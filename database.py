@@ -1,57 +1,66 @@
-from sqlmodel import SQLModel, create_engine, Session, select
+from sqlmodel import SQLModel, select
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
 from models import Product
 
 DB_NAME = "air_conditioners.db"
-DATABASE_URL = f"sqlite:///{DB_NAME}"
+DATABASE_URL = f"sqlite+aiosqlite:///{DB_NAME}"
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# Async Engine
+engine = create_async_engine(DATABASE_URL, echo=False, connect_args={"check_same_thread": False})
 
-def init_db():
-    SQLModel.metadata.create_all(engine)
+# Async Session Factory
+async_session_maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-def get_session():
-    with Session(engine) as session:
+async def init_db():
+    async with engine.begin() as conn:
+        # await conn.run_sync(SQLModel.metadata.drop_all) # Uncomment to reset
+        await conn.run_sync(SQLModel.metadata.create_all)
+
+async def get_session() -> AsyncSession: # type: ignore
+    async with async_session_maker() as session:
         yield session
 
-# --- ФУНКЦИИ ДЛЯ БОТА ---
+# --- ASYNC HELPERS (FOR BOT) ---
 
-def get_all_products():
-    with Session(engine) as session:
+async def get_all_products():
+    async with async_session_maker() as session:
         statement = select(Product).where(Product.is_published == True)
-        results = session.exec(statement).all()
-        return [p.model_dump() for p in results]
+        results = await session.execute(statement)
+        products = results.scalars().all()
+        return [p.model_dump() for p in products]
 
-def get_products_by_area(area: int):
-    with Session(engine) as session:
-        # Диапазон поиска: ищем точное совпадение или чуть больше (+10 м2)
+async def get_products_by_area(area: int):
+    async with async_session_maker() as session:
         statement = select(Product).where(
             Product.is_published == True,
             Product.area >= area,
             Product.area <= area + 10
         )
-        results = session.exec(statement).all()
-        return [p.model_dump() for p in results]
+        results = await session.execute(statement)
+        products = results.scalars().all()
+        return [p.model_dump() for p in products]
 
-def get_product_by_id(product_id: int):
-    with Session(engine) as session:
-        product = session.get(Product, product_id)
+async def get_product_by_id(product_id: int):
+    async with async_session_maker() as session:
+        product = await session.get(Product, product_id)
         return product.model_dump() if product else None
 
-def update_product_price(product_id: int, new_price: int):
-    with Session(engine) as session:
-        product = session.get(Product, product_id)
+async def update_product_price(product_id: int, new_price: int):
+    async with async_session_maker() as session:
+        product = await session.get(Product, product_id)
         if product:
             product.price = new_price
             session.add(product)
-            session.commit()
+            await session.commit()
             return True
         return False
 
-def delete_product(product_id: int):
-    with Session(engine) as session:
-        product = session.get(Product, product_id)
+async def delete_product(product_id: int):
+    async with async_session_maker() as session:
+        product = await session.get(Product, product_id)
         if product:
-            session.delete(product)
-            session.commit()
+            await session.delete(product)
+            await session.commit()
             return True
         return False

@@ -81,7 +81,7 @@ class ArticleAdmin(ModelView, model=Article):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # При старте создаем таблицы
-    init_db()
+    await init_db()
     yield
 
 app = FastAPI(lifespan=lifespan)

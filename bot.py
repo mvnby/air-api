@@ -102,7 +102,7 @@ async def cmd_start(message: types.Message):
 
 @dp.message(F.text == "📂 Каталог")
 async def show_catalog(message: types.Message):
-    products = get_all_products()
+    products = await get_all_products()
     if not products:
         await message.answer("Каталог пуст.")
         return
@@ -123,7 +123,7 @@ async def process_area(callback: CallbackQuery):
     if not area_str.isdigit(): return
     area = int(area_str)
     
-    products = get_products_by_area(area)
+    products = await get_products_by_area(area)
     is_admin = callback.from_user.id == ADMIN_ID
     
     await callback.message.answer(f"🔎 Найдено: {len(products)}")
@@ -141,7 +141,7 @@ async def buy_start(callback: CallbackQuery, state: FSMContext):
 @dp.message(ShopState.waiting_for_phone)
 async def buy_finish(message: types.Message, state: FSMContext):
     data = await state.get_data()
-    product = get_product_by_id(data['product_id'])
+    product = await get_product_by_id(int(data['product_id']))
     
     if product and ADMIN_ID:
         text = (f"🔔 ЗАКАЗ!\n{message.from_user.full_name}\nTel: {message.text}\n"
@@ -165,14 +165,14 @@ async def edit_price_start(callback: CallbackQuery, state: FSMContext):
 async def edit_price_finish(message: types.Message, state: FSMContext):
     if not message.text.isdigit(): return
     data = await state.get_data()
-    update_product_price(data['product_id'], int(message.text))
+    await update_product_price(int(data['product_id']), int(message.text))
     await message.answer("✅ Цена обновлена.")
     await state.clear()
 
 @dp.callback_query(F.data.startswith("del_confirm_"))
 async def delete_item(callback: CallbackQuery):
     if callback.from_user.id != ADMIN_ID: return
-    delete_product(callback.data.split("_")[1])
+    await delete_product(int(callback.data.split("_")[1]))
     await callback.message.delete()
     await callback.answer("Удалено")
 

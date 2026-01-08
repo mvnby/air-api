@@ -1,9 +1,8 @@
 from typing import List, Optional
 from parsers.base import BaseParser
 from parsers.onliner import OnlinerParser
-from database import engine
+from database import async_session_maker
 from models import Product
-from sqlmodel import Session
 
 class ImporterService:
     def __init__(self):
@@ -29,10 +28,10 @@ class ImporterService:
 
         data = await parser.parse(url)
         
-        # Determine publishing status (could allow strict review)
+        # Determine publishing status
         is_published = True 
 
-        with Session(engine) as session:
+        async with async_session_maker() as session:
             product = Product(
                 title=data['title'],
                 description=data['description'],
@@ -45,6 +44,6 @@ class ImporterService:
                 is_published=is_published
             )
             session.add(product)
-            session.commit()
-            session.refresh(product)
+            await session.commit()
+            await session.refresh(product)
             return product
