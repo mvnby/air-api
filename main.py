@@ -36,7 +36,7 @@ class ProductAdmin(ModelView, model=Product):
     # --- UX Improvements ---
     
     # 1. Image Thumbnail
-    def format_image(model, context, model_view):
+    def format_image(model, context):
         if model.main_image:
             return Markup(f'<img src="{model.main_image}" style="height: 50px; border-radius: 5px;">')
         return ""
@@ -47,7 +47,7 @@ class ProductAdmin(ModelView, model=Product):
     
     # 2. Categories as Tags
     # Для отображения списка категорий как тегов
-    def format_categories(model, context, model_view):
+    def format_categories(model, context):
         if model.categories:
             tags = "".join([f'<span class="badge bg-blue-lt me-1">{c}</span>' for c in model.categories])
             return Markup(tags)

@@ -1,5 +1,29 @@
 {% extends "sqladmin/list.html" %}
 
+{% block head %}
+{{ super() }}
+<style>
+    /* Ensure content is not hidden behind sidebar if it is fixed */
+    @media (min-width: 992px) {
+
+        /* SQLAdmin used to handle this, but if it fails, we force it. 
+           Standard sidebar width in Tabler/SQLAdmin is often ~15rem (240px). */
+        .page-body {
+            margin-left: 14rem;
+        }
+
+        .table-responsive {
+            margin-bottom: 0;
+            overflow-x: auto;
+        }
+    }
+
+    .badge {
+        font-size: 0.8em;
+    }
+</style>
+{% endblock %}
+
 {% block content_header %}
 <div class="row align-items-center mb-3">
     <div class="col">
