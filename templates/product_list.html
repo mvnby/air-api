@@ -22,4 +22,15 @@
         </div>
     </div>
 </div>
+</div>
+{% if request.query_params.get('msg') %}
+<div class="alert alert-{{ request.query_params.get('type', 'info') }} alert-dismissible" role="alert">
+    <div class="d-flex">
+        <div>
+            {{ request.query_params.get('msg') }}
+        </div>
+    </div>
+    <a class="btn-close" data-bs-dismiss="alert" aria-label="close"></a>
+</div>
+{% endif %}
 {% endblock %}
