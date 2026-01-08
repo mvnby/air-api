@@ -1,13 +1,13 @@
 import httpx
 import re
 import json
+from bs4 import BeautifulSoup
 
 async def parse_onliner_product(url: str):
     """
-    Парсит данные товара с Onliner.by.
+    Парсит данные товара с Onliner.by, используя API и HTML для спеков.
     """
     # 1. Извлекаем slug из URL
-    # Пример: https://catalog.onliner.by/conditioners/mdv/mdsalf12hrfn8mdo -> mdsalf12hrfn8mdo
     match = re.search(r'Catalog\.onliner\.by/.*?/([^/]+)$', url, re.IGNORECASE)
     if not match:
          match = re.search(r'/([^/]+)$', url)
@@ -17,91 +17,125 @@ async def parse_onliner_product(url: str):
     
     slug = match.group(1)
     
-    # 2. Пробуем API (SDAPI)
-    # Обычно доступно по: https://catalog.api.onliner.by/products/{slug}
-    # Но нужен корректный Host и User-Agent
-    api_url = f"https://catalog.api.onliner.by/products/{slug}"
-    
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Origin": "https://catalog.onliner.by",
         "Referer": url
     }
     
-    async with httpx.AsyncClient() as client:
-        # Получаем основную инфу
-        resp = await client.get(api_url, headers=headers)
+    async with httpx.AsyncClient(follow_redirects=True) as client:
+        # 2. Получаем HTML для парсинга таблицы характеристик
+        html_resp = await client.get(url, headers=headers)
+        if html_resp.status_code != 200:
+            raise Exception(f"Ошибка загрузки страницы товара: {html_resp.status_code}")
         
-        if resp.status_code != 200:
-            # Fallback: пробуем другой эндпоинт, который использует мобильное приложение или сам сайт
-            # https://catalog.onliner.by/sdapi/catalog.api/products/{slug}
+        soup = BeautifulSoup(html_resp.text, 'html.parser')
+        
+        # 3. Пробуем API (SDAPI) для основных данных (цена, картинки)
+        api_url = f"https://catalog.api.onliner.by/products/{slug}"
+        api_resp = await client.get(api_url, headers=headers)
+        
+        data = {}
+        if api_resp.status_code == 200:
+            data = api_resp.json()
+        else:
+            # Fallback API
             api_url_v2 = f"https://catalog.onliner.by/sdapi/catalog.api/products/{slug}"
-            resp = await client.get(api_url_v2, headers=headers)
-            
-            if resp.status_code != 200:
-                raise Exception(f"Ошибка доступа к Onliner API: {resp.status_code}")
+            api_resp = await client.get(api_url_v2, headers=headers)
+            if api_resp.status_code == 200:
+                data = api_resp.json()
 
-        data = resp.json()
-        
-        # 3. Формируем словарь Product
+        # --- Собираем данные ---
         product_data = {}
         
-        # Название
-        product_data['title'] = data.get('full_name') or data.get('name')
+        # Основное из API (если доступно)
+        product_data['title'] = data.get('full_name') or data.get('name') or soup.find('h1').get_text(strip=True)
         product_data['description'] = data.get('description', '')
         
-        # Цена (минимальная)
-        prices = data.get('prices', {})
+        # Цена
+        prices_data = data.get('prices')
         product_data['price'] = 0
-        if prices:
-            product_data['price'] = int(float(prices.get('min', 0)) * 100) # конвертация? нет, там обычно просто число
-            # В API цены могут быть в BYN * 10000 или что-то такое, надо проверить.
-            # Обычно prices.min это float в BYN.
-            product_data['price'] = int(float(prices.get('min', 0))) # Берем целую часть
-            
-        # Картинки
-        # В images -> header (главная) и icon.
-        # Могут быть photos отдельно.
-        product_data['main_image'] = data.get('images', {}).get('header', '')
+        if prices_data and 'price_min' in prices_data:
+             amount = prices_data['price_min'].get('amount')
+             if amount:
+                 product_data['price'] = int(float(amount))
         
-        # Для галереи нужны дополнительные запросы или search в image fields
-        # В базовом ответе часто нет всех фото. Но пока возьмем, что есть.
+        # Картинки
+        product_data['main_image'] = data.get('images', {}).get('header', '')
         product_data['images'] = []
         
-        # Характеристики (specs)
-        # Они часто лежат в другом эндпоинте: /products/{slug}/specs
-        # Но для простоты пока оставим пустым или попробуем достать.
-        product_data['specs'] = {}
+        # --- Парсинг таблицы характеристик через BeautifulSoup ---
+        all_specs = {}
+        target_specs = {
+            'power_cooling': None,
+            'power_heating': None,
+            'area': 0,
+            'is_inverter': False
+        }
+        categories = []
         
-        # 4. Дополнительный запрос за характеристиками (если нужно)
-        # specs_url = f"https://catalog.api.onliner.by/products/{slug}/specs"
-        # resp_specs = await client.get(specs_url, headers=headers)
-        # if resp_specs.status_code == 200:
-        #    ...
+        specs_table = soup.find('table', class_='product-specs__table')
+        if specs_table:
+            rows = specs_table.find_all('tr')
+            for row in rows:
+                # Пропускаем заголовки групп (colspan=2)
+                cells = row.find_all('td')
+                if len(cells) == 2:
+                    key = cells[0].get_text(strip=True)
+                    # Убираем текст подсказок (i-qmark)
+                    for tip in cells[1].find_all(['span', 'div'], class_=['product-tip-wrapper', 'i-tip']):
+                        tip.decompose()
+                    
+                    value = cells[1].get_text(strip=True).replace('\xa0', ' ')
+                    all_specs[key] = value
+                    
+                    # Извлекаем целевые поля
+                    if 'Мощность охлаждения' in key:
+                        match = re.search(r'([\d\.]+)', value)
+                        if match: target_specs['power_cooling'] = float(match.group(1))
+                    
+                    elif 'Мощность обогрева' in key:
+                        match = re.search(r'([\d\.]+)', value)
+                        if match: target_specs['power_heating'] = float(match.group(1))
+                    
+                    elif 'Обслуживаемая площадь' in key:
+                        match = re.search(r'(\d+)', value)
+                        if match: target_specs['area'] = int(match.group(1))
+                        
+                    elif 'Инверторная технология' in key:
+                        target_specs['is_inverter'] = True
+                        categories.append("Инвертор")
+                    
+                    elif 'Тип внутреннего блока' in key and 'настенный' in value.lower():
+                        categories.append("Настенный")
+
+        # Если площадь не нашли в табл, пробуем старую эвристику
+        if target_specs['area'] == 0:
+            btu_map = {'07': 20, '09': 25, '12': 35, '18': 50, '24': 70}
+            for k, v in btu_map.items():
+                if k in slug or k in product_data['title']:
+                    target_specs['area'] = v
+                    break
+
+        product_data['specs'] = all_specs or target_specs # Сохраняем все или только целевые
+        # Добавляем целевые прямо в specs для удобства бота, если они были найдены
+        product_data['specs'].update({k: v for k, v in target_specs.items() if v is not None})
         
-        # Категории (извлечем из description или specs)
-        product_data['categories'] = []
-        if "инвертор" in product_data.get('description', '').lower():
-             product_data['categories'].append("Инвертор")
-             
-        # Площадь (надо парсить из описания или названия)
-        # Пример: MDSALF-12... -> часто цифра 12 = 12000 BTU ~ 35м2
-        # Это сложная эвристика, пока оставим 0 или дефолт.
-        product_data['area'] = 0
-        btu_map = {'07': 20, '09': 25, '12': 35, '18': 50, '24': 70}
-        for k, v in btu_map.items():
-            if k in slug or k in product_data['title']:
-                product_data['area'] = v
-                break
+        product_data['categories'] = list(set(categories))
+        product_data['area'] = target_specs['area']
 
         return product_data
 
-# Тест запуска
 if __name__ == "__main__":
     import asyncio
-    url = "https://catalog.onliner.by/conditioners/mdv/mdsalf12hrfn8mdo"
-    try:
-        res = asyncio.run(parse_onliner_product(url))
-        print(json.dumps(res, indent=4, ensure_ascii=False))
-    except Exception as e:
-        print(f"Error: {e}")
+    
+    async def debug_main():
+        url = "https://catalog.onliner.by/conditioners/mdv/mdsalf12hrfn8mdo"
+        try:
+             res = await parse_onliner_product(url)
+             print(json.dumps(res, indent=4, ensure_ascii=False))
+        except Exception as e:
+            print(f"Error in parse_onliner_product: {e}")
+
+    asyncio.run(debug_main())
+

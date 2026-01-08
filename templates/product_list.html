@@ -1,0 +1,29 @@
+{% extends "sqladmin/list.html" %}
+
+{% block content_header %}
+<div class="row align-items-center mb-3">
+    <div class="col">
+        <h2 class="page-title">
+            {{ model_view.name_plural }}
+        </h2>
+    </div>
+    <div class="col-auto ms-auto d-print-none">
+        <div class="d-flex align-items-center">
+            <!-- Компактная форма импорта -->
+            <form action="/admin/import_onliner" method="POST" class="d-flex me-3">
+                <input type="url" name="url" class="form-control form-control-sm me-2" style="width: 250px;"
+                    placeholder="URL с Onliner..." required>
+                <button type="submit" class="btn btn-sm btn-info text-nowrap">
+                    <i class="fa-solid fa-cloud-arrow-down me-1"></i> Импорт
+                </button>
+            </form>
+
+            {% if model_view.can_create %}
+            <a href="{{ url_for('admin:create', identity=model_view.identity) }}" class="btn btn-sm btn-primary">
+                <i class="fa-solid fa-plus me-1"></i> Создать
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
