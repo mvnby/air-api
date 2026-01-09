@@ -19,3 +19,4 @@ __pycache__/
 bot.log
 __pycache__/
 *.db
+server.log
