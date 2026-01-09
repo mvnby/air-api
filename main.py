@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqladmin import Admin
 from database import engine, init_db
-from models import Product, Article, Tag, TagGroup
+from models import Product, Article, Tag, TagGroup, Order
 from contextlib import asynccontextmanager
 import os
 
@@ -160,6 +160,29 @@ class TagAdmin(ModelView, model=Tag):
     icon = "fa-solid fa-tag"
     column_list = [Tag.title, Tag.slug, Tag.group, Tag.reliability_score]
     form_columns = ["group", "title", "slug", "is_public", "is_filter", "sort_order", "ai_snippet", "reliability_score"]
+    form_columns = ["group", "title", "slug", "is_public", "is_filter", "sort_order", "ai_snippet", "reliability_score"]
+
+class OrderAdmin(ModelView, model=Order):
+    name = "Заказ"
+    name_plural = "Заказы"
+    icon = "fa-solid fa-cart-shopping"
+    
+    column_list = [Order.id, Order.status, Order.product, Order.user_id, Order.phone, Order.created_at]
+    column_sortable_list = [Order.id, Order.created_at, Order.status]
+    column_default_sort = ("created_at", True)
+    
+    column_editable_list = ["status"] # Allow quick status change
+    
+    # Eager load product to show title
+    def list_query(self, request):
+        query = super().list_query(request)
+        from sqlalchemy.orm import selectinload
+        return query.options(selectinload(self.model.product))
+
+    def detail_query(self, request):
+        query = super().detail_query(request)
+        from sqlalchemy.orm import selectinload
+        return query.options(selectinload(self.model.product))
 
 # --- ЗАПУСК ---
 
@@ -195,3 +218,4 @@ admin.add_view(ProductAdmin)
 admin.add_view(ArticleAdmin)
 admin.add_view(TagGroupAdmin)
 admin.add_view(TagAdmin)
+admin.add_view(OrderAdmin)

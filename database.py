@@ -1,7 +1,7 @@
 from sqlmodel import SQLModel, select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from models import Product
+from models import Product, Order
 
 DB_NAME = "air_conditioners.db"
 DATABASE_URL = f"sqlite+aiosqlite:///{DB_NAME}"
@@ -57,6 +57,36 @@ async def get_products_by_area(area: int):
             items.append(data)
         return items
 
+async def search_products(query: str = None, is_inverter: bool = None):
+    async with async_session_maker() as session:
+        # Start with base query
+        statement = select(Product).where(Product.is_published == True).options(selectinload(Product.tags))
+        
+        # 1. Text Search (Title)
+        if query:
+            statement = statement.where(Product.title.ilike(f"%{query}%"))
+        
+        # 2. Inverter Filter
+        if is_inverter:
+            # Join with tags to find 'inverter' or 'on-off'
+            # We assume 'is_inverter=True' means we want "inverter" tag slug
+            # Note: This requires joining tables. 
+            # Simpler approach if tags are eager loaded: filter in python? No, pagination/limit issues.
+            # Correct approach: Join
+            from models import ProductTagLink, Tag
+            statement = statement.join(Product.tags).where(Tag.slug == "inverter")
+            
+        results = await session.execute(statement)
+        products = results.scalars().all()
+        
+        # Format for bot
+        items = []
+        for p in products:
+            data = p.model_dump()
+            data['categories'] = [t.title for t in p.tags]
+            items.append(data)
+        return items
+
 async def get_product_by_id(product_id: int):
     async with async_session_maker() as session:
         statement = select(Product).where(Product.id == product_id).options(selectinload(Product.tags))
@@ -84,6 +114,38 @@ async def delete_product(product_id: int):
         product = await session.get(Product, product_id)
         if product:
             await session.delete(product)
+            await session.commit()
+            return True
+        return False
+
+# --- ORDER OPERATIONS ---
+
+async def create_order(user_id: int, product_id: int, username: str = None, full_name: str = None, phone: str = None):
+    async with async_session_maker() as session:
+        order = Order(
+            user_id=user_id,
+            product_id=product_id,
+            username=username,
+            full_name=full_name,
+            phone=phone
+        )
+        session.add(order)
+        await session.commit()
+        await session.refresh(order)
+        return order
+
+async def get_all_orders():
+    async with async_session_maker() as session:
+        statement = select(Order).options(selectinload(Order.product)).order_by(Order.created_at.desc())
+        results = await session.execute(statement)
+        return results.scalars().all()
+
+async def update_order_status(order_id: int, new_status: str):
+    async with async_session_maker() as session:
+        order = await session.get(Order, order_id)
+        if order:
+            order.status = new_status
+            session.add(order)
             await session.commit()
             return True
         return False

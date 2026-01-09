@@ -15,4 +15,7 @@ __pycache__/
 
 # Системные файлы
 .DS_Store
-.vscode/
+.vscode/server.log
+bot.log
+__pycache__/
+*.db

@@ -71,3 +71,15 @@ class Article(SQLModel, table=True):
     content: str
     image_url: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.now)
+
+class Order(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int # Telegram User ID
+    username: Optional[str] = None
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    product_id: int = Field(foreign_key="product.id")
+    status: str = Field(default="new") # new, in_progress, done, cancelled
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    product: Optional[Product] = Relationship()
