@@ -8,3 +8,4 @@ beautifulsoup4>=1.0.0
 aiogram>=3.0.0
 itsdangerous>=2.0.0aiosqlite==0.22.1
 greenlet==3.3.0
+python-slugify==8.0.4

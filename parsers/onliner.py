@@ -86,11 +86,22 @@ class OnlinerParser(BaseParser):
                     cells = row.find_all('td')
                     if len(cells) == 2:
                         key = cells[0].get_text(strip=True)
-                        # Remove tooltips
-                        for tip in cells[1].find_all(['span', 'div'], class_=['product-tip-wrapper', 'i-tip']):
-                            tip.decompose()
+                        # Check for boolean icons
+                        icon_true = cells[1].find('span', class_='i-tip')
+                        icon_false = cells[1].find('span', class_='i-x')
                         
-                        value = cells[1].get_text(strip=True).replace('\xa0', ' ')
+                        value = ""
+                        if icon_true:
+                            value = "да"
+                        elif icon_false:
+                            value = "нет"
+                        else:
+                            # Remove tooltips (BUT do not remove i-tip if we hadn't checked it yet, logic above handles it)
+                            # safe to strict decompose wrapper now
+                            for tip in cells[1].find_all(['span', 'div'], class_='product-tip-wrapper'):
+                                tip.decompose()
+                            value = cells[1].get_text(strip=True).replace('\xa0', ' ')
+                        
                         all_specs[key] = value
                         
                         # Extract target fields logic
@@ -115,20 +126,27 @@ class OnlinerParser(BaseParser):
             product_data['area'] = target_specs['area']
             
             # Auto-categories
-            if target_specs['is_inverter']:
-                categories.append("инверторный")
-            if target_specs['power_cooling']:
-                categories.append(f"охлаждение {target_specs['power_cooling']} кВт")
             if target_specs['area']:
                 categories.append(f"до {target_specs['area']} м²")
             
             # Add brand from title (simple heuristic)
-            title = product_data['title']
-            brand = title.split()[1] if len(title.split()) > 1 else "" # Usually "Conditioner Brand Model"
-            if brand:
-                categories.append(brand)
+            # manufacturer
+            manufacturer = data.get('manufacturer', {}).get('name')
+            if not manufacturer:
+                 # heuristic fallback
+                 parts = title.split()
+                 if len(parts) > 0:
+                     if parts[0].lower() in ['кондиционер', 'сплит-система']:
+                         if len(parts) > 1: manufacturer = parts[1]
+                     else:
+                         manufacturer = parts[0]
+            
+            if manufacturer:
+                categories.append(manufacturer)
 
             product_data['categories'] = categories
             product_data['specs'] = all_specs
+            # Expose raw metrics for auto-tagging
+            product_data['metrics'] = target_specs
             
             return product_data

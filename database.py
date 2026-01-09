@@ -21,14 +21,24 @@ async def get_session() -> AsyncSession: # type: ignore
     async with async_session_maker() as session:
         yield session
 
+from sqlalchemy.orm import selectinload
+
 # --- ASYNC HELPERS (FOR BOT) ---
 
 async def get_all_products():
     async with async_session_maker() as session:
-        statement = select(Product).where(Product.is_published == True)
+        # Load tags eagerly
+        statement = select(Product).where(Product.is_published == True).options(selectinload(Product.tags))
         results = await session.execute(statement)
         products = results.scalars().all()
-        return [p.model_dump() for p in products]
+        
+        # Manually flattening tags to strings for bot backward compatibility
+        items = []
+        for p in products:
+            data = p.model_dump()
+            data['categories'] = [t.title for t in p.tags] # Compatibility with bot
+            items.append(data)
+        return items
 
 async def get_products_by_area(area: int):
     async with async_session_maker() as session:
@@ -36,15 +46,28 @@ async def get_products_by_area(area: int):
             Product.is_published == True,
             Product.area >= area,
             Product.area <= area + 10
-        )
+        ).options(selectinload(Product.tags))
         results = await session.execute(statement)
         products = results.scalars().all()
-        return [p.model_dump() for p in products]
+        
+        items = []
+        for p in products:
+            data = p.model_dump()
+            data['categories'] = [t.title for t in p.tags]
+            items.append(data)
+        return items
 
 async def get_product_by_id(product_id: int):
     async with async_session_maker() as session:
-        product = await session.get(Product, product_id)
-        return product.model_dump() if product else None
+        statement = select(Product).where(Product.id == product_id).options(selectinload(Product.tags))
+        results = await session.execute(statement)
+        product = results.scalar_one_or_none()
+        
+        if product:
+            data = product.model_dump()
+            data['categories'] = [t.title for t in product.tags]
+            return data
+        return None
 
 async def update_product_price(product_id: int, new_price: int):
     async with async_session_maker() as session:

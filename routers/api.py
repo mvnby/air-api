@@ -8,11 +8,15 @@ router = APIRouter(prefix="/api", tags=["api"])
 
 @router.get("/products")
 async def get_products(session: AsyncSession = Depends(get_session)):
-    result = await session.execute(select(Product))
+    # Load categories eagerly to include them in the response (as objects)
+    from sqlalchemy.orm import selectinload
+    result = await session.execute(select(Product).options(selectinload(Product.categories)))
     products = result.scalars().all()
     return {"items": products}
 
 @router.get("/products/{product_id}")
 async def get_product(product_id: int, session: AsyncSession = Depends(get_session)):
-    product = await session.get(Product, product_id)
+    from sqlalchemy.orm import selectinload
+    result = await session.execute(select(Product).where(Product.id == product_id).options(selectinload(Product.categories)))
+    product = result.scalar_one_or_none()
     return product
