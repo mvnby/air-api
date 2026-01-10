@@ -16,7 +16,13 @@ __pycache__/
 # Системные файлы
 .DS_Store
 .vscode/server.log
-bot.log
-__pycache__/
-*.db
+
+# Логи и временные файлы
+*.log
+app.log
 server.log
+bot.log
+
+# Загрузки (Images/Files)
+static/uploads/*
+!static/uploads/.gitkeep

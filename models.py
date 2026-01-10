@@ -15,10 +15,14 @@ class TagGroup(SQLModel, table=True):
     title: str = Field(index=True)
     slug: str = Field(unique=True, index=True)
     is_public: bool = Field(default=True)
+    color: str = Field(default="secondary") # Bootstrap classes: primary, success, info, warning, danger, secondary
     sort_order: int = Field(default=0)
     allow_multiple: bool = Field(default=False)
     
     tags: List["Tag"] = Relationship(back_populates="group")
+
+    def __str__(self):
+        return self.title
 
 class Tag(SQLModel, table=True):
     __tablename__ = "tag"
@@ -65,6 +69,9 @@ class Product(SQLModel, table=True):
     is_published: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.now)
 
+    def __str__(self):
+        return f"{self.title} ({self.price} р)"
+
 class Article(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str
@@ -83,3 +90,6 @@ class Order(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
     product: Optional[Product] = Relationship()
+
+    def __str__(self):
+        return f"Заказ #{self.id} от {self.full_name or self.username}"

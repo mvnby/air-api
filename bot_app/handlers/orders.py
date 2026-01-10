@@ -2,7 +2,8 @@ from aiogram import Router, types, F, Bot
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 from database import get_product_by_id, create_order
-from ..config import ADMIN_ID, bot
+from core.config import settings
+from ..config import bot
 from ..states import ShopState
 from ..keyboards import main_menu
 
@@ -31,12 +32,12 @@ async def buy_finish(message: types.Message, state: FSMContext):
         phone=message.text
     )
 
-    if product and ADMIN_ID:
+    if product and settings.ADMIN_ID:
         text = (f"🔔 НОВЫЙ ЗАКАЗ #{order.id}!\n"
                 f"👤 {user.full_name} (@{user.username})\n"
                 f"📱 Tel: {message.text}\n"
                 f"❄️ Товар: {product['title']} ({product['price']} р)")
-        await bot.send_message(ADMIN_ID, text)
+        await bot.send_message(settings.ADMIN_ID, text)
     
     await message.answer("✅ Заказ принят!", reply_markup=main_menu)
     await state.clear()

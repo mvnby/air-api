@@ -2,14 +2,14 @@ from aiogram import Router, types, F
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 from database import update_product_price, delete_product
-from ..config import ADMIN_ID
+from core.config import settings
 from ..states import ShopState
 
 router = Router()
 
 @router.callback_query(F.data.startswith("edit_price_"))
 async def edit_price_start(callback: CallbackQuery, state: FSMContext):
-    if callback.from_user.id != ADMIN_ID: return
+    if callback.from_user.id != settings.ADMIN_ID: return
     await state.update_data(product_id=callback.data.split("_")[-1])
     await state.set_state(ShopState.edit_price)
     await callback.message.answer("Новая цена (число):")

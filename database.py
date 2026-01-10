@@ -2,12 +2,11 @@ from sqlmodel import SQLModel, select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from models import Product, Order
-
-DB_NAME = "air_conditioners.db"
-DATABASE_URL = f"sqlite+aiosqlite:///{DB_NAME}"
+from core.config import settings
+from core.logger import logger
 
 # Async Engine
-engine = create_async_engine(DATABASE_URL, echo=False, connect_args={"check_same_thread": False})
+engine = create_async_engine(settings.DATABASE_URL, echo=False, connect_args={"check_same_thread": False})
 
 # Async Session Factory
 async_session_maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

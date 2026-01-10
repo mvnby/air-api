@@ -2,7 +2,7 @@ from aiogram import Router, types, F
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 from database import get_all_products, get_products_by_area, search_products
-from ..config import ADMIN_ID
+from core.config import settings
 from ..keyboards import area_menu
 from ..utils import send_product_card
 from ..states import ShopState
@@ -16,7 +16,7 @@ async def show_catalog(message: types.Message):
         await message.answer("Каталог пуст.")
         return
     
-    is_admin = message.from_user.id == ADMIN_ID
+    is_admin = message.from_user.id == settings.ADMIN_ID
     await message.answer(f"📦 Товаров в каталоге: {len(products)}")
     
     for product in products[:5]:
@@ -33,7 +33,7 @@ async def process_area(callback: CallbackQuery):
     area = int(area_str)
     
     products = await get_products_by_area(area)
-    is_admin = callback.from_user.id == ADMIN_ID
+    is_admin = callback.from_user.id == settings.ADMIN_ID
     
     await callback.message.answer(f"🔎 Найдено: {len(products)}")
     for product in products:
@@ -43,7 +43,7 @@ async def process_area(callback: CallbackQuery):
 @router.message(F.text == "⚡ Инверторные")
 async def show_inverters(message: types.Message):
     products = await search_products(is_inverter=True)
-    is_admin = message.from_user.id == ADMIN_ID
+    is_admin = message.from_user.id == settings.ADMIN_ID
     
     if not products:
         await message.answer("Инверторные модели не найдены.")
@@ -62,7 +62,7 @@ async def search_start(message: types.Message, state: FSMContext):
 async def search_process(message: types.Message, state: FSMContext):
     query = message.text
     products = await search_products(query=query)
-    is_admin = message.from_user.id == ADMIN_ID
+    is_admin = message.from_user.id == settings.ADMIN_ID
     
     if not products:
         await message.answer(f"Hичего не найдено по запросу '{query}'.")
