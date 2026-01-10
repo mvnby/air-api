@@ -69,6 +69,15 @@ class Product(SQLModel, table=True):
     is_published: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.now)
 
+    # Virtual field for admin file upload (not in DB)
+    @property
+    def main_image_file(self) -> Any:
+        return getattr(self, "_temp_main_image_file", None)
+    
+    @main_image_file.setter
+    def main_image_file(self, value: Any):
+        self._temp_main_image_file = value
+
     def __str__(self):
         return f"{self.title} ({self.price} р)"
 
