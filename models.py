@@ -68,6 +68,7 @@ class Product(SQLModel, table=True):
     
     is_published: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.now)
+    source_url: Optional[str] = Field(default=None, index=True)
 
     # Virtual field for admin file upload (not in DB)
     @property

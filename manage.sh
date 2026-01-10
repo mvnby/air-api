@@ -35,7 +35,7 @@ start() {
         echo -e "${YELLOW}API is already running (PID: $API_PID)${NC}"
     else
         echo -n "Starting API Server... "
-        nohup "$VENV_UVICORN" main:app --host 127.0.0.1 --port 8000 --reload >> server.log 2>&1 &
+        nohup env PYTHONUNBUFFERED=1 "$VENV_UVICORN" main:app --host 127.0.0.1 --port 8000 --reload >> server.log 2>&1 &
         echo -e "${GREEN}DONE${NC}"
     fi
 

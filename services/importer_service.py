@@ -22,22 +22,30 @@ class ImporterService:
         """
         Orchestrates the import process: find parser -> parse -> save to DB.
         """
-        parser = self.get_parser(url)
-        if not parser:
-            raise ValueError("No parser found for this URL")
-
-        data = await parser.parse(url)
-        
-        # Determine publishing status
-        is_published = True 
-
+        url = url.strip().replace('\r', '').replace('\n', '')
         async with async_session_maker() as session:
+            # 0. Check for duplicates (live products only)
+            from sqlmodel import select
+            stmt = select(Product).where(Product.source_url == url)
+            result = await session.execute(stmt)
+            if result.scalar_one_or_none():
+                raise ValueError(f"Product with URL '{url}' already exists in the database.")
+
+            parser = self.get_parser(url)
+            if not parser:
+                raise ValueError("No parser found for this URL")
+
+            data = await parser.parse(url)
+            
+            # Determine publishing status
+            is_published = True 
+
             # Resolve Categories/Tags
             tag_names = data.get('categories', [])
             tag_objects = []
             
             from models import Tag
-            from sqlmodel import select, or_
+            from sqlmodel import or_
             import slugify
             from services.tag_logic import get_auto_tags
             
@@ -54,23 +62,15 @@ class ImporterService:
                     tag_objects.append(tag)
             
             # 3. Resolve old string categories (Title based)
-            # This is for backward compatibility or extra tags from parser
             for t_name in tag_names:
                 t_name = t_name.strip()
                 if not t_name: continue
                 
-                # Try to map common names to slugs or find by title
-                # Only add if not already added
-                
-                # Check if exists by Title
                 stmt = select(Tag).where(Tag.title == t_name)
                 result = await session.execute(stmt)
                 tag = result.scalar_one_or_none()
                 
                 if not tag:
-                    # Optional: Don't create new tags automatically if we want strict control?
-                    # User didn't specify. For now, let's keep creating but maybe mark as unverified?
-                    # Or just create.
                     slug = slugify.slugify(t_name)
                     tag = Tag(title=t_name, slug=slug, is_public=True)
                     session.add(tag)
@@ -85,11 +85,28 @@ class ImporterService:
                 area=data['area'],
                 main_image=data['main_image'],
                 images=data.get('images', []),
-                tags=tag_objects, # Pass objects here
+                tags=tag_objects,
                 specs=data.get('specs', {}),
-                is_published=is_published
+                is_published=is_published,
+                source_url=url
             )
             session.add(product)
             await session.commit()
             await session.refresh(product)
             return product
+
+    async def import_products_bulk(self, urls: List[str]) -> dict:
+        """
+        Imports multiple products and returns a summary of success/errors.
+        """
+        results = {"success": [], "errors": []}
+        for url in urls:
+            # Thorough cleaning of URLs
+            url = url.strip().replace('\r', '').replace('\n', '')
+            if not url: continue
+            try:
+                product = await self.import_product(url)
+                results["success"].append(f"'{product.title}' (ID: {product.id})")
+            except Exception as e:
+                results["errors"].append(f"URL '{url}': {str(e)}")
+        return results

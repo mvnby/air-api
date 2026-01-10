@@ -143,12 +143,14 @@ class ProductAdmin(ModelView, model=Product):
     # We include main_image (text path) but NOT main_image_file (to avoid KeyError)
     form_columns = [
         "title", "description", "price", "old_price", "area", 
-        "main_image", "images", "tags", "specs", "is_published"
+        "main_image", "images", "tags", "specs", "is_published", "source_url"
     ]
     
+    
     form_edit_rules = [
-        "title", "description", "price", "old_price", "area", 
-        "main_image", "main_image_file", "images", "tags", "specs", "is_published"
+        "title", "description", "area", "price", "old_price", "source_url",
+        "is_published", "main_image", "main_image_file", "images",
+        "tags", "specs"
     ]
     form_create_rules = form_edit_rules
 
