@@ -20,3 +20,13 @@ async def get_product(product_id: int, session: AsyncSession = Depends(get_sessi
     result = await session.execute(select(Product).where(Product.id == product_id).options(selectinload(Product.categories)))
     product = result.scalar_one_or_none()
     return product
+
+
+@router.get("/health")
+async def health_check(session: AsyncSession = Depends(get_session)):
+    """Проверка доступности API и базы данных"""
+    try:
+        await session.execute(select(1))
+        return {"status": "ok", "database": "online"}
+    except Exception as e:
+        return {"status": "error", "database": "offline", "detail": str(e)}

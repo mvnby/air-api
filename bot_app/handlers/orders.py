@@ -32,12 +32,17 @@ async def buy_finish(message: types.Message, state: FSMContext):
         phone=message.text
     )
 
-    if product and settings.ADMIN_ID:
+    if product and settings.admin_list:
         text = (f"🔔 НОВЫЙ ЗАКАЗ #{order.id}!\n"
                 f"👤 {user.full_name} (@{user.username})\n"
                 f"📱 Tel: {message.text}\n"
                 f"❄️ Товар: {product['title']} ({product['price']} р)")
-        await bot.send_message(settings.ADMIN_ID, text)
+        
+        for admin_id in settings.admin_list:
+            try:
+                await bot.send_message(admin_id, text)
+            except Exception as e:
+                logger.error(f"Failed to notify admin {admin_id}: {e}")
     
     await message.answer("✅ Заказ принят!", reply_markup=main_menu)
     await state.clear()

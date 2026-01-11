@@ -1,0 +1,130 @@
+{% extends "sqladmin/layout.html" %}
+{% from 'sqladmin/_macros.html' import render_form_fields %}
+
+{% block head %}
+{{ super() }}
+<link href="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/9.10.4/jsoneditor.min.css" rel="stylesheet"
+    type="text/css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/9.10.4/jsoneditor.min.js"></script>
+<style>
+    #jsoneditor {
+        height: 400px;
+        width: 100%;
+    }
+
+    .json-editor-container {
+        margin-bottom: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="col-12">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Изменение {{ model_view.name }}</h3>
+        </div>
+        <div class="card-body border-bottom py-3">
+            <form id="admin-form" action="{{ model_view._build_url_for('admin:edit', request, obj) }}" method="POST"
+                enctype="multipart/form-data">
+                <div class="row">
+                    {% if error %}
+                    <div class="alert alert-danger" role="alert">{{ error }}</div>
+                    {% endif %}
+                </div>
+                <fieldset class="form-fieldset">
+                    {{ render_form_fields(form, form_opts=form_opts) }}
+                </fieldset>
+
+                <div id="json-editor-wrapper" class="json-editor-container" style="display: none;">
+                    <label class="form-label">Интерактивный редактор характеристик (JSON)</label>
+                    <div id="jsoneditor"></div>
+                </div>
+
+                <div class="row mt-3">
+                    <div class="col-md-2">
+                        <a href="{{ url_for('admin:list', identity=model_view.identity) }}" class="btn">
+                            Отмена
+                        </a>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="btn-group flex-wrap" data-toggle="buttons">
+                            <button type="submit" name="save" value="Save" class="btn btn-primary">Сохранить</button>
+                            <button type="submit" name="save" value="Save and continue editing" class="btn">Сохранить и
+                                продолжить</button>
+                            {% if model_view.can_create %}
+                            {% if model_view.save_as %}
+                            <button type="submit" name="save" value="Save as new" class="btn">Сохранить как
+                                новый</button>
+                            {% else %}
+                            <button type="submit" name="save" value="Save and add another" class="btn">Сохранить и
+                                добавить другой</button>
+                            {% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Find the specs textarea
+        const specsTextarea = document.getElementById('specs');
+        if (!specsTextarea) return;
+
+        // Hide original textarea but keep it for form submission
+        specsTextarea.style.display = 'none';
+        const wrapper = document.getElementById('json-editor-wrapper');
+        wrapper.style.display = 'block';
+
+        // Move wrapper after the hidden textarea's parent or inside its place
+        specsTextarea.parentNode.insertBefore(wrapper, specsTextarea.nextSibling);
+
+        let initialData = {};
+        const rawValue = specsTextarea.value.trim();
+
+        try {
+            if (rawValue) {
+                // Determine if it's likely JSON (starts with {" or [)
+                if (rawValue.startsWith('{') || rawValue.startsWith('[')) {
+                    // Try to normalize single quotes back to double quotes if it looks like Python
+                    // but first try native JSON.parse
+                    try {
+                        initialData = JSON.parse(rawValue);
+                    } catch (e) {
+                        console.log('JSON.parse failed, attempting safe evaluation');
+                        // Use a safer way to parse Python-like dict strings
+                        const None = null, True = true, False = false;
+                        // Replace ' with " ONLY if not preceded by \ (very basic, but eval is easier for Python strings)
+                        initialData = eval("(" + rawValue + ")");
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Failed to parse specs:', e, rawValue);
+            initialData = {};
+        }
+
+        const container = document.getElementById('jsoneditor');
+        const options = {
+            mode: 'tree',
+            modes: ['code', 'form', 'text', 'tree', 'view'], // allowed modes
+            onError: function (err) {
+                alert(err.toString());
+            }
+        };
+        const editor = new JSONEditor(container, options);
+        editor.set(initialData);
+
+        // Sync back on form submit
+        const form = document.getElementById('admin-form');
+        form.addEventListener('submit', function () {
+            const json = editor.get();
+            specsTextarea.value = JSON.stringify(json);
+        });
+    });
+</script>
+{% endblock %}

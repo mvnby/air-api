@@ -5,6 +5,7 @@ from database import engine, init_db
 from models import Product, Article, Tag, TagGroup, Order
 from contextlib import asynccontextmanager
 import os
+import asyncio
 
 # Routers
 from routers import admin as admin_router
@@ -14,6 +15,9 @@ from routers import api as api_router
 from sqladmin import ModelView
 from markupsafe import Markup
 from wtforms import TextAreaField, FileField
+import json
+
+from wtforms import Field, widgets
 from starlette.datastructures import UploadFile
 import shutil
 import uuid
@@ -68,11 +72,11 @@ class ProductAdmin(ModelView, model=Product):
     # Сортування по умолчанию: нові зверху
     column_default_sort = ("created_at", True)
     
-    # Quick editing in the list view (Using objects to see if it works better than strings)
-    column_editable_list = [Product.price, Product.old_price, Product.is_published]
+    # Quick editing in the list view
+    column_editable_list = ["price", "old_price", "is_published"]
     
-    # Filter by area and status (REMOVED: currently incompatible with SQLModel in this version)
-    # column_filters = [Product.area, Product.is_published]
+    # Filter by area and status (DISABLED: still causes 500 error with SQLModel)
+    # column_filters = ["area", "is_published", "price"]
     
     # Default page size
     page_size = 100
@@ -302,6 +306,11 @@ class OrderAdmin(ModelView, model=Order):
 async def lifespan(app: FastAPI):
     # При старте создаем таблицы
     await init_db()
+    
+    # Запускаем фоновую синхронизацию цен (раз в 6 часов)
+    from services.scheduler_service import scheduler_service
+    asyncio.create_task(scheduler_service.start_loop(interval_hours=settings.SCHEDULER_INTERVAL))
+    
     yield
 
 app = FastAPI(lifespan=lifespan)

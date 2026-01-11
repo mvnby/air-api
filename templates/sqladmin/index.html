@@ -1,0 +1,205 @@
+{% extends "sqladmin/layout.html" %}
+
+{% block content %}
+<div class="container-xl">
+    <!-- Page title -->
+    <div class="page-header d-print-none">
+        <div class="row align-items-center">
+            <div class="col">
+                <h2 class="page-title">
+                    Панель управления
+                </h2>
+            </div>
+            <div class="col-auto ms-auto d-print-none">
+                <div class="btn-list">
+                    <span class="text-muted d-none d-sm-inline-block me-1">Контроль цен:</span>
+                    <form action="/admin/update_sync_mode" method="POST" id="syncModeForm" class="btn-group">
+                        <input type="radio" class="btn-check" name="mode" id="mode0" value="0" autocomplete="off"
+                            onchange="this.form.submit()">
+                        <label class="btn btn-outline-secondary btn-sm" for="mode0"
+                            title="Отключить автоматическое обновление цен">Выкл</label>
+
+                        <input type="radio" class="btn-check" name="mode" id="mode1" value="1" autocomplete="off"
+                            onchange="this.form.submit()">
+                        <label class="btn btn-outline-primary btn-sm" for="mode1"
+                            title="Обновлять цены только для хитов продаж">Только Хиты</label>
+
+                        <input type="radio" class="btn-check" name="mode" id="mode2" value="2" autocomplete="off"
+                            onchange="this.form.submit()">
+                        <label class="btn btn-outline-primary btn-sm" for="mode2"
+                            title="Обновлять цены всех товаров">Все товары</label>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="page-body">
+    <div class="container-xl">
+        <div class="row row-cards">
+            <!-- Stats Cards -->
+            <div class="col-sm-6 col-lg-4">
+                <div class="card card-sm">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-auto">
+                                <span class="bg-primary text-white avatar">
+                                    <i class="fa-solid fa-snowflake"></i>
+                                </span>
+                            </div>
+                            <div class="col">
+                                <div class="font-weight-medium" id="total_products">...</div>
+                                <div class="text-muted">Всего товаров</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-lg-4">
+                <div class="card card-sm">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-auto">
+                                <span class="bg-green text-white avatar">
+                                    <i class="fa-solid fa-check"></i>
+                                </span>
+                            </div>
+                            <div class="col">
+                                <div class="font-weight-medium" id="active_products">...</div>
+                                <div class="text-muted">Активных на сайте</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-lg-4">
+                <div class="card card-sm">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-auto">
+                                <span class="bg-yellow text-white avatar">
+                                    <i class="fa-solid fa-cart-shopping"></i>
+                                </span>
+                            </div>
+                            <div class="col">
+                                <div class="font-weight-medium" id="total_orders">...</div>
+                                <div class="text-muted">Всего заказов</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Latest Imports Table -->
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Последние товары</h3>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table card-table table-vcenter text-nowrap datatable">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Название</th>
+                                    <th>Цена</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="latest_items_body">
+                                <tr>
+                                    <td colspan="4" class="text-center">Загрузка...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Latest Orders Table -->
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Последние заказы</h3>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table card-table table-vcenter text-nowrap datatable">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Телефон</th>
+                                    <th>Статус</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="latest_orders_body">
+                                <tr>
+                                    <td colspan="4" class="text-center">Загрузка...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function loadStats() {
+        try {
+            const response = await fetch('/admin/stats');
+            const data = await response.json();
+
+            document.getElementById('total_products').innerText = data.total_products;
+            document.getElementById('active_products').innerText = data.active_products;
+            document.getElementById('total_orders').innerText = data.total_orders;
+
+            // Highlight current sync mode
+            if (data.sync_mode !== undefined) {
+                const radio = document.getElementById(`mode${data.sync_mode}`);
+                if (radio) radio.checked = true;
+            }
+
+            const tbodyItems = document.getElementById('latest_items_body');
+            tbodyItems.innerHTML = '';
+            data.latest_items.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${item.id}</td>
+                    <td class="text-truncate" style="max-width: 200px;">${item.title}</td>
+                    <td>${item.price} р.</td>
+                    <td class="text-end">
+                        <a href="/admin/product/edit/${item.id}" class="btn btn-sm btn-outline-primary"><i class="fa-solid fa-pen"></i></a>
+                    </td>
+                `;
+                tbodyItems.appendChild(tr);
+            });
+
+            const tbodyOrders = document.getElementById('latest_orders_body');
+            tbodyOrders.innerHTML = '';
+            data.latest_orders.forEach(order => {
+                const tr = document.createElement('tr');
+                let statusBadge = '<span class="badge bg-secondary">Новый</span>';
+                if (order.status === 'completed') statusBadge = '<span class="badge bg-green">Доставлен</span>';
+
+                tr.innerHTML = `
+                    <td>${order.id}</td>
+                    <td>${order.phone}</td>
+                    <td>${statusBadge}</td>
+                    <td class="text-end">
+                        <a href="/admin/order/edit/${order.id}" class="btn btn-sm btn-outline-primary"><i class="fa-solid fa-eye"></i></a>
+                    </td>
+                `;
+                tbodyOrders.appendChild(tr);
+            });
+        } catch (error) {
+            console.error('Error loading stats:', error);
+        }
+    }
+
+    // Load when page ready
+    document.addEventListener('DOMContentLoaded', loadStats);
+</script>
+{% endblock %}

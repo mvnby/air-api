@@ -103,3 +103,21 @@ class Order(SQLModel, table=True):
 
     def __str__(self):
         return f"Заказ #{self.id} от {self.full_name or self.username}"
+class Favorite(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True) # Telegram User ID
+    product_id: int = Field(foreign_key="product.id")
+    created_at: datetime = Field(default_factory=datetime.now)
+    
+    product: Optional[Product] = Relationship()
+
+class GlobalConfig(SQLModel, table=True):
+    __tablename__ = "global_config"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    key: str = Field(unique=True, index=True)
+    value: str
+    description: Optional[str] = None
+    updated_at: datetime = Field(default_factory=datetime.now)
+
+    def __str__(self):
+        return f"{self.key}: {self.value}"

@@ -18,8 +18,12 @@ def format_caption(product):
     )
 
 async def send_product_card(message_or_callback, product, is_admin):
+    from database import is_favorite
+    user_id = message_or_callback.from_user.id
+    in_fav = await is_favorite(user_id, product['id'])
+    
     caption = format_caption(product)
-    kb = get_product_keyboard(product['id'], is_admin)
+    kb = get_product_keyboard(product['id'], is_admin, in_favorites=in_fav)
     
     target = message_or_callback.answer if isinstance(message_or_callback, types.Message) else message_or_callback.message.answer
     

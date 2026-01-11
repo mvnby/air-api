@@ -7,7 +7,7 @@ main_menu = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📂 Каталог"), KeyboardButton(text="📐 Подбор по площади")],
         [KeyboardButton(text="⚡ Инверторные"), KeyboardButton(text="🔎 Поиск")],
-        [KeyboardButton(text="❓ Помощь")]
+        [KeyboardButton(text="⭐ Избранное"), KeyboardButton(text="❓ Помощь")]
     ],
     resize_keyboard=True
 )
@@ -19,8 +19,12 @@ area_menu = InlineKeyboardMarkup(
     ]
 )
 
-def get_product_keyboard(product_id, is_admin=False):
-    buttons = [[InlineKeyboardButton(text="🛒 Заказать", callback_data=f"buy_{product_id}")]]
+def get_product_keyboard(product_id, is_admin=False, in_favorites=False):
+    fav_text = "💔 Убрать" if in_favorites else "❤️ В избранное"
+    buttons = [
+        [InlineKeyboardButton(text="🛒 Заказать", callback_data=f"buy_{product_id}")],
+        [InlineKeyboardButton(text=fav_text, callback_data=f"fav_toggle_{product_id}")]
+    ]
     if is_admin:
         admin_row = [
             InlineKeyboardButton(text="✏️ Цена", callback_data=f"edit_price_{product_id}"),

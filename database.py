@@ -1,7 +1,7 @@
 from sqlmodel import SQLModel, select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from models import Product, Order
+from models import Product, Order, Favorite
 from core.config import settings
 from core.logger import logger
 
@@ -61,23 +61,28 @@ async def search_products(query: str = None, is_inverter: bool = None):
         # Start with base query
         statement = select(Product).where(Product.is_published == True).options(selectinload(Product.tags))
         
-        # 1. Text Search (Title)
-        if query:
-            statement = statement.where(Product.title.ilike(f"%{query}%"))
-        
-        # 2. Inverter Filter
+        # 1. Inverter Filter (if specified, do it early)
         if is_inverter:
-            # Join with tags to find 'inverter' or 'on-off'
-            # We assume 'is_inverter=True' means we want "inverter" tag slug
-            # Note: This requires joining tables. 
-            # Simpler approach if tags are eager loaded: filter in python? No, pagination/limit issues.
-            # Correct approach: Join
-            from models import ProductTagLink, Tag
+            from models import Tag
             statement = statement.join(Product.tags).where(Tag.slug == "inverter")
             
         results = await session.execute(statement)
         products = results.scalars().all()
         
+        # 2. Text Search with Fuzzy matching
+        if query:
+            from thefuzz import process
+            # Extract titles to match against
+            choices = {p.id: p.title for p in products}
+            # Get top matches
+            matches = process.extract(query, choices, limit=10)
+            
+            # Filter and sort products based on fuzzy matches (Lowered threshold for brand/short searches)
+            matched_ids = [m[2] for m in matches if m[1] >= 50]
+            # Maintain fuzzy order
+            id_map = {p.id: p for p in products}
+            products = [id_map[pid] for pid in matched_ids if pid in id_map]
+
         # Format for bot
         items = []
         for p in products:
@@ -148,3 +153,41 @@ async def update_order_status(order_id: int, new_status: str):
             await session.commit()
             return True
         return False
+# --- FAVORITES ---
+
+async def toggle_favorite(user_id: int, product_id: int) -> bool:
+    """Returns True if added, False if removed"""
+    async with async_session_maker() as session:
+        stmt = select(Favorite).where(Favorite.user_id == user_id, Favorite.product_id == product_id)
+        res = await session.execute(stmt)
+        item = res.scalar_one_or_none()
+        
+        if item:
+            await session.delete(item)
+            await session.commit()
+            return False
+        else:
+            fav = Favorite(user_id=user_id, product_id=product_id)
+            session.add(fav)
+            await session.commit()
+            return True
+
+async def is_favorite(user_id: int, product_id: int) -> bool:
+    async with async_session_maker() as session:
+        stmt = select(Favorite).where(Favorite.user_id == user_id, Favorite.product_id == product_id)
+        res = await session.execute(stmt)
+        return res.scalar_one_or_none() is not None
+
+async def get_favorites(user_id: int):
+    async with async_session_maker() as session:
+        stmt = select(Favorite).where(Favorite.user_id == user_id).options(selectinload(Favorite.product).selectinload(Product.tags))
+        res = await session.execute(stmt)
+        favs = res.scalars().all()
+        
+        items = []
+        for f in favs:
+            if f.product:
+                data = f.product.model_dump()
+                data['categories'] = [t.title for t in f.product.tags]
+                items.append(data)
+        return items
