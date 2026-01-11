@@ -149,4 +149,17 @@ class OnlinerParser(BaseParser):
             # Expose raw metrics for auto-tagging
             product_data['metrics'] = target_specs
             
+            # Related products discovery
+            related_urls = []
+            related_links = soup.select('a.offers-description-filter-control')
+            for link in related_links:
+                href = link.get('href')
+                if href:
+                    if href.startswith('/'):
+                        href = f"https://catalog.onliner.by{href}"
+                    if href not in related_urls and href != url:
+                        related_urls.append(href)
+            
+            product_data['related_urls'] = related_urls
+            
             return product_data

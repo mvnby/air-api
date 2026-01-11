@@ -65,6 +65,7 @@ async def get_dashboard_stats():
 async def import_process(request: Request):
     form = await request.form()
     raw_urls = form.get("url", "")
+    with_related = bool(form.get("with_related"))
     
     # Split by newlines, remove \r, and filter empty
     urls = [u.strip().replace('\r', '') for u in str(raw_urls).splitlines() if u.strip()]
@@ -73,16 +74,17 @@ async def import_process(request: Request):
         return RedirectResponse(url="/admin/product/list", status_code=303)
         
     try:
-        if len(urls) == 1:
-            product = await importer_service.import_product(urls[0])
-            msg = f"Product '{product.title}' imported successfully!"
+        results = await importer_service.import_products_bulk(urls, with_related=with_related)
+        success_count = len(results["success"])
+        error_count = len(results["errors"])
+        
+        if success_count == 1 and error_count == 0:
+            msg = f"Product imported successfully!"
         else:
-            results = await importer_service.import_products_bulk(urls)
-            success_count = len(results["success"])
-            error_count = len(results["errors"])
-            msg = f"Bulk import complete: {success_count} success, {error_count} errors."
-            if error_count > 0:
-                msg += " Check logs for details."
+            msg = f"Import complete: {success_count} success, {error_count} errors."
+            
+        if error_count > 0:
+            msg += " Check logs for details."
         
         return RedirectResponse(
             url=f"/admin/product/list?msg={msg}&type=success",

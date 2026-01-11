@@ -35,11 +35,18 @@
         <div class="d-flex align-items-center">
             <!-- Компактная форма импорта (теперь с поддержкой массового ввода) -->
             <form action="/admin/import_onliner" method="POST" class="d-flex align-items-end me-3">
-                <div class="px-2">
-                    <textarea name="url" class="form-control form-control-sm" style="width: 300px; height: 32px; resize: none;" 
+                <div class="px-2 d-flex flex-column">
+                    <textarea name="url" class="form-control form-control-sm"
+                        style="width: 300px; height: 32px; resize: none;"
                         placeholder="Один или несколько URL (по одному в строке)..." required
                         onfocus="this.style.height='150px'; this.style.resize='vertical';"
                         onblur="if(this.value=='') { this.style.height='32px'; this.style.resize='none'; }"></textarea>
+                    <div class="mt-1">
+                        <label class="form-check form-check-inline mb-0" style="cursor: pointer;">
+                            <input class="form-check-input" type="checkbox" name="with_related" value="1" checked>
+                            <span class="form-check-label small text-muted">Сопутствующие модели</span>
+                        </label>
+                    </div>
                 </div>
                 <button type="submit" class="btn btn-sm btn-info text-nowrap">
                     <i class="fa-solid fa-cloud-arrow-down me-1"></i> Импорт

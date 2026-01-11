@@ -18,9 +18,10 @@ class ImporterService:
                 return parser
         return None
 
-    async def import_product(self, url: str) -> Product:
+    async def import_product(self, url: str) -> dict:
         """
         Orchestrates the import process: find parser -> parse -> save to DB.
+        Returns a dict: {'product': Product, 'related_urls': List[str]}
         """
         url = url.strip().replace('\r', '').replace('\n', '')
         async with async_session_maker() as session:
@@ -28,8 +29,11 @@ class ImporterService:
             from sqlmodel import select
             stmt = select(Product).where(Product.source_url == url)
             result = await session.execute(stmt)
-            if result.scalar_one_or_none():
-                raise ValueError(f"Product with URL '{url}' already exists in the database.")
+            existing = result.scalar_one_or_none()
+            if existing:
+                # We return it but maybe don't re-save. 
+                # For the sake of bulk import, we'll return the existing one.
+                return {"product": existing, "related_urls": []}
 
             parser = self.get_parser(url)
             if not parser:
@@ -93,20 +97,36 @@ class ImporterService:
             session.add(product)
             await session.commit()
             await session.refresh(product)
-            return product
+            return {"product": product, "related_urls": data.get('related_urls', [])}
 
-    async def import_products_bulk(self, urls: List[str]) -> dict:
+    async def import_products_bulk(self, urls: List[str], with_related: bool = False) -> dict:
         """
         Imports multiple products and returns a summary of success/errors.
+        Can recursively import related products.
         """
         results = {"success": [], "errors": []}
-        for url in urls:
-            # Thorough cleaning of URLs
-            url = url.strip().replace('\r', '').replace('\n', '')
-            if not url: continue
+        processed_urls = set()
+        pending_urls = [u.strip().replace('\r', '').replace('\n', '') for u in urls if u.strip()]
+
+        while pending_urls:
+            url = pending_urls.pop(0)
+            if url in processed_urls: continue
+            
             try:
-                product = await self.import_product(url)
+                res = await self.import_product(url)
+                product = res["product"]
+                # Only add to 'success' if it's a NEW import (or just count it)
+                # To keep it simple, we count all as success if they are in DB now.
                 results["success"].append(f"'{product.title}' (ID: {product.id})")
+                
+                processed_urls.add(url)
+                
+                if with_related:
+                    for rel_url in res["related_urls"]:
+                        if rel_url not in processed_urls and rel_url not in pending_urls:
+                            pending_urls.append(rel_url)
             except Exception as e:
                 results["errors"].append(f"URL '{url}': {str(e)}")
+                processed_urls.add(url)
+
         return results
