@@ -13,10 +13,7 @@ from core.config import settings
 from core.logger import logger
 from routers import admin as admin_router
 from routers import api as api_router
-from admin_views import (
-    ProductAdmin, ArticleAdmin, TagGroupAdmin, 
-    TagAdmin, OrderAdmin
-)
+from admin import admin_views
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -61,9 +58,6 @@ app.mount(f"/{settings.STATIC_DIR}", StaticFiles(directory=settings.STATIC_DIR),
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 admin = Admin(app, engine, title="AirCon Admin", templates_dir=os.path.join(BASE_DIR, "templates"))
 
-# Register views
-admin.add_view(ProductAdmin)
-admin.add_view(ArticleAdmin)
-admin.add_view(TagGroupAdmin)
-admin.add_view(TagAdmin)
-admin.add_view(OrderAdmin)
+# Register views from the admin package
+for view in admin_views:
+    admin.add_view(view)
