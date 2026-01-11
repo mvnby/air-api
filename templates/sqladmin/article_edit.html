@@ -1,0 +1,86 @@
+{% extends "sqladmin/layout.html" %}
+{% from 'sqladmin/_macros.html' import render_form_fields %}
+
+{% block head %}
+{{ super() }}
+<link rel="stylesheet" href="https://unpkg.com/easymde/dist/easymde.min.css">
+<script src="https://unpkg.com/easymde/dist/easymde.min.js"></script>
+<style>
+    .editor-toolbar {
+        background: #fff;
+    }
+
+    .CodeMirror {
+        border-radius: 0 0 4px 4px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="col-12">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Изменение статьи: {{ obj.title }}</h3>
+        </div>
+        <div class="card-body border-bottom py-3">
+            <form id="admin-form" action="{{ model_view._build_url_for('admin:edit', request, obj) }}" method="POST"
+                enctype="multipart/form-data">
+                <div class="row">
+                    {% if error %}
+                    <div class="alert alert-danger" role="alert">{{ error }}</div>
+                    {% endif %}
+                </div>
+                <fieldset class="form-fieldset">
+                    {{ render_form_fields(form, form_opts=form_opts) }}
+                </fieldset>
+
+                <div class="row mt-3">
+                    <div class="col-md-2">
+                        <a href="{{ url_for('admin:list', identity=model_view.identity) }}" class="btn">
+                            Отмена
+                        </a>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="btn-group flex-wrap" data-toggle="buttons">
+                            <button type="submit" name="save" value="Save" class="btn btn-primary">Сохранить</button>
+                            <button type="submit" name="save" value="Save and continue editing" class="btn">Сохранить и
+                                продолжить</button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Find the content textarea
+        const contentTextarea = document.getElementById('content');
+        if (!contentTextarea) return;
+
+        const easymde = new EasyMDE({
+            element: contentTextarea,
+            spellChecker: false,
+            autosave: {
+                enabled: true,
+                uniqueId: "article-{{ obj.id }}",
+                delay: 1000,
+            },
+            placeholder: "Начните писать статью здесь...",
+            status: ["lines", "words", "cursor", "autosave"],
+            renderingConfig: {
+                singleLineBreaks: false,
+                codeSyntaxHighlighting: true,
+            },
+            toolbar: [
+                "bold", "italic", "heading", "|",
+                "quote", "unordered-list", "ordered-list", "|",
+                "link", "image", "table", "|",
+                "preview", "side-by-side", "fullscreen", "|",
+                "guide"
+            ],
+        });
+    });
+</script>
+{% endblock %}

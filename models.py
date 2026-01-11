@@ -87,9 +87,23 @@ class Product(SQLModel, table=True):
 class Article(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str
+    slug: str = Field(unique=True, index=True)
     content: str
-    image_url: Optional[str] = None
+    main_image: Optional[str] = None
+    is_published: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.now)
+
+    # Virtual field for admin file upload
+    @property
+    def main_image_file(self) -> Any:
+        return getattr(self, "_temp_main_image_file", None)
+    
+    @main_image_file.setter
+    def main_image_file(self, value: Any):
+        self._temp_main_image_file = value
+
+    def __str__(self):
+        return self.title
 
 class Order(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
