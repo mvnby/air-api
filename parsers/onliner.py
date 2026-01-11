@@ -121,6 +121,26 @@ class OnlinerParser(BaseParser):
                         elif 'Инверторная технология' in key:
                             if 'да' in value.lower():
                                 target_specs['is_inverter'] = True
+                        
+                        elif 'Минимальная температура' in key or 'Рабочая температура при обогреве' in key:
+                            # Usually format is "от -20 до +24 °C"
+                            match = re.search(r'(-\d+)', value)
+                            if match:
+                                min_temp = int(match.group(1))
+                                # Only add winter tags for temperatures -15 and below
+                                if min_temp <= -15:
+                                    # Normalize to nearest supported slug: 15, 20, 25, 30
+                                    # If it's -22, it stays -20 (downwards compatibility)
+                                    # But since user specifically mentioned winter-15, winter-20 etc, 
+                                    # we check thresholds. 
+                                    if min_temp <= -30: tag_slug = "winter-30"
+                                    elif min_temp <= -25: tag_slug = "winter-25"
+                                    elif min_temp <= -20: tag_slug = "winter-20"
+                                    else: tag_slug = "winter-15"
+                                    
+                                    # We add the slug to categories so the importer_service can resolve it to a Tag
+                                    if tag_slug not in categories:
+                                        categories.append(tag_slug)
 
             # Use parsed Area if available, else 0
             product_data['area'] = target_specs['area']
