@@ -4,3 +4,5 @@ class ShopState(StatesGroup):
     edit_price = State()
     waiting_for_phone = State()
     waiting_for_search = State()
+    select_area = State()
+    select_type = State()

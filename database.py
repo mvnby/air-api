@@ -61,10 +61,9 @@ async def search_products(query: str = None, is_inverter: bool = None):
         # Start with base query
         statement = select(Product).where(Product.is_published == True).options(selectinload(Product.tags))
         
-        # 1. Inverter Filter (if specified, do it early)
-        if is_inverter:
-            from models import Tag
-            statement = statement.join(Product.tags).where(Tag.slug == "inverter")
+        # 1. Inverter Filter (if specified)
+        if is_inverter is not None:
+            statement = statement.where(Product.is_inverter == is_inverter)
             
         results = await session.execute(statement)
         products = results.scalars().all()
@@ -121,6 +120,38 @@ async def delete_product(product_id: int):
             await session.commit()
             return True
         return False
+
+async def get_curated_products(area: int, is_inverter: bool):
+    async with async_session_maker() as session:
+        # Find products that cover the requested area
+        # We sort by area (to get the right size) and then by price
+        stmt = select(Product).where(
+            Product.is_published == True,
+            Product.is_inverter == is_inverter,
+            Product.area >= area
+        ).order_by(Product.area.asc(), Product.price.asc()).options(selectinload(Product.tags))
+        
+        res = await session.execute(stmt)
+        products = res.scalars().all()
+        
+        if not products:
+            return []
+            
+        curated = []
+        # 1. Cheapest one
+        curated.append(products[0])
+        
+        # 2. Next one (different price/brand if possible)
+        # We'll just take the second one for now, as they are sorted by price ascending
+        if len(products) > 1:
+            curated.append(products[1])
+            
+        items = []
+        for p in curated:
+            data = p.model_dump()
+            data['categories'] = [t.title for t in p.tags]
+            items.append(data)
+        return items
 
 # --- ORDER OPERATIONS ---
 

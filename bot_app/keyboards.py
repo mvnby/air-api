@@ -5,17 +5,25 @@ from aiogram.types import (
 
 main_menu = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="📂 Каталог"), KeyboardButton(text="📐 Подбор по площади")],
-        [KeyboardButton(text="⚡ Инверторные"), KeyboardButton(text="🔎 Поиск")],
+        [KeyboardButton(text="🏆 Умный подбор"), KeyboardButton(text="🔎 Поиск")],
         [KeyboardButton(text="⭐ Избранное"), KeyboardButton(text="❓ Помощь")]
     ],
     resize_keyboard=True
 )
 
-area_menu = InlineKeyboardMarkup(
+area_selection_kb = InlineKeyboardMarkup(
     inline_keyboard=[
-        [InlineKeyboardButton(text="20 м²", callback_data="area_20"), InlineKeyboardButton(text="25 м²", callback_data="area_25")],
-        [InlineKeyboardButton(text="35 м²", callback_data="area_35"), InlineKeyboardButton(text="50+ м²", callback_data="area_50")]
+        [InlineKeyboardButton(text="до 20 м²", callback_data="select_area_20"), 
+         InlineKeyboardButton(text="до 25 м²", callback_data="select_area_25")],
+        [InlineKeyboardButton(text="до 35 м²", callback_data="select_area_35"), 
+         InlineKeyboardButton(text="50+ м²", callback_data="select_area_50")]
+    ]
+)
+
+type_selection_kb = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Оптимальный (Стандарт)", callback_data="select_type_off")],
+        [InlineKeyboardButton(text="💎 Премиум (Инвертор)", callback_data="select_type_inverter")]
     ]
 )
 

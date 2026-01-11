@@ -113,7 +113,7 @@ class OnlinerParser(BaseParser):
                             match = re.search(r'([\d\.]+)', value)
                             if match: target_specs['power_heating'] = float(match.group(1))
                         
-                        elif 'Площадь помещения' in key:
+                        elif 'Площадь помещения' in key or 'Обслуживаемая площадь' in key:
                             match = re.search(r'(\d+)', value)
                             if match and not target_specs['area']: # Only if not set (or use priority)
                                 target_specs['area'] = int(match.group(1))

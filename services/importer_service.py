@@ -87,6 +87,8 @@ class ImporterService:
                 description=data['description'],
                 price=data['price'],
                 area=data['area'],
+                is_inverter=metrics.get('is_inverter', False),
+                power_cooling=metrics.get('power_cooling'),
                 main_image=data['main_image'],
                 images=data.get('images', []),
                 tags=tag_objects,

@@ -52,6 +52,8 @@ class Product(SQLModel, table=True):
     price: int
     old_price: Optional[int] = None
     area: int = Field(default=0, index=True)
+    is_inverter: bool = Field(default=False, index=True)
+    power_cooling: Optional[float] = Field(default=None, index=True)
     
     # 1. Главная картинка
     main_image: Optional[str] = Field(default=None)

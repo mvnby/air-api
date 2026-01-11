@@ -1,57 +1,59 @@
 from aiogram import Router, types, F
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
-from database import get_all_products, get_products_by_area, search_products
+from database import get_curated_products, search_products
 from core.config import settings
-from ..keyboards import area_menu
+from ..keyboards import area_selection_kb, type_selection_kb
 from ..utils import send_product_card
 from ..states import ShopState
 
 router = Router()
 
-@router.message(F.text == "📂 Каталог")
-async def show_catalog(message: types.Message):
-    products = await get_all_products()
-    if not products:
-        await message.answer("Каталог пуст.")
-        return
-    
-    is_admin = message.from_user.id == settings.ADMIN_ID
-    await message.answer(f"📦 Товаров в каталоге: {len(products)}")
-    
-    for product in products[:5]:
-        await send_product_card(message, product, is_admin)
+@router.message(F.text == "🏆 Умный подбор")
+async def start_selection(message: types.Message, state: FSMContext):
+    await state.set_state(ShopState.select_area)
+    await message.answer(
+        "Давайте подберем идеальный кондиционер! 🌬️\n\n"
+        "Для начала выберите площадь вашего помещения:",
+        reply_markup=area_selection_kb
+    )
 
-@router.message(F.text == "📐 Подбор по площади")
-async def start_area(message: types.Message):
-    await message.answer("Выберите площадь:", reply_markup=area_menu)
-
-@router.callback_query(F.data.startswith("area_"))
-async def process_area(callback: CallbackQuery):
-    area_str = callback.data.split("_")[1]
-    if not area_str.isdigit(): return
-    area = int(area_str)
+@router.callback_query(ShopState.select_area, F.data.startswith("select_area_"))
+async def process_area(callback: CallbackQuery, state: FSMContext):
+    area_val = callback.data.split("_")[-1]
+    await state.update_data(area=int(area_val))
+    await state.set_state(ShopState.select_type)
     
-    products = await get_products_by_area(area)
-    is_admin = callback.from_user.id == settings.ADMIN_ID
-    
-    await callback.message.answer(f"🔎 Найдено: {len(products)}")
-    for product in products:
-        await send_product_card(callback, product, is_admin)
+    await callback.message.edit_text(
+        f"Выбрана площадь: до {area_val} м².\n\n"
+        "Теперь выберите тип оборудования:\n"
+        "🔹 **Оптимальный** — надежные классические модели.\n"
+        "🔹 **Премиум** — тихие и экономичные инверторы.",
+        reply_markup=type_selection_kb
+    )
     await callback.answer()
 
-@router.message(F.text == "⚡ Инверторные")
-async def show_inverters(message: types.Message):
-    products = await search_products(is_inverter=True)
-    is_admin = message.from_user.id == settings.ADMIN_ID
+@router.callback_query(ShopState.select_type, F.data.startswith("select_type_"))
+async def process_type(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    area = data.get("area")
+    is_inverter = callback.data == "select_type_inverter"
+    
+    type_text = "Премиум (Инвертор)" if is_inverter else "Оптимальный (Стандарт)"
+    await callback.message.edit_text(f"Ищем лучшие модели {type_text} для площади {area} м²...")
+    
+    products = await get_curated_products(area, is_inverter)
+    is_admin = callback.from_user.id == settings.ADMIN_ID
     
     if not products:
-        await message.answer("Инверторные модели не найдены.")
-        return
-
-    await message.answer(f"⚡ Найдено инверторов: {len(products)}")
-    for product in products:
-        await send_product_card(message, product, is_admin)
+        await callback.message.answer("К сожалению, по вашим параметрам сейчас ничего не найдено. Попробуйте изменить поиск.")
+    else:
+        await callback.message.answer(f"🚀 Вот лучшие предложения для вас:")
+        for product in products:
+            await send_product_card(callback, product, is_admin)
+            
+    await state.clear()
+    await callback.answer()
 
 @router.message(F.text == "🔎 Поиск")
 async def search_start(message: types.Message, state: FSMContext):
@@ -65,10 +67,11 @@ async def search_process(message: types.Message, state: FSMContext):
     is_admin = message.from_user.id == settings.ADMIN_ID
     
     if not products:
-        await message.answer(f"Hичего не найдено по запросу '{query}'.")
+        await message.answer(f"Ничего не найдено по запросу '{query}'.")
     else:
         await message.answer(f"🔎 По запросу '{query}' найдено: {len(products)}")
-        for product in products:
+        for i, product in enumerate(products):
+            if i >= 10: break # Safety limit
             await send_product_card(message, product, is_admin)
             
     await state.clear()
