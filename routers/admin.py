@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 from services.importer_service import ImporterService
-from database import async_session_maker
+from core.database import async_session_maker
 from models import Product, Order
 from sqlmodel import select, func
 from sqlalchemy.orm import selectinload

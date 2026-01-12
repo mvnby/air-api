@@ -1,8 +1,11 @@
 from aiogram import Router, types, F, Bot
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
-from database import get_product_by_id, create_order
 from core.config import settings
+from core.database import async_session_maker
+from core.logger import logger
+from services.product_service import ProductService
+from services.order_service import OrderService
 from ..config import bot
 from ..states import ShopState
 from ..keyboards import main_menu
@@ -20,17 +23,20 @@ async def buy_start(callback: CallbackQuery, state: FSMContext):
 async def buy_finish(message: types.Message, state: FSMContext):
     data = await state.get_data()
     product_id = int(data['product_id'])
-    product = await get_product_by_id(product_id)
     
-    # Create Order in DB
     user = message.from_user
-    order = await create_order(
-        user_id=user.id,
-        product_id=product_id,
-        username=user.username,
-        full_name=user.full_name,
-        phone=message.text
-    )
+    
+    # Use new Service Layer with session
+    async with async_session_maker() as session:
+        product = await ProductService.get_by_id(session, product_id)
+        order = await OrderService.create_order(
+            session,
+            user_id=user.id,
+            product_id=product_id,
+            username=user.username,
+            full_name=user.full_name,
+            phone=message.text
+        )
 
     if product and settings.admin_list:
         text = (f"🔔 НОВЫЙ ЗАКАЗ #{order.id}!\n"

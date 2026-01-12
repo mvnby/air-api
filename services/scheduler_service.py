@@ -2,7 +2,7 @@ import asyncio
 import logging
 from typing import List
 from sqlmodel import select
-from database import async_session_maker
+from core.database import async_session_maker
 from models import Product
 from parsers.onliner import OnlinerParser
 from core.logger import logger

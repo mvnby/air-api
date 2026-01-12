@@ -1,8 +1,9 @@
 from aiogram import Router, types, F
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
-from database import get_curated_products, search_products
 from core.config import settings
+from core.database import async_session_maker
+from services.product_service import ProductService
 from ..keyboards import area_selection_kb, type_selection_kb
 from ..utils import send_product_card
 from ..states import ShopState
@@ -42,7 +43,10 @@ async def process_type(callback: CallbackQuery, state: FSMContext):
     type_text = "Премиум (Инвертор)" if is_inverter else "Оптимальный (Стандарт)"
     await callback.message.edit_text(f"Ищем лучшие модели {type_text} для площади {area} м²...")
     
-    products = await get_curated_products(area, is_inverter)
+    # Use new Service Layer with session
+    async with async_session_maker() as session:
+        products = await ProductService.get_curated(session, area, is_inverter)
+    
     is_admin = callback.from_user.id == settings.ADMIN_ID
     
     if not products:
@@ -63,7 +67,11 @@ async def search_start(message: types.Message, state: FSMContext):
 @router.message(ShopState.waiting_for_search)
 async def search_process(message: types.Message, state: FSMContext):
     query = message.text
-    products = await search_products(query=query)
+    
+    # Use new Service Layer with session
+    async with async_session_maker() as session:
+        products = await ProductService.search(session, query=query)
+    
     is_admin = message.from_user.id == settings.ADMIN_ID
     
     if not products:

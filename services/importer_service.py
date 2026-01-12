@@ -1,7 +1,7 @@
 from typing import List, Optional
 from parsers.base import BaseParser
 from parsers.onliner import OnlinerParser
-from database import async_session_maker
+from core.database import async_session_maker
 from models import Product
 
 class ImporterService:

@@ -10,7 +10,7 @@ import slugify
 
 from models import Product, Tag, TagGroup
 from forms import TagListField
-from database import async_session_maker
+from core.database import async_session_maker
 from starlette.responses import RedirectResponse
 from .base import format_tags_shared
 
