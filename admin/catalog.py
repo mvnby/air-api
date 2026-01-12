@@ -1,7 +1,7 @@
 import os
 import uuid
 import shutil
-from sqladmin import ModelView
+from sqladmin import ModelView, action, expose, BaseView
 from markupsafe import Markup
 from wtforms import TextAreaField, FileField
 from sqlalchemy.orm import selectinload
@@ -11,6 +11,7 @@ import slugify
 from models import Product, Tag, TagGroup
 from forms import TagListField
 from database import async_session_maker
+from starlette.responses import RedirectResponse
 from .base import format_tags_shared
 
 class ProductAdmin(ModelView, model=Product):
@@ -20,14 +21,17 @@ class ProductAdmin(ModelView, model=Product):
     icon = "fa-solid fa-snowflake"
     
     list_template = "product_list.html"
+    edit_template = "sqladmin/product_edit.html"
     column_list = ["id", "formatted_title", "price", "main_image", "formatted_area", "is_published"]
     column_searchable_list = ["title", "description"]
+    # column_filters = [Product.is_inverter, Product.area, Product.is_published]
     column_default_sort = ("created_at", True)
-    column_editable_list = ["price", "old_price", "is_published"]
+    column_editable_list = ["is_published"]
     page_size = 100
     page_size_options = [25, 50, 100, 200]
     export_types = ["csv", "json"]
-    
+
+
     def list_query(self, request):
         query = super().list_query(request)
         return query.options(selectinload(self.model.tags).selectinload(Tag.group))
@@ -56,10 +60,16 @@ class ProductAdmin(ModelView, model=Product):
             return f"{model.area} м²"
         return "—"
 
+    def format_price(model, context):
+        if model.price:
+            return f"{model.price:,}".replace(",", " ")
+        return "—"
+
     column_formatters = {
         "main_image": format_image,
         "formatted_title": format_product_title,
-        "formatted_area": format_area
+        "formatted_area": format_area,
+        "price": format_price
     }
     
     column_labels = {
@@ -79,12 +89,12 @@ class ProductAdmin(ModelView, model=Product):
     }
     
     form_columns = [
-        "title", "description", "price", "old_price", "area", 
+        "title", "description", "price", "old_price", "area", "is_inverter", "power_cooling",
         "main_image", "images", "tags", "specs", "is_published", "source_url"
     ]
     
     form_edit_rules = [
-        "title", "description", "area", "price", "old_price", "source_url",
+        "title", "description", "area", "is_inverter", "power_cooling", "price", "old_price", "source_url",
         "is_published", "main_image", "main_image_file", "images",
         "tags", "specs"
     ]
@@ -171,3 +181,69 @@ class TagAdmin(ModelView, model=Tag):
     def list_query(self, request):
         query = super().list_query(request)
         return query.options(selectinload(self.model.group))
+
+class BulkTagsView(BaseView):
+    name = "Bulk Tags"
+    icon = "fa-solid fa-tags"
+
+    def is_visible(self, request):
+        return False
+
+    @expose("/bulk-tags", methods=["GET", "POST"])
+    async def list(self, request):
+        pks = request.query_params.get("pks", "").split(",")
+        pks = [pk for pk in pks if pk]
+        
+        if request.method == "POST":
+            form = await request.form()
+            action_type = form.get("action_type") # add/remove
+            selected_tag_ids = form.getlist("tag_ids")
+            
+            async with async_session_maker() as session:
+                # Fetch products
+                stmt = select(Product).where(Product.id.in_(pks)).options(selectinload(Product.tags))
+                res = await session.execute(stmt)
+                products = res.scalars().all()
+                
+                # Fetch tags
+                t_stmt = select(Tag).where(Tag.id.in_(selected_tag_ids))
+                t_res = await session.execute(t_stmt)
+                tags_to_apply = t_res.scalars().all()
+                
+                for product in products:
+                    if action_type == "add":
+                        current_tag_ids = {t.id for t in product.tags}
+                        for tag in tags_to_apply:
+                            if tag.id not in current_tag_ids:
+                                product.tags.append(tag)
+                    elif action_type == "remove":
+                        product.tags = [t for t in product.tags if str(t.id) not in selected_tag_ids]
+                
+                await session.commit()
+            
+            # Redirect back to Product List
+            return RedirectResponse(
+                url=f"{request.url_for('admin:list', identity='product')}?msg=Теги обновлены для {len(products)} товаров&type=success",
+                status_code=303
+            )
+
+        # GET: show form
+        async with async_session_maker() as session:
+            g_stmt = select(TagGroup).options(selectinload(TagGroup.tags))
+            g_res = await session.execute(g_stmt)
+            groups = g_res.scalars().all()
+            
+            p_stmt = select(Product).where(Product.id.in_(pks))
+            p_res = await session.execute(p_stmt)
+            products = p_res.scalars().all()
+
+        return await self.templates.TemplateResponse(
+            request,
+            "sqladmin/bulk_tags.html",
+            {
+                "model_view": self,
+                "groups": groups,
+                "products": products,
+                "pks": pks,
+            }
+        )

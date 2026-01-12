@@ -1,0 +1,139 @@
+{% extends "sqladmin/layout.html" %}
+{% block content %}
+<div class="col-12">
+    <div class="card shadow-sm">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <div>
+                <h3 class="card-title fw-bold">Массовое управление тегами</h3>
+                <p class="card-subtitle text-muted mt-1">Вы работаете с <strong>{{ products|length }}</strong> товарами
+                </p>
+            </div>
+            <a href="{{ url_for('admin:list', identity=model_view.identity) }}"
+                class="btn btn-link btn-sm text-secondary">
+                <i class="fa-solid fa-xmark me-1"></i> Закрыть
+            </a>
+        </div>
+        <div class="card-body">
+            <form method="POST">
+                <!-- Selected Products Preview -->
+                <div class="mb-4">
+                    <label class="form-label small text-uppercase text-muted fw-bold mb-2">Объекты применения:</label>
+                    <div class="border rounded p-3 bg-light-lt" style="max-height: 120px; overflow-y: auto;">
+                        {% for p in products %}
+                        <span class="badge bg-blue-lt text-blue mb-1" title="{{ p.title }}">
+                            {{ p.title[:40] }}{% if p.title|length > 40 %}...{% endif %}
+                        </span>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <!-- Action Type -->
+                <div class="mb-4">
+                    <label class="form-label small text-uppercase text-muted fw-bold mb-3">Выберите действие:</label>
+                    <div class="form-selectgroup form-selectgroup-boxes d-flex">
+                        <label class="form-selectgroup-item flex-fill">
+                            <input type="radio" name="action_type" value="add" class="form-selectgroup-input" checked>
+                            <span class="form-selectgroup-button d-flex align-items-center p-3">
+                                <span class="me-3">
+                                    <span class="form-selectgroup-check"></span>
+                                </span>
+                                <span class="form-selectgroup-label-content">
+                                    <span class="form-selectgroup-title fw-bold">Добавить теги</span>
+                                    <span class="form-selectgroup-label-text text-muted">Выбранные теги будут добавлены
+                                        к существующим</span>
+                                </span>
+                            </span>
+                        </label>
+                        <label class="form-selectgroup-item flex-fill ms-3">
+                            <input type="radio" name="action_type" value="remove" class="form-selectgroup-input">
+                            <span class="form-selectgroup-button d-flex align-items-center p-3">
+                                <span class="me-3">
+                                    <span class="form-selectgroup-check"></span>
+                                </span>
+                                <span class="form-selectgroup-label-content">
+                                    <span class="form-selectgroup-title fw-bold">Удалить теги</span>
+                                    <span class="form-selectgroup-label-text text-muted">Выбранные теги будут убраны у
+                                        этих товаров</span>
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Tags Selection Selection -->
+                <div class="mb-3">
+                    <label class="form-label small text-uppercase text-muted fw-bold mb-3">Доступные теги по
+                        группам:</label>
+                    <div class="row g-3">
+                        {% for group in groups %}
+                        <div class="col-md-6 col-lg-4">
+                            <div class="card h-100 shadow-none border-0 bg-light p-1">
+                                <div class="card-header py-2 border-0"
+                                    style="background-color: {{ group.color or '#6c757d' }}15; border-radius: 6px 6px 0 0;">
+                                    <h4 class="card-title small fw-bold" style="color: {{ group.color or '#333' }};">
+                                        <i class="fa-solid fa-folder-tree me-1"></i> {{ group.title }}
+                                    </h4>
+                                </div>
+                                <div class="card-body py-2 px-3 overflow-auto" style="max-height: 200px;">
+                                    {% if group.tags %}
+                                    {% for tag in group.tags %}
+                                    <label class="form-check cursor-pointer mb-2">
+                                        <input class="form-check-input" type="checkbox" name="tag_ids"
+                                            value="{{ tag.id }}">
+                                        <span class="form-check-label small">{{ tag.title }}</span>
+                                    </label>
+                                    {% endfor %}
+                                    {% else %}
+                                    <span class="text-muted smaller italic">Нет тегов в этой группе</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="form-footer mt-5 border-top pt-4">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <a href="{{ url_for('admin:list', identity=model_view.identity) }}"
+                                class="btn btn-link text-secondary">
+                                Отмена
+                            </a>
+                        </div>
+                        <div class="col-auto">
+                            <button type="submit" class="btn btn-primary px-5">
+                                <i class="fa-solid fa-check me-2"></i> Применить к {{ products|length }} товарам
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .bg-light-lt {
+        background-color: rgba(246, 248, 251, 0.6);
+    }
+
+    .cursor-pointer {
+        cursor: pointer;
+    }
+
+    .italic {
+        font-style: italic;
+    }
+
+    .smaller {
+        font-size: 0.75rem;
+    }
+
+    .form-selectgroup-boxes .form-selectgroup-item {
+        margin-bottom: 0;
+    }
+</style>
+{% endblock %}

@@ -1,4 +1,4 @@
-from .catalog import ProductAdmin, TagAdmin, TagGroupAdmin
+from .catalog import ProductAdmin, TagAdmin, TagGroupAdmin, BulkTagsView
 from .orders import OrderAdmin
 from .content import ArticleAdmin
 
@@ -8,5 +8,6 @@ admin_views = [
     TagAdmin,
     TagGroupAdmin,
     OrderAdmin,
-    ArticleAdmin
+    ArticleAdmin,
+    BulkTagsView
 ]

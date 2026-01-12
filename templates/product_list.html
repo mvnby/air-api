@@ -5,9 +5,6 @@
 <style>
     /* Ensure content is not hidden behind sidebar if it is fixed */
     @media (min-width: 992px) {
-
-        /* SQLAdmin used to handle this, but if it fails, we force it. 
-           Standard sidebar width in Tabler/SQLAdmin is often ~15rem (240px). */
         .page-body {
             margin-left: 14rem;
         }
@@ -31,30 +28,36 @@
             {{ model_view.name_plural }}
         </h2>
     </div>
-    <div class="col-auto ms-auto d-print-none">
-        <div class="d-flex align-items-center">
-            <!-- Компактная форма импорта (теперь с поддержкой массового ввода) -->
-            <form action="/admin/import_onliner" method="POST" class="d-flex align-items-end me-3">
-                <div class="px-2 d-flex flex-column">
-                    <textarea name="url" class="form-control form-control-sm"
-                        style="width: 300px; height: 32px; resize: none;"
-                        placeholder="Один или несколько URL (по одному в строке)..." required
-                        onfocus="this.style.height='150px'; this.style.resize='vertical';"
-                        onblur="if(this.value=='') { this.style.height='32px'; this.style.resize='none'; }"></textarea>
-                    <div class="mt-1">
-                        <label class="form-check form-check-inline mb-0" style="cursor: pointer;">
+    <div class="col-auto ms-auto d-print-none text-end d-flex gap-2">
+        <!-- Bulk Tag Button -->
+        <button id="bulk-tag-btn" class="btn btn-sm btn-outline-primary mb-2">
+            <i class="fa-solid fa-tags me-1"></i> Теги
+        </button>
+
+        <details class="d-inline-block text-start">
+            <summary class="btn btn-sm btn-outline-secondary mb-2" style="cursor: pointer; list-style: none;">
+                <i class="fa-solid fa-cloud-arrow-down me-1"></i> Импорт из Onliner
+            </summary>
+            <div class="card p-3 shadow-sm" style="position: absolute; right: 0; z-index: 1000; min-width: 350px;">
+                <form action="/admin/import_onliner" method="POST">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Ссылки (одна в строке)</label>
+                        <textarea name="url" class="form-control form-control-sm"
+                            style="height: 100px; resize: vertical;" placeholder="https://catalog.onliner.by/..."
+                            required></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-check form-switch cursor-pointer">
                             <input class="form-check-input" type="checkbox" name="with_related" value="1" checked>
-                            <span class="form-check-label small text-muted">Сопутствующие модели</span>
+                            <span class="form-check-label small">Добавить сопутствующие модели</span>
                         </label>
                     </div>
-                </div>
-                <button type="submit" class="btn btn-sm btn-info text-nowrap">
-                    <i class="fa-solid fa-cloud-arrow-down me-1"></i> Импорт
-                </button>
-            </form>
-
-
-        </div>
+                    <button type="submit" class="btn btn-sm btn-primary w-100">
+                        <i class="fa-solid fa-play me-1"></i> Запустить импорт
+                    </button>
+                </form>
+            </div>
+        </details>
     </div>
 </div>
 </div>
@@ -68,4 +71,30 @@
     <a class="btn-close" data-bs-dismiss="alert" aria-label="close"></a>
 </div>
 {% endif %}
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const btn = document.getElementById('bulk-tag-btn');
+        if (!btn) return;
+
+        btn.addEventListener('click', function () {
+            // Find all checked checkboxes with class 'select-box'
+            // SQLAdmin structure: <td><input type="hidden" value="ID"><input type="checkbox" class="select-box"></td>
+            const checkboxes = document.querySelectorAll('input.select-box:checked');
+            const pks = Array.from(checkboxes).map(cb => {
+                // Get the ID from the hidden input which is a sibling
+                const hiddenId = cb.parentElement.querySelector('input[type="hidden"]');
+                return hiddenId ? hiddenId.value : null;
+            }).filter(id => id !== null);
+
+            if (pks.length === 0) {
+                alert('Выберите товары для редактирования тегов');
+                return;
+            }
+
+            // Redirect to bulk edit page
+            window.location.href = '/admin/bulk-tags?pks=' + pks.join(',');
+        });
+    });
+</script>
 {% endblock %}

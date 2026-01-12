@@ -1,0 +1,276 @@
+{% extends "sqladmin/layout.html" %}
+{% macro render_field(field) %}
+<div class="mb-3">
+    {{ field.label(class="form-label") }}
+    {% set extra_args = {} %}
+    {% if kwargs %}
+    {% set extra_args = kwargs %}
+    {% endif %}
+
+    {% if field.type == 'BooleanField' %}
+    <div class="form-check">
+        {{ field(class="form-check-input", **extra_args) }}
+        <label class="form-check-label" for="{{ field.id }}">{{ field.label.text }}</label>
+    </div>
+    {% else %}
+    {{ field(class="form-control", **extra_args) }}
+    {% endif %}
+
+    {% if field.description %}
+    <div class="form-text text-muted">{{ field.description }}</div>
+    {% endif %}
+    {% if field.errors %}
+    <div class="invalid-feedback d-block">{{ field.errors|join(', ') }}</div>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{% block head %}
+{{ super() }}
+<link href="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/9.10.4/jsoneditor.min.css" rel="stylesheet"
+    type="text/css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/9.10.4/jsoneditor.min.js"></script>
+<style>
+    #jsoneditor {
+        height: 400px;
+        width: 100%;
+    }
+
+    .json-editor-container {
+        margin-top: 10px;
+    }
+
+    .img-preview-container {
+        margin-top: 10px;
+        border: 1px dashed #ddd;
+        padding: 5px;
+        border-radius: 4px;
+        background: #f8f9fa;
+        text-align: center;
+        min-height: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .img-preview-container img {
+        max-width: 100%;
+        max-height: 200px;
+        object-fit: contain;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="col-12">
+    <div class="card">
+        <div class="card-header d-flex justify-content-between">
+            <h3 class="card-title">Редактирование товара</h3>
+            {% if obj.source_url %}
+            <a href="{{ obj.source_url }}" target="_blank" class="btn btn-sm btn-outline-info">
+                <i class="fa-solid fa-external-link me-1"></i> Onliner
+            </a>
+            {% endif %}
+        </div>
+        <div class="card-body border-bottom py-3">
+            <form id="admin-form" action="{{ model_view._build_url_for('admin:edit', request, obj) }}" method="POST"
+                enctype="multipart/form-data">
+
+                <div class="row">
+                    {% if error %}
+                    <div class="alert alert-danger" role="alert">{{ error }}</div>
+                    {% endif %}
+                </div>
+
+                <!-- Tabs Navigation -->
+                <ul class="nav nav-tabs mb-3" id="productTabs" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active" id="general-tab" data-bs-toggle="tab" href="#general" role="tab">О
+                            товаре</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="media-tab" data-bs-toggle="tab" href="#media" role="tab">Медиа</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="pricing-tab" data-bs-toggle="tab" href="#pricing" role="tab">Цены и
+                            Параметры</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="specs-tab" data-bs-toggle="tab" href="#specs-content"
+                            role="tab">Характеристики</a>
+                    </li>
+                </ul>
+
+                <div class="tab-content">
+                    <!-- General Tab -->
+                    <div class="tab-pane fade show active" id="general" role="tabpanel">
+                        <div class="row">
+                            <div class="col-md-8">
+                                {{ render_field(form.title) }}
+                                {{ render_field(form.description, class="form-control", rows=5) }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ render_field(form.is_published) }}
+                                {{ render_field(form.source_url) }}
+                                {{ render_field(form.tags) }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Media Tab -->
+                    <div class="tab-pane fade" id="media" role="tabpanel">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Основное изображение</label>
+                                {{ render_field(form.main_image) }}
+                                {{ render_field(form.main_image_file) }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label text-muted small">Предпросмотр</label>
+                                <div class="img-preview-container">
+                                    <img id="main-image-preview" src="{{ obj.main_image or '' }}" alt="Нет изображения">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <label class="form-label fw-bold">JSON Галерея (images)</label>
+                                {{ render_field(form.images, rows=3) }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Pricing Tab -->
+                    <div class="tab-pane fade" id="pricing" role="tabpanel">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                {{ render_field(form.price) }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ render_field(form.old_price) }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ render_field(form.area) }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ render_field(form.is_inverter) }}
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-4">
+                                {{ render_field(form.power_cooling) }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Specs Tab -->
+                    <div class="tab-pane fade" id="specs-content" role="tabpanel">
+                        <!-- Hidden Text Area for Logic -->
+                        <div style="display:none;">
+                            {{ render_field(form.specs) }}
+                        </div>
+                        <div id="json-editor-wrapper" class="json-editor-container">
+                            <div id="jsoneditor"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer Buttons -->
+                <div class="row mt-4 pt-3 border-top">
+                    <div class="col-md-2">
+                        <a href="{{ url_for('admin:list', identity=model_view.identity) }}" class="btn">
+                            Отмена
+                        </a>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="btn-group flex-wrap" data-toggle="buttons">
+                            <button type="submit" name="save" value="Save" class="btn btn-primary">Сохранить</button>
+                            <button type="submit" name="save" value="Save and continue editing" class="btn">Сохранить и
+                                продолжить</button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // --- Image Preview Logic ---
+        const urlInput = document.getElementById('main_image');
+        const fileInput = document.getElementById('main_image_file');
+        const imgParams = document.getElementById('main-image-preview');
+
+        function updatePreview(url) {
+            if (url) {
+                imgParams.src = url;
+                imgParams.style.display = 'block';
+            } else {
+                imgParams.style.display = 'none';
+            }
+        }
+
+        // 1. Listen to URL input changes
+        if (urlInput) {
+            urlInput.addEventListener('input', function (e) {
+                updatePreview(e.target.value);
+            });
+        }
+
+        // 2. Listen to File input (simple preview)
+        if (fileInput) {
+            fileInput.addEventListener('change', function (e) {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function (e) {
+                        updatePreview(e.target.result);
+                    }
+                    reader.readAsDataURL(file);
+                }
+            });
+        }
+
+
+        // --- JSON Editor Logic ---
+        const specsTextarea = document.getElementById('specs');
+        if (!specsTextarea) return;
+
+        let initialData = {};
+        const rawValue = specsTextarea.value.trim();
+
+        try {
+            if (rawValue) {
+                if (rawValue.startsWith('{') || rawValue.startsWith('[')) {
+                    try {
+                        initialData = JSON.parse(rawValue);
+                    } catch (e) {
+                        // Python dict fallback
+                        const None = null, True = true, False = false;
+                        initialData = eval("(" + rawValue + ")");
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Failed to parse specs:', e);
+            initialData = {};
+        }
+
+        const container = document.getElementById('jsoneditor');
+        const options = {
+            mode: 'tree',
+            modes: ['code', 'text', 'tree', 'view'],
+            onError: (err) => alert(err.toString())
+        };
+        const editor = new JSONEditor(container, options);
+        editor.set(initialData);
+
+        const form = document.getElementById('admin-form');
+        form.addEventListener('submit', function () {
+            const json = editor.get();
+            specsTextarea.value = JSON.stringify(json);
+        });
+    });
+</script>
+{% endblock %}
