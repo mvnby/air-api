@@ -26,3 +26,4 @@ bot.log
 # Загрузки (Images/Files)
 static/uploads/*
 !static/uploads/.gitkeep
+dump_repo.py
