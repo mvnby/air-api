@@ -121,3 +121,20 @@ class ProductDAO:
             await session.commit()
             return True
         return False
+    
+    @staticmethod
+    async def get_for_generation(session: AsyncSession, product_id: int) -> Optional[Product]:
+        """
+        Загружает товар со ВСЕЙ иерархией: Теги + Их Группы.
+        Нужно для понимания контекста (какой тег к чему относится).
+        """
+        statement = (
+            select(Product)
+            .where(Product.id == product_id)
+            .options(
+                # Жадная загрузка: Product -> Tags -> Group
+                selectinload(Product.tags).selectinload(Tag.group)
+            )
+        )
+        result = await session.execute(statement)
+        return result.scalar_one_or_none()

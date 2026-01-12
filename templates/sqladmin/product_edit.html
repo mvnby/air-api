@@ -271,6 +271,65 @@
             const json = editor.get();
             specsTextarea.value = JSON.stringify(json);
         });
+        // public/admin_custom.js
+
+        const descField = document.querySelector('textarea[name="description"]');
+
+        // Проверяем, что мы на странице редактирования (есть ID в URL)
+        const isEditPage = window.location.pathname.match(/\/product\/edit\/(\d+)/);
+
+        if (descField && isEditPage) {
+            const productId = isEditPage[1];
+
+            // 1. Создаем кнопку
+            const btn = document.createElement("button");
+            btn.type = "button"; // Чтобы не сабмитила форму
+            btn.innerText = "✨ Сгенерировать AI-описание";
+            btn.className = "btn btn-info btn-sm mt-2"; // Стили Bootstrap
+            btn.style.marginTop = "10px";
+            btn.style.marginBottom = "10px";
+
+            // 2. Вешаем логику
+            btn.onclick = async function () {
+                btn.disabled = true;
+                btn.innerText = "⏳ Генерирую...";
+
+                try {
+                    // Дергаем нашу ручку (API должно быть доступно)
+                    const response = await fetch(`/api/products/${productId}/generate-description`, {
+                        method: 'POST'
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        // Вставляем текст в поле
+                        // Если используешь WYSIWYG редактор, тут может быть сложнее, 
+                        // но для обычного textarea так:
+                        descField.value = data.description;
+
+                        // Если есть событие input (для React/Vue админок), вызываем его
+                        descField.dispatchEvent(new Event('input', { bubbles: true }));
+
+                        btn.innerText = "✅ Готово!";
+                    } else {
+                        btn.innerText = "❌ Ошибка сервера";
+                    }
+                } catch (e) {
+                    console.error(e);
+                    btn.innerText = "❌ Ошибка сети";
+                }
+
+                // Возвращаем кнопку через 2 сек
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.innerText = "✨ Сгенерировать AI-описание";
+                }, 2000);
+            };
+
+            // 3. Вставляем кнопку ПЕРЕД полем описания
+            descField.parentNode.insertBefore(btn, descField);
+        }
+
     });
 </script>
 {% endblock %}

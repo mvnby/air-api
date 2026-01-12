@@ -10,6 +10,7 @@ from sqlmodel import select
 from core.database import get_session
 from services.product_service import ProductService
 from models import Product
+from services.description_generator import DescriptionGeneratorService
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -47,3 +48,15 @@ async def health_check(session: AsyncSession = Depends(get_session)):
         return {"status": "ok", "database": "online"}
     except Exception as e:
         return {"status": "error", "database": "offline", "detail": str(e)}
+
+@router.post("/products/{product_id}/generate-description")
+async def generate_product_description(
+    product_id: int,
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Генерирует описание на основе тегов и возвращает текст.
+    Админ может потом его отредактировать и сохранить.
+    """
+    text = await DescriptionGeneratorService.generate(session, product_id)
+    return {"description": text}
