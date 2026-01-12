@@ -1,30 +1,47 @@
+"""
+API Router: Product endpoints.
+Uses Service Layer with Dependency Injection for session management.
+"""
 from fastapi import APIRouter, Depends
-from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from database import get_session
+from sqlalchemy.orm import selectinload
+from sqlmodel import select
+
+from core.database import get_session
+from services.product_service import ProductService
 from models import Product
 
 router = APIRouter(prefix="/api", tags=["api"])
 
+
 @router.get("/products")
 async def get_products(session: AsyncSession = Depends(get_session)):
-    # Load categories eagerly to include them in the response (as objects)
-    from sqlalchemy.orm import selectinload
-    result = await session.execute(select(Product).options(selectinload(Product.categories)))
-    products = result.scalars().all()
+    """Get all published products."""
+    products = await ProductService.get_all(session)
     return {"items": products}
+
 
 @router.get("/products/{product_id}")
 async def get_product(product_id: int, session: AsyncSession = Depends(get_session)):
-    from sqlalchemy.orm import selectinload
-    result = await session.execute(select(Product).where(Product.id == product_id).options(selectinload(Product.categories)))
-    product = result.scalar_one_or_none()
+    """Get a single product by ID."""
+    product = await ProductService.get_by_id(session, product_id)
     return product
+
+
+@router.get("/products/search")
+async def search_products(
+    q: str = None,
+    is_inverter: bool = None,
+    session: AsyncSession = Depends(get_session)
+):
+    """Search products with fuzzy matching."""
+    products = await ProductService.search(session, query=q, is_inverter=is_inverter)
+    return {"items": products}
 
 
 @router.get("/health")
 async def health_check(session: AsyncSession = Depends(get_session)):
-    """Проверка доступности API и базы данных"""
+    """Check API and database availability."""
     try:
         await session.execute(select(1))
         return {"status": "ok", "database": "online"}

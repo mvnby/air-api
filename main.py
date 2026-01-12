@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from sqladmin import Admin
 from starlette.middleware.sessions import SessionMiddleware
 
-from database import engine, init_db
+from core.database import engine, init_db
 from core.config import settings
 from core.logger import logger
 from routers import admin as admin_router
