@@ -13,6 +13,10 @@
     .CodeMirror {
         border-radius: 0 0 4px 4px;
     }
+
+    .editor-toolbar button {
+        width: fit-content;
+    }
 </style>
 {% endblock %}
 
@@ -59,6 +63,9 @@
         const contentTextarea = document.getElementById('content');
         if (!contentTextarea) return;
 
+        // Validation Fix: Remove 'required' from textarea as it's hidden and causes "not focusable" errors
+        contentTextarea.removeAttribute('required');
+
         const easymde = new EasyMDE({
             element: contentTextarea,
             spellChecker: false,
@@ -69,6 +76,7 @@
             },
             placeholder: "Начните писать статью здесь...",
             status: ["lines", "words", "cursor", "autosave"],
+            forceSync: true, // Automatically sync content to textarea
             renderingConfig: {
                 singleLineBreaks: false,
                 codeSyntaxHighlighting: true,
@@ -81,6 +89,14 @@
                 "guide"
             ],
         });
+
+        // Ensure form submission works by syncing editor content
+        const form = document.getElementById('admin-form');
+        if (form) {
+            form.addEventListener('submit', function () {
+                easymde.toTextArea();
+            });
+        }
     });
 </script>
 {% endblock %}

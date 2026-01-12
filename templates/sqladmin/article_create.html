@@ -13,6 +13,10 @@
     .CodeMirror {
         border-radius: 0 0 4px 4px;
     }
+
+    .editor-toolbar button {
+        width: fit-content;
+    }
 </style>
 {% endblock %}
 
@@ -23,7 +27,7 @@
             <h3 class="card-title">Новая статья</h3>
         </div>
         <div class="card-body border-bottom py-3">
-            <form id="admin-form" action="{{ model_view._build_url_for('admin:create', request) }}" method="POST"
+            <form id="admin-form" action="{{ url_for('admin:create', identity=model_view.identity) }}" method="POST"
                 enctype="multipart/form-data">
                 <div class="row">
                     {% if error %}
@@ -59,6 +63,9 @@
         const contentTextarea = document.getElementById('content');
         if (!contentTextarea) return;
 
+        // Validation Fix: Remove 'required' from textarea as it's hidden and causes "not focusable" errors
+        contentTextarea.removeAttribute('required');
+
         const easymde = new EasyMDE({
             element: contentTextarea,
             spellChecker: false,
@@ -69,6 +76,7 @@
             },
             placeholder: "Начните писать статью здесь...",
             status: ["lines", "words", "cursor", "autosave"],
+            forceSync: true, // Automatically sync content to textarea
             renderingConfig: {
                 singleLineBreaks: false,
                 codeSyntaxHighlighting: true,
@@ -76,11 +84,19 @@
             toolbar: [
                 "bold", "italic", "heading", "|",
                 "quote", "unordered-list", "ordered-list", "|",
-                "link", "image", "table", "|",
+                "link", "image", "table",
                 "preview", "side-by-side", "fullscreen", "|",
                 "guide"
             ],
         });
+
+        // Ensure form submission works by syncing editor content
+        const form = document.getElementById('admin-form');
+        if (form) {
+            form.addEventListener('submit', function () {
+                easymde.toTextArea();
+            });
+        }
     });
 </script>
 {% endblock %}
