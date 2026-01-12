@@ -4,7 +4,7 @@
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_PYTHON="$PROJECT_DIR/.venv/bin/python"
 VENV_UVICORN="$PROJECT_DIR/.venv/bin/uvicorn"
-LOG_FILE="$PROJECT_DIR/app.log"
+LOG_FILE="$PROJECT_DIR/logs/app.log"
 BOT_SCRIPT="$PROJECT_DIR/bot.py"
 
 # Colors for output
@@ -35,7 +35,7 @@ start() {
         echo -e "${YELLOW}API is already running (PID: $API_PID)${NC}"
     else
         echo -n "Starting API Server... "
-        nohup env PYTHONUNBUFFERED=1 "$VENV_UVICORN" main:app --host 127.0.0.1 --port 8000 --reload >> server.log 2>&1 &
+        nohup env PYTHONUNBUFFERED=1 "$VENV_UVICORN" main:app --host 127.0.0.1 --port 8000 --reload >> logs/server.log 2>&1 &
         echo -e "${GREEN}DONE${NC}"
     fi
 
@@ -45,7 +45,7 @@ start() {
         echo -e "${YELLOW}Bot is already running (PID: $BOT_PID)${NC}"
     else
         echo -n "Starting Telegram Bot... "
-        nohup "$VENV_PYTHON" "$BOT_SCRIPT" >> bot.log 2>&1 &
+        nohup "$VENV_PYTHON" "$BOT_SCRIPT" >> logs/bot.log 2>&1 &
         echo -e "${GREEN}DONE${NC}"
     fi
 }

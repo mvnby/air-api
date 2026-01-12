@@ -1,9 +1,15 @@
 import logging
 import sys
+import os
 from logging.handlers import RotatingFileHandler
 from .config import settings
 
 def setup_logging():
+    # Ensure logs directory exists
+    log_dir = os.path.dirname(settings.LOG_FILE)
+    if log_dir and not os.path.exists(log_dir):
+        os.makedirs(log_dir, exist_ok=True)
+
     # Base configuration
     log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
