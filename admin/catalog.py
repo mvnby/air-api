@@ -53,7 +53,7 @@ class ProductAdmin(ModelView, model=Product):
     def format_product_title(model, context):
         title_html = f'<strong>{model.title}</strong>'
         tags_html = format_tags_shared(model, context, hide_group=True)
-        return Markup(f'{title_html}<br><div style="margin-top: 5px;">{tags_html}</div>')
+        return Markup(f'{title_html}<br><div class="tags__product_title">{tags_html}</div>')
 
     def format_area(model, context):
         if model.area:
@@ -74,7 +74,10 @@ class ProductAdmin(ModelView, model=Product):
     
     column_labels = {
         "formatted_title": "Товар",
-        "formatted_area": "Площа"
+        "formatted_area": "Площадь",
+        "price": "Цена",
+        "main_image": "Фото",
+        "is_published": "Включён"
     }
     
     form_overrides = {
@@ -163,6 +166,13 @@ class TagGroupAdmin(ModelView, model=TagGroup):
     name_plural = "Группы тегов"
     icon = "fa-solid fa-layer-group"
     column_list = [TagGroup.id, TagGroup.title, TagGroup.slug, TagGroup.is_public, TagGroup.color]
+    column_labels = {
+        "id": "ID",
+        "title": "Название",
+        "slug": "Slug",
+        "is_public": "Публичная",
+        "color": "Цвет"
+    }
     column_details_list = "__all__"
     form_columns = "__all__"
 
@@ -171,6 +181,12 @@ class TagAdmin(ModelView, model=Tag):
     name_plural = "Теги"
     icon = "fa-solid fa-tag"
     column_list = [Tag.id, Tag.title, Tag.is_public, Tag.is_filter]
+    column_labels = {
+        "id": "ID",
+        "title": "Название",
+        "is_public": "Публичный",
+        "is_filter": "Фильтр"
+    }
     column_details_list = "__all__"
     form_columns = "__all__"
     

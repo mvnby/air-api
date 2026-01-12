@@ -7,6 +7,14 @@ class OrderAdmin(ModelView, model=Order):
     name_plural = "Заказы"
     icon = "fa-solid fa-cart-shopping"
     column_list = [Order.id, Order.status, Order.product, Order.user_id, Order.phone, Order.created_at]
+    column_labels = {
+        "id": "ID",
+        "status": "Статус",
+        "product": "Заказ",
+        "user_id": "Telegram ID",
+        "phone": "Телефон",
+        "created_at": "Дата"
+    }
     column_sortable_list = [Order.id, Order.created_at, Order.status]
     column_default_sort = ("created_at", True)
     column_editable_list = ["status"]
