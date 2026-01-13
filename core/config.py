@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     
     # Logging
     LOG_LEVEL: str = "INFO"
-    LOG_FILE: str = "app.log"
+    LOG_FILE: str = "logs/app.log"
     
     # Automation
     SCHEDULER_INTERVAL: int = 6 # hours

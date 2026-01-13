@@ -41,6 +41,14 @@ class Tag(SQLModel, table=True):
     products: List["Product"] = Relationship(back_populates="tags", link_model=ProductTagLink)
     
     def __str__(self):
+        # Safe access to group to avoid lazy load errors in async context
+        # Use sqlalchemy.orm.attributes.instance_state to check if group is loaded
+        from sqlalchemy.orm.attributes import instance_state
+        state = instance_state(self)
+        if 'group' in state.dict:
+            group = state.dict['group']
+            if group:
+                return f"[{group.title}] {self.title}"
         return self.title
 
 class Product(SQLModel, table=True):

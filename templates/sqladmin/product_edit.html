@@ -1,4 +1,6 @@
 {% extends "sqladmin/layout.html" %}
+
+{# --- МАКРОС ОТРИСОВКИ ПОЛЯ --- #}
 {% macro render_field(field) %}
 <div class="mb-3">
     {{ field.label(class="form-label") }}
@@ -13,6 +15,7 @@
         <label class="form-check-label" for="{{ field.id }}">{{ field.label.text }}</label>
     </div>
     {% else %}
+    {# Для Select2 важно, чтобы рендерился именно SelectField/SelectMultipleField #}
     {{ field(class="form-control", **extra_args) }}
     {% endif %}
 
@@ -25,6 +28,7 @@
 </div>
 {% endmacro %}
 
+{# --- БЛОК HEAD (Стили JSONEditor) --- #}
 {% block head %}
 {{ super() }}
 <link href="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/9.10.4/jsoneditor.min.css" rel="stylesheet"
@@ -58,9 +62,15 @@
         max-height: 200px;
         object-fit: contain;
     }
+
+    /* Исправление для Select2 внутри Bootstrap табов, если вдруг поедет ширина */
+    .select2-container {
+        width: 100% !important;
+    }
 </style>
 {% endblock %}
 
+{# --- ОСНОВНОЙ КОНТЕНТ --- #}
 {% block content %}
 <div class="col-12">
     <div class="card">
@@ -82,7 +92,6 @@
                     {% endif %}
                 </div>
 
-                <!-- Tabs Navigation -->
                 <ul class="nav nav-tabs mb-3" id="productTabs" role="tablist">
                     <li class="nav-item">
                         <a class="nav-link active" id="general-tab" data-bs-toggle="tab" href="#general" role="tab">О
@@ -102,22 +111,23 @@
                 </ul>
 
                 <div class="tab-content">
-                    <!-- General Tab -->
                     <div class="tab-pane fade show active" id="general" role="tabpanel">
                         <div class="row">
                             <div class="col-md-8">
                                 {{ render_field(form.title) }}
+                                {# Кнопка AI добавится сюда скриптом #}
                                 {{ render_field(form.description, class="form-control", rows=5) }}
                             </div>
                             <div class="col-md-4">
                                 {{ render_field(form.is_published) }}
                                 {{ render_field(form.source_url) }}
+
+                                {# ВОТ ОНО! Поле тегов. Благодаря form_ajax_refs здесь будет Select2 #}
                                 {{ render_field(form.tags) }}
                             </div>
                         </div>
                     </div>
 
-                    <!-- Media Tab -->
                     <div class="tab-pane fade" id="media" role="tabpanel">
                         <div class="row">
                             <div class="col-md-6">
@@ -140,7 +150,6 @@
                         </div>
                     </div>
 
-                    <!-- Pricing Tab -->
                     <div class="tab-pane fade" id="pricing" role="tabpanel">
                         <div class="row g-3">
                             <div class="col-md-3">
@@ -163,9 +172,7 @@
                         </div>
                     </div>
 
-                    <!-- Specs Tab -->
                     <div class="tab-pane fade" id="specs-content" role="tabpanel">
-                        <!-- Hidden Text Area for Logic -->
                         <div style="display:none;">
                             {{ render_field(form.specs) }}
                         </div>
@@ -175,7 +182,6 @@
                     </div>
                 </div>
 
-                <!-- Footer Buttons -->
                 <div class="row mt-4 pt-3 border-top">
                     <div class="col-md-2">
                         <a href="{{ url_for('admin:list', identity=model_view.identity) }}" class="btn">
@@ -194,10 +200,16 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{# --- СКРИПТЫ --- #}
+{% block tail %}
+{{ super() }}
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        // --- Image Preview Logic ---
+
+        // 1. Image Preview Logic
         const urlInput = document.getElementById('main_image');
         const fileInput = document.getElementById('main_image_file');
         const imgParams = document.getElementById('main-image-preview');
@@ -211,14 +223,12 @@
             }
         }
 
-        // 1. Listen to URL input changes
         if (urlInput) {
             urlInput.addEventListener('input', function (e) {
                 updatePreview(e.target.value);
             });
         }
 
-        // 2. Listen to File input (simple preview)
         if (fileInput) {
             fileInput.addEventListener('change', function (e) {
                 const file = e.target.files[0];
@@ -233,83 +243,78 @@
         }
 
 
-        // --- JSON Editor Logic ---
+        // 2. JSON Editor Logic
         const specsTextarea = document.getElementById('specs');
-        if (!specsTextarea) return;
+        if (specsTextarea) {
+            let initialData = {};
+            const rawValue = specsTextarea.value.trim();
 
-        let initialData = {};
-        const rawValue = specsTextarea.value.trim();
-
-        try {
-            if (rawValue) {
-                if (rawValue.startsWith('{') || rawValue.startsWith('[')) {
-                    try {
+            try {
+                if (rawValue) {
+                    if (rawValue.startsWith('{') || rawValue.startsWith('[')) {
                         initialData = JSON.parse(rawValue);
-                    } catch (e) {
-                        // Python dict fallback
-                        const None = null, True = true, False = false;
-                        initialData = eval("(" + rawValue + ")");
+                    } else {
+                        // Python dict fallback (на всякий случай)
+                        // Но лучше так не делать, JSON должен быть чистым
+                        console.warn("Trying to parse non-JSON spec string");
                     }
                 }
+            } catch (e) {
+                console.error('Failed to parse specs:', e);
             }
-        } catch (e) {
-            console.error('Failed to parse specs:', e);
-            initialData = {};
+
+            const container = document.getElementById('jsoneditor');
+            const options = {
+                mode: 'tree',
+                modes: ['code', 'text', 'tree', 'view'],
+                onChangeText: function (jsonString) {
+                    // Обновляем textarea при изменении текста
+                    specsTextarea.value = jsonString;
+                },
+                onChange: function () {
+                    // Обновляем textarea при изменении дерева
+                    try {
+                        const json = editor.get();
+                        specsTextarea.value = JSON.stringify(json);
+                    } catch (e) { }
+                }
+            };
+            const editor = new JSONEditor(container, options);
+            editor.set(initialData);
         }
 
-        const container = document.getElementById('jsoneditor');
-        const options = {
-            mode: 'tree',
-            modes: ['code', 'text', 'tree', 'view'],
-            onError: (err) => alert(err.toString())
-        };
-        const editor = new JSONEditor(container, options);
-        editor.set(initialData);
-
-        const form = document.getElementById('admin-form');
-        form.addEventListener('submit', function () {
-            const json = editor.get();
-            specsTextarea.value = JSON.stringify(json);
-        });
-        // public/admin_custom.js
-
+        // 3. AI DESCRIPTION BUTTON
         const descField = document.querySelector('textarea[name="description"]');
+        // Проверяем, что мы на странице редактирования
+        const match = window.location.pathname.match(/\/edit\/(\d+)/);
 
-        // Проверяем, что мы на странице редактирования (есть ID в URL)
-        const isEditPage = window.location.pathname.match(/\/product\/edit\/(\d+)/);
+        if (descField && match) {
+            const productId = match[1];
 
-        if (descField && isEditPage) {
-            const productId = isEditPage[1];
-
-            // 1. Создаем кнопку
+            // Создаем кнопку
             const btn = document.createElement("button");
-            btn.type = "button"; // Чтобы не сабмитила форму
+            btn.type = "button";
             btn.innerText = "✨ Сгенерировать AI-описание";
-            btn.className = "btn btn-info btn-sm mt-2"; // Стили Bootstrap
-            btn.style.marginTop = "10px";
+            btn.className = "btn btn-info btn-sm mt-2";
             btn.style.marginBottom = "10px";
+            btn.style.display = "block";
 
-            // 2. Вешаем логику
+            // Логика клика
             btn.onclick = async function () {
                 btn.disabled = true;
                 btn.innerText = "⏳ Генерирую...";
 
                 try {
-                    // Дергаем нашу ручку (API должно быть доступно)
                     const response = await fetch(`/api/products/${productId}/generate-description`, {
                         method: 'POST'
                     });
 
                     if (response.ok) {
                         const data = await response.json();
-                        // Вставляем текст в поле
-                        // Если используешь WYSIWYG редактор, тут может быть сложнее, 
-                        // но для обычного textarea так:
                         descField.value = data.description;
-
-                        // Если есть событие input (для React/Vue админок), вызываем его
+                        // Триггерим события для реактивности
                         descField.dispatchEvent(new Event('input', { bubbles: true }));
-
+                        descField.dispatchEvent(new Event('change', { bubbles: true }));
                         btn.innerText = "✅ Готово!";
                     } else {
                         btn.innerText = "❌ Ошибка сервера";
@@ -319,17 +324,15 @@
                     btn.innerText = "❌ Ошибка сети";
                 }
 
-                // Возвращаем кнопку через 2 сек
                 setTimeout(() => {
                     btn.disabled = false;
                     btn.innerText = "✨ Сгенерировать AI-описание";
                 }, 2000);
             };
 
-            // 3. Вставляем кнопку ПЕРЕД полем описания
+            // Вставляем кнопку ПЕРЕД полем описания
             descField.parentNode.insertBefore(btn, descField);
         }
-
     });
 </script>
 {% endblock %}
