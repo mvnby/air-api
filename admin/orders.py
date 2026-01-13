@@ -1,6 +1,7 @@
 from sqladmin import ModelView
 from sqlalchemy.orm import selectinload
-from models import Order, Service, OrderProductLink, OrderServiceLink
+from typing import Any
+from models import Order, Service, OrderProductLink, OrderServiceLink, Customer
 
 class ServiceAdmin(ModelView, model=Service):
     name = "Услуга"
@@ -29,8 +30,7 @@ class OrderAdmin(ModelView, model=Order):
     column_list = [
         Order.id, 
         Order.status, 
-        Order.customer_name, 
-        Order.customer_phone, 
+        Order.customer_id,
         "total_amount", 
         Order.created_at
     ]
@@ -38,28 +38,44 @@ class OrderAdmin(ModelView, model=Order):
     column_labels = {
         "id": "ID",
         "status": "Статус",
-        "customer_name": "Клиент",
-        "customer_phone": "Телефон",
+        "customer_id": "Клиент",
         "total_amount": "Сумма",
         "created_at": "Дата",
-        "customer_email": "Email",
-        "address": "Адрес",
+        "delivery_address": "Адрес доставки",
         "user_id": "Telegram ID"
+    }
+    
+    # Format customer display
+    def format_customer(model, context):
+        if model.customer:
+            return model.customer.name
+        return "—"
+    
+    column_formatters = {
+        Order.customer_id: format_customer
     }
     
     column_sortable_list = [Order.id, Order.created_at, Order.status]
     column_default_sort = ("created_at", True)
     column_editable_list = ["status"]
     
-    # Явно указываем поля для формы
+    # Form columns
     form_columns = [
-        "customer_name",
-        "customer_phone",
-        "customer_email",
-        "address",
+        "customer",
+        "delivery_address",
         "status",
         "user_id"
     ]
+    
+    # AJAX Select2 for customer lookup
+    form_ajax_refs = {
+        "customer": {
+            "fields": ["name", "phone", "inn"],
+            "order_by": "name",
+            "placeholder": "Поиск по имени, телефону или ИНН...",
+            "minimum_input_length": 0,
+        }
+    }
 
     async def on_model_change(self, data: dict, model: Any, is_created: bool, request: Any) -> None:
         """Handle dynamic items from the custom form."""
@@ -73,12 +89,6 @@ class OrderAdmin(ModelView, model=Order):
         
         if items_json:
             items = json.loads(items_json)
-            
-            # We need to manage links manually or via session
-            # Since SQLAdmin might have its own session management, 
-            # we'll use a local session for the links update to be safe, 
-            # but ideally we should use the one in request or similar.
-            # SQLAdmin 0.22.0 usually provides the session in some way.
             
             async with async_session_maker() as session:
                 # 1. Clear existing links for this order
@@ -110,6 +120,7 @@ class OrderAdmin(ModelView, model=Order):
     def form_edit_query(self, request):
         query = super().form_edit_query(request)
         return query.options(
+            selectinload(self.model.customer),
             selectinload(self.model.product_links).selectinload(OrderProductLink.product),
             selectinload(self.model.service_links).selectinload(OrderServiceLink.service)
         )
@@ -117,6 +128,7 @@ class OrderAdmin(ModelView, model=Order):
     def list_query(self, request):
         query = super().list_query(request)
         return query.options(
+            selectinload(self.model.customer),
             selectinload(self.model.product_links).selectinload(OrderProductLink.product),
             selectinload(self.model.service_links).selectinload(OrderServiceLink.service)
         )
@@ -124,6 +136,7 @@ class OrderAdmin(ModelView, model=Order):
     def detail_query(self, request):
         query = super().detail_query(request)
         return query.options(
+            selectinload(self.model.customer),
             selectinload(self.model.product_links).selectinload(OrderProductLink.product),
             selectinload(self.model.service_links).selectinload(OrderServiceLink.service)
         )

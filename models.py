@@ -114,6 +114,48 @@ class Article(SQLModel, table=True):
     def __str__(self):
         return self.title
 
+# --- CUSTOMERS (ФАЗА 24) ---
+
+from enum import Enum
+
+class CustomerType(str, Enum):
+    individual = "individual"
+    company = "company"
+
+class Customer(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    
+    # Core
+    name: str = Field(index=True)  # Short display name
+    phone: str = Field(index=True)
+    email: Optional[str] = None
+    type: CustomerType = Field(default=CustomerType.individual)
+    
+    # Legal (Company)
+    full_legal_name: Optional[str] = None  # Полное наименование
+    inn: Optional[str] = Field(default=None, index=True)  # ИНН/УНП
+    kpp: Optional[str] = None  # КПП
+    legal_address: Optional[str] = None  # Юридический адрес
+    actual_address: Optional[str] = None  # Фактический/почтовый адрес
+    
+    # Bank
+    bank_name: Optional[str] = None
+    bic: Optional[str] = None
+    iban: Optional[str] = None  # Расчетный счет
+    
+    # Signatory (for contracts)
+    signer_position: str = Field(default="Генерального директора")  # В лице...
+    signer_name: Optional[str] = None  # ФИО подписанта
+    acting_basis: str = Field(default="Устава")  # Действующего на основании...
+    
+    created_at: datetime = Field(default_factory=datetime.now)
+    
+    # Relationships
+    orders: List["Order"] = Relationship(back_populates="customer")
+
+    def __str__(self):
+        return self.name
+
 # --- CRM МОДЕЛИ (ФАЗА 22) ---
 
 class Service(SQLModel, table=True):
@@ -152,19 +194,20 @@ class OrderServiceLink(SQLModel, table=True):
 class Order(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     
-    # Контакты (CRM стиль)
-    customer_name: str
-    customer_phone: str
-    customer_email: Optional[str] = None
-    address: Optional[str] = None
+    # Customer (FK to Customer table)
+    customer_id: Optional[int] = Field(default=None, foreign_key="customer.id")
+    
+    # Delivery address (may differ from customer address)
+    delivery_address: Optional[str] = None
     
     # Техническая инфа (для связи с ботом)
     user_id: Optional[int] = Field(default=None, index=True) 
     
-    status: str = Field(default="new") # new, in_progress, done, cancelled
+    status: str = Field(default="new")  # new, in_progress, done, cancelled
     created_at: datetime = Field(default_factory=datetime.now)
     
     # Relationships
+    customer: Optional["Customer"] = Relationship(back_populates="orders")
     product_links: List[OrderProductLink] = Relationship(
         back_populates="order", 
         sa_relationship_kwargs={
@@ -187,7 +230,8 @@ class Order(SQLModel, table=True):
         return p_sum + s_sum
 
     def __str__(self):
-        return f"Заказ #{self.id} ({self.customer_name})"
+        customer_name = self.customer.name if self.customer else "N/A"
+        return f"Заказ #{self.id} ({customer_name})"
 
 class Favorite(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

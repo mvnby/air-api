@@ -36,7 +36,10 @@ async def get_dashboard_stats():
         
         # Latest Orders
         res = await session.execute(
-            select(Order).options(selectinload(Order.product)).order_by(Order.created_at.desc()).limit(5)
+            select(Order)
+            .options(selectinload(Order.customer))
+            .order_by(Order.created_at.desc())
+            .limit(5)
         )
         latest_orders = res.scalars().all()
         
@@ -52,8 +55,8 @@ async def get_dashboard_stats():
             "latest_orders": [
                 {
                     "id": o.id, 
-                    "product": o.product.title if o.product else "Unknown", 
-                    "phone": o.phone, 
+                    "customer": o.customer.name if o.customer else "N/A", 
+                    "phone": o.customer.phone if o.customer else "N/A", 
                     "status": o.status,
                     "created_at": o.created_at.strftime("%Y-%m-%d %H:%M")
                 } 
