@@ -68,10 +68,26 @@ class ProductAdmin(ModelView, model=Product):
     ]
     form_create_rules = form_edit_rules
     
-    # --- Eager loading для M2M ---
+    # --- Eager loading для M2M + tag filtering ---
     def list_query(self, request):
+        from sqlalchemy import func
         query = super().list_query(request)
-        return query.options(selectinload(Product.tags).selectinload(Tag.group))
+        query = query.options(selectinload(Product.tags).selectinload(Tag.group))
+        
+        # Handle tag_ids filtering from URL
+        tag_ids = request.query_params.getlist('tag_ids')
+        if tag_ids:
+            tag_ids = [int(tid) for tid in tag_ids]
+            # AND logic: product must have ALL selected tags
+            tag_subquery = (
+                select(ProductTagLink.product_id)
+                .where(ProductTagLink.tag_id.in_(tag_ids))
+                .group_by(ProductTagLink.product_id)
+                .having(func.count(ProductTagLink.tag_id) == len(tag_ids))
+            )
+            query = query.where(Product.id.in_(tag_subquery))
+        
+        return query
 
     def detail_query(self, request):
         query = super().detail_query(request)
