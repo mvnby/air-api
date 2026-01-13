@@ -1,0 +1,470 @@
+{% extends "sqladmin/edit.html" %}
+
+{% block head %}
+{{ super() }}
+<style>
+    .order-items-table th {
+        background: #f8f9fa;
+    }
+
+    .item-row td {
+        vertical-align: middle;
+    }
+
+    .price-input,
+    .quantity-input {
+        width: 100px !important;
+    }
+
+    .remove-row {
+        color: #d63939;
+        cursor: pointer;
+    }
+
+    .remove-row:hover {
+        color: #a52828;
+    }
+
+    .add-item-btn {
+        margin-top: 10px;
+    }
+
+    .total-summary {
+        font-size: 1.2rem;
+        font-weight: bold;
+        text-align: right;
+        margin-top: 20px;
+        padding: 10px;
+        background: #f1f3f5;
+        border-radius: 4px;
+    }
+
+    /* Filters Styles */
+    .filters-section {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        border: 1px solid #e9ecef;
+    }
+
+    .filter-group {
+        margin-bottom: 10px;
+    }
+
+    .filter-group:last-child {
+        margin-bottom: 0;
+    }
+
+    .filter-group-title {
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        margin-bottom: 5px;
+        display: block;
+    }
+
+    .filter-badge {
+        cursor: pointer;
+        user-select: none;
+        transition: all 0.2s;
+        margin-right: 5px;
+        margin-bottom: 5px;
+        border: 1px solid transparent;
+    }
+
+    .filter-badge:hover {
+        opacity: 0.8;
+    }
+
+    .filter-badge.active {
+        background-color: #0d6efd !important;
+        color: white !important;
+        border-color: #0a58ca;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="col-12">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Редактирование Заказа #{{ obj.id }}</h3>
+        </div>
+        <div class="card-body">
+            <form id="order-form" action="{{ model_view._build_url_for('admin:edit', request, obj) }}" method="POST">
+                <!-- Основные поля заказа -->
+                <div class="row">
+                    {% for field in form if field.name not in ['product_links', 'service_links'] %}
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">{{ field.label.text }}</label>
+                        {{ field(class_="form-control") }}
+                        {% if field.errors %}
+                        <div class="text-danger small">{{ field.errors|join(', ') }}</div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <hr>
+
+                <!-- ПАНЕЛЬ ФИЛЬТРОВ (Collapsible) -->
+                <div class="mb-4">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <h5 class="mb-0" style="cursor: pointer;" data-bs-toggle="collapse"
+                            data-bs-target="#filters-collapse">
+                            🔍 Фильтры товаров
+                            <i class="fa-solid fa-chevron-down ms-2 small" id="filters-chevron"></i>
+                        </h5>
+                        <div>
+                            <span id="active-filters-count" class="badge bg-primary me-2"
+                                style="display: none;">0</span>
+                            <button type="button" class="btn btn-sm btn-link text-decoration-none" id="clear-filters">
+                                <i class="fa-solid fa-xmark me-1"></i> Сбросить
+                            </button>
+                        </div>
+                    </div>
+                    <div class="collapse" id="filters-collapse">
+                        <div id="filters-container" class="filters-section">
+                            <div class="text-center p-3" id="filters-loading">
+                                <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
+                                Загрузка фильтров...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ТОВАРЫ -->
+                <div class="mb-4">
+                    <h4>📦 Товары в заказе</h4>
+                    <table class="table table-bordered order-items-table" id="products-table">
+                        <thead>
+                            <tr>
+                                <th>Товар</th>
+                                <th>Цена (руб)</th>
+                                <th>Кол-во</th>
+                                <th>Сумма</th>
+                                <th style="width: 50px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="products-body">
+                            {% for link in obj.product_links %}
+                            <tr class="item-row product-row" data-id="{{ link.product_id }}">
+                                <td>
+                                    <select class="form-control product-select" data-placeholder="Выберите товар">
+                                        <option value="{{ link.product_id }}" selected>{{ link.product.title }}</option>
+                                    </select>
+                                </td>
+                                <td><input type="number" class="form-control price-input" value="{{ link.price }}"></td>
+                                <td><input type="number" class="form-control quantity-input"
+                                        value="{{ link.quantity }}"></td>
+                                <td class="row-total">{{ link.price * link.quantity }}</td>
+                                <td><i class="fa-solid fa-trash remove-row"></i></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    <button type="button" class="btn btn-outline-primary add-item-btn" id="add-product">
+                        <i class="fa-solid fa-plus me-2"></i> Добавить товар
+                    </button>
+                </div>
+
+                <!-- УСЛУГИ -->
+                <div class="mb-4">
+                    <h4>🛠 Услуги</h4>
+                    <table class="table table-bordered order-items-table" id="services-table">
+                        <thead>
+                            <tr>
+                                <th>Услуга</th>
+                                <th>Цена (руб)</th>
+                                <th>Кол-во</th>
+                                <th>Сумма</th>
+                                <th style="width: 50px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="services-body">
+                            {% for link in obj.service_links %}
+                            <tr class="item-row service-row" data-id="{{ link.service_id }}">
+                                <td>
+                                    <select class="form-control service-select" data-placeholder="Выберите услугу">
+                                        <option value="{{ link.service_id }}" selected>{{ link.service.title }}</option>
+                                    </select>
+                                </td>
+                                <td><input type="number" class="form-control price-input" value="{{ link.price }}"></td>
+                                <td><input type="number" class="form-control quantity-input"
+                                        value="{{ link.quantity }}"></td>
+                                <td class="row-total">{{ link.price * link.quantity }}</td>
+                                <td><i class="fa-solid fa-trash remove-row"></i></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    <button type="button" class="btn btn-outline-info add-item-btn" id="add-service">
+                        <i class="fa-solid fa-plus me-2"></i> Добавить услугу
+                    </button>
+                </div>
+
+                <div class="total-summary">
+                    Итого: <span id="grand-total">0</span> руб.
+                </div>
+
+                <!-- Скрытые поля для передачи JSON данных на бэкенд -->
+                <input type="hidden" name="items_json" id="items_json">
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary px-5">Сохранить заказ</button>
+                    <a href="{{ url_for('admin:list', identity=model_view.identity) }}" class="btn btn-link">Отмена</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const productsBody = document.getElementById('products-body');
+        const servicesBody = document.getElementById('services-body');
+        const grandTotalSpan = document.getElementById('grand-total');
+        const itemsJsonInput = document.getElementById('items_json');
+        const form = document.getElementById('order-form');
+        const filtersContainer = document.getElementById('filters-container');
+        const clearFiltersBtn = document.getElementById('clear-filters');
+
+        let selectedTagIds = [];
+
+        async function loadFilters() {
+            try {
+                const response = await fetch('/api/admin/tags/filterable');
+                const groups = await response.json();
+
+                filtersContainer.innerHTML = '';
+                if (groups.length === 0) {
+                    filtersContainer.innerHTML = '<div class="text-muted small">Нет доступных фильтров</div>';
+                    return;
+                }
+
+                groups.forEach(group => {
+                    const groupDiv = document.createElement('div');
+                    groupDiv.className = 'filter-group';
+
+                    let badgesHtml = `<span class="filter-group-title">${group.group_label}</span>`;
+                    group.tags.forEach(tag => {
+                        badgesHtml += `
+                            <span class="badge bg-light text-dark filter-badge" 
+                                  data-id="${tag.id}" 
+                                  title="${tag.slug}">
+                                ${tag.title}
+                            </span>`;
+                    });
+
+                    groupDiv.innerHTML = badgesHtml;
+                    filtersContainer.appendChild(groupDiv);
+                });
+
+                // Add click listeners to badges
+                document.querySelectorAll('.filter-badge').forEach(badge => {
+                    badge.addEventListener('click', function () {
+                        const id = parseInt(this.dataset.id);
+                        if (this.classList.contains('active')) {
+                            this.classList.remove('active');
+                            selectedTagIds = selectedTagIds.filter(tid => tid !== id);
+                        } else {
+                            this.classList.add('active');
+                            selectedTagIds.push(id);
+                        }
+                        updateFilterCount();
+                        // Trigger Select2 reload for all product selects
+                        refreshProductSelect2();
+                    });
+                });
+            } catch (error) {
+                console.error('Failed to load filters:', error);
+                filtersContainer.innerHTML = '<div class="text-danger small">Ошибка загрузки фильтров</div>';
+            }
+        }
+
+        clearFiltersBtn.addEventListener('click', function () {
+            selectedTagIds = [];
+            document.querySelectorAll('.filter-badge.active').forEach(b => b.classList.remove('active'));
+            updateFilterCount();
+            refreshProductSelect2();
+        });
+
+        function updateFilterCount() {
+            const countBadge = document.getElementById('active-filters-count');
+            if (selectedTagIds.length > 0) {
+                countBadge.textContent = selectedTagIds.length;
+                countBadge.style.display = 'inline';
+            } else {
+                countBadge.style.display = 'none';
+            }
+        }
+
+        // Chevron rotation on collapse toggle
+        const filtersCollapse = document.getElementById('filters-collapse');
+        const chevron = document.getElementById('filters-chevron');
+        if (filtersCollapse && chevron) {
+            filtersCollapse.addEventListener('show.bs.collapse', () => {
+                chevron.style.transform = 'rotate(180deg)';
+            });
+            filtersCollapse.addEventListener('hide.bs.collapse', () => {
+                chevron.style.transform = 'rotate(0deg)';
+            });
+        }
+
+        function refreshProductSelect2() {
+            console.log('refreshProductSelect2 called, selectedTagIds:', selectedTagIds);
+            // Select2 with AJAX fetches fresh data on each open, so we just need to close any open ones
+            // The data function reads selectedTagIds each time, so no reinit needed
+            document.querySelectorAll('.product-select').forEach(el => {
+                const $el = $(el);
+                if ($el.data('select2')) {
+                    $el.select2('close');
+                }
+            });
+            // Show visual feedback that filters were applied
+            console.log('Filters applied. Open a product dropdown to see filtered results.');
+        }
+
+        function updateTotals() {
+            let total = 0;
+            document.querySelectorAll('.item-row').forEach(row => {
+                const price = parseFloat(row.querySelector('.price-input').value) || 0;
+                const qty = parseInt(row.querySelector('.quantity-input').value) || 0;
+                const subtotal = price * qty;
+                row.querySelector('.row-total').textContent = subtotal;
+                total += subtotal;
+            });
+            grandTotalSpan.textContent = total.toLocaleString('ru-RU');
+        }
+
+        function initSelect2(element, type) {
+            console.log('initSelect2 called for type:', type, 'element:', element);
+            try {
+                $(element).select2({
+                    ajax: {
+                        url: type === 'product' ? '/api/admin/products/search' : '/api/admin/services/search',
+                        dataType: 'json',
+                        delay: 250,
+                        traditional: true,
+                        data: function (params) {
+                            const queryParams = {
+                                q: params.term || ''
+                            };
+                            if (type === 'product' && selectedTagIds.length > 0) {
+                                queryParams.tag_ids = selectedTagIds;
+                            }
+                            console.log('Select2 AJAX request params:', queryParams);
+                            return queryParams;
+                        },
+                        processResults: function (data) {
+                            console.log('Select2 received data:', data);
+                            return {
+                                results: data
+                            };
+                        },
+                        cache: false
+                    },
+                    minimumInputLength: 0,
+                    width: '100%',
+                    placeholder: type === 'product' ? 'Выберите товар...' : 'Выберите услугу...'
+                }).on('select2:select', function (e) {
+                    const data = e.params.data;
+                    const row = $(this).closest('tr');
+                    row.find('.price-input').val(data.price);
+                    row.find('.quantity-input').val(1);
+                    updateTotals();
+                }).on('select2:open', function (e) {
+                    console.log('Select2 dropdown opened, starting search with filters:', selectedTagIds);
+                });
+                console.log('Select2 initialized successfully for:', type);
+            } catch (error) {
+                console.error('Error initializing Select2:', error);
+            }
+        }
+
+        // Delegate remove button
+        document.addEventListener('click', function (e) {
+            if (e.target.classList.contains('remove-row')) {
+                e.target.closest('tr').remove();
+                updateTotals();
+            }
+        });
+
+        // Update totals on input change
+        document.addEventListener('input', function (e) {
+            if (e.target.classList.contains('price-input') || e.target.classList.contains('quantity-input')) {
+                updateTotals();
+            }
+        });
+
+        document.getElementById('add-product').addEventListener('click', function () {
+            const row = document.createElement('tr');
+            row.className = 'item-row product-row';
+            row.innerHTML = `
+                <td><select class="form-control product-select"></select></td>
+                <td><input type="number" class="form-control price-input" value="0"></td>
+                <td><input type="number" class="form-control quantity-input" value="1"></td>
+                <td class="row-total">0</td>
+                <td><i class="fa-solid fa-trash remove-row"></i></td>
+            `;
+            productsBody.appendChild(row);
+            initSelect2(row.querySelector('.product-select'), 'product');
+        });
+
+        document.getElementById('add-service').addEventListener('click', function () {
+            const row = document.createElement('tr');
+            row.className = 'item-row service-row';
+            row.innerHTML = `
+                <td><select class="form-control service-select"></select></td>
+                <td><input type="number" class="form-control price-input" value="0"></td>
+                <td><input type="number" class="form-control quantity-input" value="1"></td>
+                <td class="row-total">0</td>
+                <td><i class="fa-solid fa-trash remove-row"></i></td>
+            `;
+            servicesBody.appendChild(row);
+            initSelect2(row.querySelector('.service-select'), 'service');
+        });
+
+        // Initialize existing ones
+        document.querySelectorAll('.product-select').forEach(el => initSelect2(el, 'product'));
+        document.querySelectorAll('.service-select').forEach(el => initSelect2(el, 'service'));
+
+        loadFilters();
+        updateTotals();
+
+        // Before submit, pack everything into JSON
+        form.addEventListener('submit', function (e) {
+            const items = {
+                products: [],
+                services: []
+            };
+
+            document.querySelectorAll('.product-row').forEach(row => {
+                const id = row.querySelector('.product-select').value;
+                if (id) {
+                    items.products.push({
+                        product_id: parseInt(id),
+                        price: parseInt(row.querySelector('.price-input').value),
+                        quantity: parseInt(row.querySelector('.quantity-input').value)
+                    });
+                }
+            });
+
+            document.querySelectorAll('.service-row').forEach(row => {
+                const id = row.querySelector('.service-select').value;
+                if (id) {
+                    items.services.push({
+                        service_id: parseInt(id),
+                        price: parseInt(row.querySelector('.price-input').value),
+                        quantity: parseInt(row.querySelector('.quantity-input').value)
+                    });
+                }
+            });
+
+            itemsJsonInput.value = JSON.stringify(items);
+        });
+    });
+</script>
+{% endblock %}

@@ -29,7 +29,7 @@ class Tag(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     group_id: Optional[int] = Field(default=None, foreign_key="tag_group.id")
     title: str = Field(index=True)
-    slug: str = Field(index=True)
+    slug: str = Field(index=True, unique=True)
     # Additional fields
     is_public: bool = Field(default=True)
     is_filter: bool = Field(default=False)
@@ -72,6 +72,7 @@ class Product(SQLModel, table=True):
     # 3. Категории (Теперь связь M2M)
     # 3. Теги (Бывшие Категории)
     tags: List[Tag] = Relationship(back_populates="products", link_model=ProductTagLink)
+    order_links: List["OrderProductLink"] = Relationship(back_populates="product")
 
     # 4. JSONSpecs
     specs: Dict[str, Any] = Field(default={}, sa_column=Column(JSON))
@@ -113,20 +114,81 @@ class Article(SQLModel, table=True):
     def __str__(self):
         return self.title
 
-class Order(SQLModel, table=True):
+# --- CRM МОДЕЛИ (ФАЗА 22) ---
+
+class Service(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int # Telegram User ID
-    username: Optional[str] = None
-    full_name: Optional[str] = None
-    phone: Optional[str] = None
-    product_id: int = Field(foreign_key="product.id")
-    status: str = Field(default="new") # new, in_progress, done, cancelled
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    title: str = Field(index=True)
+    description: Optional[str] = None
+    base_price: int = Field(default=0)
     
-    product: Optional[Product] = Relationship()
+    order_links: List["OrderServiceLink"] = Relationship(back_populates="service")
 
     def __str__(self):
-        return f"Заказ #{self.id} от {self.full_name or self.username}"
+        return f"{self.title} ({self.base_price} руб.)"
+
+class OrderProductLink(SQLModel, table=True):
+    __tablename__ = "order_product_link"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    order_id: Optional[int] = Field(default=None, foreign_key="order.id")
+    product_id: Optional[int] = Field(default=None, foreign_key="product.id")
+    quantity: int = Field(default=1)
+    price: int = Field(default=0)  # Фиксируем цену на момент заказа
+    
+    order: "Order" = Relationship(back_populates="product_links")
+    product: "Product" = Relationship(back_populates="order_links")
+
+class OrderServiceLink(SQLModel, table=True):
+    __tablename__ = "order_service_link"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    order_id: Optional[int] = Field(default=None, foreign_key="order.id")
+    service_id: Optional[int] = Field(default=None, foreign_key="service.id")
+    quantity: int = Field(default=1)
+    price: int = Field(default=0)  # Фиксируем цену на момент заказа
+    
+    order: "Order" = Relationship(back_populates="service_links")
+    service: "Service" = Relationship(back_populates="order_links")
+
+class Order(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    
+    # Контакты (CRM стиль)
+    customer_name: str
+    customer_phone: str
+    customer_email: Optional[str] = None
+    address: Optional[str] = None
+    
+    # Техническая инфа (для связи с ботом)
+    user_id: Optional[int] = Field(default=None, index=True) 
+    
+    status: str = Field(default="new") # new, in_progress, done, cancelled
+    created_at: datetime = Field(default_factory=datetime.now)
+    
+    # Relationships
+    product_links: List[OrderProductLink] = Relationship(
+        back_populates="order", 
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin"
+        }
+    )
+    service_links: List[OrderServiceLink] = Relationship(
+        back_populates="order", 
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin"
+        }
+    )
+
+    @property
+    def total_amount(self):
+        p_sum = sum([item.price * item.quantity for item in self.product_links])
+        s_sum = sum([item.price * item.quantity for item in self.service_links])
+        return p_sum + s_sum
+
+    def __str__(self):
+        return f"Заказ #{self.id} ({self.customer_name})"
+
 class Favorite(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(index=True) # Telegram User ID

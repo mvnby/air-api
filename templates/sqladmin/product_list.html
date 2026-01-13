@@ -1,0 +1,183 @@
+{% extends "sqladmin/list.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- ФИЛЬТРЫ ПО ТЕГАМ -->
+            <div class="card mb-3">
+                <div class="card-header py-2">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <h5 class="mb-0" style="cursor: pointer;" data-bs-toggle="collapse"
+                            data-bs-target="#tag-filters-collapse">
+                            🔍 Быстрые фильтры
+                            <i class="fa-solid fa-chevron-down ms-2 small" id="tag-filters-chevron"></i>
+                        </h5>
+                        <div>
+                            <span id="active-filters-count" class="badge bg-primary me-2"
+                                style="display: none;">0</span>
+                            <button type="button" class="btn btn-sm btn-link text-decoration-none"
+                                id="clear-tag-filters">
+                                <i class="fa-solid fa-xmark me-1"></i> Сбросить
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="collapse" id="tag-filters-collapse">
+                    <div class="card-body" id="tag-filters-container">
+                        <div class="text-center p-2">
+                            <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
+                            Загрузка фильтров...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{ super() }}
+
+<style>
+    .filter-group {
+        margin-bottom: 10px;
+    }
+
+    .filter-group:last-child {
+        margin-bottom: 0;
+    }
+
+    .filter-group-title {
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        margin-bottom: 5px;
+        display: block;
+    }
+
+    .filter-badge {
+        cursor: pointer;
+        user-select: none;
+        transition: all 0.2s;
+        margin-right: 5px;
+        margin-bottom: 5px;
+    }
+
+    .filter-badge:hover {
+        opacity: 0.8;
+    }
+
+    .filter-badge.active {
+        background-color: #0d6efd !important;
+        color: white !important;
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const filtersContainer = document.getElementById('tag-filters-container');
+        const clearBtn = document.getElementById('clear-tag-filters');
+        const chevron = document.getElementById('tag-filters-chevron');
+        const countBadge = document.getElementById('active-filters-count');
+        const collapseEl = document.getElementById('tag-filters-collapse');
+
+        let selectedTagIds = [];
+
+        // Load from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const tagIdsFromUrl = urlParams.getAll('tag_ids');
+        if (tagIdsFromUrl.length > 0) {
+            selectedTagIds = tagIdsFromUrl.map(id => parseInt(id));
+        }
+
+        async function loadFilters() {
+            try {
+                const response = await fetch('/api/admin/tags/filterable');
+                const groups = await response.json();
+
+                if (groups.length === 0) {
+                    filtersContainer.innerHTML = '<div class="text-muted small">Нет доступных фильтров</div>';
+                    return;
+                }
+
+                filtersContainer.innerHTML = '';
+                groups.forEach(group => {
+                    const groupDiv = document.createElement('div');
+                    groupDiv.className = 'filter-group';
+
+                    let badgesHtml = `<span class="filter-group-title">${group.group_label}</span>`;
+                    group.tags.forEach(tag => {
+                        const isActive = selectedTagIds.includes(tag.id) ? 'active' : '';
+                        badgesHtml += `
+            <span class="badge bg-light text-dark filter-badge ${isActive}" 
+                  data-id="${tag.id}" 
+                  title="${tag.slug}">
+              ${tag.title}
+            </span>`;
+                    });
+
+                    groupDiv.innerHTML = badgesHtml;
+                    filtersContainer.appendChild(groupDiv);
+                });
+
+                // Click handlers
+                document.querySelectorAll('#tag-filters-container .filter-badge').forEach(badge => {
+                    badge.addEventListener('click', function () {
+                        const id = parseInt(this.dataset.id);
+                        if (this.classList.contains('active')) {
+                            this.classList.remove('active');
+                            selectedTagIds = selectedTagIds.filter(tid => tid !== id);
+                        } else {
+                            this.classList.add('active');
+                            selectedTagIds.push(id);
+                        }
+                        updateFilterCount();
+                        applyFilters();
+                    });
+                });
+
+                updateFilterCount();
+            } catch (error) {
+                console.error('Failed to load filters:', error);
+                filtersContainer.innerHTML = '<div class="text-danger small">Ошибка загрузки</div>';
+            }
+        }
+
+        function updateFilterCount() {
+            if (selectedTagIds.length > 0) {
+                countBadge.textContent = selectedTagIds.length;
+                countBadge.style.display = 'inline';
+            } else {
+                countBadge.style.display = 'none';
+            }
+        }
+
+        function applyFilters() {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('tag_ids');
+            selectedTagIds.forEach(id => url.searchParams.append('tag_ids', id));
+            window.location.href = url.toString();
+        }
+
+        clearBtn.addEventListener('click', function () {
+            selectedTagIds = [];
+            document.querySelectorAll('.filter-badge.active').forEach(b => b.classList.remove('active'));
+            updateFilterCount();
+            applyFilters();
+        });
+
+        // Chevron animation
+        if (collapseEl && chevron) {
+            collapseEl.addEventListener('show.bs.collapse', () => {
+                chevron.style.transform = 'rotate(180deg)';
+            });
+            collapseEl.addEventListener('hide.bs.collapse', () => {
+                chevron.style.transform = 'rotate(0deg)';
+            });
+        }
+
+        loadFilters();
+    });
+</script>
+{% endblock %}
