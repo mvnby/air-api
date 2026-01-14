@@ -11,58 +11,9 @@ importer_service = ImporterService()
 
 @router.get("/stats")
 async def get_dashboard_stats():
+    from services.analytics_service import AnalyticsService
     async with async_session_maker() as session:
-        # Total Products
-        res = await session.execute(select(func.count(Product.id)))
-        total_products = res.scalar() or 0
-        
-        # Active Products
-        res = await session.execute(select(func.count(Product.id)).where(Product.is_published == True))
-        active_products = res.scalar() or 0
-        
-        # Total Orders
-        res = await session.execute(select(func.count(Order.id)))
-        total_orders = res.scalar() or 0
-        
-        # Sync Mode
-        from models import GlobalConfig
-        res = await session.execute(select(GlobalConfig).where(GlobalConfig.key == "sync_mode"))
-        sync_config = res.scalar_one_or_none()
-        sync_mode = int(sync_config.value) if sync_config else 2
-        
-        # Latest Imports
-        res = await session.execute(select(Product).order_by(Product.created_at.desc()).limit(5))
-        latest_items = res.scalars().all()
-        
-        # Latest Orders
-        res = await session.execute(
-            select(Order)
-            .options(selectinload(Order.customer))
-            .order_by(Order.created_at.desc())
-            .limit(5)
-        )
-        latest_orders = res.scalars().all()
-        
-        return {
-            "total_products": total_products,
-            "active_products": active_products,
-            "total_orders": total_orders,
-            "sync_mode": sync_mode,
-            "latest_items": [
-                {"id": p.id, "title": p.title, "price": p.price, "created_at": p.created_at.strftime("%Y-%m-%d %H:%M")} 
-                for p in latest_items
-            ],
-            "latest_orders": [
-                {
-                    "id": o.id, 
-                    "customer": o.customer.name if o.customer else "N/A", 
-                    "phone": o.customer.phone if o.customer else "N/A", 
-                    "status": o.status,
-                    "created_at": o.created_at.strftime("%Y-%m-%d %H:%M")
-                } 
-                for o in latest_orders
-            ]
-        }
+        return await AnalyticsService.get_dashboard_stats(session)
 
 @router.post("/import_onliner")
 async def import_process(request: Request):
@@ -105,19 +56,7 @@ async def update_sync_mode(request: Request):
     form = await request.form()
     new_mode = form.get("mode")
     if new_mode is not None:
-        from models import GlobalConfig
-        async with async_session_maker() as session:
-            stmt = select(GlobalConfig).where(GlobalConfig.key == "sync_mode")
-            res = await session.execute(stmt)
-            config = res.scalar_one_or_none()
-            
-            if not config:
-                config = GlobalConfig(key="sync_mode", value=str(new_mode))
-                session.add(config)
-            else:
-                config.value = str(new_mode)
-                config.updated_at = func.now()
-            
-            await session.commit()
+        from services.config_service import ConfigService
+        await ConfigService.set_config("sync_mode", str(new_mode))
             
     return RedirectResponse(url="/admin/", status_code=303)
