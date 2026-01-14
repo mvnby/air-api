@@ -80,42 +80,14 @@ class OrderAdmin(ModelView, model=Order):
     async def on_model_change(self, data: dict, model: Any, is_created: bool, request: Any) -> None:
         """Handle dynamic items from the custom form."""
         import json
-        from models import OrderProductLink, OrderServiceLink
-        from core.database import async_session_maker
-        from sqlalchemy import delete
+        from services.order_service import OrderService
         
         form_data = await request.form()
         items_json = form_data.get("items_json")
         
         if items_json:
             items = json.loads(items_json)
-            
-            async with async_session_maker() as session:
-                # 1. Clear existing links for this order
-                if not is_created:
-                    await session.execute(delete(OrderProductLink).where(OrderProductLink.order_id == model.id))
-                    await session.execute(delete(OrderServiceLink).where(OrderServiceLink.order_id == model.id))
-                
-                # 2. Add new links
-                for p in items.get("products", []):
-                    link = OrderProductLink(
-                        order_id=model.id,
-                        product_id=p["product_id"],
-                        quantity=p["quantity"],
-                        price=p["price"]
-                    )
-                    session.add(link)
-                
-                for s in items.get("services", []):
-                    link = OrderServiceLink(
-                        order_id=model.id,
-                        service_id=s["service_id"],
-                        quantity=s["quantity"],
-                        price=s["price"]
-                    )
-                    session.add(link)
-                
-                await session.commit()
+            await OrderService.update_order_links(model.id, items)
 
     def form_edit_query(self, request):
         query = super().form_edit_query(request)
