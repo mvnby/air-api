@@ -18,6 +18,13 @@
 </style>
 {% endblock %}
 
+{% block tail %}
+    {{ super() }}
+    {% for script in model_view.extra_js %}
+        <script src="{{ script }}"></script>
+    {% endfor %}
+{% endblock %}
+
 {% block content %}
 <div class="col-12">
     <div class="card">

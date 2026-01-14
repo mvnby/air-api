@@ -6,11 +6,12 @@ class CustomerAdmin(ModelView, model=Customer):
     name = "Клиент"
     name_plural = "Клиенты"
     icon = "fa-solid fa-user-tie"
+    extra_js = ["/static/js/admin_customers.js"]
     
     # List view
     column_list = [
-        Customer.id, Customer.name, Customer.phone, Customer.type, 
-        Customer.inn, Customer.created_at
+        Customer.id, Customer.name, 
+        Customer.inn, Customer.email, Customer.phone
     ]
     column_searchable_list = [Customer.name, Customer.phone, Customer.inn, Customer.email]
     column_default_sort = (Customer.created_at, True)
@@ -25,7 +26,7 @@ class CustomerAdmin(ModelView, model=Customer):
         "type": "Тип",
         "full_legal_name": "Полное наименование",
         "inn": "ИНН/УНП",
-        "kpp": "КПП",
+        "kpp": "ОКПО",
         "legal_address": "Юр. адрес",
         "actual_address": "Почтовый адрес",
         "bank_name": "Банк",
