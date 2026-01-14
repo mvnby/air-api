@@ -161,7 +161,7 @@ async def get_all_banks():
 
 @router.get("/admin/proxy/bank")
 async def find_bank(
-    search: str = Query(..., description="BIC код или IBAN")
+    search: str = Query(None, description="BIC код или IBAN")
 ):
     """
     Ищет банк локально в справочнике НБРБ.
@@ -171,6 +171,9 @@ async def find_bank(
     """
     
     # 1. Нормализация запроса
+    if not search:
+        return await get_all_banks()
+
     query = search.strip().replace(" ", "").upper()
     target_bic = query
 

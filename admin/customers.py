@@ -6,6 +6,7 @@ class CustomerAdmin(ModelView, model=Customer):
     name = "Клиент"
     name_plural = "Клиенты"
     icon = "fa-solid fa-user-tie"
+    extra_js = ["/static/js/admin_customers.js"]
     
     # List view
     column_list = [
