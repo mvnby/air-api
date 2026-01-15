@@ -36,7 +36,7 @@ class OrderAdmin(ModelView, model=Order):
         Order.status, 
         Order.customer_id,
         "total_amount", 
-        "docs",
+        "actions",
         Order.created_at
     ]
     
@@ -46,7 +46,7 @@ class OrderAdmin(ModelView, model=Order):
         "customer_id": "Клиент",
         "total_amount": "Сумма",
         "created_at": "Дата",
-        "docs": "Документы",
+        "actions": "Документы",
         "delivery_address": "Адрес доставки",
         "user_id": "Telegram ID"
     }
@@ -57,16 +57,18 @@ class OrderAdmin(ModelView, model=Order):
             return model.customer.name
         return "—"
     
-    # --- ФОРМАТТЕР ДЛЯ КНОПКИ ---
-    def format_docs(model, context):
-        # Ссылка ведет на наш новый роут
-        url = f"/admin/docs/google/{model.id}"
-        # Рисуем красивую кнопку с иконкой
-        return Markup(f'<a href="{url}" target="_blank" class="btn btn-sm btn-outline-success" title="Создать договор в Google Docs"><i class="fa-brands fa-google-drive"></i> G-Doc</a>')
+     # --- ОБНОВЛЕННЫЙ ФОРМАТТЕР ДЛЯ КНОПОК ---
+    def format_actions(model, context):
+        # Три разные кнопки
+        btn_offer = f'<a href="/admin/docs/generate/offer/{model.id}" target="_blank" class="btn btn-sm btn-outline-info" title="Коммерческое предложение"><i class="fa-solid fa-file-invoice"></i> КП</a>'
+        btn_invoice = f'<a href="/admin/docs/generate/invoice/{model.id}" target="_blank" class="btn btn-sm btn-outline-warning ms-1" title="Счет на оплату"><i class="fa-solid fa-money-bill"></i> Счет</a>'
+        btn_contract = f'<a href="/admin/docs/generate/contract/{model.id}" target="_blank" class="btn btn-sm btn-outline-success ms-1" title="Договор"><i class="fa-solid fa-file-contract"></i> Договор</a>'
+        
+        return Markup(f'<div class="d-flex">{btn_offer}{btn_invoice}{btn_contract}</div>')
     
     column_formatters = {
         Order.customer_id: format_customer,
-        "docs": format_docs
+        "actions": format_actions
     }
     
     column_sortable_list = [Order.id, Order.created_at, Order.status]

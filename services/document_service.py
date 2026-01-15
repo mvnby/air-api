@@ -1,53 +1,109 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from models import Order
-from services.google_service import google_service
 from datetime import datetime
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
+from sqlalchemy.orm import selectinload
+
+from models import Order, OrderProductLink, OrderServiceLink
+from services.google_service import google_service
+
+# ID ваших шаблонов
+TEMPLATES = {
+    "contract": "1QNXCdMHiofUdHIi997R0fvq1ht-vcHkNi5fl3mTa4Zg", # Договор поставки
+    "offer": "1_p-XN5Myos5dP20LfYXodKbL8rvIRenZNBhiwqaYpNg",    # КП 
+    "invoice": "13LlTvDxz5LXu4Wtt9pLkWf7JDG_rnt9vGoi49GMP9dY"   # Счет 
+}
 
 class DocumentService:
     @staticmethod
-    async def create_google_contract(session: AsyncSession, order_id: int) -> str:
+    async def create_document(session: AsyncSession, order_id: int, doc_type: str = "contract") -> str:
         """
-        Создает Google Doc для заказа и возвращает ссылку.
+        Создает документ указанного типа.
         """
-        # 1. Получаем данные
-        order = await session.get(Order, order_id)
+        template_id = TEMPLATES.get(doc_type)
+        if not template_id:
+            return f"Ошибка: Неизвестный тип документа {doc_type}"
+
+        # 1. Загрузка заказа с товарами
+        query = select(Order).where(Order.id == order_id).options(
+            selectinload(Order.customer),
+            selectinload(Order.product_links).selectinload(OrderProductLink.product),
+            selectinload(Order.service_links).selectinload(OrderServiceLink.service)
+        )
+        result = await session.execute(query)
+        order = result.scalar_one_or_none()
+
         if not order:
             return "Error: Order not found"
-
-        # Подгружаем связи
-        await session.refresh(order, ["customer", "product_links"])
         
-        # 2. Готовим данные для замены
-        # БЕЗОПАСНОЕ ПОЛУЧЕНИЕ ИМЕНИ
-        customer_name = "Частное лицо"
-        customer_inn = ""
-        # Проверяем, есть ли поле delivery_address в модели, если нет - ставим пустую строку
-        customer_address = getattr(order, "delivery_address", "") or ""
+        # 2. Мягкие данные клиента
+        customer_name = "Клиент"
+        customer_inn = "-"
+        customer_address = "-"
+        customer_phone = "-"
         
-        # Если есть привязанный клиент (B2B)
         if order.customer:
-             customer_name = order.customer.name
-             customer_inn = order.customer.inn or ""
-        
-        # Если клиента нет, пробуем найти хоть какие-то данные
-        # (Например, можно сохранять username в delivery_address временно, как мы делали в боте)
-        if customer_name == "Частное лицо" and customer_address:
-             # Если в адресе записан телефон или имя
-             pass
+             customer_name = order.customer.name or "Клиент"
+             customer_inn = order.customer.inn or "-"
+             customer_address = order.customer.legal_address or "-"
+             customer_phone = order.customer.phone or "-"
+        else:
+             if order.delivery_address:
+                 customer_phone = order.delivery_address
 
+        # 3. Формирование таблицы (6 колонок под вашу шапку)
+        # | № | Наименование товара | Ед. изм. | Кол-во | Цена | Сумма |
+        table_rows = []
+        counter = 1
+        
+        # Товары
+        for link in order.product_links:
+            title = link.product.title if link.product else "Товар"
+            price = link.price
+            qty = link.quantity
+            total = price * qty
+            
+            row = [
+                str(counter),           # 1. Номер
+                title,                  # 2. Наименование
+                "шт.",                  # 3. Ед. изм.
+                str(qty),               # 4. Кол-во
+                f"{price:.2f}",         # 5. Цена
+                f"{total:.2f}"          # 6. Сумма
+            ]
+            table_rows.append(row)
+            counter += 1
+
+        # Услуги
+        for link in order.service_links:
+            title = link.service.title if link.service else "Услуга"
+            price = link.price
+            qty = link.quantity
+            total = price * qty
+            
+            row = [
+                str(counter),
+                title,
+                "усл.",
+                str(qty),
+                f"{price:.2f}",
+                f"{total:.2f}"
+            ]
+            table_rows.append(row)
+            counter += 1
+
+        # 4. Замены
         replacements = {
             "{{order_id}}": str(order.id),
             "{{date}}": datetime.now().strftime("%d.%m.%Y"),
             "{{client_name}}": customer_name,
-            "{{total_amount}}": str(order.total_amount),
-            "{{phone}}": customer_address,
-            "{{inn}}": customer_inn
+            "{{total_amount}}": f"{order.total_amount:.2f}",
+            "{{phone}}": customer_phone,
+            "{{inn}}": customer_inn,
+            "{{address}}": customer_address
         }
         
-        doc_title = f"Договор #{order.id} - {customer_name}"
+        doc_names = {"contract": "Договор", "offer": "КП", "invoice": "Счет"}
+        doc_title = f"{doc_names.get(doc_type, 'Док')} #{order.id} {customer_name}"
         
-        # 3. Вызываем Google API
-        # Тут может вылететь ошибка Quota, поэтому обернем в try внутри сервиса, 
-        # но google_service уже возвращает текст ошибки, так что просто вернем его.
-        link = google_service.create_contract_from_template(doc_title, replacements)
+        link = google_service.generate_doc(template_id, doc_title, replacements, table_rows)
         return link
