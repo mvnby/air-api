@@ -6,7 +6,7 @@ from aiogram.types import (
 main_menu = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🏆 Умный подбор"), KeyboardButton(text="🔎 Поиск")],
-        [KeyboardButton(text="⭐ Избранное"), KeyboardButton(text="❓ Помощь")]
+        [KeyboardButton(text="⭐ Избранное"), KeyboardButton(text="🛒 Корзина")]
     ],
     resize_keyboard=True
 )
@@ -30,7 +30,7 @@ type_selection_kb = InlineKeyboardMarkup(
 def get_product_keyboard(product_id, is_admin=False, in_favorites=False):
     fav_text = "💔 Убрать" if in_favorites else "❤️ В избранное"
     buttons = [
-        [InlineKeyboardButton(text="🛒 Заказать", callback_data=f"buy_{product_id}")],
+        [InlineKeyboardButton(text="🛒 В корзину", callback_data=f"buy_{product_id}")],
         [InlineKeyboardButton(text=fav_text, callback_data=f"fav_toggle_{product_id}")]
     ]
     if is_admin:
