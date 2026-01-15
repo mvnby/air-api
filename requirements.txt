@@ -1,11 +1,32 @@
+#Core Framework
+
 fastapi>=0.100.0
-uvicorn>=0.20.0
-sqlmodel>=0.0.14
-sqladmin>=0.16.0
+uvicorn[standard]>=0.20.0
 python-dotenv
 httpx
 beautifulsoup4>=1.0.0
-aiogram>=3.0.0
-itsdangerous>=2.0.0aiosqlite==0.22.1
+aiosqlite==0.22.1
 greenlet==3.3.0
 python-slugify==8.0.4
+
+#Database
+
+sqlmodel>=0.0.14
+passlib[bcrypt]
+
+#Admin Panel
+
+sqladmin>=0.16.0
+jinja2
+python-multipart
+itsdangerous>=2.0.0
+
+#Telegram Bot
+
+aiogram>=3.0.0
+
+#Google Integration (Docs, Sheets, Drive)
+
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib

@@ -28,3 +28,4 @@ static/uploads/*
 !static/uploads/.gitkeep
 dump_repo.py
 AI_AGENT_CONTEXT.md
+credentials.json
