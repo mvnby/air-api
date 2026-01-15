@@ -155,6 +155,30 @@ class Customer(SQLModel, table=True):
 
     def __str__(self):
         return self.name
+        
+# --- SHOPPING CART (PHASE 27) ---
+
+class Cart(SQLModel, table=True):
+    user_id: int = Field(primary_key=True) # Telegram User ID
+    created_at: datetime = Field(default_factory=datetime.now)
+    # Используем cascade delete, чтобы при удалении корзины удалялись товары
+    items: List["CartItem"] = Relationship(
+        back_populates="cart", 
+        sa_relationship_kwargs={
+            "lazy": "selectin", 
+            "cascade": "all, delete-orphan"
+        }
+    )
+
+class CartItem(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    cart_user_id: int = Field(foreign_key="cart.user_id")
+    product_id: int = Field(foreign_key="product.id")
+    quantity: int = Field(default=1)
+    
+    cart: "Cart" = Relationship(back_populates="items")
+    # joined load, чтобы сразу получать цену и название товара
+    product: "Product" = Relationship(sa_relationship_kwargs={"lazy": "joined"})
 
 # --- CRM МОДЕЛИ (ФАЗА 22) ---
 
