@@ -5,14 +5,14 @@ from .content import ArticleAdmin
 
 # Export all views for easy registration in main.py
 admin_views = [
-    CustomerAdmin,
+    OrderAdmin,
     ProductAdmin,
+    ServiceAdmin,
+    CustomerAdmin,
+    ArticleAdmin,
     TagAdmin,
     TagGroupAdmin,
-    OrderAdmin,
-    ServiceAdmin,
     OrderProductLinkAdmin,
     OrderServiceLinkAdmin,
-    ArticleAdmin,
     BulkTagsView
 ]

@@ -62,19 +62,16 @@ async def update_sync_mode(request: Request):
             
     return RedirectResponse(url="/admin/", status_code=303)
 
-@router.get("/docs/google/{order_id}")
-async def open_google_contract(order_id: int):
+@router.get("/docs/generate/{doc_type}/{order_id}")
+async def generate_document(doc_type: str, order_id: int):
     """
-    Генерирует (или открывает) договор в Google Docs.
+    Универсальный роут для генерации документов.
+    doc_type: contract | offer | invoice
     """
-    from core.database import async_session_maker # Локальный импорт если нужно
-    
     async with async_session_maker() as session:
-        link = await DocumentService.create_google_contract(session, order_id)
+        link = await DocumentService.create_document(session, order_id, doc_type)
     
-    # Если вернулась ссылка (начинается на http), делаем редирект
     if link.startswith("http"):
         return RedirectResponse(url=link)
     else:
-        # Если вернулась ошибка текстом
         return {"error": link}
