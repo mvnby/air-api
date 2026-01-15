@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
+from services.document_service import DocumentService
 from services.importer_service import ImporterService
 from core.database import async_session_maker
 from models import Product, Order
@@ -60,3 +61,20 @@ async def update_sync_mode(request: Request):
         await ConfigService.set_config("sync_mode", str(new_mode))
             
     return RedirectResponse(url="/admin/", status_code=303)
+
+@router.get("/docs/google/{order_id}")
+async def open_google_contract(order_id: int):
+    """
+    Генерирует (или открывает) договор в Google Docs.
+    """
+    from core.database import async_session_maker # Локальный импорт если нужно
+    
+    async with async_session_maker() as session:
+        link = await DocumentService.create_google_contract(session, order_id)
+    
+    # Если вернулась ссылка (начинается на http), делаем редирект
+    if link.startswith("http"):
+        return RedirectResponse(url=link)
+    else:
+        # Если вернулась ошибка текстом
+        return {"error": link}
