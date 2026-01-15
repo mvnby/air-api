@@ -29,3 +29,5 @@ static/uploads/*
 dump_repo.py
 AI_AGENT_CONTEXT.md
 credentials.json
+client_secret.json
+token.json
