@@ -141,7 +141,7 @@ async def get_all_banks():
     """Получает список банков с кэшированием на 1 час"""
     now = datetime.now()
     if BANK_CACHE["data"] and BANK_CACHE["last_updated"]:
-        if now - BANK_CACHE["last_updated"] < timedelta(hours=1):
+        if now - BANK_CACHE["last_updated"] < timedelta(hours=72):
             return BANK_CACHE["data"]
             
     url = "https://api.nbrb.by/bic"

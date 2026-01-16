@@ -83,7 +83,7 @@ class DocumentService:
             row = [
                 str(counter),
                 title,
-                "усл.",
+                "шт.",
                 str(qty),
                 f"{price:.2f}",
                 f"{total:.2f}"
