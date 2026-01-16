@@ -78,3 +78,8 @@ class OrderService:
     @staticmethod
     async def get_all_orders(session: AsyncSession) -> List[Order]:
         return await OrderDAO.get_all(session)
+
+    @staticmethod
+    async def update_status(session: AsyncSession, order_id: int, new_status: Any) -> bool:
+        """Update order status."""
+        return await OrderDAO.update_status(session, order_id, new_status)

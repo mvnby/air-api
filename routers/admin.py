@@ -92,3 +92,39 @@ async def generate_document(
         return RedirectResponse(url=link)
     else:
         return {"error": link}
+
+from pydantic import BaseModel
+
+class OrderStatusUpdate(BaseModel):
+    order_id: int
+    new_status: str
+
+@router.post("/api/order/move")
+async def move_order_status(
+    data: OrderStatusUpdate,
+    username: str = Depends(get_current_username)
+):
+    """
+    API for Kanban drag-and-drop.
+    """
+    from services.order_service import OrderService
+    
+    async with async_session_maker() as session:
+        # Validate status
+        try:
+            # Check if status exists in Enum
+            from models import OrderStatus
+            # Allow case-insensitive match or direct match
+            status_enum = None
+            for s in OrderStatus:
+                if s.value == data.new_status:
+                    status_enum = s
+                    break
+            
+            if not status_enum:
+                return {"success": False, "error": f"Invalid status: {data.new_status}"}
+
+            success = await OrderService.update_status(session, data.order_id, status_enum)
+            return {"success": success}
+        except Exception as e:
+            return {"success": False, "error": str(e)}

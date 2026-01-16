@@ -3,8 +3,11 @@ from .orders import OrderAdmin, ServiceAdmin, OrderProductLinkAdmin, OrderServic
 from .customers import CustomerAdmin
 from .content import ArticleAdmin
 
+from .kanban import KanbanView
+
 # Export all views for easy registration in main.py
 admin_views = [
+    KanbanView, # Add Kanban first for visibility
     OrderAdmin,
     ProductAdmin,
     ServiceAdmin,

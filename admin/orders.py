@@ -56,6 +56,22 @@ class OrderAdmin(ModelView, model=Order):
         if model.customer:
             return model.customer.name
         return "—"
+
+    def format_status(model, context):
+        status = model.status.value if hasattr(model.status, "value") else str(model.status)
+        colors = {
+            "new_lead": "info",
+            "assessment": "warning",
+            "proposal": "primary", # purple in custom css but primary here
+            "negotiation": "warning",
+            "won_deposit": "success",
+            "installation": "success",
+            "completed": "primary",
+            "canceled": "danger",
+            "deferred": "secondary"
+        }
+        color = colors.get(status.lower(), "secondary")
+        return Markup(f'<span class="badge bg-{color}">{status.upper()}</span>')
     
      # --- ОБНОВЛЕННЫЙ ФОРМАТТЕР ДЛЯ КНОПОК ---
     def format_actions(model, context):
@@ -68,6 +84,7 @@ class OrderAdmin(ModelView, model=Order):
     
     column_formatters = {
         Order.customer_id: format_customer,
+        Order.status: format_status,
         "actions": format_actions
     }
     

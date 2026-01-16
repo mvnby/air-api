@@ -44,8 +44,12 @@ class OrderDAO:
     @staticmethod
     async def get_all(session: AsyncSession) -> List[Order]:
         """Get all orders with product info."""
+        # Fix: Order has product_links, not product
         stmt = select(Order).options(
-            selectinload(Order.product)
+            selectinload(Order.customer),
+            selectinload(Order.product_links).selectinload(OrderProductLink.product),
+            selectinload(Order.service_links).selectinload(OrderServiceLink.service),
+            selectinload(Order.installers)
         ).order_by(Order.created_at.desc())
         result = await session.execute(stmt)
         return list(result.scalars().all())
