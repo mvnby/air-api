@@ -62,6 +62,16 @@ class OrderService:
             )
             session.add(link)
             
+        # session.add_all(new_links) - Removed as items are added in loop
+        await session.flush() # Ensure links are in DB
+
+        # 4. Пересчитываем итоговые цифры заказа
+        # Необходимо подгрузить связи, чтобы calculate_totals отработал корректно
+        order = await OrderDAO.get_with_links(session, order_id)
+        if order:
+            order.calculate_totals()
+            session.add(order)
+            
         await session.commit()
     
     # ... остальные методы (get_all_orders, update_status) остаются без изменений ...

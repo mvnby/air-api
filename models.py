@@ -182,6 +182,43 @@ class CartItem(SQLModel, table=True):
 
 # --- CRM МОДЕЛИ (ФАЗА 22) ---
 
+class OrderStatus(str, Enum):
+    NEW_LEAD = "NEW_LEAD"          # Новый лид
+    ASSESSMENT = "ASSESSMENT"      # Замер/Осмотр
+    PROPOSAL = "PROPOSAL"     # КП отправлено
+    NEGOTIATION = "NEGOTIATION"    # Переговоры
+    DEFERRED = "DEFERRED"          # Отложено/Думают
+    WON_DEPOSIT = "WON_DEPOSIT"    # Предоплата получена
+    INSTALLATION = "INSTALLATION"  # Монтаж
+    COMPLETED = "COMPLETED"        # Закрыто
+    CANCELED = "CANCELED"          # Отмена
+
+class Installer(SQLModel, table=True):
+    __tablename__ = "installers"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str
+    is_active: bool = Field(default=True)
+    default_rate: Optional[float] = Field(default=None) # Базовая ставка
+
+class OrderInstaller(SQLModel, table=True):
+    """Ассоциативная таблица для назначения бригады и фиксации оплаты"""
+    __tablename__ = "order_installers"
+    
+    order_id: int = Field(foreign_key="order.id", primary_key=True)
+    installer_id: int = Field(foreign_key="installers.id", primary_key=True)
+    
+    # Роль (Бригадир/Помощник)
+    role: str = Field(default="main") 
+    
+    # Сколько платим за ЭТОТ конкретный монтаж (Сдельная)
+    agreed_pay: float = Field(default=0.0)
+    
+    # Статус выплаты монтажнику
+    is_paid_to_installer: bool = Field(default=False)
+    
+    order: "Order" = Relationship(back_populates="installers")
+    installer: "Installer" = Relationship()
+
 class Service(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str = Field(index=True)
@@ -199,7 +236,10 @@ class OrderProductLink(SQLModel, table=True):
     order_id: Optional[int] = Field(default=None, foreign_key="order.id")
     product_id: Optional[int] = Field(default=None, foreign_key="product.id")
     quantity: int = Field(default=1)
-    price: int = Field(default=0)  # Фиксируем цену на момент заказа
+    
+    # SNAPSHOT PRICES
+    price: int = Field(default=0)  # Цена продажи за шт
+    cost: int = Field(default=0)   # Себестоимость за шт (SNAPSHOT)
     
     order: "Order" = Relationship(back_populates="product_links")
     product: "Product" = Relationship(back_populates="order_links")
@@ -210,7 +250,10 @@ class OrderServiceLink(SQLModel, table=True):
     order_id: Optional[int] = Field(default=None, foreign_key="order.id")
     service_id: Optional[int] = Field(default=None, foreign_key="service.id")
     quantity: int = Field(default=1)
-    price: int = Field(default=0)  # Фиксируем цену на момент заказа
+    
+    # SNAPSHOT PRICES
+    price: int = Field(default=0)  # Цена продажи
+    cost: int = Field(default=0)   # Себестоимость (SNAPSHOT)
     
     order: "Order" = Relationship(back_populates="service_links")
     service: "Service" = Relationship(back_populates="order_links")
@@ -227,11 +270,29 @@ class Order(SQLModel, table=True):
     # Техническая инфа (для связи с ботом)
     user_id: Optional[int] = Field(default=None, index=True) 
     
-    status: str = Field(default="new")  # new, in_progress, done, cancelled
+    # --- CRM FIELDS ---
+    status: OrderStatus = Field(default=OrderStatus.NEW_LEAD, index=True)
+    title: Optional[str] = Field(default=None) # Краткое описание сделки
+    
+    # JSON для технических деталей (HVAC специфика)
+    # Пример: {"wall_type": "beton", "pipe_length": 5, "wifi_module": true}
+    technical_meta: Dict[str, Any] = Field(default={}, sa_column=Column(JSON))
+    
+    # Финансы (Денормализация)
+    total_amount: float = Field(default=0.0) # Итого клиенту
+    total_cost: float = Field(default=0.0)   # Себестоимость
+    margin: float = Field(default=0.0)       # Маржа
+    is_paid: bool = Field(default=False)
+    
+    # Даты
     created_at: datetime = Field(default_factory=datetime.now)
+    assessment_date: Optional[datetime] = None
+    installation_date: Optional[datetime] = None
+    closed_at: Optional[datetime] = None
     
     # Relationships
     customer: Optional["Customer"] = Relationship(back_populates="orders")
+    
     product_links: List[OrderProductLink] = Relationship(
         back_populates="order", 
         sa_relationship_kwargs={
@@ -246,12 +307,28 @@ class Order(SQLModel, table=True):
             "lazy": "selectin"
         }
     )
+    installers: List[OrderInstaller] = Relationship(
+        back_populates="order",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin"
+        }
+    )
 
-    @property
-    def total_amount(self):
+    def calculate_totals(self):
+        """Пересчитывает итоговые суммы заказа на основе связей"""
         p_sum = sum([item.price * item.quantity for item in self.product_links])
         s_sum = sum([item.price * item.quantity for item in self.service_links])
-        return p_sum + s_sum
+        
+        p_cost = sum([item.cost * item.quantity for item in self.product_links])
+        s_cost = sum([item.cost * item.quantity for item in self.service_links])
+        
+        # Стоимость монтажников
+        i_cost = sum([inst.agreed_pay for inst in self.installers])
+        
+        self.total_amount = p_sum + s_sum
+        self.total_cost = p_cost + s_cost + i_cost
+        self.margin = self.total_amount - self.total_cost
 
     def __str__(self):
         customer_name = self.customer.name if self.customer else "N/A"

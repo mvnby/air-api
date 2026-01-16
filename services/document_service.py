@@ -52,8 +52,7 @@ class DocumentService:
             "{{order_id}}": str(order.id),
             "{{date}}": datetime.now().strftime("%d.%m.%Y"),
             "{{total_amount}}": f"{order.total_amount:.2f}",
-            # *100 для преобразования суммы прописью. Почему-то метод возвращает сумму в 100 раз меньшая
-            "{{total_amount_in_words}}": DocumentService._amount_in_words(order.total_amount*100), 
+            "{{total_amount_in_words}}": DocumentService._amount_in_words(order.total_amount), 
             
             # Дефолтные значения (если клиента нет или поля пустые)
             "{{client_name}}": "Клиент",

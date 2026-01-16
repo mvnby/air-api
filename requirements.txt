@@ -20,6 +20,7 @@ sqladmin>=0.16.0
 jinja2
 python-multipart
 itsdangerous>=2.0.0
+alembic
 
 #Telegram Bot
 
