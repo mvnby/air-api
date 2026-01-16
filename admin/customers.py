@@ -25,7 +25,7 @@ class CustomerAdmin(ModelView, model=Customer):
         "email": "Email",
         "type": "Тип",
         "full_legal_name": "Полное наименование",
-        "inn": "ИНН/УНП",
+        "inn": "УНП",
         "kpp": "ОКПО",
         "legal_address": "Юр. адрес",
         "actual_address": "Почтовый адрес",

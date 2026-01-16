@@ -2,7 +2,10 @@ import asyncio
 from aiogram import types
 from .config import bot, dp
 from .handlers import base, catalog, orders, admin, favorites, cart
-from core.logger import logger
+from core.logger import setup_logging
+
+# Setup logging with session-specific bot.log (cleared on restart)
+logger = setup_logging(session_log_file="logs/bot.log", clear_session_log=True)
 
 # Global Error Handler for Bot
 @dp.error()

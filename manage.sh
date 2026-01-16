@@ -19,7 +19,8 @@ usage() {
 }
 
 get_api_pid() {
-    ps aux | grep "uvicorn main:app" | grep -v grep | awk '{print $2}'
+    # Match both the parent process and any child processes
+    ps aux | grep -E "[u]vicorn main:app" | awk '{print $2}'
 }
 
 get_bot_pid() {
@@ -28,6 +29,12 @@ get_bot_pid() {
 
 start() {
     echo -e "${YELLOW}Starting services...${NC}"
+    
+    # Add session marker to cumulative log
+    echo "" >> logs/app.log
+    echo "========================================" >> logs/app.log
+    echo "New session started at $(date '+%Y-%m-%d %H:%M:%S')" >> logs/app.log
+    echo "========================================" >> logs/app.log
 
     # 1. API Server
     API_PID=$(get_api_pid)
@@ -53,22 +60,48 @@ start() {
 stop() {
     echo -e "${YELLOW}Stopping services...${NC}"
 
-    API_PID=$(get_api_pid)
-    if [ -n "$API_PID" ]; then
-        echo -n "Stopping API (PID: $API_PID)... "
-        kill -9 $API_PID
+    # Stop API Server - kill all uvicorn processes including children
+    API_PIDS=$(get_api_pid)
+    if [ -n "$API_PIDS" ]; then
+        echo -n "Stopping API (PIDs: $API_PIDS)... "
+        # Kill all found PIDs
+        echo "$API_PIDS" | xargs kill -TERM 2>/dev/null
+        sleep 1
+        # Force kill if still running
+        API_PIDS=$(get_api_pid)
+        if [ -n "$API_PIDS" ]; then
+            echo "$API_PIDS" | xargs kill -9 2>/dev/null
+        fi
+        # Also use pkill as a fallback to ensure all uvicorn processes are killed
+        pkill -9 -f "uvicorn main:app" 2>/dev/null
         echo -e "${GREEN}DONE${NC}"
     else
         echo -e "API is not running."
     fi
 
+    # Stop Bot
     BOT_PID=$(get_bot_pid)
     if [ -n "$BOT_PID" ]; then
         echo -n "Stopping Bot (PID: $BOT_PID)... "
-        kill -9 $BOT_PID
+        kill -TERM $BOT_PID 2>/dev/null
+        sleep 1
+        # Force kill if still running
+        if ps -p $BOT_PID > /dev/null 2>&1; then
+            kill -9 $BOT_PID 2>/dev/null
+        fi
         echo -e "${GREEN}DONE${NC}"
     else
         echo -e "Bot is not running."
+    fi
+    
+    # Verify all processes are stopped
+    sleep 1
+    REMAINING_API=$(get_api_pid)
+    REMAINING_BOT=$(get_bot_pid)
+    if [ -n "$REMAINING_API" ] || [ -n "$REMAINING_BOT" ]; then
+        echo -e "${RED}Warning: Some processes may still be running${NC}"
+        [ -n "$REMAINING_API" ] && echo -e "${RED}  API PIDs: $REMAINING_API${NC}"
+        [ -n "$REMAINING_BOT" ] && echo -e "${RED}  Bot PID: $REMAINING_BOT${NC}"
     fi
 }
 

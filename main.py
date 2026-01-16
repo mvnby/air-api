@@ -10,10 +10,13 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from core.database import engine, init_db
 from core.config import settings
-from core.logger import logger
+from core.logger import setup_logging
 from routers import admin as admin_router
 from routers import api as api_router
 from admin import admin_views
+
+# Setup logging with session-specific server.log (cleared on restart)
+logger = setup_logging(session_log_file="logs/server.log", clear_session_log=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
