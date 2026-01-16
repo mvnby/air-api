@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
 from fastapi.responses import RedirectResponse
 from services.document_service import DocumentService
 from services.importer_service import ImporterService
 from core.database import async_session_maker
+from core.security import get_current_username, check_admin_session
 from models import Product, Order
 from sqlmodel import select, func
 from sqlalchemy.orm import selectinload
@@ -11,13 +12,22 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 importer_service = ImporterService()
 
 @router.get("/stats")
-async def get_dashboard_stats():
+async def get_dashboard_stats(
+    request: Request,
+    authenticated: bool = Depends(check_admin_session)
+):
+    """
+    Dashboard stats endpoint - uses session-based auth (called from admin panel AJAX).
+    """
     from services.analytics_service import AnalyticsService
     async with async_session_maker() as session:
         return await AnalyticsService.get_dashboard_stats(session)
 
 @router.post("/import_onliner")
-async def import_process(request: Request):
+async def import_process(
+    request: Request,
+    username: str = Depends(get_current_username)
+):
     form = await request.form()
     raw_urls = form.get("url", "")
     with_related = bool(form.get("with_related"))
@@ -53,7 +63,10 @@ async def import_process(request: Request):
         )
 
 @router.post("/update_sync_mode")
-async def update_sync_mode(request: Request):
+async def update_sync_mode(
+    request: Request,
+    username: str = Depends(get_current_username)
+):
     form = await request.form()
     new_mode = form.get("mode")
     if new_mode is not None:
@@ -63,7 +76,11 @@ async def update_sync_mode(request: Request):
     return RedirectResponse(url="/admin/", status_code=303)
 
 @router.get("/docs/generate/{doc_type}/{order_id}")
-async def generate_document(doc_type: str, order_id: int):
+async def generate_document(
+    doc_type: str,
+    order_id: int,
+    username: str = Depends(get_current_username)
+):
     """
     Универсальный роут для генерации документов.
     doc_type: contract | offer | invoice

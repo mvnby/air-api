@@ -1,9 +1,11 @@
 import os.path
 from typing import Dict, Any, List, Optional
+from io import BytesIO
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
 
 SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/documents']
 TOKEN_FILE = 'token.json'
@@ -67,7 +69,20 @@ class GoogleDocsService:
             
         except Exception as e:
             return f"Google API Error: {str(e)}"
-
+    def export_pdf(self, file_id: str) -> bytes:
+        """Скачивает Google Doc как PDF."""
+        if not self.creds: self._authenticate()
+        drive_service = build('drive', 'v3', credentials=self.creds)
+        
+        request = drive_service.files().export_media(fileId=file_id, mimeType='application/pdf')
+        file_io = BytesIO()
+        downloader = MediaIoBaseDownload(file_io, request)
+        
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        
+        return file_io.getvalue()
     def _fill_table(self, docs_service, doc_id, data: List[List[str]], has_footer: bool):
         # ... (Код поиска таблицы и вставки строк - такой же как был) ...
         # (Для краткости использую предыдущую стабильную версию "Double Reverse")
