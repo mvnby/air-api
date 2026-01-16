@@ -94,3 +94,30 @@ def get_current_username(
         )
     
     return credentials.username
+
+
+async def check_admin_session(request: Request) -> bool:
+    """
+    FastAPI dependency for session-based authentication (SQLAdmin).
+    Use this for endpoints that are called from the admin panel via AJAX.
+    
+    Usage:
+        @router.get("/admin/stats")
+        async def get_stats(authenticated: bool = Depends(check_admin_session)):
+            return {"data": "..."}
+    
+    Args:
+        request: FastAPI Request object
+        
+    Returns:
+        True if authenticated
+        
+    Raises:
+        HTTPException: 401 Unauthorized if not authenticated
+    """
+    if not request.session.get("authenticated", False):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated. Please login to admin panel first.",
+        )
+    return True

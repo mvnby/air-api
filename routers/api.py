@@ -3,6 +3,7 @@ API Router: Product endpoints.
 Uses Service Layer with Dependency Injection for session management.
 """
 from fastapi import APIRouter, Depends, Query
+from core.security import get_current_username
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select, and_, func
@@ -43,7 +44,10 @@ async def search_products(
     return {"items": products}
 
 @router.get("/admin/tags/filterable")
-async def get_filterable_tags(session: AsyncSession = Depends(get_session)):
+async def get_filterable_tags(
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username)
+):
     stmt = (
         select(TagGroup, Tag)
         .join(Tag, Tag.group_id == TagGroup.id)
@@ -73,7 +77,8 @@ async def get_filterable_tags(session: AsyncSession = Depends(get_session)):
 async def admin_search_products(
     q: str = "", 
     tag_ids: List[int] = Query(None),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username)
 ):
     stmt = select(Product)
     
@@ -101,7 +106,11 @@ async def admin_search_products(
     return [{"id": p.id, "text": p.title, "price": p.price} for p in products]
 
 @router.get("/admin/services/search")
-async def admin_search_services(q: str = "", session: AsyncSession = Depends(get_session)):
+async def admin_search_services(
+    q: str = "",
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username)
+):
     from models import Service
     stmt = select(Service).where(Service.title.ilike(f"%{q}%")).limit(20)
     result = await session.execute(stmt)
@@ -121,7 +130,10 @@ async def health_check(session: AsyncSession = Depends(get_session)):
 # --- BELARUS API PROXIES ---
 
 @router.get("/admin/proxy/egr")
-async def proxy_egr(unp: str):
+async def proxy_egr(
+    unp: str,
+    username: str = Depends(get_current_username)
+):
     """Proxy for Belarus EGR (Ministry of Taxes) API."""
     url = f"http://grp.nalog.gov.by/api/grp-public/data?unp={unp}&type=json&charset=UTF-8"
     async with httpx.AsyncClient() as client:
@@ -138,7 +150,7 @@ BANK_CACHE = {
 }
 
 async def get_all_banks():
-    """Получает список банков с кэшированием на 1 час"""
+    """Получает список банков с кэшированием на 72 часа"""
     now = datetime.now()
     if BANK_CACHE["data"] and BANK_CACHE["last_updated"]:
         if now - BANK_CACHE["last_updated"] < timedelta(hours=72):
@@ -161,7 +173,8 @@ async def get_all_banks():
 
 @router.get("/admin/proxy/bank")
 async def find_bank(
-    search: str = Query(None, description="BIC код или IBAN")
+    search: str = Query(None, description="BIC код или IBAN"),
+    username: str = Depends(get_current_username)
 ):
     """
     Ищет банк локально в справочнике НБРБ.
@@ -235,7 +248,8 @@ async def find_bank(
 @router.post("/products/{product_id}/generate-description")
 async def generate_product_description(
     product_id: int,
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username)
 ):
     """
     Генерирует описание на основе тегов и возвращает текст.
