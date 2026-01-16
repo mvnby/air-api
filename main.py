@@ -11,6 +11,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from core.database import engine, init_db
 from core.config import settings
 from core.logger import setup_logging
+from core.security import AdminAuthBackend
 from routers import admin as admin_router
 from routers import api as api_router
 from admin import admin_views
@@ -57,9 +58,15 @@ app.include_router(api_router.router)
 # Static files
 app.mount(f"/{settings.STATIC_DIR}", StaticFiles(directory=settings.STATIC_DIR), name="static")
 
-# Setup SQLAdmin
+# Setup SQLAdmin with authentication
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-admin = Admin(app, engine, title="AirCon Admin", templates_dir=os.path.join(BASE_DIR, "templates"))
+admin = Admin(
+    app, 
+    engine, 
+    title="AirCon Admin", 
+    templates_dir=os.path.join(BASE_DIR, "templates"),
+    authentication_backend=AdminAuthBackend(secret_key=settings.SECRET_KEY)
+)
 
 # Register views from the admin package
 for view in admin_views:

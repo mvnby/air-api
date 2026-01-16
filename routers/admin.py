@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
 from fastapi.responses import RedirectResponse
 from services.document_service import DocumentService
 from services.importer_service import ImporterService
 from core.database import async_session_maker
+from core.security import get_current_username
 from models import Product, Order
 from sqlmodel import select, func
 from sqlalchemy.orm import selectinload
@@ -11,7 +12,10 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 importer_service = ImporterService()
 
 @router.get("/stats")
-async def get_dashboard_stats():
+async def get_dashboard_stats(username: str = Depends(get_current_username)):
+    """
+    Protected endpoint - requires HTTP Basic Auth.
+    """
     from services.analytics_service import AnalyticsService
     async with async_session_maker() as session:
         return await AnalyticsService.get_dashboard_stats(session)

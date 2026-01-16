@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     ADMIN_ID: int = 0
     SECRET_KEY: str
     
+    # HTTP Basic Auth
+    ADMIN_USERNAME: str
+    ADMIN_PASSWORD: str
+    
     @property
     def admin_list(self) -> list[int]:
         ids = []
