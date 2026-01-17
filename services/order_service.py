@@ -62,9 +62,24 @@ class OrderService:
             )
             session.add(link)
             
+        # session.add_all(new_links) - Removed as items are added in loop
+        await session.flush() # Ensure links are in DB
+
+        # 4. Пересчитываем итоговые цифры заказа
+        # Необходимо подгрузить связи, чтобы calculate_totals отработал корректно
+        order = await OrderDAO.get_with_links(session, order_id)
+        if order:
+            order.calculate_totals()
+            session.add(order)
+            
         await session.commit()
     
     # ... остальные методы (get_all_orders, update_status) остаются без изменений ...
     @staticmethod
     async def get_all_orders(session: AsyncSession) -> List[Order]:
         return await OrderDAO.get_all(session)
+
+    @staticmethod
+    async def update_status(session: AsyncSession, order_id: int, new_status: Any) -> bool:
+        """Update order status."""
+        return await OrderDAO.update_status(session, order_id, new_status)

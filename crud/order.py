@@ -44,8 +44,12 @@ class OrderDAO:
     @staticmethod
     async def get_all(session: AsyncSession) -> List[Order]:
         """Get all orders with product info."""
+        # Fix: Order has product_links, not product
         stmt = select(Order).options(
-            selectinload(Order.product)
+            selectinload(Order.customer),
+            selectinload(Order.product_links).selectinload(OrderProductLink.product),
+            selectinload(Order.service_links).selectinload(OrderServiceLink.service),
+            selectinload(Order.installers)
         ).order_by(Order.created_at.desc())
         result = await session.execute(stmt)
         return list(result.scalars().all())
@@ -70,3 +74,14 @@ class OrderDAO:
     async def clear_service_links(session: AsyncSession, order_id: int):
         """Removes all service links for a given order."""
         await session.execute(delete(OrderServiceLink).where(OrderServiceLink.order_id == order_id))
+
+    @staticmethod
+    async def get_with_links(session: AsyncSession, order_id: int) -> Optional[Order]:
+        """Get order with all links (products, services, installers)."""
+        stmt = select(Order).where(Order.id == order_id).options(
+            selectinload(Order.product_links),
+            selectinload(Order.service_links),
+            selectinload(Order.installers)
+        )
+        result = await session.execute(stmt)
+        return result.scalars().first()
