@@ -7,7 +7,11 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 
-SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/documents']
+SCOPES = [
+    'https://www.googleapis.com/auth/drive', 
+    'https://www.googleapis.com/auth/documents',
+    'https://www.googleapis.com/auth/spreadsheets'
+]
 TOKEN_FILE = 'token.json'
 DESTINATION_FOLDER_ID = '1kLK6Vque3V5iPV1i1HjeH_su-TmyCzQt' 
 
@@ -26,8 +30,253 @@ class GoogleDocsService:
             if self.creds and self.creds.expired and self.creds.refresh_token:
                 try:
                     self.creds.refresh(Request())
+                    # Сохраняем токен ТОЛЬКО если успешно обновили
                     with open(TOKEN_FILE, 'w') as token: token.write(self.creds.to_json())
                 except Exception: self.creds = None
+
+    def generate_sheet(self, template_id: str, title: str, replacements: Dict[str, str], 
+                       table_data: Optional[List[List[str]]] = None,
+                       start_cell_addr: str = None,
+                       target_sheet_name: str = None,
+                       merge_cols: List[tuple] = None, 
+                       draw_borders: bool = False) -> str:
+        """
+        Генерация документа на основе Google Sheets.
+        start_cell_addr: Адрес ячейки (напр. "A12").
+        target_sheet_name: Имя листа (вкладки), куда писать данные (напр. "ТН-2").
+        """
+        if not self.creds or not self.creds.valid:
+            self._authenticate()
+            if not self.creds: return "Ошибка: Нет доступа к Google API (проверьте права)."
+
+        try:
+            drive_service = build('drive', 'v3', credentials=self.creds)
+            sheets_service = build('sheets', 'v4', credentials=self.creds)
+
+            # 1. Копируем файл
+            copy_body = {'name': title, 'parents': [DESTINATION_FOLDER_ID] if DESTINATION_FOLDER_ID else []}
+            new_file = drive_service.files().copy(fileId=template_id, body=copy_body).execute()
+            new_sheet_id = new_file.get('id')
+            
+            # 2. Замены текста (глобально)
+            # Примечание: findReplace работает по всем листам, если allSheets=True.
+            requests = []
+            for key, value in replacements.items():
+                requests.append({
+                    'findReplace': {
+                        'find': key,
+                        'replacement': str(value) if value is not None else "",
+                        'allSheets': True,
+                        'matchCase': True
+                    }
+                })
+            
+            if requests:
+                sheets_service.spreadsheets().batchUpdate(spreadsheetId=new_sheet_id, body={'requests': requests}).execute()
+
+            # 3. Заполнение таблицы
+            if table_data and len(table_data) > 0:
+                self._fill_sheet_table(sheets_service, new_sheet_id, table_data, 
+                                       start_cell_addr, target_sheet_name,
+                                       merge_cols, draw_borders)
+
+            return f"https://docs.google.com/spreadsheets/d/{new_sheet_id}/edit"
+            
+        except Exception as e:
+            return f"Google Sheets API Error: {str(e)}"
+
+    def _parse_a1(self, addr: str):
+        """Парсит A1 нотацию (напр 'B12') в (row_index, col_index)"""
+        # Упрощенный парсер
+        import re
+        match = re.match(r"([A-Za-z]+)([0-9]+)", addr)
+        if not match: return -1, -1
+        col_str, row_str = match.groups()
+        
+        row_idx = int(row_str) - 1
+        
+        col_idx = 0
+        for i, c in enumerate(reversed(col_str.upper())):
+            col_idx += (ord(c) - 64) * (26 ** i)
+        col_idx -= 1
+        
+        return row_idx, col_idx
+
+    def _fill_sheet_table(self, sheets_service, sheet_id, data: List[List[str]], 
+                          start_cell_addr=None, target_sheet_name=None,
+                          merge_cols: List[tuple] = None, draw_borders: bool = False):
+        """
+        merge_cols: список кортежей (start_col_idx, end_col_idx) для объединения ВНУТРИ каждой строки данных.
+                    Индексы 0-based. start включительно, end исключительно.
+        draw_borders: если True, рисует границы для всех ячеек таблицы.
+        """
+        spreadsheet = sheets_service.spreadsheets().get(spreadsheetId=sheet_id, includeGridData=False).execute()
+        
+        # Находим нужный лист
+        sheet = None
+        if target_sheet_name:
+            for s in spreadsheet['sheets']:
+                if s['properties']['title'] == target_sheet_name:
+                    sheet = s
+                    break
+            if not sheet:
+                print(f"⚠️ Warning: Sheet '{target_sheet_name}' not found. Falling back to the first visible sheet.")
+        
+        if not sheet:
+             # Попробуем найти первый не скрытый лист
+             for s in spreadsheet['sheets']:
+                 if not s['properties'].get('hidden', False):
+                     sheet = s
+                     break
+        
+        if not sheet: sheet = spreadsheet['sheets'][0]
+
+        sht_id = sheet['properties']['sheetId']
+        sheet_title = sheet['properties']['title']
+        
+        print(f"🎯 Target Sheet: '{sheet_title}' (ID: {sht_id})")
+
+        start_row = -1
+        start_col = -1
+        
+        if start_cell_addr:
+             start_row, start_col = self._parse_a1(start_cell_addr)
+        
+        if start_row == -1:
+             # Fallback поиска {{table_start}}
+             # (Опущен для краткости, т.к. мы используем адреса)
+             print("❌ Ошибка: Маркер не найден.")
+             return
+
+        print(f"✅ Таблица начинается в строке {start_row+1}, столбце {start_col+1} (Index: {start_row}, {start_col})")
+        
+        quoted_title = f"'{sheet_title}'" if " " in sheet_title or not sheet_title.isalnum() else sheet_title
+
+        # 1. Очищаем маркер
+        if start_cell_addr:
+             clear_range = f"{quoted_title}!{start_cell_addr}"
+        else:
+             clear_range = f"{quoted_title}!R{start_row+1}C{start_col+1}"
+        
+        # 2. Вставка строк (Стратегия: Insert All New -> Write -> Delete Old Placeholder)
+        # Это гарантирует, что первая строка не сохранит странных артефактов объединения
+        rows_to_insert = len(data)
+        print(f"📊 Data rows: {len(data)}. Inserting {rows_to_insert} clean rows at {start_row}")
+        
+        reqs = []
+        if rows_to_insert > 0:
+            reqs.append({
+                'insertDimension': {
+                    'range': {
+                        'sheetId': sht_id,
+                        'dimension': 'ROWS',
+                        'startIndex': start_row,
+                        'endIndex': start_row + rows_to_insert
+                    },
+                    'inheritFromBefore': True 
+                }
+            })
+        
+        # 2.1. Разъединяем ячейки (начиная со start_row)
+        # Так как мы вставили новые строки, они могут быть объединены (если inheritFromBefore скопировал мерж с хедера?)
+        # Лучше сделать Unmerge для всего нового блока.
+        print(f"🔓 Unmerging cells from Row {start_row} to {start_row + len(data)}")
+        reqs.append({
+            'unmergeCells': {
+                'range': {
+                    'sheetId': sht_id,
+                    'startRowIndex': start_row,
+                    'endRowIndex': start_row + len(data),
+                    'startColumnIndex': start_col,
+                    'endColumnIndex': start_col + 20 # Запас
+                }
+            }
+        })
+
+        # 2.2. Объединение ячеек (Custom Merge)
+        if merge_cols:
+            for r_offset in range(len(data)):
+                abs_row = start_row + r_offset
+                for (m_start_col, m_end_col) in merge_cols:
+                    reqs.append({
+                        'mergeCells': {
+                            'range': {
+                                'sheetId': sht_id,
+                                'startRowIndex': abs_row,
+                                'endRowIndex': abs_row + 1,
+                                'startColumnIndex': m_start_col,
+                                'endColumnIndex': m_end_col
+                            },
+                            'mergeType': 'MERGE_ALL'
+                        }
+                    })
+
+        # 2.3. Границы (Borders)
+        if draw_borders:
+            max_col_idx = start_col
+            if data:
+                 max_col_idx = start_col + len(data[0]) 
+
+            reqs.append({
+                'updateBorders': {
+                    'range': {
+                        'sheetId': sht_id,
+                        'startRowIndex': start_row,
+                        'endRowIndex': start_row + len(data),
+                        'startColumnIndex': start_col,
+                        'endColumnIndex': max_col_idx
+                    },
+                    'top': {'style': 'SOLID', 'width': 1, 'color': {'red': 0, 'green': 0, 'blue': 0}},
+                    'bottom': {'style': 'SOLID', 'width': 1, 'color': {'red': 0, 'green': 0, 'blue': 0}},
+                    'left': {'style': 'SOLID', 'width': 1, 'color': {'red': 0, 'green': 0, 'blue': 0}},
+                    'right': {'style': 'SOLID', 'width': 1, 'color': {'red': 0, 'green': 0, 'blue': 0}},
+                    'innerHorizontal': {'style': 'SOLID', 'width': 1, 'color': {'red': 0, 'green': 0, 'blue': 0}},
+                    'innerVertical': {'style': 'SOLID', 'width': 1, 'color': {'red': 0, 'green': 0, 'blue': 0}},
+                }
+            })
+        
+        # 2.4 Удаление старой строки-шаблона (которая оказалась ниже вставленных)
+        # Она теперь индексируется как start_row + rows_to_insert
+        print(f"🗑️ Deleting old placeholder row at {start_row + rows_to_insert}")
+        reqs.append({
+            'deleteDimension': {
+                'range': {
+                    'sheetId': sht_id,
+                    'dimension': 'ROWS',
+                    'startIndex': start_row + rows_to_insert,
+                    'endIndex': start_row + rows_to_insert + 1
+                }
+            }
+        })
+
+        try:
+            sheets_service.spreadsheets().batchUpdate(spreadsheetId=sheet_id, body={'requests': reqs}).execute()
+        except Exception as e:
+            print(f"❌ Error during Insert/Modify/Delete: {e}")
+
+        # 3. Запись данных
+        new_values = []
+        for row in data:
+            new_values.append([{'userEnteredValue': {'stringValue': str(x)}} for x in row])
+        
+        print(f"📝 Writing data starting at Row {start_row}, Col {start_col}")
+
+        update_req = [{
+            'updateCells': {
+                'rows': [{'values': r} for r in new_values],
+                'fields': 'userEnteredValue',
+                'start': {
+                    'sheetId': sht_id,
+                    'rowIndex': start_row,
+                    'columnIndex': start_col
+                }
+            }
+        }]
+        
+        try:
+            sheets_service.spreadsheets().batchUpdate(spreadsheetId=sheet_id, body={'requests': update_req}).execute()
+        except Exception as e:
+             print(f"❌ Error during Write Data: {e}")
 
     def generate_doc(self, template_id: str, title: str, replacements: Dict[str, str], 
                      table_data: Optional[List[List[str]]] = None, 

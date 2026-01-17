@@ -10,7 +10,8 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 # Это позволит боту создавать файлы от вашего имени
 SCOPES = [
     'https://www.googleapis.com/auth/drive',
-    'https://www.googleapis.com/auth/documents'
+    'https://www.googleapis.com/auth/documents',
+    'https://www.googleapis.com/auth/spreadsheets'
 ]
 
 def main():

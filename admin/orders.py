@@ -80,13 +80,15 @@ class OrderAdmin(ModelView, model=Order):
         btn_invoice = f'<a href="/admin/docs/generate/invoice/{model.id}" target="_blank" class="btn btn-sm btn-outline-warning ms-1" title="Счет на оплату"><i class="fa-solid fa-money-bill"></i> Счет</a>'
         btn_contract = f'<a href="/admin/docs/generate/contract/{model.id}" target="_blank" class="btn btn-sm btn-outline-success ms-1" title="Договор"><i class="fa-solid fa-file-contract"></i> Договор</a>'
         
-        # Installation Stage
+        # Installation / Shipping Stage
         btn_work_order = f'<a href="/admin/docs/generate/work_order/{model.id}" target="_blank" class="btn btn-sm btn-outline-secondary ms-1" title="Наряд-заказ"><i class="fa-solid fa-tools"></i> Наряд</a>'
+        btn_tn2 = f'<a href="/admin/docs/generate/tn2/{model.id}" target="_blank" class="btn btn-sm btn-outline-secondary ms-1" title="ТН-2 (Накладная)"><i class="fa-solid fa-truck"></i> ТН-2</a>'
+        btn_ttn1 = f'<a href="/admin/docs/generate/ttn1/{model.id}" target="_blank" class="btn btn-sm btn-outline-secondary ms-1" title="ТТН-1 (Товарно-транспортная)"><i class="fa-solid fa-truck-fast"></i> ТТН-1</a>'
         
         # Completed Stage
         btn_act = f'<a href="/admin/docs/generate/act/{model.id}" target="_blank" class="btn btn-sm btn-outline-dark ms-1" title="Акт выполненных работ"><i class="fa-solid fa-file-signature"></i> Акт</a>'
         
-        return Markup(f'<div class="d-flex">{btn_offer}{btn_invoice}{btn_contract}{btn_work_order}{btn_act}</div>')
+        return Markup(f'<div class="d-flex">{btn_offer}{btn_invoice}{btn_contract}{btn_work_order}{btn_tn2}{btn_ttn1}{btn_act}</div>')
     
     column_formatters = {
         Order.customer_id: format_customer,
