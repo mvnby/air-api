@@ -11,7 +11,9 @@ from services.google_service import google_service
 TEMPLATES = {
     "contract": "1QNXCdMHiofUdHIi997R0fvq1ht-vcHkNi5fl3mTa4Zg", 
     "offer": "1_p-XN5Myos5dP20LfYXodKbL8rvIRenZNBhiwqaYpNg",    
-    "invoice": "13LlTvDxz5LXu4Wtt9pLkWf7JDG_rnt9vGoi49GMP9dY"   
+    "invoice": "13LlTvDxz5LXu4Wtt9pLkWf7JDG_rnt9vGoi49GMP9dY",
+    "work_order": "1tom7jwtOSajR8oCIhSniWEOQFxu2RdwYQcHmEkU34Dc", # Наряд-заказ (для монтажников)
+    "act": "1Ttdz0UsuNFJB9FExgxIdvEoHSDc_vippFCq3_I7s3Xw"               # Акт выполненных работ
 }
 
 class DocumentService:
@@ -68,6 +70,11 @@ class DocumentService:
             "{{bic}}": "-"
         }
 
+        # Добавляем технические мета-данные (для Наряд-заказа)
+        if order.technical_meta and isinstance(order.technical_meta, dict):
+            for key, value in order.technical_meta.items():
+                replacements[f"{{{{meta_{key}}}}}"] = str(value)
+
         # Если клиент есть в базе, подставляем его реальные поля
         if c:
             # Логика имени: Юрлицо -> Полное название, Физлицо -> Просто имя
@@ -75,7 +82,6 @@ class DocumentService:
                 client_main_name = c.full_legal_name
             else:
                 client_main_name = c.name
-
 
             replacements.update({
                 "{{client_name}}": client_main_name,
@@ -93,40 +99,83 @@ class DocumentService:
                 "{{bic}}": c.bic or "-"
             })
 
-        # 3. Формирование таблицы (6 колонок)
-        table_rows = []
-        counter = 1
+        # 3. Формирование контента в зависимости от типа документа
         
-        # Товары
-        for link in order.product_links:
-            title = link.product.title if link.product else "Товар"
-            row = [
-                str(counter), title, "шт.", 
-                str(link.quantity), f"{link.price:.2f}", f"{link.price * link.quantity:.2f}"
-            ]
-            table_rows.append(row)
-            counter += 1
+        # --- WORK ORDER (Наряд-заказ) ---
+        # Монтажникам не нужна таблица с ценами, им нужен список оборудования и мета-данные.
+        if doc_type == "work_order":
+            equipment_lines = []
+            counter = 1
+            # Только товары (оборудование)
+            for link in order.product_links:
+                title = link.product.title if link.product else "Оборудование"
+                equipment_lines.append(f"{counter}. {title} — {link.quantity} шт.")
+                counter += 1
+            
+            # Добавим услуги, если важно (обычно монтажникам важно знать что делать)
+            # Но пользователь сказал "перечень оборудования". 
+            # Добавим услуги как "Работы" для полноты картины? 
+            # Пользователь сказал "кондиционер такой-то, трубы столько-то". Трубы - это товар.
+            # Оставим только товары (оборудование и материалы)
+            
+            equipment_list_str = "\n".join(equipment_lines)
+            replacements["{{equipment_list}}"] = equipment_list_str
+            
+            # Таблица не нужна
+            table_rows = []
 
-        # Услуги
-        for link in order.service_links:
-            title = link.service.title if link.service else "Услуга"
-            row = [
-                str(counter), title, "шт.", 
-                str(link.quantity), f"{link.price:.2f}", f"{link.price * link.quantity:.2f}"
-            ]
-            table_rows.append(row)
-            counter += 1
+        # --- ACT (Акт выполненных работ) ---
+        # Только услуги
+        elif doc_type == "act":
+            table_rows = []
+            counter = 1
+            for link in order.service_links:
+                title = link.service.title if link.service else "Услуга"
+                # 6 колонок (как в шаблоне)
+                row = [
+                    str(counter), title, "шт.", 
+                    str(link.quantity), f"{link.price:.2f}", f"{link.price * link.quantity:.2f}"
+                ]
+                table_rows.append(row)
+                counter += 1
+            
+            # Строка итогов
+            if table_rows:
+                total_services = sum(l.price * l.quantity for l in order.service_links)
+                total_row = ["Всего:", "", "", "", "", f"{total_services:.2f}"]
+                table_rows.append(total_row)
 
-          # --- ДОБАВЛЕНИЕ СТРОКИ ИТОГОВ ---
-        # Добавляем строку: ["Всего:", "", "", "", "", "123.00"]
-        # Первые 5 колонок (индексы 0-4) будут объединены в одну.
-        if table_rows:
-            total_row = [
-                "Всего:",  # Будет в объединенной ячейке
-                "", "", "", "", # Пустые, так как исчезнут при объединении
-                f"{order.total_amount:.2f}" # Сумма (6-я колонка)
-            ]
-            table_rows.append(total_row)
+        # --- CONTRACT / OFFER (Договор / КП) ---
+        # Товары + Услуги (как сейчас)
+        # --- INVOICE (Счет) ---
+        # Обычно тоже все вместе, но если пользователь захочет разделить, можно добавить условие.
+        else:
+            table_rows = []
+            counter = 1
+            
+            # Товары
+            for link in order.product_links:
+                title = link.product.title if link.product else "Товар"
+                row = [
+                    str(counter), title, "шт.", 
+                    str(link.quantity), f"{link.price:.2f}", f"{link.price * link.quantity:.2f}"
+                ]
+                table_rows.append(row)
+                counter += 1
+
+            # Услуги
+            for link in order.service_links:
+                title = link.service.title if link.service else "Услуга"
+                row = [
+                    str(counter), title, "шт.", 
+                    str(link.quantity), f"{link.price:.2f}", f"{link.price * link.quantity:.2f}"
+                ]
+                table_rows.append(row)
+                counter += 1
+
+            if table_rows:
+                total_row = ["Всего:", "", "", "", "", f"{order.total_amount:.2f}"]
+                table_rows.append(total_row)
 
         doc_names = {"contract": "Договор", "offer": "КП", "invoice": "Счет"}
         doc_title = f"{doc_names.get(doc_type, 'Док')} #{order.id} {replacements['{{client_name}}']}"

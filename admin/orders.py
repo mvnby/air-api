@@ -73,14 +73,20 @@ class OrderAdmin(ModelView, model=Order):
         color = colors.get(status.lower(), "secondary")
         return Markup(f'<span class="badge bg-{color}">{status.upper()}</span>')
     
-     # --- ОБНОВЛЕННЫЙ ФОРМАТТЕР ДЛЯ КНОПОК ---
+    # --- ОБНОВЛЕННЫЙ ФОРМАТТЕР ДЛЯ КНОПОК ---
     def format_actions(model, context):
-        # Три разные кнопки
+        # Proposal Stage
         btn_offer = f'<a href="/admin/docs/generate/offer/{model.id}" target="_blank" class="btn btn-sm btn-outline-info" title="Коммерческое предложение"><i class="fa-solid fa-file-invoice"></i> КП</a>'
         btn_invoice = f'<a href="/admin/docs/generate/invoice/{model.id}" target="_blank" class="btn btn-sm btn-outline-warning ms-1" title="Счет на оплату"><i class="fa-solid fa-money-bill"></i> Счет</a>'
         btn_contract = f'<a href="/admin/docs/generate/contract/{model.id}" target="_blank" class="btn btn-sm btn-outline-success ms-1" title="Договор"><i class="fa-solid fa-file-contract"></i> Договор</a>'
         
-        return Markup(f'<div class="d-flex">{btn_offer}{btn_invoice}{btn_contract}</div>')
+        # Installation Stage
+        btn_work_order = f'<a href="/admin/docs/generate/work_order/{model.id}" target="_blank" class="btn btn-sm btn-outline-secondary ms-1" title="Наряд-заказ"><i class="fa-solid fa-tools"></i> Наряд</a>'
+        
+        # Completed Stage
+        btn_act = f'<a href="/admin/docs/generate/act/{model.id}" target="_blank" class="btn btn-sm btn-outline-dark ms-1" title="Акт выполненных работ"><i class="fa-solid fa-file-signature"></i> Акт</a>'
+        
+        return Markup(f'<div class="d-flex">{btn_offer}{btn_invoice}{btn_contract}{btn_work_order}{btn_act}</div>')
     
     column_formatters = {
         Order.customer_id: format_customer,
