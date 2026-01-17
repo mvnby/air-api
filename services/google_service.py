@@ -2,10 +2,12 @@ import os.path
 from typing import Dict, Any, List, Optional
 from io import BytesIO
 
+from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
+import datetime
 
 SCOPES = [
     'https://www.googleapis.com/auth/drive', 
@@ -13,12 +15,62 @@ SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets'
 ]
 TOKEN_FILE = 'token.json'
+CLIENT_SECRET_FILE = 'client_secret.json'
 DESTINATION_FOLDER_ID = '1kLK6Vque3V5iPV1i1HjeH_su-TmyCzQt' 
 
 class GoogleDocsService:
     def __init__(self):
         self.creds = None
         self._authenticate()
+
+    def get_token_status(self) -> Dict[str, Any]:
+        """Returns status of current token."""
+        status = {
+            "exists": os.path.exists(TOKEN_FILE),
+            "valid": False,
+            "expired": False,
+            "expiry": None,
+            "scopes": []
+        }
+        if self.creds:
+            status["valid"] = self.creds.valid
+            status["expired"] = self.creds.expired
+            status["scopes"] = self.creds.scopes
+            if self.creds.expiry:
+                status["expiry"] = self.creds.expiry.strftime("%Y-%m-%d %H:%M:%S")
+        return status
+
+    def get_auth_url(self) -> str:
+        """Generates the OAuth2 URL for the user to visit."""
+        if not os.path.exists(CLIENT_SECRET_FILE):
+             raise Exception(f"Client Secret file '{CLIENT_SECRET_FILE}' not found!")
+        
+        flow = Flow.from_client_secrets_file(
+            CLIENT_SECRET_FILE,
+            scopes=SCOPES,
+            redirect_uri='urn:ietf:wg:oauth:2.0:oob'
+        )
+        auth_url, _ = flow.authorization_url(prompt='consent')
+        return auth_url
+
+    def finish_auth(self, code: str):
+        """Exchanges auth code for token and saves it."""
+        if not os.path.exists(CLIENT_SECRET_FILE):
+             raise Exception(f"Client Secret file '{CLIENT_SECRET_FILE}' not found!")
+             
+        flow = Flow.from_client_secrets_file(
+            CLIENT_SECRET_FILE,
+            scopes=SCOPES,
+            redirect_uri='urn:ietf:wg:oauth:2.0:oob'
+        )
+        flow.fetch_token(code=code)
+        self.creds = flow.credentials
+        
+        # Save
+        with open(TOKEN_FILE, 'w') as token:
+            token.write(self.creds.to_json())
+            
+        return True
 
     def _authenticate(self):
         if os.path.exists(TOKEN_FILE):

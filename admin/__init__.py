@@ -4,10 +4,11 @@ from .customers import CustomerAdmin
 from .content import ArticleAdmin
 
 from .kanban import KanbanView
+from .google_auth import GoogleAuthView
 
 # Export all views for easy registration in main.py
 admin_views = [
-    KanbanView, # Add Kanban first for visibility
+    KanbanView,
     OrderAdmin,
     ProductAdmin,
     ServiceAdmin,
@@ -17,5 +18,6 @@ admin_views = [
     TagGroupAdmin,
     OrderProductLinkAdmin,
     OrderServiceLinkAdmin,
-    BulkTagsView
+    BulkTagsView,
+    GoogleAuthView # Settings (Bottom)
 ]
