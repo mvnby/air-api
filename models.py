@@ -286,8 +286,10 @@ class Order(SQLModel, table=True):
     
     # Даты
     created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now}) # Track updates for Stalled logic
     assessment_date: Optional[datetime] = None
     installation_date: Optional[datetime] = None
+    next_followup_date: Optional[datetime] = Field(default=None, description="Дата следующего касания")
     closed_at: Optional[datetime] = None
     
     # Relationships

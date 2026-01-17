@@ -3,6 +3,7 @@ from sqladmin import BaseView, expose
 from core.database import async_session_maker
 from services.order_service import OrderService
 from models import OrderStatus
+from datetime import datetime
 
 class KanbanView(BaseView):
     name = "Kanban Board"
@@ -36,6 +37,7 @@ class KanbanView(BaseView):
             "sqladmin/kanban.html", 
             context={
                 "orders": orders_by_status,
-                "statuses": statuses
+                "statuses": statuses,
+                "now": datetime.now()
             }
         )

@@ -27,10 +27,20 @@
                     </div>
                     <div class="kanban-items" id="{{ stage_key }}" data-status="{{ stage_key }}">
                         {% for order in orders[stage_key] %}
-                        <div class="kanban-card" data-id="{{ order.id }}">
+                        <div class="kanban-card {% if order.next_followup_date and order.next_followup_date < now %}stalled-overdue{% elif order.status|string == 'negotiation' and (now - order.updated_at).days > 14 %}stalled-idle{% endif %}"
+                            data-id="{{ order.id }}">
                             <div class="card-badges mb-2">
                                 <span class="badge bg-light text-dark">#{{ order.id }}</span>
                                 <span class="badge bg-light text-muted">{{ order.created_at.strftime('%d.%m') }}</span>
+                                {% if order.next_followup_date %}
+                                {% if order.next_followup_date < now %} <span class="badge bg-danger text-white"
+                                    title="Overdue Follow-up!"><i class="fa-solid fa-bell"></i> {{
+                                    order.next_followup_date.strftime('%d.%m') }}</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary text-white"><i class="fa-regular fa-bell"></i> {{
+                                        order.next_followup_date.strftime('%d.%m') }}</span>
+                                    {% endif %}
+                                    {% endif %}
                             </div>
                             <div class="card-title">
                                 <a href="/admin/order/edit/{{ order.id }}"
@@ -60,6 +70,17 @@
 </div>
 
 <style>
+    /* Stalled / Overdue Logic */
+    .kanban-card.stalled-overdue {
+        border-left: 3px solid #dc3545 !important;
+        background-color: #fff5f5;
+    }
+
+    .kanban-card.stalled-idle {
+        border-left: 3px solid #fd7e14 !important;
+        background-color: #fff9db;
+    }
+
     .kanban-container {
         display: flex;
         overflow-x: auto;
@@ -68,6 +89,8 @@
         min-height: calc(100vh - 150px);
         gap: 15px;
     }
+
+    /* Rest of CSS */
 
     .kanban-column {
         flex: 0 0 300px;

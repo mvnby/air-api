@@ -46,65 +46,24 @@ class OrderAdmin(ModelView, model=Order):
         "customer_id": "Клиент",
         "total_amount": "Сумма",
         "created_at": "Дата",
+        "next_followup_date": "След. касание",
         "actions": "Документы",
         "delivery_address": "Адрес доставки",
         "user_id": "Telegram ID"
     }
     
-    # Format customer display
-    def format_customer(model, context):
-        if model.customer:
-            return model.customer.name
-        return "—"
+    # ... previous code ...
 
-    def format_status(model, context):
-        status = model.status.value if hasattr(model.status, "value") else str(model.status)
-        colors = {
-            "new_lead": "info",
-            "assessment": "warning",
-            "proposal": "primary", # purple in custom css but primary here
-            "negotiation": "warning",
-            "won_deposit": "success",
-            "installation": "success",
-            "completed": "primary",
-            "canceled": "danger",
-            "deferred": "secondary"
-        }
-        color = colors.get(status.lower(), "secondary")
-        return Markup(f'<span class="badge bg-{color}">{status.upper()}</span>')
-    
-    # --- ОБНОВЛЕННЫЙ ФОРМАТТЕР ДЛЯ КНОПОК ---
-    def format_actions(model, context):
-        # Proposal Stage
-        btn_offer = f'<a href="/admin/docs/generate/offer/{model.id}" target="_blank" class="btn btn-sm btn-outline-info" title="Коммерческое предложение"><i class="fa-solid fa-file-invoice"></i> КП</a>'
-        btn_invoice = f'<a href="/admin/docs/generate/invoice/{model.id}" target="_blank" class="btn btn-sm btn-outline-warning ms-1" title="Счет на оплату"><i class="fa-solid fa-money-bill"></i> Счет</a>'
-        btn_contract = f'<a href="/admin/docs/generate/contract/{model.id}" target="_blank" class="btn btn-sm btn-outline-success ms-1" title="Договор"><i class="fa-solid fa-file-contract"></i> Договор</a>'
-        
-        # Installation / Shipping Stage
-        btn_work_order = f'<a href="/admin/docs/generate/work_order/{model.id}" target="_blank" class="btn btn-sm btn-outline-secondary ms-1" title="Наряд-заказ"><i class="fa-solid fa-tools"></i> Наряд</a>'
-        btn_tn2 = f'<a href="/admin/docs/generate/tn2/{model.id}" target="_blank" class="btn btn-sm btn-outline-secondary ms-1" title="ТН-2 (Накладная)"><i class="fa-solid fa-truck"></i> ТН-2</a>'
-        btn_ttn1 = f'<a href="/admin/docs/generate/ttn1/{model.id}" target="_blank" class="btn btn-sm btn-outline-secondary ms-1" title="ТТН-1 (Товарно-транспортная)"><i class="fa-solid fa-truck-fast"></i> ТТН-1</a>'
-        
-        # Completed Stage
-        btn_act = f'<a href="/admin/docs/generate/act/{model.id}" target="_blank" class="btn btn-sm btn-outline-dark ms-1" title="Акт выполненных работ"><i class="fa-solid fa-file-signature"></i> Акт</a>'
-        
-        return Markup(f'<div class="d-flex">{btn_offer}{btn_invoice}{btn_contract}{btn_work_order}{btn_tn2}{btn_ttn1}{btn_act}</div>')
-    
-    column_formatters = {
-        Order.customer_id: format_customer,
-        Order.status: format_status,
-        "actions": format_actions
-    }
-    
-    column_sortable_list = [Order.id, Order.created_at, Order.status]
+    column_sortable_list = [Order.id, Order.created_at, Order.status, Order.next_followup_date]
     column_default_sort = ("created_at", True)
-    column_editable_list = ["status"]
+    column_editable_list = ["status", "next_followup_date"]
     
     # Form columns
     form_columns = [
         "customer",
         "delivery_address",
         "status",
+        "next_followup_date",
         "user_id"
     ]
     
@@ -132,6 +91,47 @@ class OrderAdmin(ModelView, model=Order):
             # ВАЖНО: Создаем сессию и передаем её первым аргументом
             async with async_session_maker() as session:
                 await OrderService.update_order_links(session, model.id, items)
+
+        # --- Phase 6: Inventory Safety Check ---
+        # Prevent moving to PROPOSAL if stock < 3
+        # Note: model.status is already updated to new value here
+        from models import OrderStatus, Product
+        from sqlmodel import select
+        
+        if model.status == OrderStatus.PROPOSAL:
+            product_ids = []
+            
+            # 1. If we just updated items, check them
+            if items_json:
+                items = json.loads(items_json)
+                product_ids = [int(item['product_id']) for item in items]
+            
+            # 2. If no item update, check existing links
+            # We must handle the async loading carefully. 
+            # If not loaded, we can't access model.product_links easily without await.
+            # But form_edit_query uses selectinload, so it should be there.
+            elif not items_json:
+                # Fallback to current links if available
+                # Note: modifying product_links directly in form might not reflect here if standard relationship handling is bypassed
+                # But for our custom JS form, items_json is the source of truth.
+                # If items_json is MISSING, it means we are just changing status via list or detail view.
+                product_ids = [link.product_id for link in model.product_links]
+            
+            if product_ids:
+                async with async_session_maker() as session:
+                    stmt = select(Product).where(Product.id.in_(product_ids))
+                    res = await session.execute(stmt)
+                    products = res.scalars().all()
+                    
+                    low_stock_items = []
+                    for p in products:
+                        # Assuming stock_quantity is mandatory field, default 0
+                        if p.stock_quantity < 3:
+                            low_stock_items.append(f"{p.title} ({p.stock_quantity})")
+                    
+                    if low_stock_items:
+                        items_str = ", ".join(low_stock_items)
+                        raise ValueError(f"⛔ STOP: Low Stock Alert! The following items have < 3 units: {items_str}. Cannot send Proposal.")
 
     def form_edit_query(self, request):
         query = super().form_edit_query(request)

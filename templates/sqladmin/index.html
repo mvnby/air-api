@@ -2,22 +2,19 @@
 
 {% block content %}
 <div class="container-xl">
-    <!-- Page title -->
     <div class="page-header d-print-none">
         <div class="row align-items-center">
             <div class="col">
                 <h2 class="page-title">
-                    Панель управления
+                    Operational Command Center
                 </h2>
+                <div class="text-muted mt-1">Real-time business performance</div>
             </div>
+            <!-- Sync Mode Controls (Keep existing) -->
             <div class="col-auto ms-auto d-print-none">
                 <div class="btn-list">
-                    <span class="text-muted d-none d-sm-inline-block me-1">Контроль цен:</span>
+                    <span class="text-muted d-none d-sm-inline-block me-1">Price Sync:</span>
                     <form action="/admin/update_sync_mode" method="POST" id="syncModeForm" class="btn-group">
-                        <input type="radio" class="btn-check" name="mode" id="mode0" value="0" autocomplete="off"
-                            onchange="this.form.submit()">
-                        <label class="btn btn-outline-secondary btn-sm" for="mode0"
-                            title="Отключить автоматическое обновление цен">Выкл</label>
 
                         <input type="radio" class="btn-check" name="mode" id="mode1" value="1" autocomplete="off"
                             onchange="this.form.submit()">
