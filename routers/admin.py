@@ -128,3 +128,29 @@ async def move_order_status(
             return {"success": success}
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+@router.get("/api/admin/installers/search")
+async def search_installers(
+    q: str = "",
+    username: str = Depends(get_current_username)
+):
+    """
+    Search installers for Select2.
+    """
+    from models import Installer
+    async with async_session_maker() as session:
+        stmt = select(Installer).where(Installer.is_active == True)
+        if q:
+            stmt = stmt.where(Installer.name.ilike(f"%{q}%"))
+        
+        result = await session.execute(stmt)
+        installers = result.scalars().all()
+        
+        return [
+            {
+                "id": i.id,
+                "text": f"{i.name} (TG: {i.telegram_id or '-'})",
+                "default_rate": i.default_rate or 0
+            }
+            for i in installers
+        ]

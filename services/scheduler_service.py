@@ -79,15 +79,67 @@ class SchedulerService:
 
     async def start_loop(self, interval_hours: int = 6):
         """
-        Запускает бесконечный цикл обновления цен.
+        Запускает фоновые задачи: синхронизация цен и автоматизация CRM.
         """
-        logger.info(f"Price sync loop started. Interval: {interval_hours} hours.")
+        logger.info(f"Scheduler started. Price Interval: {interval_hours}h.")
+        
+        # Run price sync loop
+        asyncio.create_task(self._price_sync_loop(interval_hours))
+        
+        # Run stalled deal loop (once a day)
+        asyncio.create_task(self._stalled_deal_loop())
+
+        # Keep the main loop alive 
+        while True:
+            await asyncio.sleep(3600)
+
+    async def _price_sync_loop(self, interval_hours: int):
         while True:
             try:
                 await self.update_all_prices()
             except Exception as e:
-                logger.error(f"Critical error in scheduler loop: {e}")
-            
+                logger.error(f"Critical error in price sync loop: {e}")
             await asyncio.sleep(interval_hours * 3600)
+
+    async def _stalled_deal_loop(self):
+        """Checks for stalled deals once every 24 hours."""
+        while True:
+            try:
+                logger.info("⏳ Checking Stalled Deals...")
+                async with async_session_maker() as session:
+                    await self.check_stalled_deals(session)
+                logger.info("✅ Stalled Deal Check Done. Sleeping 24 hours.")
+                await asyncio.sleep(24 * 3600)
+            except Exception as e:
+                logger.error(f"❌ Stalled Deal Check Error: {e}")
+                await asyncio.sleep(3600)  # Retry in 1 hour
+
+    async def check_stalled_deals(self, session):
+        """
+        Moves deals from NEGOTIATION to DEFERRED if updated_at > 14 days ago.
+        """
+        from models import Order, OrderStatus
+        from datetime import datetime, timedelta
+        
+        cutoff_date = datetime.now() - timedelta(days=14)
+        
+        # Select orders in Negotiation older than 14 days
+        stmt = select(Order).where(
+            Order.status == OrderStatus.NEGOTIATION,
+            Order.updated_at < cutoff_date
+        )
+        res = await session.execute(stmt)
+        stalled_orders = res.scalars().all()
+        
+        for order in stalled_orders:
+            logger.warning(f"⚠️ Deferring Stalled Order #{order.id} (Last update: {order.updated_at})")
+            order.status = OrderStatus.DEFERRED
+            order.technical_meta = {**(order.technical_meta or {}), "deferred_reason": "Auto-deferred: >14 days in Negotiation"}
+            order.next_followup_date = datetime.now() + timedelta(days=7)
+            session.add(order)
+            
+        if stalled_orders:
+            await session.commit()
+            logger.info(f"🔄 Auto-deferred {len(stalled_orders)} stalled orders.")
 
 scheduler_service = SchedulerService()

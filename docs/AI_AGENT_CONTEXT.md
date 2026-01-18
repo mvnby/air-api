@@ -77,9 +77,12 @@ We stick to a strict **Service-Layer** setup. No shortcuts!
   * **OOB Auth Flow**: Implemented "Copy Link -> Paste Code" flow for Google Auth directly in Admin UI.
   * **Admin Integration**: Added dedicated view to check token expiration and regenerate it.
 * **Phase 6**: **Operational Dashboard (Command Center)**.
-  * **KPI Widgets**: Financial Funnel (Revenue by Stage), Action Items (Installations, Overdue), Installer Load.
-  * **Inventory Safety**: BLOCKS `Proposal` stage if stock < 3. Catching potential issues early.
-  * **Nurture Logic**: Stalled deals (>14 days) get Red Border in Kanban. Added `next_followup_date`.
+  * **Real-time Stats**: Connected Frontend to Backend. "Active on Site", "Latest Orders", "Latest Products" now show live data.
+  * **Action Items**: Added "Overdue Assessments" and "Upcoming Installations" alerts.
+  * **UI Fixes**: Solved `undefined` widgets and AJAX loading issues.
+* **Phase 7** (Next): **Automation & Notifications**.
+  * **Stalled Deals**: Auto-defer >14 days.
+  * **Installer Bot**: Telegram notifications for new jobs.
 
 
 ## **The Rules (Don't Break These) 🚨**

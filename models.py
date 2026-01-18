@@ -1,5 +1,6 @@
 from typing import Optional, List, Dict, Any
 from sqlmodel import SQLModel, Field, JSON, Column, Relationship
+from sqlalchemy import BigInteger
 from datetime import datetime
 
 class ProductTagLink(SQLModel, table=True):
@@ -199,6 +200,9 @@ class Installer(SQLModel, table=True):
     name: str
     is_active: bool = Field(default=True)
     default_rate: Optional[float] = Field(default=None) # Базовая ставка
+    
+    # Telegram ID for notifications
+    telegram_id: Optional[int] = Field(default=None, sa_column=Column(BigInteger, unique=True, nullable=True))
 
 class OrderInstaller(SQLModel, table=True):
     """Ассоциативная таблица для назначения бригады и фиксации оплаты"""

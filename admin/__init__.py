@@ -1,6 +1,7 @@
 from .catalog import ProductAdmin, TagAdmin, TagGroupAdmin, BulkTagsView
 from .orders import OrderAdmin, ServiceAdmin, OrderProductLinkAdmin, OrderServiceLinkAdmin
 from .customers import CustomerAdmin
+from .installers import InstallerAdmin
 from .content import ArticleAdmin
 
 from .kanban import KanbanView
@@ -19,5 +20,6 @@ admin_views = [
     OrderProductLinkAdmin,
     OrderServiceLinkAdmin,
     BulkTagsView,
-    GoogleAuthView # Settings (Bottom)
+    GoogleAuthView, # Settings (Bottom)
+    InstallerAdmin
 ]
