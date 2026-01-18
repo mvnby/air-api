@@ -80,9 +80,13 @@ We stick to a strict **Service-Layer** setup. No shortcuts!
   * **Real-time Stats**: Connected Frontend to Backend. "Active on Site", "Latest Orders", "Latest Products" now show live data.
   * **Action Items**: Added "Overdue Assessments" and "Upcoming Installations" alerts.
   * **UI Fixes**: Solved `undefined` widgets and AJAX loading issues.
-* **Phase 7** (Next): **Automation & Notifications**.
-  * **Stalled Deals**: Auto-defer >14 days.
-  * **Installer Bot**: Telegram notifications for new jobs.
+* **Phase 7**: **Automation & Notifications**.
+  * **Stalled Deals**: Auto-tracking of "stuck" deals >14 days.
+  * **Notification Bot**: Installers get Telegram alerts for new jobs.
+  * **Installer Management**: Inline editing of installers, pay tracking, and eager-loading bug fixes in Admin.
+* **Phase 8** (Next): **Resource Calendar**.
+  * **Visual Schedule**: FullCalendar.js integration.
+  * **Conflict Avoidance**: See dates for Installation/Assessment.
 
 
 ## **The Rules (Don't Break These) 🚨**

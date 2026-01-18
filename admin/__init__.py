@@ -5,11 +5,13 @@ from .installers import InstallerAdmin
 from .content import ArticleAdmin
 
 from .kanban import KanbanView
+from .calendar import CalendarAdmin
 from .google_auth import GoogleAuthView
 
 # Export all views for easy registration in main.py
 admin_views = [
     KanbanView,
+    CalendarAdmin,
     OrderAdmin,
     ProductAdmin,
     ServiceAdmin,
