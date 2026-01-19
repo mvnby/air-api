@@ -63,10 +63,7 @@ class DocumentService:
         doc_name = DOC_NAMES.get(doc_type, doc_type.upper())
         title = f"{doc_name} {doc_number}"
         
-        # 4. Копируем шаблон в Google Drive
-        file_info = google_service.copy_template(template_id, title)
-        
-        # 5. Получаем данные заказа и формируем замены
+        # 4. Получаем стратегию для подготовки данных
         strategy = DocumentFactory.get_strategy(doc_type, session, order_id)
         await strategy.fetch_order()
         replacements = strategy._prepare_base_variables()
@@ -75,19 +72,50 @@ class DocumentService:
         replacements["{{doc_number}}"] = doc_number
         replacements["{{number}}"] = doc_number
         
-        # 6. Заменяем плейсхолдеры в документе
-        google_service.replace_placeholders(file_info['file_id'], replacements)
+        # Добавляем специфичные для типа документа замены
+        if hasattr(strategy, '_add_specific_replacements'):
+            strategy._add_specific_replacements(replacements)
         
-        # 7. Заполняем таблицу (если есть данные)
-        table_data = strategy._prepare_table_data() if hasattr(strategy, '_prepare_table_data') else []
-        if table_data and len(table_data) > 0:
-            # Определяем, нужен ли footer (строка "Всего")
-            has_footer = (doc_type not in ["work_order"])
+        # 5. Определяем тип документа (Docs или Sheets)
+        is_sheet = doc_type in ["tn2", "ttn1"]
+        
+        if is_sheet:
+            # Google Sheets документ
+            from services.documents.logistics import LogisticsSheetStrategy
+            if isinstance(strategy, LogisticsSheetStrategy):
+                # Используем старый метод generate для Sheets
+                edit_url = await strategy.generate(doc_type)
+                
+                # Извлекаем file_id из URL
+                # URL формат: https://docs.google.com/spreadsheets/d/{file_id}/edit
+                import re
+                match = re.search(r'/spreadsheets/d/([a-zA-Z0-9-_]+)', edit_url)
+                if match:
+                    file_id = match.group(1)
+                else:
+                    raise ValueError(f"Could not extract file_id from URL: {edit_url}")
+            else:
+                raise ValueError(f"Expected LogisticsSheetStrategy for {doc_type}")
+        else:
+            # Google Docs документ
+            # 4. Копируем шаблон в Google Drive
+            file_info = google_service.copy_template(template_id, title)
+            file_id = file_info['file_id']
+            edit_url = file_info['edit_url']
             
-            # Используем внутренний метод google_service для заполнения таблицы
-            from googleapiclient.discovery import build
-            docs_service = build('docs', 'v1', credentials=google_service.creds)
-            google_service._fill_table(docs_service, file_info['file_id'], table_data, has_footer)
+            # 6. Заменяем плейсхолдеры в документе
+            google_service.replace_placeholders(file_id, replacements)
+            
+            # 7. Заполняем таблицу (если есть данные)
+            table_data = strategy._prepare_table_data() if hasattr(strategy, '_prepare_table_data') else []
+            if table_data and len(table_data) > 0:
+                # Определяем, нужен ли footer (строка "Всего")
+                has_footer = (doc_type not in ["work_order"])
+                
+                # Используем внутренний метод google_service для заполнения таблицы
+                from googleapiclient.discovery import build
+                docs_service = build('docs', 'v1', credentials=google_service.creds)
+                google_service._fill_table(docs_service, file_id, table_data, has_footer)
         
         # 8. Создаем запись в БД
         new_doc = OrderDocument(
@@ -95,8 +123,8 @@ class DocumentService:
             doc_type=doc_type,
             number=doc_number,
             date=datetime.now(),
-            google_file_id=file_info['file_id'],
-            google_edit_url=file_info['edit_url']
+            google_file_id=file_id,
+            google_edit_url=edit_url
         )
         
         session.add(new_doc)

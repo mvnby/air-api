@@ -82,6 +82,11 @@ class ActStrategy(GoogleDocStrategy):
             table_rows.append(total_row)
             
         return table_rows
+    
+    def _add_specific_replacements(self, replacements: dict):
+        """Добавляем сумму услуг прописью"""
+        total_services = sum(l.price * l.quantity for l in self.order.service_links)
+        replacements["{{sum_word}}"] = self._amount_in_words(total_services)
 
 
 class GeneralDocStrategy(GoogleDocStrategy):
