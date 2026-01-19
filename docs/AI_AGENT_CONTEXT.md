@@ -15,10 +15,12 @@ We just crushed the Shopping Cart (Phase 27), totally nailed the Google Docs Aut
 
 * **Lang:** Python 3.10+ (only the fresh stuff).  
 * **Framework:** [FastAPI](https://fastapi.tiangolo.com/) (Zoom zoom!).  
-* **Server:** Uvicorn (boss it around via ./manage.sh).  
-* **DB:** SQLite air_conditioners.db driven by aiosqlite. Simple & clean.  
+* **Server:** Uvicorn (running inside Docker).
+* **DB:** [PostgreSQL 15](https://www.postgresql.org/) (Running in Docker).
+* **Driver:** `postgresql+asyncpg://` for async API and `psycopg2` for sync tasks (like migration).
 * **ORM:** [SQLModel](https://sqlmodel.tiangolo.com/) (SQLAlchemy wrapped up nice).  
 * **HTTP:** httpx (async requests ftw).
+* **Infra:** [Docker Compose](https://docs.docker.com/compose/) (Everything's containerized!).
 
 ### **Admin UI 👨‍💻**
 
@@ -84,9 +86,14 @@ We stick to a strict **Service-Layer** setup. No shortcuts!
   * **Stalled Deals**: Auto-tracking of "stuck" deals >14 days.
   * **Notification Bot**: Installers get Telegram alerts for new jobs.
   * **Installer Management**: Inline editing of installers, pay tracking, and eager-loading bug fixes in Admin.
-* **Phase 8** (Next): **Resource Calendar**.
+* **Phase 8**: **Resource Calendar**.
   * **Visual Schedule**: FullCalendar.js integration.
   * **Conflict Avoidance**: See dates for Installation/Assessment.
+* **Phase 30**: **PostgreSQL & Docker (MODERN ERA)**.
+  * **DB Migration**: Switched from SQLite to Postgres for reliability.
+  * **Dockerization**: The whole stack (API, Bot, DB) now runs via Docker Compose.
+  * **Requirements Upgrade**: Added `pydantic-settings`, `asyncpg`, `psycopg2-binary`.
+  * **Logging Fix**: Updated `setup_logging` to be more flexible for multi-service context.
 
 
 ## **The Rules (Don't Break These) 🚨**
@@ -105,12 +112,14 @@ We stick to a strict **Service-Layer** setup. No shortcuts!
 
 ## **Git Life**
 
-1. **No pushing to main.** Ever.  
-2. New feature? git checkout \-b feature/phase-NAME.  
-3. Push it and PR it.
+1.  **No pushing to main.** Ever.  
+2.  New feature? git checkout \-b feature/phase-NAME.  
+3.  Push it and PR it.
 
 ## **Cheat Sheet**
 
-* **Fire it up:** ./manage.sh start  
-* **Kill it:** ./manage.sh stop  
-* **Get Google Token:** python scripts/get\_token.py
+*   **Fire it up:** `docker compose up -d --build`
+*   **Check logs:** `docker compose logs -f`
+*   **Kill it:** `docker compose down`
+*   **Migrate DB:** `docker compose exec app python scripts/migrate_sqlite_to_pg.py`
+*   **Get Google Token:** `python scripts/get_token.py` (Run inside container if needed)

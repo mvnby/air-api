@@ -1,53 +1,102 @@
-# Deployment Guide
+# Deployment Guide (Docker & PostgreSQL)
+
+This guide describes how to deploy the MVN project using Docker and PostgreSQL.
 
 ## System Requirements
-- Python 3.10+
-- SQLite (included)
-- Nginx (optional, for reverse proxy)
-- Systemd (for service management)
+- Docker 20.10+
+- Docker Compose (v2 recommended)
+- Git
 
-## 1. Environment Setup
+## 1. Project Setup
 
-Copy `.env.example` to `.env` and fill in:
+Clone the repository and enter the directory:
 ```bash
-cp .env.example .env
-nano .env
+git clone <repo_url>
+cd mvn
 ```
 
-Ensure `SECRET_KEY` is secure in production!
+## 2. Environment Variables
 
-## 2. Running with Gunicorn (Production)
+Create a `.env` file in the root directory. You can use `.env.example` as a template.
 
-Do not use `uvicorn` directly in production. Use `gunicorn` with uvicorn workers.
+### Database Credentials
+These variables are used by both the PostgreSQL container and the application:
+```env
+POSTGRES_USER=mvnadmin
+POSTGRES_PASSWORD=securepass
+POSTGRES_DB=air_conditioners
+POSTGRES_SERVER=db
+POSTGRES_PORT=5432
+```
 
+### Application Settings
+```env
+BOT_TOKEN=...
+ADMIN_USERNAME=...
+ADMIN_PASSWORD=...
+SECRET_KEY=...
+```
+
+## 3. Running with Docker Compose
+
+To build and start all services (App, Bot, Database):
 ```bash
-gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+docker compose up -d --build
 ```
 
-## 3. Systemd Service
+This will:
+- Start PostgreSQL on port `5432` (internal and external).
+- Start the FastAPI application on port `8000`.
+- Start the Telegram Bot.
 
-Create `/etc/systemd/system/mvn-crm.service`:
+## 4. First Run & Data Migration
 
-```ini
-[Unit]
-Description=MVN CRM API
-After=network.target
+If you are migrating from an existing SQLite database:
 
-[Service]
-User=www-data
-Group=www-data
-WorkingDirectory=/var/www/mvn
-Environment="PATH=/var/www/mvn/.venv/bin"
-ExecStart=/var/www/mvn/.venv/bin/gunicorn main:app --workers 3 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
-Restart=always
+1. Ensure `air_conditioners.db` is present in the project root.
+2. Run the migration script inside the running container:
+   ```bash
+   docker compose exec app python scripts/migrate_sqlite_to_pg.py
+   ```
+   *Note: This script also resets PostgreSQL sequences for auto-increment fields.*
 
-[Install]
-WantedBy=multi-user.target
+## 5. Monitoring & Logs
+
+View combined logs:
+```bash
+docker compose logs -f
 ```
 
-## 4. Nginx Configuration
+View specific service logs:
+```bash
+docker compose logs -f app
+docker compose logs -f bot
+```
 
-Create `/etc/nginx/sites-available/mvn`:
+## 6. Updating the Application
+
+To update to the latest version:
+```bash
+git pull origin main
+docker compose up -d --build
+```
+
+## 7. Backups
+
+### PostgreSQL Backup
+To create a database dump:
+```bash
+docker compose exec db pg_dump -U mvnadmin air_conditioners > backup.sql
+```
+
+### Restore
+```bash
+cat backup.sql | docker compose exec -T db psql -U mvnadmin air_conditioners
+```
+
+## Nginx Configuration (Optional Reverse Proxy)
+
+If you are using Nginx on the host machine to proxy to the Docker container:
 
 ```nginx
 server {
@@ -62,16 +111,9 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    location /static {
-        alias /var/www/mvn/static;
+    # Uploaded files
+    location /static/uploads {
+        alias /var/www/mvn/static/uploads;
     }
 }
-```
-
-## 5. Updates
-To update the application:
-```bash
-git pull origin main
-./manage.sh migrate  # If migration script exists
-systemctl restart mvn-crm
 ```
