@@ -119,24 +119,63 @@ class OrderAdmin(ModelView, model=Order):
     }
 
     # --- ИСПРАВЛЕННЫЙ МЕТОД ---
-    async def on_model_change(self, data: dict, model: Any, is_created: bool, request: Any) -> None:
-        """Handle dynamic items from the custom form."""
+    async def update_model(self, request, pk: Any, data: dict) -> Any:
         import json
-        from services.order_service import OrderService
+        from models import Product, OrderProductLink, OrderServiceLink, OrderInstaller
         
-        form_data = await request.form()
-        items_json = form_data.get("items_json")
+        items_json = data.pop("items_json", None)
         
+        # 1. Update basic fields
+        model = await super().update_model(request, pk, data)
+        
+        # 2. Update items if provided
         if items_json:
             items = json.loads(items_json)
-            # ВАЖНО: Создаем сессию и передаем её первым аргументом
+            
             async with async_session_maker() as session:
-                await OrderService.update_order_links(session, model.id, items)
+                # Delete existing links
+                await session.execute(
+                    OrderProductLink.__table__.delete().where(OrderProductLink.order_id == pk)
+                )
+                await session.execute(
+                    OrderServiceLink.__table__.delete().where(OrderServiceLink.order_id == pk)
+                )
+                await session.execute(
+                    OrderInstaller.__table__.delete().where(OrderInstaller.order_id == pk)
+                )
                 
-                # Update Installers if present in JSON
-                if "installers" in items:
-                    await OrderService.update_order_installers(session, model.id, items["installers"])
-
+                # Add new product links
+                for item in items.get("products", []):
+                    link = OrderProductLink(
+                        order_id=pk,
+                        product_id=item["product_id"],
+                        price=item["price"],
+                        quantity=item["quantity"]
+                    )
+                    session.add(link)
+                
+                # Add new service links
+                for item in items.get("services", []):
+                    link = OrderServiceLink(
+                        order_id=pk,
+                        service_id=item["service_id"],
+                        price=item["price"],
+                        quantity=item["quantity"]
+                    )
+                    session.add(link)
+                
+                # Add new installer links
+                for item in items.get("installers", []):
+                    link = OrderInstaller(
+                        order_id=pk,
+                        installer_id=item["installer_id"],
+                        agreed_pay=item["agreed_pay"],
+                        role=item["role"]
+                    )
+                    session.add(link)
+                
+                await session.commit()
+        
         # --- Phase 6: Inventory Safety Check ---
         # Prevent moving to PROPOSAL if stock < 3
         # Note: model.status is already updated to new value here
@@ -147,7 +186,7 @@ class OrderAdmin(ModelView, model=Order):
             # 1. If we just updated items, check them
             if items_json:
                 items = json.loads(items_json)
-                product_ids = [int(item['product_id']) for item in items]
+                product_ids = [int(item['product_id']) for item in items.get('products', [])]
             
             # 2. If no item update, check existing links
             elif not items_json:
@@ -168,6 +207,8 @@ class OrderAdmin(ModelView, model=Order):
                     if low_stock_items:
                         items_str = ", ".join(low_stock_items)
                         raise ValueError(f"⛔ STOP: Low Stock Alert! The following items have < 3 units: {items_str}. Cannot send Proposal.")
+
+        return model
 
     def form_edit_query(self, request):
         query = super().form_edit_query(request)
@@ -227,3 +268,24 @@ class OrderAdmin(ModelView, model=Order):
                              date_str=order.installation_date.strftime("%d.%m.%Y") if order.installation_date else "Не назначена",
                              role=link.role
                          )
+    
+    async def edit(self, request):
+        """Override to always redirect back to edit page after save."""
+        from starlette.responses import RedirectResponse
+        
+        # Call parent edit method
+        response = await super().edit(request)
+        
+        # If it's a redirect response after successful save, change destination
+        if isinstance(response, RedirectResponse):
+            # Extract order ID from current URL
+            path_parts = request.url.path.split('/')
+            if 'edit' in path_parts:
+                order_id = path_parts[-1]
+                # Always redirect back to edit page
+                return RedirectResponse(
+                    url=f"/admin/order/edit/{order_id}",
+                    status_code=302
+                )
+        
+        return response
