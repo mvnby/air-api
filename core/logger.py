@@ -1,75 +1,48 @@
 import logging
 import sys
-import os
 from logging.handlers import RotatingFileHandler
-from .config import settings
+from pathlib import Path
 
-# Global flag to track if logging has been set up
-_logging_configured = False
+# Create logs directory if it doesn't exist
+LOG_DIR = Path(__file__).parent.parent / "logs"
+LOG_DIR.mkdir(exist_ok=True)
+LOG_FILE = LOG_DIR / "app.log"
 
-def setup_logging(session_log_file=None, clear_session_log=False):
+def setup_logging():
     """
-    Setup logging with support for both cumulative and session-based logs.
-    Uses a singleton pattern to prevent duplicate handlers.
-    
-    Args:
-        session_log_file: Optional path to a session-specific log file (e.g., server.log, bot.log)
-        clear_session_log: If True, clears the session log file on startup
+    Configures the root logger with:
+    1. RotatingFileHandler for robust file logging.
+    2. StreamHandler for console output (dev).
     """
-    global _logging_configured
-    
-    # If already configured in this process, just return the logger
-    if _logging_configured:
-        return logging.getLogger()
-    
-    # Ensure logs directory exists
-    log_dir = os.path.dirname(settings.LOG_FILE)
-    if log_dir and not os.path.exists(log_dir):
-        os.makedirs(log_dir, exist_ok=True)
-
-    # Base configuration
-    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
-    
-    # Root logger
+    # Create config for Root Logger
     logger = logging.getLogger()
-    logger.setLevel(level)
-    
-    # Clear existing handlers to avoid duplicates
-    if logger.handlers:
-        logger.handlers.clear()
-    
-    # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(logging.Formatter(log_format))
-    logger.addHandler(console_handler)
-    
-    # Cumulative file handler with rotation (app.log)
-    # This keeps full history with automatic rotation
-    cumulative_handler = RotatingFileHandler(
-        settings.LOG_FILE,
-        maxBytes=10*1024*1024,  # 10MB
-        backupCount=5
+    logger.setLevel(logging.INFO)
+
+    # Formatter
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
-    cumulative_handler.setFormatter(logging.Formatter(log_format))
-    logger.addHandler(cumulative_handler)
-    
-    # Session-specific file handler (server.log or bot.log)
-    # This is cleared on each restart for easy debugging
-    if session_log_file:
-        # Clear the session log if requested
-        if clear_session_log and os.path.exists(session_log_file):
-            open(session_log_file, 'w').close()
-        
-        session_handler = logging.FileHandler(session_log_file, mode='a')
-        session_handler.setFormatter(logging.Formatter(log_format))
-        logger.addHandler(session_handler)
-    
-    # Mark as configured
-    _logging_configured = True
-    
+
+    # 1. File Handler (Rotating)
+    # Max size 10MB, keep 5 backups
+    file_handler = RotatingFileHandler(
+        LOG_FILE, maxBytes=10*1024*1024, backupCount=5, encoding="utf-8"
+    )
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(logging.INFO)
+    logger.addHandler(file_handler)
+
+    # 2. Console Handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    console_handler.setLevel(logging.INFO)
+    logger.addHandler(console_handler)
+
+    # Silence noisy libraries
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("aiosqlite").setLevel(logging.WARNING)
+
     return logger
 
-# Export a default logger instance for backward compatibility
-# This will be replaced when setup_logging() is called in main.py or bot_app/main.py
-logger = logging.getLogger()
+# Singleton instance access if needed, though getLogger() usage is preferred
+logger = setup_logging()
