@@ -33,6 +33,19 @@ class OrderInstallerAdmin(ModelView, model=OrderInstaller):
     form_columns = ["installer", "role", "agreed_pay", "is_paid_to_installer"]
 
 # --- ORDER ADMIN ---
+# --- ORDER ADMIN ---
+STATUS_LABELS = {
+    "new_lead": "Новый лид",
+    "assessment": "Замер/Осмотр",
+    "proposal": "КП отправлено",
+    "negotiation": "Переговоры",
+    "won_deposit": "Сделка (Предоплата)",
+    "installation": "Монтаж",
+    "completed": "Закрыто (Успех)",
+    "canceled": "Отмена",
+    "deferred": "Отложено"
+}
+
 class OrderAdmin(ModelView, model=Order):
     name = "Заказ"
     name_plural = "Заказы"
@@ -92,10 +105,11 @@ class OrderAdmin(ModelView, model=Order):
     }
     
     # Restore choices for Status (since we changed column to String)
-    form_overrides = dict(status=SelectField)
+    form_overrides = dict(status=SelectField) 
+    
     form_args = {
         "status": {
-            "choices": [(s.value, s.value) for s in OrderStatus], 
+            "choices": [(s.value, STATUS_LABELS.get(s.value, s.value)) for s in OrderStatus], 
             "coerce": str
         }
     }

@@ -1,10 +1,11 @@
 # CRM Gap Analysis & Progress Report
 
-**Date:** 2026-01-18  
-**Based on:** `CRM для кондиционеров_ Анализ и Проектирование.md`
+**Date:** 2026-01-19  
+**Based on:** `CRM для кондиционеров_ Анализ и Проектирование.md` & Codebase Review
 
 ## 1. Executive Summary
-The CRM implementation is **advanced and highly aligned** with the initial architectural design (~85% complete). The core data structure, Admin UI (including Kanban), and financial logic are fully operational. The primary gaps are in **automation** (dealing with stalled deals) and **integration** (notifying installers via Telegram).
+The CRM implementation has advanced significantly. **Phase 7 (Automation)** and **Phase 8 (Resource Calendar)** are effectively **Complete**. The backend logic for stalled deals and installer notifications is in place. The Calendar view is functional.
+However, a **Critical Regression** was found in **Phase 6 (Dashboard)**: The main admin dashboard widgets are broken (`undefined`) and tables are not loading. This requires immediate attention before adding new features.
 
 ## 2. Component Analysis
 
@@ -16,20 +17,20 @@ The database schema (`models.py`) is a near-perfect match to the design:
 - **Statuses:** Full `OrderStatus` enum is implemented correctly.
 
 ### ✅ Admin Interface (90% Complete)
-- **Kanban Board:** Backend logic (`admin/kanban.py`) is implemented. **UI Verification:** Confirmed functional drag-and-drop interface with correct columns (New Lead -> Assessment -> Proposal).
-- **Order Management:** `OrderAdmin` includes status coloring and custom search/filtering. **UI Verification:** Clean list view, functional CRUD forms.
-- **Inventory Safety:** The specific logical check (`stock < 3` alert on Proposal) is implemented in `on_model_change`.
-- **Dashboard:** The backend service (`analytics_service.py`) calculates metrics.
-    - ⚠️ **UI Issues:** Browser analysis revealed bugs in the Dashboard template:
-        - "Active on Site" widget shows `undefined`.
-        - "Latest Orders" table is stuck on "Loading..." state.
-        - "Latest Products" table is empty (visual bug or data issue).
+- **Kanban Board:** Backend logic (`admin/kanban.py`) and UI are fully functional.
+- **Calendar (Phase 8):** `admin/calendar.py` and template are working. **UI Verification:** Month view renders correctly with events.
+- **Order Management:** `OrderAdmin` includes status coloring and custom search/filtering.
+- **Dashboard (Phase 6):** The backend service (`analytics_service.py`) calculates metrics.
+    - ❌ **UI Issues:** Browser verification confirmed **CRITICAL BUGS**:
+        - "Active on Site", "Orders", "Products" widgets show `undefined`.
+        - "Latest Orders" table is stuck on "Loading...".
+        - "Latest Products" table is empty.
 
-### ⚠️ Business Logic & Automation (60% Complete)
-- **Document Generation:** **Implemented (Alternative Approach).** Instead of local PDF (WeasyPrint), the system uses Google Docs/Sheets API (`document_service.py`). This allows for easier template editing but requires internet access. It covers all key docs (Quote, Work Order, Invoice).
+### ✅ Business Logic & Automation (95% Complete)
+- **Document Generation:** Implemented via `document_service.py` (Google Docs).
 - **Inventory Reservation:** Implemented via `OrderStatus` logic.
-- **MISSING: Stalled Deal Automation:** The design called for automatically marking deals as `deferred` or sending alerts if they stay in `negotiation` > 7 days. The `scheduler_service.py` currently only syncs prices.
-- **MISSING: Installer Notifications:** While `bot_app` exists, there is no explicit link sending a Telegram message to an installer when they are assigned to an `Order`.
+- **Stalled Deal Automation (Phase 7):** `scheduler_service.py` contains `check_stalled_deals` logic (Auto-defer > 14 days).
+- **Installer Notifications (Phase 7):** `BotService.notify_installer_new_order` is hooked into `OrderService.update_order_installers`. Notifications are sent when installers are assigned.
 
 ## 3. Gap Analysis Table
 
@@ -40,10 +41,10 @@ The database schema (`models.py`) is a near-perfect match to the design:
 | **Kanban View** | Drag & Drop UI | ✅ Implemented | `admin/kanban.py` |
 | **Documents** | PDF (Quote, Invoice, Work Order) | ✅ Implemented (Google API) | `document_service.py` |
 | **Inventory Alert** | Warn if stock < 3 at Proposal | ✅ Implemented | `OrderAdmin.on_model_change` |
-| **Dashboard** | Funnel, Action Items, Load | ✅ Backend Ready | `analytics_service.py` |
-| **Stalled Logic** | Auto-defer after 14 days | ❌ **Missing** | Scheduler only does price sync |
-| **Installer Bot** | Notify installer on assignment | ❌ **Missing** | Bot exists, but no trigger logic |
-| **Soft Booking** | Calendar "Draft" events | ⚠️ Partial | Calendar logic not fully visible in Admin |
+| **Dashboard** | Funnel, Action Items, Load | ❌ **Broken UI** | Backend ready, Frontend fails |
+| **Stalled Logic** | Auto-defer after 14 days | ✅ Implemented | `scheduler_service.py` |
+| **Installer Bot** | Notify installer on assignment | ✅ Implemented | `OrderService` -> `BotService` |
+| **Soft Booking** | Calendar "Draft" events | ✅ Implemented | `admin/calendar.py` events |
 
 ## 4. Recommendations & Updates
 
@@ -57,21 +58,13 @@ The database schema (`models.py`) is a near-perfect match to the design:
 
 ## 5. Proposed Roadmap (New Phases)
 
-Based on the analysis, here are the suggested next steps:
+### Phase 9: Dashboard Stabilization (Priority)
+*Goal: Restore system observability.*
+- [ ] **Fix Dashboard Widgets:** Debug JS/API mismatch for `active`, `orders_count`, `products_count`.
+- [ ] **Fix Data Tables:** Resolve "Loading..." state for Orders and empty Products table.
+- [ ] **Verify Analytics:** Ensure numbers from `analytics_service.py` match the database reality.
 
-### Phase 6: Operational Dashboard & Analytics (Current)
-*Goal: Visualize the business pulse.*
-- [ ] **Fix Dashboard UI:** Resolve `undefined` widget and "Loading..." infinite loop (JS/API mismatch).
-- [ ] Connect `analytics_service.py` to the frontend template correctly.
-- [ ] Add "Overdue Assessments" alerts to the dashboard.
-
-### Phase 7: Automation & Notifications (New)
-*Goal: Reduce manual management overhead.*
-- [ ] **Stalled Deal Supervisor:** Auto-move deals to `DEFERRED` if inactive > 14 days.
-- [ ] **Installer Bot Integration:** Send "New Job" notifications via Telegram.
-- [ ] **Status Alerts:** Notify managers if "Action Items" are overdue.
-
-### Phase 8: Resource Calendar (New)
-*Goal: Visual scheduling.*
-- [ ] Implement a Calendar View in SQLAdmin (using FullCalendar.js).
-- [ ] Visualize "Soft Bookings" (Negotiation) vs "Hard Bookings" (Installation).
+### Phase 10: Advanced Reporting (Future)
+*Goal: Deep financial insights.*
+- [ ] Sales Funnel visualization (Chart.js integration).
+- [ ] Installer/Crew Load verification.

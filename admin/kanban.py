@@ -17,10 +17,18 @@ class KanbanView(BaseView):
         
         # Group orders by status
         orders_by_status = {status.value: [] for status in OrderStatus}
-        
-        # Sort keys to match Enum order (Pipeline flow)
-        # Using the Enum members order
-        statuses = {status.value: status.value.replace('_', ' ').title() for status in OrderStatus}
+        # Custom Mapping for UI Labels (English Enum -> Russian Display)
+        statuses = {
+            "new_lead": "Новый лид",
+            "assessment": "Замер/Осмотр",
+            "proposal": "КП отправлено",
+            "negotiation": "Переговоры",
+            "won_deposit": "Сделка (Предоплата)",
+            "installation": "Монтаж",
+            "completed": "Закрыто (Успех)",
+            "canceled": "Отмена",
+            "deferred": "Отложено"
+        }
         
         for order in orders:
             # Handle case where status might be legacy or string

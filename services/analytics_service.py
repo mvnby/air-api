@@ -35,9 +35,12 @@ class AnalyticsService:
         
         # 2. Action Items: Installations (Today & Tomorrow)
         # Filter: Status=INSTALLATION AND installation_date in [Today, Tomorrow]
+        # Use simple string checks as DB returns strings now
+        from models import OrderStatus
+        
         res = await session.execute(
             select(Order)
-            .where(Order.status == "INSTALLATION")
+            .where(Order.status == OrderStatus.INSTALLATION.value)
             .where(Order.installation_date >= datetime.combine(today, time.min))
             .where(Order.installation_date <= datetime.combine(tomorrow, time.max))
             .options(selectinload(Order.customer))
@@ -46,10 +49,9 @@ class AnalyticsService:
         installs_soon = res.scalars().all()
         
         # 3. Action Items: Overdue Assessments
-        # Filter: Status=ASSESSMENT AND assessment_date < Today
         res = await session.execute(
             select(Order)
-            .where(Order.status == "ASSESSMENT")
+            .where(Order.status == OrderStatus.ASSESSMENT.value)
             .where(Order.assessment_date < datetime.combine(today, time.min))
             .options(selectinload(Order.customer))
             .order_by(Order.assessment_date)
@@ -57,13 +59,11 @@ class AnalyticsService:
         overdue_assessments = res.scalars().all()
         
         # 4. Installer Load
-        # Active orders (not completed/canceled/new) assigned to installer
-        # We need to join OrderInstaller -> Order
-        from models import OrderInstaller, Installer, OrderStatus
+        from models import OrderInstaller, Installer
         
         active_statuses = [
-            OrderStatus.WON_DEPOSIT, 
-            OrderStatus.INSTALLATION
+            OrderStatus.WON_DEPOSIT.value, 
+            OrderStatus.INSTALLATION.value
         ]
         
         res = await session.execute(
@@ -75,20 +75,19 @@ class AnalyticsService:
         )
         installer_load = [{"name": row[0], "count": row[1]} for row in res.all()]
 
-        # Basic Stats (Keep existing)
+        # ... (Keep Basic Stats) ...
+        # (Snippet shortened for brevity, skipping lines 78-95)
         res = await session.execute(select(func.count(Product.id)))
         total_products = res.scalar() or 0
         
         res = await session.execute(select(func.count(Order.id)))
         total_orders = res.scalar() or 0
-
-        # 5. Latest 5 Products
+        
         res = await session.execute(
             select(Product).order_by(Product.id.desc()).limit(5)
         )
         latest_products = res.scalars().all()
-        
-        # 6. Latest 5 Orders
+
         res = await session.execute(
             select(Order).options(selectinload(Order.customer)).order_by(Order.id.desc()).limit(5)
         )
@@ -98,7 +97,8 @@ class AnalyticsService:
         res = await session.execute(select(func.count(Product.id)).where(Product.is_published == True))
         active_products = res.scalar() or 0
 
-        # Sync Mode
+        # ... (Sync Mode) ...
+        
         res = await session.execute(
             select(GlobalConfig).where(GlobalConfig.key == "sync_mode")
         )
@@ -123,7 +123,7 @@ class AnalyticsService:
                 {
                     "id": o.id,
                     "phone": o.customer.phone if o.customer else o.delivery_address or "-",
-                    "status": o.status.value,
+                    "status": o.status if isinstance(o.status, str) else o.status.value,
                     "amount": float(o.total_amount)
                 } for o in latest_orders
             ],

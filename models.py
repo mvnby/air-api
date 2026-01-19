@@ -184,15 +184,15 @@ class CartItem(SQLModel, table=True):
 # --- CRM МОДЕЛИ (ФАЗА 22) ---
 
 class OrderStatus(str, Enum):
-    NEW_LEAD = "Новый лид"
-    ASSESSMENT = "Замер/Осмотр"
-    PROPOSAL = "КП отправлено"
-    NEGOTIATION = "Переговоры"
-    DEFERRED = "Отложено"
-    WON_DEPOSIT = "Предоплата получена"
-    INSTALLATION = "Монтаж"
-    COMPLETED = "Закрыто"
-    CANCELED = "Отмена"
+    NEW_LEAD = "new_lead"
+    ASSESSMENT = "assessment"
+    PROPOSAL = "proposal"
+    NEGOTIATION = "negotiation"
+    DEFERRED = "deferred"
+    WON_DEPOSIT = "won_deposit"
+    INSTALLATION = "installation"
+    COMPLETED = "completed"
+    CANCELED = "canceled"
 
 class Installer(SQLModel, table=True):
     __tablename__ = "installers"

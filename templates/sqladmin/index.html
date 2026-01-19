@@ -268,7 +268,20 @@
                 if (order.status === 'new_lead') color = "blue";
                 if (order.status === 'won_deposit') color = "yellow";
 
-                const statusBadge = `<span class="badge bg-${color}-lt">${order.status}</span>`;
+                const statusLabels = {
+                    "new_lead": "Новый лид",
+                    "assessment": "Замер/Осмотр",
+                    "proposal": "КП отправлено",
+                    "negotiation": "Переговоры",
+                    "deferred": "Отложено",
+                    "won_deposit": "Предоплата",
+                    "installation": "Монтаж",
+                    "completed": "Закрыто",
+                    "canceled": "Отмена"
+                };
+                const label = statusLabels[order.status] || order.status;
+
+                const statusBadge = `<span class="badge bg-${color}-lt">${label}</span>`;
 
                 tr.innerHTML = `
                     <td>${order.id}</td>
