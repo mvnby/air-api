@@ -67,7 +67,7 @@ class DocumentService:
         # 4. Получаем стратегию для подготовки данных
         strategy = DocumentFactory.get_strategy(doc_type, session, order_id)
         await strategy.fetch_order()
-        replacements = await strategy._prepare_base_variables()
+        replacements = await strategy._prepare_base_variables(doc_number=doc_number, doc_type=doc_type)
         
         # Добавляем номер документа в замены
         replacements["{{doc_number}}"] = doc_number

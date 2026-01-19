@@ -199,6 +199,12 @@ class OrderAdmin(ModelView, model=Order):
                         
                 await session.commit()
                 
+                # Recalculate order totals after updating items
+                await session.refresh(model)
+                model.calculate_totals()
+                session.add(model)
+                await session.commit()
+                
             except Exception as e:
                 # Log error but don't fail the whole request if possible, 
                 # or raise to let user know
