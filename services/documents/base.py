@@ -43,7 +43,8 @@ class BaseDocumentStrategy(ABC):
             selectinload(Order.service_links).selectinload(OrderServiceLink.service)
         )
         result = await self.session.execute(query)
-        self.order = result.scalar_one_or_none()
+        self.order = result.unique().scalar_one_or_none()
+
 
     @staticmethod
     def _amount_in_words(amount: float) -> str:
