@@ -120,11 +120,17 @@ async def download_document_pdf(
             pdf_content = google_service.export_file(document.google_file_id, mime_type='application/pdf')
             
             # 3. Возвращаем как StreamingResponse
+            # Используем URL encoding для кириллицы в имени файла (RFC 5987)
+            from urllib.parse import quote
             filename = f"{document.number}.pdf"
+            filename_encoded = quote(filename)
+            
             return StreamingResponse(
                 pdf_content,
                 media_type="application/pdf",
-                headers={"Content-Disposition": f"attachment; filename={filename}"}
+                headers={
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{filename_encoded}"
+                }
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error exporting PDF: {str(e)}")
