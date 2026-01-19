@@ -25,7 +25,20 @@ class Settings(BaseSettings):
         return ids
     
     # Database Settings
-    DATABASE_URL: str = "sqlite+aiosqlite:///./air_conditioners.db"
+    POSTGRES_USER: str = "postgres"
+    POSTGRES_PASSWORD: str = "postgres"
+    POSTGRES_SERVER: str = "localhost"
+    POSTGRES_PORT: int = 5432
+    POSTGRES_DB: str = "air_conditioners"
+    
+    # DATABASE_URL can be set directly or will be constructed from POSTGRES_* vars
+    DATABASE_URL: str = ""
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # If DATABASE_URL not provided, construct it from POSTGRES_* settings
+        if not self.DATABASE_URL:
+            self.DATABASE_URL = f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
     
     # Static Files
     STATIC_DIR: str = "static"

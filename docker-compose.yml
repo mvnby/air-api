@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mvnadmin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-securepass}
+      POSTGRES_DB: ${POSTGRES_DB:-air_conditioners}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  app:
+    build: .
+    restart: always
+    depends_on:
+      - db
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mvnadmin}:${POSTGRES_PASSWORD:-securepass}@db/${POSTGRES_DB:-air_conditioners}
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+  bot:
+    build: .
+    restart: always
+    depends_on:
+      - db
+    env_file:
+      - .env
+    environment:
+      # Ему тоже нужна база данных
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mvnadmin}:${POSTGRES_PASSWORD:-securepass}@db/${POSTGRES_DB:-air_conditioners}
+    # ВАЖНО: Переопределяем команду запуска.
+    # Вместо uvicorn (как в Dockerfile) запускаем бота
+    command: python -m bot_app.main
+
+volumes:
+  postgres_data:

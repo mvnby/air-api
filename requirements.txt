@@ -2,17 +2,21 @@
 
 fastapi>=0.100.0
 uvicorn[standard]>=0.20.0
+pydantic-settings
 python-dotenv
 httpx
 beautifulsoup4>=1.0.0
 aiosqlite==0.22.1
 greenlet==3.3.0
 python-slugify==8.0.4
+thefuzz
 
 #Database
 
 sqlmodel>=0.0.14
 passlib[bcrypt]
+asyncpg
+psycopg2-binary
 
 #Admin Panel
 
