@@ -114,25 +114,65 @@
                 </div>
             </div>
 
-            <!-- Latest Orders Table -->
+            <!-- Action Items: Overdue & Upcoming -->
+            <div class="col-12 mb-3" id="action_items_container" style="display: none;">
+                <div class="card bg-danger-lt">
+                    <div class="card-header">
+                        <h3 class="card-title text-danger"><i class="fa-solid fa-triangle-exclamation me-2"></i> Требует
+                            внимания</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="row" id="overdue_list">
+                            <!-- Injected via JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Operational Tables -->
             <div class="col-lg-6">
-                <div class="card">
+                <div class="card" style="height: 100%">
+                    <div class="card-header">
+                        <h3 class="card-title">Монтажи (Скоро)</h3>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table card-table table-vcenter text-nowrap">
+                            <thead>
+                                <tr>
+                                    <th>Дата</th>
+                                    <th>Клиент</th>
+                                    <th>Объект</th>
+                                </tr>
+                            </thead>
+                            <tbody id="installations_body">
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">Нет назначенных монтажей</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="card" style="height: 100%">
                     <div class="card-header">
                         <h3 class="card-title">Последние заказы</h3>
                     </div>
                     <div class="table-responsive">
-                        <table class="table card-table table-vcenter text-nowrap datatable">
+                        <table class="table card-table table-vcenter text-nowrap">
                             <thead>
                                 <tr>
                                     <th>ID</th>
-                                    <th>Телефон</th>
+                                    <th>Телефон/Клиент</th>
+                                    <th>Сумма</th>
                                     <th>Статус</th>
                                     <th></th>
                                 </tr>
                             </thead>
                             <tbody id="latest_orders_body">
                                 <tr>
-                                    <td colspan="4" class="text-center">Загрузка...</td>
+                                    <td colspan="5" class="text-center">Загрузка...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -149,16 +189,58 @@
             const response = await fetch('/admin/stats');
             const data = await response.json();
 
+            // 1. Stats Cards
             document.getElementById('total_products').innerText = data.total_products;
             document.getElementById('active_products').innerText = data.active_products;
             document.getElementById('total_orders').innerText = data.total_orders;
 
-            // Highlight current sync mode
+            // Sync Mode
             if (data.sync_mode !== undefined) {
                 const radio = document.getElementById(`mode${data.sync_mode}`);
                 if (radio) radio.checked = true;
             }
 
+            // 2. Action Items: Overdue Assessments
+            const overdueContainer = document.getElementById('action_items_container');
+            const overdueList = document.getElementById('overdue_list');
+            overdueList.innerHTML = '';
+
+            if (data.overdue_assessments && data.overdue_assessments.length > 0) {
+                overdueContainer.style.display = 'block';
+                data.overdue_assessments.forEach(item => {
+                    const el = document.createElement('div');
+                    el.className = 'col-md-6 mb-2';
+                    el.innerHTML = `
+                        <div class="alert alert-important alert-danger m-0 p-2">
+                           <strong><i class="fa-solid fa-clock"></i> Просрочен замер!</strong><br>
+                           <a href="/admin/order/edit/${item.id}" class="text-white">Заказ #${item.id}</a> - ${item.customer} (${item.date})
+                        </div>
+                    `;
+                    overdueList.appendChild(el);
+                });
+            } else {
+                overdueContainer.style.display = 'none';
+            }
+
+            // 3. Installations (Soon)
+            const tbodyInstalls = document.getElementById('installations_body');
+            tbodyInstalls.innerHTML = '';
+            if (data.installations_soon && data.installations_soon.length > 0) {
+                data.installations_soon.forEach(item => {
+                    const tr = document.createElement('tr');
+                    const badge = item.is_today ? '<span class="badge bg-red-lt">Сегодня</span>' : '';
+                    tr.innerHTML = `
+                        <td>${item.date} ${badge}</td>
+                        <td><a href="/admin/order/edit/${item.id}">${item.id} - ${item.customer}</a></td>
+                        <td>${item.title}</td>
+                    `;
+                    tbodyInstalls.appendChild(tr);
+                });
+            } else {
+                tbodyInstalls.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Нет назначенных монтажей на ближайшие 2 дня</td></tr>';
+            }
+
+            // 4. Latest Items
             const tbodyItems = document.getElementById('latest_items_body');
             tbodyItems.innerHTML = '';
             data.latest_items.forEach(item => {
@@ -174,16 +256,24 @@
                 tbodyItems.appendChild(tr);
             });
 
+            // 5. Latest Orders
             const tbodyOrders = document.getElementById('latest_orders_body');
             tbodyOrders.innerHTML = '';
             data.latest_orders.forEach(order => {
                 const tr = document.createElement('tr');
-                let statusBadge = '<span class="badge bg-secondary">Новый</span>';
-                if (order.status === 'completed') statusBadge = '<span class="badge bg-green">Доставлен</span>';
+
+                // Status mapping (simple color logic)
+                let color = "secondary";
+                if (order.status === 'completed') color = "green";
+                if (order.status === 'new_lead') color = "blue";
+                if (order.status === 'won_deposit') color = "yellow";
+
+                const statusBadge = `<span class="badge bg-${color}-lt">${order.status}</span>`;
 
                 tr.innerHTML = `
                     <td>${order.id}</td>
                     <td>${order.phone}</td>
+                    <td>${order.amount.toLocaleString()} р.</td>
                     <td>${statusBadge}</td>
                     <td class="text-end">
                         <a href="/admin/order/edit/${order.id}" class="btn btn-sm btn-outline-primary"><i class="fa-solid fa-eye"></i></a>
@@ -191,6 +281,7 @@
                 `;
                 tbodyOrders.appendChild(tr);
             });
+
         } catch (error) {
             console.error('Error loading stats:', error);
         }

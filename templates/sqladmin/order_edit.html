@@ -209,6 +209,48 @@
                     Итого: <span id="grand-total">0</span> руб.
                 </div>
 
+                <!-- INSTALLERS TABLE -->
+                <div class="mb-4">
+                    <h4>👷 Монтажная бригада</h4>
+                    <table class="table table-bordered order-items-table" id="installers-table">
+                        <thead>
+                            <tr>
+                                <th>Монтажник</th>
+                                <th>Роль</th>
+                                <th>Оплата (руб)</th>
+                                <th style="width: 50px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="installers-body">
+                            {% for link in obj.installers %}
+                            <tr class="item-row installer-row" data-id="{{ link.installer_id }}">
+                                <td>
+                                    <select class="form-control installer-select"
+                                        data-placeholder="Выберите монтажника">
+                                        <option value="{{ link.installer_id }}" selected>{{ link.installer.name }}
+                                        </option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <select class="form-control role-select">
+                                        <option value="main" {% if link.role=='main' %}selected{% endif %}>Главный
+                                        </option>
+                                        <option value="helper" {% if link.role=='helper' %}selected{% endif %}>Помощник
+                                        </option>
+                                    </select>
+                                </td>
+                                <td><input type="number" class="form-control pay-input" value="{{ link.agreed_pay }}">
+                                </td>
+                                <td><i class="fa-solid fa-trash remove-row"></i></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    <button type="button" class="btn btn-outline-success add-item-btn" id="add-installer">
+                        <i class="fa-solid fa-user-plus me-2"></i> Добавить монтажника
+                    </button>
+                </div>
+
                 <!-- Скрытые поля для передачи JSON данных на бэкенд -->
                 <input type="hidden" name="items_json" id="items_json">
 
@@ -344,7 +386,11 @@
             try {
                 $(element).select2({
                     ajax: {
-                        url: type === 'product' ? '/api/admin/products/search' : '/api/admin/services/search',
+                        url: function () {
+                            if (type === 'product') return '/api/admin/products/search';
+                            if (type === 'service') return '/api/admin/services/search';
+                            return '/admin/api/admin/installers/search'; // Using the route we just added
+                        },
                         dataType: 'json',
                         delay: 250,
                         traditional: true,
@@ -368,13 +414,18 @@
                     },
                     minimumInputLength: 0,
                     width: '100%',
-                    placeholder: type === 'product' ? 'Выберите товар...' : 'Выберите услугу...'
+                    placeholder: type === 'product' ? 'Выберите товар...' : (type === 'service' ? 'Выберите услугу...' : 'Выберите монтажника...')
                 }).on('select2:select', function (e) {
                     const data = e.params.data;
                     const row = $(this).closest('tr');
-                    row.find('.price-input').val(data.price);
-                    row.find('.quantity-input').val(1);
-                    updateTotals();
+
+                    if (type === 'installer') {
+                        row.find('.pay-input').val(data.default_rate || 0);
+                    } else {
+                        row.find('.price-input').val(data.price);
+                        row.find('.quantity-input').val(1);
+                        updateTotals();
+                    }
                 }).on('select2:open', function (e) {
                     console.log('Select2 dropdown opened, starting search with filters:', selectedTagIds);
                 });
@@ -427,9 +478,29 @@
             initSelect2(row.querySelector('.service-select'), 'service');
         });
 
+        // Installer Button
+        document.getElementById('add-installer').addEventListener('click', function () {
+            const row = document.createElement('tr');
+            row.className = 'item-row installer-row';
+            row.innerHTML = `
+                <td><select class="form-control installer-select"></select></td>
+                <td>
+                    <select class="form-control role-select">
+                        <option value="main" selected>Главный</option>
+                        <option value="helper">Помощник</option>
+                    </select>
+                </td>
+                <td><input type="number" class="form-control pay-input" value="0"></td>
+                <td><i class="fa-solid fa-trash remove-row"></i></td>
+            `;
+            document.getElementById('installers-body').appendChild(row);
+            initSelect2(row.querySelector('.installer-select'), 'installer');
+        });
+
         // Initialize existing ones
         document.querySelectorAll('.product-select').forEach(el => initSelect2(el, 'product'));
         document.querySelectorAll('.service-select').forEach(el => initSelect2(el, 'service'));
+        document.querySelectorAll('.installer-select').forEach(el => initSelect2(el, 'installer'));
 
         loadFilters();
         updateTotals();
@@ -438,7 +509,8 @@
         form.addEventListener('submit', function (e) {
             const items = {
                 products: [],
-                services: []
+                services: [],
+                installers: []
             };
 
             document.querySelectorAll('.product-row').forEach(row => {
@@ -459,6 +531,17 @@
                         service_id: parseInt(id),
                         price: parseInt(row.querySelector('.price-input').value),
                         quantity: parseInt(row.querySelector('.quantity-input').value)
+                    });
+                }
+            });
+
+            document.querySelectorAll('.installer-row').forEach(row => {
+                const id = row.querySelector('.installer-select').value;
+                if (id) {
+                    items.installers.push({
+                        installer_id: parseInt(id),
+                        agreed_pay: parseInt(row.querySelector('.pay-input').value),
+                        role: row.querySelector('.role-select').value
                     });
                 }
             });

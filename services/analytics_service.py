@@ -82,6 +82,22 @@ class AnalyticsService:
         res = await session.execute(select(func.count(Order.id)))
         total_orders = res.scalar() or 0
 
+        # 5. Latest 5 Products
+        res = await session.execute(
+            select(Product).order_by(Product.id.desc()).limit(5)
+        )
+        latest_products = res.scalars().all()
+        
+        # 6. Latest 5 Orders
+        res = await session.execute(
+            select(Order).options(selectinload(Order.customer)).order_by(Order.id.desc()).limit(5)
+        )
+        latest_orders = res.scalars().all()
+
+        # 7. Active Products Count
+        res = await session.execute(select(func.count(Product.id)).where(Product.is_published == True))
+        active_products = res.scalar() or 0
+
         # Sync Mode
         res = await session.execute(
             select(GlobalConfig).where(GlobalConfig.key == "sync_mode")
@@ -92,8 +108,26 @@ class AnalyticsService:
         return {
             "total_products": total_products,
             "total_orders": total_orders,
+            "active_products": active_products,
             "sync_mode": sync_mode,
             
+            # Tables
+            "latest_items": [
+                {
+                    "id": p.id,
+                    "title": p.title,
+                    "price": p.price
+                } for p in latest_products
+            ],
+            "latest_orders": [
+                {
+                    "id": o.id,
+                    "phone": o.customer.phone if o.customer else o.delivery_address or "-",
+                    "status": o.status.value,
+                    "amount": float(o.total_amount)
+                } for o in latest_orders
+            ],
+
             # New Operational Data
             "funnel": funnel_stats,
             "installations_soon": [
@@ -101,8 +135,8 @@ class AnalyticsService:
                     "id": o.id,
                     "title": o.title or "Монтаж",
                     "customer": o.customer.name if o.customer else "—",
-                    "date": o.installation_date.strftime("%d.%m %H:%M"),
-                    "is_today": o.installation_date.date() == today
+                    "date": o.installation_date.strftime("%d.%m %H:%M") if o.installation_date else "-",
+                    "is_today": o.installation_date.date() == today if o.installation_date else False
                 } for o in installs_soon
             ],
             "overdue_assessments": [

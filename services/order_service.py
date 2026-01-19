@@ -1,5 +1,6 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from crud.order import OrderDAO
 from models import Order, OrderProductLink, OrderServiceLink
@@ -67,6 +68,79 @@ class OrderService:
 
         # 4. Пересчитываем итоговые цифры заказа
         # Необходимо подгрузить связи, чтобы calculate_totals отработал корректно
+        # Используем существующий метод DAO или подгружаем вручную
+        order = await OrderDAO.get_with_links(session, order_id)
+        if order:
+            order.calculate_totals()
+            session.add(order)
+            
+        await session.commit()
+
+    @staticmethod
+    async def update_order_installers(session: AsyncSession, order_id: int, installers_data: List[Dict[str, Any]]) -> None:
+        """
+        Updates installers for an order and triggers notifications for NEW assignments.
+        """
+        from models import OrderInstaller, Installer
+        from services.bot_service import BotService
+        
+        # 1. Забираем текущие назначения чтобы понять, кто новый
+        existing = await session.execute(select(OrderInstaller).where(OrderInstaller.order_id == order_id))
+        existing_map = {i.installer_id: i for i in existing.scalars().all()}
+        
+        # 2. Очищаем старые (или обновляем, но для простоты пересоздадим)
+        # В идеале нужно делать diff, но пока просто удалим те, кого нет в новом списке
+        # Хотя для уведомлений нужно знать именно добавленных.
+        
+        new_installer_ids = {int(i['installer_id']) for i in installers_data}
+        
+        # Удаляем тех, кого нет в новом списке
+        for i_id, link in list(existing_map.items()):
+            if i_id not in new_installer_ids:
+                await session.delete(link)
+        
+        # 3. Добавляем/Обновляем
+        added_installers = []
+        for i_data in installers_data:
+            i_id = int(i_data['installer_id'])
+            if i_id not in existing_map:
+                # Это новый!
+                item = OrderInstaller(
+                    order_id=order_id,
+                    installer_id=i_id,
+                    role=i_data.get('role', 'main'),
+                    agreed_pay=float(i_data.get('agreed_pay', 0))
+                )
+                session.add(item)
+                added_installers.append(i_id)
+            else:
+                # Обновляем существующего
+                existing_item = existing_map[i_id]
+                existing_item.agreed_pay = float(i_data.get('agreed_pay', 0))
+                existing_item.role = i_data.get('role', 'main')
+                session.add(existing_item)
+        
+        await session.flush()
+        
+        # 4. Триггер уведомлений для НОВЫХ
+        if added_installers:
+            # Подгружаем детали для сообщения
+            order = await OrderDAO.get_with_links(session, order_id)
+            # Подгружаем самих монтажников чтобы узнать telegram_id
+            res = await session.execute(select(Installer).where(Installer.id.in_(added_installers)))
+            installers_to_notify = res.scalars().all()
+            
+            for inst in installers_to_notify:
+                if inst.telegram_id:
+                    await BotService.notify_installer_new_order(
+                        installer_tg_id=inst.telegram_id,
+                        order_id=order_id,
+                        address=order.delivery_address or "Адрес не указан",
+                        date_str=order.installation_date.strftime("%d.%m.%Y") if order.installation_date else "Не назначена",
+                        role="Монтажник" # Можно уточнить из связи
+                    )
+
+        # Пересчет
         order = await OrderDAO.get_with_links(session, order_id)
         if order:
             order.calculate_totals()

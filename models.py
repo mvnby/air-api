@@ -1,5 +1,6 @@
 from typing import Optional, List, Dict, Any
 from sqlmodel import SQLModel, Field, JSON, Column, Relationship
+from sqlalchemy import BigInteger, String
 from datetime import datetime
 
 class ProductTagLink(SQLModel, table=True):
@@ -183,15 +184,15 @@ class CartItem(SQLModel, table=True):
 # --- CRM МОДЕЛИ (ФАЗА 22) ---
 
 class OrderStatus(str, Enum):
-    NEW_LEAD = "NEW_LEAD"          # Новый лид
-    ASSESSMENT = "ASSESSMENT"      # Замер/Осмотр
-    PROPOSAL = "PROPOSAL"     # КП отправлено
-    NEGOTIATION = "NEGOTIATION"    # Переговоры
-    DEFERRED = "DEFERRED"          # Отложено/Думают
-    WON_DEPOSIT = "WON_DEPOSIT"    # Предоплата получена
-    INSTALLATION = "INSTALLATION"  # Монтаж
-    COMPLETED = "COMPLETED"        # Закрыто
-    CANCELED = "CANCELED"          # Отмена
+    NEW_LEAD = "Новый лид"
+    ASSESSMENT = "Замер/Осмотр"
+    PROPOSAL = "КП отправлено"
+    NEGOTIATION = "Переговоры"
+    DEFERRED = "Отложено"
+    WON_DEPOSIT = "Предоплата получена"
+    INSTALLATION = "Монтаж"
+    COMPLETED = "Закрыто"
+    CANCELED = "Отмена"
 
 class Installer(SQLModel, table=True):
     __tablename__ = "installers"
@@ -199,6 +200,9 @@ class Installer(SQLModel, table=True):
     name: str
     is_active: bool = Field(default=True)
     default_rate: Optional[float] = Field(default=None) # Базовая ставка
+    
+    # Telegram ID for notifications
+    telegram_id: Optional[int] = Field(default=None, sa_column=Column(BigInteger, unique=True, nullable=True))
 
 class OrderInstaller(SQLModel, table=True):
     """Ассоциативная таблица для назначения бригады и фиксации оплаты"""
@@ -271,7 +275,7 @@ class Order(SQLModel, table=True):
     user_id: Optional[int] = Field(default=None, index=True) 
     
     # --- CRM FIELDS ---
-    status: OrderStatus = Field(default=OrderStatus.NEW_LEAD, index=True)
+    status: OrderStatus = Field(default=OrderStatus.NEW_LEAD, sa_column=Column(String, index=True))
     title: Optional[str] = Field(default=None) # Краткое описание сделки
     
     # JSON для технических деталей (HVAC специфика)
