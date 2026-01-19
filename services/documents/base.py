@@ -48,8 +48,36 @@ class BaseDocumentStrategy(ABC):
     @staticmethod
     def _amount_in_words(amount: float) -> str:
         try:
-            text = num2words(amount, lang='ru', to='currency', currency='RUB')
-            return text.capitalize() 
+            # num2words с to='currency' делит на 100, поэтому используем обычный режим
+            rubles = int(amount)
+            kopecks = int((amount - rubles) * 100)
+            
+            # Генерируем текст для рублей
+            rubles_text = num2words(rubles, lang='ru')
+            
+            # Склонение слова "рубль"
+            if rubles % 10 == 1 and rubles % 100 != 11:
+                rub_word = "рубль"
+            elif rubles % 10 in [2, 3, 4] and rubles % 100 not in [12, 13, 14]:
+                rub_word = "рубля"
+            else:
+                rub_word = "рублей"
+            
+            # Формируем итоговую строку
+            if kopecks > 0:
+                kopecks_text = num2words(kopecks, lang='ru')
+                # Склонение слова "копейка"
+                if kopecks % 10 == 1 and kopecks % 100 != 11:
+                    kop_word = "копейка"
+                elif kopecks % 10 in [2, 3, 4] and kopecks % 100 not in [12, 13, 14]:
+                    kop_word = "копейки"
+                else:
+                    kop_word = "копеек"
+                result = f"{rubles_text} {rub_word}, {kopecks_text} {kop_word}"
+            else:
+                result = f"{rubles_text} {rub_word}, ноль копеек"
+            
+            return result.capitalize()
         except Exception:
             return str(amount)
 
