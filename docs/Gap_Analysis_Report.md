@@ -58,13 +58,13 @@ The database schema (`models.py`) is a near-perfect match to the design:
 
 ## 5. Proposed Roadmap (New Phases)
 
-### Phase 9: Dashboard Stabilization (Priority)
+### Phase 9: Dashboard Stabilization (Completed)
 *Goal: Restore system observability.*
-- [ ] **Fix Dashboard Widgets:** Debug JS/API mismatch for `active`, `orders_count`, `products_count`.
-- [ ] **Fix Data Tables:** Resolve "Loading..." state for Orders and empty Products table.
-- [ ] **Verify Analytics:** Ensure numbers from `analytics_service.py` match the database reality.
+- [x] **Fix Dashboard Widgets:** Debug JS/API mismatch for `active`, `orders_count`, `products_count`.
+- [x] **Fix Data Tables:** Resolve "Loading..." state for Orders and empty Products table.
+- [x] **Verify Analytics:** Ensure numbers from `analytics_service.py` match the database reality.
 
-### Phase 10: Advanced Reporting (Future)
+### Phase 10: Advanced Reporting (Completed)
 *Goal: Deep financial insights.*
-- [ ] Sales Funnel visualization (Chart.js integration).
-- [ ] Installer/Crew Load verification.
+- [x] Sales Funnel visualization (Chart.js integration).
+- [x] Installer/Crew Load verification.

@@ -88,6 +88,28 @@
                 </div>
             </div>
 
+            <!-- Charts Row -->
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Воронка продаж (Сумма)</h3>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="funnelChart" style="max-height: 300px;"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Загрузка монтажников (Активные)</h3>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="installerChart" style="max-height: 300px;"></canvas>
+                    </div>
+                </div>
+            </div>
+
             <!-- Latest Imports Table -->
             <div class="col-lg-6">
                 <div class="card">
@@ -183,6 +205,7 @@
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     async function loadStats() {
         try {
@@ -295,8 +318,86 @@
                 tbodyOrders.appendChild(tr);
             });
 
+            // 6. Charts Rendering
+            renderCharts(data);
+
         } catch (error) {
             console.error('Error loading stats:', error);
+        }
+    }
+
+    function renderCharts(data) {
+        // --- Installer Load Chart ---
+        const installerCtx = document.getElementById('installerChart');
+        if (installerCtx && data.installer_load) {
+            const labels = data.installer_load.map(i => i.name);
+            const values = data.installer_load.map(i => i.count);
+
+            new Chart(installerCtx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Активные заказы',
+                        data: values,
+                        backgroundColor: '#206bc4',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                    }
+                }
+            });
+        }
+
+        // --- Funnel Chart ---
+        const funnelCtx = document.getElementById('funnelChart');
+        if (funnelCtx && data.funnel) {
+            // Define funnel order
+            const pipeline = ["new_lead", "assessment", "proposal", "negotiation", "won_deposit", "installation", "completed"];
+            const labelsMap = {
+                "new_lead": "Новый лид",
+                "assessment": "Замер",
+                "proposal": "КП",
+                "negotiation": "Переговоры",
+                "won_deposit": "Предоплата",
+                "installation": "Монтаж",
+                "completed": "Закрыто"
+            };
+
+            const labels = [];
+            const amounts = [];
+
+            pipeline.forEach(key => {
+                if (data.funnel[key]) {
+                    labels.push(labelsMap[key]);
+                    amounts.push(data.funnel[key].sum);
+                }
+            });
+
+            new Chart(funnelCtx, {
+                type: 'bar', // Using horizontal bar to simulate funnel
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Сумма (руб)',
+                        data: amounts,
+                        backgroundColor: [
+                            '#4299e1', '#3182ce', '#2b6cb0', '#2c5282', '#38a169', '#2f855a', '#276749'
+                        ],
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
         }
     }
 
