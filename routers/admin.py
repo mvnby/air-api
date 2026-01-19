@@ -92,6 +92,8 @@ async def generate_document(
             doc = await DocumentService.create_or_get_document(session, order_id, doc_type)
             return RedirectResponse(url=doc.google_edit_url)
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             return {"error": str(e)}
 
 @router.get("/docs/download/{doc_id}")

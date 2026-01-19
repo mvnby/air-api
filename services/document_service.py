@@ -148,7 +148,7 @@ class DocumentService:
         ).order_by(OrderDocument.id.desc())
         
         result = await session.execute(query)
-        last_doc = result.scalar_one_or_none()
+        last_doc = result.scalars().first()
         
         # Определяем префикс
         prefix_map = {
