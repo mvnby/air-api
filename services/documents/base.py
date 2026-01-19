@@ -108,10 +108,26 @@ class BaseDocumentStrategy(ABC):
             "{{iban}}": "-",
             "{{bic}}": "-",
             
-            # Contract info
-            "{{contract_name}}": order.contract_number or "-",
+            # Contract info - will be populated after fetching contract document
+            "{{contract_name}}": "-",
             "{{contract_date}}": order.contract_date.strftime("%d.%m.%Y") if order.contract_date else "-"
         }
+        
+        # Fetch contract document if exists to get contract number
+        from models import OrderDocument
+        contract_query = select(OrderDocument).where(
+            OrderDocument.order_id == order.id,
+            OrderDocument.doc_type == "contract"
+        ).order_by(OrderDocument.created_at.desc())
+        
+        contract_result = await self.session.execute(contract_query)
+        contract_doc = contract_result.scalars().first()
+        
+        if contract_doc:
+            replacements["{{contract_name}}"] = contract_doc.number
+            # If contract exists and order.contract_date is not set, use contract document date
+            if not order.contract_date:
+                replacements["{{contract_date}}"] = contract_doc.date.strftime("%d.%m.%Y")
 
         # Technical Meta
         if order.technical_meta and isinstance(order.technical_meta, dict):

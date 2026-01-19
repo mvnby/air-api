@@ -296,9 +296,8 @@ class Order(SQLModel, table=True):
     next_followup_date: Optional[datetime] = Field(default=None, description="Дата следующего касания")
     closed_at: Optional[datetime] = None
     
-    # Contract info for document generation
-    contract_number: Optional[str] = Field(default=None, description="Номер договора (например, Д-2026-001)")
-    contract_date: Optional[datetime] = Field(default=None, description="Дата заключения договора")
+    # Contract date for document generation (editable before contract creation)
+    contract_date: Optional[datetime] = Field(default_factory=datetime.now, description="Дата заключения договора")
     
     # Relationships
     customer: Optional["Customer"] = Relationship(back_populates="orders")

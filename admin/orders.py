@@ -72,7 +72,6 @@ class OrderAdmin(ModelView, model=Order):
         "user_id": "Telegram ID",
         "installation_date": "Дата установки",
         "assessment_date": "Дата замера",
-        "contract_number": "Номер договора",
         "contract_date": "Дата договора"
     }
     
@@ -91,7 +90,6 @@ class OrderAdmin(ModelView, model=Order):
         "installation_date",
         "assessment_date",
         "next_followup_date",
-        "contract_number",
         "contract_date",
         "user_id"
     ]
