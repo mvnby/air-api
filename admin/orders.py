@@ -173,7 +173,7 @@ class OrderAdmin(ModelView, model=Order):
                             order_id=order_id,
                             product_id=int(prod["product_id"]),
                             quantity=int(prod["quantity"]),
-                            sale_price=int(prod["price"])
+                            price=int(prod["price"])
                         )
                         session.add(new_link)
                         
@@ -183,7 +183,7 @@ class OrderAdmin(ModelView, model=Order):
                             order_id=order_id,
                             service_id=int(serv["service_id"]),
                             quantity=int(serv["quantity"]),
-                            sale_price=int(serv["price"])
+                            price=int(serv["price"])
                         )
                         session.add(new_link)
                         
