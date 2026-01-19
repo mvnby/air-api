@@ -195,7 +195,8 @@ class OrderAdmin(ModelView, model=Order):
             selectinload(self.model.customer),
             selectinload(self.model.product_links).selectinload(OrderProductLink.product),
             selectinload(self.model.service_links).selectinload(OrderServiceLink.service),
-            selectinload(self.model.installers).selectinload(OrderInstaller.installer)
+            selectinload(self.model.installers).selectinload(OrderInstaller.installer),
+            selectinload(self.model.documents)
         )
 
     def list_query(self, request):
@@ -203,7 +204,8 @@ class OrderAdmin(ModelView, model=Order):
         return query.options(
             selectinload(self.model.customer),
             selectinload(self.model.product_links).selectinload(OrderProductLink.product),
-            selectinload(self.model.service_links).selectinload(OrderServiceLink.service)
+            selectinload(self.model.service_links).selectinload(OrderServiceLink.service),
+            selectinload(self.model.documents)
         )
 
     def detail_query(self, request):
@@ -212,7 +214,8 @@ class OrderAdmin(ModelView, model=Order):
             selectinload(self.model.customer),
             selectinload(self.model.product_links).selectinload(OrderProductLink.product),
             selectinload(self.model.service_links).selectinload(OrderServiceLink.service),
-            selectinload(self.model.installers).selectinload(OrderInstaller.installer)
+            selectinload(self.model.installers).selectinload(OrderInstaller.installer),
+            selectinload(self.model.documents)
         )
 
     # --- Notification Hook ---
