@@ -200,9 +200,20 @@ class OrderAdmin(ModelView, model=Order):
                 await session.commit()
                 
                 # Recalculate order totals after updating items
-                await session.refresh(model)
-                model.calculate_totals()
-                session.add(model)
+                # Need to reload the order with all relationships
+                from sqlmodel import select
+                from sqlalchemy.orm import selectinload
+                
+                query = select(Order).where(Order.id == order_id).options(
+                    selectinload(Order.product_links),
+                    selectinload(Order.service_links),
+                    selectinload(Order.installers)
+                )
+                result = await session.execute(query)
+                refreshed_order = result.scalar_one()
+                
+                refreshed_order.calculate_totals()
+                session.add(refreshed_order)
                 await session.commit()
                 
             except Exception as e:
