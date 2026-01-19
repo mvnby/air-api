@@ -398,8 +398,9 @@
                 <input type="hidden" name="items_json" id="items_json">
 
                 <div class="mt-4">
+                    <button type="submit" name="save" value="Save" class="btn btn-primary px-5">Сохранить</button>
                     <button type="submit" name="save" value="Save and continue editing"
-                        class="btn btn-primary px-5">Сохранить заказ</button>
+                        class="btn btn-secondary px-5 ms-2">Сохранить и продолжить</button>
                     <a href="{{ url_for('admin:list', identity=model_view.identity) }}" class="btn btn-link">Отмена</a>
                 </div>
             </form>
@@ -516,13 +517,21 @@
         function updateTotals() {
             let total = 0;
             document.querySelectorAll('.item-row').forEach(row => {
-                const price = parseFloat(row.querySelector('.price-input').value) || 0;
-                const qty = parseInt(row.querySelector('.quantity-input').value) || 0;
-                const subtotal = price * qty;
-                row.querySelector('.row-total').textContent = subtotal;
-                total += subtotal;
+                const priceInput = row.querySelector('.price-input');
+                const qtyInput = row.querySelector('.quantity-input');
+                const rowTotalEl = row.querySelector('.row-total');
+
+                if (priceInput && qtyInput && rowTotalEl) {
+                    const price = parseFloat(priceInput.value) || 0;
+                    const qty = parseInt(qtyInput.value) || 0;
+                    const subtotal = price * qty;
+                    rowTotalEl.textContent = subtotal.toLocaleString('ru-RU');
+                    total += subtotal;
+                }
             });
-            grandTotalSpan.textContent = total.toLocaleString('ru-RU');
+            if (typeof grandTotalSpan !== 'undefined' && grandTotalSpan) {
+                grandTotalSpan.textContent = total.toLocaleString('ru-RU');
+            }
         }
 
         function initSelect2(element, type) {
@@ -651,51 +660,82 @@
 
         // Before submit, pack everything into JSON
         form.addEventListener('submit', function (e) {
-            const items = {
-                products: [],
-                services: [],
-                installers: []
-            };
+            try {
+                const items = {
+                    products: [],
+                    services: [],
+                    installers: []
+                };
 
-            document.querySelectorAll('.product-row').forEach(row => {
-                const id = row.querySelector('.product-select').value;
-                if (id) {
-                    items.products.push({
-                        product_id: parseInt(id),
-                        price: parseInt(row.querySelector('.price-input').value),
-                        quantity: parseInt(row.querySelector('.quantity-input').value)
-                    });
-                }
-            });
+                document.querySelectorAll('.product-row').forEach(row => {
+                    const select = row.querySelector('.product-select');
+                    let id = $(select).val();
 
-            document.querySelectorAll('.service-row').forEach(row => {
-                const id = row.querySelector('.service-select').value;
-                if (id) {
-                    items.services.push({
-                        service_id: parseInt(id),
-                        price: parseInt(row.querySelector('.price-input').value),
-                        quantity: parseInt(row.querySelector('.quantity-input').value)
-                    });
-                }
-            });
+                    // Fallback for Select2
+                    if (!id && $(select).data('select2')) {
+                        const data = $(select).select2('data');
+                        if (data && data.length > 0) {
+                            id = data[0].id;
+                        }
+                    }
 
-            document.querySelectorAll('.installer-row').forEach(row => {
-                const id = row.querySelector('.installer-select').value;
-                if (id) {
-                    items.installers.push({
-                        installer_id: parseInt(id),
-                        agreed_pay: parseInt(row.querySelector('.pay-input').value),
-                        role: row.querySelector('.role-select').value
-                    });
-                }
-            });
+                    if (id) {
+                        items.products.push({
+                            product_id: parseInt(id),
+                            price: parseInt(row.querySelector('.price-input').value) || 0,
+                            quantity: parseInt(row.querySelector('.quantity-input').value) || 1
+                        });
+                    }
+                });
 
-            itemsJsonInput.value = JSON.stringify(items);
+                document.querySelectorAll('.service-row').forEach(row => {
+                    const select = row.querySelector('.service-select');
+                    let id = $(select).val();
 
-            // Force form to submit to current URL (edit page)
-            const currentPath = window.location.pathname;
-            if (currentPath.includes('/edit/')) {
-                form.action = currentPath;
+                    // Fallback for Select2
+                    if (!id && $(select).data('select2')) {
+                        const data = $(select).select2('data');
+                        if (data && data.length > 0) {
+                            id = data[0].id;
+                        }
+                    }
+
+                    if (id) {
+                        items.services.push({
+                            service_id: parseInt(id),
+                            price: parseInt(row.querySelector('.price-input').value) || 0,
+                            quantity: parseInt(row.querySelector('.quantity-input').value) || 1
+                        });
+                    }
+                });
+
+                document.querySelectorAll('.installer-row').forEach(row => {
+                    const select = row.querySelector('.installer-select');
+                    let id = $(select).val();
+
+                    // Fallback for Select2
+                    if (!id && $(select).data('select2')) {
+                        const data = $(select).select2('data');
+                        if (data && data.length > 0) {
+                            id = data[0].id;
+                        }
+                    }
+
+                    if (id) {
+                        items.installers.push({
+                            installer_id: parseInt(id),
+                            agreed_pay: parseInt(row.querySelector('.pay-input').value) || 0,
+                            role: row.querySelector('.role-select').value
+                        });
+                    }
+                });
+
+                itemsJsonInput.value = JSON.stringify(items);
+                console.log("Saving items:", itemsJsonInput.value); // Debug
+            } catch (err) {
+                alert("Ошибка при подготовке данных: " + err.message);
+                console.error(err);
+                e.preventDefault(); // Stop submission on error
             }
         });
     });

@@ -122,59 +122,87 @@ class OrderAdmin(ModelView, model=Order):
     async def update_model(self, request, pk: Any, data: dict) -> Any:
         import json
         from models import Product, OrderProductLink, OrderServiceLink, OrderInstaller
+        import logging
         
+        # Ensure pk is an integer for DB operations
+        try:
+            order_id = int(pk)
+        except (ValueError, TypeError):
+            # Fallback if pk is somehow not convertable, though unlikely for existing ID
+            order_id = pk
+
+        logger = logging.getLogger(__name__)
+        
+        # Check if items_json is in data or need to be fetched from request form
         items_json = data.pop("items_json", None)
         
+        if items_json is None:
+            # Fallback: try to get from request form directly if not in processed data
+            form_data = await request.form()
+            items_json = form_data.get("items_json")
+            logger.info(f"update_model: items_json extracted from request form: {bool(items_json)}")
+        else:
+            logger.info(f"update_model: items_json found in data: {bool(items_json)}")
+
         # 1. Update basic fields
         model = await super().update_model(request, pk, data)
         
-        # 2. Update items if provided
+        # 2. If items_json is present, parse it and update relationships
         if items_json:
-            items = json.loads(items_json)
-            
-            async with async_session_maker() as session:
-                # Delete existing links
-                await session.execute(
-                    OrderProductLink.__table__.delete().where(OrderProductLink.order_id == pk)
-                )
-                await session.execute(
-                    OrderServiceLink.__table__.delete().where(OrderServiceLink.order_id == pk)
-                )
-                await session.execute(
-                    OrderInstaller.__table__.delete().where(OrderInstaller.order_id == pk)
-                )
+            try:
+                items_data = json.loads(items_json)
+                session = self.session_maker()
                 
-                # Add new product links
-                for item in items.get("products", []):
-                    link = OrderProductLink(
-                        order_id=pk,
-                        product_id=item["product_id"],
-                        price=item["price"],
-                        quantity=item["quantity"]
+                async with session.begin():
+                    # Clear existing links (using integer order_id)
+                    await session.execute(
+                        OrderProductLink.__table__.delete().where(OrderProductLink.order_id == order_id)
                     )
-                    session.add(link)
-                
-                # Add new service links
-                for item in items.get("services", []):
-                    link = OrderServiceLink(
-                        order_id=pk,
-                        service_id=item["service_id"],
-                        price=item["price"],
-                        quantity=item["quantity"]
+                    await session.execute(
+                        OrderServiceLink.__table__.delete().where(OrderServiceLink.order_id == order_id)
                     )
-                    session.add(link)
-                
-                # Add new installer links
-                for item in items.get("installers", []):
-                    link = OrderInstaller(
-                        order_id=pk,
-                        installer_id=item["installer_id"],
-                        agreed_pay=item["agreed_pay"],
-                        role=item["role"]
+                    await session.execute(
+                        OrderInstaller.__table__.delete().where(OrderInstaller.order_id == order_id)
                     )
-                    session.add(link)
-                
+                    
+                    # Add new products
+                    for prod in items_data.get("products", []):
+                        new_link = OrderProductLink(
+                            order_id=order_id,
+                            product_id=int(prod["product_id"]),
+                            quantity=int(prod["quantity"]),
+                            sale_price=int(prod["price"])
+                        )
+                        session.add(new_link)
+                        
+                    # Add new services
+                    for serv in items_data.get("services", []):
+                        new_link = OrderServiceLink(
+                            order_id=order_id,
+                            service_id=int(serv["service_id"]),
+                            quantity=int(serv["quantity"]),
+                            sale_price=int(serv["price"])
+                        )
+                        session.add(new_link)
+                        
+                    # Add new installers
+                    for inst in items_data.get("installers", []):
+                        new_inst = OrderInstaller(
+                            order_id=order_id,
+                            installer_id=int(inst["installer_id"]),
+                            agreed_pay=int(inst["agreed_pay"]),
+                            role=inst["role"]
+                        )
+                        session.add(new_inst)
+                        
                 await session.commit()
+                
+            except Exception as e:
+                # Log error but don't fail the whole request if possible, 
+                # or raise to let user know
+                import logging
+                logging.getLogger(__name__).error(f"Error updating order items: {e}")
+                raise e
         
         # --- Phase 6: Inventory Safety Check ---
         # Prevent moving to PROPOSAL if stock < 3
@@ -268,21 +296,26 @@ class OrderAdmin(ModelView, model=Order):
                              date_str=order.installation_date.strftime("%d.%m.%Y") if order.installation_date else "Не назначена",
                              role=link.role
                          )
-    
+
     async def edit(self, request):
-        """Override to always redirect back to edit page after save."""
+        """Override to handle 'Save and continue' redirect."""
         from starlette.responses import RedirectResponse
         
+        # Check form data for button value
+        form = await request.form()
+        save_action = form.get("save")
+
         # Call parent edit method
         response = await super().edit(request)
-        
-        # If it's a redirect response after successful save, change destination
-        if isinstance(response, RedirectResponse):
+
+        # If it's a redirect (success) and user clicked 'Save and continue'
+        if isinstance(response, RedirectResponse) and save_action == "Save and continue editing":
             # Extract order ID from current URL
+            # Path format: /admin/order/edit/{id}
             path_parts = request.url.path.split('/')
             if 'edit' in path_parts:
                 order_id = path_parts[-1]
-                # Always redirect back to edit page
+                # Redirect back to the same edit page
                 return RedirectResponse(
                     url=f"/admin/order/edit/{order_id}",
                     status_code=302
