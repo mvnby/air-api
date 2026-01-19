@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqladmin import Admin
 from starlette.middleware.sessions import SessionMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from core.database import engine, init_db
 from core.config import settings
@@ -53,7 +54,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"message": "Internal server error"},
     )
-
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 app.add_middleware(
     CORSMiddleware,
