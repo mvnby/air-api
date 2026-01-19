@@ -2,6 +2,7 @@ from typing import Any
 from sqladmin import ModelView
 from sqlalchemy.orm import selectinload
 from markupsafe import Markup
+from wtforms import SelectField
 
 # Импорты моделей и сессии
 from models import Order, Service, OrderProductLink, OrderServiceLink, Customer, OrderInstaller, OrderStatus, Product
@@ -57,7 +58,9 @@ class OrderAdmin(ModelView, model=Order):
         "next_followup_date": "След. касание",
         "actions": "Документы",
         "delivery_address": "Адрес доставки",
-        "user_id": "Telegram ID"
+        "user_id": "Telegram ID",
+        "installation_date": "Дата установки",
+        "assessment_date": "Дата замера"
     }
     
     column_sortable_list = [Order.id, Order.created_at, Order.status, Order.next_followup_date]
@@ -85,6 +88,15 @@ class OrderAdmin(ModelView, model=Order):
             "order_by": "name",
             "placeholder": "Поиск по имени, телефону или ИНН...",
             "minimum_input_length": 0,
+        }
+    }
+    
+    # Restore choices for Status (since we changed column to String)
+    form_overrides = dict(status=SelectField)
+    form_args = {
+        "status": {
+            "choices": [(s.value, s.value) for s in OrderStatus], 
+            "coerce": str
         }
     }
 
