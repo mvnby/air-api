@@ -58,7 +58,6 @@ class OrderAdmin(ModelView, model=Order):
         Order.status, 
         Order.customer_id,
         "total_amount", 
-        "actions",
         Order.created_at
     ]
     
@@ -69,7 +68,6 @@ class OrderAdmin(ModelView, model=Order):
         "total_amount": "Сумма",
         "created_at": "Дата",
         "next_followup_date": "След. касание",
-        "actions": "Документы",
         "delivery_address": "Адрес доставки",
         "user_id": "Telegram ID",
         "installation_date": "Дата установки",
@@ -117,25 +115,7 @@ class OrderAdmin(ModelView, model=Order):
     # Custom formatters
     column_formatters = {
         "status": lambda m, a: STATUS_LABELS.get(m.status.value if hasattr(m.status, 'value') else m.status, m.status),
-        "total_amount": lambda m, a: f"{m.total_amount:,.2f} руб.",
-        "actions": lambda m, a: Markup(
-            f"""
-            <div class="btn-group">
-                <a href="/admin/docs/generate/contract/{m.id}" class="btn btn-sm btn-outline-primary" target="_blank" title="Договор">📄</a>
-                <a href="/admin/docs/generate/offer/{m.id}" class="btn btn-sm btn-outline-info" target="_blank" title="КП">💼</a>
-                <a href="/admin/docs/generate/invoice/{m.id}" class="btn btn-sm btn-outline-success" target="_blank" title="Счет">💰</a>
-                <a href="/admin/docs/generate/act/{m.id}" class="btn btn-sm btn-outline-secondary" target="_blank" title="Акт">✅</a>
-                <a href="/admin/docs/generate/work_order/{m.id}" class="btn btn-sm btn-outline-warning" target="_blank" title="Наряд">🛠️</a>
-                <div class="dropdown">
-                    <button class="btn btn-sm btn-outline-dark dropdown-toggle" type="button" data-bs-toggle="dropdown">📦</button>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="/admin/docs/generate/tn2/{m.id}" target="_blank">ТН-2</a></li>
-                        <li><a class="dropdown-item" href="/admin/docs/generate/ttn1/{m.id}" target="_blank">ТТН-1</a></li>
-                    </ul>
-                </div>
-            </div>
-            """
-        )
+        "total_amount": lambda m, a: f"{m.total_amount:,.2f} руб."
     }
 
     # --- ИСПРАВЛЕННЫЙ МЕТОД ---

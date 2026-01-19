@@ -631,4 +631,27 @@ class GoogleDocsService:
             if style_reqs:
                 docs_service.documents().batchUpdate(documentId=doc_id, body={'requests': style_reqs}).execute()
 
+
+    def delete_file(self, file_id: str) -> None:
+        """
+        Перемещает файл в корзину Google Drive.
+        
+        Args:
+            file_id: ID файла в Google Drive
+        """
+        if not self.creds or not self.creds.valid:
+            self._authenticate()
+            if not self.creds:
+                raise Exception("Ошибка: Нет доступа к Google API.")
+                
+        try:
+            drive_service = build('drive', 'v3', credentials=self.creds)
+            
+            # Обновляем метаданные файла, устанавливая trashed=True
+            drive_service.files().update(fileId=file_id, body={'trashed': True}).execute()
+            
+        except Exception as e:
+            # Логируем ошибку, но не прерываем выполнение (файл мог быть уже удален)
+            print(f"Warning: Failed to delete Google Drive file {file_id}: {str(e)}")
+
 google_service = GoogleDocsService()

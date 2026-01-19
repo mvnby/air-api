@@ -137,6 +137,46 @@ async def download_document_pdf(
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error exporting PDF: {str(e)}")
 
+@router.get("/docs/delete/{doc_id}")
+async def delete_document(
+    doc_id: int,
+    username: str = Depends(get_current_username)
+):
+    """
+    Удаляет документ из БД и перемещает файл в корзину Google Drive.
+    """
+    from models import OrderDocument
+    from services.google_service import google_service
+    
+    async with async_session_maker() as session:
+        # 1. Находим документ
+        result = await session.execute(
+            select(OrderDocument).where(OrderDocument.id == doc_id)
+        )
+        document = result.scalar_one_or_none()
+        
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        order_id = document.order_id
+        
+        # 2. Удаляем файл из Google Drive (если есть ID)
+        if document.google_file_id:
+            try:
+                google_service.delete_file(document.google_file_id)
+            except Exception as e:
+                print(f"Error deleting file from Drive: {e}")
+        
+        # 3. Удаляем запись из БД
+        await session.delete(document)
+        await session.commit()
+        
+        # 4. Редирект обратно на страницу заказа
+        return RedirectResponse(
+            url=f"/admin/order/edit/{order_id}", 
+            status_code=302
+        )
+
 from pydantic import BaseModel
 
 class OrderStatusUpdate(BaseModel):
