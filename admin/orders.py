@@ -72,6 +72,8 @@ class OrderAdmin(ModelView, model=Order):
         "customer",
         "delivery_address",
         "status",
+        "installation_date",
+        "assessment_date",
         "next_followup_date",
         "user_id"
     ]
