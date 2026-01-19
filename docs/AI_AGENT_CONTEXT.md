@@ -94,6 +94,11 @@ We stick to a strict **Service-Layer** setup. No shortcuts!
   * **Dockerization**: The whole stack (API, Bot, DB) now runs via Docker Compose.
   * **Requirements Upgrade**: Added `pydantic-settings`, `asyncpg`, `psycopg2-binary`.
   * **Logging Fix**: Updated `setup_logging` to be more flexible for multi-service context.
+* **Phase 31**: **Advanced Document Generation & Contract UX**.
+  * **Contract Placeholders**: Implemented `{{contract_name}}` and `{{contract_date}}` for all documents (Acts, TN-2, Invoices).
+  * **Pre-generation Numbering**: Refactored `DocumentService` to generate document numbers *before* creation, allowing documents (like contracts) to reference their own ID.
+  * **Automatic Totals Calculation**: Fixed critical bug where `total_amount` stayed 0. Added `calculate_totals()` with explicit relationship loading (`selectinload`) during every order update in Admin.
+  * **UX Improvements**: Removed manual `contract_number` input (now auto-generated from `OrderDocument`) and added optional `contract_date` with default=today for manual "backdating" if requested by client.
 
 
 ## **The Rules (Don't Break These) 🚨**
