@@ -691,6 +691,12 @@
             });
 
             itemsJsonInput.value = JSON.stringify(items);
+
+            // Force form to submit to current URL (edit page)
+            const currentPath = window.location.pathname;
+            if (currentPath.includes('/edit/')) {
+                form.action = currentPath;
+            }
         });
     });
 </script>
