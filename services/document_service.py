@@ -30,12 +30,13 @@ class DocumentService:
             OrderDocument объект с данными о документе
         """
         # 1. Проверяем, есть ли уже такой документ
+        # Если есть дубликаты, берем самый новый
         query = select(OrderDocument).where(
             OrderDocument.order_id == order_id,
             OrderDocument.doc_type == doc_type
-        )
+        ).order_by(OrderDocument.created_at.desc())
         result = await session.execute(query)
-        existing_doc = result.scalar_one_or_none()
+        existing_doc = result.scalars().first()
         
         if existing_doc:
             return existing_doc
