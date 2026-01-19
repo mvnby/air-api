@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, HTTPException
 from typing import Optional
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from services.document_service import DocumentService
 from services.importer_service import ImporterService
 from core.database import async_session_maker
@@ -84,15 +84,50 @@ async def generate_document(
 ):
     """
     Универсальный роут для генерации документов.
-    doc_type: contract | offer | invoice
+    doc_type: contract | offer | invoice | act | tn2 | ttn1
+    Возвращает ссылку на редактирование в Google Docs.
     """
     async with async_session_maker() as session:
-        link = await DocumentService.create_document(session, order_id, doc_type)
+        try:
+            doc = await DocumentService.create_or_get_document(session, order_id, doc_type)
+            return RedirectResponse(url=doc.google_edit_url)
+        except Exception as e:
+            return {"error": str(e)}
+
+@router.get("/docs/download/{doc_id}")
+async def download_document_pdf(
+    doc_id: int,
+    username: str = Depends(get_current_username)
+):
+    """
+    Скачивает документ в формате PDF из Google Drive.
+    """
+    from models import OrderDocument
+    from services.google_service import google_service
     
-    if link.startswith("http"):
-        return RedirectResponse(url=link)
-    else:
-        return {"error": link}
+    async with async_session_maker() as session:
+        # 1. Находим документ в БД
+        result = await session.execute(
+            select(OrderDocument).where(OrderDocument.id == doc_id)
+        )
+        document = result.scalar_one_or_none()
+        
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # 2. Экспортируем из Google Drive
+        try:
+            pdf_content = google_service.export_file(document.google_file_id, mime_type='application/pdf')
+            
+            # 3. Возвращаем как StreamingResponse
+            filename = f"{document.number}.pdf"
+            return StreamingResponse(
+                pdf_content,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f"attachment; filename={filename}"}
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error exporting PDF: {str(e)}")
 
 from pydantic import BaseModel
 
