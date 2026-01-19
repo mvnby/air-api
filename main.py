@@ -10,17 +10,18 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from core.database import engine, init_db
 from core.config import settings
-from core.logger import setup_logging
+from core.logger import logger
 from core.security import AdminAuthBackend
 from routers import admin as admin_router
 from routers import api as api_router
 from admin import admin_views
 
-# Setup logging with session-specific server.log (cleared on restart)
-logger = setup_logging(session_log_file="logs/server.log", clear_session_log=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Log startup
+    logger.info("Starting Application...")
+    
     # Create tables on startup
     await init_db()
     
@@ -29,6 +30,8 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(scheduler_service.start_loop(interval_hours=settings.SCHEDULER_INTERVAL))
     
     yield
+    
+    logger.info("Stopping Application...")
 
 app = FastAPI(lifespan=lifespan)
 
@@ -36,7 +39,16 @@ app = FastAPI(lifespan=lifespan)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.exception(f"Unhandled exception: {exc}")
+    logger.exception(f"Unhandled exception at {request.url}: {exc}")
+    
+    # If the error happened in Admin Panel, try to return a user-friendly HTML
+    if str(request.url.path).startswith("/admin"):
+        # We can implement a simple HTML response here or redirect
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal Server Error", "detail": str(exc)},
+        ) # SQLAdmin usually has its own handler, but this catches unhandled ones
+        
     return JSONResponse(
         status_code=500,
         content={"message": "Internal server error"},
