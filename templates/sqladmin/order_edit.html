@@ -92,8 +92,151 @@
         <div class="card-header">
             <h3 class="card-title">Редактирование Заказа #{{ obj.id }}</h3>
         </div>
+
+        <!-- DOCUMENTS SECTION -->
+        <div class="card-body border-bottom bg-light">
+            <h5 class="mb-3">📄 Документы</h5>
+
+            <!-- Existing Documents Table -->
+            {% if obj.documents %}
+            <div class="table-responsive mb-4">
+                <table class="table table-sm table-hover mb-0 bg-white border">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Тип</th>
+                            <th>Номер</th>
+                            <th>Дата</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% set has_contract = false %}
+                        {% for doc in obj.documents %}
+                        {% if doc.doc_type == 'contract' %}
+                        {% set has_contract = true %}
+                        {% endif %}
+                        <tr>
+                            <td><span class="badge bg-secondary">{{ doc.doc_type.upper() }}</span></td>
+                            <td>{{ doc.number }}</td>
+                            <td>{{ doc.date.strftime('%d.%m.%Y') }}</td>
+                            <td>
+                                <div class="btn-group">
+                                    <a href="{{ doc.google_edit_url }}" target="_blank"
+                                        class="btn btn-sm btn-outline-primary" title="Редактировать в Google Docs">
+                                        <i class="fa-brands fa-google"></i>
+                                    </a>
+                                    <a href="/admin/docs/download/{{ doc.id }}" class="btn btn-sm btn-outline-secondary"
+                                        title="Скачать PDF">
+                                        <i class="fa-solid fa-download"></i>
+                                    </a>
+                                    <a href="/admin/docs/delete/{{ doc.id }}" class="btn btn-sm btn-outline-danger"
+                                        title="Удалить"
+                                        onclick="return confirm('Вы уверены? Файл будет перемещен в корзину, а запись удалена.');">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            {% set has_contract = false %}
+            <div class="alert alert-info mb-4 py-2">
+                <small>Нет созданных документов</small>
+            </div>
+            {% endif %}
+
+            <!-- Smart Generation Panel -->
+            <div class="d-flex gap-2 flex-wrap">
+                <!-- Offer (КП) -->
+                {% if obj.product_links or obj.service_links %}
+                <a href="/admin/docs/generate/offer/{{ obj.id }}" target="_blank"
+                    class="btn btn-sm btn-info text-white">
+                    <i class="fa-solid fa-briefcase me-1"></i> КП
+                </a>
+                {% else %}
+                <button class="btn btn-sm btn-outline-secondary" disabled title="Добавьте товары или услуги">
+                    <i class="fa-solid fa-briefcase me-1"></i> КП
+                </button>
+                {% endif %}
+
+                <!-- Contract (Договор) -->
+                {% set contract_ready = obj.customer and (obj.customer.inn or obj.customer.name) %}
+                {% set ns = namespace(contract_exists=false) %}
+                {% for d in obj.documents %}
+                {% if d.doc_type == 'contract' %}
+                {% set ns.contract_exists = true %}
+                {% endif %}
+                {% endfor %}
+                {% set contract_exists = ns.contract_exists %}
+
+                {% if not contract_exists %}
+                {% if contract_ready %}
+                <a href="/admin/docs/generate/contract/{{ obj.id }}" target="_blank" class="btn btn-sm btn-primary">
+                    <i class="fa-solid fa-file-contract me-1"></i> Договор
+                </a>
+                {% else %}
+                <button class="btn btn-sm btn-outline-secondary" disabled
+                    title="Заполните данные клиента (ФИО или ИНН)">
+                    <i class="fa-solid fa-file-contract me-1"></i> Договор
+                </button>
+                {% endif %}
+                {% endif %}
+
+                <!-- Invoice (Счет) -->
+                {% if contract_ready %}
+                <a href="/admin/docs/generate/invoice/{{ obj.id }}" target="_blank"
+                    class="btn btn-sm btn-success text-white">
+                    <i class="fa-solid fa-file-invoice-dollar me-1"></i> Счет
+                </a>
+                {% else %}
+                <button class="btn btn-sm btn-outline-secondary" disabled title="Требуется клиент">
+                    <i class="fa-solid fa-file-invoice-dollar me-1"></i> Счет
+                </button>
+                {% endif %}
+
+                <!-- Act (Акт) -->
+                <!-- Requires Contract AND Services -->
+                {% set act_ready = contract_exists and obj.service_links %}
+                {% if act_ready %}
+                <a href="/admin/docs/generate/act/{{ obj.id }}" target="_blank" class="btn btn-sm btn-secondary">
+                    <i class="fa-solid fa-check-double me-1"></i> Акт
+                </a>
+                {% else %}
+                <button class="btn btn-sm btn-outline-secondary" disabled title="Нужен договор и услуги">
+                    <i class="fa-solid fa-check-double me-1"></i> Акт
+                </button>
+                {% endif %}
+
+                <!-- Work Order (Наряд) -->
+                <a href="/admin/docs/generate/work_order/{{ obj.id }}" target="_blank"
+                    class="btn btn-sm btn-warning text-dark">
+                    <i class="fa-solid fa-tools me-1"></i> Наряд
+                </a>
+
+                <!-- Logistics Dropdown -->
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-dark dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="fa-solid fa-truck me-1"></i> Логистика
+                    </button>
+                    <ul class="dropdown-menu">
+                        {% if obj.product_links %}
+                        <li><a class="dropdown-item" href="/admin/docs/generate/tn2/{{ obj.id }}"
+                                target="_blank">ТН-2</a></li>
+                        <li><a class="dropdown-item" href="/admin/docs/generate/ttn1/{{ obj.id }}"
+                                target="_blank">ТТН-1</a></li>
+                        {% else %}
+                        <li><span class="dropdown-item disabled">Нет товаров</span></li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+
         <div class="card-body">
-            <form id="order-form" action="{{ model_view._build_url_for('admin:edit', request, obj) }}" method="POST">
+            <form id="order-form" method="POST">
                 <!-- Основные поля заказа -->
                 <div class="row">
                     {% for field in form if field.name not in ['product_links', 'service_links'] %}
@@ -255,7 +398,9 @@
                 <input type="hidden" name="items_json" id="items_json">
 
                 <div class="mt-4">
-                    <button type="submit" class="btn btn-primary px-5">Сохранить заказ</button>
+                    <button type="submit" name="save" value="Save" class="btn btn-primary px-5">Сохранить</button>
+                    <button type="submit" name="save" value="Save and continue editing"
+                        class="btn btn-secondary px-5 ms-2">Сохранить и продолжить</button>
                     <a href="{{ url_for('admin:list', identity=model_view.identity) }}" class="btn btn-link">Отмена</a>
                 </div>
             </form>
@@ -372,13 +517,21 @@
         function updateTotals() {
             let total = 0;
             document.querySelectorAll('.item-row').forEach(row => {
-                const price = parseFloat(row.querySelector('.price-input').value) || 0;
-                const qty = parseInt(row.querySelector('.quantity-input').value) || 0;
-                const subtotal = price * qty;
-                row.querySelector('.row-total').textContent = subtotal;
-                total += subtotal;
+                const priceInput = row.querySelector('.price-input');
+                const qtyInput = row.querySelector('.quantity-input');
+                const rowTotalEl = row.querySelector('.row-total');
+
+                if (priceInput && qtyInput && rowTotalEl) {
+                    const price = parseFloat(priceInput.value) || 0;
+                    const qty = parseInt(qtyInput.value) || 0;
+                    const subtotal = price * qty;
+                    rowTotalEl.textContent = subtotal.toLocaleString('ru-RU');
+                    total += subtotal;
+                }
             });
-            grandTotalSpan.textContent = total.toLocaleString('ru-RU');
+            if (typeof grandTotalSpan !== 'undefined' && grandTotalSpan) {
+                grandTotalSpan.textContent = total.toLocaleString('ru-RU');
+            }
         }
 
         function initSelect2(element, type) {
@@ -507,46 +660,83 @@
 
         // Before submit, pack everything into JSON
         form.addEventListener('submit', function (e) {
-            const items = {
-                products: [],
-                services: [],
-                installers: []
-            };
+            try {
+                const items = {
+                    products: [],
+                    services: [],
+                    installers: []
+                };
 
-            document.querySelectorAll('.product-row').forEach(row => {
-                const id = row.querySelector('.product-select').value;
-                if (id) {
-                    items.products.push({
-                        product_id: parseInt(id),
-                        price: parseInt(row.querySelector('.price-input').value),
-                        quantity: parseInt(row.querySelector('.quantity-input').value)
-                    });
-                }
-            });
+                document.querySelectorAll('.product-row').forEach(row => {
+                    const select = row.querySelector('.product-select');
+                    let id = $(select).val();
 
-            document.querySelectorAll('.service-row').forEach(row => {
-                const id = row.querySelector('.service-select').value;
-                if (id) {
-                    items.services.push({
-                        service_id: parseInt(id),
-                        price: parseInt(row.querySelector('.price-input').value),
-                        quantity: parseInt(row.querySelector('.quantity-input').value)
-                    });
-                }
-            });
+                    // Fallback for Select2
+                    if (!id && $(select).data('select2')) {
+                        const data = $(select).select2('data');
+                        if (data && data.length > 0) {
+                            id = data[0].id;
+                        }
+                    }
 
-            document.querySelectorAll('.installer-row').forEach(row => {
-                const id = row.querySelector('.installer-select').value;
-                if (id) {
-                    items.installers.push({
-                        installer_id: parseInt(id),
-                        agreed_pay: parseInt(row.querySelector('.pay-input').value),
-                        role: row.querySelector('.role-select').value
-                    });
-                }
-            });
+                    if (id) {
+                        items.products.push({
+                            product_id: parseInt(id),
+                            price: parseInt(row.querySelector('.price-input').value) || 0,
+                            quantity: parseInt(row.querySelector('.quantity-input').value) || 1
+                        });
+                    }
+                });
 
-            itemsJsonInput.value = JSON.stringify(items);
+                document.querySelectorAll('.service-row').forEach(row => {
+                    const select = row.querySelector('.service-select');
+                    let id = $(select).val();
+
+                    // Fallback for Select2
+                    if (!id && $(select).data('select2')) {
+                        const data = $(select).select2('data');
+                        if (data && data.length > 0) {
+                            id = data[0].id;
+                        }
+                    }
+
+                    if (id) {
+                        items.services.push({
+                            service_id: parseInt(id),
+                            price: parseInt(row.querySelector('.price-input').value) || 0,
+                            quantity: parseInt(row.querySelector('.quantity-input').value) || 1
+                        });
+                    }
+                });
+
+                document.querySelectorAll('.installer-row').forEach(row => {
+                    const select = row.querySelector('.installer-select');
+                    let id = $(select).val();
+
+                    // Fallback for Select2
+                    if (!id && $(select).data('select2')) {
+                        const data = $(select).select2('data');
+                        if (data && data.length > 0) {
+                            id = data[0].id;
+                        }
+                    }
+
+                    if (id) {
+                        items.installers.push({
+                            installer_id: parseInt(id),
+                            agreed_pay: parseInt(row.querySelector('.pay-input').value) || 0,
+                            role: row.querySelector('.role-select').value
+                        });
+                    }
+                });
+
+                itemsJsonInput.value = JSON.stringify(items);
+                console.log("Saving items:", itemsJsonInput.value); // Debug
+            } catch (err) {
+                alert("Ошибка при подготовке данных: " + err.message);
+                console.error(err);
+                e.preventDefault(); // Stop submission on error
+            }
         });
     });
 </script>

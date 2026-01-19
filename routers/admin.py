@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, HTTPException
 from typing import Optional
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from services.document_service import DocumentService
 from services.importer_service import ImporterService
 from core.database import async_session_maker
@@ -84,15 +84,98 @@ async def generate_document(
 ):
     """
     Универсальный роут для генерации документов.
-    doc_type: contract | offer | invoice
+    doc_type: contract | offer | invoice | act | tn2 | ttn1
+    Возвращает ссылку на редактирование в Google Docs.
     """
     async with async_session_maker() as session:
-        link = await DocumentService.create_document(session, order_id, doc_type)
+        try:
+            doc = await DocumentService.create_or_get_document(session, order_id, doc_type)
+            return RedirectResponse(url=doc.google_edit_url)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return {"error": str(e)}
+
+@router.get("/docs/download/{doc_id}")
+async def download_document_pdf(
+    doc_id: int,
+    username: str = Depends(get_current_username)
+):
+    """
+    Скачивает документ в формате PDF из Google Drive.
+    """
+    from models import OrderDocument
+    from services.google_service import google_service
     
-    if link.startswith("http"):
-        return RedirectResponse(url=link)
-    else:
-        return {"error": link}
+    async with async_session_maker() as session:
+        # 1. Находим документ в БД
+        result = await session.execute(
+            select(OrderDocument).where(OrderDocument.id == doc_id)
+        )
+        document = result.scalar_one_or_none()
+        
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # 2. Экспортируем из Google Drive
+        try:
+            pdf_content = google_service.export_file(document.google_file_id, mime_type='application/pdf')
+            
+            # 3. Возвращаем как StreamingResponse
+            # Используем URL encoding для кириллицы в имени файла (RFC 5987)
+            from urllib.parse import quote
+            filename = f"{document.number}.pdf"
+            filename_encoded = quote(filename)
+            
+            return StreamingResponse(
+                pdf_content,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{filename_encoded}"
+                }
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error exporting PDF: {str(e)}")
+
+@router.get("/docs/delete/{doc_id}")
+async def delete_document(
+    doc_id: int,
+    username: str = Depends(get_current_username)
+):
+    """
+    Удаляет документ из БД и перемещает файл в корзину Google Drive.
+    """
+    from models import OrderDocument
+    from services.google_service import google_service
+    
+    async with async_session_maker() as session:
+        # 1. Находим документ
+        result = await session.execute(
+            select(OrderDocument).where(OrderDocument.id == doc_id)
+        )
+        document = result.scalar_one_or_none()
+        
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        order_id = document.order_id
+        
+        # 2. Удаляем файл из Google Drive (если есть ID)
+        if document.google_file_id:
+            try:
+                google_service.delete_file(document.google_file_id)
+            except Exception as e:
+                print(f"Error deleting file from Drive: {e}")
+        
+        # 3. Удаляем запись из БД
+        await session.delete(document)
+        await session.commit()
+        
+        # 4. Редирект обратно на страницу заказа
+        return RedirectResponse(
+            url=f"/admin/order/edit/{order_id}", 
+            status_code=302
+        )
 
 from pydantic import BaseModel
 

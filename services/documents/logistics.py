@@ -12,7 +12,7 @@ class LogisticsSheetStrategy(BaseDocumentStrategy):
         if not self.order: return "Order not found"
 
         template_id = TEMPLATES.get(doc_type)
-        replacements = self._prepare_base_variables()
+        replacements = await self._prepare_base_variables(doc_number=None, doc_type=doc_type)
         
         # Add TTN specific empty placeholders if TTN-1
         if doc_type == "ttn1":

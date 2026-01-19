@@ -43,17 +43,46 @@ class BaseDocumentStrategy(ABC):
             selectinload(Order.service_links).selectinload(OrderServiceLink.service)
         )
         result = await self.session.execute(query)
-        self.order = result.scalar_one_or_none()
+        self.order = result.unique().scalar_one_or_none()
+
 
     @staticmethod
     def _amount_in_words(amount: float) -> str:
         try:
-            text = num2words(amount, lang='ru', to='currency', currency='RUB')
-            return text.capitalize() 
+            # num2words с to='currency' делит на 100, поэтому используем обычный режим
+            rubles = int(amount)
+            kopecks = int((amount - rubles) * 100)
+            
+            # Генерируем текст для рублей
+            rubles_text = num2words(rubles, lang='ru')
+            
+            # Склонение слова "рубль"
+            if rubles % 10 == 1 and rubles % 100 != 11:
+                rub_word = "рубль"
+            elif rubles % 10 in [2, 3, 4] and rubles % 100 not in [12, 13, 14]:
+                rub_word = "рубля"
+            else:
+                rub_word = "рублей"
+            
+            # Формируем итоговую строку
+            if kopecks > 0:
+                kopecks_text = num2words(kopecks, lang='ru')
+                # Склонение слова "копейка"
+                if kopecks % 10 == 1 and kopecks % 100 != 11:
+                    kop_word = "копейка"
+                elif kopecks % 10 in [2, 3, 4] and kopecks % 100 not in [12, 13, 14]:
+                    kop_word = "копейки"
+                else:
+                    kop_word = "копеек"
+                result = f"{rubles_text} {rub_word}, {kopecks_text} {kop_word}"
+            else:
+                result = f"{rubles_text} {rub_word}, ноль копеек"
+            
+            return result.capitalize()
         except Exception:
             return str(amount)
 
-    def _prepare_base_variables(self) -> Dict[str, str]:
+    async def _prepare_base_variables(self, doc_number: Optional[str] = None, doc_type: Optional[str] = None) -> Dict[str, str]:
         if not self.order:
             raise ValueError("Order not fetched")
             
@@ -77,8 +106,32 @@ class BaseDocumentStrategy(ABC):
             "{{acting_basis}}": "Устава",
             "{{bank_name}}": "-",
             "{{iban}}": "-",
-            "{{bic}}": "-"
+            "{{bic}}": "-",
+            
+            # Contract info - will be populated after fetching contract document
+            "{{contract_name}}": "-",
+            "{{contract_date}}": order.contract_date.strftime("%d.%m.%Y") if order.contract_date else "-"
         }
+        
+        # If we're generating a contract and have doc_number, use it for contract_name
+        if doc_type == "contract" and doc_number:
+            replacements["{{contract_name}}"] = doc_number
+        else:
+            # Fetch contract document if exists to get contract number
+            from models import OrderDocument
+            contract_query = select(OrderDocument).where(
+                OrderDocument.order_id == order.id,
+                OrderDocument.doc_type == "contract"
+            ).order_by(OrderDocument.created_at.desc())
+            
+            contract_result = await self.session.execute(contract_query)
+            contract_doc = contract_result.scalars().first()
+            
+            if contract_doc:
+                replacements["{{contract_name}}"] = contract_doc.number
+                # If contract exists and order.contract_date is not set, use contract document date
+                if not order.contract_date:
+                    replacements["{{contract_date}}"] = contract_doc.date.strftime("%d.%m.%Y")
 
         # Technical Meta
         if order.technical_meta and isinstance(order.technical_meta, dict):

@@ -296,6 +296,9 @@ class Order(SQLModel, table=True):
     next_followup_date: Optional[datetime] = Field(default=None, description="Дата следующего касания")
     closed_at: Optional[datetime] = None
     
+    # Contract date for document generation (editable before contract creation)
+    contract_date: Optional[datetime] = Field(default_factory=datetime.now, description="Дата заключения договора")
+    
     # Relationships
     customer: Optional["Customer"] = Relationship(back_populates="orders")
     
@@ -314,6 +317,13 @@ class Order(SQLModel, table=True):
         }
     )
     installers: List[OrderInstaller] = Relationship(
+        back_populates="order",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin"
+        }
+    )
+    documents: List["OrderDocument"] = Relationship(
         back_populates="order",
         sa_relationship_kwargs={
             "cascade": "all, delete-orphan",
@@ -339,6 +349,28 @@ class Order(SQLModel, table=True):
     def __str__(self):
         customer_name = self.customer.name if self.customer else "N/A"
         return f"Заказ #{self.id} ({customer_name})"
+
+class OrderDocument(SQLModel, table=True):
+    """Реестр документов заказа с хранением в Google Drive"""
+    __tablename__ = "order_document"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    order_id: int = Field(foreign_key="order.id", index=True)
+    doc_type: str = Field(index=True)  # "contract", "invoice", "offer", "waybill", "act"
+    number: str  # Номер документа (например "Д-2024-001")
+    date: datetime = Field(default_factory=datetime.now)
+    
+    # Google Drive поля
+    google_file_id: str  # ID файла в Google Drive
+    google_edit_url: str  # Прямая ссылка для редактирования в браузере
+    
+    created_at: datetime = Field(default_factory=datetime.now)
+    
+    # Relationship
+    order: "Order" = Relationship(back_populates="documents")
+    
+    def __str__(self):
+        return f"{self.doc_type.upper()} {self.number} от {self.date.strftime('%d.%m.%Y')}"
 
 class Favorite(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

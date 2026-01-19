@@ -14,7 +14,7 @@ class GoogleDocStrategy(BaseDocumentStrategy):
         if not template_id:
             return f"Error: Template for {doc_type} not found"
 
-        replacements = self._prepare_base_variables()
+        replacements = await self._prepare_base_variables(doc_number=None, doc_type=doc_type)
         table_rows = self._prepare_table_data()
         
         # Additional Replacements specific to doc logic
@@ -82,6 +82,11 @@ class ActStrategy(GoogleDocStrategy):
             table_rows.append(total_row)
             
         return table_rows
+    
+    def _add_specific_replacements(self, replacements: dict):
+        """Добавляем сумму услуг прописью"""
+        total_services = sum(l.price * l.quantity for l in self.order.service_links)
+        replacements["{{sum_word}}"] = self._amount_in_words(total_services)
 
 
 class GeneralDocStrategy(GoogleDocStrategy):

@@ -384,6 +384,112 @@ class GoogleDocsService:
             status, done = downloader.next_chunk()
         
         return file_io.getvalue()
+    
+    def copy_template(self, template_id: str, new_title: str) -> Dict[str, str]:
+        """
+        Копирует Google Doc шаблон и возвращает информацию о файле.
+        
+        Args:
+            template_id: ID шаблона в Google Drive
+            new_title: Название нового документа
+            
+        Returns:
+            Dict с ключами:
+            - file_id: ID созданного файла
+            - edit_url: Ссылка для редактирования
+        """
+        if not self.creds or not self.creds.valid:
+            self._authenticate()
+            if not self.creds:
+                raise Exception("Ошибка: Нет доступа к Google API.")
+        
+        try:
+            drive_service = build('drive', 'v3', credentials=self.creds)
+            
+            # Копируем файл
+            copy_body = {
+                'name': new_title,
+                'parents': [DESTINATION_FOLDER_ID] if DESTINATION_FOLDER_ID else []
+            }
+            new_file = drive_service.files().copy(fileId=template_id, body=copy_body).execute()
+            file_id = new_file.get('id')
+            
+            # Формируем ссылку для редактирования
+            edit_url = f"https://docs.google.com/document/d/{file_id}/edit"
+            
+            return {
+                'file_id': file_id,
+                'edit_url': edit_url
+            }
+        except Exception as e:
+            raise Exception(f"Google Drive API Error: {str(e)}")
+    
+    def replace_placeholders(self, file_id: str, replacements: Dict[str, str]) -> None:
+        """
+        Заменяет плейсхолдеры {{key}} в Google Doc на соответствующие значения.
+        
+        Args:
+            file_id: ID документа в Google Drive
+            replacements: Словарь замен {"{{placeholder}}": "value"}
+        """
+        if not self.creds or not self.creds.valid:
+            self._authenticate()
+            if not self.creds:
+                raise Exception("Ошибка: Нет доступа к Google API.")
+        
+        try:
+            docs_service = build('docs', 'v1', credentials=self.creds)
+            
+            # Формируем запросы на замену
+            requests = []
+            for key, value in replacements.items():
+                requests.append({
+                    'replaceAllText': {
+                        'containsText': {'text': key, 'matchCase': True},
+                        'replaceText': str(value) if value is not None else ""
+                    }
+                })
+            
+            if requests:
+                docs_service.documents().batchUpdate(
+                    documentId=file_id, 
+                    body={'requests': requests}
+                ).execute()
+        except Exception as e:
+            raise Exception(f"Google Docs API Error: {str(e)}")
+    
+    def export_file(self, file_id: str, mime_type: str = 'application/pdf') -> BytesIO:
+        """
+        Экспортирует Google Doc в указанный формат.
+        
+        Args:
+            file_id: ID файла в Google Drive
+            mime_type: MIME тип для экспорта (по умолчанию PDF)
+                      Поддерживаемые: 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', и др.
+        
+        Returns:
+            BytesIO объект с содержимым файла
+        """
+        if not self.creds or not self.creds.valid:
+            self._authenticate()
+            if not self.creds:
+                raise Exception("Ошибка: Нет доступа к Google API.")
+        
+        try:
+            drive_service = build('drive', 'v3', credentials=self.creds)
+            
+            request = drive_service.files().export_media(fileId=file_id, mimeType=mime_type)
+            file_io = BytesIO()
+            downloader = MediaIoBaseDownload(file_io, request)
+            
+            done = False
+            while not done:
+                status, done = downloader.next_chunk()
+            
+            file_io.seek(0)  # Сбрасываем позицию на начало
+            return file_io
+        except Exception as e:
+            raise Exception(f"Google Drive Export Error: {str(e)}")
     def _fill_table(self, docs_service, doc_id, data: List[List[str]], has_footer: bool):
         # ... (Код поиска таблицы и вставки строк - такой же как был) ...
         # (Для краткости использую предыдущую стабильную версию "Double Reverse")
@@ -524,5 +630,28 @@ class GoogleDocsService:
 
             if style_reqs:
                 docs_service.documents().batchUpdate(documentId=doc_id, body={'requests': style_reqs}).execute()
+
+
+    def delete_file(self, file_id: str) -> None:
+        """
+        Перемещает файл в корзину Google Drive.
+        
+        Args:
+            file_id: ID файла в Google Drive
+        """
+        if not self.creds or not self.creds.valid:
+            self._authenticate()
+            if not self.creds:
+                raise Exception("Ошибка: Нет доступа к Google API.")
+                
+        try:
+            drive_service = build('drive', 'v3', credentials=self.creds)
+            
+            # Обновляем метаданные файла, устанавливая trashed=True
+            drive_service.files().update(fileId=file_id, body={'trashed': True}).execute()
+            
+        except Exception as e:
+            # Логируем ошибку, но не прерываем выполнение (файл мог быть уже удален)
+            print(f"Warning: Failed to delete Google Drive file {file_id}: {str(e)}")
 
 google_service = GoogleDocsService()
