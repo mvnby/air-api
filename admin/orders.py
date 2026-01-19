@@ -71,7 +71,9 @@ class OrderAdmin(ModelView, model=Order):
         "delivery_address": "Адрес доставки",
         "user_id": "Telegram ID",
         "installation_date": "Дата установки",
-        "assessment_date": "Дата замера"
+        "assessment_date": "Дата замера",
+        "contract_number": "Номер договора",
+        "contract_date": "Дата договора"
     }
     
     column_sortable_list = [Order.id, Order.created_at, Order.status, Order.next_followup_date]
@@ -89,6 +91,8 @@ class OrderAdmin(ModelView, model=Order):
         "installation_date",
         "assessment_date",
         "next_followup_date",
+        "contract_number",
+        "contract_date",
         "user_id"
     ]
     

@@ -106,7 +106,11 @@ class BaseDocumentStrategy(ABC):
             "{{acting_basis}}": "Устава",
             "{{bank_name}}": "-",
             "{{iban}}": "-",
-            "{{bic}}": "-"
+            "{{bic}}": "-",
+            
+            # Contract info
+            "{{contract_name}}": order.contract_number or "-",
+            "{{contract_date}}": order.contract_date.strftime("%d.%m.%Y") if order.contract_date else "-"
         }
 
         # Technical Meta
