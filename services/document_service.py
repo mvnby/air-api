@@ -78,7 +78,18 @@ class DocumentService:
         # 6. Заменяем плейсхолдеры в документе
         google_service.replace_placeholders(file_info['file_id'], replacements)
         
-        # 7. Создаем запись в БД
+        # 7. Заполняем таблицу (если есть данные)
+        table_data = strategy._prepare_table_data() if hasattr(strategy, '_prepare_table_data') else []
+        if table_data and len(table_data) > 0:
+            # Определяем, нужен ли footer (строка "Всего")
+            has_footer = (doc_type not in ["work_order"])
+            
+            # Используем внутренний метод google_service для заполнения таблицы
+            from googleapiclient.discovery import build
+            docs_service = build('docs', 'v1', credentials=google_service.creds)
+            google_service._fill_table(docs_service, file_info['file_id'], table_data, has_footer)
+        
+        # 8. Создаем запись в БД
         new_doc = OrderDocument(
             order_id=order_id,
             doc_type=doc_type,
