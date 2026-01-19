@@ -14,7 +14,7 @@ class GoogleDocStrategy(BaseDocumentStrategy):
         if not template_id:
             return f"Error: Template for {doc_type} not found"
 
-        replacements = self._prepare_base_variables()
+        replacements = await self._prepare_base_variables()
         table_rows = self._prepare_table_data()
         
         # Additional Replacements specific to doc logic

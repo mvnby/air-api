@@ -82,7 +82,7 @@ class BaseDocumentStrategy(ABC):
         except Exception:
             return str(amount)
 
-    def _prepare_base_variables(self) -> Dict[str, str]:
+    async def _prepare_base_variables(self) -> Dict[str, str]:
         if not self.order:
             raise ValueError("Order not fetched")
             
