@@ -16,7 +16,7 @@ class Meta(BaseModel):
 class ProductBase(BaseModel):
     id: int
     title: str
-    slug: str
+    slug: Optional[str]
     price: int
     old_price: Optional[int]
     area: int
