@@ -273,7 +273,8 @@ class OrderAdmin(ModelView, model=Order):
             selectinload(self.model.customer),
             selectinload(self.model.product_links).selectinload(OrderProductLink.product),
             selectinload(self.model.service_links).selectinload(OrderServiceLink.service),
-            selectinload(self.model.documents)
+            selectinload(self.model.documents),
+            selectinload(self.model.installers)
         )
 
     def detail_query(self, request):
