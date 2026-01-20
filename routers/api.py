@@ -15,6 +15,19 @@ from services.product_service import ProductService
 from models import Product, Tag, TagGroup, ProductTagLink
 from services.description_generator import DescriptionGeneratorService
 import httpx
+from schemas import (
+    CatalogResponse,
+    Meta,
+    ProductResponse,
+    ArticleResponse,
+    ServiceResponse,
+    OrderPayload,
+    OrderResponse,
+    TagResponse
+)
+from crud.product import ProductDAO
+from models import Article, Service, Order, Customer, OrderStatus, OrderProductLink, CustomerType
+from fastapi import HTTPException
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -257,3 +270,186 @@ async def generate_product_description(
     """
     text = await DescriptionGeneratorService.generate(session, product_id)
     return {"description": text}
+
+# --- V1 HEADLESS COMMERCE API ---
+
+@router.get("/v1/catalog", response_model=CatalogResponse)
+async def get_catalog(
+    page: int = 1,
+    limit: int = 20,
+    sort: str = "newest",
+    min_price: Optional[int] = None,
+    max_price: Optional[int] = None,
+    area_min: Optional[int] = None,
+    area_max: Optional[int] = None,
+    tag_slugs: Optional[List[str]] = Query(None),
+    session: AsyncSession = Depends(get_session)
+):
+    items = await ProductDAO.get_filtered(
+        session,
+        area_min=area_min,
+        area_max=area_max,
+        min_price=min_price,
+        max_price=max_price,
+        tag_slugs=tag_slugs,
+        sort=sort,
+        page=page,
+        limit=limit,
+        is_published=True
+    )
+    total = await ProductDAO.count_filtered(
+        session,
+        area_min=area_min,
+        area_max=area_max,
+        min_price=min_price,
+        max_price=max_price,
+        tag_slugs=tag_slugs,
+        is_published=True
+    )
+    
+    mapped_items = []
+    for p in items:
+        # Convert tags manually to flatten group title
+        p_tags = []
+        for t in p.tags:
+            g_title = t.group.title if t.group else None
+            p_tags.append(TagResponse(id=t.id, title=t.title, slug=t.slug, group_title=g_title))
+        
+        # ProductResponse
+        item = ProductResponse(
+            id=p.id,
+            title=p.title,
+            slug=p.slug,
+            price=p.price,
+            old_price=p.old_price,
+            area=p.area,
+            is_inverter=p.is_inverter,
+            power_cooling=p.power_cooling,
+            main_image=p.main_image,
+            is_published=p.is_published,
+            created_at=p.created_at,
+            tags=p_tags,
+            specs=p.specs,
+            images=p.images
+        )
+        mapped_items.append(item)
+
+    pages = (total + limit - 1) // limit if limit > 0 else 0
+    return CatalogResponse(
+        items=mapped_items,
+        meta=Meta(total=total, page=page, limit=limit, pages=pages)
+    )
+
+@router.get("/v1/products/by-slug/{slug}", response_model=ProductResponse)
+async def get_product_by_slug_endpoint(slug: str, session: AsyncSession = Depends(get_session)):
+    product = await ProductDAO.get_by_slug(session, slug)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+        
+    p_tags = []
+    for t in product.tags:
+        g_title = t.group.title if t.group else None
+        p_tags.append(TagResponse(id=t.id, title=t.title, slug=t.slug, group_title=g_title))
+
+    return ProductResponse(
+        id=product.id,
+        title=product.title,
+        slug=product.slug,
+        price=product.price,
+        old_price=product.old_price,
+        area=product.area,
+        is_inverter=product.is_inverter,
+        power_cooling=product.power_cooling,
+        main_image=product.main_image,
+        is_published=product.is_published,
+        created_at=product.created_at,
+        tags=p_tags,
+        specs=product.specs,
+        images=product.images
+    )
+
+@router.get("/v1/articles", response_model=List[ArticleResponse])
+async def get_articles(session: AsyncSession = Depends(get_session)):
+    stmt = select(Article).where(Article.is_published == True).order_by(Article.created_at.desc())
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+@router.get("/v1/articles/{slug}", response_model=ArticleResponse)
+async def get_article(slug: str, session: AsyncSession = Depends(get_session)):
+    stmt = select(Article).where(Article.slug == slug, Article.is_published == True)
+    result = await session.execute(stmt)
+    article = result.scalar_one_or_none()
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    return article
+
+@router.get("/v1/services", response_model=List[ServiceResponse])
+async def get_services(session: AsyncSession = Depends(get_session)):
+    stmt = select(Service).order_by(Service.id)
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+@router.post("/v1/orders", response_model=OrderResponse)
+async def create_order(payload: OrderPayload, session: AsyncSession = Depends(get_session)):
+    phone_clean = payload.customer.phone.strip()
+    
+    stmt = select(Customer).where(Customer.phone == phone_clean)
+    result = await session.execute(stmt)
+    customer = result.scalar_one_or_none()
+    
+    if not customer:
+        customer = Customer(
+            name=payload.customer.name,
+            phone=phone_clean,
+            email=payload.customer.email,
+            type=CustomerType.individual, 
+            actual_address=payload.customer.address
+        )
+        session.add(customer)
+        await session.flush()
+    else:
+        if payload.customer.address:
+            customer.actual_address = payload.customer.address
+            session.add(customer)
+
+    order = Order(
+        customer_id=customer.id,
+        delivery_address=payload.customer.address,
+        status=OrderStatus.NEW_LEAD,
+        title=f"Заказ с сайта от {datetime.now().strftime('%d.%m %H:%M')}",
+        created_at=datetime.now()
+    )
+    session.add(order)
+    await session.flush()
+    
+    total_amount = 0.0
+    
+    for item in payload.items:
+        product = await session.get(Product, item.product_id)
+        if product:
+             link = OrderProductLink(
+                 order_id=order.id,
+                 product_id=product.id,
+                 quantity=item.quantity,
+                 price=product.price,
+                 cost=0
+             )
+             session.add(link)
+             total_amount += product.price * item.quantity
+    
+    order.total_amount = total_amount
+    session.add(order)
+    await session.commit()
+    await session.refresh(order)
+    
+    print(f"------------ NEW ORDER #{order.id} ------------")
+    print(f"Customer: {customer.name} ({customer.phone})")
+    print(f"Total: {total_amount} RUB")
+    print("-----------------------------------------------")
+    
+    return OrderResponse(
+        id=order.id,
+        status=order.status,
+        total_amount=order.total_amount,
+        created_at=order.created_at
+    )
