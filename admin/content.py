@@ -12,6 +12,7 @@ class ArticleAdmin(ModelView, model=Article):
     name = "Статья"
     name_plural = "Статьи"
     icon = "fa-solid fa-newspaper"
+    extra_js = ["/static/js/admin_article_upload.js"]
     
     column_list = [
         "id", "cover_image", "title", "is_published", "created_at"

@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Request, Depends, HTTPException
-from typing import Optional
+from fastapi import APIRouter, Request, Depends, HTTPException, UploadFile, File
+from typing import Optional, List
 from fastapi.responses import RedirectResponse, StreamingResponse
 from services.document_service import DocumentService
 from services.importer_service import ImporterService
@@ -308,3 +308,40 @@ async def get_calendar_events(
                 })
                 
         return events
+        
+@router.post("/api/upload_images")
+async def upload_images(
+    files: List[UploadFile],
+    slug: Optional[str] = None,
+    username: str = Depends(get_current_username)
+):
+    """
+    Bulk upload images for articles/products.
+    Returns list of web-accessible URLs.
+    """
+    from services.image_service import ImageService
+    uploaded_urls = []
+    
+    # Default to 'uploads' if no slug provided (e.g. new article)
+    effective_slug = slug or "uploads"
+    
+    # Determine entity type based on context - defaulting to 'articles' for now 
+    # as this is primarily for article editor.
+    # Could be made dynamic if needed.
+    entity_type = "articles" 
+    
+    for file in files:
+        file_bytes = await file.read()
+        filename = file.filename or "image.jpg"
+        
+        db_path = await ImageService.save_image(
+            file_bytes=file_bytes,
+            entity_type=entity_type,
+            slug=effective_slug,
+            filename=filename
+        )
+        
+        web_path = ImageService.get_web_path(db_path)
+        uploaded_urls.append(web_path)
+        
+    return {"urls": uploaded_urls}
