@@ -4,13 +4,12 @@ import Layout from "../../layouts/Layout.astro";
 import { getProductBySlug } from "../../utils/api";
 
 const { slug } = Astro.params;
-const product = await getProductBySlug(slug);
+const product = await getProductBySlug(slug as string);
 
 if (!product) {
     return Astro.redirect("/404");
 }
 
-// Convert specs if it's not a proper object (fallback)
 const specs = product.specs || {};
 const images = product.images || [];
 ---
@@ -18,14 +17,16 @@ const images = product.images || [];
 <Layout title={product.title}>
     <div class="container product-page">
         <nav class="breadcrumb">
-            <a href="/">Главная</a> / <a href="/catalog">Каталог</a> / <span
-                >{product.title}</span
-            >
+            <a href="/">Главная</a>
+            <span class="sep">/</span>
+            <a href="/catalog">Каталог</a>
+            <span class="sep">/</span>
+            <span class="active">{product.title}</span>
         </nav>
 
         <div class="product-layout">
             <div class="product-visuals">
-                <div class="main-image">
+                <div class="main-image-card card">
                     <img
                         src={product.main_image || "/placeholder.jpg"}
                         alt={product.title}
@@ -35,17 +36,19 @@ const images = product.images || [];
                 {
                     images.length > 0 && (
                         <div class="image-gallery">
-                            <img
-                                src={product.main_image}
-                                class="thumb active"
-                                onclick="document.getElementById('mainImg').src=this.src"
-                            />
-                            {images.map((img) => (
-                                <img
-                                    src={img}
-                                    class="thumb"
-                                    onclick="document.getElementById('mainImg').src=this.src"
-                                />
+                            <div
+                                class="thumb card active"
+                                onclick="document.getElementById('mainImg').src=this.querySelector('img').src; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('active')); this.classList.add('active')"
+                            >
+                                <img src={product.main_image} alt="Thumbnail" />
+                            </div>
+                            {images.map((img: string) => (
+                                <div
+                                    class="thumb card"
+                                    onclick="document.getElementById('mainImg').src=this.querySelector('img').src; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('active')); this.classList.add('active')"
+                                >
+                                    <img src={img} alt="Thumbnail" />
+                                </div>
                             ))}
                         </div>
                     )
@@ -54,51 +57,77 @@ const images = product.images || [];
 
             <div class="product-info">
                 <div class="info-header">
-                    {
-                        product.is_inverter && (
-                            <span class="badge">Inverter Technology</span>
-                        )
-                    }
-                    <h1>{product.title}</h1>
-                    <p class="sku">Slug: {product.slug}</p>
-                </div>
-
-                <div class="price-section">
-                    <span class="price"
-                        >{product.price.toLocaleString()} Br</span
-                    >
-                    {
-                        product.old_price && (
-                            <span class="old-price">
-                                {product.old_price.toLocaleString()} Br
-                            </span>
-                        )
-                    }
-                </div>
-
-                <div class="quick-specs">
-                    <div class="spec-item">
-                        <span class="label">Площадь</span>
-                        <span class="value">{product.area} м²</span>
+                    <div class="badge-row">
+                        {
+                            product.is_inverter && (
+                                <span class="badge">Inverter Technology</span>
+                            )
+                        }
+                        <span class="badge secondary">В наличии</span>
                     </div>
-                    <div class="spec-item">
-                        <span class="label">Мощность</span>
-                        <span class="value">{product.power_cooling} кВт</span>
+                    <h1>{product.title}</h1>
+                    <p class="sku">
+                        Артикул: {product.slug.split("-").pop()?.toUpperCase()}
+                    </p>
+                </div>
+
+                <div class="price-card card">
+                    <div class="price-row">
+                        <span class="final-price"
+                            >{product.price.toLocaleString()} Br</span
+                        >
+                        {
+                            product.old_price && (
+                                <span class="old-price">
+                                    {product.old_price.toLocaleString()} Br
+                                </span>
+                            )
+                        }
+                    </div>
+                    <div class="install-promo">
+                        <span class="material-icons-round">construction</span>
+                        <div>
+                            <strong>Монтаж «под ключ»</strong>
+                            <p>Стандартная установка от 360 Br</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="quick-specs-grid">
+                    <div class="qs-item card">
+                        <span class="material-icons-round">square_foot</span>
+                        <div>
+                            <span class="qs-label">Площадь</span>
+                            <span class="qs-val">{product.area} м²</span>
+                        </div>
+                    </div>
+                    <div class="qs-item card">
+                        <span class="material-icons-round">bolt</span>
+                        <div>
+                            <span class="qs-label">Мощность</span>
+                            <span class="qs-val"
+                                >{product.power_cooling} кВт</span
+                            >
+                        </div>
                     </div>
                 </div>
 
                 <div class="actions">
-                    <button class="btn btn-primary btn-large"
-                        >Добавить в корзину</button
+                    <button class="btn btn-primary btn-large">
+                        <span class="material-icons-round">shopping_cart</span>
+                        Добавить в корзину
+                    </button>
+                    <button class="btn btn-outline btn-large"
+                        >Заказать монтаж</button
                     >
-                    <button class="btn btn-outline">Заказать монтаж</button>
                 </div>
 
-                <div class="tabs">
-                    <div class="tab-header">
-                        <span class="active">Характеристики</span>
+                <div class="details-tabs">
+                    <div class="tab-nav">
+                        <button class="tab-link active">Характеристики</button>
+                        <button class="tab-link">Описание</button>
                     </div>
-                    <div class="tab-content">
+                    <div class="tab-pane">
                         <table class="specs-table">
                             {
                                 Object.entries(specs).map(([key, value]) => (
@@ -118,36 +147,42 @@ const images = product.images || [];
 
 <style>
     .product-page {
-        padding: 2rem 0;
+        padding: 3rem 0;
     }
     .breadcrumb {
-        margin-bottom: 2rem;
+        margin-bottom: 3rem;
         color: var(--text-muted);
         font-size: 0.9rem;
+        font-weight: 500;
+        display: flex;
+        gap: 0.5rem;
     }
     .breadcrumb a:hover {
         color: var(--primary);
     }
+    .sep {
+        opacity: 0.5;
+    }
+    .breadcrumb .active {
+        color: var(--text);
+    }
 
     .product-layout {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 4rem;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 5rem;
         align-items: start;
     }
 
-    .main-image {
-        background: white;
-        border-radius: 1.5rem;
-        padding: 2rem;
+    .main-image-card {
+        height: 500px;
+        padding: 3rem;
         display: flex;
         align-items: center;
         justify-content: center;
-        height: 500px;
-        box-shadow: var(--card-shadow);
-        margin-bottom: 1.5rem;
+        background: white;
     }
-    .main-image img {
+    .main-image-card img {
         max-width: 100%;
         max-height: 100%;
         object-fit: contain;
@@ -156,51 +191,68 @@ const images = product.images || [];
     .image-gallery {
         display: flex;
         gap: 1rem;
+        margin-top: 1.5rem;
         overflow-x: auto;
         padding-bottom: 0.5rem;
     }
     .thumb {
-        width: 80px;
-        height: 80px;
-        border-radius: 0.5rem;
-        border: 1px solid #e5e7eb;
+        width: 100px;
+        height: 100px;
+        padding: 0.5rem;
         cursor: pointer;
-        padding: 5px;
         background: white;
-        object-fit: contain;
+        flex-shrink: 0;
     }
     .thumb.active {
         border-color: var(--primary);
         border-width: 2px;
     }
+    .thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
 
+    .info-header {
+        margin-bottom: 2.5rem;
+    }
+    .badge-row {
+        display: flex;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+    }
+    .badge.secondary {
+        background: #dcfce7;
+        color: #166534;
+    }
     .info-header h1 {
-        font-size: 2.5rem;
-        margin: 0.5rem 0;
-        line-height: 1.2;
+        font-size: 3rem;
+        margin-bottom: 0.75rem;
+        font-weight: 800;
+        line-height: 1.1;
     }
     .sku {
         color: var(--text-muted);
         font-size: 0.85rem;
-    }
-    .badge {
-        background: #eff6ff;
-        color: var(--primary);
-        padding: 0.25rem 0.75rem;
-        border-radius: 1rem;
-        font-size: 0.8rem;
         font-weight: 600;
+        text-transform: uppercase;
     }
 
-    .price-section {
-        margin: 2rem 0;
+    .price-card {
+        padding: 2rem;
+        margin-bottom: 2.5rem;
+        background: var(--bg);
+        border: none;
+    }
+    .price-row {
         display: flex;
         align-items: baseline;
-        gap: 1rem;
+        gap: 1.5rem;
+        margin-bottom: 1.5rem;
     }
-    .price {
+    .final-price {
         font-size: 2.5rem;
-        font-weight: 700;
+        font-weight: 800;
         color: var(--text);
     }
     .old-price {
@@ -208,58 +260,95 @@ const images = product.images || [];
         color: var(--text-muted);
         text-decoration: line-through;
     }
+    .install-promo {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--border);
+    }
+    .install-promo .material-icons-round {
+        color: var(--primary);
+        font-size: 2rem;
+    }
+    .install-promo strong {
+        display: block;
+        font-size: 0.95rem;
+    }
+    .install-promo p {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+    }
 
-    .quick-specs {
-        display: flex;
-        gap: 3rem;
-        margin-bottom: 2.5rem;
-        padding: 1.5rem;
-        background: #f8fafc;
-        border-radius: 1rem;
+    .quick-specs-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+        margin-bottom: 3rem;
     }
-    .spec-item {
+    .qs-item {
         display: flex;
-        flex-direction: column;
-        gap: 0.25rem;
+        gap: 1rem;
+        align-items: center;
+        padding: 1.25rem;
     }
-    .spec-item .label {
-        font-size: 0.8rem;
+    .qs-item .material-icons-round {
+        color: var(--primary);
+        opacity: 0.6;
+    }
+    .qs-label {
+        display: block;
+        font-size: 0.75rem;
         color: var(--text-muted);
         text-transform: uppercase;
-        letter-spacing: 0.05em;
+        font-weight: 700;
     }
-    .spec-item .value {
-        font-size: 1.25rem;
-        font-weight: 600;
+    .qs-val {
+        font-size: 1.125rem;
+        font-weight: 700;
     }
 
     .actions {
         display: flex;
-        gap: 1rem;
-        margin-bottom: 3rem;
+        gap: 1.5rem;
+        margin-bottom: 4rem;
     }
     .btn-large {
         flex: 1;
-        padding: 1.25rem;
-        font-size: 1.1rem;
+        height: 60px;
+        font-size: 1.125rem;
     }
 
-    .tab-header {
-        border-bottom: 1px solid #e5e7eb;
-        margin-bottom: 2rem;
+    .details-tabs {
+        margin-top: 2rem;
+    }
+    .tab-nav {
         display: flex;
-        gap: 2rem;
+        gap: 2.5rem;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 2.5rem;
     }
-    .tab-header span {
+    .tab-link {
+        background: none;
+        border: none;
         padding: 1rem 0;
-        border-bottom: 2px solid transparent;
-        cursor: pointer;
+        font-weight: 700;
         color: var(--text-muted);
-        font-weight: 600;
+        cursor: pointer;
+        position: relative;
     }
-    .tab-header .active {
-        border-color: var(--primary);
+    .tab-link.active {
         color: var(--primary);
+    }
+    .tab-link.active::after {
+        content: "";
+        position: absolute;
+        bottom: -1px;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: var(--primary);
+        border-radius: 3px;
     }
 
     .specs-table {
@@ -267,26 +356,31 @@ const images = product.images || [];
         border-collapse: collapse;
     }
     .specs-table tr {
-        border-bottom: 1px solid #f1f5f9;
+        border-bottom: 1px solid var(--border);
+    }
+    .specs-table tr:last-child {
+        border-bottom: none;
     }
     .specs-table td {
-        padding: 1rem 0;
-        vertical-align: top;
+        padding: 1.25rem 0;
+        font-size: 0.95rem;
     }
     .specs-table .key {
-        width: 40%;
         color: var(--text-muted);
+        width: 45%;
     }
     .specs-table .val {
-        font-weight: 500;
+        font-weight: 600;
+        color: var(--text);
     }
 
-    @media (max-width: 968px) {
+    @media (max-width: 1100px) {
         .product-layout {
             grid-template-columns: 1fr;
+            gap: 3rem;
         }
-        .main-image {
-            height: 350px;
+        .main-image-card {
+            height: 400px;
         }
     }
 </style>
