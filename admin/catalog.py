@@ -1,6 +1,3 @@
-import os
-import uuid
-import shutil
 from sqladmin import ModelView, action, expose, BaseView
 from sqladmin.fields import AjaxSelectMultipleField, QueryAjaxModelLoader
 from markupsafe import Markup
@@ -13,6 +10,7 @@ from models import Product, Tag, TagGroup, ProductTagLink
 from core.database import async_session_maker
 from starlette.responses import RedirectResponse
 from .base import format_tags_shared
+from services.product_service import ProductService
 
 
 class ProductAdmin(ModelView, model=Product):
@@ -140,23 +138,64 @@ class ProductAdmin(ModelView, model=Product):
         "is_published": "Включён"
     }
 
-    # --- Сохранение: обработка файла ---
+    # --- Сохранение: обработка файла через ProductService ---
     async def on_model_change(self, data, model, is_created, request):
         form = await request.form()
         upload = form.get("main_image_file")
         
+        # Remove file field from data
         if "main_image_file" in data:
             del data["main_image_file"]
 
+        # Ensure slug exists before saving
+        if not data.get("slug") and data.get("title"):
+            data["slug"] = slugify.slugify(data["title"])
+        
+        # Handle image upload BEFORE saving model
         if upload and hasattr(upload, "filename") and upload.filename:
-            ext = upload.filename.split(".")[-1]
-            filename = f"{uuid.uuid4()}.{ext}"
-            upload_dir = os.path.join("static", "uploads")
-            os.makedirs(upload_dir, exist_ok=True)
-            file_path = os.path.join(upload_dir, filename)
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(upload.file, buffer)
-            data["main_image"] = f"/static/uploads/{filename}"
+            # For new products, we need to save first to get ID
+            if is_created:
+                # Save model first to get ID
+                await super().on_model_change(data, model, is_created, request)
+                
+                # Now upload image
+                file_bytes = await upload.read()
+                async with async_session_maker() as session:
+                    web_path = await ProductService.save_main_image(
+                        session=session,
+                        product_id=model.id,
+                        file_bytes=file_bytes,
+                        filename=upload.filename
+                    )
+                # Image is already saved to DB by ProductService
+            else:
+                # For existing products, we can update data before saving
+                file_bytes = await upload.read()
+                async with async_session_maker() as session:
+                    # Get product to get slug
+                    from sqlmodel import select
+                    from models import Product
+                    stmt = select(Product).where(Product.id == model.id)
+                    result = await session.execute(stmt)
+                    product = result.scalar_one_or_none()
+                    
+                    if product:
+                        # Save image
+                        from services.image_service import ImageService
+                        db_path = await ImageService.save_image(
+                            file_bytes=file_bytes,
+                            entity_type="products",
+                            slug=product.slug,
+                            filename=upload.filename
+                        )
+                        # Update data dict so it gets saved
+                        data["main_image"] = ImageService.get_web_path(db_path)
+                
+                # Now save with updated data
+                await super().on_model_change(data, model, is_created, request)
+        else:
+            # No image upload, just save normally
+            await super().on_model_change(data, model, is_created, request)
 
 
 class TagGroupAdmin(ModelView, model=TagGroup):
@@ -211,38 +250,28 @@ class BulkTagsView(BaseView):
     @expose("/bulk-tags", methods=["GET", "POST"])
     async def list(self, request):
         pks = request.query_params.get("pks", "").split(",")
-        pks = [pk for pk in pks if pk]
+        pks = [int(pk) for pk in pks if pk]
         
         if request.method == "POST":
             form = await request.form()
             action_type = form.get("action_type")
-            selected_tag_ids = form.getlist("tag_ids")
+            selected_tag_ids = [int(tid) for tid in form.getlist("tag_ids")]
             
+            # Use ProductService for bulk tag operations
             async with async_session_maker() as session:
-                stmt = select(Product).where(Product.id.in_(pks)).options(selectinload(Product.tags))
-                res = await session.execute(stmt)
-                products = res.scalars().all()
-                
-                t_stmt = select(Tag).where(Tag.id.in_(selected_tag_ids))
-                t_res = await session.execute(t_stmt)
-                tags_to_apply = t_res.scalars().all()
-                
-                for product in products:
-                    if action_type == "add":
-                        current_tag_ids = {t.id for t in product.tags}
-                        for tag in tags_to_apply:
-                            if tag.id not in current_tag_ids:
-                                product.tags.append(tag)
-                    elif action_type == "remove":
-                        product.tags = [t for t in product.tags if str(t.id) not in selected_tag_ids]
-                
-                await session.commit()
+                num_updated = await ProductService.bulk_update_tags(
+                    session=session,
+                    product_ids=pks,
+                    tag_ids=selected_tag_ids,
+                    action=action_type
+                )
             
             return RedirectResponse(
-                url=f"{request.url_for('admin:list', identity='product')}?msg=Теги обновлены для {len(products)} товаров&type=success",
+                url=f"{request.url_for('admin:list', identity='product')}?msg=Теги обновлены для {num_updated} товаров&type=success",
                 status_code=303
             )
 
+        # Fetch data for form display
         async with async_session_maker() as session:
             g_stmt = select(TagGroup).options(selectinload(TagGroup.tags))
             g_res = await session.execute(g_stmt)
