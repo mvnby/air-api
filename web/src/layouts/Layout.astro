@@ -1,0 +1,159 @@
+---
+import '../assets/index.css';
+
+interface Props {
+	title: string;
+	description?: string;
+}
+
+const { title, description = "Premium Air Conditioning store" } = Astro.props;
+---
+
+<!doctype html>
+<html lang="ru">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="description" content={description} />
+		<meta name="viewport" content="width=device-width" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="generator" content={Astro.generator} />
+		<title>{title} | MVN Store</title>
+	</head>
+	<body>
+		<header class="navbar">
+			<div class="container nav-content">
+				<a href="/" class="logo">
+					<span class="logo-accent">MVN</span> Air
+				</a>
+				<nav class="nav-links">
+					<a href="/catalog">Каталог</a>
+					<a href="/services">Услуги</a>
+					<a href="/blog">Блог</a>
+					<a href="/about">О нас</a>
+				</nav>
+				<div class="nav-actions">
+					<a href="/cart" class="cart-link">
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+						<span class="cart-count">0</span>
+					</a>
+				</div>
+			</div>
+		</header>
+		
+		<main>
+			<slot />
+		</main>
+
+		<footer class="footer">
+			<div class="container footer-content">
+				<div class="footer-info">
+					<h3>MVN Air</h3>
+					<p>Ваш эксперт в мире климата.</p>
+				</div>
+				<div class="footer-links">
+					<h4>Навигация</h4>
+					<a href="/catalog">Каталог</a>
+					<a href="/services">Услуги</a>
+					<a href="/contacts">Контакты</a>
+				</div>
+				<div class="footer-contact">
+					<h4>Контакты</h4>
+					<p>+375 (29) 111-11-11</p>
+					<p>info@mvn-air.by</p>
+				</div>
+			</div>
+			<div class="footer-bottom">
+				<p>&copy; 2026 MVN Air. Все права защищены.</p>
+			</div>
+		</footer>
+
+		<style>
+			.navbar {
+				background: rgba(255, 255, 255, 0.8);
+				backdrop-filter: blur(10px);
+				position: sticky;
+				top: 0;
+				z-index: 100;
+				border-bottom: 1px solid #eaeaea;
+				height: 80px;
+				display: flex;
+				align-items: center;
+			}
+			.nav-content {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				width: 100%;
+			}
+			.logo {
+				font-size: 1.5rem;
+				font-weight: 700;
+				letter-spacing: -1px;
+			}
+			.logo-accent {
+				color: var(--primary);
+			}
+			.nav-links {
+				display: flex;
+				gap: 2rem;
+			}
+			.nav-links a {
+				font-weight: 500;
+				color: var(--text-muted);
+			}
+			.nav-links a:hover {
+				color: var(--primary);
+			}
+			.nav-actions {
+				display: flex;
+				align-items: center;
+			}
+			.cart-link {
+				position: relative;
+				padding: 8px;
+			}
+			.cart-count {
+				position: absolute;
+				top: 0;
+				right: 0;
+				background: var(--accent);
+				color: white;
+				font-size: 0.7rem;
+				width: 18px;
+				height: 18px;
+				border-radius: 50%;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				font-weight: 700;
+			}
+			
+			.footer {
+				background: #171717;
+				color: white;
+				padding: 4rem 0 2rem;
+				margin-top: 4rem;
+			}
+			.footer-content {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+				gap: 3rem;
+				margin-bottom: 3rem;
+			}
+			.footer-info h3 { margin-bottom: 1rem; }
+			.footer-info p { color: #a3a3a3; }
+			.footer-links h4, .footer-contact h4 { margin-bottom: 1.5rem; }
+			.footer-links { display: flex; flex-direction: column; gap: 0.75rem; }
+			.footer-links a { color: #a3a3a3; }
+			.footer-links a:hover { color: white; }
+			.footer-contact p { color: #a3a3a3; margin-bottom: 0.5rem; }
+			.footer-bottom {
+				border-top: 1px solid #262626;
+				padding-top: 2rem;
+				text-align: center;
+				color: #737373;
+				font-size: 0.9rem;
+			}
+		</style>
+	</body>
+</html>

@@ -1,0 +1,178 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Главная">
+	<section class="hero">
+		<div class="container hero-content">
+			<div class="hero-text">
+				<h1>Идеальный климат <br /> в вашем доме</h1>
+				<p>
+					Профессиональный подбор и установка кондиционеров от ведущих
+					мировых брендов.
+				</p>
+				<div class="hero-btns">
+					<a href="/catalog" class="btn btn-primary"
+						>Перейти в каталог</a
+					>
+					<a href="/services" class="btn btn-outline">Наши Услуги</a>
+				</div>
+			</div>
+			<div class="hero-image">
+				<div class="hero-card">
+					<div class="card-inner">
+						<span class="badge">New 2026</span>
+						<h3>Chigo Mars Black</h3>
+						<p>Инверторная сплит-система бизнес-класса</p>
+						<span class="price">от 2 400 Br</span>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<section class="features container">
+		<div class="feature-item">
+			<div class="feat-icon">⚡</div>
+			<h4>Быстрый монтаж</h4>
+			<p>Установка за 24 часа с момента заказа.</p>
+		</div>
+		<div class="feature-item">
+			<div class="feat-icon">🛡️</div>
+			<h4>Гарантия 5 лет</h4>
+			<p>Уверенность в качестве оборудования и работ.</p>
+		</div>
+		<div class="feature-item">
+			<div class="feat-icon">💎</div>
+			<h4>Рассрочка</h4>
+			<p>Возможность оплаты частями без переплаты.</p>
+		</div>
+	</section>
+</Layout>
+
+<style>
+	.hero {
+		padding: 6rem 0;
+		background: radial-gradient(
+			circle at 90% 10%,
+			#eff6ff 0%,
+			#f9f9f9 100%
+		);
+		min-height: 80vh;
+		display: flex;
+		align-items: center;
+	}
+	.hero-content {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		align-items: center;
+		gap: 4rem;
+	}
+	.hero-text h1 {
+		font-size: 4rem;
+		line-height: 1.1;
+		margin-bottom: 1.5rem;
+		font-weight: 700;
+	}
+	.hero-text p {
+		font-size: 1.25rem;
+		color: var(--text-muted);
+		margin-bottom: 2.5rem;
+		max-width: 500px;
+	}
+	.hero-btns {
+		display: flex;
+		gap: 1rem;
+	}
+	.btn-outline {
+		border: 1px solid #d4d4d4;
+		color: var(--text);
+	}
+	.btn-outline:hover {
+		background: #f5f5f5;
+	}
+
+	.hero-image {
+		position: relative;
+		height: 400px;
+	}
+	.hero-card {
+		background: white;
+		padding: 2rem;
+		border-radius: 1.5rem;
+		box-shadow: var(--card-shadow-hover);
+		width: 320px;
+		position: absolute;
+		right: 10%;
+		top: 50%;
+		transform: translateY(-50%) rotate(3deg);
+	}
+	.badge {
+		background: #dcfce7;
+		color: #166534;
+		padding: 0.25rem 0.75rem;
+		border-radius: 1rem;
+		font-size: 0.75rem;
+		font-weight: 600;
+		margin-bottom: 1rem;
+		display: inline-block;
+	}
+	.hero-card h3 {
+		font-size: 1.5rem;
+		margin-bottom: 0.5rem;
+	}
+	.hero-card p {
+		color: var(--text-muted);
+		font-size: 0.9rem;
+		margin-bottom: 1.5rem;
+	}
+	.hero-card .price {
+		font-size: 1.5rem;
+		font-weight: 700;
+		color: var(--primary);
+	}
+
+	.features {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+		gap: 2rem;
+		margin-top: -4rem;
+	}
+	.feature-item {
+		background: white;
+		padding: 2.5rem;
+		border-radius: 1rem;
+		box-shadow: var(--card-shadow);
+	}
+	.feat-icon {
+		font-size: 2.5rem;
+		margin-bottom: 1.5rem;
+	}
+	.feature-item h4 {
+		margin-bottom: 0.75rem;
+		font-size: 1.25rem;
+	}
+	.feature-item p {
+		color: var(--text-muted);
+		line-height: 1.6;
+	}
+
+	@media (max-width: 968px) {
+		.hero-content {
+			grid-template-columns: 1fr;
+			text-align: center;
+		}
+		.hero-text h1 {
+			font-size: 3rem;
+		}
+		.hero-btns {
+			justify-content: center;
+		}
+		.hero-image {
+			display: none;
+		}
+		.hero-text p {
+			margin: 0 auto 2.5rem;
+		}
+	}
+</style>

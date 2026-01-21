@@ -6,8 +6,16 @@ So, we're building this wicked **Air Conditioning Management System**. It's got 
 
 Running on modern Python async goodness (fast af 🚀). Still baking it, but it's getting there.
 
-Current Mission: Stabilize & Ship It.  
-We just crushed the Shopping Cart (Phase 27), totally nailed the Google Docs Automation (Phase 28) with some fancy table magic, and now we've locked down the system with HTTP Basic Auth (Phase 29).
+## **Current Mission: Headless Commerce & Store Infrastructure**
+
+We are transitioning from a pure internal CRM/Bot system to a full **Headless Commerce Backend**. 
+The API is ~80% ready for the upcoming **Astro JS + Vue.js** store.
+
+### **Upcoming Objectives:**
+1. **Media Engine**: Implement robust image processing, storage, and linking (Products ↔ Images ↔ Articles).
+2. **Production Core**: Set up automated DB backups & restoration.
+3. **Smooth Ops**: Implement a reliable deployment/update flow (Local → Production).
+4. **Store UI**: Building the web vitrine with Astro and interactive Vue components.
 
 ## **The Tech Stack (The Good Stuff)**
 
@@ -99,6 +107,10 @@ We stick to a strict **Service-Layer** setup. No shortcuts!
   * **Pre-generation Numbering**: Refactored `DocumentService` to generate document numbers *before* creation, allowing documents (like contracts) to reference their own ID.
   * **Automatic Totals Calculation**: Fixed critical bug where `total_amount` stayed 0. Added `calculate_totals()` with explicit relationship loading (`selectinload`) during every order update in Admin.
   * **UX Improvements**: Removed manual `contract_number` input (now auto-generated from `OrderDocument`) and added optional `contract_date` with default=today for manual "backdating" if requested by client.
+* **Phase 32**: **Headless Commerce API & SEO Slugs**.
+  * **SEO-friendly Slugs**: Implemented brand-model URL generation (`chigo-cs51...`) and migration scripts.
+  * **Public API v1**: Added `/catalog`, `/products/{slug}`, `/content/articles/`, and `/orders` endpoints for guest users.
+  * **Refactoring & Logging**: Extracted response mapping logic, added pagination validation, and replaced print() with the `logging` module for production traceability.
 
 
 ## **The Rules (Don't Break These) 🚨**

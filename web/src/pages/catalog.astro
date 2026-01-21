@@ -1,0 +1,314 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { getCatalog } from "../utils/api";
+
+const { searchParams } = Astro.url;
+const page = searchParams.get("page") || "1";
+const sort = searchParams.get("sort") || "newest";
+
+const data = await getCatalog({ page, limit: 12, sort });
+const products = data.items || [];
+const meta = data.meta || { total: 0, page: 1, limit: 12, pages: 1 };
+---
+
+<Layout title="Каталог">
+    <div class="container catalog-page">
+        <header class="catalog-header">
+            <div class="breadcrumb">
+                <a href="/">Главная</a> / <span>Каталог</span>
+            </div>
+            <h1>Каталог продукции</h1>
+            <p>Найдено товаров: <strong>{meta.total}</strong></p>
+        </header>
+
+        <div class="catalog-layout">
+            <aside class="filters">
+                <div class="filter-group">
+                    <h5>Категории</h5>
+                    <ul>
+                        <li class="active">Все кондиционеры</li>
+                        <li>Настенные</li>
+                        <li>Кассетные</li>
+                        <li>Канальные</li>
+                    </ul>
+                </div>
+
+                <div class="filter-group">
+                    <h5>Бренд</h5>
+                    <div class="checkbox-list">
+                        <label><input type="checkbox" /> Chigo</label>
+                        <label><input type="checkbox" /> Mitsubishi</label>
+                        <label><input type="checkbox" /> Gree</label>
+                    </div>
+                </div>
+            </aside>
+
+            <main class="products-grid">
+                {
+                    products.length > 0 ? (
+                        <div class="grid">
+                            {products.map((product) => (
+                                <a
+                                    href={`/product/${product.slug}`}
+                                    class="product-card"
+                                >
+                                    <div class="card-image">
+                                        <img
+                                            src={
+                                                product.main_image ||
+                                                "/placeholder.jpg"
+                                            }
+                                            alt={product.title}
+                                        />
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="card-tags">
+                                            {product.is_inverter && (
+                                                <span class="tag">
+                                                    Инвертор
+                                                </span>
+                                            )}
+                                            <span class="tag">
+                                                {product.area} м²
+                                            </span>
+                                        </div>
+                                        <h4>{product.title}</h4>
+                                        <div class="card-footer">
+                                            <span class="price">
+                                                {product.price.toLocaleString()}{" "}
+                                                Br
+                                            </span>
+                                            <button class="btn-icon">
+                                                <svg
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    width="20"
+                                                    height="20"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    stroke-width="2"
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                >
+                                                    <circle
+                                                        cx="8"
+                                                        cy="21"
+                                                        r="1"
+                                                    />
+                                                    <circle
+                                                        cx="19"
+                                                        cy="21"
+                                                        r="1"
+                                                    />
+                                                    <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </a>
+                            ))}
+                        </div>
+                    ) : (
+                        <div class="empty-status">
+                            <h3>Товары не найдены</h3>
+                            <p>Попробуйте сбросить фильтры.</p>
+                        </div>
+                    )
+                }
+
+                {
+                    meta.pages > 1 && (
+                        <div class="pagination">
+                            {Array.from(
+                                { length: meta.pages },
+                                (_, i) => i + 1,
+                            ).map((p) => (
+                                <a
+                                    href={`/catalog?page=${p}`}
+                                    class={`page-link ${Number(page) === p ? "active" : ""}`}
+                                >
+                                    {p}
+                                </a>
+                            ))}
+                        </div>
+                    )
+                }
+            </main>
+        </div>
+    </div>
+</Layout>
+
+<style>
+    .catalog-page {
+        padding: 2rem 0;
+    }
+    .catalog-header {
+        margin-bottom: 3rem;
+    }
+    .breadcrumb {
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        margin-bottom: 1rem;
+    }
+    .catalog-header h1 {
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .catalog-layout {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        gap: 3rem;
+    }
+
+    /* Filters */
+    .filters {
+        display: flex;
+        flex-direction: column;
+        gap: 2.5rem;
+    }
+    .filter-group h5 {
+        font-size: 1.1rem;
+        margin-bottom: 1.25rem;
+        font-weight: 600;
+    }
+    .filter-group ul {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    .filter-group li {
+        cursor: pointer;
+        color: var(--text-muted);
+        transition: all 0.2s;
+    }
+    .filter-group li:hover,
+    .filter-group li.active {
+        color: var(--primary);
+        font-weight: 500;
+    }
+    .checkbox-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    .checkbox-list label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        cursor: pointer;
+        font-size: 0.95rem;
+    }
+
+    /* Grid */
+    .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 2rem;
+    }
+    .product-card {
+        background: white;
+        border-radius: 1rem;
+        overflow: hidden;
+        box-shadow: var(--card-shadow);
+        transition: all 0.3s ease;
+        display: flex;
+        flex-direction: column;
+    }
+    .product-card:hover {
+        transform: translateY(-5px);
+        box-shadow: var(--card-shadow-hover);
+    }
+    .card-image {
+        height: 240px;
+        background: #fdfdfd;
+        padding: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .card-image img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+    .card-body {
+        padding: 1.5rem;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+    .card-tags {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    .tag {
+        background: #f3f4f6;
+        padding: 0.25rem 0.6rem;
+        border-radius: 0.5rem;
+        font-size: 0.75rem;
+        color: #4b5563;
+        font-weight: 500;
+    }
+    .card-body h4 {
+        font-size: 1.1rem;
+        margin-bottom: 1.5rem;
+        line-height: 1.4;
+        flex: 1;
+    }
+    .card-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .price {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--text);
+    }
+    .btn-icon {
+        background: #f3f4f6;
+        border: none;
+        padding: 0.5rem;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .btn-icon:hover {
+        background: var(--primary);
+        color: white;
+    }
+
+    .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 4rem;
+    }
+    .page-link {
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0.5rem;
+        background: white;
+        border: 1px solid #e5e7eb;
+        font-weight: 500;
+    }
+    .page-link.active {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+
+    @media (max-width: 768px) {
+        .catalog-layout {
+            grid-template-columns: 1fr;
+        }
+        .filters {
+            display: none;
+        }
+    }
+</style>
