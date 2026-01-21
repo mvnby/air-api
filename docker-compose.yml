@@ -40,5 +40,20 @@ services:
     # Вместо uvicorn (как в Dockerfile) запускаем бота
     command: python -m bot_app.main
 
+  web:
+    build:
+      context: ./web
+    restart: always
+    depends_on:
+      - app
+    ports:
+      - "4321:4321"
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+    environment:
+      - PUBLIC_API_URL=http://localhost:8000/api/v1 # For browser
+      - INTERNAL_API_URL=http://app:8000/api/v1 # For SSR
+
 volumes:
   postgres_data:

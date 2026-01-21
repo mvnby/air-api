@@ -32,3 +32,4 @@ credentials.json
 client_secret.json
 token.json
 backups/backup.sql
+web/temp/*

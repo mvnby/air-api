@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select, and_, func
 from typing import List, Optional
 from datetime import datetime, timedelta
+import logging
 
 from core.database import get_session
 from services.product_service import ProductService
@@ -30,6 +31,40 @@ from models import Article, Service, Order, Customer, OrderStatus, OrderProductL
 from fastapi import HTTPException
 
 router = APIRouter(prefix="/api", tags=["api"])
+logger = logging.getLogger(__name__)
+
+# --- HELPER FUNCTIONS ---
+
+def _map_product_to_response(product: Product) -> ProductResponse:
+    """Convert Product model to ProductResponse schema."""
+    p_tags = []
+    for t in product.tags:
+        g_title = t.group.title if t.group else None
+        p_tags.append(TagResponse(id=t.id, title=t.title, slug=t.slug, group_title=g_title))
+    
+    return ProductResponse(
+        id=product.id,
+        title=product.title,
+        slug=product.slug,
+        price=product.price,
+        old_price=product.old_price,
+        area=product.area,
+        is_inverter=product.is_inverter,
+        power_cooling=product.power_cooling,
+        main_image=product.main_image,
+        is_published=product.is_published,
+        created_at=product.created_at,
+        tags=p_tags,
+        specs=product.specs,
+        images=product.images
+    )
+
+def _validate_pagination(page: int, limit: int) -> None:
+    """Validate pagination parameters."""
+    if page < 1:
+        raise HTTPException(status_code=400, detail="Page must be >= 1")
+    if limit < 1 or limit > 100:
+        raise HTTPException(status_code=400, detail="Limit must be between 1 and 100")
 
 
 @router.get("/products")
@@ -285,6 +320,23 @@ async def get_catalog(
     tag_slugs: Optional[List[str]] = Query(None),
     session: AsyncSession = Depends(get_session)
 ):
+    """
+    Get paginated product catalog with filtering and sorting.
+    
+    **Filters:**
+    - `min_price`, `max_price`: Price range filter
+    - `area_min`, `area_max`: Area coverage filter
+    - `tag_slugs`: Filter by tag slugs (e.g., 'inverter', 'chigo', 'area-25')
+    
+    **Sorting:**
+    - `newest`: Recently added products (default)
+    - `price_asc`: Price low to high
+    - `price_desc`: Price high to low
+    - `area_asc`: Area low to high
+    - `area_desc`: Area high to low
+    """
+    _validate_pagination(page, limit)
+    
     items = await ProductDAO.get_filtered(
         session,
         area_min=area_min,
@@ -307,92 +359,73 @@ async def get_catalog(
         is_published=True
     )
     
-    mapped_items = []
-    for p in items:
-        # Convert tags manually to flatten group title
-        p_tags = []
-        for t in p.tags:
-            g_title = t.group.title if t.group else None
-            p_tags.append(TagResponse(id=t.id, title=t.title, slug=t.slug, group_title=g_title))
-        
-        # ProductResponse
-        item = ProductResponse(
-            id=p.id,
-            title=p.title,
-            slug=p.slug,
-            price=p.price,
-            old_price=p.old_price,
-            area=p.area,
-            is_inverter=p.is_inverter,
-            power_cooling=p.power_cooling,
-            main_image=p.main_image,
-            is_published=p.is_published,
-            created_at=p.created_at,
-            tags=p_tags,
-            specs=p.specs,
-            images=p.images
-        )
-        mapped_items.append(item)
-
+    mapped_items = [_map_product_to_response(p) for p in items]
     pages = (total + limit - 1) // limit if limit > 0 else 0
+    
     return CatalogResponse(
         items=mapped_items,
         meta=Meta(total=total, page=page, limit=limit, pages=pages)
     )
 
-@router.get("/v1/products/by-slug/{slug}", response_model=ProductResponse)
-async def get_product_by_slug_endpoint(slug: str, session: AsyncSession = Depends(get_session)):
+@router.get("/v1/products/{slug}", response_model=ProductResponse)
+async def get_product_by_slug(slug: str, session: AsyncSession = Depends(get_session)):
+    """
+    Get product details by slug.
+    
+    Returns full product information including tags, specifications, and images.
+    Raises 404 if product not found.
+    """
     product = await ProductDAO.get_by_slug(session, slug)
     if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-        
-    p_tags = []
-    for t in product.tags:
-        g_title = t.group.title if t.group else None
-        p_tags.append(TagResponse(id=t.id, title=t.title, slug=t.slug, group_title=g_title))
+        raise HTTPException(status_code=404, detail=f"Product with slug '{slug}' not found")
+    
+    return _map_product_to_response(product)
 
-    return ProductResponse(
-        id=product.id,
-        title=product.title,
-        slug=product.slug,
-        price=product.price,
-        old_price=product.old_price,
-        area=product.area,
-        is_inverter=product.is_inverter,
-        power_cooling=product.power_cooling,
-        main_image=product.main_image,
-        is_published=product.is_published,
-        created_at=product.created_at,
-        tags=p_tags,
-        specs=product.specs,
-        images=product.images
-    )
+# --- CONTENT ENDPOINTS ---
 
-@router.get("/v1/articles", response_model=List[ArticleResponse])
+@router.get("/v1/content/articles", response_model=List[ArticleResponse])
 async def get_articles(session: AsyncSession = Depends(get_session)):
+    """Get list of published articles ordered by creation date (newest first)."""
     stmt = select(Article).where(Article.is_published == True).order_by(Article.created_at.desc())
     result = await session.execute(stmt)
     return result.scalars().all()
 
-@router.get("/v1/articles/{slug}", response_model=ArticleResponse)
+@router.get("/v1/content/articles/{slug}", response_model=ArticleResponse)
 async def get_article(slug: str, session: AsyncSession = Depends(get_session)):
+    """Get article details by slug. Returns 404 if not found or not published."""
     stmt = select(Article).where(Article.slug == slug, Article.is_published == True)
     result = await session.execute(stmt)
     article = result.scalar_one_or_none()
     if not article:
-        raise HTTPException(status_code=404, detail="Article not found")
+        raise HTTPException(status_code=404, detail=f"Article with slug '{slug}' not found")
     return article
 
-@router.get("/v1/services", response_model=List[ServiceResponse])
+@router.get("/v1/content/services", response_model=List[ServiceResponse])
 async def get_services(session: AsyncSession = Depends(get_session)):
+    """Get list of all available services."""
     stmt = select(Service).order_by(Service.id)
     result = await session.execute(stmt)
     return result.scalars().all()
 
+# --- ORDER ENDPOINTS ---
+
 @router.post("/v1/orders", response_model=OrderResponse)
 async def create_order(payload: OrderPayload, session: AsyncSession = Depends(get_session)):
+    """
+    Create a new order from website.
+    
+    Accepts customer information and cart items. Creates or updates customer record,
+    creates order with NEW_LEAD status, and logs the event.
+    
+    Returns created order details.
+    """
+    # Validate cart is not empty
+    if not payload.items:
+        raise HTTPException(status_code=400, detail="Cart cannot be empty")
+    
     phone_clean = payload.customer.phone.strip()
     
+    # Find or create customer
     stmt = select(Customer).where(Customer.phone == phone_clean)
     result = await session.execute(stmt)
     customer = result.scalar_one_or_none()
@@ -407,11 +440,13 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
         )
         session.add(customer)
         await session.flush()
+        logger.info(f"Created new customer: {customer.name} ({customer.phone})")
     else:
         if payload.customer.address:
             customer.actual_address = payload.customer.address
             session.add(customer)
 
+    # Create order
     order = Order(
         customer_id=customer.id,
         delivery_address=payload.customer.address,
@@ -422,30 +457,37 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
     session.add(order)
     await session.flush()
     
+    # Add items to order
     total_amount = 0.0
+    added_items = []
     
     for item in payload.items:
         product = await session.get(Product, item.product_id)
         if product:
-             link = OrderProductLink(
-                 order_id=order.id,
-                 product_id=product.id,
-                 quantity=item.quantity,
-                 price=product.price,
-                 cost=0
-             )
-             session.add(link)
-             total_amount += product.price * item.quantity
+            link = OrderProductLink(
+                order_id=order.id,
+                product_id=product.id,
+                quantity=item.quantity,
+                price=product.price,
+                cost=0
+            )
+            session.add(link)
+            total_amount += product.price * item.quantity
+            added_items.append(f"{product.title} x{item.quantity}")
+        else:
+            logger.warning(f"Product {item.product_id} not found in order creation")
     
     order.total_amount = total_amount
     session.add(order)
     await session.commit()
     await session.refresh(order)
     
-    print(f"------------ NEW ORDER #{order.id} ------------")
-    print(f"Customer: {customer.name} ({customer.phone})")
-    print(f"Total: {total_amount} RUB")
-    print("-----------------------------------------------")
+    # Log order creation
+    logger.info(
+        f"NEW ORDER #{order.id} | Customer: {customer.name} ({customer.phone}) | "
+        f"Total: {total_amount} RUB | Items: {len(added_items)}"
+    )
+    logger.debug(f"Order #{order.id} items: {', '.join(added_items)}")
     
     return OrderResponse(
         id=order.id,

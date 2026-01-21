@@ -1,59 +1,18 @@
 # **🤘 The Lowdown on the AI Agent Project**
 
-## **What's the Vibe?**
-
 So, we're building this wicked **Air Conditioning Management System**. It's got a Telegram Bot for the users and a killer Admin Panel for us.
 
 Running on modern Python async goodness (fast af 🚀). Still baking it, but it's getting there.
 
-Current Mission: Stabilize & Ship It.  
-We just crushed the Shopping Cart (Phase 27), totally nailed the Google Docs Automation (Phase 28) with some fancy table magic, and now we've locked down the system with HTTP Basic Auth (Phase 29).
+## **Current Mission: Production Readiness & Feature Expansion**
 
-## **The Tech Stack (The Good Stuff)**
+We have successfully transitioned to a **Headless Commerce** architecture. The **Astro JS + Vue.js** storefront is implemented with a premium brand design.
 
-### **Backend ⚙️**
-
-* **Lang:** Python 3.10+ (only the fresh stuff).  
-* **Framework:** [FastAPI](https://fastapi.tiangolo.com/) (Zoom zoom!).  
-* **Server:** Uvicorn (running inside Docker).
-* **DB:** [PostgreSQL 15](https://www.postgresql.org/) (Running in Docker).
-* **Driver:** `postgresql+asyncpg://` for async API and `psycopg2` for sync tasks (like migration).
-* **ORM:** [SQLModel](https://sqlmodel.tiangolo.com/) (SQLAlchemy wrapped up nice).  
-* **HTTP:** httpx (async requests ftw).
-* **Infra:** [Docker Compose](https://docs.docker.com/compose/) (Everything's containerized!).
-
-### **Admin UI 👨‍💻**
-
-* **Framework:** [SQLAdmin](https://aminalaee.dev/sqladmin/).  
-* **Auth:** HTTP Basic Auth + Session-based (Phase 29).  
-* **Customs:** Check admin/ for our custom views.  
-* **Frontend:** Just some vanilla JS via extra_js. Keepin' it old school.
-
-### **Telegram Bot 🤖**
-
-* **Framework:** [Aiogram 3.x](https://docs.aiogram.dev/en/latest/) (Async only!).  
-* **Home:** bot_app/ and bot.py.  
-* **State:** aiogram.fsm (like ShopState).
-
-## **How We Built It (Architecture)**
-
-We stick to a strict **Service-Layer** setup. No shortcuts!
-
-1. **Routers/Admin/Bot:** They just take input, call a Service, and spit out output. **NO DB ACCESS HERE!** Don't even think about it.  
-2. **Services (services/):** The brains. Business logic & transactions live here.  
-3. **CRUD (crud/):** Just talking to the DB.  
-4. **Models (models.py):** Data shapes.
-
-**Key Folders:**
-
-* /services:  
-  * order_service.py: Orders & items logic.  
-  * cart_service.py: Shopping cart & checkout flow.  
-  * google_service.py: Google API wrapper. **Features:** OAuth 2.0 (bye service acct), "Double Reverse" table fill (cool hack), Merging cells & Styling.  
-  * document_service.py: Prepping data for Contracts/Offers.  
-* /crud: DB access objects.  
-* /admin: The UI views.
-* /core: Config, database, logging, **security** (Phase 29).
+### **Upcoming Objectives:**
+1. **Checkout Flow**: Implement the order/basket logic in the frontend and connect to backend services.
+2. **Media Engine**: Implement robust local image processing (via `/media/`) to replace external links.
+3. **Production Core**: Set up automated DB backups & restoration.
+4. **Smooth Ops**: Finalize the production deployment pipeline.
 
 ## **Hall of Fame (History)**
 
@@ -99,6 +58,15 @@ We stick to a strict **Service-Layer** setup. No shortcuts!
   * **Pre-generation Numbering**: Refactored `DocumentService` to generate document numbers *before* creation, allowing documents (like contracts) to reference their own ID.
   * **Automatic Totals Calculation**: Fixed critical bug where `total_amount` stayed 0. Added `calculate_totals()` with explicit relationship loading (`selectinload`) during every order update in Admin.
   * **UX Improvements**: Removed manual `contract_number` input (now auto-generated from `OrderDocument`) and added optional `contract_date` with default=today for manual "backdating" if requested by client.
+* **Phase 32**: **Headless Commerce API & SEO Slugs**.
+  * **SEO-friendly Slugs**: Implemented brand-model URL generation (`chigo-cs51...`) and migration scripts.
+  * **Public API v1**: Added `/catalog`, `/products/{slug}`, `/content/articles/`, and `/orders` endpoints for guest users.
+  * **Refactoring & Logging**: Extracted response mapping logic, added pagination validation, and replaced print() with the `logging` module for production traceability.
+* **Phase 33**: **Premium Storefront UI & Branding**.
+  * **Brand Identity**: Integrated new "МАСТЕР ВОЗДУХА" teal logo and color system.
+  * **UI Redesign**: Re-implemented Home, Catalog, and Product sections in Astro with the "Google Stitch" premium aesthetic.
+  * **Design System**: Established [ui.md](file:///Users/maksimkorotov/dev/mvn/docs/ui.md) guide with specific spacing, typography, and theme-switching logic.
+  * **Fixes**: Cleaned up logo backgrounds and established transparent asset pipeline.
 
 
 ## **The Rules (Don't Break These) 🚨**

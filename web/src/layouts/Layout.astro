@@ -1,0 +1,406 @@
+---
+import "../assets/index.css";
+
+interface Props {
+	title: string;
+	description?: string;
+}
+
+const { title, description = "Premium Air Conditioning store" } = Astro.props;
+---
+
+<!doctype html>
+<html lang="ru">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="description" content={description} />
+		<meta name="viewport" content="width=device-width" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="generator" content={Astro.generator} />
+		<title>{title} | МАСТЕР ВОЗДУХА</title>
+		<link
+			href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"
+			rel="stylesheet"
+		/>
+		<script is:inline>
+			const theme = (() => {
+				if (
+					typeof localStorage !== "undefined" &&
+					localStorage.getItem("theme")
+				) {
+					return localStorage.getItem("theme");
+				}
+				if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+					return "dark";
+				}
+				return "light";
+			})();
+
+			if (theme === "light") {
+				document.documentElement.classList.remove("dark");
+			} else {
+				document.documentElement.classList.add("dark");
+			}
+			window.localStorage.setItem("theme", theme);
+		</script>
+	</head>
+	<body
+		class="bg-bg text-text transition-colors duration-300 min-h-screen flex flex-col"
+	>
+		<nav class="sticky-nav">
+			<div class="container nav-container">
+				<a href="/" class="logo-group">
+					<div class="logo-img-wrapper">
+						<img
+							src="/img/logos/logo-teal.png"
+							alt="MB"
+							class="logo-img light-only"
+						/>
+						<img
+							src="/img/logos/logo-white.png"
+							alt="MB"
+							class="logo-img dark-only"
+						/>
+					</div>
+					<div class="logo-text">
+						<span class="logo-title">МАСТЕР ВОЗДУХА</span>
+						<span class="logo-subtitle">Системы комфорта</span>
+					</div>
+				</a>
+
+				<div class="nav-links">
+					<a href="/catalog">Каталог</a>
+					<a href="/services">Услуги</a>
+					<a href="/contacts">Контакты</a>
+				</div>
+
+				<div class="nav-actions">
+					<button
+						id="theme-toggle"
+						class="icon-btn"
+						aria-label="Toggle theme"
+					>
+						<span class="material-icons-round moon">dark_mode</span>
+						<span class="material-icons-round sun">light_mode</span>
+					</button>
+					<a
+						href="tel:+375290000000"
+						class="btn btn-primary call-btn"
+					>
+						<span class="material-icons-round">call</span>
+						<span class="btn-text">Позвонить</span>
+					</a>
+				</div>
+			</div>
+		</nav>
+
+		<main class="flex-grow">
+			<slot />
+		</main>
+
+		<footer class="footer">
+			<div class="container footer-grid">
+				<div class="footer-brand">
+					<div class="logo-group">
+						<div class="logo-img-wrapper">
+							<img
+								src="/img/logos/logo-teal.png"
+								alt="MB"
+								class="logo-img light-only"
+							/>
+							<img
+								src="/img/logos/logo-white.png"
+								alt="MB"
+								class="logo-img dark-only"
+							/>
+						</div>
+						<div class="logo-text">
+							<span class="logo-title">МАСТЕР ВОЗДУХА</span>
+							<span class="logo-subtitle">Системы комфорта</span>
+						</div>
+					</div>
+					<p class="footer-desc">
+						Профессиональные решения для вентиляции и
+						кондиционирования. Создаем идеальный климат в вашем доме
+						и офисе.
+					</p>
+				</div>
+
+				<div class="footer-col">
+					<h4>Контакты</h4>
+					<ul class="footer-links">
+						<li>
+							<span class="material-icons-round mini"
+								>location_on</span
+							> г. Витебск, ул. Ленина, 54
+						</li>
+						<li>
+							<span class="material-icons-round mini">phone</span>
+							<a href="tel:+375290000000">+375 (29) 000-00-00</a>
+						</li>
+						<li>
+							<span class="material-icons-round mini">email</span>
+							<a href="mailto:info@master-air.by"
+								>info@master-air.by</a
+							>
+						</li>
+					</ul>
+				</div>
+
+				<div class="footer-col">
+					<h4>Меню</h4>
+					<ul class="footer-links">
+						<li><a href="/catalog">Каталог</a></li>
+						<li><a href="/services">Услуги</a></li>
+						<li><a href="/about">О нас</a></li>
+					</ul>
+				</div>
+
+				<div class="footer-col">
+					<h4>Соцсети</h4>
+					<div class="social-links">
+						<a href="#" class="social-btn"
+							><span class="material-icons-round">chat</span></a
+						>
+						<a href="#" class="social-btn"
+							><span class="material-icons-round">send</span></a
+						>
+					</div>
+				</div>
+			</div>
+			<div class="footer-bottom">
+				<p>© 2026 МАСТЕР ВОЗДУХА. Все права защищены.</p>
+			</div>
+		</footer>
+
+		<script>
+			const themeToggle = document.getElementById("theme-toggle");
+			themeToggle?.addEventListener("click", () => {
+				const isDark =
+					document.documentElement.classList.toggle("dark");
+				localStorage.setItem("theme", isDark ? "dark" : "light");
+			});
+		</script>
+
+		<style is:global>
+			.sticky-nav {
+				background: rgba(var(--surface-rgb, 255, 255, 255), 0.8);
+				backdrop-filter: blur(12px);
+				position: sticky;
+				top: 0;
+				z-index: 100;
+				border-bottom: 1px solid var(--border);
+				height: 80px;
+				display: flex;
+				align-items: center;
+				transition: all 0.3s ease;
+			}
+			.dark .sticky-nav {
+				background: rgba(30, 41, 59, 0.85);
+			}
+			.nav-container {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				width: 100%;
+			}
+			.logo-group {
+				display: flex;
+				align-items: center;
+				gap: 0.75rem;
+			}
+			.logo-img-wrapper {
+				width: auto;
+				height: 48px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				overflow: hidden;
+			}
+			.logo-img {
+				width: 100%;
+				height: 100%;
+				object-fit: cover;
+			}
+			.light-only {
+				display: block;
+			}
+			.dark-only {
+				display: none;
+			}
+			.dark .light-only {
+				display: none;
+			}
+			.dark .dark-only {
+				display: block;
+			}
+			.logo-text {
+				display: flex;
+				flex-direction: column;
+			}
+			.logo-title {
+				font-size: 1.125rem;
+				font-weight: 700;
+				line-height: 1;
+				letter-spacing: -0.025em;
+				color: var(--primary);
+			}
+			.dark .logo-title {
+				color: white;
+			}
+			.logo-subtitle {
+				font-size: 0.75rem;
+				color: var(--text-muted);
+				font-weight: 500;
+			}
+
+			.nav-links {
+				display: flex;
+				gap: 2rem;
+			}
+			.nav-links a {
+				font-weight: 500;
+				color: var(--text-muted);
+				transition: color 0.2s;
+			}
+			.nav-links a:hover {
+				color: var(--primary);
+			}
+
+			.nav-actions {
+				display: flex;
+				align-items: center;
+				gap: 1rem;
+			}
+			.icon-btn {
+				background: transparent;
+				border: none;
+				color: var(--text-muted);
+				cursor: pointer;
+				padding: 0.5rem;
+				border-radius: 9999px;
+				transition: background 0.2s;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+			}
+			.icon-btn:hover {
+				background: rgba(0, 0, 0, 0.05);
+				color: var(--text);
+			}
+			.dark .icon-btn:hover {
+				background: rgba(255, 255, 255, 0.1);
+			}
+
+			.sun {
+				display: none;
+			}
+			.dark .moon {
+				display: none;
+			}
+			.dark .sun {
+				display: block;
+			}
+
+			.call-btn {
+				display: flex;
+				align-items: center;
+				gap: 0.5rem;
+				padding: 0.6rem 1.25rem;
+				border-radius: 12px;
+			}
+			.call-btn .material-icons-round {
+				font-size: 1.1rem;
+			}
+
+			.footer {
+				background: var(--surface);
+				border-top: 1px solid var(--border);
+				padding: 5rem 0 2rem;
+				margin-top: 5rem;
+			}
+			.footer-grid {
+				display: grid;
+				grid-template-columns: 1.5fr 1fr 1fr 1fr;
+				gap: 4rem;
+				margin-bottom: 4rem;
+			}
+			.footer-brand {
+				display: flex;
+				flex-direction: column;
+				gap: 1.5rem;
+			}
+			.footer-desc {
+				color: var(--text-muted);
+				line-height: 1.6;
+				font-size: 0.95rem;
+			}
+			.footer-col h4 {
+				margin-bottom: 1.5rem;
+				font-size: 1.125rem;
+			}
+			.footer-links {
+				display: flex;
+				flex-direction: column;
+				gap: 1rem;
+			}
+			.footer-links li {
+				display: flex;
+				align-items: flex-start;
+				gap: 0.75rem;
+				color: var(--text-muted);
+				font-size: 0.9rem;
+			}
+			.footer-links a {
+				transition: color 0.2s;
+			}
+			.footer-links a:hover {
+				color: var(--primary);
+			}
+			.mini {
+				font-size: 1.2rem;
+				color: var(--primary);
+			}
+
+			.social-links {
+				display: flex;
+				gap: 1rem;
+			}
+			.social-btn {
+				width: 40px;
+				height: 40px;
+				background: var(--bg);
+				border-radius: 50%;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				color: var(--text-muted);
+				transition: all 0.2s;
+			}
+			.social-btn:hover {
+				background: var(--primary);
+				color: white;
+				transform: translateY(-3px);
+			}
+
+			.footer-bottom {
+				border-top: 1px solid var(--border);
+				padding-top: 2rem;
+				text-align: center;
+				color: var(--text-muted);
+				font-size: 0.875rem;
+			}
+
+			@media (max-width: 768px) {
+				.nav-links,
+				.btn-text {
+					display: none;
+				}
+				.footer-grid {
+					grid-template-columns: 1fr;
+					gap: 2.5rem;
+				}
+			}
+		</style>
+	</body>
+</html>
