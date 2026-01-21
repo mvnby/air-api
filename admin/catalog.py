@@ -13,6 +13,7 @@ from models import Product, Tag, TagGroup, ProductTagLink
 from core.database import async_session_maker
 from starlette.responses import RedirectResponse
 from .base import format_tags_shared
+from services.image_service import ImageService
 
 
 class ProductAdmin(ModelView, model=Product):
@@ -149,14 +150,28 @@ class ProductAdmin(ModelView, model=Product):
             del data["main_image_file"]
 
         if upload and hasattr(upload, "filename") and upload.filename:
+            # Ensure slug exists
+            if not data.get("slug") and data.get("title"):
+                data["slug"] = slugify.slugify(data["title"])
+            
+            slug = data.get("slug") or model.slug or f"product-{uuid.uuid4().hex[:8]}"
+            
+            # Read file bytes
+            file_bytes = await upload.read()
+            
+            # Use ImageService to save
             ext = upload.filename.split(".")[-1]
             filename = f"{uuid.uuid4()}.{ext}"
-            upload_dir = os.path.join("static", "uploads")
-            os.makedirs(upload_dir, exist_ok=True)
-            file_path = os.path.join(upload_dir, filename)
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(upload.file, buffer)
-            data["main_image"] = f"/static/uploads/{filename}"
+            
+            db_path = ImageService.save_image(
+                file_bytes=file_bytes,
+                entity_type="products",
+                slug=slug,
+                filename=filename
+            )
+            
+            # Store path with leading slash for web access
+            data["main_image"] = ImageService.get_web_path(db_path)
 
 
 class TagGroupAdmin(ModelView, model=TagGroup):

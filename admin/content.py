@@ -1,5 +1,6 @@
 import os
 import shutil
+import uuid
 from typing import Any
 from sqladmin import ModelView
 from wtforms import FileField, TextAreaField
@@ -7,6 +8,7 @@ from slugify import slugify
 from markupsafe import Markup
 
 from models import Article
+from services.image_service import ImageService
 
 class ArticleAdmin(ModelView, model=Article):
     name = "Статья"
@@ -63,18 +65,24 @@ class ArticleAdmin(ModelView, model=Article):
         # 2. Handle Image Upload
         upload_field = data.get("main_image_file")
         if upload_field and hasattr(upload_field, 'filename') and upload_field.filename:
-            # Create uploads dir if not exists
-            upload_dir = "/Users/maksimkorotov/dev/mvn/static/uploads/articles"
-            os.makedirs(upload_dir, exist_ok=True)
+            slug = data.get("slug") or model.slug or f"article-{uuid.uuid4().hex[:8]}"
             
-            filename = f"{slugify(data['slug'])}_{upload_field.filename}"
-            file_path = os.path.join(upload_dir, filename)
+            # Read file bytes
+            file_bytes = await upload_field.read()
             
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(upload_field.file, buffer)
+            # Use ImageService to save
+            ext = upload_field.filename.split(".")[-1]
+            filename = f"{slugify(slug)}_{upload_field.filename}"
             
-            # Set the URL in the database field
-            data["main_image"] = f"/static/uploads/articles/{filename}"
+            db_path = ImageService.save_image(
+                file_bytes=file_bytes,
+                entity_type="articles",
+                slug=slug,
+                filename=filename
+            )
+            
+            # Set the URL in the NEW cover_image field
+            data["cover_image"] = ImageService.get_web_path(db_path)
         
         # Security: Remove the temporary file field so it doesn't break SQLModel
         if "main_image_file" in data:

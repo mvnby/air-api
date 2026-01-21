@@ -68,8 +68,11 @@ class Product(SQLModel, table=True):
     # 1. Главная картинка
     main_image: Optional[str] = Field(default=None)
     
-    # 2. Галерея
+    # 2. Галерея (Legacy JSON field - deprecated, use gallery_images relationship)
     images: List[str] = Field(default=[], sa_column=Column(JSON))
+    
+    # 2b. Gallery images (New relationship-based approach)
+    gallery_images: List["ProductImage"] = Relationship(back_populates="product")
     
     # 3. Категории (Теперь связь M2M)
     # 3. Теги (Бывшие Категории)
@@ -95,12 +98,28 @@ class Product(SQLModel, table=True):
     def __str__(self):
         return f"{self.title} ({self.price} р)"
 
+class ProductImage(SQLModel, table=True):
+    """Gallery images for products, including installation photos."""
+    __tablename__ = "product_image"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    product_id: int = Field(foreign_key="product.id", index=True)
+    url: str
+    is_installation_photo: bool = Field(default=False, index=True)  # Flag for real installation photos
+    created_at: datetime = Field(default_factory=datetime.now)
+    
+    product: "Product" = Relationship(back_populates="gallery_images")
+
+    def __str__(self):
+        photo_type = "Installation" if self.is_installation_photo else "Gallery"
+        return f"{photo_type} photo for product #{self.product_id}"
+
 class Article(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str
     slug: str = Field(unique=True, index=True)
     content: str
-    main_image: Optional[str] = None
+    main_image: Optional[str] = None  # Legacy field, kept for backward compatibility
+    cover_image: Optional[str] = None  # New unified field
     is_published: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.now)
 
