@@ -38,10 +38,32 @@ logger = logging.getLogger(__name__)
 def _map_product_to_response(product: Product) -> ProductResponse:
     """Convert Product model to ProductResponse schema."""
     p_tags = []
-    for t in product.tags:
-        g_title = t.group.title if t.group else None
-        p_tags.append(TagResponse(id=t.id, title=t.title, slug=t.slug, group_title=g_title))
+    # Ensure tags are loaded
+    if product.tags:
+        for t in product.tags:
+            g_title = t.group.title if t.group else None
+            p_tags.append(TagResponse(id=t.id, title=t.title, slug=t.slug, group_title=g_title))
     
+    # Handle potentially string-encoded JSON fields
+    import json
+    specs = product.specs
+    if isinstance(specs, str):
+        try:
+            # Replace single quotes with double quotes for valid JSON if needed, 
+            # but usually it's better to try literal_eval if it's a python repr
+            import ast
+            specs = ast.literal_eval(specs)
+        except:
+            specs = {}
+            
+    images = product.images
+    if isinstance(images, str):
+        try:
+            import ast
+            images = ast.literal_eval(images)
+        except:
+            images = []
+
     return ProductResponse(
         id=product.id,
         title=product.title,
@@ -55,8 +77,8 @@ def _map_product_to_response(product: Product) -> ProductResponse:
         is_published=product.is_published,
         created_at=product.created_at,
         tags=p_tags,
-        specs=product.specs,
-        images=product.images
+        specs=specs or {},
+        images=images or []
     )
 
 def _validate_pagination(page: int, limit: int) -> None:

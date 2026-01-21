@@ -56,7 +56,7 @@ class Product(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     
     title: str = Field(index=True)
-    slug: Optional[str] = Field(default=None, unique=True, index=True)
+    slug: str = Field(unique=True, index=True)  # Non-nullable, required for URL routing
     description: str = Field(default="")
     
     price: int
@@ -68,7 +68,7 @@ class Product(SQLModel, table=True):
     # 1. Главная картинка
     main_image: Optional[str] = Field(default=None)
     
-    # 2. Галерея (Legacy JSON field - deprecated, use gallery_images relationship)
+    # 2. Galeria (Legacy JSON field - DEPRECATED, use gallery_images relationship instead)
     images: List[str] = Field(default=[], sa_column=Column(JSON))
     
     # 2b. Gallery images (New relationship-based approach)
@@ -118,8 +118,8 @@ class Article(SQLModel, table=True):
     title: str
     slug: str = Field(unique=True, index=True)
     content: str
-    main_image: Optional[str] = None  # Legacy field, kept for backward compatibility
-    cover_image: Optional[str] = None  # New unified field
+    main_image: Optional[str] = None  # DEPRECATED: Legacy field, use cover_image instead
+    cover_image: Optional[str] = None  # Primary cover image field
     is_published: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.now)
 

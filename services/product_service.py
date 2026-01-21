@@ -125,3 +125,153 @@ class ProductService:
         # Flatten tags to list of strings for bot compatibility
         data['categories'] = [t.title for t in product.tags]
         return data
+
+    @staticmethod
+    async def save_main_image(
+        session: AsyncSession,
+        product_id: int,
+        file_bytes: bytes,
+        filename: str
+    ) -> Optional[str]:
+        """
+        Save main image for a product.
+        
+        Args:
+            session: Database session
+            product_id: ID of the product
+            file_bytes: Raw bytes of the image file
+            filename: Original filename
+            
+        Returns:
+            Web path to the saved image (with leading slash) or None if product not found
+        """
+        from services.image_service import ImageService
+        from sqlmodel import select
+        
+        # Fetch product
+        stmt = select(Product).where(Product.id == product_id)
+        result = await session.execute(stmt)
+        product = result.scalar_one_or_none()
+        
+        if not product:
+            return None
+        
+        # Save image using ImageService
+        db_path = await ImageService.save_image(
+            file_bytes=file_bytes,
+            entity_type="products",
+            slug=product.slug,
+            filename=filename
+        )
+        
+        # Get web path with leading slash
+        web_path = ImageService.get_web_path(db_path)
+        
+        # Update product
+        product.main_image = web_path
+        session.add(product)
+        await session.commit()
+        await session.refresh(product)
+        
+        return web_path
+
+    @staticmethod
+    async def add_gallery_images(
+        session: AsyncSession,
+        product_id: int,
+        images_data: List[Dict[str, Any]]
+    ) -> List[int]:
+        """
+        Add multiple gallery images to a product.
+        
+        Args:
+            session: Database session
+            product_id: ID of the product
+            images_data: List of dicts with keys: file_bytes, filename, is_installation_photo
+            
+        Returns:
+            List of created ProductImage IDs
+        """
+        from services.image_service import ImageService
+        from models import ProductImage
+        from sqlmodel import select
+        
+        # Fetch product
+        stmt = select(Product).where(Product.id == product_id)
+        result = await session.execute(stmt)
+        product = result.scalar_one_or_none()
+        
+        if not product:
+            return []
+        
+        created_ids = []
+        for img_data in images_data:
+            # Save image file
+            db_path = await ImageService.save_image(
+                file_bytes=img_data["file_bytes"],
+                entity_type="products",
+                slug=product.slug,
+                filename=img_data["filename"]
+            )
+            
+            # Create ProductImage record
+            web_path = ImageService.get_web_path(db_path)
+            product_image = ProductImage(
+                product_id=product_id,
+                url=web_path,
+                is_installation_photo=img_data.get("is_installation_photo", False)
+            )
+            session.add(product_image)
+            await session.flush()
+            created_ids.append(product_image.id)
+        
+        await session.commit()
+        return created_ids
+
+    @staticmethod
+    async def bulk_update_tags(
+        session: AsyncSession,
+        product_ids: List[int],
+        tag_ids: List[int],
+        action: str
+    ) -> int:
+        """
+        Bulk add or remove tags from multiple products.
+        
+        Args:
+            session: Database session
+            product_ids: List of product IDs to update
+            tag_ids: List of tag IDs to add/remove
+            action: Either "add" or "remove"
+            
+        Returns:
+            Number of products updated
+        """
+        from sqlmodel import select
+        from sqlalchemy.orm import selectinload
+        from models import Tag
+        
+        # Fetch products with tags loaded
+        stmt = select(Product).where(Product.id.in_(product_ids)).options(
+            selectinload(Product.tags)
+        )
+        result = await session.execute(stmt)
+        products = result.scalars().all()
+        
+        # Fetch tags to apply
+        tag_stmt = select(Tag).where(Tag.id.in_(tag_ids))
+        tag_result = await session.execute(tag_stmt)
+        tags_to_apply = tag_result.scalars().all()
+        
+        # Apply changes
+        for product in products:
+            if action == "add":
+                current_tag_ids = {t.id for t in product.tags}
+                for tag in tags_to_apply:
+                    if tag.id not in current_tag_ids:
+                        product.tags.append(tag)
+            elif action == "remove":
+                product.tags = [t for t in product.tags if t.id not in tag_ids]
+        
+        await session.commit()
+        return len(products)

@@ -2,8 +2,9 @@
 Universal Image Service
 Handles saving images to the filesystem with organized folder structure.
 """
-import os
+import uuid
 from pathlib import Path
+import anyio
 
 
 class ImageService:
@@ -12,7 +13,7 @@ class ImageService:
     BASE_DIR = Path("media")  # Base directory for all media files
     
     @classmethod
-    def save_image(
+    async def save_image(
         cls,
         file_bytes: bytes,
         entity_type: str,
@@ -26,24 +27,29 @@ class ImageService:
             file_bytes: Raw bytes of the image file
             entity_type: Type of entity ('products', 'articles', etc.)
             slug: Slug of the entity (e.g., 'gree-09', 'how-to-choose')
-            filename: Name of the file to save
+            filename: Original filename (used only for extension extraction)
             
         Returns:
-            Relative path for database storage (e.g., 'media/products/gree-09/image.jpg')
+            Relative path for database storage (e.g., 'media/products/gree-09/uuid.jpg')
         """
+        # Extract extension from original filename
+        ext = filename.rsplit(".", 1)[-1] if "." in filename else "jpg"
+        
+        # Generate secure unique filename using uuid4
+        unique_filename = f"{uuid.uuid4()}.{ext}"
+        
         # Create directory structure: media/{entity_type}/{slug}/
-        entity_dir = cls.BASE_DIR / entity_type / slug
-        entity_dir.mkdir(parents=True, exist_ok=True)
+        entity_dir = anyio.Path(cls.BASE_DIR) / entity_type / slug
+        await entity_dir.mkdir(parents=True, exist_ok=True)
         
         # Full file path
-        file_path = entity_dir / filename
+        file_path = entity_dir / unique_filename
         
-        # Write file
-        with open(file_path, "wb") as f:
-            f.write(file_bytes)
+        # Write file asynchronously
+        await file_path.write_bytes(file_bytes)
         
         # Return relative path for DB (using forward slashes for web compatibility)
-        return str(file_path).replace(os.sep, "/")
+        return str(file_path).replace("\\", "/")
     
     @classmethod
     def get_web_path(cls, db_path: str) -> str:

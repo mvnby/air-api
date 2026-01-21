@@ -17,7 +17,7 @@ from routers import admin as admin_router
 from routers import api as api_router
 from admin import admin_views
 
-
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Log startup
@@ -69,10 +69,10 @@ app.include_router(admin_router.router)
 app.include_router(api_router.router)
 
 # Static files
-app.mount(f"/{settings.STATIC_DIR}", StaticFiles(directory=settings.STATIC_DIR), name="static")
+app.mount(f"/{settings.STATIC_DIR}", StaticFiles(directory=os.path.join(BASE_DIR, settings.STATIC_DIR)), name="static")
+app.mount("/media", StaticFiles(directory=os.path.join(BASE_DIR, "media")), name="media")
 
 # Setup SQLAdmin with authentication
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 admin = Admin(
     app, 
     engine, 
