@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Request, Depends, HTTPException, UploadFile, File, Form
 from typing import Optional, List
 from fastapi.responses import RedirectResponse, StreamingResponse
 from services.document_service import DocumentService
@@ -312,7 +312,7 @@ async def get_calendar_events(
 @router.post("/api/upload_images")
 async def upload_images(
     files: List[UploadFile],
-    slug: Optional[str] = None,
+    slug: Optional[str] = Form(None),
     username: str = Depends(get_current_username)
 ):
     """
@@ -345,3 +345,17 @@ async def upload_images(
         uploaded_urls.append(web_path)
         
     return {"urls": uploaded_urls}
+
+@router.get("/api/article_images/{slug}")
+async def list_article_images(
+    slug: str,
+    username: str = Depends(get_current_username)
+):
+    """
+    List all images associated with an article slug.
+    """
+    from services.image_service import ImageService
+    
+    # We assume 'articles' entity type
+    urls = await ImageService.list_images("articles", slug)
+    return {"urls": urls}

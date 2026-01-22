@@ -5,6 +5,7 @@
 {{ super() }}
 <link rel="stylesheet" href="https://unpkg.com/easymde/dist/easymde.min.css">
 <script src="https://unpkg.com/easymde/dist/easymde.min.js"></script>
+<script src="/static/js/admin_article_upload.js"></script>
 <style>
     .editor-toolbar {
         background: #fff;
@@ -26,6 +27,9 @@
         <div class="card-header">
             <h3 class="card-title">Изменение статьи: {{ obj.title }}</h3>
         </div>
+        <!-- Gallery Container Placeholder -->
+        <div id="article-image-gallery-placeholder"></div>
+
         <div class="card-body border-bottom py-3">
             <form id="admin-form" action="{{ model_view._build_url_for('admin:edit', request, obj) }}" method="POST"
                 enctype="multipart/form-data">

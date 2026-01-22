@@ -132,6 +132,15 @@ class Article(SQLModel, table=True):
     def main_image_file(self, value: Any):
         self._temp_main_image_file = value
 
+    # Virtual field for admin cover image upload
+    @property
+    def cover_image_file(self) -> Any:
+        return getattr(self, "_temp_cover_image_file", None)
+    
+    @cover_image_file.setter
+    def cover_image_file(self, value: Any):
+        self._temp_cover_image_file = value
+
     def __str__(self):
         return self.title
 
