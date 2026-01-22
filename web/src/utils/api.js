@@ -60,3 +60,15 @@ export async function getProductById(id) {
         return null;
     }
 }
+
+export async function getGlobalConfig() {
+    const url = `${API_BASE}/config`;
+    try {
+        const response = await fetch(url);
+        if (!response.ok) return {};
+        return await response.json();
+    } catch (error) {
+        console.error('Fetch error:', error);
+        return {};
+    }
+}

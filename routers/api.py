@@ -525,3 +525,19 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
         total_amount=order.total_amount,
         created_at=order.created_at
     )
+
+# --- CONFIG ENDPOINTS ---
+
+@router.get("/v1/config")
+async def get_global_config(session: AsyncSession = Depends(get_session)):
+    """
+    Get all global configuration parameters as a key-value dictionary.
+    Example: {"phone": "+37529...", "email": "..."}
+    """
+    from models import GlobalConfig
+    stmt = select(GlobalConfig)
+    result = await session.execute(stmt)
+    configs = result.scalars().all()
+    
+    # Convert list of configs to simple key-value dict
+    return {c.key: c.value for c in configs}

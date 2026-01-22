@@ -1,5 +1,6 @@
 ---
 import "../assets/index.css";
+import { getGlobalConfig } from "../utils/api";
 
 interface Props {
 	title: string;
@@ -7,6 +8,13 @@ interface Props {
 }
 
 const { title, description = "Premium Air Conditioning store" } = Astro.props;
+const config = await getGlobalConfig();
+
+// Default fallbacks if config is missing
+const phone = config["phone"] || "+375 (29) 000-00-00";
+const phoneClean = config["phone_clean"] || phone.replace(/\D/g, "");
+const email = config["email"] || "info@master-air.by";
+const address = config["address"] || "г. Витебск, ул. Ленина, 54";
 ---
 
 <!doctype html>
@@ -64,7 +72,9 @@ const { title, description = "Premium Air Conditioning store" } = Astro.props;
 					</div>
 					<div class="logo-text">
 						<span class="logo-title">МАСТЕР ВОЗДУХА</span>
-						<span class="logo-subtitle">кондиционеры в Витебске</span>
+						<span class="logo-subtitle"
+							>кондиционеры в Витебске</span
+						>
 					</div>
 				</a>
 
@@ -84,7 +94,7 @@ const { title, description = "Premium Air Conditioning store" } = Astro.props;
 						<span class="material-icons-round sun">light_mode</span>
 					</button>
 					<a
-						href="tel:+375290000000"
+						href={`tel:${phoneClean}`}
 						class="btn btn-primary call-btn"
 					>
 						<span class="material-icons-round">call</span>
@@ -132,17 +142,16 @@ const { title, description = "Premium Air Conditioning store" } = Astro.props;
 						<li>
 							<span class="material-icons-round mini"
 								>location_on</span
-							> г. Витебск, ул. Ленина, 54
+							>
+							{address}
 						</li>
 						<li>
 							<span class="material-icons-round mini">phone</span>
-							<a href="tel:+375290000000">+375 (29) 000-00-00</a>
+							<a href={`tel:${phoneClean}`}>{phone}</a>
 						</li>
 						<li>
 							<span class="material-icons-round mini">email</span>
-							<a href="mailto:info@master-air.by"
-								>info@master-air.by</a
-							>
+							<a href={`mailto:${email}`}>{email}</a>
 						</li>
 					</ul>
 				</div>
