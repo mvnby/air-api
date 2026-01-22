@@ -1,4 +1,7 @@
 ---
+import PriceWithToggle from "./PriceWithToggle.vue";
+import { resolveImageUrl } from "../utils/api";
+
 interface Props {
   product: {
     title: string;
@@ -7,6 +10,8 @@ interface Props {
     main_image?: string;
     area?: number;
     is_inverter?: boolean;
+    // New: support custom badges
+    badges?: Array<{ text: string; class?: string }>;
     attributes?: Record<string, any>;
     description?: string; // For hero card
   };
@@ -29,41 +34,34 @@ const formatPrice = (price: number) => price.toLocaleString() + " р.";
   variant === "default" && (
     <a href={`/product/${product.slug}`} class="product-item card group">
       <div class="p-img-box">
-        <img
-          src={product.main_image || "/placeholder.jpg"}
-          alt={product.title}
-        />
+        <img src={resolveImageUrl(product.main_image)} alt={product.title} />
         <div class="p-badge-list">
-          {product.is_inverter && <span class="badge small">Инвертор</span>}
+          {product.badges ? (
+            product.badges.map((badge) => (
+              <span class={`p-tag ${badge.class || ""}`}>{badge.text}</span>
+            ))
+          ) : (
+            <>
+              {product.is_inverter && <span class="badge small">Инвертор</span>}
+            </>
+          )}
         </div>
       </div>
       <div class="p-info">
         {product.area && <span class="p-area-info">{product.area} м²</span>}
         <h4>{product.title}</h4>
 
-        {showInstallation && (
-          <div
-            class="installation-toggle"
-            data-base-price={product.price}
-            data-inst-price={baseInstallationPrice}
-            onclick="event.preventDefault();"
-          >
-            <div class="toggle-control">
-              <div class="toggle-switch" />
-              <span>Монтаж</span>
-            </div>
-            <span class="inst-price">
-              +{baseInstallationPrice.toLocaleString()} р.
-            </span>
-          </div>
-        )}
-
-        <div class="p-footer">
-          <span class="final-price">{formatPrice(product.price)}</span>
+        <PriceWithToggle
+          client:visible
+          basePrice={product.price}
+          installPrice={baseInstallationPrice}
+          currency="Br"
+          showToggle={showInstallation}
+        >
           <div class="add-btn micro">
             <span class="material-icons-round">shopping_cart</span>
           </div>
-        </div>
+        </PriceWithToggle>
       </div>
     </a>
   )
@@ -73,7 +71,7 @@ const formatPrice = (price: number) => price.toLocaleString() + " р.";
   variant === "hero" && (
     <div class="featured-card">
       <img
-        src={product.main_image || "/placeholder.jpg"}
+        src={resolveImageUrl(product.main_image)}
         alt={product.title}
         class="featured-img"
       />
@@ -100,10 +98,7 @@ const formatPrice = (price: number) => price.toLocaleString() + " р.";
   variant === "minimal" && (
     <a href={`/product/${product.slug}`} class="minimal-card card">
       <div class="m-img-box">
-        <img
-          src={product.main_image || "/placeholder.jpg"}
-          alt={product.title}
-        />
+        <img src={resolveImageUrl(product.main_image)} alt={product.title} />
       </div>
       <div class="m-info">
         <h4>{product.title}</h4>
@@ -141,6 +136,7 @@ const formatPrice = (price: number) => price.toLocaleString() + " р.";
     justify-content: center;
     padding: 1.5rem;
     position: relative;
+    border-bottom: 1px solid var(--border);
   }
   .p-img-box img {
     max-width: 100%;
@@ -181,80 +177,8 @@ const formatPrice = (price: number) => price.toLocaleString() + " р.";
     flex: 1;
   }
 
-  /* Installation Toggle */
-  .installation-toggle {
-    background: var(--secondary, #f1f5f9);
-    padding: 0.75rem 1rem;
-    border-radius: 1rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    cursor: pointer;
-    margin-bottom: 1.5rem;
-    transition: background 0.2s;
-  }
-  .installation-toggle:hover {
-    background: rgba(0, 127, 128, 0.15);
-  }
-  .toggle-control {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    font-weight: 600;
-    font-size: 0.9rem;
-  }
-  .toggle-switch {
-    width: 36px;
-    height: 20px;
-    border-radius: 20px;
-    background: #cbd5e1;
-    position: relative;
-    transition: background 0.3s;
-  }
-  .toggle-switch::after {
-    content: "";
-    position: absolute;
-    width: 14px;
-    height: 14px;
-    background: white;
-    border-radius: 50%;
-    top: 3px;
-    left: 3px;
-    transition: all 0.3s;
-  }
-  .installation-toggle.active {
-    background: rgba(0, 127, 128, 0.2);
-  }
-  .installation-toggle.active .toggle-switch {
-    background: var(--primary);
-  }
-  .installation-toggle.active .toggle-switch::after {
-    left: 19px;
-  }
-  .inst-price {
-    color: var(--primary);
-    font-weight: 700;
-    font-size: 0.9rem;
-  }
-
-  .p-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: auto;
-  }
-  .final-price {
-    font-size: 1.25rem;
-    font-weight: 800;
-    transition: transform 0.2s;
-  }
-  .final-price.small {
-    font-size: 1.1rem;
-  }
-  .pulse {
-    transform: scale(1.1);
-    color: var(--primary);
-  }
+  /* Installation Toggle Styles moved to Vue Component */
+  /* But we need some button styles for slots */
 
   .add-btn.micro {
     width: 36px;
@@ -413,52 +337,3 @@ const formatPrice = (price: number) => price.toLocaleString() + " р.";
     align-items: center;
   }
 </style>
-
-<script>
-  // Installation toggle logic
-  // We attach listener to document to handle Astro ViewTransitions/Islands if needed,
-  // or just run it once. Using a specific class selector.
-
-  function initToggles() {
-    const toggles = document.querySelectorAll(".installation-toggle");
-    toggles.forEach((toggle) => {
-      // Avoid double binding
-      if (toggle.hasAttribute("data-bound")) return;
-      toggle.setAttribute("data-bound", "true");
-
-      toggle.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        toggle.classList.toggle("active");
-
-        const basePrice = parseInt(
-          toggle.getAttribute("data-base-price") || "0",
-        );
-        const instPrice = parseInt(
-          toggle.getAttribute("data-inst-price") || "0",
-        );
-
-        const card = toggle.closest(".group"); // Assuming 'group' class on card
-        const finalPriceEl = card?.querySelector(".final-price");
-
-        if (finalPriceEl) {
-          const isAuto = toggle.classList.contains("active");
-          const total = basePrice + (isAuto ? instPrice : 0);
-          finalPriceEl.textContent = total.toLocaleString() + " Br";
-
-          if (isAuto) {
-            finalPriceEl.classList.add("pulse");
-            setTimeout(() => finalPriceEl.classList.remove("pulse"), 400);
-          }
-        }
-      });
-    });
-  }
-
-  // Run on load
-  initToggles();
-
-  // Support for View Transitions if/when added
-  document.addEventListener("astro:page-load", initToggles);
-</script>

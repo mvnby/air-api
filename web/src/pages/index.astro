@@ -136,83 +136,47 @@ const displayProduct = heroProduct || {
 		</div>
 
 		<div class="product-grid">
-			<!-- Product 1 -->
-			<div class="product-item card group">
-				<div class="p-img-box">
-					<img
-						src="https://lh3.googleusercontent.com/aida-public/AB6AXuDzHRJRud1P6Zqy3Hb7jwnkWAeXeg0lE7zSfaVCogcX5h2hWu50uUogAaRiIawuBXIx4DpipBH1mCxBAlVuA77yigQ6ur0LCTEFXSYe3lH1PpBjUoIwvcKBAkFNOuajaVpDqns55HawHc7WN00maaB2_a1vxyBCXPNZJ6iae-VbAXvx2KOu1gfi-_zm4t9CEKbaANuUuwlGJTCzbdaFOabE9Y12wvftIPO0p9FBP5C-3vl3iav9YkwhUexYv0IAKNrxzwa_fNm5kfg"
-						alt="Gree Bora"
+			{
+				/* Mock Data for Popular Models (replacing hardcoded HTML) */
+				[
+					{
+						title: "Gree Bora Inverter",
+						price: 1199,
+						slug: "gree-bora",
+						main_image:
+							"https://lh3.googleusercontent.com/aida-public/AB6AXuDzHRJRud1P6Zqy3Hb7jwnkWAeXeg0lE7zSfaVCogcX5h2hWu50uUogAaRiIawuBXIx4DpipBH1mCxBAlVuA77yigQ6ur0LCTEFXSYe3lH1PpBjUoIwvcKBAkFNOuajaVpDqns55HawHc7WN00maaB2_a1vxyBCXPNZJ6iae-VbAXvx2KOu1gfi-_zm4t9CEKbaANuUuwlGJTCzbdaFOabE9Y12wvftIPO0p9FBP5C-3vl3iav9YkwhUexYv0IAKNrxzwa_fNm5kfg",
+						area: 25,
+						badges: [{ text: "В наличии", class: "in-stock" }],
+						is_inverter: true,
+					},
+					{
+						title: "Electrolux Fusion Evo",
+						price: 1550,
+						slug: "electrolux-fusion",
+						main_image:
+							"https://lh3.googleusercontent.com/aida-public/AB6AXuDSG-005qtT6VDREOusPFBeg_4fBlCc_MvbwyXEFDfsReN3_yJ_-CEkE6_Rq4lQswgRarL39hASWVOgoAmL1hA2wTb0JvpaTevVGURpdhhzdNeBwrpA1jQoKMk5-shNbCBkE7njkuAV5KK2sNjWXXKPus76bLYhm0Z89ZIPuHlWgtDVbbK_8Ud7ty_g4L57Imf1ip_KmCLNjfUkONYpA88-uRaNTw-gQYP1CP8FLkD7lUJ0kRwqbk5MzLV1fP4BdGHcvLlSv-UJnyU",
+						area: 35,
+						badges: [{ text: "Wi-Fi", class: "wifi" }],
+						is_inverter: false,
+					},
+					{
+						title: "Cooper&Hunter Alpha",
+						price: 1799,
+						slug: "cooper-hunter-alpha",
+						main_image:
+							"https://lh3.googleusercontent.com/aida-public/AB6AXuC6AEk8mzi7MIpUmuyEV_EmJunKDyJJV02nurzUAt33RP4pxnxpxBDlqzyihxz7qjlFIl2Tq0pJ2Nre1iq0xh5Pu2dvzF7k_KKTuRFFcQixkfz6Yy-XefQFHMldsxcRcF7S9HH8Q3XZd3uXK4GM-Cuk23oC8y2414YfI_8Cyen8lMHNGOzROsViS9S-V3zJVCMJZ57YJNVnB3cyhQXIH_uRsJqOnTT6EWFIJ7vxjdYc7q5Sz7sQmyOqrsMEwf-9izfFe7HLtdYWkAY",
+						area: 20,
+						badges: [{ text: "Хит", class: "hit" }],
+						is_inverter: true,
+					},
+				].map((product) => (
+					<ProductCard
+						product={product}
+						showInstallation={true}
+						baseInstallationPrice={360}
 					/>
-					<div class="p-tag in-stock">В наличии</div>
-				</div>
-				<h3>Gree Bora Inverter</h3>
-				<p class="p-desc">До 25 м² • Охлаждение/Обогрев</p>
-
-				<div class="installation-toggle" data-base-price="1199">
-					<div class="toggle-control">
-						<div class="toggle-switch"></div>
-						<span>Монтаж</span>
-					</div>
-					<span class="inst-price">+360 Br</span>
-				</div>
-
-				<div class="p-footer">
-					<span class="final-price">1 199 Br</span>
-					<button class="btn btn-primary">В корзину</button>
-				</div>
-			</div>
-
-			<!-- Product 2 -->
-			<div class="product-item card group">
-				<div class="p-img-box">
-					<img
-						src="https://lh3.googleusercontent.com/aida-public/AB6AXuDSG-005qtT6VDREOusPFBeg_4fBlCc_MvbwyXEFDfsReN3_yJ_-CEkE6_Rq4lQswgRarL39hASWVOgoAmL1hA2wTb0JvpaTevVGURpdhhzdNeBwrpA1jQoKMk5-shNbCBkE7njkuAV5KK2sNjWXXKPus76bLYhm0Z89ZIPuHlWgtDVbbK_8Ud7ty_g4L57Imf1ip_KmCLNjfUkONYpA88-uRaNTw-gQYP1CP8FLkD7lUJ0kRwqbk5MzLV1fP4BdGHcvLlSv-UJnyU"
-						alt="Electrolux"
-					/>
-					<div class="p-tag wifi">Wi-Fi</div>
-				</div>
-				<h3>Electrolux Fusion Evo</h3>
-				<p class="p-desc">До 35 м² • Тихий режим</p>
-
-				<div class="installation-toggle" data-base-price="1550">
-					<div class="toggle-control">
-						<div class="toggle-switch"></div>
-						<span>Монтаж</span>
-					</div>
-					<span class="inst-price">+360 Br</span>
-				</div>
-
-				<div class="p-footer">
-					<span class="final-price">1 550 Br</span>
-					<button class="btn btn-primary">В корзину</button>
-				</div>
-			</div>
-
-			<!-- Product 3 -->
-			<div class="product-item card group">
-				<div class="p-img-box">
-					<img
-						src="https://lh3.googleusercontent.com/aida-public/AB6AXuC6AEk8mzi7MIpUmuyEV_EmJunKDyJJV02nurzUAt33RP4pxnxpxBDlqzyihxz7qjlFIl2Tq0pJ2Nre1iq0xh5Pu2dvzF7k_KKTuRFFcQixkfz6Yy-XefQFHMldsxcRcF7S9HH8Q3XZd3uXK4GM-Cuk23oC8y2414YfI_8Cyen8lMHNGOzROsViS9S-V3zJVCMJZ57YJNVnB3cyhQXIH_uRsJqOnTT6EWFIJ7vxjdYc7q5Sz7sQmyOqrsMEwf-9izfFe7HLtdYWkAY"
-						alt="Cooper Hunter"
-					/>
-					<div class="p-tag hit">Хит</div>
-				</div>
-				<h3>Cooper&Hunter Alpha</h3>
-				<p class="p-desc">До 20 м² • Плазма фильтр</p>
-
-				<div class="installation-toggle" data-base-price="1799">
-					<div class="toggle-control">
-						<div class="toggle-switch"></div>
-						<span>Монтаж</span>
-					</div>
-					<span class="inst-price">+360 Br</span>
-				</div>
-
-				<div class="p-footer">
-					<span class="final-price">1 799 Br</span>
-					<button class="btn btn-primary">В корзину</button>
-				</div>
-			</div>
+				))
+			}
 		</div>
 
 		<div class="show-all">
@@ -229,36 +193,6 @@ const displayProduct = heroProduct || {
 		/>
 	</div>
 </Layout>
-
-<script>
-	// Installation toggle logic
-	const toggles = document.querySelectorAll(".installation-toggle");
-	toggles.forEach((toggle) => {
-		toggle.addEventListener("click", () => {
-			toggle.classList.toggle("active");
-			const basePrice = parseInt(
-				toggle.getAttribute("data-base-price") || "0",
-			);
-			const finalPriceEl = toggle
-				.closest(".group")
-				?.querySelector(".final-price");
-
-			if (finalPriceEl) {
-				const isAuto = toggle.classList.contains("active");
-				const total = basePrice + (isAuto ? 360 : 0);
-				finalPriceEl.textContent = total.toLocaleString() + " Br";
-
-				if (isAuto) {
-					finalPriceEl.classList.add("pulse");
-					setTimeout(
-						() => finalPriceEl.classList.remove("pulse"),
-						400,
-					);
-				}
-			}
-		});
-	});
-</script>
 
 <style>
 	.hero-section {
@@ -680,77 +614,6 @@ const displayProduct = heroProduct || {
 		color: var(--text-muted);
 		font-size: 0.9rem;
 		margin-bottom: 1.5rem;
-	}
-
-	.installation-toggle {
-		background: var(--secondary);
-		padding: 0.75rem 1rem;
-		border-radius: 1rem;
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		cursor: pointer;
-		margin-bottom: 1.5rem;
-		transition: background 0.2s;
-	}
-	.installation-toggle:hover {
-		background: rgba(0, 127, 128, 0.15);
-	}
-	.toggle-control {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		font-weight: 600;
-		font-size: 0.9rem;
-	}
-	.toggle-switch {
-		width: 36px;
-		height: 20px;
-		border-radius: 20px;
-		background: #cbd5e1;
-		position: relative;
-		transition: background 0.3s;
-	}
-	.toggle-switch::after {
-		content: "";
-		position: absolute;
-		width: 14px;
-		height: 14px;
-		background: white;
-		border-radius: 50%;
-		top: 3px;
-		left: 3px;
-		transition: all 0.3s;
-	}
-	.installation-toggle.active {
-		background: rgba(0, 127, 128, 0.2);
-	}
-	.installation-toggle.active .toggle-switch {
-		background: var(--primary);
-	}
-	.installation-toggle.active .toggle-switch::after {
-		left: 19px;
-	}
-	.inst-price {
-		color: var(--primary);
-		font-weight: 700;
-		font-size: 0.9rem;
-	}
-
-	.p-footer {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-top: auto;
-	}
-	.final-price {
-		font-size: 1.5rem;
-		font-weight: 800;
-		transition: transform 0.2s;
-	}
-	.pulse {
-		transform: scale(1.1);
-		color: var(--primary);
 	}
 
 	.show-all {

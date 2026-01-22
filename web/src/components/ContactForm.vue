@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue';
+import { submitContactForm } from '../utils/api';
 
 const form = ref({
   name: '',
@@ -12,18 +13,21 @@ const isSuccess = ref(false);
 
 const submitForm = async () => {
   isSubmitting.value = true;
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 1000));
   
-  console.log('Form submitted:', form.value);
+  const success = await submitContactForm(form.value);
+  
   isSubmitting.value = false;
-  isSuccess.value = true;
   
-  // Reset after 3 seconds
-  setTimeout(() => {
-    isSuccess.value = false;
-    form.value = { name: '', phone: '', message: '' };
-  }, 3000);
+  if (success) {
+    isSuccess.value = true;
+    // Reset after 5 seconds
+    setTimeout(() => {
+        isSuccess.value = false;
+        form.value = { name: '', phone: '', message: '' };
+    }, 5000);
+  } else {
+    alert('Ошибка отправки. Попробуйте позже.');
+  }
 };
 </script>
 
