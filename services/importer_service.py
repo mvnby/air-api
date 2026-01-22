@@ -3,6 +3,7 @@ from parsers.base import BaseParser
 from parsers.onliner import OnlinerParser
 from core.database import async_session_maker
 from models import Product
+from services.image_service import ImageService
 
 class ImporterService:
     def __init__(self):
@@ -82,15 +83,40 @@ class ImporterService:
                 if tag not in tag_objects:
                     tag_objects.append(tag)
 
+            # 4. Handle Images (Download to local storage)
+            slug = data.get('slug')
+            # Fallback if slug missing (shouldn't happen with updated OnlinerParser)
+            if not slug:
+                slug = slugify.slugify(data['title'])
+
+            # Main Image
+            main_image_url = data.get('main_image')
+            local_main_image = None
+            if main_image_url:
+                local_main_image = await ImageService.download_and_save_image(
+                    main_image_url, 'products', slug
+                )
+            
+            # Gallery Images
+            gallery_urls = data.get('images', [])
+            local_gallery_images = []
+            for img_url in gallery_urls:
+                local_path = await ImageService.download_and_save_image(
+                    img_url, 'products', slug
+                )
+                if local_path:
+                    local_gallery_images.append(local_path)
+
             product = Product(
                 title=data['title'],
+                slug=slug,
                 description=data['description'],
                 price=data['price'],
                 area=data['area'],
                 is_inverter=metrics.get('is_inverter', False),
                 power_cooling=metrics.get('power_cooling'),
-                main_image=data['main_image'],
-                images=data.get('images', []),
+                main_image=local_main_image,  # Use local path
+                images=local_gallery_images,  # Use local paths
                 tags=tag_objects,
                 specs=data.get('specs', {}),
                 is_published=is_published,

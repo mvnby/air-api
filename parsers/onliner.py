@@ -152,7 +152,53 @@ class OnlinerParser(BaseParser):
             # Expose raw metrics for auto-tagging
             product_data['metrics'] = target_specs
             
-            # Related products discovery
+            # 3. Extract gallery images from HTML directly
+            # User pointed out that images are in .swiper-slide elements within the gallery
+            gallery_thumbs = soup.select('.product-gallery__thumb img')
+            for img in gallery_thumbs:
+                src = img.get('src') or img.get('data-src')
+                if src:
+                    # Clean up URL (sometimes has size params)
+                    # ex: https://imgproxy.onliner.by/..../w:200/h:200/ex:1/f:jpg/...
+                    # We might want to try to get the original or larger version.
+                    # Usually Onliner imgproxy URLs contain encoded original URL or params.
+                    # But often sticking to what's there or just removing resizing params might work.
+                    # Actually, if we look at the HTML from the user:
+                    # src="https://imgproxy.onliner.by/E-nW46.../w:200/h:200/ex:1/f:jpg/..."
+                    # The high-res is usually loaded on click.
+                    # But the NUXT data showed "main" and "retina" variants.
+                    
+                    # For now, let's just collect these URLs. 
+                    # If they are thumbnails, we might want to try to remove resizing?
+                    # Onliner imgproxy format: /.../w:200/h:200/...
+                    # If we remove /w:200/h:200 from URL, does it give full size? 
+                    # Often not, it depends on signature.
+                    
+                    # NOTE: Emulating what the browser sees.
+                    if src not in product_data['images'] and src != product_data['main_image']:
+                         product_data['images'].append(src)
+
+            # Also try to fallback to NUXT regex if HTML extraction yields nothing or low quality
+            # (Keeping the regex as backup or for better quality URLs if needed, but simplifying)
+            if not product_data['images']:
+                 try:
+                    for script in soup.find_all('script'):
+                        if script.string and 'window.__NUXT__' in script.string:
+                            # Simple regex for all image-like URLs
+                            # "https://...onliner.by/...jpg"
+                            urls = re.findall(r'"(https://[^"]+(?:content|imgproxy)\.onliner\.by[^"]+)"', script.string)
+                            for u in urls:
+                                u = u.replace(r'\/', '/')
+                                # Filter out likely irrelevant icons/assets
+                                if u not in product_data['images'] and u != product_data['main_image']:
+                                    # Heuristic: product images usually long hash or specific path
+                                    if 'catalog/device' in u or 'imgproxy' in u:
+                                         product_data['images'].append(u)
+                            break
+                 except Exception:
+                     pass
+            
+            # Legacy fallback: Related products discovery
             related_urls = []
             related_links = soup.select('a.offers-description-filter-control')
             for link in related_links:
@@ -162,7 +208,8 @@ class OnlinerParser(BaseParser):
                         href = f"https://catalog.onliner.by{href}"
                     if href not in related_urls and href != url:
                         related_urls.append(href)
-            
+
             product_data['related_urls'] = related_urls
+            product_data['slug'] = slug
             
             return product_data

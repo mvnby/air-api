@@ -101,3 +101,42 @@ class ImageService:
                 
         return sorted(urls)
 
+    @classmethod
+    async def download_and_save_image(
+        cls,
+        url: str,
+        entity_type: str,
+        slug: str
+    ) -> str:
+        """
+        Download an image from a URL and save it to the filesystem.
+        
+        Args:
+            url: Remote URL of the image
+            entity_type: Type of entity
+            slug: Slug of the entity
+            
+        Returns:
+            Relative path for database storage (e.g., 'media/products/gree-09/uuid.jpg')
+            Returns None if download fails.
+        """
+        import httpx
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, follow_redirects=True, timeout=10.0)
+                if resp.status_code != 200:
+                    print(f"Failed to download image: {url} (Status: {resp.status_code})")
+                    return None
+                    
+                filename = url.split("/")[-1]
+                # Clean filename of query params if any
+                if "?" in filename:
+                    filename = filename.split("?")[0]
+                    
+                return await cls.save_image(resp.content, entity_type, slug, filename)
+        except Exception as e:
+            print(f"Error downloading image {url}: {e}")
+            return None
+
+

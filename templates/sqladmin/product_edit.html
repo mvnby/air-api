@@ -138,7 +138,9 @@
                             <div class="col-md-6">
                                 <label class="form-label text-muted small">Предпросмотр</label>
                                 <div class="img-preview-container">
-                                    <img id="main-image-preview" src="{{ obj.main_image or '' }}" alt="Нет изображения">
+                                    <img id="main-image-preview"
+                                        src="{{ obj.main_image if obj.main_image and obj.main_image.startswith('/') else ('/' + obj.main_image if obj.main_image else '') }}"
+                                        alt="Нет изображения">
                                 </div>
                             </div>
                         </div>
