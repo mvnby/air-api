@@ -70,3 +70,34 @@ class ImageService:
             return f"/{db_path}"
         
         return db_path
+
+    @classmethod
+    async def list_images(cls, entity_type: str, slug: str) -> list[str]:
+        """
+        List all images for a given entity and slug.
+        
+        Args:
+            entity_type: Type of entity
+            slug: Slug of the entity
+            
+        Returns:
+            List of web-accessible URLs
+        """
+        entity_dir = anyio.Path(cls.BASE_DIR) / entity_type / slug
+        
+        if not await entity_dir.exists():
+            return []
+            
+        urls = []
+        async for path in entity_dir.iterdir():
+            if await path.is_file() and path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
+                # Construct DB path then convert to web path
+                # Ideally we store relative path in DB, but here we scan FS
+                # path.relative_to(cls.BASE_DIR) might handle it but let's be careful with async path
+                
+                # Manual relative path construction for simplicity and safety
+                relative_path = f"{cls.BASE_DIR}/{entity_type}/{slug}/{path.name}"
+                urls.append(cls.get_web_path(relative_path))
+                
+        return sorted(urls)
+

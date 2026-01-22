@@ -34,19 +34,34 @@ class ArticleAdmin(ModelView, model=Article):
     ]
 
     form_create_rules = [
+        "title"
+    ]
+    
+    # Restore full fields for editing
+    form_edit_rules = [
         "title", "slug", "cover_image_file", "content", "is_published"
     ]
-    form_edit_rules = form_create_rules
 
     form_overrides = {
         "content": TextAreaField
     }
 
     async def scaffold_form(self, rules=None, **kwargs):
-        # We call super() WITHOUT rules to avoid KeyError for extra fields
-        # sqladmin will use form_columns by default.
-        form_class = await super().scaffold_form()
-        form_class.cover_image_file = self.form_extra_fields["cover_image_file"]
+        # We must pass rules to super() so strict forms (like ['title']) use only those fields.
+        # However, we must filter out non-model fields (like 'cover_image_file') before passing to super,
+        # otherwise sqladmin might error trying to find them on the model.
+        
+        model_rules = rules
+        if rules:
+            model_rules = [r for r in rules if r != "cover_image_file"]
+            
+        form_class = await super().scaffold_form(rules=model_rules)
+        
+        # Only attach the extra field if it was requested in the original rules
+        # (or if rules is None, implying default/full form)
+        if rules is None or "cover_image_file" in rules:
+            form_class.cover_image_file = self.form_extra_fields["cover_image_file"]
+            
         return form_class
 
     create_template = "sqladmin/article_create.html"
@@ -60,6 +75,10 @@ class ArticleAdmin(ModelView, model=Article):
         # 1. Handle Slug
         if not data.get("slug"):
             data["slug"] = slugify(data.get("title", "article"))
+            
+        # 2. Handle Required Content
+        if is_created and "content" not in data:
+            data["content"] = ""
 
         # Remove file field from data
         if "cover_image_file" in data:
