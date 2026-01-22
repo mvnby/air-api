@@ -1,0 +1,95 @@
+---
+import ProductCard from "./ProductCard.astro";
+import { getCatalog } from "../utils/api";
+
+interface Props {
+    title?: string;
+    tags: string[];
+    limit?: number;
+}
+
+const { title, tags, limit = 4 } = Astro.props;
+
+// Fetch products based on tags
+// The API now supports faceted filtering: OR within groups, AND between groups.
+const data = await getCatalog({
+    tag_slugs: tags,
+    limit: limit,
+    sort: "area_asc", // Default sort by area for these groups usually makes sense? Or let it be default.
+});
+
+const products = data.items || [];
+---
+
+{
+    products.length > 0 && (
+        <section class="product-group-section">
+            {title && (
+                <div class="group-header">
+                    <h3>{title}</h3>
+                    <a
+                        href={`/catalog?tag_slugs=${tags.join(",")}`}
+                        class="view-all"
+                    >
+                        Смотреть все{" "}
+                        <span class="material-icons-round">arrow_forward</span>
+                    </a>
+                </div>
+            )}
+
+            <div class="group-grid">
+                {products.map((product: any) => (
+                    <ProductCard
+                        product={product}
+                        variant="default"
+                        showInstallation={true}
+                    />
+                ))}
+            </div>
+        </section>
+    )
+}
+
+<style>
+    .product-group-section {
+        margin-bottom: 4rem;
+    }
+
+    .group-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+    }
+
+    .group-header h3 {
+        font-size: 1.75rem;
+        font-weight: 800;
+    }
+
+    .view-all {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+        color: var(--primary);
+        text-decoration: none;
+        transition: gap 0.2s;
+    }
+
+    .view-all:hover {
+        gap: 0.75rem;
+    }
+
+    .group-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 2rem;
+    }
+
+    @media (max-width: 768px) {
+        .group-header h3 {
+            font-size: 1.5rem;
+        }
+    }
+</style>

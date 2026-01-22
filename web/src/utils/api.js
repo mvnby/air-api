@@ -2,7 +2,18 @@ const API_BASE = import.meta.env.INTERNAL_API_URL || 'http://app:8000/api/v1';
 const PUBLIC_API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
 export async function getCatalog(params = {}) {
-    const query = new URLSearchParams(params).toString();
+    // Manually build URLSearchParams to handle arrays correctly (FastAPI expects repeated keys)
+    const searchParams = new URLSearchParams();
+
+    Object.entries(params).forEach(([key, value]) => {
+        if (Array.isArray(value)) {
+            value.forEach(v => searchParams.append(key, v));
+        } else if (value !== null && value !== undefined) {
+            searchParams.append(key, value);
+        }
+    });
+
+    const query = searchParams.toString();
     const url = `${API_BASE}/catalog?${query}`;
     console.log('Fetching from:', url);
 

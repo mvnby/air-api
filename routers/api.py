@@ -359,13 +359,20 @@ async def get_catalog(
     """
     _validate_pagination(page, limit)
     
+    # Resolve tags for faceted filtering if provided
+    faceted_tag_ids = None
+    if tag_slugs:
+        faceted_tag_ids = await ProductService.resolve_slugs_to_grouped_ids(session, tag_slugs)
+    
     items = await ProductDAO.get_filtered(
         session,
         area_min=area_min,
         area_max=area_max,
         min_price=min_price,
         max_price=max_price,
-        tag_slugs=tag_slugs,
+        # We pass None for tag_slugs because we handle it via faceted_tag_ids now
+        tag_slugs=None, 
+        faceted_tag_ids=faceted_tag_ids,
         sort=sort,
         page=page,
         limit=limit,
@@ -377,7 +384,8 @@ async def get_catalog(
         area_max=area_max,
         min_price=min_price,
         max_price=max_price,
-        tag_slugs=tag_slugs,
+        tag_slugs=None,
+        faceted_tag_ids=faceted_tag_ids,
         is_published=True
     )
     

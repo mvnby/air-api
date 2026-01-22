@@ -80,6 +80,28 @@ class ProductDAO:
         return stmt
 
     @staticmethod
+    def _apply_faceted_filters(
+        stmt,
+        faceted_tag_ids: Optional[dict[int, list[int]]] = None
+    ):
+        """
+        Apply faceted filtering:
+        - Tags within the same group are combined with OR.
+        - Groups are combined with AND.
+        """
+        if faceted_tag_ids:
+            for group_id, tag_ids in faceted_tag_ids.items():
+                if not tag_ids:
+                    continue
+                # Subquery for products having ANY of the tags in this group
+                subq = (
+                    select(ProductTagLink.product_id)
+                    .where(ProductTagLink.tag_id.in_(tag_ids))
+                )
+                stmt = stmt.where(Product.id.in_(subq))
+        return stmt
+
+    @staticmethod
     async def get_filtered(
         session: AsyncSession,
         *,
@@ -92,7 +114,8 @@ class ProductDAO:
         is_published: bool = True,
         sort: str = "newest",
         page: int = 1,
-        limit: int = 20
+        limit: int = 20,
+        faceted_tag_ids: Optional[dict[int, list[int]]] = None
     ) -> List[Product]:
         """
         Flexible product filtering with pagination and sorting.
@@ -104,6 +127,8 @@ class ProductDAO:
         stmt = ProductDAO._apply_common_filters(
             stmt, area_min, area_max, min_price, max_price, is_inverter, tag_slugs, is_published
         )
+        
+        stmt = ProductDAO._apply_faceted_filters(stmt, faceted_tag_ids)
         
         # Sorting
         if sort == "price_asc":
@@ -134,13 +159,15 @@ class ProductDAO:
         max_price: Optional[int] = None,
         is_inverter: Optional[bool] = None,
         tag_slugs: Optional[List[str]] = None,
-        is_published: bool = True
+        is_published: bool = True,
+        faceted_tag_ids: Optional[dict[int, list[int]]] = None
     ) -> int:
         """Count total results for pagination metadata."""
         stmt = select(func.count(Product.id))
         stmt = ProductDAO._apply_common_filters(
             stmt, area_min, area_max, min_price, max_price, is_inverter, tag_slugs, is_published
         )
+        stmt = ProductDAO._apply_faceted_filters(stmt, faceted_tag_ids)
         result = await session.execute(stmt)
         return result.scalar_one() or 0
 
