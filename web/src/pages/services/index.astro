@@ -1,0 +1,173 @@
+---
+import Layout from "../../layouts/Layout.astro";
+
+const services = [
+    {
+        title: "Монтаж кондиционеров",
+        desc: "Профессиональная установка сплит-систем любой сложности. Пылесос, качественные расходники.",
+        link: "/services/installation",
+        icon: "build",
+        image: "/img/services/installation.png",
+    },
+    {
+        title: "Обслуживание",
+        desc: "Чистка, дезинфекция, дозаправка фреоном. Продлим жизнь вашей технике.",
+        link: "/services/maintenance",
+        icon: "cleaning_services",
+        image: "/img/services/maintenance.png",
+    },
+    {
+        title: "Ремонт",
+        desc: "Диагностика и ремонт кондиционеров на дому. Запчасти в наличии.",
+        link: "/services/repair",
+        icon: "engineering",
+        image: "/img/services/repair.png",
+    },
+];
+---
+
+<Layout
+    title="Услуги"
+    description="Установка, обслуживание и ремонт кондиционеров в Витебске"
+>
+    <section class="page-header">
+        <div class="container">
+            <h1>Наши услуги</h1>
+            <p class="breadcrumbs">Главная / Услуги</p>
+        </div>
+    </section>
+
+    <section class="container services-grid-section">
+        <div class="services-grid">
+            {
+                services.map((service) => (
+                    <a href={service.link} class="service-card glass">
+                        <div class="image-box">
+                            <img src={service.image} alt={service.title} />
+                        </div>
+                        <div class="card-content">
+                            <h3>{service.title}</h3>
+                            <p>{service.desc}</p>
+                            <div class="link-arrow">
+                                Подробнее{" "}
+                                <span class="material-icons-round">
+                                    arrow_forward
+                                </span>
+                            </div>
+                        </div>
+                    </a>
+                ))
+            }
+        </div>
+    </section>
+</Layout>
+
+<style>
+    .page-header {
+        background: var(--bg);
+        padding: 3rem 0;
+        margin-bottom: 3rem;
+    }
+
+    h1 {
+        font-size: 3rem;
+        font-weight: 800;
+        margin-bottom: 0.5rem;
+    }
+
+    .breadcrumbs {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+    }
+
+    .services-grid-section {
+        margin-bottom: 6rem;
+    }
+
+    .services-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2rem;
+    }
+
+    .service-card {
+        padding: 0; /* Remove padding for full-width image */
+        display: flex;
+        flex-direction: column;
+        border-radius: 1.5rem;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        transition: all 0.3s;
+        height: 100%;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .service-card:hover {
+        transform: translateY(-5px);
+        border-color: var(--primary);
+        box-shadow:
+            0 20px 25px -5px rgba(0, 0, 0, 0.1),
+            0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    }
+    
+    .service-card:hover .image-box img {
+        transform: scale(1.05);
+    }
+
+    .image-box {
+        width: 100%;
+        height: 240px;
+        background: radial-gradient(circle at center, #f1f5f9 0%, #e2e8f0 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        position: relative;
+        padding: 0;
+    }
+    
+    .image-box img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.5s ease;
+        filter: drop-shadow(0 10px 15px rgba(0,0,0,0.1));
+    }
+
+    .card-content {
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        flex-grow: 1;
+        gap: 1rem;
+    }
+
+    h3 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+
+    p {
+        color: var(--text-muted);
+        line-height: 1.6;
+        flex-grow: 1;
+        margin-bottom: 1.5rem;
+    }
+
+    .link-arrow {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+        color: var(--primary);
+        margin-top: auto;
+    }
+
+    @media (max-width: 900px) {
+        .services-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
