@@ -105,7 +105,8 @@ class ProductAdmin(ModelView, model=Product):
     # --- Formatters ---
     def format_image(model, context):
         if model.main_image:
-            return Markup(f'<img src="{model.main_image}" style="height: 50px; border-radius: 5px;">')
+            url = model.main_image if model.main_image.startswith("/") else f"/{model.main_image}"
+            return Markup(f'<img src="{url}" style="height: 50px; border-radius: 5px;">')
         return ""
 
     def format_product_title(model, context):

@@ -51,6 +51,7 @@ services:
     volumes:
       - ./web:/app
       - /app/node_modules
+      - ./media:/app/public/media
     environment:
       - PUBLIC_API_URL=http://localhost:8000/api/v1 # For browser
       - INTERNAL_API_URL=http://app:8000/api/v1 # For SSR

@@ -164,5 +164,6 @@ class OnlinerParser(BaseParser):
                         related_urls.append(href)
             
             product_data['related_urls'] = related_urls
+            product_data['slug'] = slug
             
             return product_data

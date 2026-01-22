@@ -520,7 +520,7 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
     logger.debug(f"Order #{order.id} items: {', '.join(added_items)}")
     
     return OrderResponse(
-        id=order.id,
+                id=order.id,
         status=order.status,
         total_amount=order.total_amount,
         created_at=order.created_at
