@@ -1,5 +1,21 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import ProductCard from "../components/ProductCard.astro";
+import { getProductById } from "../utils/api";
+
+const heroProduct = await getProductById(63);
+
+// Fallback if product 63 not found (prevent crash)
+const displayProduct = heroProduct || {
+	title: "Haier Coral Expert",
+	price: 1399,
+	slug: "haier-coral",
+	main_image:
+		"https://lh3.googleusercontent.com/aida-public/AB6AXuCJ9hM1wPSDne42j3c73oSgAT919piozP7uewktSZ65sf4wj5_kHtyPyb93VjYjG1Z1ePYKgwwOrPWYP8m5qfhVfHvL8UBqWbfXDOWBa0g-HmvZJGujd-rXIAHGOVXQjyphznvogsQJPjx_LXNhnRWhkHsSjYmBELj_UoMApNOW44UMtGnbcrKgZwW9AMKEnATanS8miDOCPIx9641OEeQgqbgQbcemmrbnB8ME2XXUi3VkwPi4aeF3jHDl6F3BJDQAfkErAjwuny0",
+	description:
+		"Инверторная сплит-система с функцией самоочистки и тихим режимом.",
+	is_inverter: true,
+};
 ---
 
 <Layout title="Главная">
@@ -48,30 +64,7 @@ import Layout from "../layouts/Layout.astro";
 			</div>
 
 			<div class="hero-visual">
-				<div class="featured-card">
-					<img
-						src="https://lh3.googleusercontent.com/aida-public/AB6AXuCJ9hM1wPSDne42j3c73oSgAT919piozP7uewktSZ65sf4wj5_kHtyPyb93VjYjG1Z1ePYKgwwOrPWYP8m5qfhVfHvL8UBqWbfXDOWBa0g-HmvZJGujd-rXIAHGOVXQjyphznvogsQJPjx_LXNhnRWhkHsSjYmBELj_UoMApNOW44UMtGnbcrKgZwW9AMKEnATanS8miDOCPIx9641OEeQgqbgQbcemmrbnB8ME2XXUi3VkwPi4aeF3jHDl6F3BJDQAfkErAjwuny0"
-						alt="Haier Coral Expert"
-						class="featured-img"
-					/>
-					<div class="featured-info">
-						<div class="f-header">
-							<div>
-								<h3>Haier Coral Expert</h3>
-								<p>Инверторная сплит-система</p>
-							</div>
-							<span class="badge small">Хит продаж</span>
-						</div>
-						<div class="f-footer">
-							<span class="f-price">1 399 Br</span>
-							<button class="add-btn"
-								><span class="material-icons-round">add</span
-								></button
-							>
-						</div>
-					</div>
-				</div>
-				
+				<ProductCard product={displayProduct} variant="hero" />
 			</div>
 		</div>
 	</section>
