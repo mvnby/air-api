@@ -96,3 +96,14 @@ We have successfully transitioned to a **Headless Commerce** architecture. The *
 *   **Kill it:** `docker compose down`
 *   **Migrate DB:** `docker compose exec app python scripts/migrate_sqlite_to_pg.py`
 *   **Get Google Token:** `python scripts/get_token.py` (Run inside container if needed)
+
+## **Technical Context & Lessons**
+
+1.  **API Versioning**:
+    *   `/api/products/{id}` -> Get by ID.
+    *   `/api/v1/products/{slug}` -> Get by Slug (Headless V1).
+    *   *Lesson*: When fetching by ID in frontend, strip `/v1` from base URL if necessary.
+2.  **Docker Commands**:
+    *   Use `docker compose` (v2 style), NOT `docker-compose`.
+    *   To restart a specific service: `docker compose restart web`.
+    *   **SSR Networking**: URLs like `localhost:8000` inside a container point to the container itself. Use service names (e.g., `http://app:8000`) for internal communication.

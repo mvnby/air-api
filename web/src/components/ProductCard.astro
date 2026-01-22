@@ -1,0 +1,464 @@
+---
+interface Props {
+  product: {
+    title: string;
+    price: number;
+    slug: string;
+    main_image?: string;
+    area?: number;
+    is_inverter?: boolean;
+    attributes?: Record<string, any>;
+    description?: string; // For hero card
+  };
+  variant?: "default" | "hero" | "small" | "minimal";
+  showInstallation?: boolean;
+  baseInstallationPrice?: number;
+}
+
+const {
+  product,
+  variant = "default",
+  showInstallation = false,
+  baseInstallationPrice = 360,
+} = Astro.props;
+
+const formatPrice = (price: number) => price.toLocaleString() + " р.";
+---
+
+{
+  variant === "default" && (
+    <a href={`/product/${product.slug}`} class="product-item card group">
+      <div class="p-img-box">
+        <img
+          src={product.main_image || "/placeholder.jpg"}
+          alt={product.title}
+        />
+        <div class="p-badge-list">
+          {product.is_inverter && <span class="badge small">Инвертор</span>}
+        </div>
+      </div>
+      <div class="p-info">
+        {product.area && <span class="p-area-info">{product.area} м²</span>}
+        <h4>{product.title}</h4>
+
+        {showInstallation && (
+          <div
+            class="installation-toggle"
+            data-base-price={product.price}
+            data-inst-price={baseInstallationPrice}
+            onclick="event.preventDefault();"
+          >
+            <div class="toggle-control">
+              <div class="toggle-switch" />
+              <span>Монтаж</span>
+            </div>
+            <span class="inst-price">
+              +{baseInstallationPrice.toLocaleString()} р.
+            </span>
+          </div>
+        )}
+
+        <div class="p-footer">
+          <span class="final-price">{formatPrice(product.price)}</span>
+          <div class="add-btn micro">
+            <span class="material-icons-round">shopping_cart</span>
+          </div>
+        </div>
+      </div>
+    </a>
+  )
+}
+
+{
+  variant === "hero" && (
+    <div class="featured-card">
+      <img
+        src={product.main_image || "/placeholder.jpg"}
+        alt={product.title}
+        class="featured-img"
+      />
+      <div class="featured-info">
+        <div class="f-header">
+          <div>
+            <h3>{product.title}</h3>
+            <p>{product.description || "Инверторная сплит-система"}</p>
+          </div>
+          {product.is_inverter && <span class="badge small">Хит продаж</span>}
+        </div>
+        <div class="f-footer">
+          <span class="f-price">{formatPrice(product.price)}</span>
+          <button class="add-btn">
+            <span class="material-icons-round">shopping_cart</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+{
+  variant === "minimal" && (
+    <a href={`/product/${product.slug}`} class="minimal-card card">
+      <div class="m-img-box">
+        <img
+          src={product.main_image || "/placeholder.jpg"}
+          alt={product.title}
+        />
+      </div>
+      <div class="m-info">
+        <h4>{product.title}</h4>
+        <div class="m-footer">
+          <span class="final-price small">{formatPrice(product.price)}</span>
+          <button class="add-btn micro plain">
+            <span class="material-icons-round">arrow_forward</span>
+          </button>
+        </div>
+      </div>
+    </a>
+  )
+}
+
+<style>
+  /* Base Card Styles from catalog.astro */
+  .product-item {
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.2s;
+  }
+  .product-item:hover {
+    transform: translateY(-4px);
+  }
+
+  .p-img-box {
+    height: 200px;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    position: relative;
+  }
+  .p-img-box img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    transition: transform 0.4s;
+  }
+  .product-item:hover .p-img-box img {
+    transform: scale(1.1);
+  }
+  .p-badge-list {
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .p-info {
+    padding: 1.5rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .p-area-info {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--primary);
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+    display: block;
+  }
+  .p-info h4 {
+    font-size: 1.125rem;
+    margin-bottom: 1.5rem;
+    line-height: 1.4;
+    flex: 1;
+  }
+
+  /* Installation Toggle */
+  .installation-toggle {
+    background: var(--secondary, #f1f5f9);
+    padding: 0.75rem 1rem;
+    border-radius: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    margin-bottom: 1.5rem;
+    transition: background 0.2s;
+  }
+  .installation-toggle:hover {
+    background: rgba(0, 127, 128, 0.15);
+  }
+  .toggle-control {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+  .toggle-switch {
+    width: 36px;
+    height: 20px;
+    border-radius: 20px;
+    background: #cbd5e1;
+    position: relative;
+    transition: background 0.3s;
+  }
+  .toggle-switch::after {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background: white;
+    border-radius: 50%;
+    top: 3px;
+    left: 3px;
+    transition: all 0.3s;
+  }
+  .installation-toggle.active {
+    background: rgba(0, 127, 128, 0.2);
+  }
+  .installation-toggle.active .toggle-switch {
+    background: var(--primary);
+  }
+  .installation-toggle.active .toggle-switch::after {
+    left: 19px;
+  }
+  .inst-price {
+    color: var(--primary);
+    font-weight: 700;
+    font-size: 0.9rem;
+  }
+
+  .p-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: auto;
+  }
+  .final-price {
+    font-size: 1.25rem;
+    font-weight: 800;
+    transition: transform 0.2s;
+  }
+  .final-price.small {
+    font-size: 1.1rem;
+  }
+  .pulse {
+    transform: scale(1.1);
+    color: var(--primary);
+  }
+
+  .add-btn.micro {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    /* Improved visibility: shadow + border */
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    border: 1px solid var(--border, #e2e8f0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface, #fff);
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--primary);
+  }
+  .add-btn.micro.plain {
+    box-shadow: none;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+  }
+  .add-btn.micro.plain:hover {
+    background: transparent;
+    color: var(--primary);
+    transform: translateX(2px);
+  }
+
+  .add-btn.micro:hover:not(.plain) {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+  }
+  .add-btn .material-icons-round {
+    font-size: 1.2rem;
+  }
+
+  /* Hero Variant Styles form index.astro */
+  .featured-card {
+    background: var(--surface);
+    border-radius: 2rem;
+    overflow: hidden;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--border);
+    position: relative;
+    z-index: 2;
+  }
+  .featured-img {
+    width: 100%;
+    height: 320px;
+    object-fit: contain;
+    padding: 2rem;
+    background: var(
+      --bg
+    ); /* Slight background contrast if needed, or matches card bg */
+  }
+  .featured-info {
+    padding: 1.5rem;
+  }
+  .f-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin-bottom: 1.5rem;
+  }
+  .f-header h3 {
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
+  }
+  .f-header p {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+  .small {
+    padding: 0.2rem 0.6rem;
+    font-size: 0.7rem;
+  }
+
+  .f-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .f-price {
+    font-size: 1.75rem;
+    font-weight: 800;
+  }
+  .add-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: white;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    box-shadow: 0 10px 15px -3px rgba(0, 127, 128, 0.4);
+  }
+  .add-btn:hover {
+    background: var(--primary-dark);
+    transform: scale(1.1);
+  }
+
+  /* Minimal Variant */
+  .minimal-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem;
+    border-radius: 1rem;
+    text-decoration: none;
+    color: inherit;
+    background: var(--surface);
+    border: 1px solid var(--border, transparent);
+    transition: all 0.2s;
+  }
+  .minimal-card:hover {
+    background: var(--surface);
+    border-color: var(--border-hover, #cbd5e1);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  }
+  .m-img-box {
+    width: 64px;
+    height: 64px;
+    border-radius: 0.75rem;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 0.5rem;
+  }
+  .m-img-box img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+  .m-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .m-info h4 {
+    font-size: 0.95rem;
+    margin-bottom: 0.25rem;
+    line-height: 1.2;
+  }
+  .m-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+</style>
+
+<script>
+  // Installation toggle logic
+  // We attach listener to document to handle Astro ViewTransitions/Islands if needed,
+  // or just run it once. Using a specific class selector.
+
+  function initToggles() {
+    const toggles = document.querySelectorAll(".installation-toggle");
+    toggles.forEach((toggle) => {
+      // Avoid double binding
+      if (toggle.hasAttribute("data-bound")) return;
+      toggle.setAttribute("data-bound", "true");
+
+      toggle.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        toggle.classList.toggle("active");
+
+        const basePrice = parseInt(
+          toggle.getAttribute("data-base-price") || "0",
+        );
+        const instPrice = parseInt(
+          toggle.getAttribute("data-inst-price") || "0",
+        );
+
+        const card = toggle.closest(".group"); // Assuming 'group' class on card
+        const finalPriceEl = card?.querySelector(".final-price");
+
+        if (finalPriceEl) {
+          const isAuto = toggle.classList.contains("active");
+          const total = basePrice + (isAuto ? instPrice : 0);
+          finalPriceEl.textContent = total.toLocaleString() + " Br";
+
+          if (isAuto) {
+            finalPriceEl.classList.add("pulse");
+            setTimeout(() => finalPriceEl.classList.remove("pulse"), 400);
+          }
+        }
+      });
+    });
+  }
+
+  // Run on load
+  initToggles();
+
+  // Support for View Transitions if/when added
+  document.addEventListener("astro:page-load", initToggles);
+</script>

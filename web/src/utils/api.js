@@ -27,3 +27,25 @@ export async function getProductBySlug(slug) {
         return null;
     }
 }
+
+export async function getProductById(id) {
+    // FIX: The backend ID endpoint is /api/products/{id}, NOT /api/v1/products/{id}
+    // We strip '/v1' from the base URL to match the router structure.
+    const apiRoot = API_BASE.replace(/\/v1\/?$/, '');
+    const url = `${apiRoot}/products/${id}`;
+
+    console.log(`[SSR] Fetching product ${id} from: ${url}`);
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            console.error(`[SSR] Failed to fetch product ${id}: ${response.status} ${response.statusText}`);
+            return null;
+        }
+        const data = await response.json();
+        console.log(`[SSR] Successfully fetched product ${id}: ${data.title}`);
+        return data;
+    } catch (error) {
+        console.error(`[SSR] Error fetching product ${id} from ${url}:`, error.message);
+        return null;
+    }
+}
