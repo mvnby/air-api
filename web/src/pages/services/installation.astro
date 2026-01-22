@@ -1,0 +1,137 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import ContactForm from "../../components/ContactForm.vue";
+---
+
+<Layout
+    title="Монтаж кондиционеров"
+    description="Установка сплит-систем в Витебске. Этузиасты чистого монтажа."
+>
+    <section class="page-header">
+        <div class="container">
+            <h1>Монтаж кондиционеров</h1>
+            <p class="breadcrumbs">Главная / Услуги / Монтаж</p>
+        </div>
+    </section>
+
+    <section class="container detail-grid">
+        <div class="content">
+            <div class="glass p-8 rounded-3xl mb-8">
+                <h2>Стандартный монтаж</h2>
+                <p class="price-tag">от 360 BYN</p>
+                <p class="mb-6 text-muted">
+                    Включает в себя установку внутреннего и внешнего блоков,
+                    прокладку трассы до 3 метров и пуско-наладочные работы.
+                </p>
+
+                <ul class="feature-list">
+                    <li>
+                        <span class="material-icons-round">check_circle</span>
+                        <span>Используем промышленный пылесос (чисто!)</span>
+                    </li>
+                    <li>
+                        <span class="material-icons-round">check_circle</span>
+                        <span>Медная труба стандарта ASTM (толстостенная)</span>
+                    </li>
+                    <li>
+                        <span class="material-icons-round">check_circle</span>
+                        <span>Вакуумирование системы (обязательно)</span>
+                    </li>
+                    <li>
+                        <span class="material-icons-round">check_circle</span>
+                        <span>Гарантия на монтаж — 5 лет</span>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="article-content">
+                <h3>Что входит в стоимость?</h3>
+                <p>
+                    Мы не экономим на расходных материалах. Используем только
+                    качественную медную трубу, надежную теплоизоляцию K-Flex и
+                    армированный дренаж. Внешний блок устанавливается на
+                    усиленные кронштейны.
+                </p>
+
+                <h3>Этапы работы</h3>
+                <ol>
+                    <li>Согласование места установки</li>
+                    <li>Бурение отверстия (с пылесосом)</li>
+                    <li>Монтаж внешнего блока</li>
+                    <li>Прокладка коммуникаций</li>
+                    <li>Монтаж внутреннего блока</li>
+                    <li>Вакуумирование и запуск</li>
+                    <li>Уборка мусора</li>
+                </ol>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <ContactForm client:visible />
+        </div>
+    </section>
+</Layout>
+
+<style>
+    .page-header {
+        padding: 3rem 0;
+        margin-bottom: 2rem;
+    }
+    h1 {
+        font-size: 3rem;
+        font-weight: 800;
+    }
+    .breadcrumbs {
+        color: var(--text-muted);
+    }
+
+    .detail-grid {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 4rem;
+        margin-bottom: 6rem;
+    }
+
+    .price-tag {
+        font-size: 2rem;
+        font-weight: 800;
+        color: var(--primary);
+        margin-bottom: 1rem;
+    }
+
+    .feature-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .feature-list li {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    .feature-list .material-icons-round {
+        color: #10b981;
+    }
+
+    .article-content h3 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+    }
+    .article-content ol {
+        margin-left: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    @media (max-width: 900px) {
+        .detail-grid {
+            grid-template-columns: 1fr;
+        }
+        .sidebar {
+            order: -1;
+        }
+    }
+</style>
