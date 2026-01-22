@@ -5,9 +5,26 @@ import { getCatalog } from "../utils/api";
 
 const { searchParams } = Astro.url;
 const page = searchParams.get("page") || "1";
-const sort = searchParams.get("sort") || "newest";
+const sort = searchParams.get("sort") || "newest"; // "newest", "price_asc", "price_desc"
+const tagSlugsRaw = searchParams.get("tag_slugs");
 
-const data = await getCatalog({ page, limit: 12, sort });
+// Handle tag_slugs which might be "tag1,tag2" or just "tag1"
+// Note: If multiple ?tag_slugs=a&tag_slugs=b are used, Astro/Vite might handle them differently,
+// but for the link we generated we use comma separation.
+let tag_slugs: string[] | null = null;
+if (tagSlugsRaw) {
+    tag_slugs = tagSlugsRaw
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+}
+
+const data = await getCatalog({
+    page,
+    limit: 12,
+    sort,
+    tag_slugs, // Pass array to api utils
+});
 const products = data.items || [];
 const meta = data.meta || { total: 0, page: 1, limit: 12, pages: 1 };
 ---
