@@ -359,13 +359,20 @@ async def get_catalog(
     """
     _validate_pagination(page, limit)
     
+    # Resolve tags for faceted filtering if provided
+    faceted_tag_ids = None
+    if tag_slugs:
+        faceted_tag_ids = await ProductService.resolve_slugs_to_grouped_ids(session, tag_slugs)
+    
     items = await ProductDAO.get_filtered(
         session,
         area_min=area_min,
         area_max=area_max,
         min_price=min_price,
         max_price=max_price,
-        tag_slugs=tag_slugs,
+        # We pass None for tag_slugs because we handle it via faceted_tag_ids now
+        tag_slugs=None, 
+        faceted_tag_ids=faceted_tag_ids,
         sort=sort,
         page=page,
         limit=limit,
@@ -377,7 +384,8 @@ async def get_catalog(
         area_max=area_max,
         min_price=min_price,
         max_price=max_price,
-        tag_slugs=tag_slugs,
+        tag_slugs=None,
+        faceted_tag_ids=faceted_tag_ids,
         is_published=True
     )
     
@@ -517,3 +525,19 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
         total_amount=order.total_amount,
         created_at=order.created_at
     )
+
+# --- CONFIG ENDPOINTS ---
+
+@router.get("/v1/config")
+async def get_global_config(session: AsyncSession = Depends(get_session)):
+    """
+    Get all global configuration parameters as a key-value dictionary.
+    Example: {"phone": "+37529...", "email": "..."}
+    """
+    from models import GlobalConfig
+    stmt = select(GlobalConfig)
+    result = await session.execute(stmt)
+    configs = result.scalars().all()
+    
+    # Convert list of configs to simple key-value dict
+    return {c.key: c.value for c in configs}

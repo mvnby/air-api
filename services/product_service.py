@@ -116,6 +116,42 @@ class ProductService:
         return [ProductService._to_dict(p) for p in products]
 
     @staticmethod
+    async def resolve_slugs_to_grouped_ids(
+        session: AsyncSession,
+        slugs: List[str]
+    ) -> Dict[int, List[int]]:
+        """
+        Resolves a list of tag slugs to their IDs, grouped by TagGroup ID.
+        Returns: {group_id: [tag_id1, tag_id2]}
+        """
+        from models import Tag
+        from sqlmodel import select
+        
+        if not slugs:
+            return {}
+            
+        stmt = select(Tag).where(Tag.slug.in_(slugs))
+        result = await session.execute(stmt)
+        tags = result.scalars().all()
+        
+        grouped: Dict[int, List[int]] = {}
+        
+        for tag in tags:
+            # If tag has no group, we put it in a "None" group (key 0 or None)
+            # But query logic needs to handle it. 
+            # If no group, treating as separate "tags" is tricky in faceted search.
+            # Let's assume all faceted tags belong to a group. 
+            # If not, we can put them in a special bucket or just ignore group logic.
+            # For this implementation, we map None group to 0.
+            g_id = tag.group_id if tag.group_id else 0
+            
+            if g_id not in grouped:
+                grouped[g_id] = []
+            grouped[g_id].append(tag.id)
+            
+        return grouped
+
+    @staticmethod
     def _to_dict(product: Product) -> Dict[str, Any]:
         """
         Convert Product model to dictionary with bot-compatible format.
