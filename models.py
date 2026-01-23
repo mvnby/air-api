@@ -419,3 +419,21 @@ class GlobalConfig(SQLModel, table=True):
 
     def __str__(self):
         return f"{self.key}: {self.value}"
+
+class InstallationRate(SQLModel, table=True):
+    __tablename__ = "installation_rates"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    
+    category: str = Field(index=True) # "Wall", "Cassette", "Duct"
+    power_range: str = Field(default="") # "07-12", "18-24" etc
+    
+    base_price: int = Field(default=0)
+    extra_pipe_price: int = Field(default=0)
+    included_pipe_meters: int = Field(default=3)
+    
+    is_fixed: bool = Field(default=True) # True = fixed formula, False = "from X rub"
+    
+    comment: Optional[str] = Field(default=None, sa_column=Column(String)) # "Forests not included", etc
+    
+    def __str__(self):
+        return f"{self.category} {self.power_range} ({self.base_price}r)"

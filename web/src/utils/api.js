@@ -2,12 +2,13 @@ const ENV_API_URL = import.meta.env.INTERNAL_API_URL || 'http://app:8000/api/v1'
 const PUBLIC_API_ROOT = (import.meta.env.PUBLIC_API_URL || 'http://localhost:8000').replace(/\/api\/v1\/?$/, "");
 
 // Ensure standard formatting (no trailing slash)
-const BASE_URL = ENV_API_URL.replace(/\/$/, "");
+const INTERNAL_URL = (import.meta.env.INTERNAL_API_URL || 'http://app:8000/api/v1').replace(/\/$/, "");
+const PUBLIC_URL = (import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/\/$/, "");
 
 // Define API versions relative to the base
-// Assumption: BASE_URL points to .../api/v1
-const API_V1 = BASE_URL;
-const API_ROOT = BASE_URL.replace(/\/v1$/, ""); // Fallback for non-versioned endpoints
+// Use Client-side URL if not in SSR
+const API_V1 = import.meta.env.SSR ? INTERNAL_URL : PUBLIC_URL;
+const API_ROOT = API_V1.replace(/\/v1$/, ""); // Fallback for non-versioned endpoints
 
 export function resolveImageUrl(path) {
     if (!path) return "/placeholder.jpg";
@@ -68,6 +69,21 @@ export async function getProductById(id) {
 export async function getGlobalConfig() {
     const data = await fetchJson(`${API_V1}/config`);
     return data || {};
+}
+
+let _installationRatesPromise = null;
+
+export async function getInstallationRates() {
+    if (!_installationRatesPromise) {
+        // Cache the promise to prevent race conditions/multiple requests
+        _installationRatesPromise = fetchJson(`${API_V1}/installation-rates`)
+            .catch(err => {
+                console.error('[API] Failed to fetch installation rates:', err);
+                _installationRatesPromise = null; // Reset on failure so we can try again
+                return [];
+            });
+    }
+    return _installationRatesPromise;
 }
 
 export async function submitContactForm(data) {

@@ -452,6 +452,12 @@ async def get_services(session: AsyncSession = Depends(get_session)):
     result = await session.execute(stmt)
     return result.scalars().all()
 
+@router.get("/v1/installation-rates")
+async def get_installation_rates(session: AsyncSession = Depends(get_session)):
+    """Get all installation rates."""
+    from services.installation_service import InstallationService
+    return await InstallationService.get_all(session)
+
 # --- ORDER ENDPOINTS ---
 
 @router.post("/v1/orders", response_model=OrderResponse)

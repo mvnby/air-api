@@ -1,4 +1,4 @@
-from .catalog import ProductAdmin, TagAdmin, TagGroupAdmin, BulkTagsView
+from .catalog import ProductAdmin, TagAdmin, TagGroupAdmin, BulkTagsView, InstallationRateAdmin
 from .orders import OrderAdmin, ServiceAdmin, OrderProductLinkAdmin, OrderServiceLinkAdmin
 from .customers import CustomerAdmin
 from .installers import InstallerAdmin
@@ -26,5 +26,6 @@ admin_views = [
     BulkTagsView,
     GoogleAuthView, # Settings (Bottom)
     InstallerAdmin,
-    GlobalConfigAdmin
+    GlobalConfigAdmin,
+    InstallationRateAdmin
 ]

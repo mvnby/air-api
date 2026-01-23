@@ -9,7 +9,7 @@ from sqladmin import Admin
 from starlette.middleware.sessions import SessionMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from core.database import engine, init_db
+from core.database import engine, init_db, async_session_maker
 from core.config import settings
 from core.logger import logger
 from core.security import AdminAuthBackend
@@ -25,6 +25,11 @@ async def lifespan(app: FastAPI):
     
     # Create tables on startup
     await init_db()
+    
+    # Seed data
+    from services.installation_service import InstallationService
+    async with async_session_maker() as session:
+        await InstallationService.seed_defaults(session)
     
     # Start background price sync (every 6 hours)
     from services.scheduler_service import scheduler_service
