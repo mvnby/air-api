@@ -69,6 +69,14 @@ We have successfully transitioned to a **Headless Commerce** architecture. The *
   * **Fixes**: Cleaned up logo backgrounds and established transparent asset pipeline.
 
 
+* **Phase 34**: **Product Card Component & Catalog Refactor**.
+  *   **Reusable Component**: Created `ProductCard.astro` with "Default", "Hero", and "Minimal" variants.
+  *   **Features**: Integrated "Installation Toggle" logic directly into the component.
+  *   **UI Polish**: Premium "Squircle" design, row-based badges, and optimized layout.
+  *   **Refactor**: Updated Home and Catalog pages to use the new component, ensuring design consistency.
+  *   **Fixes**: Solved SSR API versioning issues in `api.js` and fixed badge duplication.
+  *   **Feature**: Added slug classes to feature tags for custom styling.
+
 ## **The Rules (Don't Break These) 🚨**
 
 1. **Service Layer Only**: Seriously, no raw SQL in routers or admin. I will find you.  

@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 import Layout from "../../layouts/Layout.astro";
-import { getProductBySlug } from "../../utils/api";
+import { getProductBySlug, resolveImageUrl } from "../../utils/api";
 
 const { slug } = Astro.params;
 const product = await getProductBySlug(slug as string);
@@ -28,7 +28,7 @@ const images = product.images || [];
             <div class="product-visuals">
                 <div class="main-image-card card">
                     <img
-                        src={product.main_image || "/placeholder.jpg"}
+                        src={resolveImageUrl(product.main_image)}
                         alt={product.title}
                         id="mainImg"
                     />
@@ -40,14 +40,20 @@ const images = product.images || [];
                                 class="thumb card active"
                                 onclick="document.getElementById('mainImg').src=this.querySelector('img').src; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('active')); this.classList.add('active')"
                             >
-                                <img src={product.main_image} alt="Thumbnail" />
+                                <img
+                                    src={resolveImageUrl(product.main_image)}
+                                    alt="Thumbnail"
+                                />
                             </div>
                             {images.map((img: string) => (
                                 <div
                                     class="thumb card"
                                     onclick="document.getElementById('mainImg').src=this.querySelector('img').src; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('active')); this.classList.add('active')"
                                 >
-                                    <img src={img} alt="Thumbnail" />
+                                    <img
+                                        src={resolveImageUrl(img)}
+                                        alt="Thumbnail"
+                                    />
                                 </div>
                             ))}
                         </div>

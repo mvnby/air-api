@@ -1,10 +1,23 @@
-const API_BASE = import.meta.env.INTERNAL_API_URL || 'http://app:8000/api/v1';
-const PUBLIC_API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+const ENV_API_URL = import.meta.env.INTERNAL_API_URL || 'http://app:8000/api/v1';
+const PUBLIC_API_ROOT = (import.meta.env.PUBLIC_API_URL || 'http://localhost:8000').replace(/\/api\/v1\/?$/, "");
 
-export async function getCatalog(params = {}) {
-    // Manually build URLSearchParams to handle arrays correctly (FastAPI expects repeated keys)
+// Ensure standard formatting (no trailing slash)
+const BASE_URL = ENV_API_URL.replace(/\/$/, "");
+
+// Define API versions relative to the base
+// Assumption: BASE_URL points to .../api/v1
+const API_V1 = BASE_URL;
+const API_ROOT = BASE_URL.replace(/\/v1$/, ""); // Fallback for non-versioned endpoints
+
+export function resolveImageUrl(path) {
+    if (!path) return "/placeholder.jpg";
+    if (path.startsWith("http")) return path;
+    return `${PUBLIC_API_ROOT}/${path.replace(/^\//, "")}`;
+}
+
+// Formatting helpers
+function buildQuery(params) {
     const searchParams = new URLSearchParams();
-
     Object.entries(params).forEach(([key, value]) => {
         if (Array.isArray(value)) {
             value.forEach(v => searchParams.append(key, v));
@@ -12,63 +25,70 @@ export async function getCatalog(params = {}) {
             searchParams.append(key, value);
         }
     });
-
-    const query = searchParams.toString();
-    const url = `${API_BASE}/catalog?${query}`;
-    console.log('Fetching from:', url);
-
-    try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('API request failed');
-        return await response.json();
-    } catch (error) {
-        console.error('Fetch error:', error);
-        return { items: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } };
-    }
+    return searchParams.toString();
 }
 
-export async function getProductBySlug(slug) {
-    const url = `${API_BASE}/products/${slug}`;
-    try {
-        const response = await fetch(url);
-        if (!response.ok) return null;
-        return await response.json();
-    } catch (error) {
-        console.error('Fetch error:', error);
-        return null;
-    }
-}
-
-export async function getProductById(id) {
-    // FIX: The backend ID endpoint is /api/products/{id}, NOT /api/v1/products/{id}
-    // We strip '/v1' from the base URL to match the router structure.
-    const apiRoot = API_BASE.replace(/\/v1\/?$/, '');
-    const url = `${apiRoot}/products/${id}`;
-
-    console.log(`[SSR] Fetching product ${id} from: ${url}`);
+async function fetchJson(url, errorMsg = 'API request failed') {
     try {
         const response = await fetch(url);
         if (!response.ok) {
-            console.error(`[SSR] Failed to fetch product ${id}: ${response.status} ${response.statusText}`);
-            return null;
+            console.error(`[API] Error ${response.status} from ${url}`);
+            return null; // Return null on error primarily
         }
-        const data = await response.json();
-        console.log(`[SSR] Successfully fetched product ${id}: ${data.title}`);
-        return data;
+        return await response.json();
     } catch (error) {
-        console.error(`[SSR] Error fetching product ${id} from ${url}:`, error.message);
+        console.error(`[API] Fetch error for ${url}:`, error.message);
         return null;
     }
 }
 
+export async function getCatalog(params = {}) {
+    const query = buildQuery(params);
+    const url = `${API_V1}/catalog?${query}`;
+    console.log('[API] Fetching Catalog:', url);
+
+    const data = await fetchJson(url);
+    if (!data) {
+        return { items: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } };
+    }
+    return data;
+}
+
+export async function getProductBySlug(slug) {
+    return await fetchJson(`${API_V1}/products/${slug}`);
+}
+
+export async function getProductById(id) {
+    // Uses API_ROOT because ID endpoint is at /api/products/{id}
+    const url = `${API_ROOT}/products/${id}`;
+    console.log(`[SSR] Fetching product ${id} from: ${url}`);
+    return await fetchJson(url);
+}
+
 export async function getGlobalConfig() {
-    const url = `${API_BASE}/config`;
+    const data = await fetchJson(`${API_V1}/config`);
+    return data || {};
+}
+
+export async function submitContactForm(data) {
+    // Assuming POST /leads based on context
+    const url = `${API_V1}/leads`;
     try {
-        const response = await fetch(url);
-        if (!response.ok) return {};
-        return await response.json();
-    } catch (error) {
-        console.error('Fetch error:', error);
-        return {};
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+        });
+
+        if (!response.ok) {
+            console.error(`[API] Submit error ${response.status}`);
+            return false;
+        }
+        return true;
+    } catch (e) {
+        console.error('[API] Submit exception:', e);
+        return false;
     }
 }

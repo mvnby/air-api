@@ -24,7 +24,8 @@ from schemas import (
     ServiceResponse,
     OrderPayload,
     OrderResponse,
-    TagResponse
+    TagResponse,
+    TagGroupResponse
 )
 from crud.product import ProductDAO
 from models import Article, Service, Order, Customer, OrderStatus, OrderProductLink, CustomerType
@@ -41,8 +42,22 @@ def _map_product_to_response(product: Product) -> ProductResponse:
     # Ensure tags are loaded
     if product.tags:
         for t in product.tags:
-            g_title = t.group.title if t.group else None
-            p_tags.append(TagResponse(id=t.id, title=t.title, slug=t.slug, group_title=g_title))
+            g_resp = None
+            if t.group:
+                g_resp = TagGroupResponse(
+                    title=t.group.title,
+                    slug=t.group.slug,
+                    is_public=t.group.is_public
+                )
+            
+            p_tags.append(TagResponse(
+                id=t.id, 
+                title=t.title, 
+                slug=t.slug, 
+                is_public=t.is_public,
+                group=g_resp,
+                group_title=t.group.title if t.group else None
+            ))
     
     # Handle potentially string-encoded JSON fields
     import json

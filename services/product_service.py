@@ -160,6 +160,16 @@ class ProductService:
         data = product.model_dump()
         # Flatten tags to list of strings for bot compatibility
         data['categories'] = [t.title for t in product.tags]
+        
+        # Serialize full tags with groups for Frontend
+        tags_data = []
+        for tag in product.tags:
+            t_dict = tag.model_dump()
+            if tag.group:
+                t_dict['group'] = tag.group.model_dump()
+            tags_data.append(t_dict)
+        data['tags'] = tags_data
+        
         return data
 
     @staticmethod

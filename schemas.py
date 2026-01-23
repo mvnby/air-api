@@ -26,10 +26,17 @@ class ProductBase(BaseModel):
     is_published: bool
     created_at: datetime
 
+class TagGroupResponse(BaseModel):
+    title: str
+    slug: str
+    is_public: bool = True
+
 class TagResponse(BaseModel):
     id: int
     title: str
     slug: str
+    is_public: bool = True
+    group: Optional[TagGroupResponse] = None
     group_title: Optional[str] = None
 
 class ProductResponse(ProductBase):
