@@ -1,0 +1,345 @@
+---
+import Layout from "../layouts/Layout.astro";
+import ContactForm from "../components/ContactForm.vue";
+import InstallationCalculator from "../components/InstallationCalculator.vue";
+import { getInstallationPricingInfo } from "../utils/api";
+
+const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
+---
+
+<Layout
+    title="Установка кондиционеров в Витебске и области"
+    description="Профессиональный монтаж сплит-систем любой сложности. Вакуумирование системы, чистая работа с пылесосом, гарантия до5 лет. Устанавливаем даже б/у технику."
+>
+    <section class="page-header">
+        <div class="container">
+            <h1>Установка кондиционеров</h1>
+            <p class="breadcrumbs">Главная / Услуги / Монтаж</p>
+        </div>
+    </section>
+
+    <section class="container detail-grid">
+        <div class="content">
+            
+            <h2>Стандартный монтаж «под ключ»</h2>
+            <div class="price-header">
+                <p class="price-tag">от {minStandardPrice} BYN</p>
+                {
+                    minBundlePrice < minStandardPrice && (
+                        <p class="bundle-price-badge">
+                            от <strong>{minBundlePrice} BYN</strong> при
+                            покупке у нас
+                        </p>
+                    )
+                }
+            </div>
+            
+
+            <div class="mb-12">
+                <InstallationCalculator client:visible />
+            </div>
+
+            <div class="article-content">
+                <section class="mb-12">
+                    <h2>Почему выбирают «Мастер Воздуха»?</h2>
+                    <p>
+                        Мы специализируемся на качественном монтаже
+                        климатического оборудования в Витебске. Наш подход
+                        исключает «экономию» на критически важных этапах.
+                    </p>
+
+                    <div class="grid md:grid-cols-2 gap-6 mt-6">
+                        <div class="advantage-card">
+                            <h3>Универсальность</h3>
+                            <p>
+                                Монтируем настенные, кассетные, канальные и
+                                напольно-потолочные системы любой мощности.
+                                Работаем как с новым оборудованием, так и с б/у
+                                (даже если купили не у нас).
+                            </p>
+                        </div>
+                        <div class="advantage-card">
+                            <h3>Технологичность</h3>
+                            <p>
+                                Всегда используем вакуумный насос для удаления
+                                влаги и воздуха из системы. Это предотвращает
+                                поломку компрессора и потерю производительности.
+                            </p>
+                        </div>
+                        <div class="advantage-card">
+                            <h3>Сервис</h3>
+                            <p>
+                                Бесплатная консультация и выезд специалиста для
+                                подбора оптимального места установки в черте
+                                города.
+                            </p>
+                        </div>
+                        <div class="advantage-card">
+                            <h3>Надежность</h3>
+                            <p>
+                                Используем только толстостенную медную трубу
+                                (ASTM), качественную теплоизоляцию и усиленные
+                                кронштейны.
+                            </p>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="mb-12">
+                    <h3>Что входит в «Стандартный монтаж»?</h3>
+                    <p>
+                        Стандартная цена включает полный набор материалов и
+                        работ для установки сплит-системы:
+                    </p>
+                    <ul class="materials-list">
+                        <li>
+                            <strong>Трасса до 3 метров:</strong> медные трубки, термофлекс,
+                            межблочный кабель и дренажный шланг.
+                        </li>
+                        <li>
+                            <strong>Декоративный короб:</strong> до 2 метров кабель-канала
+                            60х60 мм внутри помещения.
+                        </li>
+                        <li>
+                            <strong>Отверстие:</strong> 1 прокол в наружной стене
+                            глубиной до 80 см.
+                        </li>
+                        <li>
+                            <strong>Питание:</strong> провод до 5 метров с вилкой
+                            для подключения к розетке.
+                        </li>
+                        <li>
+                            <strong>Монтажный комплект:</strong> кронштейны, метизы
+                            и профессиональная пена.
+                        </li>
+                    </ul>
+                </section>
+
+                <section class="mb-12">
+                    <h3>Термины и условия установки</h3>
+                    <div class="terms-grid">
+                        <div class="term-item">
+                            <h4>Размещение блоков</h4>
+                            <p>
+                                Внутренний блок устанавливается на стену.
+                                Внешний — под окно, что исключает затраты на
+                                альпинистов или спецтехнику.
+                            </p>
+                        </div>
+                        <div class="term-item">
+                            <h4>Особенности 1-го этажа</h4>
+                            <p>
+                                На первом этаже внешний блок (весом до 35 кг)
+                                монтируется с лестницы на высоте до 3 метров без
+                                доплат.
+                            </p>
+                        </div>
+                        <div class="term-item">
+                            <h4>Отвод конденсата</h4>
+                            <p>
+                                Дренажный шланг от внутреннего блока выводится
+                                на улицу. Отвод воды от наружного блока в стандартный
+                                монтаж не входит.
+                            </p>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h3>Этапы нашей работы</h3>
+                    <div class="steps-flow">
+                        <div class="step">
+                            <span>1</span> Согласование мест установки и схемы прокладки
+                        </div>
+                        <div class="step">
+                            <span>2</span> Чистое бурение отверстия с пылеудалением
+                        </div>
+                        <div class="step">
+                            <span>3</span> Монтаж внешнего блока на усиленные опоры
+                        </div>
+                        <div class="step">
+                            <span>4</span> Прокладка коммуникаций и монтаж внутреннего
+                            блока
+                        </div>
+                        <div class="step">
+                            <span>5</span>
+                            <b>Вакуумирование</b> трассы и проверка на герметичность
+                        </div>
+                        <div class="step">
+                            <span>6</span> Запуск системы и демонстрация функций
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <ContactForm client:visible />
+        </div>
+    </section>
+</Layout>
+
+<style>
+    .page-header {
+        padding: 3rem 0;
+        margin-bottom: 2rem;
+    }
+    h1 {
+        font-size: 3rem;
+        font-weight: 800;
+    }
+    .breadcrumbs {
+        color: var(--text-muted);
+    }
+
+    .detail-grid {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 4rem;
+        margin-bottom: 6rem;
+    }
+
+    .price-tag {
+        font-size: 2rem;
+        font-weight: 800;
+        color: var(--primary);
+        margin-bottom: 0.5rem;
+    }
+
+    .bundle-price-badge {
+        display: inline-block;
+        padding: 0.4rem 1rem;
+        background: #f0fdfa; /* Teal-50 */
+        border: 1px solid #99f6e4; /* Teal-200 */
+        color: #0f766e; /* Teal-700 */
+        border-radius: 12px;
+        font-size: 0.9rem;
+        margin-bottom: 1.5rem;
+    }
+    .bundle-price-badge strong {
+        color: var(--primary);
+        font-weight: 800;
+    }
+
+    .price-header {
+        margin-bottom: 1rem;
+    }
+
+    .feature-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .feature-list li {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    .feature-list .material-icons-round {
+        color: #10b981;
+    }
+
+    .article-content h3 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+    }
+    .article-content ol {
+        margin-left: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .advantage-card {
+        padding: 1.5rem;
+        background: rgba(255, 255, 255, 0.5);
+        border: 1px solid rgba(0, 127, 128, 0.1);
+        border-radius: 1.5rem;
+    }
+    .advantage-card h3 {
+        font-size: 1.1rem;
+        color: var(--primary);
+        margin-bottom: 0.5rem;
+        margin-top: 0 !important;
+    }
+    .advantage-card p {
+        font-size: 0.95rem;
+        line-height: 1.5;
+        margin: 0;
+    }
+
+    .materials-list {
+        list-style: none;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-top: 1rem;
+    }
+    .materials-list li {
+        position: relative;
+        padding-left: 1.5rem;
+    }
+    .materials-list li::before {
+        content: "•";
+        position: absolute;
+        left: 0;
+        color: var(--primary);
+        font-weight: bold;
+    }
+
+    .terms-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 2rem;
+        margin-top: 1rem;
+    }
+    .term-item h4 {
+        font-size: 1rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        color: var(--text-main);
+    }
+    .term-item p {
+        font-size: 0.9rem;
+        color: var(--text-muted);
+    }
+
+    .steps-flow {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        margin-top: 1.5rem;
+    }
+    .step {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem;
+        background: #f8fafc;
+        border-radius: 1rem;
+    }
+    .step span {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        background: var(--primary);
+        color: white;
+        border-radius: 50%;
+        font-weight: bold;
+        flex-shrink: 0;
+    }
+
+    @media (max-width: 900px) {
+        .detail-grid {
+            grid-template-columns: 1fr;
+        }
+        .sidebar {
+            order: -1;
+        }
+    }
+</style>
