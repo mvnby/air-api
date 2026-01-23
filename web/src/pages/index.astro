@@ -146,8 +146,50 @@ const displayProduct = heroProduct || {
 						main_image:
 							"https://lh3.googleusercontent.com/aida-public/AB6AXuDzHRJRud1P6Zqy3Hb7jwnkWAeXeg0lE7zSfaVCogcX5h2hWu50uUogAaRiIawuBXIx4DpipBH1mCxBAlVuA77yigQ6ur0LCTEFXSYe3lH1PpBjUoIwvcKBAkFNOuajaVpDqns55HawHc7WN00maaB2_a1vxyBCXPNZJ6iae-VbAXvx2KOu1gfi-_zm4t9CEKbaANuUuwlGJTCzbdaFOabE9Y12wvftIPO0p9FBP5C-3vl3iav9YkwhUexYv0IAKNrxzwa_fNm5kfg",
 						area: 25,
-						badges: [{ text: "В наличии", class: "in-stock" }],
 						is_inverter: true,
+						// New Tags Structure
+						tags: [
+							{
+								title: "Full DC Inverter",
+								slug: "full-dc",
+								is_public: true,
+								group: {
+									title: "Inverter",
+									slug: "compressor-type",
+									is_public: true,
+								},
+							},
+							{
+								title: "до -15°C",
+								slug: "heat-15",
+								is_public: true,
+								group: {
+									title: "Winter",
+									slug: "winter",
+									is_public: true,
+								},
+							},
+							{
+								title: "25 м²",
+								slug: "area-25",
+								is_public: true,
+								group: {
+									title: "Area",
+									slug: "area",
+									is_public: true,
+								},
+							},
+							{
+								title: "Wi-Fi",
+								slug: "wifi",
+								is_public: true,
+								group: {
+									title: "Features",
+									slug: "features",
+									is_public: true,
+								},
+							},
+						],
 					},
 					{
 						title: "Electrolux Fusion Evo",
@@ -156,8 +198,39 @@ const displayProduct = heroProduct || {
 						main_image:
 							"https://lh3.googleusercontent.com/aida-public/AB6AXuDSG-005qtT6VDREOusPFBeg_4fBlCc_MvbwyXEFDfsReN3_yJ_-CEkE6_Rq4lQswgRarL39hASWVOgoAmL1hA2wTb0JvpaTevVGURpdhhzdNeBwrpA1jQoKMk5-shNbCBkE7njkuAV5KK2sNjWXXKPus76bLYhm0Z89ZIPuHlWgtDVbbK_8Ud7ty_g4L57Imf1ip_KmCLNjfUkONYpA88-uRaNTw-gQYP1CP8FLkD7lUJ0kRwqbk5MzLV1fP4BdGHcvLlSv-UJnyU",
 						area: 35,
-						badges: [{ text: "Wi-Fi", class: "wifi" }],
 						is_inverter: false,
+						tags: [
+							{
+								title: "On/Off",
+								slug: "on-off",
+								is_public: true,
+								group: {
+									title: "Inverter",
+									slug: "compressor-type",
+									is_public: true,
+								},
+							},
+							{
+								title: "35 м²",
+								slug: "area-35",
+								is_public: true,
+								group: {
+									title: "Area",
+									slug: "area",
+									is_public: true,
+								},
+							},
+							{
+								title: "Turbo",
+								slug: "turbo",
+								is_public: true,
+								group: {
+									title: "Features",
+									slug: "features",
+									is_public: true,
+								},
+							},
+						],
 					},
 					{
 						title: "Cooper&Hunter Alpha",
@@ -166,8 +239,39 @@ const displayProduct = heroProduct || {
 						main_image:
 							"https://lh3.googleusercontent.com/aida-public/AB6AXuC6AEk8mzi7MIpUmuyEV_EmJunKDyJJV02nurzUAt33RP4pxnxpxBDlqzyihxz7qjlFIl2Tq0pJ2Nre1iq0xh5Pu2dvzF7k_KKTuRFFcQixkfz6Yy-XefQFHMldsxcRcF7S9HH8Q3XZd3uXK4GM-Cuk23oC8y2414YfI_8Cyen8lMHNGOzROsViS9S-V3zJVCMJZ57YJNVnB3cyhQXIH_uRsJqOnTT6EWFIJ7vxjdYc7q5Sz7sQmyOqrsMEwf-9izfFe7HLtdYWkAY",
 						area: 20,
-						badges: [{ text: "Хит", class: "hit" }],
 						is_inverter: true,
+						tags: [
+							{
+								title: "Inverter",
+								slug: "inverter-std",
+								is_public: true,
+								group: {
+									title: "Inverter",
+									slug: "compressor-type",
+									is_public: true,
+								},
+							},
+							{
+								title: "до -25°C",
+								slug: "heat-25",
+								is_public: true,
+								group: {
+									title: "Winter",
+									slug: "winter",
+									is_public: true,
+								},
+							},
+							{
+								title: "20 м²",
+								slug: "area-20",
+								is_public: true,
+								group: {
+									title: "Area",
+									slug: "area",
+									is_public: true,
+								},
+							},
+						],
 					},
 				].map((product) => (
 					<ProductCard
