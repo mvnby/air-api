@@ -108,3 +108,24 @@ export async function submitContactForm(data) {
         return false;
     }
 }
+export async function getInstallationPricingInfo() {
+    const [rates, config] = await Promise.all([
+        getInstallationRates(),
+        getGlobalConfig()
+    ]);
+
+    // Find the minimum base price for standard (Wall) installation
+    const wallRates = rates.filter(r => r.category.toLowerCase() === 'wall');
+    const minStandardPrice = wallRates.length > 0
+        ? Math.min(...wallRates.map(r => r.base_price))
+        : 600; // Fallback
+
+    const discount = parseInt(config.install_discount || "100", 10);
+    const minBundlePrice = Math.max(0, minStandardPrice - discount);
+
+    return {
+        minStandardPrice,
+        minBundlePrice,
+        discount
+    };
+}

@@ -2,7 +2,9 @@
 export const prerender = false;
 import Layout from "../../layouts/Layout.astro";
 import { getProductBySlug, resolveImageUrl } from "../../utils/api";
+import { getInstallationPricingInfo } from "../../utils/api";
 
+const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
 const { slug } = Astro.params;
 const product = await getProductBySlug(slug as string);
 
@@ -94,7 +96,7 @@ const images = product.images || [];
                         <span class="material-icons-round">construction</span>
                         <div>
                             <strong>Монтаж «под ключ»</strong>
-                            <p>Стандартная установка от 360 Br</p>
+                            <p>Стандартная установка от {minBundlePrice} BYN</p>
                         </div>
                     </div>
                 </div>

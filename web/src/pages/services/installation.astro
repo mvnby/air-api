@@ -2,6 +2,9 @@
 import Layout from "../../layouts/Layout.astro";
 import ContactForm from "../../components/ContactForm.vue";
 import InstallationCalculator from "../../components/InstallationCalculator.vue";
+import { getInstallationPricingInfo } from "../../utils/api";
+
+const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
 ---
 
 <Layout
@@ -19,7 +22,17 @@ import InstallationCalculator from "../../components/InstallationCalculator.vue"
         <div class="content">
             <div class="glass p-8 rounded-3xl mb-8">
                 <h2>Стандартный монтаж</h2>
-                <p class="price-tag">от 500 BYN</p>
+                <div class="price-header">
+                    <p class="price-tag">от {minStandardPrice} BYN</p>
+                    {
+                        minBundlePrice < minStandardPrice && (
+                            <p class="bundle-price-badge">
+                                от <strong>{minBundlePrice} BYN</strong> при
+                                покупке у нас
+                            </p>
+                        )
+                    }
+                </div>
                 <p class="mb-6 text-muted">
                     Включает в себя установку внутреннего и внешнего блоков,
                     прокладку трассы до 3 метров и пуско-наладочные работы.
@@ -101,6 +114,25 @@ import InstallationCalculator from "../../components/InstallationCalculator.vue"
         font-size: 2rem;
         font-weight: 800;
         color: var(--primary);
+        margin-bottom: 0.5rem;
+    }
+
+    .bundle-price-badge {
+        display: inline-block;
+        padding: 0.4rem 1rem;
+        background: #f0fdfa; /* Teal-50 */
+        border: 1px solid #99f6e4; /* Teal-200 */
+        color: #0f766e; /* Teal-700 */
+        border-radius: 12px;
+        font-size: 0.9rem;
+        margin-bottom: 1.5rem;
+    }
+    .bundle-price-badge strong {
+        color: var(--primary);
+        font-weight: 800;
+    }
+
+    .price-header {
         margin-bottom: 1rem;
     }
 
