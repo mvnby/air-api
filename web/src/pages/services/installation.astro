@@ -1,6 +1,7 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import ContactForm from "../../components/ContactForm.vue";
+import InstallationCalculator from "../../components/InstallationCalculator.vue";
 ---
 
 <Layout
@@ -18,7 +19,7 @@ import ContactForm from "../../components/ContactForm.vue";
         <div class="content">
             <div class="glass p-8 rounded-3xl mb-8">
                 <h2>Стандартный монтаж</h2>
-                <p class="price-tag">от 360 BYN</p>
+                <p class="price-tag">от 500 BYN</p>
                 <p class="mb-6 text-muted">
                     Включает в себя установку внутреннего и внешнего блоков,
                     прокладку трассы до 3 метров и пуско-наладочные работы.
@@ -42,6 +43,10 @@ import ContactForm from "../../components/ContactForm.vue";
                         <span>Гарантия на монтаж — 5 лет</span>
                     </li>
                 </ul>
+            </div>
+
+            <div class="mb-12">
+                <InstallationCalculator client:visible />
             </div>
 
             <div class="article-content">

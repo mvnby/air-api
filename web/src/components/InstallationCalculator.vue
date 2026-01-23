@@ -1,0 +1,442 @@
+<script setup>
+import { ref, computed, onMounted, watch } from 'vue';
+import { getInstallationRates } from '../utils/api';
+
+const rates = ref([]);
+const loading = ref(true);
+const error = ref(null);
+
+const selectedCategory = ref('');
+const selectedRateId = ref(null);
+const currentMeters = ref(3);
+
+// CONSTANTS
+const BASE_PIPE_LENGTH = 3;
+
+// Frontend Localization Maps
+const CATEGORY_MAP = {
+  'Wall': 'Настенный',
+  'Cassette/Ceiling': 'Кассетный/Потолочный',
+  'Cassette': 'Кассетный',
+  'Ceiling': 'Напольно-потолочный',
+  'Duct': 'Канальный',
+  'Multisplit': 'Мульти-сплит'
+};
+
+const RANGE_MAP = {
+  '07-12': '07-12 (до 35 м²)',
+  '18-24': '18-24 (до 70 м²)',
+  '30-36': '30-36 (до 100 м²)',
+  'area-20, area-25, area-35': '07-12 (до 35 м²)',
+  'area-50, area-70': '18-24 (до 70 м²)',
+  'area-80, area-100': '30-36 (до 100 м²)',
+  'All': 'Любая мощность'
+};
+
+onMounted(async () => {
+  try {
+    const data = await getInstallationRates();
+    if (!data) {
+       throw new Error('Не удалось загрузить тарифы');
+    }
+    rates.value = data;
+    
+    // Select first category by default if available
+    if (rates.value.length > 0) {
+      const categories = [...new Set(rates.value.map(r => r.category))];
+      if (categories.length > 0) {
+        selectedCategory.value = categories[0];
+      }
+    }
+  } catch (err) {
+    error.value = err.message;
+  } finally {
+    loading.value = false;
+  }
+});
+
+// Computed: Unique Categories
+const categories = computed(() => {
+  return [...new Set(rates.value.map(r => r.category))];
+});
+
+// Computed: Rates for selected category
+const categoryRates = computed(() => {
+  if (!selectedCategory.value) return [];
+  return rates.value.filter(r => r.category === selectedCategory.value);
+});
+
+// Computed: The currently active rate object
+const activeRate = computed(() => {
+  if (!selectedCategory.value) return null;
+  // If user selected a specific rate ID, find it
+  if (selectedRateId.value) {
+    return categoryRates.value.find(r => r.id === selectedRateId.value) || categoryRates.value[0];
+  }
+  // Default to first one
+  return categoryRates.value[0];
+});
+
+// Helper to translate
+const tCategory = (cat) => CATEGORY_MAP[cat] || cat;
+const tRange = (range) => {
+    // Try exact match first
+    if (RANGE_MAP[range]) return RANGE_MAP[range];
+    // If range contains one of the keys (partial match logic for flexibility)
+    for (const [key, val] of Object.entries(RANGE_MAP)) {
+        if (range.includes(key)) return val;
+    }
+    return range;
+};
+
+// Watch for category change to reset selection or auto-select
+watch(selectedCategory, (newVal) => {
+  const available = rates.value.filter(r => r.category === newVal);
+  if (available.length > 0) {
+    selectedRateId.value = available[0].id;
+  } else {
+    selectedRateId.value = null;
+  }
+});
+
+// Calculation Logic
+const calculatedPrice = computed(() => {
+  const rate = activeRate.value;
+  if (!rate) return 0;
+  
+  if (!rate.is_fixed) return rate.base_price;
+
+  const extraMeters = Math.max(0, currentMeters.value - rate.included_pipe_meters);
+  return rate.base_price + (extraMeters * rate.extra_pipe_price);
+});
+
+const isFixedPrice = computed(() => activeRate.value?.is_fixed ?? true);
+const priceComment = computed(() => activeRate.value?.comment);
+
+</script>
+
+<template>
+  <div class="calculator-card glass p-8 rounded-3xl" v-if="!loading && !error">
+    <h3 class="text-2xl font-bold mb-6 text-teal-900">Калькулятор монтажа</h3>
+
+    <!-- Category Selection -->
+    <div class="control-group">
+      <label class="label">Тип оборудования</label>
+      <div class="category-list">
+        <button 
+          v-for="cat in categories" 
+          :key="cat"
+          @click="selectedCategory = cat"
+          class="cat-btn"
+          :class="{ active: selectedCategory === cat }"
+        >
+          {{ tCategory(cat) }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Power Range Selection (if multiple) -->
+    <div class="control-group" v-if="categoryRates.length > 1">
+      <label class="label">Мощность (BTU / кВт)</label>
+      <div class="select-wrapper">
+        <select v-model="selectedRateId" class="custom-select">
+          <option v-for="rate in categoryRates" :key="rate.id" :value="rate.id">
+            {{ tRange(rate.power_range || 'Стандарт') }}
+          </option>
+        </select>
+        <span class="material-icons-round select-icon">expand_more</span>
+      </div>
+    </div>
+
+    <!-- Length Slider -->
+    <div class="control-group" v-if="isFixedPrice">
+      <div class="range-header">
+        <label class="label">Длина трассы</label>
+        <div class="range-value">
+          {{ currentMeters }} <span>м</span>
+        </div>
+      </div>
+      
+      <div class="range-container">
+        <input 
+            type="range" 
+            v-model.number="currentMeters" 
+            min="1" 
+            max="15" 
+            step="0.5"
+            class="range-input"
+        >
+        <div class="range-labels">
+            <span>1 м</span>
+            <span>15 м</span>
+        </div>
+      </div>
+      
+      <p class="helper-text">
+        В базовый монтаж включено <strong>{{ activeRate?.included_pipe_meters || 3 }} метра</strong>. 
+        Дополнительный метр: <strong>{{ activeRate?.extra_pipe_price }} BYN</strong>
+      </p>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Total Price -->
+    <div class="total-section">
+      <p class="total-label">Итоговая стоимость</p>
+      
+      <transition mode="out-in" name="fade-slide">
+        <div :key="calculatedPrice" class="price-display">
+          <div class="price-value">
+             <span v-if="!isFixedPrice" class="price-prefix">от</span>
+             {{ calculatedPrice }} 
+             <span class="currency">BYN</span>
+          </div>
+          <p v-if="priceComment" class="price-comment">
+             {{ priceComment }}
+          </p>
+        </div>
+      </transition>
+    </div>
+
+  </div>
+  
+  <div v-else-if="loading" class="calculator-card glass loading">
+    Loading...
+  </div>
+
+  <div v-else class="error-msg">
+    Ошибка загрузки тарифов
+  </div>
+</template>
+
+<style scoped>
+.calculator-card {
+    padding: 2rem;
+    border-radius: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    color: var(--primary-dark);
+}
+
+.control-group {
+    margin-bottom: 1.5rem;
+}
+
+.label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+/* Category Buttons */
+.category-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.cat-btn {
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    border: 1px solid transparent;
+    background: rgba(255, 255, 255, 0.5);
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.cat-btn:hover {
+    background: rgba(255, 255, 255, 0.8);
+    color: var(--text);
+}
+
+.cat-btn.active {
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 4px 12px rgba(0, 127, 128, 0.3);
+}
+
+/* Custom Select */
+.select-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.custom-select {
+    width: 100%;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.5);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.custom-select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(0, 127, 128, 0.1);
+}
+
+.select-icon {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    color: var(--text-muted);
+}
+
+/* Slider */
+.range-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 0.5rem;
+}
+
+.range-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--primary);
+    line-height: 1;
+}
+
+.range-value span {
+    font-size: 1rem;
+    font-weight: 400;
+    color: var(--text-muted);
+}
+
+.range-container {
+    padding: 0.5rem 0;
+}
+
+.range-input {
+    width: 100%;
+    height: 8px;
+    background: #e5e7eb;
+    border-radius: 4px;
+    appearance: none;
+    cursor: pointer;
+}
+
+.range-input::-webkit-slider-thumb {
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    background: var(--primary);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    transition: transform 0.1s;
+}
+
+.range-input::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+}
+
+.range-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+.helper-text {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    margin-top: 1rem;
+    line-height: 1.5;
+}
+
+.helper-text strong {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.divider {
+    height: 1px;
+    background: rgba(0, 0, 0, 0.05); /* very subtle */
+    margin: 2rem 0;
+}
+
+/* Total Section */
+.total-section {
+    text-align: center;
+}
+
+.total-label {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.price-value {
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--primary);
+    line-height: 1;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.02em;
+}
+
+.price-prefix {
+    font-size: 1.5rem;
+    vertical-align: top;
+    margin-right: 0.25rem;
+    font-weight: 500;
+}
+
+.currency {
+    font-size: 1.5rem;
+    vertical-align: top;
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+.price-comment {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background: #fff7ed;
+    color: #c2410c;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+/* Animations */
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.error-msg {
+    text-align: center;
+    color: #ef4444;
+    padding: 2rem;
+}
+</style>
