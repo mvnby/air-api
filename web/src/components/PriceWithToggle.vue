@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { getInstallationRates } from '../utils/api';
+import { getInstallationRates, getGlobalConfig } from '../utils/api';
 
 const props = defineProps({
   basePrice: { type: Number, required: true },
@@ -12,12 +12,19 @@ const props = defineProps({
 
 const isInstalled = ref(false);
 const rates = ref([]);
-// We might want to expose loading state if crucial, but for now internal is fine
+const discount = ref(0);
 const loading = ref(true);
 
 onMounted(async () => {
     try {
-        rates.value = await getInstallationRates() || [];
+        const [ratesData, configData] = await Promise.all([
+            getInstallationRates(),
+            getGlobalConfig()
+        ]);
+        rates.value = ratesData || [];
+        if (configData && configData.install_discount) {
+            discount.value = parseInt(configData.install_discount, 10) || 0;
+        }
     } finally {
         loading.value = false;
     }
@@ -30,34 +37,21 @@ const matchedRate = computed(() => {
     if (!rates.value.length) return null;
 
     // 1. Identify Product Category
-    // Known categories corresponding to installation rate types
-    const knownCategories = ['wall', 'cassette', 'duct', 'ceiling'];
-    
-    // Find the category tag in the product tags
+    const knownCategories = ['wall', 'cassette', 'duct', 'ceiling', 'multisplit'];
     const categoryTag = props.tags.find(t => knownCategories.includes(normalize(t.slug)));
-    
-    // If product doesn't have a known category tag, we can't determine rate -> return null
     if (!categoryTag) return null;
 
     const productCategorySlug = normalize(categoryTag.slug);
 
     // 2. Filter Rates by Category
-    // We expect rate.category to match the tag slug (e.g. "wall", "duct")
     const categoryRates = rates.value.filter(r => normalize(r.category) === productCategorySlug);
-
     if (!categoryRates.length) return null;
 
     // 3. Find Specific Rate by Power/Area
-    // Check for 'all' or specific slug match
     for (const rate of categoryRates) {
         const pRange = normalize(rate.power_range);
-        
-        // Case A: "all" - matches anything in this category (unless a more specific one is prioritized? Assuming order doesn't matter or 'all' is fallback)
-        // Ideally we might want specific matches to take precedence, but for now let's find the first valid match.
         if (pRange === 'all') return rate;
 
-        // Case B: List of slugs (e.g. "area-20, area-25")
-        // Check if ANY of the rate's power slugs exist in the product's tags
         const rateSlugs = pRange.split(',').map(s => s.trim());
         const hasMatchingTag = props.tags.some(t => rateSlugs.includes(normalize(t.slug)));
 
@@ -72,47 +66,55 @@ const effectiveInstallPrice = computed(() => {
     if (matchedRate.value && matchedRate.value.is_fixed) {
         return matchedRate.value.base_price;
     }
-    return props.installPrice; // Fallback (shouldn't happen if hidden)
+    return props.installPrice; 
+});
+
+// Price WITH discount applied
+const finalInstallPrice = computed(() => {
+    return Math.max(0, effectiveInstallPrice.value - discount.value);
 });
 
 const shouldShowToogle = computed(() => {
-    // If no rate matched, HIDE EVERYTHING related to installation
     if (!matchedRate.value) return false;
-
-    // If rate matched but not fixed, HIDE TOGGLE (show text instead)
     if (!matchedRate.value.is_fixed) return false;
-    
     return props.showToggle;
 });
 
 const priceDisplay = computed(() => {
-    // If logic:
-    // 1. No match -> Just Base Price
-    // 2. Match + Not Fixed -> Just Base Price (Text "from..." is separate)
-    // 3. Match + Fixed + Toggled -> Base + Install
+    // Case 1: No match or non-fixed -> Just Product Price
+    if (!matchedRate.value || !matchedRate.value.is_fixed) {
+         return {
+             current: format(props.basePrice),
+             old: null
+         };
+    }
     
-    if (!matchedRate.value) {
-         return format(props.basePrice);
+    // Case 2: Fixed rate but NOT toggled -> Just Product Price
+    if (!isInstalled.value) {
+        return {
+            current: format(props.basePrice),
+            old: null
+        };
     }
 
-    if (!matchedRate.value.is_fixed) {
-        // If not fixed, we just show the base price in the main slot?
-        // Prompt says: "вместо итоговой суммы выводить текст 'от [base_price] руб.'" 
-        // Wait, "от [base_price] руб." usually refers to the INSTALLATION price or the TOTAL?
-        // Context: "Product Card". usually "Price: 50 000". If install is "from 10k", total is "50k + from 10k".
-        // Current implementation puts "от X Br" in a separate div `non-fixed-message`.
-        // The main price `final-price` should probably stay as the Product Price.
-        return format(props.basePrice);
-    }
-    
-    // Fixed rate logic
-    const total = props.basePrice + (isInstalled.value ? effectiveInstallPrice.value : 0);
-    return format(total);
+    // Case 3: Fixed rate + Toggled -> Product + Discounted Install
+    const total = props.basePrice + finalInstallPrice.value;
+    const oldTotal = props.basePrice + effectiveInstallPrice.value;
+
+    return {
+        current: format(total),
+        old: discount.value > 0 ? format(oldTotal) : null
+    };
 });
 
-// Force ru-RU to match server side rendering (assuming Node uses system or we can enforce)
-// Ideally, pass locale as prop or use a consistent formatter
+// Force ru-RU to match server side rendering
 const format = (num) => num.toLocaleString('ru-RU') + ' ' + props.currency;
+
+const discountPct = computed(() => {
+    if (!props.oldPrice || !props.basePrice) return 0;
+    const diff = props.oldPrice - props.basePrice;
+    return Math.round((diff / props.oldPrice) * 100);
+});
 
 const toggle = (e) => {
     e.preventDefault();
@@ -130,12 +132,21 @@ const toggle = (e) => {
       :class="{ active: isInstalled }"
       @click="toggle"
     >
-      <div class="toggle-control">
-        <div class="toggle-switch" />
-        <span>Монтаж</span>
+      <div class="toggle-content">
+          <div class="toggle-control">
+            <div class="toggle-switch" />
+            <span>Монтаж</span>
+          </div>
+          <div class="price-column">
+             <span class="inst-price" :class="{ 'line-through text-xs text-muted': discount > 0 }">
+                +{{ effectiveInstallPrice }} {{ currency }}
+             </span>
+             <span v-if="discount > 0" class="discount-price">
+                +{{ finalInstallPrice }} {{ currency }}
+             </span>
       </div>
-      <span class="inst-price">+{{ effectiveInstallPrice }} {{ currency }}</span>
     </div>
+  </div>
 
     <!-- Non-fixed rate message (e.g. "from 500 Br") -->
     <div v-if="matchedRate && !matchedRate.is_fixed" class="non-fixed-message">
@@ -143,9 +154,19 @@ const toggle = (e) => {
     </div>
 
     <div class="p-footer">
-       <span class="final-price" :class="{ pulse: isInstalled }">
-         {{ priceDisplay }}
-       </span>
+       <div class="price-wrapper">
+           <!-- Product Discount Badge (Sale Effect) -->
+           <div v-if="props.oldPrice" class="discount-badge squircle sale-badge">
+             -{{ discountPct }}%
+           </div>
+           
+           <span v-if="priceDisplay.old" class="old-price">
+               {{ priceDisplay.old }}
+           </span>
+           <span class="final-price" :class="{ pulse: isInstalled }">
+             {{ priceDisplay.current }}
+           </span>
+       </div>
        <div class="actions">
            <slot></slot>
        </div>
@@ -154,30 +175,43 @@ const toggle = (e) => {
 </template>
 
 <style scoped>
+  .price-container {
+    display: flex;
+    flex-direction: column;
+    /* gap: 1rem; removed to tighten layout */
+  }
+
   .installation-toggle {
     background: var(--secondary, #f1f5f9);
     padding: 0.75rem 1rem;
     border-radius: 1rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    position: relative; /* For badge absolute positioning */
     cursor: pointer;
     margin-bottom: 1.5rem;
     transition: background 0.2s;
+    border: 2px solid transparent;
   }
   .installation-toggle:hover {
-    background: rgba(0, 127, 128, 0.15);
+    background: rgba(0, 127, 128, 0.1);
   }
+  
+  .toggle-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+  }
+
   .toggle-control {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     font-weight: 600;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
   }
   .toggle-switch {
-    width: 36px;
-    height: 20px;
+    width: 40px;
+    height: 22px;
     border-radius: 20px;
     background: #cbd5e1;
     position: relative;
@@ -186,27 +220,70 @@ const toggle = (e) => {
   .toggle-switch::after {
     content: "";
     position: absolute;
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     background: white;
     border-radius: 50%;
     top: 3px;
     left: 3px;
     transition: all 0.3s;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
   }
   .installation-toggle.active {
-    background: rgba(0, 127, 128, 0.2);
+    background: rgba(0, 127, 128, 0.05);
+    border-color: rgba(0, 127, 128, 0.2);
   }
   .installation-toggle.active .toggle-switch {
     background: var(--primary);
   }
   .installation-toggle.active .toggle-switch::after {
-    left: 19px;
+    left: 21px;
+  }
+  
+  .price-column {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      line-height: 1.1;
   }
   .inst-price {
-    color: var(--primary);
-    font-weight: 700;
+    color: var(--text-muted);
+    font-weight: 500;
     font-size: 0.9rem;
+  }
+  .discount-price {
+      color: #0d9488; /* Teal-600 */
+      font-weight: 700;
+      font-size: 0.95rem;
+  }
+  .text-xs { font-size: 0.75rem; }
+  .text-muted { color: #94a3b8; }
+  .line-through { text-decoration: line-through; }
+
+  /* Badge */
+  .discount-badge {
+    position: absolute;
+    top: -10px;
+    right: -5px;
+    background: #f97316; /* Orange-500 */
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 8px; /* Squircle aprox */
+    box-shadow: 0 2px 5px rgba(249, 115, 22, 0.4);
+    transform: rotate(3deg);
+    animation: bounce 2s infinite;
+  }
+  .squircle {
+       border-radius: 6px; /* Smooth corners */
+  }
+
+  @keyframes bounce {
+      0%, 20%, 50%, 80%, 100% {transform: translateY(0) rotate(3deg);}
+      40% {transform: translateY(-3px) rotate(3deg);}
+      60% {transform: translateY(-2px) rotate(3deg);}
   }
 
   .p-footer {
@@ -215,13 +292,38 @@ const toggle = (e) => {
     align-items: center;
     margin-top: auto;
   }
+  
+  /* Price Wrapper for old/new stacking */
+  .price-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      position: relative;
+  }
+  
+  .old-price {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      text-decoration: line-through;
+      margin-bottom: -4px;
+      padding-top: 10px; /* Make space for badge */
+  }
+
+  .sale-badge {
+      top: -5px;
+      left: -5px;
+      right: auto;
+      transform: rotate(-3deg);
+  }
+
   .final-price {
-    font-size: 1.25rem;
+    font-size: 1.5rem;
     font-weight: 800;
     transition: transform 0.2s;
+    color: var(--text);
   }
   .pulse {
-    transform: scale(1.1);
+    transform: scale(1.02);
     color: var(--primary);
   }
   .actions {

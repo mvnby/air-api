@@ -1,10 +1,11 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import { getInstallationRates } from '../utils/api';
+import { getInstallationRates, getGlobalConfig } from '../utils/api';
 
 const rates = ref([]);
 const loading = ref(true);
 const error = ref(null);
+const discount = ref(0);
 
 const selectedCategory = ref('');
 const selectedRateId = ref(null);
@@ -35,11 +36,19 @@ const RANGE_MAP = {
 
 onMounted(async () => {
   try {
-    const data = await getInstallationRates();
+    const [data, config] = await Promise.all([
+        getInstallationRates(),
+        getGlobalConfig()
+    ]);
+    
     if (!data) {
        throw new Error('Не удалось загрузить тарифы');
     }
     rates.value = data;
+    
+    if (config && config.install_discount) {
+        discount.value = parseInt(config.install_discount, 10) || 0;
+    }
     
     // Select first category by default if available
     if (rates.value.length > 0) {
@@ -196,6 +205,14 @@ const priceComment = computed(() => activeRate.value?.comment);
           </p>
         </div>
       </transition>
+
+      <!-- Promo Banner -->
+      <div v-if="discount > 0" class="promo-banner squircle">
+        <span class="material-icons-round promo-icon">info</span>
+        <p>
+          Купите кондиционер у нас и получите скидку <strong>{{ discount }} BYN</strong> на этот монтаж!
+        </p>
+      </div>
     </div>
 
   </div>
@@ -416,6 +433,40 @@ const priceComment = computed(() => activeRate.value?.comment);
     border-radius: 0.5rem;
     font-size: 0.875rem;
     font-weight: 500;
+}
+
+/* Promo Banner */
+.promo-banner {
+    margin-top: 1.5rem;
+    background: #f0fdfa; /* Teal-50 */
+    border: 1px solid #99f6e4; /* Teal-200 */
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    text-align: left;
+    color: #0f766e; /* Teal-700 */
+    box-shadow: 0 4px 12px rgba(13, 148, 136, 0.1);
+}
+
+.promo-banner p {
+    font-size: 0.9rem;
+    line-height: 1.4;
+    margin: 0;
+}
+
+.promo-banner strong {
+    color: var(--primary);
+    font-weight: 700;
+}
+
+.promo-icon {
+    color: var(--primary);
+    font-size: 1.25rem;
+}
+
+.squircle {
+    border-radius: 12px;
 }
 
 /* Animations */
