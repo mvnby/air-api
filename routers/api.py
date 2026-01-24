@@ -251,7 +251,7 @@ async def get_all_banks():
                 BANK_CACHE["last_updated"] = now
                 return data
         except Exception as e:
-            print(f"Error fetching banks: {e}")
+            logger.error(f"Error fetching banks: {e}")
             # Если ошибка сети, пробуем вернуть старый кэш
             return BANK_CACHE["data"]
     return []

@@ -2,9 +2,12 @@
 Universal Image Service
 Handles saving images to the filesystem with organized folder structure.
 """
+import logging
 import uuid
 from pathlib import Path
 import anyio
+
+logger = logging.getLogger(__name__)
 
 
 class ImageService:
@@ -126,7 +129,7 @@ class ImageService:
             async with httpx.AsyncClient() as client:
                 resp = await client.get(url, follow_redirects=True, timeout=10.0)
                 if resp.status_code != 200:
-                    print(f"Failed to download image: {url} (Status: {resp.status_code})")
+                    logger.warning(f"Failed to download image: {url} (Status: {resp.status_code})")
                     return None
                     
                 filename = url.split("/")[-1]
@@ -136,7 +139,7 @@ class ImageService:
                     
                 return await cls.save_image(resp.content, entity_type, slug, filename)
         except Exception as e:
-            print(f"Error downloading image {url}: {e}")
+            logger.error(f"Error downloading image {url}: {e}")
             return None
 
 

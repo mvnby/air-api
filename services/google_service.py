@@ -1,4 +1,5 @@
 import os.path
+import logging
 from typing import Dict, Any, List, Optional
 from io import BytesIO
 
@@ -8,6 +9,8 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 import datetime
+
+logger = logging.getLogger(__name__)
 
 SCOPES = [
     'https://www.googleapis.com/auth/drive', 
@@ -172,7 +175,7 @@ class GoogleDocsService:
                     sheet = s
                     break
             if not sheet:
-                print(f"⚠️ Warning: Sheet '{target_sheet_name}' not found. Falling back to the first visible sheet.")
+                logger.warning(f"Sheet '{target_sheet_name}' not found. Falling back to the first visible sheet.")
         
         if not sheet:
              # Попробуем найти первый не скрытый лист
@@ -186,7 +189,7 @@ class GoogleDocsService:
         sht_id = sheet['properties']['sheetId']
         sheet_title = sheet['properties']['title']
         
-        print(f"🎯 Target Sheet: '{sheet_title}' (ID: {sht_id})")
+        logger.debug(f"Target Sheet: '{sheet_title}' (ID: {sht_id})")
 
         start_row = -1
         start_col = -1
@@ -197,10 +200,10 @@ class GoogleDocsService:
         if start_row == -1:
              # Fallback поиска {{table_start}}
              # (Опущен для краткости, т.к. мы используем адреса)
-             print("❌ Ошибка: Маркер не найден.")
+             logger.error("Marker not found in sheet.")
              return
 
-        print(f"✅ Таблица начинается в строке {start_row+1}, столбце {start_col+1} (Index: {start_row}, {start_col})")
+        logger.debug(f"Table starts at row {start_row+1}, column {start_col+1} (Index: {start_row}, {start_col})")
         
         quoted_title = f"'{sheet_title}'" if " " in sheet_title or not sheet_title.isalnum() else sheet_title
 
@@ -213,7 +216,7 @@ class GoogleDocsService:
         # 2. Вставка строк (Стратегия: Insert All New -> Write -> Delete Old Placeholder)
         # Это гарантирует, что первая строка не сохранит странных артефактов объединения
         rows_to_insert = len(data)
-        print(f"📊 Data rows: {len(data)}. Inserting {rows_to_insert} clean rows at {start_row}")
+        logger.debug(f"Data rows: {len(data)}. Inserting {rows_to_insert} clean rows at {start_row}")
         
         reqs = []
         if rows_to_insert > 0:
@@ -232,7 +235,7 @@ class GoogleDocsService:
         # 2.1. Разъединяем ячейки (начиная со start_row)
         # Так как мы вставили новые строки, они могут быть объединены (если inheritFromBefore скопировал мерж с хедера?)
         # Лучше сделать Unmerge для всего нового блока.
-        print(f"🔓 Unmerging cells from Row {start_row} to {start_row + len(data)}")
+        logger.debug(f"Unmerging cells from Row {start_row} to {start_row + len(data)}")
         reqs.append({
             'unmergeCells': {
                 'range': {
@@ -289,7 +292,7 @@ class GoogleDocsService:
         
         # 2.4 Удаление старой строки-шаблона (которая оказалась ниже вставленных)
         # Она теперь индексируется как start_row + rows_to_insert
-        print(f"🗑️ Deleting old placeholder row at {start_row + rows_to_insert}")
+        logger.debug(f"Deleting old placeholder row at {start_row + rows_to_insert}")
         reqs.append({
             'deleteDimension': {
                 'range': {
@@ -304,14 +307,14 @@ class GoogleDocsService:
         try:
             sheets_service.spreadsheets().batchUpdate(spreadsheetId=sheet_id, body={'requests': reqs}).execute()
         except Exception as e:
-            print(f"❌ Error during Insert/Modify/Delete: {e}")
+            logger.error(f"Error during Insert/Modify/Delete: {e}")
 
         # 3. Запись данных
         new_values = []
         for row in data:
             new_values.append([{'userEnteredValue': {'stringValue': str(x)}} for x in row])
         
-        print(f"📝 Writing data starting at Row {start_row}, Col {start_col}")
+        logger.debug(f"Writing data starting at Row {start_row}, Col {start_col}")
 
         update_req = [{
             'updateCells': {
@@ -328,7 +331,7 @@ class GoogleDocsService:
         try:
             sheets_service.spreadsheets().batchUpdate(spreadsheetId=sheet_id, body={'requests': update_req}).execute()
         except Exception as e:
-             print(f"❌ Error during Write Data: {e}")
+             logger.error(f"Error during Write Data: {e}")
 
     def generate_doc(self, template_id: str, title: str, replacements: Dict[str, str], 
                      table_data: Optional[List[List[str]]] = None, 
@@ -652,6 +655,6 @@ class GoogleDocsService:
             
         except Exception as e:
             # Логируем ошибку, но не прерываем выполнение (файл мог быть уже удален)
-            print(f"Warning: Failed to delete Google Drive file {file_id}: {str(e)}")
+            logger.warning(f"Failed to delete Google Drive file {file_id}: {str(e)}")
 
 google_service = GoogleDocsService()
