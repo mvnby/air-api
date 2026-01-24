@@ -61,3 +61,17 @@ class ArticleService:
         await session.refresh(article)
         
         return web_path
+
+    @staticmethod
+    async def get_all_published(session: AsyncSession):
+        """Get all published articles ordered by creation date (newest first)."""
+        stmt = select(Article).where(Article.is_published == True).order_by(Article.created_at.desc())
+        result = await session.execute(stmt)
+        return result.scalars().all()
+
+    @staticmethod
+    async def get_by_slug(session: AsyncSession, slug: str) -> Optional[Article]:
+        """Get a published article by slug. Returns None if not found."""
+        stmt = select(Article).where(Article.slug == slug, Article.is_published == True)
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
