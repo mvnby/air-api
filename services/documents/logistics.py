@@ -146,7 +146,7 @@ class LogisticsSheetStrategy(BaseDocumentStrategy):
                  if spec_w:
                      try:
                         total_weight += (float(spec_w) * qty)
-                     except: pass
+                     except Exception: pass  # Ignore weight parsing errors
 
         # Total Row
         if table_rows:
