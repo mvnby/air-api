@@ -148,14 +148,13 @@ class OrderAdmin(ModelView, model=Order):
     # --- ИСПРАВЛЕННЫЙ МЕТОД ---
     async def update_model(self, request, pk: Any, data: dict) -> Any:
         import json
-        from models import Product, OrderProductLink, OrderServiceLink, OrderInstaller
         import logging
+        from services.order_service import OrderService
         
         # Ensure pk is an integer for DB operations
         try:
             order_id = int(pk)
         except (ValueError, TypeError):
-            # Fallback if pk is somehow not convertable, though unlikely for existing ID
             order_id = pk
 
         logger = logging.getLogger(__name__)
@@ -164,7 +163,6 @@ class OrderAdmin(ModelView, model=Order):
         items_json = data.pop("items_json", None)
         
         if items_json is None:
-            # Fallback: try to get from request form directly if not in processed data
             form_data = await request.form()
             items_json = form_data.get("items_json")
             logger.info(f"update_model: items_json extracted from request form: {bool(items_json)}")
@@ -174,107 +172,39 @@ class OrderAdmin(ModelView, model=Order):
         # 1. Update basic fields
         model = await super().update_model(request, pk, data)
         
-        # 2. If items_json is present, parse it and update relationships
+        # 2. If items_json is present, use OrderService for full sync
         if items_json:
             try:
                 items_data = json.loads(items_json)
-                session = self.session_maker()
                 
-                async with session.begin():
-                    # Clear existing links (using integer order_id)
-                    await session.execute(
-                        OrderProductLink.__table__.delete().where(OrderProductLink.order_id == order_id)
-                    )
-                    await session.execute(
-                        OrderServiceLink.__table__.delete().where(OrderServiceLink.order_id == order_id)
-                    )
-                    await session.execute(
-                        OrderInstaller.__table__.delete().where(OrderInstaller.order_id == order_id)
+                async with async_session_maker() as session:
+                    await OrderService.update_all_items(
+                        session=session,
+                        order_id=order_id,
+                        items_data=items_data
                     )
                     
-                    # Add new products
-                    for prod in items_data.get("products", []):
-                        new_link = OrderProductLink(
-                            order_id=order_id,
-                            product_id=int(prod["product_id"]),
-                            quantity=int(prod["quantity"]),
-                            price=int(prod["price"])
-                        )
-                        session.add(new_link)
-                        
-                    # Add new services
-                    for serv in items_data.get("services", []):
-                        new_link = OrderServiceLink(
-                            order_id=order_id,
-                            service_id=int(serv["service_id"]),
-                            quantity=int(serv["quantity"]),
-                            price=int(serv["price"])
-                        )
-                        session.add(new_link)
-                        
-                    # Add new installers
-                    for inst in items_data.get("installers", []):
-                        new_inst = OrderInstaller(
-                            order_id=order_id,
-                            installer_id=int(inst["installer_id"]),
-                            agreed_pay=int(inst["agreed_pay"]),
-                            role=inst["role"]
-                        )
-                        session.add(new_inst)
-                        
-                await session.commit()
-                
-                # Recalculate order totals after updating items
-                # Need to reload the order with all relationships
-                from sqlmodel import select
-                from sqlalchemy.orm import selectinload
-                
-                query = select(Order).where(Order.id == order_id).options(
-                    selectinload(Order.product_links),
-                    selectinload(Order.service_links),
-                    selectinload(Order.installers)
-                )
-                result = await session.execute(query)
-                refreshed_order = result.scalar_one()
-                
-                refreshed_order.calculate_totals()
-                session.add(refreshed_order)
-                await session.commit()
-                
             except Exception as e:
-                # Log error but don't fail the whole request if possible, 
-                # or raise to let user know
-                import logging
-                logging.getLogger(__name__).error(f"Error updating order items: {e}")
+                logger.error(f"Error updating order items: {e}")
                 raise e
         
         # --- Phase 6: Inventory Safety Check ---
         # Prevent moving to PROPOSAL if stock < 3
-        # Note: model.status is already updated to new value here
-        
         if model.status == OrderStatus.PROPOSAL:
             product_ids = []
             
-            # 1. If we just updated items, check them
             if items_json:
                 items = json.loads(items_json)
                 product_ids = [int(item['product_id']) for item in items.get('products', [])]
-            
-            # 2. If no item update, check existing links
-            elif not items_json:
+            else:
                 product_ids = [link.product_id for link in model.product_links]
             
             if product_ids:
                 async with async_session_maker() as session:
-                    stmt = select(Product).where(Product.id.in_(product_ids))
-                    res = await session.execute(stmt)
-                    products = res.scalars().all()
-                    
-                    low_stock_items = []
-                    for p in products:
-                        # Assuming stock_quantity is mandatory field, default 0
-                        if p.stock_quantity < 3:
-                            low_stock_items.append(f"{p.title} ({p.stock_quantity})")
+                    low_stock_items = await OrderService.check_stock_for_proposal(
+                        session=session,
+                        product_ids=product_ids
+                    )
                     
                     if low_stock_items:
                         items_str = ", ".join(low_stock_items)
