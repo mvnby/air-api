@@ -2,6 +2,25 @@
 import { ref } from 'vue';
 import { submitContactForm } from '../utils/api';
 
+const props = defineProps({
+  title: {
+    type: String,
+    default: 'Оставить заявку'
+  },
+  subtitle: {
+    type: String,
+    default: 'Перезвоним в течение 15 минут'
+  },
+  buttonText: {
+    type: String,
+    default: 'Отправить'
+  },
+  subject: {
+    type: String,
+    default: '' // e.g. 'Заказ монтажа', 'Сервис'
+  }
+});
+
 const form = ref({
   name: '',
   phone: '',
@@ -14,7 +33,14 @@ const isSuccess = ref(false);
 const submitForm = async () => {
   isSubmitting.value = true;
   
-  const success = await submitContactForm(form.value);
+  // Combine subject with message if present
+  const payload = { ...form.value };
+  if (props.subject) {
+      const prefix = `[${props.subject}] `;
+      payload.message = prefix + (payload.message || '');
+  }
+  
+  const success = await submitContactForm(payload);
   
   isSubmitting.value = false;
   
@@ -42,8 +68,8 @@ const submitForm = async () => {
     </div>
 
     <form v-else @submit.prevent="submitForm" class="contact-form">
-      <h3>Оставить заявку</h3>
-      <p class="subtitle">Перезвоним в течение 15 минут</p>
+      <h3>{{ title }}</h3>
+      <p class="subtitle" v-if="subtitle">{{ subtitle }}</p>
 
       <div class="form-group">
         <label for="name">Ваше имя</label>
@@ -73,14 +99,14 @@ const submitForm = async () => {
           id="message" 
           v-model="form.message" 
           rows="3" 
-          placeholder="Меня интересует установка..."
+          placeholder="Меня интересует..."
         ></textarea>
       </div>
 
       <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
         <span v-if="isSubmitting">Отправка...</span>
         <span v-else class="flex-center">
-          Отправить
+          {{ buttonText }}
           <span class="material-icons-round ml-2">send</span>
         </span>
       </button>

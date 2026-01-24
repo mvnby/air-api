@@ -210,7 +210,13 @@ import ContactForm from "../components/ContactForm.vue";
         </div>
 
         <div class="sidebar">
-            <ContactForm client:visible />
+            <ContactForm
+                client:visible
+                title="Заказать сервис"
+                subtitle="Гарантия на все работы"
+                buttonText="Записаться"
+                subject="Заказ обслуживания"
+            />
         </div>
     </section>
 </Layout>

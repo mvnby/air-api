@@ -78,7 +78,8 @@ class CustomerPayload(BaseModel):
 
 class OrderPayload(BaseModel):
     customer: CustomerPayload
-    items: List[CartItemPayload]
+    items: List[CartItemPayload] = []
+    comment: Optional[str] = None
 
 class OrderResponse(BaseModel):
     id: int

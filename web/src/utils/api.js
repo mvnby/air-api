@@ -86,16 +86,28 @@ export async function getInstallationRates() {
     return _installationRatesPromise;
 }
 
-export async function submitContactForm(data) {
-    // Assuming POST /leads based on context
-    const url = `${API_V1}/leads`;
+export async function submitContactForm(formData) {
+    // We treat contact form submissions as Orders with no items (Leads)
+    const url = `${API_V1}/orders`;
+
+    // Transform flat form data to OrderPayload
+    const payload = {
+        customer: {
+            name: formData.name,
+            phone: formData.phone,
+            email: formData.email || null
+        },
+        items: [],
+        comment: formData.message || formData.comment || null
+    };
+
     try {
         const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(data),
+            body: JSON.stringify(payload),
         });
 
         if (!response.ok) {

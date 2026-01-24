@@ -20,20 +20,18 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
 
     <section class="container detail-grid">
         <div class="content">
-            
             <h2>Стандартный монтаж «под ключ»</h2>
             <div class="price-header">
                 <p class="price-tag">от {minStandardPrice} BYN</p>
                 {
                     minBundlePrice < minStandardPrice && (
                         <p class="bundle-price-badge">
-                            от <strong>{minBundlePrice} BYN</strong> при
-                            покупке у нас
+                            от <strong>{minBundlePrice} BYN</strong> при покупке
+                            у нас
                         </p>
                     )
                 }
             </div>
-            
 
             <div class="mb-12">
                 <InstallationCalculator client:visible />
@@ -138,8 +136,8 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
                             <h4>Отвод конденсата</h4>
                             <p>
                                 Дренажный шланг от внутреннего блока выводится
-                                на улицу. Отвод воды от наружного блока в стандартный
-                                монтаж не входит.
+                                на улицу. Отвод воды от наружного блока в
+                                стандартный монтаж не входит.
                             </p>
                         </div>
                     </div>
@@ -174,7 +172,13 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
         </div>
 
         <div class="sidebar">
-            <ContactForm client:visible />
+            <ContactForm
+                client:visible
+                title="Заказать монтаж"
+                subtitle="Консультация и выезд мастера бесплатно"
+                buttonText="Вызвать мастера"
+                subject="Заказ монтажа"
+            />
         </div>
     </section>
 </Layout>
