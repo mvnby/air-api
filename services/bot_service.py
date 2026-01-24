@@ -1,5 +1,8 @@
+import logging
 from aiogram import Bot
 from core.config import settings
+
+logger = logging.getLogger(__name__)
 
 class BotService:
     @staticmethod
@@ -13,7 +16,7 @@ class BotService:
             async with bot.context():
                 await bot.send_message(chat_id=user_id, text=text, parse_mode="HTML")
         except Exception as e:
-            print(f"Failed to send Telegram message to {user_id}: {e}")
+            logger.error(f"Failed to send Telegram message to {user_id}: {e}")
 
     @staticmethod
     async def notify_installer_new_order(installer_tg_id: int, order_id: int, address: str, date_str: str, role: str):
