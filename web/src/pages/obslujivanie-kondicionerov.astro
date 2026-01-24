@@ -1,0 +1,346 @@
+---
+import Layout from "../layouts/Layout.astro";
+import ContactForm from "../components/ContactForm.vue";
+---
+
+<Layout
+    title="Сервисное обслуживание кондиционеров в Витебске"
+    description="Комплексное техническое обслуживание сплит-систем: чистка парогенератором, антибактериальная обработка, проверка давления и дозаправка. Гарантия долгой работы."
+>
+    <section class="page-header">
+        <div class="container">
+            <h1>Обслуживание кондиционеров</h1>
+            <p class="breadcrumbs">Главная / Услуги / Обслуживание</p>
+        </div>
+    </section>
+
+    <section class="container detail-grid">
+        <div class="content">
+            <div class="glass p-8 rounded-3xl mb-8">
+                <h2>Комплексное ТО</h2>
+                <div class="pricing-grid mb-6">
+                    <div class="price-item">
+                        <span class="label">До 5 кВт (9-18 Btu)</span>
+                        <span class="value">110 BYN</span>
+                    </div>
+                    <div class="price-item">
+                        <span class="label">Свыше 7 кВт (24+ Btu)</span>
+                        <span class="value">160 BYN</span>
+                    </div>
+                    <div class="price-item">
+                        <span class="label">Кассетные / Потолочные</span>
+                        <span class="value">210 BYN</span>
+                    </div>
+                </div>
+                <p class="mb-6 text-muted">
+                    Рекомендуется проводить <b>минимум 1 раз в год</b>. Это
+                    продлевает срок службы оборудования, предотвращает поломки
+                    компрессора и бережет ваше здоровье.
+                </p>
+
+                <ul class="feature-list">
+                    <li>
+                        <span class="check-icon"
+                            ><span class="material-icons-round">check</span
+                            ></span
+                        >
+                        <span
+                            ><b>Глубокая чистка</b> — используем парогенератор для
+                            удаления грибка</span
+                        >
+                    </li>
+                    <li>
+                        <span class="check-icon"
+                            ><span class="material-icons-round">check</span
+                            ></span
+                        >
+                        <span
+                            ><b>Антибактериальная обработка</b> — устраняем неприятные
+                            запахи</span
+                        >
+                    </li>
+                    <li>
+                        <span class="check-icon"
+                            ><span class="material-icons-round">check</span
+                            ></span
+                        >
+                        <span
+                            ><b>Проверка системы</b> — замер давления и температуры</span
+                        >
+                    </li>
+                    <li>
+                        <span class="check-icon"
+                            ><span class="material-icons-round">check</span
+                            ></span
+                        >
+                        <span
+                            ><b>Чистая работа</b> — используем сервис-пакеты для защиты
+                            интерьера</span
+                        >
+                    </li>
+                </ul>
+            </div>
+
+            <div class="article-content">
+                <section class="mb-12">
+                    <h2>Что входит в обслуживание? (13 этапов)</h2>
+                    <p>
+                        Наше техническое обслуживание — это не просто «протереть
+                        пыль». Мы проводим полный комплекс работ согласно
+                        регламенту производителей:
+                    </p>
+
+                    <div class="steps-grid mt-8">
+                        <div class="step-card">
+                            <span class="num">01</span>
+                            <p>
+                                Внешний осмотр блоков на предмет механических
+                                повреждений
+                            </p>
+                        </div>
+                        <div class="step-card">
+                            <span class="num">02</span>
+                            <p>
+                                Проверка надежности электрических соединений и
+                                кабелей
+                            </p>
+                        </div>
+                        <div class="step-card">
+                            <span class="num">03</span>
+                            <p>
+                                Проверка герметичности вальцовочных соединений
+                                фреонопровода
+                            </p>
+                        </div>
+                        <div class="step-card">
+                            <span class="num">04</span>
+                            <p>
+                                Тестирование работы системы во всех
+                                функциональных режимах
+                            </p>
+                        </div>
+                        <div class="step-card">
+                            <span class="num">05</span>
+                            <p>
+                                Контроль рабочего давления хладагента в системе
+                            </p>
+                        </div>
+                        <div class="step-card">
+                            <span class="num">06</span>
+                            <p>
+                                Замер разности температур воздуха на входе и
+                                выходе испарителя
+                            </p>
+                        </div>
+                        <div class="step-card">
+                            <span class="num">07</span>
+                            <p>
+                                Проверка подтяжки винтов контактных зажимов
+                                клеммных колодок
+                            </p>
+                        </div>
+                        <div class="step-card">
+                            <span class="num">08</span>
+                            <p>
+                                Контроль работы выходных жалюзи внутреннего
+                                блока
+                            </p>
+                        </div>
+                        <div class="step-card">
+                            <span class="num">09</span>
+                            <p>
+                                <b>Чистка воздушных фильтров</b> внутреннего блока
+                            </p>
+                        </div>
+                        <div class="step-card">
+                            <span class="num">10</span>
+                            <p>
+                                <b>Чистка теплообменника</b> внутреннего блока парогенератором
+                            </p>
+                        </div>
+                        <div class="step-card">
+                            <span class="num">11</span>
+                            <p>
+                                <b>Антибактериальная обработка</b> теплообменника
+                                спецсредствами
+                            </p>
+                        </div>
+                        <div class="step-card">
+                            <span class="num">12</span>
+                            <p>
+                                <b>Чистка теплообменника</b> наружного блока (при
+                                доступе)
+                            </p>
+                        </div>
+                        <div class="step-card">
+                            <span class="num">13</span>
+                            <p>
+                                Проверка работы дренажной системы и её промывка
+                            </p>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="mb-12">
+                    <h3>Зачем нужно регулярное ТО?</h3>
+                    <p>
+                        Многие вспоминают об обслуживании только когда
+                        кондиционер перестает холодить или начинает течь. Однако
+                        регулярная профилактика решает критические задачи:
+                    </p>
+                    <ul class="bullet-list mt-4">
+                        <li>
+                            <strong>Здоровье:</strong> Влажная среда внутри блока
+                            — идеальное место для плесени и легионелл. Профессиональная
+                            чистка убивает 99% микробов.
+                        </li>
+                        <li>
+                            <strong>Экономия:</strong> Засоренный радиатор заставляет
+                            компрессор работать на износ, увеличивая потребление электроэнергии
+                            до 30%.
+                        </li>
+                        <li>
+                            <strong>Срок службы:</strong> Без ежегодной проверки давления
+                            компрессор может сгореть от перегрева, а его замена стоит
+                            как половина нового кондиционера.
+                        </li>
+                    </ul>
+                </section>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <ContactForm client:visible />
+        </div>
+    </section>
+</Layout>
+
+<style>
+    .page-header {
+        padding: 3rem 0;
+        margin-bottom: 2rem;
+    }
+    h1 {
+        font-size: 3rem;
+        font-weight: 800;
+    }
+    .breadcrumbs {
+        color: var(--text-muted);
+    }
+
+    .detail-grid {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 4rem;
+        margin-bottom: 6rem;
+    }
+
+    .pricing-grid {
+        display: grid;
+        gap: 1rem;
+        background: #f0fdf9; /* Light Teal */
+        padding: 2rem;
+        border-radius: 2rem;
+    }
+    .price-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .price-item .label {
+        font-weight: 500;
+        color: var(--text-main);
+    }
+    .price-item .value {
+        font-size: 1.25rem;
+        font-weight: 800;
+        color: #007f80;
+    }
+
+    .feature-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+    }
+    .feature-list li {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    .check-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        background: #007f80;
+        border-radius: 50%;
+        flex-shrink: 0;
+        margin-top: 4px;
+    }
+    .check-icon .material-icons-round {
+        color: #fff !important;
+        font-size: 16px !important;
+        font-weight: 900;
+    }
+
+    .steps-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1.5rem;
+    }
+    .step-card {
+        padding: 1.5rem;
+        background: #f8fafc;
+        border-radius: 1.25rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .step-card .num {
+        font-size: 0.9rem;
+        font-weight: 800;
+        color: var(--primary);
+        opacity: 0.5;
+    }
+    .step-card p {
+        margin: 0;
+        font-size: 0.95rem;
+        line-height: 1.5;
+    }
+
+    .bullet-list {
+        list-style: none;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .bullet-list li {
+        padding-left: 1.5rem;
+        position: relative;
+    }
+    .bullet-list li::before {
+        content: "→";
+        position: absolute;
+        left: 0;
+        color: var(--primary);
+        font-weight: bold;
+    }
+
+    .article-content h3 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+    }
+
+    @media (max-width: 900px) {
+        .detail-grid {
+            grid-template-columns: 1fr;
+        }
+        .sidebar {
+            order: -1;
+        }
+    }
+</style>
