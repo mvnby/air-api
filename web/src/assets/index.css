@@ -23,6 +23,7 @@
     --text-muted: #9ca3af;
     --border: #374151;
     --secondary: #134e4a;
+    --accent-light: #5eead4;
 }
 
 * {
@@ -122,7 +123,7 @@ ul {
 
 .dark .badge {
     background: rgba(45, 212, 191, 0.1);
-    color: #5eead4;
+    color: var(--accent-light);
 }
 
 .card {

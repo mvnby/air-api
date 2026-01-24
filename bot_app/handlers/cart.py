@@ -82,8 +82,8 @@ async def finish_checkout(message: types.Message, state: FSMContext):
                 for admin_id in settings.admin_list:
                     try:
                         await bot.send_message(admin_id, admin_text, parse_mode="HTML")
-                    except:
-                        pass
+                    except Exception:
+                        pass  # Ignore notification failures
             
             await message.answer(f"✅ <b>Заказ #{order.id} успешно оформлен!</b>\nМы свяжемся с вами в ближайшее время.", reply_markup=main_menu, parse_mode="HTML")
             

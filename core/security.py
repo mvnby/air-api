@@ -27,9 +27,17 @@ class AdminAuthBackend(AuthenticationBackend):
         username = form.get("username")
         password = form.get("password")
         
-        # Validate credentials
-        if (username == settings.ADMIN_USERNAME and 
-            password == settings.ADMIN_PASSWORD):
+        # Validate credentials using timing-safe comparison
+        username_correct = secrets.compare_digest(
+            str(username).encode("utf8"),
+            settings.ADMIN_USERNAME.encode("utf8")
+        )
+        password_correct = secrets.compare_digest(
+            str(password).encode("utf8"),
+            settings.ADMIN_PASSWORD.encode("utf8")
+        )
+        
+        if username_correct and password_correct:
             # Store authentication in session
             request.session.update({"authenticated": True})
             return True

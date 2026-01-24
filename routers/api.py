@@ -68,16 +68,16 @@ def _map_product_to_response(product: Product) -> ProductResponse:
             # but usually it's better to try literal_eval if it's a python repr
             import ast
             specs = ast.literal_eval(specs)
-        except:
-            specs = {}
+        except Exception:
+            specs = {}  # Fallback if JSON parsing fails
             
     images = product.images
     if isinstance(images, str):
         try:
             import ast
             images = ast.literal_eval(images)
-        except:
-            images = []
+        except Exception:
+            images = []  # Fallback if JSON parsing fails
 
     return ProductResponse(
         id=product.id,
