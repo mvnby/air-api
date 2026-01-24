@@ -5,9 +5,10 @@ from markupsafe import Markup
 from wtforms import SelectField
 
 # Импорты моделей и сессии
-from models import Order, Service, OrderProductLink, OrderServiceLink, Customer, OrderInstaller, OrderStatus, Product
+from models import Order, Service, OrderProductLink, OrderServiceLink, Customer, OrderInstaller, OrderStatus, Product, LeadSource
 from core.database import async_session_maker
 from sqlmodel import select
+from wtforms import TextAreaField
 
 class ServiceAdmin(ModelView, model=Service):
     name = "Услуга"
@@ -46,6 +47,16 @@ STATUS_LABELS = {
     "deferred": "Отложено"
 }
 
+LEAD_SOURCE_LABELS = {
+    "site": "🌐 Сайт",
+    "bot": "🤖 Telegram бот",
+    "phone": "📞 Звонок",
+    "email": "📧 Email",
+    "manager": "👨‍💼 Менеджер",
+    "referral": "🗣️ Рекомендация",
+    "other": "➕ Другое"
+}
+
 class OrderAdmin(ModelView, model=Order):
     name = "Заказ"
     name_plural = "Заказы"
@@ -55,7 +66,8 @@ class OrderAdmin(ModelView, model=Order):
     
     column_list = [
         Order.id, 
-        Order.status, 
+        Order.status,
+        Order.lead_source,
         Order.customer_id,
         "total_amount", 
         Order.created_at
@@ -64,6 +76,7 @@ class OrderAdmin(ModelView, model=Order):
     column_labels = {
         "id": "ID",
         "status": "Статус",
+        "lead_source": "Источник",
         "customer_id": "Клиент",
         "total_amount": "Сумма",
         "created_at": "Дата",
@@ -72,7 +85,8 @@ class OrderAdmin(ModelView, model=Order):
         "user_id": "Telegram ID",
         "installation_date": "Дата установки",
         "assessment_date": "Дата замера",
-        "contract_date": "Дата договора"
+        "contract_date": "Дата договора",
+        "comment": "Заметка"
     }
     
     column_sortable_list = [Order.id, Order.created_at, Order.status, Order.next_followup_date]
@@ -87,6 +101,8 @@ class OrderAdmin(ModelView, model=Order):
         "customer",
         "delivery_address",
         "status",
+        "lead_source",
+        "comment",
         "installation_date",
         "assessment_date",
         "next_followup_date",
@@ -104,12 +120,20 @@ class OrderAdmin(ModelView, model=Order):
         }
     }
     
-    # Restore choices for Status (since we changed column to String)
-    form_overrides = dict(status=SelectField) 
+    # Restore choices for Status and LeadSource (since we changed columns to String)
+    form_overrides = {
+        "status": SelectField,
+        "lead_source": SelectField,
+        "comment": TextAreaField
+    }
     
     form_args = {
         "status": {
             "choices": [(s.value, STATUS_LABELS.get(s.value, s.value)) for s in OrderStatus], 
+            "coerce": str
+        },
+        "lead_source": {
+            "choices": [(s.value, LEAD_SOURCE_LABELS.get(s.value, s.value)) for s in LeadSource],
             "coerce": str
         }
     }
@@ -117,6 +141,7 @@ class OrderAdmin(ModelView, model=Order):
     # Custom formatters
     column_formatters = {
         "status": lambda m, a: STATUS_LABELS.get(m.status.value if hasattr(m.status, 'value') else m.status, m.status),
+        "lead_source": lambda m, a: LEAD_SOURCE_LABELS.get(m.lead_source.value if hasattr(m.lead_source, 'value') else m.lead_source, m.lead_source) if m.lead_source else "—",
         "total_amount": lambda m, a: f"{m.total_amount:,.2f} руб."
     }
 

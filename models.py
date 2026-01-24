@@ -223,6 +223,16 @@ class OrderStatus(str, Enum):
     COMPLETED = "completed"
     CANCELED = "canceled"
 
+class LeadSource(str, Enum):
+    """Источник лида - откуда пришёл клиент"""
+    SITE = "site"           # Сайт (заказ через корзину)
+    BOT = "bot"             # Telegram бот
+    PHONE = "phone"         # Входящий звонок
+    EMAIL = "email"         # Email запрос
+    MANAGER = "manager"     # Менеджер внёс вручную
+    REFERRAL = "referral"   # Рекомендация/сарафан
+    OTHER = "other"         # Другое
+
 class Installer(SQLModel, table=True):
     __tablename__ = "installers"
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -305,7 +315,9 @@ class Order(SQLModel, table=True):
     
     # --- CRM FIELDS ---
     status: OrderStatus = Field(default=OrderStatus.NEW_LEAD, sa_column=Column(String, index=True))
+    lead_source: LeadSource = Field(default=LeadSource.MANAGER, sa_column=Column(String, index=True))
     title: Optional[str] = Field(default=None) # Краткое описание сделки
+    comment: Optional[str] = Field(default=None) # Заметка или первичный запрос клиента ("посоветуйте кондиционер")
     
     # JSON для технических деталей (HVAC специфика)
     # Пример: {"wall_type": "beton", "pipe_length": 5, "wifi_module": true}
