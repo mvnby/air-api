@@ -464,11 +464,12 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
     Create a new order from website.
     
     Accepts customer information and cart items. Creates or updates customer record,
-    creates order with NEW_LEAD status, and logs the event.
+    creates order with NEW_LEAD status and lead_source=SITE.
     
     Returns created order details.
     """
     from services.order_service import OrderService
+    from models import LeadSource
     
     # Validate cart is not empty
     if not payload.items:
@@ -477,14 +478,15 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
     # Convert payload items to format expected by service
     items = [{"product_id": item.product_id, "quantity": item.quantity} for item in payload.items]
     
-    # Delegate to OrderService
+    # Delegate to OrderService with SITE lead source
     order = await OrderService.create_from_website(
         session=session,
         customer_name=payload.customer.name,
         customer_phone=payload.customer.phone,
         customer_email=payload.customer.email,
         customer_address=payload.customer.address,
-        items=items
+        items=items,
+        lead_source=LeadSource.SITE
     )
     
     return OrderResponse(

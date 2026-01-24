@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from crud.order import OrderDAO
-from models import Order, OrderProductLink, OrderServiceLink, Customer, CustomerType, OrderStatus, Product
+from models import Order, OrderProductLink, OrderServiceLink, Customer, CustomerType, OrderStatus, Product, LeadSource
 
 logger = logging.getLogger(__name__)
 
@@ -44,14 +44,16 @@ class OrderService:
         customer_phone: str,
         customer_email: Optional[str],
         customer_address: Optional[str],
-        items: List[Dict[str, Any]]  # [{"product_id": int, "quantity": int}]
+        items: List[Dict[str, Any]],  # [{"product_id": int, "quantity": int}]
+        lead_source: LeadSource = LeadSource.SITE,
+        comment: Optional[str] = None
     ) -> Order:
         """
         Create order from website checkout.
         
         Handles:
         1. Customer lookup/creation by phone
-        2. Order creation with NEW_LEAD status
+        2. Order creation with NEW_LEAD status and lead_source
         3. Product linking with current prices
         4. Total calculation
         
@@ -62,6 +64,8 @@ class OrderService:
             customer_email: Optional email
             customer_address: Delivery address
             items: List of cart items [{product_id, quantity}]
+            lead_source: Source of the lead (SITE, BOT, PHONE, etc.)
+            comment: Optional note or initial customer request
             
         Returns:
             Created Order with calculated totals
@@ -90,11 +94,13 @@ class OrderService:
                 customer.actual_address = customer_address
                 session.add(customer)
 
-        # 2. Create order
+        # 2. Create order with lead_source
         order = Order(
             customer_id=customer.id,
             delivery_address=customer_address,
             status=OrderStatus.NEW_LEAD,
+            lead_source=lead_source,
+            comment=comment,
             title=f"Заказ с сайта от {datetime.now().strftime('%d.%m %H:%M')}",
             created_at=datetime.now()
         )
@@ -129,7 +135,8 @@ class OrderService:
         
         # Log
         logger.info(
-            f"NEW ORDER #{order.id} | Customer: {customer.name} ({customer.phone}) | "
+            f"NEW ORDER #{order.id} | Source: {lead_source.value} | "
+            f"Customer: {customer.name} ({customer.phone}) | "
             f"Total: {total_amount} RUB | Items: {len(added_items)}"
         )
         logger.debug(f"Order #{order.id} items: {', '.join(added_items)}")
@@ -250,8 +257,104 @@ class OrderService:
             session.add(order)
             
         await session.commit()
+
+    @staticmethod
+    async def update_all_items(
+        session: AsyncSession, 
+        order_id: int, 
+        items_data: Dict[str, Any]
+    ) -> None:
+        """
+        Full sync of order items including products, services, and installers.
+        Used by admin panel for order editing.
+        
+        Args:
+            session: Database session
+            order_id: Order ID
+            items_data: Dict with 'products', 'services', 'installers' lists
+        """
+        from models import OrderInstaller
+        
+        # 1. Clear existing links
+        await OrderDAO.clear_product_links(session, order_id)
+        await OrderDAO.clear_service_links(session, order_id)
+        
+        # Clear installers
+        stmt = OrderInstaller.__table__.delete().where(OrderInstaller.order_id == order_id)
+        await session.execute(stmt)
+        
+        # 2. Add products
+        for prod in items_data.get("products", []):
+            link = OrderProductLink(
+                order_id=order_id,
+                product_id=int(prod["product_id"]),
+                quantity=int(prod["quantity"]),
+                price=int(prod["price"])
+            )
+            session.add(link)
+        
+        # 3. Add services
+        for serv in items_data.get("services", []):
+            link = OrderServiceLink(
+                order_id=order_id,
+                service_id=int(serv["service_id"]),
+                quantity=int(serv["quantity"]),
+                price=int(serv["price"])
+            )
+            session.add(link)
+        
+        # 4. Add installers
+        for inst in items_data.get("installers", []):
+            new_inst = OrderInstaller(
+                order_id=order_id,
+                installer_id=int(inst["installer_id"]),
+                agreed_pay=int(inst.get("agreed_pay", 0)),
+                role=inst.get("role", "main")
+            )
+            session.add(new_inst)
+        
+        await session.flush()
+        
+        # 5. Recalculate totals
+        order = await OrderDAO.get_with_links(session, order_id)
+        if order:
+            order.calculate_totals()
+            session.add(order)
+        
+        await session.commit()
+
+    @staticmethod
+    async def check_stock_for_proposal(
+        session: AsyncSession, 
+        product_ids: List[int],
+        min_stock: int = 3
+    ) -> List[str]:
+        """
+        Check if products have sufficient stock for sending a proposal.
+        
+        Args:
+            session: Database session
+            product_ids: List of product IDs to check
+            min_stock: Minimum required stock (default 3)
+            
+        Returns:
+            List of warning strings for low-stock items. Empty if all OK.
+        """
+        if not product_ids:
+            return []
+        
+        stmt = select(Product).where(Product.id.in_(product_ids))
+        result = await session.execute(stmt)
+        products = result.scalars().all()
+        
+        low_stock_items = []
+        for p in products:
+            stock = getattr(p, 'stock_quantity', 0) or 0
+            if stock < min_stock:
+                low_stock_items.append(f"{p.title} ({stock})")
+        
+        return low_stock_items
     
-    # ... остальные методы (get_all_orders, update_status) остаются без изменений ...
     @staticmethod
     async def get_all_orders(session: AsyncSession) -> List[Order]:
         return await OrderDAO.get_all(session)

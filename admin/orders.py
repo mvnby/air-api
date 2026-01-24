@@ -5,9 +5,10 @@ from markupsafe import Markup
 from wtforms import SelectField
 
 # Импорты моделей и сессии
-from models import Order, Service, OrderProductLink, OrderServiceLink, Customer, OrderInstaller, OrderStatus, Product
+from models import Order, Service, OrderProductLink, OrderServiceLink, Customer, OrderInstaller, OrderStatus, Product, LeadSource
 from core.database import async_session_maker
 from sqlmodel import select
+from wtforms import TextAreaField
 
 class ServiceAdmin(ModelView, model=Service):
     name = "Услуга"
@@ -46,6 +47,16 @@ STATUS_LABELS = {
     "deferred": "Отложено"
 }
 
+LEAD_SOURCE_LABELS = {
+    "site": "🌐 Сайт",
+    "bot": "🤖 Telegram бот",
+    "phone": "📞 Звонок",
+    "email": "📧 Email",
+    "manager": "👨‍💼 Менеджер",
+    "referral": "🗣️ Рекомендация",
+    "other": "➕ Другое"
+}
+
 class OrderAdmin(ModelView, model=Order):
     name = "Заказ"
     name_plural = "Заказы"
@@ -55,7 +66,8 @@ class OrderAdmin(ModelView, model=Order):
     
     column_list = [
         Order.id, 
-        Order.status, 
+        Order.status,
+        Order.lead_source,
         Order.customer_id,
         "total_amount", 
         Order.created_at
@@ -64,6 +76,7 @@ class OrderAdmin(ModelView, model=Order):
     column_labels = {
         "id": "ID",
         "status": "Статус",
+        "lead_source": "Источник",
         "customer_id": "Клиент",
         "total_amount": "Сумма",
         "created_at": "Дата",
@@ -72,7 +85,8 @@ class OrderAdmin(ModelView, model=Order):
         "user_id": "Telegram ID",
         "installation_date": "Дата установки",
         "assessment_date": "Дата замера",
-        "contract_date": "Дата договора"
+        "contract_date": "Дата договора",
+        "comment": "Заметка"
     }
     
     column_sortable_list = [Order.id, Order.created_at, Order.status, Order.next_followup_date]
@@ -87,6 +101,8 @@ class OrderAdmin(ModelView, model=Order):
         "customer",
         "delivery_address",
         "status",
+        "lead_source",
+        "comment",
         "installation_date",
         "assessment_date",
         "next_followup_date",
@@ -104,12 +120,20 @@ class OrderAdmin(ModelView, model=Order):
         }
     }
     
-    # Restore choices for Status (since we changed column to String)
-    form_overrides = dict(status=SelectField) 
+    # Restore choices for Status and LeadSource (since we changed columns to String)
+    form_overrides = {
+        "status": SelectField,
+        "lead_source": SelectField,
+        "comment": TextAreaField
+    }
     
     form_args = {
         "status": {
             "choices": [(s.value, STATUS_LABELS.get(s.value, s.value)) for s in OrderStatus], 
+            "coerce": str
+        },
+        "lead_source": {
+            "choices": [(s.value, LEAD_SOURCE_LABELS.get(s.value, s.value)) for s in LeadSource],
             "coerce": str
         }
     }
@@ -117,20 +141,20 @@ class OrderAdmin(ModelView, model=Order):
     # Custom formatters
     column_formatters = {
         "status": lambda m, a: STATUS_LABELS.get(m.status.value if hasattr(m.status, 'value') else m.status, m.status),
+        "lead_source": lambda m, a: LEAD_SOURCE_LABELS.get(m.lead_source.value if hasattr(m.lead_source, 'value') else m.lead_source, m.lead_source) if m.lead_source else "—",
         "total_amount": lambda m, a: f"{m.total_amount:,.2f} руб."
     }
 
     # --- ИСПРАВЛЕННЫЙ МЕТОД ---
     async def update_model(self, request, pk: Any, data: dict) -> Any:
         import json
-        from models import Product, OrderProductLink, OrderServiceLink, OrderInstaller
         import logging
+        from services.order_service import OrderService
         
         # Ensure pk is an integer for DB operations
         try:
             order_id = int(pk)
         except (ValueError, TypeError):
-            # Fallback if pk is somehow not convertable, though unlikely for existing ID
             order_id = pk
 
         logger = logging.getLogger(__name__)
@@ -139,7 +163,6 @@ class OrderAdmin(ModelView, model=Order):
         items_json = data.pop("items_json", None)
         
         if items_json is None:
-            # Fallback: try to get from request form directly if not in processed data
             form_data = await request.form()
             items_json = form_data.get("items_json")
             logger.info(f"update_model: items_json extracted from request form: {bool(items_json)}")
@@ -149,107 +172,39 @@ class OrderAdmin(ModelView, model=Order):
         # 1. Update basic fields
         model = await super().update_model(request, pk, data)
         
-        # 2. If items_json is present, parse it and update relationships
+        # 2. If items_json is present, use OrderService for full sync
         if items_json:
             try:
                 items_data = json.loads(items_json)
-                session = self.session_maker()
                 
-                async with session.begin():
-                    # Clear existing links (using integer order_id)
-                    await session.execute(
-                        OrderProductLink.__table__.delete().where(OrderProductLink.order_id == order_id)
-                    )
-                    await session.execute(
-                        OrderServiceLink.__table__.delete().where(OrderServiceLink.order_id == order_id)
-                    )
-                    await session.execute(
-                        OrderInstaller.__table__.delete().where(OrderInstaller.order_id == order_id)
+                async with async_session_maker() as session:
+                    await OrderService.update_all_items(
+                        session=session,
+                        order_id=order_id,
+                        items_data=items_data
                     )
                     
-                    # Add new products
-                    for prod in items_data.get("products", []):
-                        new_link = OrderProductLink(
-                            order_id=order_id,
-                            product_id=int(prod["product_id"]),
-                            quantity=int(prod["quantity"]),
-                            price=int(prod["price"])
-                        )
-                        session.add(new_link)
-                        
-                    # Add new services
-                    for serv in items_data.get("services", []):
-                        new_link = OrderServiceLink(
-                            order_id=order_id,
-                            service_id=int(serv["service_id"]),
-                            quantity=int(serv["quantity"]),
-                            price=int(serv["price"])
-                        )
-                        session.add(new_link)
-                        
-                    # Add new installers
-                    for inst in items_data.get("installers", []):
-                        new_inst = OrderInstaller(
-                            order_id=order_id,
-                            installer_id=int(inst["installer_id"]),
-                            agreed_pay=int(inst["agreed_pay"]),
-                            role=inst["role"]
-                        )
-                        session.add(new_inst)
-                        
-                await session.commit()
-                
-                # Recalculate order totals after updating items
-                # Need to reload the order with all relationships
-                from sqlmodel import select
-                from sqlalchemy.orm import selectinload
-                
-                query = select(Order).where(Order.id == order_id).options(
-                    selectinload(Order.product_links),
-                    selectinload(Order.service_links),
-                    selectinload(Order.installers)
-                )
-                result = await session.execute(query)
-                refreshed_order = result.scalar_one()
-                
-                refreshed_order.calculate_totals()
-                session.add(refreshed_order)
-                await session.commit()
-                
             except Exception as e:
-                # Log error but don't fail the whole request if possible, 
-                # or raise to let user know
-                import logging
-                logging.getLogger(__name__).error(f"Error updating order items: {e}")
+                logger.error(f"Error updating order items: {e}")
                 raise e
         
         # --- Phase 6: Inventory Safety Check ---
         # Prevent moving to PROPOSAL if stock < 3
-        # Note: model.status is already updated to new value here
-        
         if model.status == OrderStatus.PROPOSAL:
             product_ids = []
             
-            # 1. If we just updated items, check them
             if items_json:
                 items = json.loads(items_json)
                 product_ids = [int(item['product_id']) for item in items.get('products', [])]
-            
-            # 2. If no item update, check existing links
-            elif not items_json:
+            else:
                 product_ids = [link.product_id for link in model.product_links]
             
             if product_ids:
                 async with async_session_maker() as session:
-                    stmt = select(Product).where(Product.id.in_(product_ids))
-                    res = await session.execute(stmt)
-                    products = res.scalars().all()
-                    
-                    low_stock_items = []
-                    for p in products:
-                        # Assuming stock_quantity is mandatory field, default 0
-                        if p.stock_quantity < 3:
-                            low_stock_items.append(f"{p.title} ({p.stock_quantity})")
+                    low_stock_items = await OrderService.check_stock_for_proposal(
+                        session=session,
+                        product_ids=product_ids
+                    )
                     
                     if low_stock_items:
                         items_str = ", ".join(low_stock_items)
