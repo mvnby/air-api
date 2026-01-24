@@ -355,6 +355,7 @@ async def get_catalog(
     area_min: Optional[int] = None,
     area_max: Optional[int] = None,
     tag_slugs: Optional[List[str]] = Query(None),
+    is_inverter: Optional[bool] = None,
     session: AsyncSession = Depends(get_session)
 ):
     """
@@ -364,6 +365,7 @@ async def get_catalog(
     - `min_price`, `max_price`: Price range filter
     - `area_min`, `area_max`: Area coverage filter
     - `tag_slugs`: Filter by tag slugs (e.g., 'inverter', 'chigo', 'area-25')
+    - `is_inverter`: Filter by inverter technology
     
     **Sorting:**
     - `newest`: Recently added products (default)
@@ -385,6 +387,7 @@ async def get_catalog(
         area_max=area_max,
         min_price=min_price,
         max_price=max_price,
+        is_inverter=is_inverter,
         # We pass None for tag_slugs because we handle it via faceted_tag_ids now
         tag_slugs=None, 
         faceted_tag_ids=faceted_tag_ids,
@@ -399,6 +402,7 @@ async def get_catalog(
         area_max=area_max,
         min_price=min_price,
         max_price=max_price,
+        is_inverter=is_inverter,
         tag_slugs=None,
         faceted_tag_ids=faceted_tag_ids,
         is_published=True

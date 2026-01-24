@@ -7,6 +7,11 @@ const isSunny = ref(false);
 const people = ref(1);
 const computers = ref(1);
 
+// New filters
+const isInverter = ref(false);
+const hasWifi = ref(false);
+const hasWinterHeating = ref(false);
+
 const calculatedPower = computed(() => {
   // Base power: 1 kW per 10 sq.m.
   let power = (area.value * 1.0) / 10;
@@ -32,17 +37,47 @@ const calculatedPower = computed(() => {
 
 const recommendedModel = computed(() => {
   const kw = calculatedPower.value;
-  if (kw <= 2.1) return { btu: 7, kw: 2.0, name: '07 (до 20 м²)' };
-  if (kw <= 2.6) return { btu: 9, kw: 2.5, name: '09 (до 25 м²)' };
-  if (kw <= 3.6) return { btu: 12, kw: 3.5, name: '12 (до 35 м²)' };
-  if (kw <= 5.4) return { btu: 18, kw: 5.0, name: '18 (до 50 м²)' };
-  if (kw <= 7.1) return { btu: 24, kw: 7.0, name: '24 (до 70 м²)' };
-  return { btu: 30, kw: 8.0, name: '30+ (Промышленный)' };
+  if (kw <= 2.1) return { btu: 7, kw: 2.0, name: '07 (до 20 м²)', slug: 'area-20' };
+  if (kw <= 2.6) return { btu: 9, kw: 2.5, name: '09 (до 25 м²)', slug: 'area-25' };
+  if (kw <= 3.6) return { btu: 12, kw: 3.5, name: '12 (до 35 м²)', slug: 'area-35' };
+  if (kw <= 5.4) return { btu: 18, kw: 5.0, name: '18 (до 50 м²)', slug: 'area-50' };
+  if (kw <= 7.1) return { btu: 24, kw: 7.0, name: '24 (до 70 м²)', slug: 'area-70' };
+  if (kw <= 8.1) return { btu: 28, kw: 8.0, name: '28 (до 80 м²)', slug: 'area-80' };
+  return { btu: 30, kw: 9.0, name: 'Требуется консультация', slug: null };
 });
 
 const progressPercent = computed(() => {
     // scale from 10 to 100m2
     return ((area.value - 10) / (100 - 10)) * 100;
+});
+
+const catalogUrl = computed(() => {
+    if (!recommendedModel.value.slug) return '/contacts'; // Redirect to contacts for large areas
+
+    const params = new URLSearchParams();
+    const tags = [];
+
+    // Area tag
+    tags.push(recommendedModel.value.slug);
+
+    // Feature tags
+    if (isInverter.value) {
+        tags.push('inverter'); 
+    }
+    if (hasWifi.value) {
+        tags.push('wifi-builtin');
+    }
+    if (hasWinterHeating.value) {
+        tags.push('winter-20');
+        tags.push('winter-25');
+        tags.push('winter-30');
+    }
+
+    if (tags.length > 0) {
+        params.set('tag_slugs', tags.join(','));
+    }
+
+    return `/catalog?${params.toString()}`;
 });
 </script>
 
@@ -75,7 +110,7 @@ const progressPercent = computed(() => {
             </div>
         </div>
 
-        <div class="toggles-row">
+        <div class="toggles-grid">
             <div 
                 class="toggle-btn" 
                 :class="{ active: isSunny }"
@@ -83,6 +118,30 @@ const progressPercent = computed(() => {
             >
                 <span class="material-icons-round">wb_sunny</span>
                 <span>Солнечная сторона</span>
+            </div>
+             <div 
+                class="toggle-btn" 
+                :class="{ active: isInverter }"
+                @click="isInverter = !isInverter"
+            >
+                <span class="material-icons-round">equalizer</span>
+                <span>Инвертор</span>
+            </div>
+             <div 
+                class="toggle-btn" 
+                :class="{ active: hasWifi }"
+                @click="hasWifi = !hasWifi"
+            >
+                <span class="material-icons-round">wifi</span>
+                <span>Wi-Fi</span>
+            </div>
+             <div 
+                class="toggle-btn" 
+                :class="{ active: hasWinterHeating }"
+                @click="hasWinterHeating = !hasWinterHeating"
+            >
+                <span class="material-icons-round">ac_unit</span>
+                <span>Обогрев зимой</span>
             </div>
         </div>
         
@@ -112,13 +171,18 @@ const progressPercent = computed(() => {
                 <span>Рекомендуем модель:</span>
                 <span class="val highlight">{{ recommendedModel.name }}</span>
             </div>
-             <div class="res-desc">
+             <div class="res-desc" v-if="recommendedModel.btu">
                 *BTU: {{ recommendedModel.btu }}000
             </div>
         </div>
 
-        <a href="/catalog" class="btn btn-primary full-width">
-            Подобрать модели
+        <div v-if="!recommendedModel.slug" class="warning-box">
+            <span class="material-icons-round">warning</span>
+            <p>Для такой площади требуется профессиональный расчет. Возможно, вам нужен полупромышленный кондиционер или мульти-сплит система.</p>
+        </div>
+
+        <a :href="catalogUrl" class="btn btn-primary full-width">
+            {{ !recommendedModel.slug ? 'Заказать консультацию' : 'Подобрать модели' }}
             <span class="material-icons-round">arrow_forward</span>
         </a>
     </div>
@@ -206,24 +270,41 @@ h2 {
     margin-top: 0.5rem;
 }
 
-.toggles-row {
+.toggles-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
     margin-top: 1.5rem;
 }
 
 .toggle-btn {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: center; /* Center content */
     gap: 0.5rem;
     padding: 0.75rem;
     border: 1px solid var(--border);
     border-radius: 12px;
     cursor: pointer;
     font-weight: 500;
+    font-size: 0.9rem;
     transition: all 0.2s;
+    background: var(--bg); /* Ensure background is set */
 }
 
+/* Specific active states for different toggles */
 .toggle-btn.active {
+    border-color: var(--primary);
+    background: rgba(0, 127, 128, 0.1);
+    color: var(--primary);
+}
+
+/* Sunny toggle specific style override if needed, or keep uniform */
+/* Original sunny style was yellow/orange, let's keep it for Sunny only? 
+   Or make everything primary for consistency? 
+   Let's keep Sunny warm, others primary.
+*/
+.toggle-btn:first-child.active { /* Sunny is first */
     background: #fef3c7;
     border-color: #f59e0b;
     color: #92400e;
@@ -299,10 +380,29 @@ h2 {
     margin-top: 0.2rem;
 }
 
+.warning-box {
+    background: #fff1f2;
+    border: 1px solid #fda4af;
+    color: #9f1239;
+    padding: 1rem;
+    border-radius: 0.75rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.warning-box .material-icons-round {
+    color: #e11d48;
+}
+
 .full-width {
     width: 100%;
     justify-content: center;
     font-size: 1.1rem;
     padding: 1rem;
+    text-decoration: none;
 }
 </style>
