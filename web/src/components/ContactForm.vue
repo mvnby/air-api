@@ -93,18 +93,8 @@ const submitForm = async () => {
 </template>
 
 <style scoped>
-.glass {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  backdrop-filter: blur(12px);
-  border-radius: 1.5rem;
-  overflow: hidden;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-}
-
 .contact-form-container {
-  padding: 2rem;
-  height: 100%;
+  padding: 2.5rem;
   min-height: 480px;
   display: flex;
   flex-direction: column;
