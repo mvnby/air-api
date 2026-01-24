@@ -431,16 +431,14 @@ async def get_product_by_slug(slug: str, session: AsyncSession = Depends(get_ses
 @router.get("/v1/content/articles", response_model=List[ArticleResponse])
 async def get_articles(session: AsyncSession = Depends(get_session)):
     """Get list of published articles ordered by creation date (newest first)."""
-    stmt = select(Article).where(Article.is_published == True).order_by(Article.created_at.desc())
-    result = await session.execute(stmt)
-    return result.scalars().all()
+    from services.article_service import ArticleService
+    return await ArticleService.get_all_published(session)
 
 @router.get("/v1/content/articles/{slug}", response_model=ArticleResponse)
 async def get_article(slug: str, session: AsyncSession = Depends(get_session)):
     """Get article details by slug. Returns 404 if not found or not published."""
-    stmt = select(Article).where(Article.slug == slug, Article.is_published == True)
-    result = await session.execute(stmt)
-    article = result.scalar_one_or_none()
+    from services.article_service import ArticleService
+    article = await ArticleService.get_by_slug(session, slug)
     if not article:
         raise HTTPException(status_code=404, detail=f"Article with slug '{slug}' not found")
     return article
@@ -470,78 +468,27 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
     
     Returns created order details.
     """
+    from services.order_service import OrderService
+    
     # Validate cart is not empty
     if not payload.items:
         raise HTTPException(status_code=400, detail="Cart cannot be empty")
     
-    phone_clean = payload.customer.phone.strip()
+    # Convert payload items to format expected by service
+    items = [{"product_id": item.product_id, "quantity": item.quantity} for item in payload.items]
     
-    # Find or create customer
-    stmt = select(Customer).where(Customer.phone == phone_clean)
-    result = await session.execute(stmt)
-    customer = result.scalar_one_or_none()
-    
-    if not customer:
-        customer = Customer(
-            name=payload.customer.name,
-            phone=phone_clean,
-            email=payload.customer.email,
-            type=CustomerType.individual, 
-            actual_address=payload.customer.address
-        )
-        session.add(customer)
-        await session.flush()
-        logger.info(f"Created new customer: {customer.name} ({customer.phone})")
-    else:
-        if payload.customer.address:
-            customer.actual_address = payload.customer.address
-            session.add(customer)
-
-    # Create order
-    order = Order(
-        customer_id=customer.id,
-        delivery_address=payload.customer.address,
-        status=OrderStatus.NEW_LEAD,
-        title=f"Заказ с сайта от {datetime.now().strftime('%d.%m %H:%M')}",
-        created_at=datetime.now()
+    # Delegate to OrderService
+    order = await OrderService.create_from_website(
+        session=session,
+        customer_name=payload.customer.name,
+        customer_phone=payload.customer.phone,
+        customer_email=payload.customer.email,
+        customer_address=payload.customer.address,
+        items=items
     )
-    session.add(order)
-    await session.flush()
-    
-    # Add items to order
-    total_amount = 0.0
-    added_items = []
-    
-    for item in payload.items:
-        product = await session.get(Product, item.product_id)
-        if product:
-            link = OrderProductLink(
-                order_id=order.id,
-                product_id=product.id,
-                quantity=item.quantity,
-                price=product.price,
-                cost=0
-            )
-            session.add(link)
-            total_amount += product.price * item.quantity
-            added_items.append(f"{product.title} x{item.quantity}")
-        else:
-            logger.warning(f"Product {item.product_id} not found in order creation")
-    
-    order.total_amount = total_amount
-    session.add(order)
-    await session.commit()
-    await session.refresh(order)
-    
-    # Log order creation
-    logger.info(
-        f"NEW ORDER #{order.id} | Customer: {customer.name} ({customer.phone}) | "
-        f"Total: {total_amount} RUB | Items: {len(added_items)}"
-    )
-    logger.debug(f"Order #{order.id} items: {', '.join(added_items)}")
     
     return OrderResponse(
-                id=order.id,
+        id=order.id,
         status=order.status,
         total_amount=order.total_amount,
         created_at=order.created_at
