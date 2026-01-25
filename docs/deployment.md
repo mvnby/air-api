@@ -1,6 +1,12 @@
-# Deployment Guide (Docker & PostgreSQL)
+# Deployment Guide (Backend & Bot)
 
-This guide describes how to deploy the MVN project using Docker and PostgreSQL.
+This guide describes how to deploy the backend services for **MVN.BY**.
+
+## Architecture Overview
+
+*   **Frontend**: Static HTML web application hosted on `mvn.by`.
+*   **Backend**: FastAPI application + Telegram Bot hosted on `api.mvn.by`.
+*   **Database**: PostgreSQL (Dockerized).
 
 ## System Requirements
 - Docker 20.10+
@@ -17,10 +23,9 @@ cd mvn
 
 ## 2. Environment Variables
 
-Create a `.env` file in the root directory. You can use `.env.example` as a template.
+Create a `.env` file in the root directory.
 
 ### Database Credentials
-These variables are used by both the PostgreSQL container and the application:
 ```env
 POSTGRES_USER=mvnadmin
 POSTGRES_PASSWORD=securepass
@@ -35,32 +40,18 @@ BOT_TOKEN=...
 ADMIN_USERNAME=...
 ADMIN_PASSWORD=...
 SECRET_KEY=...
+BACKUP_FOLDER_ID=...   # Google Drive Folder ID for backups
 ```
 
-## 3. Running with Docker Compose
+## 3. Running Services
 
-To build and start all services (App, Bot, Database):
+To build and start the backend services (App, Bot, Database):
 ```bash
 docker compose up -d --build
 ```
+*Note: This starts `app`, `bot`, and `db`. The `web` container is for local development or generation only.*
 
-This will:
-- Start PostgreSQL on port `5432` (internal and external).
-- Start the FastAPI application on port `8000`.
-- Start the Telegram Bot.
-
-## 4. First Run & Data Migration
-
-If you are migrating from an existing SQLite database:
-
-1. Ensure `air_conditioners.db` is present in the project root.
-2. Run the migration script inside the running container:
-   ```bash
-   docker compose exec app python scripts/migrate_sqlite_to_pg.py
-   ```
-   *Note: This script also resets PostgreSQL sequences for auto-increment fields.*
-
-## 5. Monitoring & Logs
+## 4. Monitoring & Logs
 
 View combined logs:
 ```bash
@@ -73,7 +64,7 @@ docker compose logs -f app
 docker compose logs -f bot
 ```
 
-## 6. Updating the Application
+## 5. Updating the Application
 
 To update to the latest version:
 ```bash
@@ -81,28 +72,44 @@ git pull origin main
 docker compose up -d --build
 ```
 
-## 7. Backups
+## 6. Backups and Recovery
 
-### PostgreSQL Backup
-To create a database dump:
+### Automated Backups
+The system is configured to automatically backup the database every 24 hours. Backups are:
+1. Created via `pg_dump`.
+2. Uploaded to the configured Google Drive folder (`BACKUP_FOLDER_ID`).
+3. Cleaned up locally to save space.
+
+### Manual Backup
+To manually trigger a backup (and also keep a local copy in the `backups/` folder):
+
 ```bash
-docker compose exec db pg_dump -U mvnadmin air_conditioners > backup.sql
+./backup_db.sh
 ```
 
 ### Restore
+**⚠️ WARNING: Restoring will overwrite the current database!**
+
+#### Option A: Restore from Local File
 ```bash
-cat backup.sql | docker compose exec -T db psql -U mvnadmin air_conditioners
+docker compose exec app python restore.py --file backups/your_backup_file.sql
 ```
 
-## Nginx Configuration (Optional Reverse Proxy)
+#### Option B: Restore from Google Drive
+```bash
+docker compose exec app python restore.py --drive-id <GOOGLE_DRIVE_FILE_ID>
+```
 
-If you are using Nginx on the host machine to proxy to the Docker container:
+## 7. Nginx Configuration (api.mvn.by)
+
+The backend server (`api.mvn.by`) acts as the API endpoint for the static site.
 
 ```nginx
 server {
     listen 80;
-    server_name crm.mvn.by;
+    server_name api.mvn.by;
 
+    # Backend API + Admin Panel
     location / {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
@@ -111,9 +118,10 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Uploaded files
-    location /static/uploads {
-        alias /var/www/mvn/static/uploads;
+    # Uploaded media files
+    location /media/ {
+        alias /var/www/mvn/media/;
     }
 }
 ```
+

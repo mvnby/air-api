@@ -475,11 +475,7 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
     from services.order_service import OrderService
     from models import LeadSource
     
-    # Validate cart is not empty
-    if not payload.items:
-        raise HTTPException(status_code=400, detail="Cart cannot be empty")
-    
-    # Convert payload items to format expected by service
+    # If items provided, convert them
     items = [{"product_id": item.product_id, "quantity": item.quantity} for item in payload.items]
     
     # Delegate to OrderService with SITE lead source
@@ -490,7 +486,8 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
         customer_email=payload.customer.email,
         customer_address=payload.customer.address,
         items=items,
-        lead_source=LeadSource.SITE
+        lead_source=LeadSource.SITE,
+        comment=payload.comment
     )
     
     return OrderResponse(

@@ -7,7 +7,7 @@ from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 import datetime
 
 logger = logging.getLogger(__name__)
@@ -656,5 +656,62 @@ class GoogleDocsService:
         except Exception as e:
             # Логируем ошибку, но не прерываем выполнение (файл мог быть уже удален)
             logger.warning(f"Failed to delete Google Drive file {file_id}: {str(e)}")
+
+
+    def upload_file(self, file_path: str, filename: str, mime_type: str, folder_id: str = None) -> str:
+        """
+        Загружает файл на Google Drive.
+        
+        Args:
+            file_path: Путь к локальному файлу
+            filename: Имя файла в Google Drive
+            mime_type: MIME тип файла
+            folder_id: ID папки (опционально)
+            
+        Returns:
+            ID загруженного файла
+        """
+        if not self.creds or not self.creds.valid:
+            self._authenticate()
+            if not self.creds:
+                 raise Exception("Ошибка: Нет доступа к Google API.")
+        
+        try:
+            drive_service = build('drive', 'v3', credentials=self.creds)
+            
+            file_metadata = {'name': filename}
+            if folder_id:
+                file_metadata['parents'] = [folder_id]
+                
+            media = MediaFileUpload(file_path, mimetype=mime_type, resumable=True)
+            
+            file = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+            
+            return file.get('id')
+        except Exception as e:
+            raise Exception(f"Google Drive Upload Error: {str(e)}")
+
+    def download_file(self, file_id: str) -> BytesIO:
+        """
+        Скачивает файл из Google Drive (бинарный).
+        """
+        if not self.creds or not self.creds.valid:
+            self._authenticate()
+        
+        try:
+            drive_service = build('drive', 'v3', credentials=self.creds)
+            request = drive_service.files().get_media(fileId=file_id)
+            
+            file_io = BytesIO()
+            downloader = MediaIoBaseDownload(file_io, request)
+            
+            done = False
+            while not done:
+                status, done = downloader.next_chunk()
+            
+            file_io.seek(0)
+            return file_io
+        except Exception as e:
+             raise Exception(f"Google Drive Download Error: {str(e)}")
 
 google_service = GoogleDocsService()
