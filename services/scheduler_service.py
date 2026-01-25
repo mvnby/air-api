@@ -4,8 +4,10 @@ from typing import List
 from sqlmodel import select
 from core.database import async_session_maker
 from models import Product
+from datetime import datetime
 from parsers.onliner import OnlinerParser
 from core.logger import logger
+from services.backup_service import backup_service
 
 class SchedulerService:
     def __init__(self):
@@ -89,6 +91,9 @@ class SchedulerService:
         # Run stalled deal loop (once a day)
         asyncio.create_task(self._stalled_deal_loop())
 
+        # Run backup loop (once a day)
+        asyncio.create_task(self._backup_loop())
+
         # Keep the main loop alive 
         while True:
             await asyncio.sleep(3600)
@@ -141,5 +146,27 @@ class SchedulerService:
         if stalled_orders:
             await session.commit()
             logger.info(f"🔄 Auto-deferred {len(stalled_orders)} stalled orders.")
+
+    async def _backup_loop(self):
+        """Runs database backup every 24 hours."""
+        while True:
+            try:
+                # Calculate sleep time until next run (e.g., 3 AM)
+                # For simplicity, we just run it 24h loop, starting immediately or after a small delay?
+                # Let's run it once at startup (or after short delay) and then every 24h
+                # OR better: run at 03:00 UTC
+                
+                now = datetime.now()
+                # Run backups?
+                logger.info("⏳ Starting Daily Backup...")
+                # We need to run sync method in thread executor because subprocess is blocking
+                await asyncio.to_thread(backup_service.perform_backup, cleanup=True)
+                logger.info("✅ Daily Backup Completed.")
+                
+            except Exception as e:
+                logger.error(f"❌ Backup Loop Error: {e}")
+            
+            # Sleep 24h
+            await asyncio.sleep(24 * 3600)
 
 scheduler_service = SchedulerService()

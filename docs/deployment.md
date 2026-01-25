@@ -81,15 +81,52 @@ git pull origin main
 docker compose up -d --build
 ```
 
-## 7. Backups
+## 7. Backups and Recovery
 
-### PostgreSQL Backup
-To create a database dump:
+### Automated Backups
+The system is configured to automatically backup the database every 24 hours. Backups are:
+1. Created via `pg_dump`.
+2. Uploaded to the configured Google Drive folder (`BACKUP_FOLDER_ID`).
+3. Cleaned up locally to save space.
+
+### Manual Backup
+To manually trigger a backup (and also keep a local copy in the `backups/` folder):
+
+```bash
+./backup_db.sh
+```
+This script runs the backup process inside the container and ensures the local file is preserved.
+
+### Restore
+
+You can restore the database using the `restore.py` script included in the image.
+
+**⚠️ WARNING: Restoring will overwrite the current database!**
+
+#### Option A: Restore from Local File
+If you have a `.sql` file in your `backups/` folder (or mapped volume):
+
+```bash
+docker compose exec app python restore.py --file backups/your_backup_file.sql
+```
+
+#### Option B: Restore from Google Drive
+If you know the File ID from Google Drive:
+
+```bash
+docker compose exec app python restore.py --drive-id <GOOGLE_DRIVE_FILE_ID>
+```
+
+---
+
+### Legacy Manual Methods (Direct PG Access)
+
+#### PostgreSQL Dump (Raw)
 ```bash
 docker compose exec db pg_dump -U mvnadmin air_conditioners > backup.sql
 ```
 
-### Restore
+#### Restore (Raw)
 ```bash
 cat backup.sql | docker compose exec -T db psql -U mvnadmin air_conditioners
 ```
