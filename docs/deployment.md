@@ -127,5 +127,15 @@ server {
         alias /var/www/mvn/media/;
     }
 }
+
+## 8. Media Synchronization
+
+To synchronize local media files (images, uploads) with the remote server:
+
+```bash
+./sync_media.sh
+```
+This uses `rsync` to upload contents of `./media/` to `/opt/air-api/media` on the `mvn-api` host.
+*Note: Requires SSH access configured for `mvn-api` alias.*
 ```
 
