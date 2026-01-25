@@ -15,9 +15,16 @@ async def main():
     group.add_argument("--file", type=str, help="Path to local SQL dump file")
     group.add_argument("--drive-id", type=str, help="Google Drive File ID to download and restore")
     
+    parser.add_argument("--clean-db", action="store_true", help="Drop public schema before restoring (Recommended for old backups)")
+    
     args = parser.parse_args()
 
     try:
+        # Optional: Clean DB first (Drop Schema)
+        if args.clean_db:
+            print("⚠️ Cleaning database (Dropping schema public)...")
+            backup_service.drop_public_schema()
+
         if args.file:
             print(f"Restoring from local file: {args.file}")
             backup_service.restore_from_file(args.file)

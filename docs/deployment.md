@@ -94,6 +94,10 @@ To manually trigger a backup (and also keep a local copy in the `backups/` folde
 ```bash
 docker compose exec app python restore.py --file backups/your_backup_file.sql
 ```
+*Tip: Add `--clean-db` to drop the current database schema before restoring (Recommended if restoring over existing data).*
+```bash
+docker compose exec app python restore.py --file backups/your_backup_file.sql --clean-db
+```
 
 #### Option B: Restore from Google Drive
 ```bash
