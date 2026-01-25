@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict EFGn8W4sy3iFD5svubDhLK7xhn0pwg62axMQmPtjfTMZrK8Mpla2RK6122hZ80M
+\restrict f9wke00Clo32NeZvcoaUSlBb99AgsRYBg5nsglbKw9749oqOx4ObmpjK3cbdcJE
 
 -- Dumped from database version 15.15
 -- Dumped by pg_dump version 17.7 (Debian 17.7-0+deb13u1)
@@ -19,6 +19,122 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
+ALTER TABLE IF EXISTS ONLY public.tag DROP CONSTRAINT IF EXISTS tag_group_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.product_tag_link DROP CONSTRAINT IF EXISTS product_tag_link_tag_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.product_tag_link DROP CONSTRAINT IF EXISTS product_tag_link_product_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.product_image DROP CONSTRAINT IF EXISTS product_image_product_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.order_service_link DROP CONSTRAINT IF EXISTS order_service_link_service_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.order_service_link DROP CONSTRAINT IF EXISTS order_service_link_order_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.order_product_link DROP CONSTRAINT IF EXISTS order_product_link_product_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.order_product_link DROP CONSTRAINT IF EXISTS order_product_link_order_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.order_installers DROP CONSTRAINT IF EXISTS order_installers_order_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.order_installers DROP CONSTRAINT IF EXISTS order_installers_installer_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.order_document DROP CONSTRAINT IF EXISTS order_document_order_id_fkey;
+ALTER TABLE IF EXISTS ONLY public."order" DROP CONSTRAINT IF EXISTS order_customer_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.favorite DROP CONSTRAINT IF EXISTS favorite_product_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.cartitem DROP CONSTRAINT IF EXISTS cartitem_product_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.cartitem DROP CONSTRAINT IF EXISTS cartitem_cart_user_id_fkey;
+DROP INDEX IF EXISTS public.ix_tag_title;
+DROP INDEX IF EXISTS public.ix_tag_slug;
+DROP INDEX IF EXISTS public.ix_tag_group_title;
+DROP INDEX IF EXISTS public.ix_tag_group_slug;
+DROP INDEX IF EXISTS public.ix_service_title;
+DROP INDEX IF EXISTS public.ix_product_title;
+DROP INDEX IF EXISTS public.ix_product_source_url;
+DROP INDEX IF EXISTS public.ix_product_slug;
+DROP INDEX IF EXISTS public.ix_product_power_cooling;
+DROP INDEX IF EXISTS public.ix_product_is_inverter;
+DROP INDEX IF EXISTS public.ix_product_image_product_id;
+DROP INDEX IF EXISTS public.ix_product_image_is_installation_photo;
+DROP INDEX IF EXISTS public.ix_product_area;
+DROP INDEX IF EXISTS public.ix_order_user_id;
+DROP INDEX IF EXISTS public.ix_order_status;
+DROP INDEX IF EXISTS public.ix_order_lead_source;
+DROP INDEX IF EXISTS public.ix_order_document_order_id;
+DROP INDEX IF EXISTS public.ix_order_document_doc_type;
+DROP INDEX IF EXISTS public.ix_installation_rates_category;
+DROP INDEX IF EXISTS public.ix_global_config_key;
+DROP INDEX IF EXISTS public.ix_favorite_user_id;
+DROP INDEX IF EXISTS public.ix_customer_phone;
+DROP INDEX IF EXISTS public.ix_customer_name;
+DROP INDEX IF EXISTS public.ix_customer_inn;
+DROP INDEX IF EXISTS public.ix_article_slug;
+ALTER TABLE IF EXISTS ONLY public.tag DROP CONSTRAINT IF EXISTS tag_pkey;
+ALTER TABLE IF EXISTS ONLY public.tag_group DROP CONSTRAINT IF EXISTS tag_group_pkey;
+ALTER TABLE IF EXISTS ONLY public.service DROP CONSTRAINT IF EXISTS service_pkey;
+ALTER TABLE IF EXISTS ONLY public.product_tag_link DROP CONSTRAINT IF EXISTS product_tag_link_pkey;
+ALTER TABLE IF EXISTS ONLY public.product DROP CONSTRAINT IF EXISTS product_pkey;
+ALTER TABLE IF EXISTS ONLY public.product_image DROP CONSTRAINT IF EXISTS product_image_pkey;
+ALTER TABLE IF EXISTS ONLY public.order_service_link DROP CONSTRAINT IF EXISTS order_service_link_pkey;
+ALTER TABLE IF EXISTS ONLY public.order_product_link DROP CONSTRAINT IF EXISTS order_product_link_pkey;
+ALTER TABLE IF EXISTS ONLY public."order" DROP CONSTRAINT IF EXISTS order_pkey;
+ALTER TABLE IF EXISTS ONLY public.order_installers DROP CONSTRAINT IF EXISTS order_installers_pkey;
+ALTER TABLE IF EXISTS ONLY public.order_document DROP CONSTRAINT IF EXISTS order_document_pkey;
+ALTER TABLE IF EXISTS ONLY public.installers DROP CONSTRAINT IF EXISTS installers_telegram_id_key;
+ALTER TABLE IF EXISTS ONLY public.installers DROP CONSTRAINT IF EXISTS installers_pkey;
+ALTER TABLE IF EXISTS ONLY public.installation_rates DROP CONSTRAINT IF EXISTS installation_rates_pkey;
+ALTER TABLE IF EXISTS ONLY public.global_config DROP CONSTRAINT IF EXISTS global_config_pkey;
+ALTER TABLE IF EXISTS ONLY public.favorite DROP CONSTRAINT IF EXISTS favorite_pkey;
+ALTER TABLE IF EXISTS ONLY public.customer DROP CONSTRAINT IF EXISTS customer_pkey;
+ALTER TABLE IF EXISTS ONLY public.cartitem DROP CONSTRAINT IF EXISTS cartitem_pkey;
+ALTER TABLE IF EXISTS ONLY public.cart DROP CONSTRAINT IF EXISTS cart_pkey;
+ALTER TABLE IF EXISTS ONLY public.article DROP CONSTRAINT IF EXISTS article_pkey;
+ALTER TABLE IF EXISTS ONLY public.alembic_version DROP CONSTRAINT IF EXISTS alembic_version_pkc;
+ALTER TABLE IF EXISTS public.tag_group ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.tag ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.service ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.product_image ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.product ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.order_service_link ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.order_product_link ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.order_document ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public."order" ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.installers ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.installation_rates ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.global_config ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.favorite ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.customer ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.cartitem ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.cart ALTER COLUMN user_id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.article ALTER COLUMN id DROP DEFAULT;
+DROP SEQUENCE IF EXISTS public.tag_id_seq;
+DROP SEQUENCE IF EXISTS public.tag_group_id_seq;
+DROP TABLE IF EXISTS public.tag_group;
+DROP TABLE IF EXISTS public.tag;
+DROP SEQUENCE IF EXISTS public.service_id_seq;
+DROP TABLE IF EXISTS public.service;
+DROP TABLE IF EXISTS public.product_tag_link;
+DROP SEQUENCE IF EXISTS public.product_image_id_seq;
+DROP TABLE IF EXISTS public.product_image;
+DROP SEQUENCE IF EXISTS public.product_id_seq;
+DROP TABLE IF EXISTS public.product;
+DROP SEQUENCE IF EXISTS public.order_service_link_id_seq;
+DROP TABLE IF EXISTS public.order_service_link;
+DROP SEQUENCE IF EXISTS public.order_product_link_id_seq;
+DROP TABLE IF EXISTS public.order_product_link;
+DROP TABLE IF EXISTS public.order_installers;
+DROP SEQUENCE IF EXISTS public.order_id_seq;
+DROP SEQUENCE IF EXISTS public.order_document_id_seq;
+DROP TABLE IF EXISTS public.order_document;
+DROP TABLE IF EXISTS public."order";
+DROP SEQUENCE IF EXISTS public.installers_id_seq;
+DROP TABLE IF EXISTS public.installers;
+DROP SEQUENCE IF EXISTS public.installation_rates_id_seq;
+DROP TABLE IF EXISTS public.installation_rates;
+DROP SEQUENCE IF EXISTS public.global_config_id_seq;
+DROP TABLE IF EXISTS public.global_config;
+DROP SEQUENCE IF EXISTS public.favorite_id_seq;
+DROP TABLE IF EXISTS public.favorite;
+DROP SEQUENCE IF EXISTS public.customer_id_seq;
+DROP TABLE IF EXISTS public.customer;
+DROP SEQUENCE IF EXISTS public.cartitem_id_seq;
+DROP TABLE IF EXISTS public.cartitem;
+DROP SEQUENCE IF EXISTS public.cart_user_id_seq;
+DROP TABLE IF EXISTS public.cart;
+DROP SEQUENCE IF EXISTS public.article_id_seq;
+DROP TABLE IF EXISTS public.article;
+DROP TABLE IF EXISTS public.alembic_version;
+DROP TYPE IF EXISTS public.customertype;
 --
 -- Name: customertype; Type: TYPE; Schema: public; Owner: mvnadmin
 --
@@ -1118,6 +1234,7 @@ COPY public.installers (id, name, is_active, default_rate, telegram_id) FROM std
 
 COPY public."order" (id, customer_id, delivery_address, user_id, status, title, technical_meta, total_amount, total_cost, margin, is_paid, created_at, updated_at, assessment_date, installation_date, next_followup_date, closed_at, contract_date, lead_source, comment) FROM stdin;
 16	164	\N	\N	new_lead	Заказ с сайта от 24.01 23:41	{}	0	0	0	f	2026-01-24 23:41:17.670806	2026-01-24 23:41:17.671666	\N	\N	\N	\N	2026-01-24 23:41:17.672061	site	[Заказ обслуживания] НИЧЕГО!
+17	160	\N	\N	new_lead	Заказ с сайта от 25.01 09:00	{}	2290	0	2290	f	2026-01-25 09:00:34.592516	2026-01-25 09:01:34.432233	\N	\N	\N	\N	2026-01-25 09:00:34	site	[Заказ монтажа] 
 \.
 
 
@@ -1126,6 +1243,7 @@ COPY public."order" (id, customer_id, delivery_address, user_id, status, title, 
 --
 
 COPY public.order_document (id, order_id, doc_type, number, date, google_file_id, google_edit_url, created_at) FROM stdin;
+37	17	contract	Д-2026-001	2026-01-25 12:15:41.773799	1pdNNZgWbGH0goXtWvzj4Um3ssrp5srPcV9Yp9lpUu-s	https://docs.google.com/document/d/1pdNNZgWbGH0goXtWvzj4Um3ssrp5srPcV9Yp9lpUu-s/edit	2026-01-25 12:15:41.79308
 \.
 
 
@@ -1142,6 +1260,7 @@ COPY public.order_installers (order_id, installer_id, role, agreed_pay, is_paid_
 --
 
 COPY public.order_product_link (id, order_id, product_id, quantity, price, cost) FROM stdin;
+37	17	59	1	2290	0
 \.
 
 
@@ -1968,21 +2087,21 @@ SELECT pg_catalog.setval('public.installers_id_seq', 2, false);
 -- Name: order_document_id_seq; Type: SEQUENCE SET; Schema: public; Owner: mvnadmin
 --
 
-SELECT pg_catalog.setval('public.order_document_id_seq', 35, true);
+SELECT pg_catalog.setval('public.order_document_id_seq', 37, true);
 
 
 --
 -- Name: order_id_seq; Type: SEQUENCE SET; Schema: public; Owner: mvnadmin
 --
 
-SELECT pg_catalog.setval('public.order_id_seq', 16, true);
+SELECT pg_catalog.setval('public.order_id_seq', 17, true);
 
 
 --
 -- Name: order_product_link_id_seq; Type: SEQUENCE SET; Schema: public; Owner: mvnadmin
 --
 
-SELECT pg_catalog.setval('public.order_product_link_id_seq', 35, true);
+SELECT pg_catalog.setval('public.order_product_link_id_seq', 37, true);
 
 
 --
@@ -2494,5 +2613,5 @@ ALTER TABLE ONLY public.tag
 -- PostgreSQL database dump complete
 --
 
-\unrestrict EFGn8W4sy3iFD5svubDhLK7xhn0pwg62axMQmPtjfTMZrK8Mpla2RK6122hZ80M
+\unrestrict f9wke00Clo32NeZvcoaUSlBb99AgsRYBg5nsglbKw9749oqOx4ObmpjK3cbdcJE
 
