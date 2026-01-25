@@ -36,7 +36,9 @@ class BackupService:
             "-h", self.db_host,
             "-U", self.db_user,
             "-d", self.db_name,
-            "-f", filepath
+            "-f", filepath,
+            "--clean",
+            "--if-exists"
         ]
 
         logger.info(f"Starting backup for {self.db_name}...")
@@ -139,5 +141,32 @@ class BackupService:
         except subprocess.CalledProcessError as e:
             logger.error(f"Restore command failed: {e}")
             raise Exception("Database restore failed")
+
+    def drop_public_schema(self):
+        """
+        Drops and recreates the public schema. 
+        Useful for cleaning DB before restore if the dump doesn't have --clean.
+        """
+        env = os.environ.copy()
+        env["PGPASSWORD"] = self.db_password
+        
+        # Command to drop and recreate schema
+        sql_command = "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO public;"
+        
+        command = [
+            "psql",
+            "-h", self.db_host,
+            "-U", self.db_user,
+            "-d", self.db_name,
+            "-c", sql_command
+        ]
+        
+        logger.warning("Dropping PUBLIC schema...")
+        try:
+            subprocess.run(command, env=env, check=True)
+            logger.info("Schema public reset successfully.")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Schema reset failed: {e}")
+            raise Exception("Schema reset failed")
 
 backup_service = BackupService()
