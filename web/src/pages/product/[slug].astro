@@ -1,28 +1,51 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import { resolveImageUrl, getProducts } from "../../utils/api";
-import { getInstallationPricingInfo } from "../../utils/api";
+import PriceWithToggle from "../../components/PriceWithToggle.vue";
+import Gallery from "../../components/product/Gallery.vue";
+import StickyBuyBar from "../../components/product/StickyBuyBar.vue";
+import {
+    getDimensions,
+    getPerformance,
+    getOtherSpecs,
+} from "../../utils/specs";
 
 export async function getStaticPaths() {
     const products = await getProducts();
-    return products.map((product) => ({
+    return products.map((product: any) => ({
         params: { slug: product.slug },
         props: { product },
     }));
 }
 
-const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
-const { product } = Astro.props; // Get product from props, not fetch by slug
+// Define Props
+interface Props {
+    product: any;
+}
+
+const { product } = Astro.props as Props;
 
 if (!product) {
     return Astro.redirect("/404");
 }
 
 const specs = product.specs || {};
-const images = product.images || [];
+const images = [product.main_image, ...(product.images || [])]
+    .filter(Boolean)
+    .map(resolveImageUrl);
+const mainImage = images[0];
+
+// Grouped Specs
+const dimensions = getDimensions(specs);
+const performance = getPerformance(specs);
+const otherSpecs = getOtherSpecs(specs);
+
+const publicTags = (product.tags || []).filter((t: any) => t.is_public);
 ---
 
 <Layout title={product.title}>
+    <StickyBuyBar client:visible price={product.price} currency="Br" />
+
     <div class="container product-page">
         <nav class="breadcrumb">
             <a href="/">Главная</a>
@@ -32,128 +55,236 @@ const images = product.images || [];
             <span class="active">{product.title}</span>
         </nav>
 
-        <div class="product-layout">
-            <div class="product-visuals">
-                <div class="main-image-card card">
-                    <img
-                        src={resolveImageUrl(product.main_image)}
-                        alt={product.title}
-                        id="mainImg"
-                    />
-                </div>
+        <div class="product-grid">
+            <!-- Left: Visuals -->
+            <div class="visuals-col">
+                <Gallery
+                    client:visible
+                    images={images}
+                    initialImage={mainImage}
+                />
                 {
-                    images.length > 0 && (
-                        <div class="image-gallery">
-                            <div
-                                class="thumb card active"
-                                onclick="document.getElementById('mainImg').src=this.querySelector('img').src; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('active')); this.classList.add('active')"
-                            >
-                                <img
-                                    src={resolveImageUrl(product.main_image)}
-                                    alt="Thumbnail"
-                                />
-                            </div>
-                            {images.map((img: string) => (
-                                <div
-                                    class="thumb card"
-                                    onclick="document.getElementById('mainImg').src=this.querySelector('img').src; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('active')); this.classList.add('active')"
-                                >
-                                    <img
-                                        src={resolveImageUrl(img)}
-                                        alt="Thumbnail"
-                                    />
-                                </div>
-                            ))}
+                    product.description && (
+                        <div class="gallery-desc">
+                            <h3>Описание</h3>
+                            <p>{product.description}</p>
                         </div>
                     )
                 }
             </div>
 
-            <div class="product-info">
-                <div class="info-header">
-                    <div class="badge-row">
+            <!-- Right: Info -->
+            <div class="info-col">
+                <div class="header-section">
+                    <div class="badges">
                         {
-                            product.is_inverter && (
-                                <span class="badge">Inverter Technology</span>
-                            )
+                            publicTags.map((tag: any) => {
+                                const label =
+                                    tag.title || tag.name || tag.slug || "";
+                                if (!label) return null;
+                                return (
+                                    <span
+                                        class={`badge ${tag.slug.includes("inverter") ? "inverter" : ""}`}
+                                    >
+                                        {label}
+                                    </span>
+                                );
+                            })
                         }
-                        <span class="badge secondary">В наличии</span>
                     </div>
                     <h1>{product.title}</h1>
-                    <p class="sku">
-                        Артикул: {product.slug.split("-").pop()?.toUpperCase()}
-                    </p>
-                </div>
-
-                <div class="price-card card">
-                    <div class="price-row">
-                        <span class="final-price"
-                            >{product.price.toLocaleString()} Br</span
+                    <div class="sku-row">
+                        <span class="sku"
+                            >Артикул: {
+                                product.slug.split("-").pop()?.toUpperCase()
+                            }</span
                         >
                         {
-                            product.old_price && (
-                                <span class="old-price">
-                                    {product.old_price.toLocaleString()} Br
+                            performance.year && (
+                                <span class="year-label">
+                                    {performance.year}
                                 </span>
                             )
                         }
                     </div>
-                    <div class="install-promo">
-                        <span class="material-icons-round">construction</span>
-                        <div>
-                            <strong>Монтаж «под ключ»</strong>
-                            <p>Стандартная установка от {minBundlePrice} BYN</p>
-                        </div>
-                    </div>
                 </div>
 
-                <div class="quick-specs-grid">
-                    <div class="qs-item card">
-                        <span class="material-icons-round">square_foot</span>
-                        <div>
-                            <span class="qs-label">Площадь</span>
-                            <span class="qs-val">{product.area} м²</span>
-                        </div>
-                    </div>
-                    <div class="qs-item card">
-                        <span class="material-icons-round">bolt</span>
-                        <div>
-                            <span class="qs-label">Мощность</span>
-                            <span class="qs-val"
-                                >{product.power_cooling} кВт</span
-                            >
-                        </div>
-                    </div>
-                </div>
-
-                <div class="actions">
-                    <button class="btn btn-primary btn-large">
-                        <span class="material-icons-round">shopping_cart</span>
-                        Добавить в корзину
-                    </button>
-                    <button class="btn btn-outline btn-large"
-                        >Заказать монтаж</button
+                <div class="price-section card">
+                    <PriceWithToggle
+                        client:visible
+                        basePrice={product.price}
+                        oldPrice={product.old_price}
+                        tags={product.tags}
+                        large={true}
                     >
+                        <div class="actions-slot">
+                            <button class="btn btn-primary btn-large">
+                                <span class="material-icons-round"
+                                    >shopping_cart</span
+                                >
+                                В корзину
+                            </button>
+                            <button class="btn btn-outline btn-large">
+                                <span class="material-icons-round"
+                                    >touch_app</span
+                                >
+                                Купить в 1 клик
+                            </button>
+                        </div>
+                    </PriceWithToggle>
                 </div>
 
-                <div class="details-tabs">
-                    <div class="tab-nav">
-                        <button class="tab-link active">Характеристики</button>
-                        <button class="tab-link">Описание</button>
+                <!-- Smart Specs -->
+                <div class="smart-specs">
+                    <!-- Efficiency Group -->
+                    <div class="specs-group">
+                        <h3 class="group-title">Климат и Эффективность</h3>
+                        <div class="specs-grid-3">
+                            <div class="spec-card">
+                                <span class="material-icons-round icon cold"
+                                    >ac_unit</span
+                                >
+                                <div class="spec-val">
+                                    <span class="label">Охлаждение</span>
+                                    <span class="value"
+                                        >{performance.powerCooling || "-"} кВт</span
+                                    >
+                                </div>
+                            </div>
+                            <div class="spec-card">
+                                <span class="material-icons-round icon heat"
+                                    >wb_sunny</span
+                                >
+                                <div class="spec-val">
+                                    <span class="label">Обогрев</span>
+                                    <span class="value"
+                                        >{performance.powerHeating || "-"} кВт</span
+                                    >
+                                </div>
+                            </div>
+                            <div class="spec-card">
+                                <span class="material-icons-round icon energy"
+                                    >bolt</span
+                                >
+                                <div class="spec-val">
+                                    <span class="label">Класс</span>
+                                    <span class="value hl"
+                                        >{performance.energyClass || "A"}</span
+                                    >
+                                </div>
+                            </div>
+                        </div>
+                        <div class="extra-row">
+                            {
+                                performance.freon && (
+                                    <div class="extra-item">
+                                        <span class="label">Фреон:</span>{" "}
+                                        <strong>{performance.freon}</strong>
+                                    </div>
+                                )
+                            }
+                            {
+                                performance.wifi && (
+                                    <div class="extra-item">
+                                        <span class="material-icons-round wifi-icon">
+                                            wifi
+                                        </span>{" "}
+                                        <strong>Wi-Fi Ready</strong>
+                                    </div>
+                                )
+                            }
+                        </div>
                     </div>
-                    <div class="tab-pane">
+
+                    <!-- Dimensions Group -->
+                    {
+                        (dimensions.inner || dimensions.outer) && (
+                            <div class="specs-group">
+                                <h3 class="group-title">Габариты (ШxВxГ)</h3>
+                                <div class="dims-visual-row">
+                                    {dimensions.inner && (
+                                        <div class="dim-box inner">
+                                            <div class="box-visual">
+                                                <span class="w">
+                                                    {dimensions.inner.w}
+                                                </span>
+                                                <span class="h">
+                                                    {dimensions.inner.h}
+                                                </span>
+                                            </div>
+                                            <div class="box-info">
+                                                <span class="title">
+                                                    Внутренний блок
+                                                </span>
+                                                <span class="dims-text">
+                                                    {dimensions.inner.w} x{" "}
+                                                    {dimensions.inner.h} x{" "}
+                                                    {dimensions.inner.d}
+                                                </span>
+                                                {dimensions.weightInner && (
+                                                    <span class="weight">
+                                                        {dimensions.weightInner}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {dimensions.outer && (
+                                        <div class="dim-box outer">
+                                            <div class="box-visual">
+                                                <span class="w">
+                                                    {dimensions.outer.w}
+                                                </span>
+                                                <span class="h">
+                                                    {dimensions.outer.h}
+                                                </span>
+                                            </div>
+                                            <div class="box-info">
+                                                <span class="title">
+                                                    Внешний блок
+                                                </span>
+                                                <span class="dims-text">
+                                                    {dimensions.outer.w} x{" "}
+                                                    {dimensions.outer.h} x{" "}
+                                                    {dimensions.outer.d}
+                                                </span>
+                                                {dimensions.weightOuter && (
+                                                    <span class="weight">
+                                                        {dimensions.weightOuter}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )
+                    }
+                </div>
+
+                <!-- Full Specs Spoiler -->
+                <details class="full-specs-spoiler">
+                    <summary>
+                        <span>Полные технические характеристики</span>
+                        <span class="material-icons-round chevron"
+                            >expand_more</span
+                        >
+                    </summary>
+                    <div class="specs-content">
                         <table class="specs-table">
                             {
-                                Object.entries(specs).map(([key, value]) => (
-                                    <tr>
-                                        <td class="key">{key}</td>
-                                        <td class="val">{value}</td>
-                                    </tr>
-                                ))
+                                Object.entries(otherSpecs).map(
+                                    ([key, value]) => (
+                                        <tr>
+                                            <td class="key">{key}</td>
+                                            <td class="val">{value}</td>
+                                        </tr>
+                                    ),
+                                )
                             }
                         </table>
                     </div>
-                </div>
+                </details>
             </div>
         </div>
     </div>
@@ -161,240 +292,399 @@ const images = product.images || [];
 
 <style>
     .product-page {
-        padding: 3rem 0;
+        padding: 3rem 1.5rem;
     }
+
     .breadcrumb {
-        margin-bottom: 3rem;
-        color: var(--text-muted);
+        margin-bottom: 2rem;
+        color: var(--text-muted, #94a3b8);
         font-size: 0.9rem;
-        font-weight: 500;
         display: flex;
         gap: 0.5rem;
+        align-items: center;
     }
     .breadcrumb a:hover {
-        color: var(--primary);
+        color: var(--primary, #007f80);
     }
     .sep {
         opacity: 0.5;
     }
-    .breadcrumb .active {
-        color: var(--text);
+    .active {
+        color: var(--text, #0f172a);
+        font-weight: 500;
     }
 
-    .product-layout {
+    /* Layout */
+    .product-grid {
         display: grid;
-        grid-template-columns: 1.2fr 1fr;
-        gap: 5rem;
+        grid-template-columns: 42% 1fr; /* User requested ~40% for gallery */
+        gap: 4rem;
         align-items: start;
     }
 
-    .main-image-card {
-        height: 500px;
-        padding: 3rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: white;
-    }
-    .main-image-card img {
-        max-width: 100%;
-        max-height: 100%;
-        object-fit: contain;
+    .visuals-col {
+        position: sticky;
+        top: 2rem;
     }
 
-    .image-gallery {
+    /* Info Column */
+    .header-section {
+        margin-bottom: 2rem;
+    }
+
+    h1 {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 2.5rem;
+        line-height: 1.1;
+        margin: 0.5rem 0;
+        background: linear-gradient(90deg, #0f172a, #334155);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .badges {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    .badge {
+        background: #f1f5f9;
+        color: #475569;
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        line-height: 1.4;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 28px;
+    }
+    .badge.inverter {
+        background: rgba(0, 127, 128, 0.1);
+        color: #007f80;
+    }
+
+    .sku-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 0.5rem;
+    }
+    .sku {
+        font-size: 0.9rem;
+        color: #94a3b8;
+        font-family: monospace;
+    }
+    .year-label {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #64748b;
+        background: #f8fafc;
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+
+    .price-section {
+        background: white;
+        padding: 2rem;
+        border-radius: 2rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+        margin-bottom: 2.5rem;
+    }
+
+    .short-desc {
+        color: #64748b;
+        font-size: 0.95rem;
+        line-height: 1.6;
+        margin-top: 1.5rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid #f1f5f9;
+    }
+
+    .actions-slot {
         display: flex;
         gap: 1rem;
         margin-top: 1.5rem;
-        overflow-x: auto;
-        padding-bottom: 0.5rem;
-    }
-    .thumb {
-        width: 100px;
-        height: 100px;
-        padding: 0.5rem;
-        cursor: pointer;
-        background: white;
-        flex-shrink: 0;
-    }
-    .thumb.active {
-        border-color: var(--primary);
-        border-width: 2px;
-    }
-    .thumb img {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-    }
-
-    .info-header {
-        margin-bottom: 2.5rem;
-    }
-    .badge-row {
-        display: flex;
-        gap: 0.75rem;
-        margin-bottom: 1.5rem;
-    }
-    .badge.secondary {
-        background: #dcfce7;
-        color: #166534;
-    }
-    .info-header h1 {
-        font-size: 3rem;
-        margin-bottom: 0.75rem;
-        font-weight: 800;
-        line-height: 1.1;
-    }
-    .sku {
-        color: var(--text-muted);
-        font-size: 0.85rem;
-        font-weight: 600;
-        text-transform: uppercase;
-    }
-
-    .price-card {
-        padding: 2rem;
-        margin-bottom: 2.5rem;
-        background: var(--bg);
-        border: none;
-    }
-    .price-row {
-        display: flex;
-        align-items: baseline;
-        gap: 1.5rem;
-        margin-bottom: 1.5rem;
-    }
-    .final-price {
-        font-size: 2.5rem;
-        font-weight: 800;
-        color: var(--text);
-    }
-    .old-price {
-        font-size: 1.5rem;
-        color: var(--text-muted);
-        text-decoration: line-through;
-    }
-    .install-promo {
-        display: flex;
-        gap: 1rem;
-        align-items: center;
-        padding-top: 1.5rem;
-        border-top: 1px solid var(--border);
-    }
-    .install-promo .material-icons-round {
-        color: var(--primary);
-        font-size: 2rem;
-    }
-    .install-promo strong {
-        display: block;
-        font-size: 0.95rem;
-    }
-    .install-promo p {
-        font-size: 0.85rem;
-        color: var(--text-muted);
-    }
-
-    .quick-specs-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1.5rem;
-        margin-bottom: 3rem;
-    }
-    .qs-item {
-        display: flex;
-        gap: 1rem;
-        align-items: center;
-        padding: 1.25rem;
-    }
-    .qs-item .material-icons-round {
-        color: var(--primary);
-        opacity: 0.6;
-    }
-    .qs-label {
-        display: block;
-        font-size: 0.75rem;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        font-weight: 700;
-    }
-    .qs-val {
-        font-size: 1.125rem;
-        font-weight: 700;
-    }
-
-    .actions {
-        display: flex;
-        gap: 1.5rem;
-        margin-bottom: 4rem;
     }
     .btn-large {
         flex: 1;
-        height: 60px;
-        font-size: 1.125rem;
+        padding: 1rem;
+        border-radius: 14px;
+        font-size: 1rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        cursor: pointer;
+        transition:
+            transform 0.2s,
+            box-shadow 0.2s;
+    }
+    .btn-large:active {
+        transform: scale(0.98);
     }
 
-    .details-tabs {
-        margin-top: 2rem;
-    }
-    .tab-nav {
-        display: flex;
-        gap: 2.5rem;
-        border-bottom: 1px solid var(--border);
-        margin-bottom: 2.5rem;
-    }
-    .tab-link {
-        background: none;
+    .btn-primary {
+        background: #007f80;
+        color: white;
         border: none;
-        padding: 1rem 0;
+        box-shadow: 0 4px 12px rgba(0, 127, 128, 0.3);
+    }
+    .btn-primary:hover {
+        background: #006b6c;
+    }
+
+    .btn-outline {
+        background: transparent;
+        border: 2px solid #cbd5e1;
+        color: #475569;
+    }
+    .btn-outline:hover {
+        border-color: #94a3b8;
+        background: #f8fafc;
+    }
+
+    .gallery-desc {
+        margin-top: 2rem;
+        background: #f8fafc;
+        padding: 1.5rem;
+        border-radius: 1rem;
+    }
+    .gallery-desc h3 {
+        font-size: 1.1rem;
         font-weight: 700;
-        color: var(--text-muted);
-        cursor: pointer;
+        margin-bottom: 0.5rem;
+        color: #334155;
+    }
+    .gallery-desc p {
+        font-size: 0.95rem;
+        line-height: 1.6;
+        color: #475569;
+    }
+
+    /* Smart Specs */
+    .smart-specs {
+        display: flex;
+        flex-direction: column;
+        gap: 2rem;
+    }
+
+    .group-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        color: #334155;
+    }
+
+    .specs-grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+    }
+
+    .spec-card {
+        background: white;
+        padding: 1rem;
+        border-radius: 1rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 0.5rem;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+        border: 1px solid #f1f5f9;
+    }
+
+    .icon {
+        font-size: 1.5rem;
+        color: #94a3b8;
+    }
+    .icon.cold {
+        color: #3b82f6;
+    }
+    .icon.heat {
+        color: #f59e0b;
+    }
+    .icon.energy {
+        color: #10b981;
+    }
+
+    .spec-val {
+        display: flex;
+        flex-direction: column;
+    }
+    .spec-val .label {
+        font-size: 0.7rem;
+        color: #94a3b8;
+        text-transform: uppercase;
+    }
+    .spec-val .value {
+        font-weight: 700;
+        color: #0f172a;
+        font-size: 1rem;
+    }
+    .spec-val .value.hl {
+        color: #007f80;
+    }
+
+    .extra-row {
+        display: flex;
+        gap: 1.5rem;
+        margin-top: 1rem;
+        font-size: 0.9rem;
+        color: #475569;
+        align-items: center;
+    }
+    .extra-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .wifi-icon {
+        color: #007f80;
+        font-size: 1.1rem;
+    }
+
+    /* Visual Dimensions */
+    .dims-visual-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+    }
+    .dim-box {
+        background: white;
+        padding: 1rem;
+        border-radius: 1rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        border: 1px solid #f1f5f9;
+    }
+    .box-visual {
+        width: 100%;
+        height: 60px;
+        border: 2px solid #cbd5e1;
+        border-radius: 4px;
         position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
-    .tab-link.active {
-        color: var(--primary);
+    .dim-box.inner .box-visual {
+        width: 80%;
+        border-color: #007f80;
+        background: rgba(0, 127, 128, 0.02);
     }
-    .tab-link.active::after {
-        content: "";
-        position: absolute;
-        bottom: -1px;
-        left: 0;
-        right: 0;
-        height: 3px;
-        background: var(--primary);
-        border-radius: 3px;
+    .dim-box.outer .box-visual {
+        width: 90%;
+        height: 80px;
+        border-color: #64748b;
+        background: rgba(100, 116, 139, 0.05);
+    }
+
+    .box-info {
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+    }
+    .box-info .title {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #64748b;
+    }
+    .box-info .dims-text {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin-top: 2px;
+    }
+    .box-info .weight {
+        font-size: 0.8rem;
+        color: #94a3b8;
+        margin-top: 2px;
+    }
+
+    /* Spoiler */
+    .full-specs-spoiler {
+        margin-top: 3rem;
+        border-top: 1px solid #e2e8f0;
+        padding-top: 1rem;
+    }
+    .full-specs-spoiler summary {
+        list-style: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        font-weight: 600;
+        color: #334155;
+        padding: 0.5rem 0;
+    }
+    .full-specs-spoiler[open] summary .chevron {
+        transform: rotate(180deg);
+    }
+    .chevron {
+        transition: transform 0.3s;
+        color: #94a3b8;
     }
 
     .specs-table {
         width: 100%;
+        margin-top: 1rem;
         border-collapse: collapse;
     }
-    .specs-table tr {
-        border-bottom: 1px solid var(--border);
-    }
-    .specs-table tr:last-child {
-        border-bottom: none;
-    }
     .specs-table td {
-        padding: 1.25rem 0;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid #f1f5f9;
         font-size: 0.95rem;
     }
     .specs-table .key {
-        color: var(--text-muted);
-        width: 45%;
+        color: #64748b;
+        width: 50%;
     }
     .specs-table .val {
-        font-weight: 600;
-        color: var(--text);
+        color: #0f172a;
+        font-weight: 500;
     }
 
-    @media (max-width: 1100px) {
-        .product-layout {
+    /* Breakpoints */
+    @media (max-width: 900px) {
+        .product-grid {
             grid-template-columns: 1fr;
-            gap: 3rem;
+            gap: 2rem;
         }
-        .main-image-card {
-            height: 400px;
+        .visuals-col {
+            position: relative;
+            top: 0;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .product-page {
+            padding: 1rem; /* Aligned with global container */
+            padding-bottom: 6rem;
+        }
+
+        .header-section h1 {
+            font-size: 1.8rem;
+        }
+        .price-section {
+            padding: 1.5rem;
+        }
+        .actions-slot {
+            flex-direction: column;
+        }
+
+        .specs-grid-3 {
+            grid-template-columns: 1fr 1fr;
+        }
+        .spec-card:nth-child(3) {
+            grid-column: span 2;
         }
     }
 </style>

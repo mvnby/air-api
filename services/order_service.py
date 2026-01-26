@@ -73,9 +73,18 @@ class OrderService:
         phone_clean = customer_phone.strip()
         
         # 1. Find or create customer
-        stmt = select(Customer).where(Customer.phone == phone_clean)
-        result = await session.execute(stmt)
-        customer = result.scalar_one_or_none()
+        customer = None
+        
+        # Only lookup if phone is valid (at least 6 digits/chars) to avoid matching empty strings
+        if len(phone_clean) > 5:
+            stmt = select(Customer).where(Customer.phone == phone_clean)
+            result = await session.execute(stmt)
+            # Handle potential duplicates gracefully
+            try:
+                customer = result.scalar_one_or_none()
+            except Exception:
+                logger.warning(f"Multiple customers found for phone '{phone_clean}'. Creating new individual.")
+                customer = None
         
         if not customer:
             customer = Customer(

@@ -7,7 +7,8 @@ const props = defineProps({
   installPrice: { type: Number, default: 600 }, // Fallback/Legacy
   currency: { type: String, default: 'Br' },
   showToggle: { type: Boolean, default: true },
-  tags: { type: Array, default: () => [] }
+  tags: { type: Array, default: () => [] },
+  large: { type: Boolean, default: false }
 });
 
 const isInstalled = ref(false);
@@ -124,7 +125,7 @@ const toggle = (e) => {
 </script>
 
 <template>
-  <div class="price-container">
+  <div class="price-container" :class="{ 'size-large': large }">
     <!-- Toggle: Only show if allowed (fixed price or default) -->
     <div 
       v-if="shouldShowToogle"
@@ -321,6 +322,21 @@ const toggle = (e) => {
     font-weight: 800;
     transition: transform 0.2s;
     color: var(--text);
+  }
+  .size-large .final-price {
+    font-size: 2.5rem;
+  }
+  .size-large .installation-toggle {
+    padding: 1rem 1.5rem;
+  }
+  .size-large .toggle-control {
+    font-size: 1.1rem;
+  }
+  .size-large .inst-price {
+    font-size: 1rem;
+  }
+  .size-large .discount-price {
+    font-size: 1.1rem;
   }
   .pulse {
     transform: scale(1.02);

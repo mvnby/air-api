@@ -46,7 +46,6 @@ async function fetchJson(url, errorMsg = 'API request failed') {
 export async function getCatalog(params = {}) {
     const query = buildQuery(params);
     const url = `${API_V1}/catalog?${query}`;
-    console.log('[API] Fetching Catalog:', url);
 
     const data = await fetchJson(url);
     if (!data) {
