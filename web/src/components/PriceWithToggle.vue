@@ -4,6 +4,7 @@ import { getInstallationRates, getGlobalConfig } from '../utils/api';
 
 const props = defineProps({
   basePrice: { type: Number, required: true },
+  oldPrice: { type: Number, default: 0 },
   installPrice: { type: Number, default: 600 }, // Fallback/Legacy
   currency: { type: String, default: 'р.' },
   showToggle: { type: Boolean, default: true },
@@ -75,7 +76,7 @@ const finalInstallPrice = computed(() => {
     return Math.max(0, effectiveInstallPrice.value - discount.value);
 });
 
-const shouldShowToogle = computed(() => {
+const shouldShowToggle = computed(() => {
     if (!matchedRate.value) return false;
     if (!matchedRate.value.is_fixed) return false;
     return props.showToggle;
@@ -142,14 +143,14 @@ const toggle = (e) => {
       </span>
   </div>
     <div 
-      v-if="shouldShowToogle"
+      v-if="shouldShowToggle"
       class="installation-toggle" 
       :class="{ active: isInstalled }"
       @click="toggle"
     >
       <div class="toggle-content">
           <div class="toggle-control">
-            <div class="toggle-switch" />
+            <div class="toggle-switch"></div>
             <span>Монтаж</span>
           </div>
           <div class="price-column">
