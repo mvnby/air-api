@@ -287,6 +287,7 @@
                                 <th>Товар</th>
                                 <th>Цена (руб)</th>
                                 <th>Кол-во</th>
+                                <th>Монтаж</th>
                                 <th>Сумма</th>
                                 <th style="width: 50px;"></th>
                             </tr>
@@ -302,6 +303,16 @@
                                 <td><input type="number" class="form-control price-input" value="{{ link.price }}"></td>
                                 <td><input type="number" class="form-control quantity-input"
                                         value="{{ link.quantity }}"></td>
+                                <td>
+                                    {% if link.is_installation_included %}
+                                    <span class="badge bg-success"
+                                        title="Монтаж включен: {{ link.installation_price }} руб.">
+                                        🔧 {{ link.installation_price }} руб.
+                                    </span>
+                                    {% else %}
+                                    <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
                                 <td class="row-total">{{ link.price * link.quantity }}</td>
                                 <td><i class="fa-solid fa-trash remove-row"></i></td>
                             </tr>
