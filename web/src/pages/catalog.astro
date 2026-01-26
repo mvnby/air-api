@@ -1,6 +1,6 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import ProductCard from "../components/ProductCard.astro";
+import CatalogApp from "../components/CatalogApp.vue";
 import { getCatalog } from "../utils/api";
 
 const { searchParams } = Astro.url;
@@ -60,53 +60,6 @@ const data = await getCatalog({
 });
 const products = (data.items || []) as Product[];
 const meta = data.meta || { total: 0, page: 1, limit: 12, pages: 1 };
-
-// Helper to toggle URL params
-function getUrl(params: Record<string, string | null>) {
-    const url = new URL(Astro.request.url);
-    const sp = url.searchParams;
-
-    // Process new params
-    Object.entries(params).forEach(([key, value]) => {
-        if (value === null) {
-            sp.delete(key);
-        } else {
-            sp.set(key, value);
-        }
-    });
-
-    // Handle tag toggling separately if key is 'toggle_tag'
-    // Handle tag toggling separately if key is 'toggle_tag'
-    if (params.toggle_tag) {
-        const tagsToToggle = params.toggle_tag.split(",").map((t) => t.trim());
-        sp.delete("toggle_tag"); // Clean up
-
-        let currentTags = sp.get("tag_slugs")
-            ? sp.get("tag_slugs")!.split(",")
-            : [];
-
-        // Check if ALL tags to toggle are currently present
-        const allPresent = tagsToToggle.every((t) => currentTags.includes(t));
-
-        if (allPresent) {
-            // If all are present, remove them all (toggle off behavior)
-            currentTags = currentTags.filter((t) => !tagsToToggle.includes(t));
-        } else {
-            // If any is missing, add/ensure all are present (activates the filter set)
-            tagsToToggle.forEach((t) => {
-                if (!currentTags.includes(t)) currentTags.push(t);
-            });
-        }
-
-        if (currentTags.length > 0) {
-            sp.set("tag_slugs", currentTags.join(","));
-        } else {
-            sp.delete("tag_slugs");
-        }
-    }
-
-    return url.pathname + url.search;
-}
 ---
 
 <Layout title="Каталог кондиционеров в Витебске">
@@ -124,106 +77,7 @@ function getUrl(params: Record<string, string | null>) {
             </p>
         </header>
 
-        <!-- Top Filters Bar -->
-        <div class="filters-bar">
-            <!-- Inverter -->
-            <a
-                href={getUrl({
-                    is_inverter: is_inverter === "true" ? null : "true",
-                })}
-                class={`filter-btn ${is_inverter === "true" ? "active" : ""}`}
-            >
-                <span class="material-icons-round icon">equalizer</span>
-                Инвертор
-            </a>
-
-            <!-- Area 25m -->
-            <a
-                href={getUrl({ area_max: area_max === "25" ? null : "25" })}
-                class={`filter-btn ${area_max === "25" ? "active" : ""}`}
-            >
-                <span class="material-icons-round icon">straighten</span>
-                До 25 кв.м
-            </a>
-
-            <!-- Calculator Link -->
-            <a
-                href="/kak-vybrat-konditsioner"
-                class="filter-btn"
-                style="border-color: var(--primary); color: var(--primary);"
-            >
-                <span class="material-icons-round icon">calculate</span>
-                Подбор
-            </a>
-
-            <!-- Heating -25/-30 -->
-            <a
-                href={getUrl({ toggle_tag: "winter-25,winter-30" })}
-                class={`filter-btn ${tagSlugsRaw?.includes("winter-25") || tagSlugsRaw?.includes("winter-30") ? "active" : ""}`}
-            >
-                <span class="material-icons-round icon">ac_unit</span>
-                Обогрев в мороз
-            </a>
-
-            <!-- WiFi -->
-            <a
-                href={getUrl({ toggle_tag: "wifi-builtin" })}
-                class={`filter-btn ${tagSlugsRaw?.includes("wifi") ? "active" : ""}`}
-            >
-                <span class="material-icons-round icon">wifi</span>
-                Wi-Fi модуль
-            </a>
-
-            <!-- Quiet -->
-            <a
-                href={getUrl({ toggle_tag: "noise-silent" })}
-                class={`filter-btn ${tagSlugsRaw?.includes("noise-silent") ? "active" : ""}`}
-            >
-                <span class="material-icons-round icon">volume_off</span>
-                Тихий режим
-            </a>
-        </div>
-
-        <main class="products-area">
-            {
-                products.length > 0 ? (
-                    <div class="grid">
-                        {products.map((product) => (
-                            <ProductCard
-                                product={product}
-                                showInstallation={true}
-                            />
-                        ))}
-                    </div>
-                ) : (
-                    <div class="empty-status card">
-                        <span class="material-icons-round large">
-                            search_off
-                        </span>
-                        <h3>Товары не найдены</h3>
-                        <p>Попробуйте изменить параметры поиска.</p>
-                    </div>
-                )
-            }
-
-            {
-                meta.pages > 1 && (
-                    <div class="pagination">
-                        {Array.from(
-                            { length: meta.pages },
-                            (_, i) => i + 1,
-                        ).map((p) => (
-                            <a
-                                href={getUrl({ page: String(p) })}
-                                class={`page-link ${Number(page) === p ? "active" : ""}`}
-                            >
-                                {p}
-                            </a>
-                        ))}
-                    </div>
-                )
-            }
-        </main>
+        <CatalogApp client:load initialProducts={products} initialMeta={meta} />
     </div>
 </Layout>
 

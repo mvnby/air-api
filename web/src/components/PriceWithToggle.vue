@@ -4,10 +4,12 @@ import { getInstallationRates, getGlobalConfig } from '../utils/api';
 
 const props = defineProps({
   basePrice: { type: Number, required: true },
+  oldPrice: { type: Number, default: 0 },
   installPrice: { type: Number, default: 600 }, // Fallback/Legacy
-  currency: { type: String, default: 'Br' },
+  currency: { type: String, default: 'р.' },
   showToggle: { type: Boolean, default: true },
-  tags: { type: Array, default: () => [] }
+  tags: { type: Array, default: () => [] },
+  large: { type: Boolean, default: false }
 });
 
 const isInstalled = ref(false);
@@ -74,7 +76,7 @@ const finalInstallPrice = computed(() => {
     return Math.max(0, effectiveInstallPrice.value - discount.value);
 });
 
-const shouldShowToogle = computed(() => {
+const shouldShowToggle = computed(() => {
     if (!matchedRate.value) return false;
     if (!matchedRate.value.is_fixed) return false;
     return props.showToggle;
@@ -124,17 +126,31 @@ const toggle = (e) => {
 </script>
 
 <template>
-  <div class="price-container">
+  <div class="price-container" :class="{ 'size-large': large }">
     <!-- Toggle: Only show if allowed (fixed price or default) -->
+   
+  <div class="price-wrapper">
+      <!-- Product Discount Badge (Sale Effect) -->
+      <div v-if="props.oldPrice" class="discount-badge squircle sale-badge">
+        -{{ discountPct }}%
+      </div>
+      
+      <span v-if="priceDisplay.old" class="old-price">
+          {{ priceDisplay.old }}
+      </span>
+      <span class="final-price" :class="{ pulse: isInstalled }">
+        {{ priceDisplay.current }}
+      </span>
+  </div>
     <div 
-      v-if="shouldShowToogle"
+      v-if="shouldShowToggle"
       class="installation-toggle" 
       :class="{ active: isInstalled }"
       @click="toggle"
     >
       <div class="toggle-content">
           <div class="toggle-control">
-            <div class="toggle-switch" />
+            <div class="toggle-switch"></div>
             <span>Монтаж</span>
           </div>
           <div class="price-column">
@@ -154,19 +170,6 @@ const toggle = (e) => {
     </div>
 
     <div class="p-footer">
-       <div class="price-wrapper">
-           <!-- Product Discount Badge (Sale Effect) -->
-           <div v-if="props.oldPrice" class="discount-badge squircle sale-badge">
-             -{{ discountPct }}%
-           </div>
-           
-           <span v-if="priceDisplay.old" class="old-price">
-               {{ priceDisplay.old }}
-           </span>
-           <span class="final-price" :class="{ pulse: isInstalled }">
-             {{ priceDisplay.current }}
-           </span>
-       </div>
        <div class="actions">
            <slot></slot>
        </div>
@@ -178,7 +181,8 @@ const toggle = (e) => {
   .price-container {
     display: flex;
     flex-direction: column;
-    /* gap: 1rem; removed to tighten layout */
+    align-items: center;
+    gap: .25rem;
   }
 
   .installation-toggle {
@@ -200,6 +204,7 @@ const toggle = (e) => {
     justify-content: space-between;
     align-items: center;
     width: 100%;
+    gap: 1.25rem;
   }
 
   .toggle-control {
@@ -297,7 +302,7 @@ const toggle = (e) => {
   .price-wrapper {
       display: flex;
       flex-direction: column;
-      align-items: flex-start;
+      align-items: center;
       position: relative;
   }
   
@@ -317,10 +322,26 @@ const toggle = (e) => {
   }
 
   .final-price {
+    white-space: nowrap;
     font-size: 1.5rem;
     font-weight: 800;
     transition: transform 0.2s;
     color: var(--text);
+  }
+  .size-large .final-price {
+    font-size: 3.5rem;
+  }
+  .size-large .installation-toggle {
+    padding: 1rem 1.5rem;
+  }
+  .size-large .toggle-control {
+    font-size: 1.1rem;
+  }
+  .size-large .inst-price {
+    font-size: 1rem;
+  }
+  .size-large .discount-price {
+    font-size: 1.1rem;
   }
   .pulse {
     transform: scale(1.02);
@@ -328,6 +349,11 @@ const toggle = (e) => {
   }
   .actions {
       display: flex;
+      width: 100%;
+      justify-content: center ;
+  }
+  .actions-slot {
+    width: 100%;
   }
   
   .non-fixed-message {

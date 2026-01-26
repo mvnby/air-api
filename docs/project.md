@@ -76,6 +76,11 @@ We have successfully transitioned to a **Headless Commerce** architecture. The *
   *   **Refactor**: Updated Home and Catalog pages to use the new component, ensuring design consistency.
   *   **Fixes**: Solved SSR API versioning issues in `api.js` and fixed badge duplication.
   *   **Feature**: Added slug classes to feature tags for custom styling.
+  *
+* **Phase 35**: **CORS Hardening (SECURITY BOOST)**.
+  * **Strict Policy**: Replaced wildcard `["*"]` with a managed whitelist.
+  * **Managed Origins**: Origins are now configurable via `CORS_ORIGINS` in `.env`.
+  * **Defaults**: Pre-configured with `https://mvn.by`, `https://dev.mvn.by`, and local dev ports.
 
 ## **The Rules (Don't Break These) 🚨**
 
@@ -90,6 +95,7 @@ We have successfully transitioned to a **Headless Commerce** architecture. The *
    * **Protect Admin Endpoints**: Use `Depends(get_current_username)` for HTTP Basic Auth.  
    * **AJAX from Admin Panel**: Use `Depends(check_admin_session)` for session-based auth.  
    * **Public API**: Keep /api/products, /api/health, etc. open for the bot.
+   * **CORS Management**: Use `CORS_ORIGINS` in `.env` for production domain control. No more `*` allow-all.
 
 ## **Git Life**
 
