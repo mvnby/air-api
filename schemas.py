@@ -69,6 +69,10 @@ class ServiceResponse(BaseModel):
 class CartItemPayload(BaseModel):
     product_id: int
     quantity: int = 1
+    # Installation snapshot fields (Phase: Snapshot Pricing Refactor)
+    with_installation: bool = False
+    installation_price: float = 0.0
+    installation_meta: Optional[Dict] = None
 
 class CustomerPayload(BaseModel):
     name: str

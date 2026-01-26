@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { getInstallationRates, getGlobalConfig } from '../utils/api';
+import { addItem } from '../store/cart';
 
 const props = defineProps({
   basePrice: { type: Number, required: true },
@@ -9,7 +10,12 @@ const props = defineProps({
   currency: { type: String, default: 'р.' },
   showToggle: { type: Boolean, default: true },
   tags: { type: Array, default: () => [] },
-  large: { type: Boolean, default: false }
+  large: { type: Boolean, default: false },
+  // Data for Cart
+  id: { type: String, default: '' },
+  productId: { default: 0 },
+  title: { type: String, default: '' },
+  image: { type: String, default: '' }
 });
 
 const isInstalled = ref(false);
@@ -82,6 +88,9 @@ const shouldShowToggle = computed(() => {
     return props.showToggle;
 });
 
+// Force ru-RU to match server side rendering
+const format = (num) => num.toLocaleString('ru-RU') + ' ' + props.currency;
+
 const priceDisplay = computed(() => {
     // Case 1: No match or non-fixed -> Just Product Price
     if (!matchedRate.value || !matchedRate.value.is_fixed) {
@@ -109,9 +118,6 @@ const priceDisplay = computed(() => {
     };
 });
 
-// Force ru-RU to match server side rendering
-const format = (num) => num.toLocaleString('ru-RU') + ' ' + props.currency;
-
 const discountPct = computed(() => {
     if (!props.oldPrice || !props.basePrice) return 0;
     const diff = props.oldPrice - props.basePrice;
@@ -122,6 +128,27 @@ const toggle = (e) => {
     e.preventDefault();
     e.stopPropagation();
     isInstalled.value = !isInstalled.value;
+}
+
+const addToCart = () => {
+    if (!props.id) return;
+    
+    addItem({
+        id: props.id,
+        name: props.title,
+        price: props.basePrice,
+        image: props.image,
+        withInstallation: isInstalled.value,
+        installationPrice: effectiveInstallPrice.value,
+        // We could infer category from tags if needed, or pass it
+    });
+    
+    // Optional: Visual feedback
+    const btn = document.activeElement;
+    if (btn) {
+        btn.classList.add('success');
+        setTimeout(() => btn.classList.remove('success'), 1000);
+    }
 }
 </script>
 
@@ -171,7 +198,16 @@ const toggle = (e) => {
 
     <div class="p-footer">
        <div class="actions">
-           <slot></slot>
+            <div class="actions-slot">
+                <button class="btn btn-primary btn-large" @click="addToCart">
+                    <span class="material-icons-round">shopping_cart</span>
+                    В корзину
+                </button>
+                <button class="btn btn-outline btn-large">
+                    <span class="material-icons-round">touch_app</span>
+                    Купить в 1 клик
+                </button>
+            </div>
        </div>
     </div>
   </div>
@@ -354,6 +390,7 @@ const toggle = (e) => {
   }
   .actions-slot {
     width: 100%;
+    /* display: flex; gap: 1rem; */
   }
   
   .non-fixed-message {

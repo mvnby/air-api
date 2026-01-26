@@ -123,16 +123,33 @@ class OrderService:
         for item in items:
             product = await session.get(Product, item["product_id"])
             if product:
+                # Extract installation fields (Phase: Snapshot Pricing Refactor)
+                with_installation = item.get("with_installation", False)
+                installation_price = int(item.get("installation_price", 0))
+                installation_meta = item.get("installation_meta")
+                
                 link = OrderProductLink(
                     order_id=order.id,
                     product_id=product.id,
                     quantity=item["quantity"],
                     price=product.price,
-                    cost=0
+                    cost=0,
+                    # Installation snapshot fields
+                    is_installation_included=with_installation,
+                    installation_price=installation_price,
+                    installation_details=installation_meta
                 )
                 session.add(link)
-                total_amount += product.price * item["quantity"]
-                added_items.append(f"{product.title} x{item['quantity']}")
+                
+                # Calculate total including installation
+                item_total = (product.price + installation_price) * item["quantity"]
+                total_amount += item_total
+                
+                # Log details
+                item_desc = f"{product.title} x{item['quantity']}"
+                if with_installation:
+                    item_desc += f" + монтаж ({installation_price} р.)"
+                added_items.append(item_desc)
             else:
                 logger.warning(f"Product {item['product_id']} not found in order creation")
         

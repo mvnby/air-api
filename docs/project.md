@@ -9,10 +9,9 @@ Running on modern Python async goodness (fast af 🚀). Still baking it, but it'
 We have successfully transitioned to a **Headless Commerce** architecture. The **Astro JS + Vue.js** storefront is implemented with a premium brand design.
 
 ### **Upcoming Objectives:**
-1. **Checkout Flow**: Implement the order/basket logic in the frontend and connect to backend services.
-2. **Media Engine**: Implement robust local image processing (via `/media/`) to replace external links.
-3. **Production Core**: Set up automated DB backups & restoration.
-4. **Smooth Ops**: Finalize the production deployment pipeline.
+1. **Media Engine**: Implement robust local image processing (via `/media/`) to replace external links.
+2. **Production Core**: Set up automated DB backups & restoration.
+3. **Smooth Ops**: Finalize the production deployment pipeline.
 
 ## **Hall of Fame (History)**
 
@@ -68,7 +67,6 @@ We have successfully transitioned to a **Headless Commerce** architecture. The *
   * **Design System**: Established [ui.md](file:///Users/maksimkorotov/dev/mvn/docs/ui.md) guide with specific spacing, typography, and theme-switching logic.
   * **Fixes**: Cleaned up logo backgrounds and established transparent asset pipeline.
 
-
 * **Phase 34**: **Product Card Component & Catalog Refactor**.
   *   **Reusable Component**: Created `ProductCard.astro` with "Default", "Hero", and "Minimal" variants.
   *   **Features**: Integrated "Installation Toggle" logic directly into the component.
@@ -76,11 +74,18 @@ We have successfully transitioned to a **Headless Commerce** architecture. The *
   *   **Refactor**: Updated Home and Catalog pages to use the new component, ensuring design consistency.
   *   **Fixes**: Solved SSR API versioning issues in `api.js` and fixed badge duplication.
   *   **Feature**: Added slug classes to feature tags for custom styling.
-  *
+  
 * **Phase 35**: **CORS Hardening (SECURITY BOOST)**.
   * **Strict Policy**: Replaced wildcard `["*"]` with a managed whitelist.
   * **Managed Origins**: Origins are now configurable via `CORS_ORIGINS` in `.env`.
   * **Defaults**: Pre-configured with `https://mvn.by`, `https://dev.mvn.by`, and local dev ports.
+
+* **Phase 36**: **Shopping Cart & Robust Checkout**.
+  * **Persistent Store**: Implemented `nanostores` based cart persisting to localStorage.
+  * **UI Components**: Created `CartPage`, `CheckoutForm`, and `HeaderCart` badge.
+  * **Smart Add-to-Cart**: Integrated `PriceWithToggle` to handle installation options and price calculations.
+  * **Auto-Repair Logic**: Implemented fallback mechanism in Checkout to resolve missing Product IDs by slug (handling stale cart data gracefully).
+  * **New Pages**: `/cart`, `/checkout`, `/success` fully implemented.
 
 ## **The Rules (Don't Break These) 🚨**
 

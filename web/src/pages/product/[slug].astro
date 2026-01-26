@@ -118,22 +118,11 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                         oldPrice={product.old_price}
                         tags={product.tags}
                         large={true}
-                    >
-                        <div class="actions-slot">
-                            <button class="btn btn-primary btn-large">
-                                <span class="material-icons-round"
-                                    >shopping_cart</span
-                                >
-                                В корзину
-                            </button>
-                            <button class="btn btn-outline btn-large">
-                                <span class="material-icons-round"
-                                    >touch_app</span
-                                >
-                                Купить в 1 клик
-                            </button>
-                        </div>
-                    </PriceWithToggle>
+                        id={product.slug}
+                        productId={product.id}
+                        title={product.title}
+                        image={mainImage}
+                    />
                 </div>
 
                 <!-- Smart Specs -->
