@@ -22,7 +22,7 @@ async def test_snapshot_pricing():
     async with async_session_maker() as session:
         # 1. Get or create test product
         print("\n📦 Fetching test product...")
-        product = await session.get(Product, 1)
+        product = await session.get(Product, 63)
         if not product:
             print("   ❌ No product with ID=1 found. Please create a product first.")
             return False

@@ -138,8 +138,9 @@ const addToCart = () => {
         name: props.title,
         price: props.basePrice,
         image: props.image,
+        productId: props.productId,
         withInstallation: isInstalled.value,
-        installationPrice: effectiveInstallPrice.value,
+        installationPrice: finalInstallPrice.value, // Use discounted price
         // We could infer category from tags if needed, or pass it
     });
     

@@ -119,6 +119,7 @@ class OrderService:
         # 3. Add items with current prices
         total_amount = 0.0
         added_items = []
+        installation_services = []  # Collect installation services to add after products
         
         for item in items:
             product = await session.get(Product, item["product_id"])
@@ -126,24 +127,36 @@ class OrderService:
                 # Extract installation fields (Phase: Snapshot Pricing Refactor)
                 with_installation = item.get("with_installation", False)
                 installation_price = int(item.get("installation_price", 0))
-                installation_meta = item.get("installation_meta")
                 
                 link = OrderProductLink(
                     order_id=order.id,
                     product_id=product.id,
                     quantity=item["quantity"],
                     price=product.price,
-                    cost=0,
-                    # Installation snapshot fields
-                    is_installation_included=with_installation,
-                    installation_price=installation_price,
-                    installation_details=installation_meta
+                    cost=0
                 )
                 session.add(link)
                 
-                # Calculate total including installation
-                item_total = (product.price + installation_price) * item["quantity"]
-                total_amount += item_total
+                # Calculate product total
+                product_total = product.price * item["quantity"]
+                total_amount += product_total
+                
+                # If installation requested, prepare service entry
+                if with_installation and installation_price > 0:
+                    # Generate detailed service title
+                    power_kw = product.power_cooling or 0
+                    power_str = f"{power_kw:.1f}".replace('.0', '') if power_kw else "—"
+                    
+                    service_title = f"Стандартный монтаж бытового кондиционера мощностью {power_str} кВт включая трассу до 3 м"
+                    
+                    installation_services.append({
+                        "title": service_title,
+                        "price": installation_price,
+                        "quantity": item["quantity"]
+                    })
+                    
+                    # Add installation to total
+                    total_amount += installation_price * item["quantity"]
                 
                 # Log details
                 item_desc = f"{product.title} x{item['quantity']}"
@@ -152,6 +165,17 @@ class OrderService:
                 added_items.append(item_desc)
             else:
                 logger.warning(f"Product {item['product_id']} not found in order creation")
+        
+        # 3b. Add installation services
+        for inst_svc in installation_services:
+            service_link = OrderServiceLink(
+                order_id=order.id,
+                service_id=None,  # Custom service, no reference to service table
+                title=inst_svc["title"],
+                price=inst_svc["price"],
+                quantity=inst_svc["quantity"]
+            )
+            session.add(service_link)
         
         # 4. Update totals and commit
         order.total_amount = total_amount
@@ -163,7 +187,8 @@ class OrderService:
         logger.info(
             f"NEW ORDER #{order.id} | Source: {lead_source.value} | "
             f"Customer: {customer.name} ({customer.phone}) | "
-            f"Total: {total_amount} RUB | Items: {len(added_items)}"
+            f"Total: {total_amount} RUB | Items: {len(added_items)} | "
+            f"Installation services: {len(installation_services)}"
         )
         logger.debug(f"Order #{order.id} items: {', '.join(added_items)}")
         
@@ -319,11 +344,16 @@ class OrderService:
             )
             session.add(link)
         
-        # 3. Add services
+        # 3. Add services (with custom titles)
         for serv in items_data.get("services", []):
+            # Use None instead of 0 for service_id to enable snapshot pricing
+            service_id_raw = serv.get("service_id", 0)
+            service_id = None if (service_id_raw == 0 or service_id_raw is None) else int(service_id_raw)
+            
             link = OrderServiceLink(
                 order_id=order_id,
-                service_id=int(serv["service_id"]),
+                service_id=service_id,  # Can be None for custom services
+                title=serv.get("title"),  # Custom editable title
                 quantity=int(serv["quantity"]),
                 price=int(serv["price"])
             )

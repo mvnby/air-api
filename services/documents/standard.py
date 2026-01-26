@@ -67,7 +67,7 @@ class ActStrategy(GoogleDocStrategy):
         table_rows = []
         counter = 1
         for link in self.order.service_links:
-            title = link.service.title if link.service else "Услуга"
+            title = link.title or (link.service.title if link.service else "Услуга")
             # 6 columns
             row = [
                 str(counter), title, "шт.", 
@@ -108,7 +108,7 @@ class GeneralDocStrategy(GoogleDocStrategy):
 
         # Services
         for link in self.order.service_links:
-            title = link.service.title if link.service else "Услуга"
+            title = link.title or (link.service.title if link.service else "Услуга")
             row = [
                 str(counter), title, "шт.", 
                 str(link.quantity), f"{link.price:.2f}", f"{link.price * link.quantity:.2f}"
