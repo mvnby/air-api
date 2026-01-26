@@ -1,7 +1,9 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import { resolveImageUrl, getProducts } from "../../utils/api";
+// @ts-expect-error Vue SFC with script setup
 import PriceWithToggle from "../../components/PriceWithToggle.vue";
+// @ts-expect-error Vue SFC with script setup
 import Gallery from "../../components/product/Gallery.vue";
 import StickyBuyBar from "../../components/product/StickyBuyBar.vue";
 import {
@@ -138,7 +140,9 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                 <div class="smart-specs">
                     <!-- Efficiency Group -->
                     <div class="specs-group">
-                        <h3 class="group-title">Производительность и Эффективность</h3>
+                        <h3 class="group-title">
+                            Производительность и Эффективность
+                        </h3>
                         <div class="specs-grid-3">
                             <div class="spec-card">
                                 <span class="material-icons-round icon cold"
