@@ -284,6 +284,11 @@ class OrderProductLink(SQLModel, table=True):
     price: int = Field(default=0)  # Цена продажи за шт
     cost: int = Field(default=0)   # Себестоимость за шт (SNAPSHOT)
     
+    # INSTALLATION SNAPSHOT (Phase: Snapshot Pricing Refactor)
+    is_installation_included: bool = Field(default=False)  # Флаг наличия монтажа
+    installation_price: int = Field(default=0)  # Цена монтажа на момент заказа (snapshot)
+    installation_details: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))  # Метаданные: {"discount": 100, "base_rate": 360}
+    
     order: "Order" = Relationship(back_populates="product_links")
     product: "Product" = Relationship(back_populates="order_links")
 

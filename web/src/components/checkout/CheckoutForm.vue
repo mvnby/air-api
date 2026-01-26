@@ -65,7 +65,15 @@ const submitOrder = async () => {
             
             return {
                 product_id: pid,
-                quantity: i.quantity
+                quantity: i.quantity,
+                // Installation snapshot fields (Phase: Snapshot Pricing Refactor)
+                with_installation: i.withInstallation || false,
+                installation_price: i.withInstallation ? (i.installationPrice || 0) : 0,
+                installation_meta: i.withInstallation ? {
+                    source: "web_calculator",
+                    discount_applied: true,
+                    base_rate: i.installationPrice ? i.installationPrice + 100 : 0  // Assuming 100 BYN discount
+                } : null
             };
         }));
 
