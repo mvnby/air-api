@@ -1,0 +1,85 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Заказ оформлен">
+    <div class="container success-page">
+        <div class="success-card">
+            <div class="icon-circle">
+                <span class="material-icons-round">check_circle</span>
+            </div>
+            <h1>Спасибо за заказ!</h1>
+            <p>
+                Мы уже получили вашу заявку. Менеджер свяжется с вами в
+                ближайшее время для подтверждения деталей.
+            </p>
+            <div class="actions">
+                <a href="/" class="btn btn-primary">На главную</a>
+            </div>
+        </div>
+    </div>
+</Layout>
+
+<style>
+    .success-page {
+        min-height: 60vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 1rem;
+    }
+
+    .success-card {
+        background: white;
+        padding: 3rem;
+        border-radius: 2rem;
+        text-align: center;
+        max-width: 500px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.05);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .icon-circle {
+        width: 80px;
+        height: 80px;
+        background: rgba(16, 185, 129, 0.1);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #10b981;
+    }
+    .material-icons-round {
+        font-size: 3rem;
+    }
+
+    h1 {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 2rem;
+        color: #0f172a;
+        margin: 0;
+    }
+
+    p {
+        color: #64748b;
+        line-height: 1.6;
+    }
+
+    .btn-primary {
+        background: #007f80;
+        color: white;
+        padding: 0.8rem 2rem;
+        border-radius: 1rem;
+        text-decoration: none;
+        font-weight: 600;
+        transition: background 0.2s;
+        display: inline-block;
+        margin-top: 1rem;
+    }
+    .btn-primary:hover {
+        background: #006b6c;
+    }
+</style>

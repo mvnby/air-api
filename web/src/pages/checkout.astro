@@ -1,0 +1,35 @@
+---
+import Layout from "../layouts/Layout.astro";
+import CheckoutFormFn from "../components/checkout/CheckoutForm.vue";
+---
+
+<Layout title="Оформление заказа">
+    <div class="container checkout-page-wrapper">
+        <h1 class="page-title">Оформление заказа</h1>
+        <CheckoutFormFn client:load />
+    </div>
+</Layout>
+
+<style>
+    .checkout-page-wrapper {
+        padding: 3rem 1.5rem;
+    }
+    .page-title {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 2.5rem;
+        line-height: 1.1;
+        margin-bottom: 2rem;
+        background: linear-gradient(90deg, #0f172a, #334155);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    @media (max-width: 640px) {
+        .checkout-page-wrapper {
+            padding: 1.5rem 1rem;
+        }
+        .page-title {
+            font-size: 2rem;
+        }
+    }
+</style>
