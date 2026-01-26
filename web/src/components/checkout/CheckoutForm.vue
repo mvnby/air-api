@@ -87,7 +87,7 @@ const submitOrder = async () => {
             items: orderItems
         };
 
-        const response = await fetch(`${API_URL}/api/v1/orders`, {
+        const response = await fetch(`${API_URL}/orders`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
