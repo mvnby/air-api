@@ -323,11 +323,12 @@ class OrderService:
             )
             session.add(link)
         
-        # 3. Add services
+        # 3. Add services (with custom titles)
         for serv in items_data.get("services", []):
             link = OrderServiceLink(
                 order_id=order_id,
                 service_id=int(serv["service_id"]),
+                title=serv.get("title"),  # Custom editable title
                 quantity=int(serv["quantity"]),
                 price=int(serv["price"])
             )
