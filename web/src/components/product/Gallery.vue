@@ -123,5 +123,8 @@ const zoomImage = () => {
         border-radius: 1.5rem;
         aspect-ratio: 1/1;
     }
+    .gallery-component {
+        width: 93dvw;
+    }
 }
 </style>
