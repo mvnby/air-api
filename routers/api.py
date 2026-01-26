@@ -100,8 +100,8 @@ def _validate_pagination(page: int, limit: int) -> None:
     """Validate pagination parameters."""
     if page < 1:
         raise HTTPException(status_code=400, detail="Page must be >= 1")
-    if limit < 1 or limit > 100:
-        raise HTTPException(status_code=400, detail="Limit must be between 1 and 100")
+    if limit < 1 or limit > 1000:
+        raise HTTPException(status_code=400, detail="Limit must be between 1 and 1000")
 
 
 @router.get("/products")

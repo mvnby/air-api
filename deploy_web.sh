@@ -25,7 +25,7 @@ cd "$LOCAL_WEB_DIR"
 
 # Set API URL for the build process (SSG needs access to API)
 # We use the public API URL because we are building locally (outside docker network)
-export INTERNAL_API_URL="https://api.mvn.by/api/v1"
+export INTERNAL_API_URL="http://localhost:8000/api/v1"
 export PUBLIC_API_URL="https://api.mvn.by/api/v1"
 # Переменная теперь доступна для Astro во время npm run build
 export PUBLIC_SITE_URL=$PUBLIC_SITE_URL

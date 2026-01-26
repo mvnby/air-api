@@ -50,7 +50,6 @@ class ProductAdmin(ModelView, model=Product):
     # --- Оверрайды для НЕ-relationship полей ---
     form_overrides = {
         "description": TextAreaField,
-        "specs": TextAreaField,
         "images": TextAreaField,
     }
 
