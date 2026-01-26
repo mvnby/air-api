@@ -299,6 +299,9 @@ class OrderServiceLink(SQLModel, table=True):
     service_id: Optional[int] = Field(default=None, foreign_key="service.id")
     quantity: int = Field(default=1)
     
+    # Custom title (editable in admin, overrides service.title for documents)
+    title: Optional[str] = Field(default=None)
+    
     # SNAPSHOT PRICES
     price: int = Field(default=0)  # Цена продажи
     cost: int = Field(default=0)   # Себестоимость (SNAPSHOT)

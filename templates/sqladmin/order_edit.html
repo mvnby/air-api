@@ -341,9 +341,9 @@
                             {% for link in obj.service_links %}
                             <tr class="item-row service-row" data-id="{{ link.service_id }}">
                                 <td>
-                                    <select class="form-control service-select" data-placeholder="Выберите услугу">
-                                        <option value="{{ link.service_id }}" selected>{{ link.service.title }}</option>
-                                    </select>
+                                    <input type="text" class="form-control service-title-input"
+                                        value="{{ link.service.title }}" data-service-id="{{ link.service_id }}"
+                                        placeholder="Название услуги">
                                 </td>
                                 <td><input type="number" class="form-control price-input" value="{{ link.price }}"></td>
                                 <td><input type="number" class="form-control quantity-input"
@@ -653,14 +653,13 @@
             const row = document.createElement('tr');
             row.className = 'item-row service-row';
             row.innerHTML = `
-                <td><select class="form-control service-select"></select></td>
+                <td><input type="text" class="form-control service-title-input" placeholder="Название услуги" data-service-id="0"></td>
                 <td><input type="number" class="form-control price-input" value="0"></td>
                 <td><input type="number" class="form-control quantity-input" value="1"></td>
                 <td class="row-total">0</td>
                 <td><i class="fa-solid fa-trash remove-row"></i></td>
             `;
             servicesBody.appendChild(row);
-            initSelect2(row.querySelector('.service-select'), 'service');
         });
 
         // Installer Button
@@ -726,20 +725,14 @@
                 });
 
                 document.querySelectorAll('.service-row').forEach(row => {
-                    const select = row.querySelector('.service-select');
-                    let id = $(select).val();
+                    const titleInput = row.querySelector('.service-title-input');
+                    const serviceId = titleInput ? parseInt(titleInput.dataset.serviceId) || 0 : 0;
+                    const title = titleInput ? titleInput.value.trim() : '';
 
-                    // Fallback for Select2
-                    if (!id && $(select).data('select2')) {
-                        const data = $(select).select2('data');
-                        if (data && data.length > 0) {
-                            id = data[0].id;
-                        }
-                    }
-
-                    if (id) {
+                    if (title) {  // Only add if title is not empty
                         items.services.push({
-                            service_id: parseInt(id),
+                            service_id: serviceId,
+                            title: title,
                             price: parseInt(row.querySelector('.price-input').value) || 0,
                             quantity: parseInt(row.querySelector('.quantity-input').value) || 1
                         });
