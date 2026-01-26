@@ -475,8 +475,19 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
     from services.order_service import OrderService
     from models import LeadSource
     
+    # DEBUG: Log incoming payload
+    logger.info(f"📦 Incoming order payload: customer={payload.customer.name}, items_count={len(payload.items)}")
+    for idx, item in enumerate(payload.items):
+        logger.info(f"   Item {idx}: product_id={item.product_id}, qty={item.quantity}, with_install={getattr(item, 'with_installation', 'N/A')}, install_price={getattr(item, 'installation_price', 'N/A')}")
+    
     # If items provided, convert them
-    items = [{"product_id": item.product_id, "quantity": item.quantity} for item in payload.items]
+    items = [{
+        "product_id": item.product_id, 
+        "quantity": item.quantity,
+        "with_installation": item.with_installation,
+        "installation_price": item.installation_price,
+        "installation_meta": item.installation_meta
+    } for item in payload.items]
     
     # Delegate to OrderService with SITE lead source
     order = await OrderService.create_from_website(
