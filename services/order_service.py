@@ -309,13 +309,17 @@ class OrderService:
         stmt = OrderInstaller.__table__.delete().where(OrderInstaller.order_id == order_id)
         await session.execute(stmt)
         
-        # 2. Add products
+        # 2. Add products (with installation snapshot fields)
         for prod in items_data.get("products", []):
             link = OrderProductLink(
                 order_id=order_id,
                 product_id=int(prod["product_id"]),
                 quantity=int(prod["quantity"]),
-                price=int(prod["price"])
+                price=int(prod["price"]),
+                # Installation fields (editable in admin panel)
+                is_installation_included=prod.get("is_installation_included", False),
+                installation_price=int(prod.get("installation_price", 0)),
+                installation_details=None
             )
             session.add(link)
         
