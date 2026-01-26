@@ -27,6 +27,7 @@ services:
     volumes:
       - .:/app
       - ./media:/app/media
+      - ./token.json:/app/token.json
 
   bot:
     build: .
