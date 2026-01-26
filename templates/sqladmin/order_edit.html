@@ -287,7 +287,6 @@
                                 <th>Товар</th>
                                 <th>Цена (руб)</th>
                                 <th>Кол-во</th>
-                                <th>Монтаж</th>
                                 <th>Сумма</th>
                                 <th style="width: 50px;"></th>
                             </tr>
@@ -303,16 +302,6 @@
                                 <td><input type="number" class="form-control price-input" value="{{ link.price }}"></td>
                                 <td><input type="number" class="form-control quantity-input"
                                         value="{{ link.quantity }}"></td>
-                                <td>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <input type="checkbox" class="form-check-input installation-checkbox" {% if
-                                            link.is_installation_included %}checked{% endif %} title="Включить монтаж">
-                                        <input type="number" class="form-control installation-price-input"
-                                            value="{{ link.installation_price }}" placeholder="Цена"
-                                            style="width: 90px;" {% if not link.is_installation_included %}disabled{%
-                                            endif %}>
-                                    </div>
-                                </td>
                                 <td class="row-total">{{ link.price * link.quantity }}</td>
                                 <td><i class="fa-solid fa-trash remove-row"></i></td>
                             </tr>
@@ -342,8 +331,8 @@
                             <tr class="item-row service-row" data-id="{{ link.service_id }}">
                                 <td>
                                     <input type="text" class="form-control service-title-input"
-                                        value="{{ link.service.title }}" data-service-id="{{ link.service_id }}"
-                                        placeholder="Название услуги">
+                                        value="{{ link.title or (link.service.title if link.service else '') }}"
+                                        data-service-id="{{ link.service_id or 0 }}" placeholder="Название услуги">
                                 </td>
                                 <td><input type="number" class="form-control price-input" value="{{ link.price }}"></td>
                                 <td><input type="number" class="form-control quantity-input"
@@ -609,22 +598,7 @@
 
         // Update totals on input change
         document.addEventListener('input', function (e) {
-            if (e.target.classList.contains('price-input') || e.target.classList.contains('quantity-input') || e.target.classList.contains('installation-price-input')) {
-                updateTotals();
-            }
-        });
-
-        // Installation checkbox toggle handler
-        document.addEventListener('change', function (e) {
-            if (e.target.classList.contains('installation-checkbox')) {
-                const row = e.target.closest('tr');
-                const priceInput = row.querySelector('.installation-price-input');
-                if (e.target.checked) {
-                    priceInput.disabled = false;
-                } else {
-                    priceInput.disabled = true;
-                    priceInput.value = 0;
-                }
+            if (e.target.classList.contains('price-input') || e.target.classList.contains('quantity-input')) {
                 updateTotals();
             }
         });
@@ -636,12 +610,6 @@
                 <td><select class="form-control product-select"></select></td>
                 <td><input type="number" class="form-control price-input" value="0"></td>
                 <td><input type="number" class="form-control quantity-input" value="1"></td>
-                <td>
-                    <div class="d-flex align-items-center gap-2">
-                        <input type="checkbox" class="form-check-input installation-checkbox" title="Включить монтаж">
-                        <input type="number" class="form-control installation-price-input" value="0" placeholder="Цена" style="width: 90px;" disabled>
-                    </div>
-                </td>
                 <td class="row-total">0</td>
                 <td><i class="fa-solid fa-trash remove-row"></i></td>
             `;
@@ -711,15 +679,10 @@
                     }
 
                     if (id) {
-                        const installCheckbox = row.querySelector('.installation-checkbox');
-                        const installPrice = row.querySelector('.installation-price-input');
-
                         items.products.push({
                             product_id: parseInt(id),
                             price: parseInt(row.querySelector('.price-input').value) || 0,
-                            quantity: parseInt(row.querySelector('.quantity-input').value) || 1,
-                            is_installation_included: installCheckbox ? installCheckbox.checked : false,
-                            installation_price: (installCheckbox && installCheckbox.checked) ? (parseInt(installPrice.value) || 0) : 0
+                            quantity: parseInt(row.querySelector('.quantity-input').value) || 1
                         });
                     }
                 });
