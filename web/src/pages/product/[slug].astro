@@ -147,7 +147,7 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                                 <div class="spec-val">
                                     <span class="label">Охлаждение</span>
                                     <span class="value"
-                                        >{performance.powerCooling || "-"} кВт</span
+                                        >{performance.powerCooling || "-"}</span
                                     >
                                 </div>
                             </div>
@@ -158,7 +158,7 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                                 <div class="spec-val">
                                     <span class="label">Обогрев</span>
                                     <span class="value"
-                                        >{performance.powerHeating || "-"} кВт</span
+                                        >{performance.powerHeating || "-"}</span
                                     >
                                 </div>
                             </div>
@@ -487,7 +487,7 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
     }
 
     .spec-card {
-        background: white;
+        background: var(--surface);
         padding: 1rem;
         border-radius: 1rem;
         display: flex;
@@ -500,7 +500,7 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
     }
 
     .icon {
-        font-size: 1.5rem;
+        font-size: 3.5rem;
         color: #94a3b8;
     }
     .icon.cold {
@@ -518,13 +518,13 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
         flex-direction: column;
     }
     .spec-val .label {
-        font-size: 0.7rem;
-        color: #94a3b8;
+        font-size: 1rem;
+        color: var(--text-muted);
         text-transform: uppercase;
     }
     .spec-val .value {
         font-weight: 700;
-        color: #0f172a;
+        color: var(--text);
         font-size: 1rem;
     }
     .spec-val .value.hl {
