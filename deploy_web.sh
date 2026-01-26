@@ -7,6 +7,7 @@ API_HOST="mvn-api"
 # User specified path for SSG
 REMOTE_WEB_DIR="/var/www/user2154318/data/www/dev.mvn.by"
 LOCAL_WEB_DIR="./web"
+export PUBLIC_SITE_URL="https://dev.mvn.by"
 
 echo "========================================"
 echo "🚀 Deploying WEB (SSG) to $WEB_HOST..."
@@ -26,6 +27,8 @@ cd "$LOCAL_WEB_DIR"
 # We use the public API URL because we are building locally (outside docker network)
 export INTERNAL_API_URL="https://api.mvn.by/api/v1"
 export PUBLIC_API_URL="https://api.mvn.by/api/v1"
+# Переменная теперь доступна для Astro во время npm run build
+export PUBLIC_SITE_URL=$PUBLIC_SITE_URL
 
 npm install
 npm run build
@@ -42,5 +45,8 @@ echo "📡 Uploading to $WEB_HOST:$REMOTE_WEB_DIR..."
 ssh "$WEB_HOST" "mkdir -p $REMOTE_WEB_DIR"
 # Sync dist contents to remote public_html
 rsync -avz --delete "$LOCAL_WEB_DIR/dist/" "$WEB_HOST:$REMOTE_WEB_DIR/"
+# 4. Активация robots.txt для разработки
+echo "🤖 Setting up robots.txt for DEV environment..."
+ssh "$WEB_HOST" "cp $REMOTE_WEB_DIR/robots.dev.txt $REMOTE_WEB_DIR/robots.txt"
 
 echo "✅ WEB Deployment Complete!"
