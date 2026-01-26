@@ -268,16 +268,16 @@ const showLegacyArea = !areaTag && product.area;
     position: absolute;
     top: 1rem;
     right: 1rem;
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--surface);
     backdrop-filter: blur(4px);
     padding: 0.25rem 0.6rem;
     border-radius: 8px;
     font-size: 0.75rem;
     font-weight: 700;
-    font-weight: 700;
-    color: #1e293b; /* Force dark text for contrast on white bg */
+    color: var(--text);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     z-index: 2;
+    border: 1px solid var(--border);
   }
 
   .p-bottom-badge {
@@ -296,11 +296,11 @@ const showLegacyArea = !areaTag && product.area;
   }
 
   .p-bottom-badge.heat {
-    background: linear-gradient(to right, #fff7ed, #fff1f2);
-    color: #c2410c;
-    border-top: 1px solid #ffedd5;
+    background: var(--warning-bg);
+    color: var(--warning-text);
+    border-top: 1px solid var(--warning);
     width: fit-content;
-    box-shadow: 2px -1px 1px -1px #fd050529;
+    box-shadow: 2px -1px 1px -1px var(--warning);
     border-radius: 0 10px 0 0;
   }
 

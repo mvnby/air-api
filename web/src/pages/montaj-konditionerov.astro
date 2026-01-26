@@ -37,7 +37,7 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
                 <InstallationCalculator client:visible />
             </div>
 
-            <div class="article-content">
+            <div class="article-content prose">
                 <section class="mb-12">
                     <h2>Почему выбирают «Мастер Воздуха»?</h2>
                     <p>
@@ -214,9 +214,9 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
     .bundle-price-badge {
         display: inline-block;
         padding: 0.4rem 1rem;
-        background: #f0fdfa; /* Teal-50 */
-        border: 1px solid #99f6e4; /* Teal-200 */
-        color: #0f766e; /* Teal-700 */
+        background: var(--success-bg);
+        border: 1px solid var(--success);
+        color: var(--success-text);
         border-radius: 12px;
         font-size: 0.9rem;
         margin-bottom: 1.5rem;
@@ -259,8 +259,8 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
 
     .advantage-card {
         padding: 1.5rem;
-        background: rgba(255, 255, 255, 0.5);
-        border: 1px solid rgba(0, 127, 128, 0.1);
+        background: var(--surface);
+        border: 1px solid var(--border);
         border-radius: 1.5rem;
     }
     .advantage-card h3 {
@@ -323,7 +323,8 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
         align-items: center;
         gap: 1rem;
         padding: 1rem;
-        background: #f8fafc;
+        background: var(--surface);
+        border: 1px solid var(--border);
         border-radius: 1rem;
     }
     .step span {
