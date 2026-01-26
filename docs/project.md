@@ -87,6 +87,14 @@ We have successfully transitioned to a **Headless Commerce** architecture. The *
   * **Auto-Repair Logic**: Implemented fallback mechanism in Checkout to resolve missing Product IDs by slug (handling stale cart data gracefully).
   * **New Pages**: `/cart`, `/checkout`, `/success` fully implemented.
 
+* **Phase 37**: **Snapshot Pricing & Installation Refactor (ARCHITECTURE STABILITY)**.
+  * **Decoupled Pricing**: Successfully transitioned to "Snapshot Pricing" pattern where service details (title, price) are stored directly in the order.
+  * **Flexible DB Schema**: Migrated `service_id` to be nullable in `OrderServiceLink`, allowing for custom services not bound to the `services` table.
+  * **Automated Logic**: Implemented detailed auto-generation of installation titles during checkout (e.g., "Стандартный монтаж кондиционера мощностью 3.5 кВт...").
+  * **Admin UI Cleanup**: Removed confusing/redundant installation checkboxes from the products table; everything is now unified under the "Services" section with editable titles.
+  * **Contract Ready**: Updated document engine (Contracts, Acts, Invoices) to prioritize snapshot titles for 100% accuracy in generated files.
+
+
 ## **The Rules (Don't Break These) 🚨**
 
 1. **Service Layer Only**: Seriously, no raw SQL in routers or admin. I will find you.  
