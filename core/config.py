@@ -11,6 +11,14 @@ class Settings(BaseSettings):
     ADMIN_ID: int = 0
     SECRET_KEY: str
     
+    # CORS Settings
+    CORS_ORIGINS: list[str] = [
+        "https://mvn.by",
+        "https://dev.mvn.by",
+        "http://localhost:4321",
+        "http://localhost:3000",
+    ]
+    
     # HTTP Basic Auth
     ADMIN_USERNAME: str
     ADMIN_PASSWORD: str
