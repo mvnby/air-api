@@ -55,6 +55,12 @@ export async function getCatalog(params = {}) {
     return data;
 }
 
+export async function getProducts() {
+    // Fetch all products for SSG (limit 1000 for now)
+    const data = await getCatalog({ limit: 1000 });
+    return data && data.items ? data.items : [];
+}
+
 export async function getProductBySlug(slug) {
     return await fetchJson(`${API_V1}/products/${slug}`);
 }
@@ -83,7 +89,8 @@ export async function getInstallationRates() {
                 return [];
             });
     }
-    return _installationRatesPromise;
+    // Handle case where fetchJson returns null (swallowed error)
+    return _installationRatesPromise.then(res => res || []);
 }
 
 export async function submitContactForm(formData) {

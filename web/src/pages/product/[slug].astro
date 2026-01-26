@@ -1,17 +1,18 @@
 ---
-export const prerender = false;
 import Layout from "../../layouts/Layout.astro";
-import { getProductBySlug, resolveImageUrl } from "../../utils/api";
+import { resolveImageUrl, getProducts } from "../../utils/api";
 import { getInstallationPricingInfo } from "../../utils/api";
 
-const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
-const { slug } = Astro.params;
-const product = await getProductBySlug(slug as string);
-
-if (!product) {
-    return Astro.redirect("/404");
+export async function getStaticPaths() {
+    const products = await getProducts();
+    return products.map((product) => ({
+        params: { slug: product.slug },
+        props: { product },
+    }));
 }
 
+const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
+const { product } = Astro.props; // Get product from props, not fetch by slug
 const specs = product.specs || {};
 const images = product.images || [];
 ---
