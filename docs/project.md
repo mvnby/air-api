@@ -100,6 +100,13 @@ We have successfully transitioned to a **Headless Commerce** architecture. The *
   * **Interactive Feedback**: Implemented "Morphing Buttons" (Add -> Check) and global Toast notifications for clear user confirmation.
   * **Bug Fixes**: Resolved critical Vue hydration issues (nesting bugs) using explicit keys and fixed catalog badge overlaps.
 
+* **Phase 39**: **Standalone Installation Calculator & Advanced Cart**.
+  * **Service-Only Orders**: Architected system to support orders without physical products (Installation Only). Refactored backend to store these as `OrderServiceLink` for correct admin logic.
+  * **Detailed Metadata**: Implemented smart title generation for services (e.g., "Installation (Wall) Power < 3.5kW, Pipe 5m") improving clarity for admins and documents.
+  * **Advanced Cart**: Enhanced Cart Store and UI to allow per-item installation configuration (Pipe meters, Options) directly in the cart before checkout.
+  * **Calculator UX**: Added "Order Service" modal to the Installation Calculator, allowing direct lead generation from the tools page.
+  * **Notification Upgrade**: Updated Telegram Admin alerts to support and clearly display standalone service orders.
+
 
 ## **The Rules (Don't Break These) 🚨**
 

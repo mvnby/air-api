@@ -507,7 +507,8 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
     
     if settings.admin_list:
         # Подгружаем связи для уведомления
-        await session.refresh(order, ["product_links", "customer"])
+        # Подгружаем связи для уведомления
+        await session.refresh(order, ["product_links", "service_links", "customer"])
         for link in order.product_links:
             await session.refresh(link, ["product"])
         
@@ -529,6 +530,7 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
         message_lines.append("🛒 <b>Товары:</b>")
         
         for link in order.product_links:
+
             product_name = link.product.title if link.product else f"Product #{link.product_id}"
             line_total = link.price * link.quantity
             product_line = f"▫️ {product_name} x{link.quantity} — {line_total} р."
@@ -539,6 +541,13 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
                 install_price = link.installation_price or 0
                 install_line = f"   └ 🔧 Монтаж: {install_price} BYN"
                 message_lines.append(install_line)
+        
+        # Добавляем услуги (включая Standalone монтаж)
+        if order.service_links:
+            for s_link in order.service_links:
+                 title = s_link.title or "Услуга"
+                 total = s_link.price * s_link.quantity
+                 message_lines.append(f"🔧 {title} x{s_link.quantity} — {total} BYN")
         
         message_lines.append("")
         message_lines.append(f"💰 <b>Итого: {order.total_amount} руб.</b>")

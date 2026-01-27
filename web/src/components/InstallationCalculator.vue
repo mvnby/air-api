@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import { getInstallationRates, getGlobalConfig } from '../utils/api';
+import { getInstallationRates, getGlobalConfig, createOrder } from '../utils/api';
 
 const rates = ref([]);
 const loading = ref(true);
@@ -122,6 +122,60 @@ const calculatedPrice = computed(() => {
 const isFixedPrice = computed(() => activeRate.value?.is_fixed ?? true);
 const priceComment = computed(() => activeRate.value?.comment);
 
+// --- ORDER LOGIC ---
+const showModal = ref(false);
+const submitting = ref(false);
+const success = ref(false);
+const form = ref({
+    name: '',
+    phone: ''
+});
+
+const openOrderModal = () => {
+    showModal.value = true;
+    success.value = false;
+};
+
+const submitOrder = async () => {
+    if (!form.value.name || !form.value.phone) return;
+    
+    submitting.value = true;
+    
+    // Construct payload
+    const payload = {
+        customer: {
+            name: form.value.name,
+            phone: form.value.phone,
+        },
+        items: [{
+            product_id: null,
+            quantity: 1,
+            with_installation: true,
+            installation_price: calculatedPrice.value,
+            installation_meta: {
+                source: "calculator_page",
+                type: tCategory(selectedCategory.value),
+                meters: currentMeters.value,
+                power_range: activeRate.value?.power_range || "Standard"
+            }
+        }],
+        comment: `Заказ на монтаж из калькулятора. ${currentMeters.value}м трассы.`
+    };
+
+    const res = await createOrder(payload);
+    
+    submitting.value = false;
+    if (res) {
+        success.value = true;
+        form.value = { name: '', phone: '' };
+        setTimeout(() => {
+            showModal.value = false;
+        }, 3000);
+    } else {
+        alert('Ошибка при отправке заказа. Попробуйте позже.');
+    }
+};
+
 </script>
 
 <template>
@@ -213,6 +267,48 @@ const priceComment = computed(() => activeRate.value?.comment);
           Купите кондиционер у нас и получите скидку <strong>{{ discount }} BYN</strong> на этот монтаж!
         </p>
       </div>
+
+      <button class="action-btn" @click="openOrderModal">
+        Заказать монтаж
+      </button>
+    </div>
+
+    <!-- Modal Portal -->
+    <div v-if="showModal" class="modal-overlay" @click.self="showModal = false">
+        <div class="modal-card glass">
+            <button class="close-btn" @click="showModal = false">
+                <span class="material-icons-round">close</span>
+            </button>
+            
+            <div v-if="!success">
+                <h3 class="modal-title">Заказать монтаж</h3>
+                <p class="modal-desc">Оставьте контакты, и мы свяжемся для уточнения деталей.</p>
+                
+                <form @submit.prevent="submitOrder" class="order-form">
+                    <div class="form-group">
+                        <label>Ваше имя</label>
+                        <input type="text" v-model="form.name" required placeholder="Иван" class="form-input" />
+                    </div>
+                    <div class="form-group">
+                        <label>Телефон</label>
+                        <input type="tel" v-model="form.phone" required placeholder="+375 29 000 00 00" class="form-input" />
+                    </div>
+                    
+                    <button type="submit" class="submit-btn" :disabled="submitting">
+                        <span v-if="submitting">Отправка...</span>
+                        <span v-else>Отправить заявку</span>
+                    </button>
+                </form>
+            </div>
+            
+            <div v-else class="success-state">
+                <div class="success-icon">
+                    <span class="material-icons-round">check_circle</span>
+                </div>
+                <h3>Заявка принята!</h3>
+                <p>Менеджер свяжется с вами в ближайшее время.</p>
+            </div>
+        </div>
     </div>
 
   </div>
@@ -489,5 +585,136 @@ const priceComment = computed(() => activeRate.value?.comment);
     text-align: center;
     color: #ef4444;
     padding: 2rem;
+}
+
+/* Modal Styles */
+.action-btn {
+    margin-top: 1.5rem;
+    width: 100%;
+    padding: 1rem;
+    border: none;
+    border-radius: 12px;
+    background: var(--primary);
+    color: white;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    box-shadow: 0 4px 12px rgba(0, 127, 128, 0.4);
+}
+.action-btn:hover {
+    background: #006b6c;
+    transform: translateY(-2px);
+}
+.action-btn:active {
+    transform: translateY(0);
+}
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 1rem;
+}
+
+.modal-card {
+    background: white; /* Fallback */
+    background: rgba(255, 255, 255, 0.95);
+    width: 100%;
+    max-width: 400px;
+    padding: 2rem;
+    border-radius: 1.5rem;
+    position: relative;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.close-btn {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+}
+
+.modal-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: var(--primary-dark);
+}
+.modal-desc {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    font-size: 0.9rem;
+    color: var(--text);
+}
+.form-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    font-size: 1rem;
+    transition: all 0.2s;
+}
+.form-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(0, 127, 128, 0.1);
+}
+
+.submit-btn {
+    width: 100%;
+    padding: 1rem;
+    margin-top: 1rem;
+    background: var(--primary);
+    color: white;
+    font-weight: 700;
+    border: none;
+    border-radius: 0.75rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.submit-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+.success-state {
+    text-align: center;
+    padding: 1rem 0;
+}
+.success-icon {
+    font-size: 4rem;
+    color: var(--primary);
+    margin-bottom: 1rem;
+}
+.success-icon .material-icons-round {
+    font-size: 4rem;
 }
 </style>

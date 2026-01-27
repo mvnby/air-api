@@ -147,3 +147,26 @@ export async function getInstallationPricingInfo() {
         discount
     };
 }
+
+export async function createOrder(payload) {
+    const url = `${API_V1}/orders`;
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            console.error(`[API] Order error ${response.status}`, err);
+            return null;
+        }
+        return await response.json();
+    } catch (e) {
+        console.error('[API] Order exception:', e);
+        return null;
+    }
+}
