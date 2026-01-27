@@ -134,7 +134,6 @@ We have successfully transitioned to a **Headless Commerce** architecture. The *
 *   **Fire it up:** `docker compose up -d --build`
 *   **Check logs:** `docker compose logs -f`
 *   **Kill it:** `docker compose down`
-*   **Migrate DB:** `docker compose exec app python scripts/migrate_sqlite_to_pg.py`
 *   **Get Google Token:** `python scripts/get_token.py` (Run inside container if needed)
 
 ## **Technical Context & Lessons**
