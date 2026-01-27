@@ -14,14 +14,14 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
 
 <template>
 <div class="cart-container">
-    <div v-if="items.length === 0" class="empty-state">
+    <div v-if="items.length === 0" key="empty" class="empty-state">
         <span class="material-icons-round empty-icon">shopping_cart</span>
         <h2>Корзина пуста</h2>
         <p>Перейдите в каталог, чтобы выбрать товары</p>
         <a href="/catalog" class="btn btn-primary">В каталог</a>
     </div>
 
-    <div v-else class="cart-layout-grid-v2">
+    <div v-if="items.length > 0" key="list" class="cart-layout-grid-v2">
         <!-- List -->
         <div class="cart-items">
             <div v-for="item in items" :key="item.id + item.withInstallation" class="cart-item">
@@ -95,7 +95,7 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
 .cart-items {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 1rem;
 }
 
 .cart-item {
@@ -103,8 +103,8 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
     grid-template-columns: 100px 1fr auto auto;
     gap: 2rem;
     align-items: center;
-    background: white;
-    padding: 1.5rem;
+    background: var(--bg);
+    padding: 1rem;
     border-radius: 1.5rem;
     box-shadow: 0 4px 12px rgba(0,0,0,0.03);
     border: 1px solid var(--border);
@@ -136,7 +136,7 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
 }
 .item-price {
     font-weight: 700;
-    color: #0f172a;
+    color: var(--text);
 }
 
 /* Install Toggle */
@@ -146,14 +146,14 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
     gap: 0.5rem;
     cursor: pointer;
     font-size: 0.9rem;
-    color: #64748b;
+    color: var(--primary);
     user-select: none;
     margin-top: 0.25rem;
 }
 .checkbox {
     width: 20px;
     height: 20px;
-    border: 2px solid #cbd5e1;
+    border: 2px solid var(--border);
     border-radius: 4px;
     display: flex;
     align-items: center;

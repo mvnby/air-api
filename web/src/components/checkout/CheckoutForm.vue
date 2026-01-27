@@ -131,12 +131,12 @@ const onPhoneInput = (e) => {
 
 <template>
 <div class="checkout-container">
-    <div v-if="items.length === 0" class="empty-msg">
+    <div v-if="items.length === 0" key="empty" class="empty-msg"> 
         <h2>Корзина пуста</h2>
         <a href="/catalog">В каталог</a>
     </div>
 
-    <div v-else class="checkout-layout-grid-v2">
+    <div v-if="items.length > 0" key="form" class="checkout-layout-grid-v2">
         <!-- Form -->
         <div class="form-section card">
             <h2>Оформление заказа</h2>
