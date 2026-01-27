@@ -73,6 +73,92 @@ git pull origin main
 docker compose up -d --build
 ```
 
+> [!CAUTION]
+> If there were **database schema changes** (new columns, tables), you MUST run migrations BEFORE restarting. See Section 5.5.
+
+## 5.5 Database Migrations (Alembic)
+
+We use **Alembic** for database schema versioning. This ensures that schema changes are applied consistently across all environments.
+
+### When to Use Migrations
+
+| Scenario | Action |
+|----------|--------|
+| Added new column to a model | Create migration |
+| Renamed/deleted column | Create migration |
+| Changed column type | Create migration |
+| Just changed Python code (no DB) | No migration needed |
+
+### Local Development Workflow
+
+**Step 1: Make changes to `models.py`**
+
+**Step 2: Auto-generate migration**
+```bash
+# Inside the container (or locally if you have Python env)
+docker compose exec app alembic revision --autogenerate -m "add installation columns"
+```
+This creates a new file in `alembic/versions/` with the detected changes.
+
+**Step 3: Review the generated migration**
+Open the new file and verify the `upgrade()` and `downgrade()` functions are correct.
+
+**Step 4: Apply migration locally**
+```bash
+docker compose exec app alembic upgrade head
+```
+
+**Step 5: Commit migration file to git**
+```bash
+git add alembic/versions/
+git commit -m "migration: add installation columns"
+```
+
+### Production Deployment Workflow
+
+**Step 1: Deploy code to server**
+```bash
+git pull origin main
+```
+
+**Step 2: Run migrations BEFORE restarting the app**
+```bash
+docker compose exec app alembic upgrade head
+```
+
+**Step 3: Restart the application**
+```bash
+docker compose up -d --build
+```
+
+### Useful Alembic Commands
+
+```bash
+# Check current migration version
+docker compose exec app alembic current
+
+# Show migration history
+docker compose exec app alembic history
+
+# Downgrade one step (rollback)
+docker compose exec app alembic downgrade -1
+
+# Generate empty migration (for manual SQL)
+docker compose exec app alembic revision -m "manual changes"
+```
+
+### Emergency: Manual Schema Fix (Without Migration)
+
+If you need to quickly fix a missing column on production without a migration file:
+
+```bash
+# Connect to DB and add column manually
+ssh mvn-api "cd /opt/air-api && docker compose exec db psql -U mvnadmin -d air_conditioners -c 'ALTER TABLE tablename ADD COLUMN colname TYPE DEFAULT value;'"
+```
+
+> [!WARNING]
+> Manual fixes are a **temporary solution**. Always create a proper migration afterwards to keep the schema in sync.
+
 ## 6. Backups and Recovery
 
 ### Automated Backups
