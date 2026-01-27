@@ -10,6 +10,22 @@ from thefuzz import process
 from crud.product import ProductDAO
 from models import Product
 
+# Транслитерация RU → EN для поиска
+TRANSLIT_MAP = {
+    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
+    'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
+    'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+    'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch',
+    'ы': 'y', 'э': 'e', 'ю': 'yu', 'я': 'ya', 'ь': '', 'ъ': ''
+}
+
+def transliterate(text: str) -> str:
+    """Транслитерирует русский текст в латиницу."""
+    result = []
+    for char in text.lower():
+        result.append(TRANSLIT_MAP.get(char, char))
+    return ''.join(result)
+
 
 class ProductService:
     """
@@ -25,11 +41,11 @@ class ProductService:
         limit: int = 10
     ) -> List[Dict[str, Any]]:
         """
-        Search products with fuzzy text matching.
+        Search products with fuzzy text matching and transliteration support.
         
         Args:
             session: Database session.
-            query: Search text (fuzzy matched against title).
+            query: Search text (fuzzy matched against title, supports RU→EN transliteration).
             is_inverter: Filter by inverter type.
             limit: Maximum results.
         
@@ -45,11 +61,23 @@ class ProductService:
         
         # Apply fuzzy search if query provided
         if query:
-            choices = {p.id: p.title for p in products}
-            matches = process.extract(query, choices, limit=limit)
+            # Case-insensitive: lowercase все для сравнения
+            query_lower = query.lower()
+            choices = {p.id: p.title.lower() for p in products}
             
-            # Filter by match score >= 50%
-            matched_ids = [m[2] for m in matches if m[1] >= 50]
+            # Пробуем оригинальный запрос
+            matches = process.extract(query_lower, choices, limit=limit)
+            matched_ids = [m[2] for m in matches if m[1] >= 60]  # Порог 60%
+            
+            # Если мало результатов — пробуем транслитерацию
+            if len(matched_ids) < 2:
+                translit_query = transliterate(query)
+                if translit_query != query_lower:
+                    translit_matches = process.extract(translit_query, choices, limit=limit)
+                    for m in translit_matches:
+                        if m[1] >= 60 and m[2] not in matched_ids:
+                            matched_ids.append(m[2])
+            
             id_map = {p.id: p for p in products}
             products = [id_map[pid] for pid in matched_ids if pid in id_map]
         
@@ -60,27 +88,34 @@ class ProductService:
         session: AsyncSession,
         area: int,
         is_inverter: bool,
-        limit: int = 2
+        tag_slugs: Optional[List[str]] = None,
+        limit: int = 5
     ) -> List[Dict[str, Any]]:
         """
-        Get curated product recommendations based on area and type.
+        Get curated product recommendations based on area, type, and optional tags.
         
         Args:
             session: Database session.
             area: Minimum area coverage needed.
             is_inverter: Whether to filter for inverter models.
-            limit: Number of recommendations.
+            tag_slugs: Optional list of tag slugs to filter by (e.g., ['winter-20', 'wifi-builtin']).
+            limit: Number of recommendations (default 5).
         
         Returns:
             List of product dictionaries (sorted by area, then price).
         """
+        # Resolve tag slugs to grouped IDs for faceted filtering
+        faceted_tag_ids = None
+        if tag_slugs:
+            faceted_tag_ids = await ProductService.resolve_slugs_to_grouped_ids(session, tag_slugs)
+        
         products = await ProductDAO.get_filtered(
             session,
             area_min=area,
             is_inverter=is_inverter,
             is_published=True,
-            order_by_area=True,
-            order_by_price=True,
+            faceted_tag_ids=faceted_tag_ids,
+            sort="area_asc",  # Сортировка по площади, затем по цене
             limit=limit
         )
         

@@ -73,7 +73,12 @@ class CartService:
         
         # ВАЖНОЕ ИСПРАВЛЕНИЕ:
         # Принудительно обновляем заказ и подгружаем связи, чтобы total_amount посчитался верно
+        # И чтобы product_links.product были доступны для уведомлений
         await session.refresh(order, ["product_links", "service_links"])
+        
+        # Подгружаем product для каждого product_link (для telegram уведомлений)
+        for link in order.product_links:
+            await session.refresh(link, ["product"])
         
         # Очищаем корзину
         await CartService.clear_cart(session, user_id)

@@ -4,11 +4,13 @@ from aiogram.fsm.context import FSMContext
 from core.config import settings
 from core.database import async_session_maker
 from services.product_service import ProductService
-from ..keyboards import area_selection_kb, type_selection_kb
+from ..keyboards import area_selection_kb, type_selection_kb, winter_selection_kb, wifi_selection_kb
 from ..utils import send_product_card
 from ..states import ShopState
 
 router = Router()
+
+# ==================== УМНЫЙ ПОДБОР ====================
 
 @router.message(F.text == "🏆 Умный подбор")
 async def start_selection(message: types.Message, state: FSMContext):
@@ -36,41 +38,98 @@ async def process_area(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(ShopState.select_type, F.data.startswith("select_type_"))
 async def process_type(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    area = data.get("area")
     is_inverter = callback.data == "select_type_inverter"
+    await state.update_data(is_inverter=is_inverter)
+    await state.set_state(ShopState.select_winter)
     
     type_text = "Премиум (Инвертор)" if is_inverter else "Оптимальный (Стандарт)"
-    await callback.message.edit_text(f"Ищем лучшие модели {type_text} для площади {area} м²...")
+    await callback.message.edit_text(
+        f"Выбран тип: {type_text}.\n\n"
+        "❄️ Нужен ли обогрев зимой?\n"
+        "Если да — выберите минимальную температуру работы:",
+        reply_markup=winter_selection_kb
+    )
+    await callback.answer()
+
+@router.callback_query(ShopState.select_winter, F.data.startswith("select_winter_"))
+async def process_winter(callback: CallbackQuery, state: FSMContext):
+    winter_val = callback.data.replace("select_winter_", "")
+    # winter_val будет "none" или "winter-15", "winter-20", etc.
+    winter_tag = None if winter_val == "none" else winter_val
+    await state.update_data(winter_tag=winter_tag)
+    await state.set_state(ShopState.select_wifi)
     
-    # Use new Service Layer with session
+    winter_text = "Не важно" if winter_val == "none" else f"До {winter_val.replace('winter', '')}°C"
+    await callback.message.edit_text(
+        f"Обогрев зимой: {winter_text}.\n\n"
+        "📶 Нужен ли Wi-Fi модуль для управления со смартфона?",
+        reply_markup=wifi_selection_kb
+    )
+    await callback.answer()
+
+@router.callback_query(ShopState.select_wifi, F.data.startswith("select_wifi_"))
+async def process_wifi_and_show_results(callback: CallbackQuery, state: FSMContext):
+    wifi_val = callback.data.replace("select_wifi_", "")
+    wifi_tag = None if wifi_val == "none" else wifi_val
+    
+    # Получаем все данные
+    data = await state.get_data()
+    area = data.get("area")
+    is_inverter = data.get("is_inverter")
+    winter_tag = data.get("winter_tag")
+    
+    # Собираем теги для фильтрации
+    tag_slugs = []
+    if winter_tag:
+        tag_slugs.append(winter_tag)
+    if wifi_tag:
+        tag_slugs.append(wifi_tag)
+    
+    wifi_text = "Не важно" if wifi_val == "none" else ("Встроенный" if "builtin" in wifi_val else "Опция")
+    await callback.message.edit_text(
+        f"Wi-Fi: {wifi_text}.\n\n"
+        f"🔍 Ищем лучшие модели для площади {area} м²..."
+    )
+    
+    # Получаем товары с фильтрацией по тегам
     async with async_session_maker() as session:
-        products = await ProductService.get_curated(session, area, is_inverter)
+        products = await ProductService.get_curated(
+            session, 
+            area=area, 
+            is_inverter=is_inverter,
+            tag_slugs=tag_slugs if tag_slugs else None,
+            limit=5  # Максимум 5 результатов
+        )
     
     is_admin = callback.from_user.id == settings.ADMIN_ID
     
     if not products:
-        await callback.message.answer("К сожалению, по вашим параметрам сейчас ничего не найдено. Попробуйте изменить поиск.")
+        await callback.message.answer(
+            "К сожалению, по вашим параметрам сейчас ничего не найдено. 😔\n"
+            "Попробуйте убрать фильтр по обогреву или Wi-Fi."
+        )
     else:
-        await callback.message.answer(f"🚀 Вот лучшие предложения для вас:")
+        await callback.message.answer(f"🚀 Вот лучшие предложения для вас ({len(products)} шт.):")
         for product in products:
             await send_product_card(callback, product, is_admin)
             
     await state.clear()
     await callback.answer()
 
+# ==================== ПОИСК ====================
+
 @router.message(F.text == "🔎 Поиск")
 async def search_start(message: types.Message, state: FSMContext):
     await state.set_state(ShopState.waiting_for_search)
-    await message.answer("Введите название товара (например, Gree):")
+    await message.answer("Введите название товара (например, Gree или Лофт):")
 
 @router.message(ShopState.waiting_for_search)
 async def search_process(message: types.Message, state: FSMContext):
     query = message.text
     
-    # Use new Service Layer with session
+    # Поиск с транслитерацией
     async with async_session_maker() as session:
-        products = await ProductService.search(session, query=query)
+        products = await ProductService.search(session, query=query, limit=5)
     
     is_admin = message.from_user.id == settings.ADMIN_ID
     
@@ -78,8 +137,7 @@ async def search_process(message: types.Message, state: FSMContext):
         await message.answer(f"Ничего не найдено по запросу '{query}'.")
     else:
         await message.answer(f"🔎 По запросу '{query}' найдено: {len(products)}")
-        for i, product in enumerate(products):
-            if i >= 10: break # Safety limit
+        for product in products:
             await send_product_card(message, product, is_admin)
             
     await state.clear()
