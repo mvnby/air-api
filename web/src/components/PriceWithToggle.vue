@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { getInstallationRates, getGlobalConfig } from '../utils/api';
 import { addItem } from '../store/cart';
+import { addToast } from '../store/toast';
 
 const props = defineProps({
   basePrice: { type: Number, required: true },
@@ -22,6 +23,7 @@ const isInstalled = ref(false);
 const rates = ref([]);
 const discount = ref(0);
 const loading = ref(true);
+const buttonState = ref('default');
 
 onMounted(async () => {
     try {
@@ -144,12 +146,13 @@ const addToCart = () => {
         // We could infer category from tags if needed, or pass it
     });
     
-    // Optional: Visual feedback
-    const btn = document.activeElement;
-    if (btn) {
-        btn.classList.add('success');
-        setTimeout(() => btn.classList.remove('success'), 1000);
-    }
+    // Feedback: Toast + Button State
+    addToast(`Добавлено в корзину: ${props.title}`);
+    
+    buttonState.value = 'success';
+    setTimeout(() => {
+        buttonState.value = 'default';
+    }, 2000);
 }
 </script>
 
@@ -200,9 +203,13 @@ const addToCart = () => {
 
     <!-- Actions (Centered) -->
     <div class="actions-container">
-        <button class="btn-action primary" @click.stop="addToCart">
-            <span class="material-icons-round">shopping_cart</span>
-            В корзину
+        <button 
+            class="btn-action primary" 
+            :class="{ success: buttonState === 'success' }"
+            @click.stop="addToCart"
+        >
+            <span class="material-icons-round">{{ buttonState === 'success' ? 'check' : 'shopping_cart' }}</span>
+            {{ buttonState === 'success' ? 'Добавлено' : 'В корзину' }}
         </button>
         <!-- "Buy in 1 click" removed for micro cards, kept for large if requested? 
              User specifically said remove quick order from thumbnails. 
@@ -218,7 +225,7 @@ const addToCart = () => {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1.5rem;
+    gap: .5rem;
     width: 100%;
   }
 
@@ -395,6 +402,12 @@ const addToCart = () => {
       background: var(--primary-dark);
       transform: translateY(-2px);
       box-shadow: 0 6px 20px rgba(var(--primary-rgb), 0.4);
+  }
+
+  .btn-action.primary.success {
+      background: #10b981; /* Emerald 500 */
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+      pointer-events: none;
   }
 
   .btn-action.primary:active {

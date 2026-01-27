@@ -282,6 +282,7 @@ const showLegacyArea = !areaTag && product.area;
     flex-direction: column;
     gap: 0.5rem;
     z-index: 2;
+    max-width: 60%; /* Prevent overlap with right badge */
   }
 
   .p-top-right-badge {
@@ -343,7 +344,7 @@ const showLegacyArea = !areaTag && product.area;
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
-    margin-bottom: 1.5rem;
+    margin-bottom: 0.5rem;
     margin-top: -0.5rem;
   }
 
@@ -361,6 +362,7 @@ const showLegacyArea = !areaTag && product.area;
     flex: 1;
     display: flex;
     flex-direction: column;
+    justify-content: space-between;
   }
   .p-area-info {
     font-size: 0.8rem;
@@ -571,6 +573,7 @@ const showLegacyArea = !areaTag && product.area;
 
 <script>
   import { addItem } from "../store/cart";
+  import { addToast } from "../store/toast";
 
   function initHeroCart() {
     const buttons =
@@ -593,16 +596,20 @@ const showLegacyArea = !areaTag && product.area;
             installationPrice: 0,
           });
 
-          // Visual feedback
+          // Feedback: Toast + Button Morph
+          addToast(`Добавлено в корзину: ${name}`);
+
           const icon = btn.querySelector(".material-icons-round");
           if (icon) {
             const originalIcon = icon.textContent;
             icon.textContent = "check";
             btn.classList.add("success");
+
+            // Revert after 2 seconds
             setTimeout(() => {
               icon.textContent = originalIcon;
               btn.classList.remove("success");
-            }, 1500);
+            }, 2000);
           }
         }
       });

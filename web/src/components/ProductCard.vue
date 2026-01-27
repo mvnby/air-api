@@ -207,9 +207,8 @@ const showLegacyArea = computed(() => !areaTag.value && props.product.area);
   .p-features-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-bottom: 1.5rem;
-    margin-top: -0.5rem;
+    gap: 0.375rem;
+    margin-top: 0.25rem;
   }
 
   .feature-tag {
@@ -232,7 +231,7 @@ const showLegacyArea = computed(() => !areaTag.value && props.product.area);
     padding: 0 1.5rem 1.5rem;
   }
   .p-info {
-    padding: 1.5rem 1.5rem 0.5rem;
+    padding: .75rem 1.5rem 0.5rem;
     flex: 1;
     display: flex;
     flex-direction: column;

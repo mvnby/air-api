@@ -3,6 +3,7 @@ import "../assets/index.css";
 import { getGlobalConfig } from "../utils/api";
 import { SITE_CONFIG } from "../config";
 import HeaderCart from "../components/cart/HeaderCart.vue";
+import ToastContainer from "../components/ui/ToastContainer.vue";
 
 interface Props {
 	title: string;
@@ -113,6 +114,7 @@ const address = config["address"] || SITE_CONFIG.address;
 
 		<main class="flex-grow">
 			<slot />
+			<ToastContainer client:idle />
 		</main>
 
 		<footer class="footer">

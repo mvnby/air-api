@@ -92,7 +92,13 @@ We have successfully transitioned to a **Headless Commerce** architecture. The *
   * **Flexible DB Schema**: Migrated `service_id` to be nullable in `OrderServiceLink`, allowing for custom services not bound to the `services` table.
   * **Automated Logic**: Implemented detailed auto-generation of installation titles during checkout (e.g., "Стандартный монтаж кондиционера мощностью 3.5 кВт...").
   * **Admin UI Cleanup**: Removed confusing/redundant installation checkboxes from the products table; everything is now unified under the "Services" section with editable titles.
-  * **Contract Ready**: Updated document engine (Contracts, Acts, Invoices) to prioritize snapshot titles for 100% accuracy in generated files.
+  *   **Contract Ready**: Updated document engine (Contracts, Acts, Invoices) to prioritize snapshot titles for 100% accuracy in generated files.
+  
+* **Phase 38**: **Cart Redesign & UX Polish**.
+  * **Layout Standardization**: Unified Cart and Checkout pages with a reliable side-by-side grid layout (sticky summary sidebar) for desktop, stacking correctly on mobile.
+  * **Dark Mode Logic**: Fixed styling issues in Vue components (`CartPage`, `CheckoutForm`) using CSS variables for robust theme support.
+  * **Interactive Feedback**: Implemented "Morphing Buttons" (Add -> Check) and global Toast notifications for clear user confirmation.
+  * **Bug Fixes**: Resolved critical Vue hydration issues (nesting bugs) using explicit keys and fixed catalog badge overlaps.
 
 
 ## **The Rules (Don't Break These) 🚨**

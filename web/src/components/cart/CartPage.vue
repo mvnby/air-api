@@ -103,7 +103,7 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
     grid-template-columns: 100px 1fr auto auto;
     gap: 2rem;
     align-items: center;
-    background: var(--bg);
+    background: var(--surface);
     padding: 1rem;
     border-radius: 1.5rem;
     box-shadow: 0 4px 12px rgba(0,0,0,0.03);
@@ -183,7 +183,7 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    background: #f1f5f9;
+    background: var(--bg);
     padding: 4px;
     border-radius: 8px;
 }
@@ -194,11 +194,11 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
     align-items: center;
     justify-content: center;
     border: none;
-    background: white;
+    background: var(--surface);
     border-radius: 6px;
     cursor: pointer;
     font-weight: 600;
-    color: #334155;
+    color: var(--text);
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 .qty-btn:hover {
@@ -226,14 +226,14 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
 .item-total {
     font-weight: 700;
     font-size: 1.1rem;
-    color: #0f172a;
+    color: var(--text);
     min-width: 100px;
     text-align: right;
 }
 
 /* Summary */
 .cart-summary {
-    background: white;
+    background: var(--surface);
     padding: 2rem;
     border-radius: 2rem;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
@@ -246,18 +246,18 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
     font-size: 1.25rem;
     font-weight: 700;
     margin-bottom: 1.5rem;
-    color: #0f172a;
+    color: var(--text);
 }
 .summary-row {
     display: flex;
     justify-content: space-between;
     margin-bottom: 1rem;
     font-size: 0.95rem;
-    color: #64748b;
+    color: var(--text-muted);
 }
 .summary-divider {
     height: 1px;
-    background: #e2e8f0;
+    background: var(--border);
     margin: 1.5rem 0;
 }
 .summary-total {
@@ -266,7 +266,7 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
     align-items: center;
     font-size: 1.25rem;
     font-weight: 800;
-    color: #0f172a;
+    color: var(--text);
     margin-bottom: 1.5rem;
 }
 .checkout-btn {

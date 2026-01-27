@@ -240,7 +240,7 @@ const onPhoneInput = (e) => {
 /* Layout logic moved to Astro pages for global scope */
 
 .card {
-    background: white;
+    background: var(--surface);
     padding: 2.5rem;
     border-radius: 2rem;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
@@ -251,7 +251,7 @@ h2 {
     font-size: 1.5rem;
     font-weight: 700;
     margin-bottom: 2rem;
-    color: #0f172a;
+    color: var(--text);
 }
 
 .form-group {
@@ -263,7 +263,7 @@ h2 {
 label {
     font-weight: 600;
     font-size: 0.95rem;
-    color: #334155;
+    color: var(--text-muted);
 }
 .req { color: #ef4444; }
 
@@ -271,10 +271,12 @@ input, textarea {
     width: 100%;
     padding: 0.8rem 1rem;
     border-radius: 0.75rem;
-    border: 1px solid #cbd5e1;
+    border: 1px solid var(--border);
     font-size: 1rem;
     transition: border-color 0.2s, box-shadow 0.2s;
     font-family: inherit;
+    background: var(--bg);
+    color: var(--text);
 }
 input:focus, textarea:focus {
     outline: none;
@@ -303,16 +305,16 @@ input.invalid {
     line-height: 1.4;
 }
 .mini-item .name {
-    color: #334155;
+    color: var(--text-muted);
     padding-right: 1rem;
 }
 .mini-item .qty {
-    color: #94a3b8;
+    color: var(--text-muted);
     font-weight: 600;
 }
 .mini-item .price {
     font-weight: 600;
-    color: #0f172a;
+    color: var(--text);
     white-space: nowrap;
 }
 
@@ -327,7 +329,7 @@ input.invalid {
     align-items: center;
     font-size: 1.25rem;
     font-weight: 800;
-    color: #0f172a;
+    color: var(--text);
     margin-bottom: 2rem;
 }
 
@@ -360,10 +362,6 @@ input.invalid {
 .sticky-sidebar {
     position: sticky;
     top: 2rem;
-}
-
-.summary-card {
-    border-color: var(--primary-bg);
 }
 
 .mobile-action {
