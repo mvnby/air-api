@@ -87,14 +87,15 @@ export function updateQuantity(id: string, withInstallation: boolean, quantity: 
     cartItems.set(updated);
 }
 
-export function updateInstallationDetails(id: string, withInstallation: boolean, details: { meters?: number, price?: number }) {
+export function updateInstallationDetails(id: string, withInstallation: boolean, details: { meters?: number, price?: number, options?: string[] }) {
     const current = cartItems.get();
     const updated = current.map(item => {
         if (item.id === id && item.withInstallation === withInstallation) {
             return {
                 ...item,
                 installationMeters: details.meters ?? item.installationMeters,
-                installationPrice: details.price ?? item.installationPrice
+                installationPrice: details.price ?? item.installationPrice,
+                installationOptions: details.options ?? item.installationOptions ?? []
             };
         }
         return item;

@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from crud.order import OrderDAO
-from models import Order, OrderProductLink, OrderServiceLink, Customer, CustomerType, OrderStatus, Product, LeadSource
+from crud.product import ProductDAO
+from models import Order, OrderProductLink, OrderServiceLink, Customer, CustomerType, OrderStatus, Product, LeadSource, Service
 
 logger = logging.getLogger(__name__)
 
@@ -124,8 +125,12 @@ class OrderService:
         for item in items:
             product_id = item.get("product_id")
             product = None
+
+
+# ...
+
             if product_id:
-                product = await session.get(Product, product_id)
+                product = await ProductDAO.get_by_id(session, product_id)
 
             if product:
                 # Extract installation fields (Phase: Snapshot Pricing Refactor)
@@ -152,6 +157,165 @@ class OrderService:
                 # If installation requested, add to total
                 if with_installation and installation_price > 0:
                     total_amount += installation_price * item["quantity"]
+                    
+                    # --- NEW LOGIC: Explicitly create OrderServiceLink for Main Installation ---
+                    # Construct title based on meta
+                    meta = item.get("installation_meta", {})
+                    meters = meta.get("meters", 3)
+                    
+                    
+                    # Robust Title Generation using Product Attributes + Mappings
+                    # User requested format: "Монтаж кондиционера {type}, мощностью {power}, включая межблочную трассу {meters} м"
+                    
+                    # 1. Determine Type
+                    # Mappings: Wall -> настенного типа, Cassette -> кассетного типа, etc.
+                    # We check: product tags, meta type, or fallback to Wall.
+                    type_str = "настенного типа" # Default
+                    
+                    # Try to find type in tags if product exists
+                    product_tags_titles = [t.title.lower() for t in product.tags] if product and product.tags else []
+                    product_tags_slugs = [t.slug.lower() for t in product.tags] if product and product.tags else []
+                    
+                    # Map of tag/meta keywords to Russian text
+                    TYPE_MAPPINGS = {
+                        'wall': 'настенного типа', 
+                        'настенный': 'настенного типа',
+                        'cassette': 'кассетного типа', 
+                        'кассетный': 'кассетного типа',
+                        'ceiling': 'потолочного типа', 
+                        'напольно-потолочный': 'потолочного типа',
+                        'duct': 'канального типа', 
+                        'канальный': 'канального типа',
+                        'multisplit': 'мульти-сплит системы',
+                        'multi': 'мульти-сплит системы'
+                    }
+                    
+                    # Check tags first (more reliable than meta usually)
+                    found_type = False
+                    for key, val in TYPE_MAPPINGS.items():
+                        if key in product_tags_slugs or key in product_tags_titles:
+                            type_str = val
+                            found_type = True
+                            break
+                    
+                    # If not found in tags, check meta (fallback)
+                    if not found_type and type_raw and type_raw != "General":
+                        lower_raw = type_raw.lower()
+                        if lower_raw in TYPE_MAPPINGS:
+                            type_str = TYPE_MAPPINGS[lower_raw]
+                        else:
+                             # Direct translation check for common English terms
+                             if 'wall' in lower_raw: type_str = 'настенного типа'
+                             elif 'cassette' in lower_raw: type_str = 'кассетного типа'
+                             elif 'ceiling' in lower_raw: type_str = 'потолочного типа'
+                             elif 'duct' in lower_raw: type_str = 'канального типа'
+                             elif 'multi' in lower_raw: type_str = 'мульти-сплит системы'
+
+                    # 2. Determine Power Range
+                    # Mappings: 
+                    # area-20..35 -> до 4 кВт
+                    # area-50..70 -> до 7 кВт
+                    # area-80+ -> выше 7 кВт
+                    power_str = ""
+                    
+                    # Use product area if available
+                    if product and product.area:
+                        area = product.area
+                        if area <= 35:
+                            power_str = "до 4 кВт"
+                        elif area <= 70:
+                            power_str = "до 7 кВт"
+                        else:
+                            power_str = "выше 7 кВт"
+                    elif power_raw:
+                        # Fallback to meta string parsing if product area missing
+                        # power_raw ex: "area-25", "07-12", "Standard"
+                        if "20" in power_raw or "25" in power_raw or "35" in power_raw or "07" in power_raw or "09" in power_raw or "12" in power_raw:
+                             power_str = "до 4 кВт"
+                        elif "50" in power_raw or "70" in power_raw or "18" in power_raw or "24" in power_raw:
+                             power_str = "до 7 кВт"
+                        elif "80" in power_raw or "100" in power_raw or "30" in power_raw or "36" in power_raw:
+                             power_str = "выше 7 кВт"
+                        # Handle specific text map from old logic if needed, but above covers most numeric codes
+
+                    # Construct Title
+                    main_inst_title = f"Монтаж кондиционера {type_str}"
+                    if power_str:
+                        main_inst_title += f", мощностью {power_str}"
+                    
+                    main_inst_title += f", включая межблочную трассу {meters} м"
+
+
+                    # Add MAIN installation as a service link
+                    installation_services.append({
+                        "title": main_inst_title,
+                        "price": installation_price, # This is the calculated total for main install (base + meters)
+                        "quantity": item["quantity"]
+                    })
+                    
+                    # --- NEW LOGIC: Process Add-ons ---
+                    options_slugs = item.get("installation_options", [])
+                    if options_slugs:
+                        # Fetch services by slug to get titles/prices (security check)
+                        # Note: The price in payload "installation_price" usually includes options if calculated on frontend.
+                        # However, for accurate breakdown, we should ideally sum them up or use the frontend provided breakdown if available.
+                        # Current cart.ts logic: "installationPrice" holds the SUM of base + meters + options.
+                        # PROBLEM: If we add "installation_price" above (line 154) AND add separate service links with prices, we double count?
+                        # NO, "total_amount" is calculated on line 154.
+                        # The "installation_services" list is used to create LINKS.
+                        # The LINKS (OrderServiceLink) have a price.
+                        # When calculate_totals() runs on the order later, it might sum up ServiceLinks + ProductLinks.
+                        # Let's check calculate_totals in Order model... (I can't see it now, but assumingly it sums everything).
+                        # BUT, line 143: link (ProductLink) has "installation_price".
+                        # If we ALSO create ServiceLink, we double-charge.
+                        
+                        # ACTION: 
+                        # 1. ProductLink should probably NOT store the full installation price if we are breaking it out into services.
+                        # OR 
+                        # 2. ProductLink stores it for "Product + Install" line item reference, but ServiceLinks are "extra"?
+                        # The user wants them in "Services".
+                        # Safest bet: Set ProductLink.installation_price to 0 or keeping it as "snapshot" but ensuring total calculation doesn't double dip.
+                        # Actually, looking at line 149-154: `total_amount` is manually accumulated here.
+                        # And `Order.total_amount` is set on line 247.
+                        # So `calculate_totals` is NOT called here.
+                        # So we are free to define links as we want for display.
+                        
+                        # RE-CALCULATION STRATEGY:
+                        # 1. Main Install Price = Total Install Price (from payload) - Sum(Options Prices).
+                        #    We need to fetch options to know their prices.
+                        
+                        from services.image_service import ImageService # Just in case, or use DAO
+                        stmt_opts = select(Service).where(Service.slug.in_(options_slugs))
+                        res_opts = await session.execute(stmt_opts)
+                        db_options = res_opts.scalars().all()
+                        
+                        options_total_cost = 0
+                        for opt in db_options:
+                            options_total_cost += opt.base_price
+                            # Add option as service link
+                            installation_services.append({
+                                "title": f"Доп. услуга: {opt.title}",
+                                "price": opt.base_price,
+                                "quantity": item["quantity"],
+                                "service_id": opt.id # Link to actual service
+                            })
+                            
+                        # Adjust Main Install Price in the Service Link to exclude options cost 
+                        # so that Sum(Services) = Original Total Install Price
+                        # (This assumes frontend passed the correct total).
+                        
+                        # Wait, the `installation_price` from payload is the Grand Total of valid install?
+                        # Yes.
+                        # So Main Link Price = PayloadPrice - OptionsCost.
+                        
+                        # Update the last added service (Main Install)
+                        if installation_services:
+                            # The main install is the one before options (index -1 - len(options))
+                            # Actually we just added it.
+                            main_svc_idx = len(installation_services) - 1 - len(db_options)
+                            if main_svc_idx >= 0:
+                                installation_services[main_svc_idx]["price"] -= options_total_cost
+                    
                 
                 # Log details
                 item_desc = f"{product.title} x{item['quantity']}"
@@ -160,18 +324,18 @@ class OrderService:
                 added_items.append(item_desc)
 
             elif product_id is None and item.get("with_installation"):
-                # SERVICE-ONLY ORDER (Installation without product)
-                # Refactored: save as OrderServiceLink (not ProductLink) for correct admin display
+                # SERVICE-ONLY ORDER (Legacy/Calculator)
+                # ... existing logic for service-only ...
                 
                 installation_price = int(item.get("installation_price", 0))
                 meta = item.get("installation_meta", {})
                 
+                # ... (Same mapping logic as above) ...
                 # Construct detailed title with friendly formatting
                 type_raw = meta.get("type", "General")
                 meters = meta.get("meters", 3)
                 power_raw = meta.get("power_range", "")
                 
-                # Mappings
                 TYPE_MAP = {
                     'Wall': 'настенного типа',
                     'Настенный': 'настенного типа',
@@ -199,14 +363,10 @@ class OrderService:
                 
                 service_title = f"Монтаж кондиционера {type_str}"
                 
-                # Handle power with custom logic if not in map but looks like standard range
                 if power_str and power_str != "Standard":
-                    # If it's the raw value and not mapped, try to match by inclusion
                     if power_raw in POWER_MAP: 
-                         # ALready mapped
                          service_title += f", мощностью {power_str}"
                     else:
-                         # Fallback/Partial match check
                          found_power = False
                          for k, v in POWER_MAP.items():
                              if k in power_raw:
@@ -214,7 +374,6 @@ class OrderService:
                                  found_power = True
                                  break
                          if not found_power:
-                             # Display raw if unknown format
                              service_title += f", мощностью {power_raw}"
 
                 service_title += f", включая межблочную трассу {meters} м"
@@ -236,7 +395,7 @@ class OrderService:
         for inst_svc in installation_services:
             service_link = OrderServiceLink(
                 order_id=order.id,
-                service_id=None,  # Custom service, no reference to service table
+                service_id=inst_svc.get("service_id"), # Now supported
                 title=inst_svc["title"],
                 price=inst_svc["price"],
                 quantity=inst_svc["quantity"]

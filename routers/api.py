@@ -449,8 +449,26 @@ async def get_article(slug: str, session: AsyncSession = Depends(get_session)):
 
 @router.get("/v1/content/services", response_model=List[ServiceResponse])
 async def get_services(session: AsyncSession = Depends(get_session)):
-    """Get list of all available services."""
-    stmt = select(Service).order_by(Service.id)
+    """Get list of all available services (Legacy, redirects to valid logic)."""
+    # Maintain partial backward compatibility or update to filtered
+    stmt = select(Service).where(Service.is_active == True).order_by(Service.id)
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+@router.get("/v1/services/options", response_model=List[ServiceResponse])
+async def get_service_options(
+    category: str = "installation_option",
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Get rich installation options.
+    """
+    stmt = (
+        select(Service)
+        .where(Service.is_active == True)
+        .where(Service.category == category)
+        .order_by(Service.base_price) 
+    )
     result = await session.execute(stmt)
     return result.scalars().all()
 
@@ -486,7 +504,8 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
         "quantity": item.quantity,
         "with_installation": item.with_installation,
         "installation_price": item.installation_price,
-        "installation_meta": item.installation_meta
+        "installation_meta": item.installation_meta,
+        "installation_options": item.installation_options
     } for item in payload.items]
     
     # Delegate to OrderService with SITE lead source

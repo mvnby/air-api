@@ -107,6 +107,14 @@ We have successfully transitioned to a **Headless Commerce** architecture. The *
   * **Calculator UX**: Added "Order Service" modal to the Installation Calculator, allowing direct lead generation from the tools page.
   * **Notification Upgrade**: Updated Telegram Admin alerts to support and clearly display standalone service orders.
 
+* **Phase 40**: **Rich Installation Options & Robust Orders (DATA INTEGRITY)**.
+  * **Rich Services**: Repurposed `services` table to store installation add-ons with detailed metadata (Image, Description, Slug).
+  * **Admin UI**: Updated `ServiceAdmin` to support image uploads and rich text fields for add-ons.
+  * **Frontend Integration**: Updated Cart to fetch and display rich installation options dynamically.
+  * **Order Logic**: Rewrote `create_from_website` to split "Installation" into distinct `OrderServiceLink` items (Main Installation + Individual Add-ons).
+  * **Title Formatting**: Implemented robust Russian title generation for installation services (e.g., "Монтаж кондиционера настенного типа, мощностью до 4 кВт...").
+  * **Bug Fixes**: Solved backend crash (Lazy Loading recursion), CORS issues, and fixed a critical bug where installation discounts were lost during option updates.
+
 
 ## **The Rules (Don't Break These) 🚨**
 

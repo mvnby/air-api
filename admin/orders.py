@@ -8,18 +8,121 @@ from wtforms import SelectField
 from models import Order, Service, OrderProductLink, OrderServiceLink, Customer, OrderInstaller, OrderStatus, Product, LeadSource
 from core.database import async_session_maker
 from sqlmodel import select
-from wtforms import TextAreaField
+from wtforms import SelectField, TextAreaField, FileField
 
 class ServiceAdmin(ModelView, model=Service):
     name = "Услуга"
     name_plural = "Услуги"
     icon = "fa-solid fa-hand-holding-heart"
-    column_list = [Service.id, Service.title, Service.base_price]
+    
+    column_list = [
+        Service.id, 
+        Service.category,
+        Service.title, 
+        Service.slug,
+        "formatted_image",
+        Service.base_price,
+        Service.is_active
+    ]
+    
     column_labels = {
         "id": "ID",
         "title": "Название",
-        "base_price": "Базовая цена (руб.)"
+        "slug": "Slug",
+        "category": "Категория",
+        "base_price": "Цена (руб.)",
+        "formatted_image": "Фото",
+        "is_active": "Активен",
+        "description": "Описание"
     }
+    
+    form_columns = [
+        "title",
+        "slug",
+        "category",
+        "base_price",
+        "is_active",
+        "description",
+        "image"
+    ]
+    
+    form_overrides = {
+        "description": TextAreaField
+    }
+    
+    form_extra_fields = {
+        "image_file": FileField("Загрузить фото")
+    }
+    
+    # Custom formatters
+    def format_image(model, context):
+        if model.image:
+            url = model.image if model.image.startswith("/") else f"/{model.image}"
+            return Markup(f'<img src="{url}" style="height: 50px; border-radius: 5px;">')
+        return ""
+        
+    column_formatters = {
+        "formatted_image": format_image
+    }
+    
+    async def scaffold_form(self, *args, **kwargs):
+        form_class = await super().scaffold_form(*args, **kwargs)
+        form_class.image_file = self.form_extra_fields["image_file"]
+        return form_class
+        
+    async def on_model_change(self, data, model, is_created, request):
+        from services.image_service import ImageService
+        import slugify
+        
+        form = await request.form()
+        upload = form.get("image_file")
+        
+        # Remove file field from data
+        if "image_file" in data:
+            del data["image_file"]
+            
+        # Generare slug if missing
+        if not data.get("slug") and data.get("title"):
+             data["slug"] = slugify.slugify(data["title"])
+             
+        # Handle upload
+        if upload and hasattr(upload, "filename") and upload.filename:
+             file_bytes = await upload.read()
+             
+             # Need to save model first to get ID for new objects? 
+             # Service doesn't rely on ID for image path necessarily, generally uses slug.
+             # let's follow ProductAdmin pattern: for new, save first.
+             
+             if is_created:
+                 await super().on_model_change(data, model, is_created, request)
+                 # Now upload
+                 async with async_session_maker() as session:
+                     slug_val = data.get("slug") or "service_temp"
+                     db_path = await ImageService.save_image(
+                         file_bytes=file_bytes,
+                         entity_type="services",
+                         slug=slug_val,
+                         filename=upload.filename
+                     )
+                     # Update without recursion
+                     # We need to manually update using session because on_model_change is done
+                     model.image = ImageService.get_web_path(db_path)
+                     session.add(model)
+                     await session.commit()
+             else:
+                 # Existing
+                 async with async_session_maker() as session:
+                     slug_val = data.get("slug") or model.slug or "service"
+                     db_path = await ImageService.save_image(
+                         file_bytes=file_bytes,
+                         entity_type="services",
+                         slug=slug_val,
+                         filename=upload.filename
+                     )
+                     data["image"] = ImageService.get_web_path(db_path)
+                 await super().on_model_change(data, model, is_created, request)
+        else:
+             await super().on_model_change(data, model, is_created, request)
 
 class OrderProductLinkAdmin(ModelView, model=OrderProductLink):
     def is_visible(self, request): return False

@@ -75,7 +75,8 @@ const submitOrder = async () => {
                     base_rate: i.installationPrice ? i.installationPrice + 100 : 0,  // Assuming 100 BYN discount
                     meters: i.installationMeters || 3,
                     options: i.installationOptions || []
-                } : null
+                } : null,
+                installation_options: i.installationOptions || []
             };
         }));
 
