@@ -22,8 +22,28 @@ area_selection_kb = InlineKeyboardMarkup(
 
 type_selection_kb = InlineKeyboardMarkup(
     inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Оптимальный (Стандарт)", callback_data="select_type_off")],
+        [InlineKeyboardButton(text="✅ Стандарт (ON-OFF)", callback_data="select_type_off")],
         [InlineKeyboardButton(text="💎 Премиум (Инвертор)", callback_data="select_type_inverter")]
+    ]
+)
+
+# Выбор зимнего обогрева
+winter_selection_kb = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Не важно", callback_data="select_winter_none")],
+        [InlineKeyboardButton(text="❄️ До -15°C", callback_data="select_winter_winter-15"),
+         InlineKeyboardButton(text="❄️ До -20°C", callback_data="select_winter_winter-20")],
+        [InlineKeyboardButton(text="🥶 До -25°C", callback_data="select_winter_winter-25"),
+         InlineKeyboardButton(text="🥶 До -30°C", callback_data="select_winter_winter-30")]
+    ]
+)
+
+# Выбор Wi-Fi
+wifi_selection_kb = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Не важно", callback_data="select_wifi_none")],
+        [InlineKeyboardButton(text="📶 Wi-Fi встроенный", callback_data="select_wifi_wifi-builtin")],
+        [InlineKeyboardButton(text="📡 Wi-Fi опция", callback_data="select_wifi_wifi-ready")]
     ]
 )
 

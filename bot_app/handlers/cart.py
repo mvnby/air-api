@@ -73,12 +73,32 @@ async def finish_checkout(message: types.Message, state: FSMContext):
             
             # Уведомление админам
             if settings.admin_list:
-                admin_text = (
-                    f"🔔 <b>НОВЫЙ ЗАКАЗ #{order.id}</b>\n"
-                    f"👤 {user.full_name} (@{user.username})\n"
-                    f"📱 {phone}\n"
-                    f"💰 Сумма: {order.total_amount} руб."
-                )
+                # Build message with order items
+                message_lines = [
+                    f"🔔 <b>НОВЫЙ ЗАКАЗ #{order.id}</b>",
+                    f"👤 {user.full_name} (@{user.username})",
+                    f"📱 {phone}",
+                    "",
+                    "🛒 <b>Товары:</b>"
+                ]
+                
+                # Iterate through product links (relations loaded via selectin)
+                for link in order.product_links:
+                    product_name = link.product.title if link.product else f"Product #{link.product_id}"
+                    line_total = link.price * link.quantity
+                    product_line = f"▫️ {product_name} x{link.quantity} — {line_total} р."
+                    message_lines.append(product_line)
+                    
+                    # Add installation line if included
+                    if link.is_installation_included:
+                        install_price = link.installation_price or 0
+                        install_line = f"   └ 🔧 Монтаж: {install_price} BYN"
+                        message_lines.append(install_line)
+                
+                message_lines.append("")
+                message_lines.append(f"💰 <b>Итого: {order.total_amount} руб.</b>")
+                
+                admin_text = "\n".join(message_lines)
                 for admin_id in settings.admin_list:
                     try:
                         await bot.send_message(admin_id, admin_text, parse_mode="HTML")

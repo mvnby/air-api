@@ -501,6 +501,56 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
         comment=payload.comment
     )
     
+    # Отправляем уведомление админам в Telegram
+    from core.config import settings
+    from services.bot_service import BotService
+    
+    if settings.admin_list:
+        # Подгружаем связи для уведомления
+        await session.refresh(order, ["product_links", "customer"])
+        for link in order.product_links:
+            await session.refresh(link, ["product"])
+        
+        # Формируем сообщение
+        message_lines = [
+            f"🌐 <b>ЗАКАЗ С САЙТА #{order.id}</b>",
+            f"👤 {payload.customer.name}",
+            f"📱 {payload.customer.phone}",
+        ]
+        
+        if payload.customer.email:
+            message_lines.append(f"📧 {payload.customer.email}")
+        if payload.customer.address:
+            message_lines.append(f"📍 {payload.customer.address}")
+        if payload.comment:
+            message_lines.append(f"💬 {payload.comment}")
+            
+        message_lines.append("")
+        message_lines.append("🛒 <b>Товары:</b>")
+        
+        for link in order.product_links:
+            product_name = link.product.title if link.product else f"Product #{link.product_id}"
+            line_total = link.price * link.quantity
+            product_line = f"▫️ {product_name} x{link.quantity} — {line_total} р."
+            message_lines.append(product_line)
+            
+            # Добавляем строку монтажа если включен
+            if link.is_installation_included:
+                install_price = link.installation_price or 0
+                install_line = f"   └ 🔧 Монтаж: {install_price} BYN"
+                message_lines.append(install_line)
+        
+        message_lines.append("")
+        message_lines.append(f"💰 <b>Итого: {order.total_amount} руб.</b>")
+        
+        admin_text = "\n".join(message_lines)
+        
+        for admin_id in settings.admin_list:
+            try:
+                await BotService.send_message(admin_id, admin_text)
+            except Exception as e:
+                logger.warning(f"Failed to notify admin {admin_id}: {e}")
+    
     return OrderResponse(
         id=order.id,
         status=order.status,
