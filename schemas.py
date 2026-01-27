@@ -61,6 +61,10 @@ class ArticleResponse(BaseModel):
 class ServiceResponse(BaseModel):
     id: int
     title: str
+    slug: str
+    category: str
+    is_active: bool
+    image: Optional[str]
     description: Optional[str]
     base_price: int
 
@@ -73,6 +77,7 @@ class CartItemPayload(BaseModel):
     with_installation: bool = False
     installation_price: float = 0.0
     installation_meta: Optional[Dict] = None
+    installation_options: Optional[List[str]] = []
 
 class CustomerPayload(BaseModel):
     name: str

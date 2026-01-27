@@ -265,10 +265,23 @@ class OrderInstaller(SQLModel, table=True):
 class Service(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str = Field(index=True)
+    slug: str = Field(unique=True, index=True)
+    category: str = Field(default="installation_option", index=True)
+    is_active: bool = Field(default=True)
+    image: Optional[str] = None
     description: Optional[str] = None
     base_price: int = Field(default=0)
     
     order_links: List["OrderServiceLink"] = Relationship(back_populates="service")
+
+    # Virtual field for admin file upload
+    @property
+    def image_file(self) -> Any:
+        return getattr(self, "_temp_image_file", None)
+    
+    @image_file.setter
+    def image_file(self, value: Any):
+        self._temp_image_file = value
 
     def __str__(self):
         return f"{self.title} ({self.base_price} руб.)"

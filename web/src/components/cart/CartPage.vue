@@ -1,11 +1,17 @@
 <script setup>
 import { useStore } from '@nanostores/vue';
 import { cartItems, cartTotal, updateQuantity, removeItem, toggleInstallation, updateInstallationDetails } from '../../store/cart';
-import { getInstallationRates } from '../../utils/api';
+import { installationOptions, fetchInstallationOptions } from '../../store/installation';
+// ... imports
+import { getInstallationRates, getGlobalConfig } from '../../utils/api';
+
+// ...
+
 import { onMounted, ref } from 'vue';
 
 const items = useStore(cartItems);
 const total = useStore(cartTotal);
+const options = useStore(installationOptions);
 
 const formatPrice = (p) => p.toLocaleString('ru-RU') + ' р.';
 
@@ -14,29 +20,73 @@ const equipmentTotal = () => items.value.reduce((sum, i) => sum + i.price * i.qu
 const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstallation ? i.installationPrice * i.quantity : 0), 0);
 
 const rates = ref([]);
+const discount = ref(0);
+
 onMounted(async () => {
-    rates.value = await getInstallationRates();
+    const [ratesData, configData] = await Promise.all([
+        getInstallationRates(),
+        getGlobalConfig(),
+        fetchInstallationOptions()
+    ]);
+    rates.value = ratesData;
+    discount.value = parseInt(configData.install_discount || "0", 10);
 });
+
+const calculateInstallationPrice = (meters, optionSlugs) => {
+    // Find generic rate (assume Wall for now as fallback)
+    const rate = rates.value.find(r => r.category === 'Wall') || rates.value[0];
+    let price = 0;
+    
+    if (rate) {
+        const extraMeters = Math.max(0, meters - rate.included_pipe_meters);
+        price = rate.base_price + (extraMeters * rate.extra_pipe_price);
+    }
+    
+    // Add options
+    if (optionSlugs && optionSlugs.length > 0) {
+        const optionsCost = optionSlugs.reduce((sum, slug) => {
+             const opt = options.value.find(o => o.slug === slug);
+             return sum + (opt ? opt.price : 0);
+        }, 0);
+        price += optionsCost;
+    }
+    
+    // Apply discount (Bundle Logic)
+    // We assume items in cart with installation act as bundles
+    // Only apply if base price > discount to avoid negative? Or just do it.
+    // User logic: 600 - 100 = 500.
+    if (discount.value > 0) {
+        price = Math.max(0, price - discount.value);
+    }
+    
+    return price;
+};
 
 const updateMeters = (item, delta) => {
     const newMeters = Math.max(1, (item.installationMeters || 3) + delta);
     if (newMeters === item.installationMeters) return;
     
-    // Find generic rate (assume Wall for now as fallback)
-    const rate = rates.value.find(r => r.category === 'Wall') || rates.value[0];
-    let newPrice = item.installationPrice;
-    
-    if (rate) {
-        const oldMeters = item.installationMeters || 3;
-        const oldExtra = Math.max(0, oldMeters - rate.included_pipe_meters);
-        const newExtra = Math.max(0, newMeters - rate.included_pipe_meters);
-        const diffMeters = newExtra - oldExtra;
-        
-        newPrice = item.installationPrice + (diffMeters * rate.extra_pipe_price);
-    }
+    const newPrice = calculateInstallationPrice(newMeters, item.installationOptions);
     
     updateInstallationDetails(item.id, item.withInstallation, {
         meters: newMeters,
+        price: newPrice
+    });
+};
+
+const toggleOption = (item, opt) => {
+    const currentOptions = item.installationOptions || [];
+    let newOptions;
+    if (currentOptions.includes(opt.slug)) {
+        newOptions = currentOptions.filter(o => o !== opt.slug);
+    } else {
+        newOptions = [...currentOptions, opt.slug];
+    }
+    
+    const newPrice = calculateInstallationPrice(item.installationMeters || 3, newOptions);
+    
+    updateInstallationDetails(item.id, item.withInstallation, {
+        options: newOptions,
         price: newPrice
     });
 };
@@ -75,7 +125,7 @@ const updateMeters = (item, delta) => {
                             <span class="label">Монтаж (+{{ item.installationPrice }} р.)</span>
                         </div>
                         
-                         <!-- Installation Settings -->
+                          <!-- Installation Settings -->
                         <div v-if="item.withInstallation" class="install-settings">
                              <div class="setting-row">
                                 <span class="setting-label">Трасса:</span>
@@ -84,6 +134,25 @@ const updateMeters = (item, delta) => {
                                      <span>{{ item.installationMeters || 3 }}м</span>
                                      <button @click="updateMeters(item, 1)">+</button>
                                 </div>
+                             </div>
+                             
+                             <!-- Add-ons -->
+                             <div v-if="options.length > 0" class="addons-list">
+                                 <div v-for="opt in options" :key="opt.slug" class="addon-row">
+                                     <label class="checkbox-label">
+                                        <input type="checkbox" 
+                                            :checked="item.installationOptions?.includes(opt.slug)" 
+                                            @change="toggleOption(item, opt)"
+                                        />
+                                        <span class="addon-name">{{ opt.name }}</span>
+                                        <span class="addon-price">+{{ opt.price }} р.</span>
+                                        <span v-if="opt.description" class="info-icon" :title="opt.description">i</span>
+                                        <!-- Optional Image Thumbnail -->
+                                        <div v-if="opt.image" class="addon-thumb-hover">
+                                            <img :src="opt.image" class="thumb" />
+                                        </div>
+                                     </label>
+                                 </div>
                              </div>
                         </div>
                     </div>
@@ -398,5 +467,53 @@ const updateMeters = (item, delta) => {
         padding-top: 0.5rem;
         border-top: 1px dashed #e2e8f0;
     }
+}
+/* Add-ons styles */
+.addons-list {
+    margin-top: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.addon-row {
+    font-size: 0.85rem;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    color: var(--text);
+}
+
+.checkbox-label input {
+    accent-color: var(--primary);
+    width: 16px;
+    height: 16px;
+}
+
+.addon-price {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.info-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #e0f2f1;
+    color: #007f80;
+    font-size: 10px;
+    font-weight: bold;
+    cursor: help;
+}
+
+.addon-thumb-hover {
+    display: none; /* Hide for now, can be tooltip */
 }
 </style>
