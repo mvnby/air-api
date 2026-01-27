@@ -67,7 +67,7 @@ class ServiceResponse(BaseModel):
 # --- ORDERS ---
 
 class CartItemPayload(BaseModel):
-    product_id: int
+    product_id: Optional[int] = None
     quantity: int = 1
     # Installation snapshot fields (Phase: Snapshot Pricing Refactor)
     with_installation: bool = False

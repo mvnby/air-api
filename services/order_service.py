@@ -122,7 +122,11 @@ class OrderService:
         installation_services = []  # Collect installation services to add after products
         
         for item in items:
-            product = await session.get(Product, item["product_id"])
+            product_id = item.get("product_id")
+            product = None
+            if product_id:
+                product = await session.get(Product, product_id)
+
             if product:
                 # Extract installation fields (Phase: Snapshot Pricing Refactor)
                 with_installation = item.get("with_installation", False)
@@ -133,7 +137,11 @@ class OrderService:
                     product_id=product.id,
                     quantity=item["quantity"],
                     price=product.price,
-                    cost=0
+                    cost=0,
+                    # Save snapshot for history
+                    is_installation_included=with_installation,
+                    installation_price=installation_price if with_installation else 0,
+                    installation_details=item.get("installation_meta") if with_installation else None
                 )
                 session.add(link)
                 
@@ -141,21 +149,8 @@ class OrderService:
                 product_total = product.price * item["quantity"]
                 total_amount += product_total
                 
-                # If installation requested, prepare service entry
+                # If installation requested, add to total
                 if with_installation and installation_price > 0:
-                    # Generate detailed service title
-                    power_kw = product.power_cooling or 0
-                    power_str = f"{power_kw:.1f}".replace('.0', '') if power_kw else "—"
-                    
-                    service_title = f"Стандартный монтаж бытового кондиционера мощностью {power_str} кВт включая трассу до 3 м"
-                    
-                    installation_services.append({
-                        "title": service_title,
-                        "price": installation_price,
-                        "quantity": item["quantity"]
-                    })
-                    
-                    # Add installation to total
                     total_amount += installation_price * item["quantity"]
                 
                 # Log details
@@ -163,8 +158,79 @@ class OrderService:
                 if with_installation:
                     item_desc += f" + монтаж ({installation_price} р.)"
                 added_items.append(item_desc)
+
+            elif product_id is None and item.get("with_installation"):
+                # SERVICE-ONLY ORDER (Installation without product)
+                # Refactored: save as OrderServiceLink (not ProductLink) for correct admin display
+                
+                installation_price = int(item.get("installation_price", 0))
+                meta = item.get("installation_meta", {})
+                
+                # Construct detailed title with friendly formatting
+                type_raw = meta.get("type", "General")
+                meters = meta.get("meters", 3)
+                power_raw = meta.get("power_range", "")
+                
+                # Mappings
+                TYPE_MAP = {
+                    'Wall': 'настенного типа',
+                    'Настенный': 'настенного типа',
+                    'Cassette': 'кассетного типа',
+                    'Кассетный': 'кассетного типа',
+                    'Ceiling': 'потолочного типа',
+                    'Напольно-потолочный': 'потолочного типа',
+                    'Duct': 'канального типа',
+                    'Канальный': 'канального типа',
+                    'Multisplit': 'мульти-сплит системы',
+                    'Мульти-сплит': 'мульти-сплит системы'
+                }
+                
+                POWER_MAP = {
+                    'area-20, area-25, area-35': 'до 4 кВт',
+                    'area-50, area-70': 'до 7 кВт',
+                    'area-80, area-100': 'выше 7 кВт',
+                    '07-12': 'до 3.5 кВт',
+                    '18-24': 'до 7 кВт',
+                    '30-36': 'выше 7 кВт'
+                }
+                
+                type_str = TYPE_MAP.get(type_raw, type_raw)
+                power_str = POWER_MAP.get(power_raw, power_raw)
+                
+                service_title = f"Монтаж кондиционера {type_str}"
+                
+                # Handle power with custom logic if not in map but looks like standard range
+                if power_str and power_str != "Standard":
+                    # If it's the raw value and not mapped, try to match by inclusion
+                    if power_raw in POWER_MAP: 
+                         # ALready mapped
+                         service_title += f", мощностью {power_str}"
+                    else:
+                         # Fallback/Partial match check
+                         found_power = False
+                         for k, v in POWER_MAP.items():
+                             if k in power_raw:
+                                 service_title += f", мощностью {v}"
+                                 found_power = True
+                                 break
+                         if not found_power:
+                             # Display raw if unknown format
+                             service_title += f", мощностью {power_raw}"
+
+                service_title += f", включая межблочную трассу {meters} м"
+                installation_services.append({
+                    "title": service_title,
+                    "price": installation_price,
+                    "quantity": item["quantity"]
+                })
+                
+                # Add to total
+                total_amount += installation_price * item["quantity"]
+                
+                added_items.append(f"{service_title} x{item['quantity']} ({installation_price} р.)")
+
             else:
-                logger.warning(f"Product {item['product_id']} not found in order creation")
+                logger.warning(f"Product {product_id} not found/invalid in order creation")
         
         # 3b. Add installation services
         for inst_svc in installation_services:

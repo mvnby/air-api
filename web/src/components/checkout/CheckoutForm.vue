@@ -72,7 +72,9 @@ const submitOrder = async () => {
                 installation_meta: i.withInstallation ? {
                     source: "web_calculator",
                     discount_applied: true,
-                    base_rate: i.installationPrice ? i.installationPrice + 100 : 0  // Assuming 100 BYN discount
+                    base_rate: i.installationPrice ? i.installationPrice + 100 : 0,  // Assuming 100 BYN discount
+                    meters: i.installationMeters || 3,
+                    options: i.installationOptions || []
                 } : null
             };
         }));

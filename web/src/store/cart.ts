@@ -10,6 +10,8 @@ export type CartItem = {
     quantity: number;
     withInstallation: boolean; // Toggle state
     installationPrice: number; // Calculated price for installation or 0
+    installationMeters: number; // Default 3
+    installationOptions: string[]; // e.g., ['vibration_stand', 'canopy']
     category?: string; // Helpful for installation matching
 };
 
@@ -26,6 +28,13 @@ export const cartItems = persistentAtom<CartItem[]>('mvn_cart', [], {
 
 export const cartTotal = computed(cartItems, items => {
     return items.reduce((sum, item) => {
+        // Calculate installation price dynamically based on meters/options
+        // Ideally we should recalculate it via a helper, but for now use stored price + meter extras
+        // NOTE: The UI should update installationPrice before calling updateInstallationDetails if logic is there,
+        // OR we put pricing logic here.
+        // Let's assume installationPrice is the BASE for standard + extra meters cost.
+        // But extra meters cost depends on rate.
+        // Simplified: store holds the FINAL calculated installationPrice.
         const itemPrice = item.price + (item.withInstallation ? item.installationPrice : 0);
         return sum + (itemPrice * item.quantity);
     }, 0);
@@ -36,7 +45,7 @@ export const cartCount = computed(cartItems, items => {
 });
 
 // Actions
-export function addItem(item: Omit<CartItem, 'quantity' | 'withInstallation'> & { withInstallation?: boolean }) {
+export function addItem(item: Omit<CartItem, 'quantity' | 'withInstallation' | 'installationMeters' | 'installationOptions'> & { withInstallation?: boolean }) {
     const current = cartItems.get();
     const existingIndex = current.findIndex(i => i.id === item.id && i.withInstallation === !!item.withInstallation);
 
@@ -50,7 +59,10 @@ export function addItem(item: Omit<CartItem, 'quantity' | 'withInstallation'> & 
         cartItems.set([...current, {
             ...item,
             quantity: 1,
-            withInstallation: !!item.withInstallation
+            withInstallation: !!item.withInstallation,
+            installationMeters: 3,
+            installationOptions: [],
+            installationPrice: item.installationPrice || 0
         }]);
     }
 }
@@ -69,6 +81,21 @@ export function updateQuantity(id: string, withInstallation: boolean, quantity: 
     const updated = current.map(item => {
         if (item.id === id && item.withInstallation === withInstallation) {
             return { ...item, quantity };
+        }
+        return item;
+    });
+    cartItems.set(updated);
+}
+
+export function updateInstallationDetails(id: string, withInstallation: boolean, details: { meters?: number, price?: number }) {
+    const current = cartItems.get();
+    const updated = current.map(item => {
+        if (item.id === id && item.withInstallation === withInstallation) {
+            return {
+                ...item,
+                installationMeters: details.meters ?? item.installationMeters,
+                installationPrice: details.price ?? item.installationPrice
+            };
         }
         return item;
     });
@@ -97,7 +124,9 @@ export function toggleInstallation(id: string, currentWithInstallation: boolean)
     } else {
         // Just flip the state
         const updated = [...current];
-        updated[itemIndex] = { ...item, withInstallation: newWithInstallation };
+        // Reset defaults when toggling ON
+        const newMeters = newWithInstallation ? 3 : item.installationMeters;
+        updated[itemIndex] = { ...item, withInstallation: newWithInstallation, installationMeters: newMeters };
         cartItems.set(updated);
     }
 }

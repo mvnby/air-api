@@ -1,6 +1,8 @@
 <script setup>
 import { useStore } from '@nanostores/vue';
-import { cartItems, cartTotal, updateQuantity, removeItem, toggleInstallation } from '../../store/cart';
+import { cartItems, cartTotal, updateQuantity, removeItem, toggleInstallation, updateInstallationDetails } from '../../store/cart';
+import { getInstallationRates } from '../../utils/api';
+import { onMounted, ref } from 'vue';
 
 const items = useStore(cartItems);
 const total = useStore(cartTotal);
@@ -10,6 +12,34 @@ const formatPrice = (p) => p.toLocaleString('ru-RU') + ' р.';
 // Subtotals
 const equipmentTotal = () => items.value.reduce((sum, i) => sum + i.price * i.quantity, 0);
 const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstallation ? i.installationPrice * i.quantity : 0), 0);
+
+const rates = ref([]);
+onMounted(async () => {
+    rates.value = await getInstallationRates();
+});
+
+const updateMeters = (item, delta) => {
+    const newMeters = Math.max(1, (item.installationMeters || 3) + delta);
+    if (newMeters === item.installationMeters) return;
+    
+    // Find generic rate (assume Wall for now as fallback)
+    const rate = rates.value.find(r => r.category === 'Wall') || rates.value[0];
+    let newPrice = item.installationPrice;
+    
+    if (rate) {
+        const oldMeters = item.installationMeters || 3;
+        const oldExtra = Math.max(0, oldMeters - rate.included_pipe_meters);
+        const newExtra = Math.max(0, newMeters - rate.included_pipe_meters);
+        const diffMeters = newExtra - oldExtra;
+        
+        newPrice = item.installationPrice + (diffMeters * rate.extra_pipe_price);
+    }
+    
+    updateInstallationDetails(item.id, item.withInstallation, {
+        meters: newMeters,
+        price: newPrice
+    });
+};
 </script>
 
 <template>
@@ -43,6 +73,18 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
                                 <span v-if="item.withInstallation" class="material-icons-round check">check</span>
                             </div>
                             <span class="label">Монтаж (+{{ item.installationPrice }} р.)</span>
+                        </div>
+                        
+                         <!-- Installation Settings -->
+                        <div v-if="item.withInstallation" class="install-settings">
+                             <div class="setting-row">
+                                <span class="setting-label">Трасса:</span>
+                                <div class="qty-micro">
+                                     <button @click="updateMeters(item, -1)">−</button>
+                                     <span>{{ item.installationMeters || 3 }}м</span>
+                                     <button @click="updateMeters(item, 1)">+</button>
+                                </div>
+                             </div>
                         </div>
                     </div>
                 </div>
@@ -171,6 +213,47 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
 .install-toggle.active .label {
     color: #007f80;
     font-weight: 500;
+}
+
+.install-settings {
+    margin-top: 0.75rem;
+    padding-left: 2rem; /* Indent to align with text */
+}
+.setting-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+.qty-micro {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: var(--bg);
+    border-radius: 4px;
+    padding: 2px;
+}
+.qty-micro button {
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: white;
+    border-radius: 3px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text);
+    font-size: 1rem;
+    line-height: 1;
+}
+.qty-micro span {
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 0 4px;
+    min-width: 24px;
+    text-align: center;
 }
 
 /* Actions */
