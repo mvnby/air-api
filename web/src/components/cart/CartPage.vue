@@ -21,7 +21,7 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
         <a href="/catalog" class="btn btn-primary">В каталог</a>
     </div>
 
-    <div v-else class="cart-layout">
+    <div v-else class="cart-layout-grid-v2">
         <!-- List -->
         <div class="cart-items">
             <div v-for="item in items" :key="item.id + item.withInstallation" class="cart-item">
@@ -88,42 +88,8 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
 </div>
 </template>
 
-<style scoped>
-.cart-container {
-    padding: 1rem 0;
-}
-
-.empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 4rem 1rem;
-    text-align: center;
-    gap: 1rem;
-    background: #f8fafc;
-    border-radius: 1rem;
-}
-.empty-icon {
-    font-size: 4rem;
-    color: #cbd5e1;
-}
-.empty-state h2 {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #334155;
-}
-.empty-state p {
-    color: #64748b;
-    margin-bottom: 1rem;
-}
-
-/* Layout */
-.cart-layout {
-    display: grid;
-    grid-template-columns: 1fr 340px;
-    gap: 2rem;
-}
+<style>
+/* Layout logic moved to Astro pages for global scope */
 
 /* Items */
 .cart-items {
@@ -134,22 +100,28 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
 
 .cart-item {
     display: grid;
-    grid-template-columns: 80px 1fr auto auto;
-    gap: 1.5rem;
+    grid-template-columns: 100px 1fr auto auto;
+    gap: 2rem;
     align-items: center;
     background: white;
-    padding: 1rem;
-    border-radius: 1rem;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.03);
-    border: 1px solid #f1f5f9;
+    padding: 1.5rem;
+    border-radius: 1.5rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+    border: 1px solid var(--border);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.cart-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.06);
 }
 
 .item-img img {
-    width: 80px;
-    height: 80px;
+    width: 100px;
+    height: 100px;
     object-fit: contain;
-    border-radius: 0.5rem;
-    background: #f8fafc;
+    border-radius: 1rem;
+    background: var(--bg);
+    padding: 0.5rem;
 }
 
 .item-info {
@@ -262,10 +234,10 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
 /* Summary */
 .cart-summary {
     background: white;
-    padding: 1.5rem;
-    border-radius: 1.5rem;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-    border: 1px solid #f1f5f9;
+    padding: 2rem;
+    border-radius: 2rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+    border: 1px solid var(--border);
     height: fit-content;
     position: sticky;
     top: 2rem;
@@ -317,7 +289,7 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
 
 /* Mobile */
 @media (max-width: 900px) {
-    .cart-layout {
+    .cart-layout-grid {
         grid-template-columns: 1fr;
     }
 }

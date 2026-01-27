@@ -9,6 +9,7 @@ interface Props {
     slug: string;
     main_image?: string;
     description?: string; // For hero card
+    id?: number;
     // Supports both old and new data structures
     is_inverter?: boolean;
     area?: number;
@@ -75,8 +76,8 @@ const showLegacyArea = !areaTag && product.area;
 
 {
   variant === "default" && (
-    <a href={`/product/${product.slug}`} class="product-item card group">
-      <div class="p-img-box">
+    <div class="product-item card group">
+      <a href={`/product/${product.slug}`} class="p-img-box">
         <img src={resolveImageUrl(product.main_image)} alt={product.title} />
 
         {/* Top Left: Functionality Badges + Inverter (if it replaces the old spot) */}
@@ -115,14 +116,16 @@ const showLegacyArea = !areaTag && product.area;
             {winterTag.title}
           </div>
         )}
-      </div>
+      </a>
       <div class="p-info">
         {/* Only show legacy area info if we DON'T have a top-right badge for it */}
         {!areaTag && showLegacyArea && (
           <span class="p-area-info">{`${product.area} м²`}</span>
         )}
 
-        <h4>{product.title}</h4>
+        <a href={`/product/${product.slug}`} class="p-title-link">
+          <h4>{product.title}</h4>
+        </a>
 
         {/* Feature Tags moved here (under title) */}
         {featureTags.length > 0 && (
@@ -133,16 +136,22 @@ const showLegacyArea = !areaTag && product.area;
           </div>
         )}
 
-        <PriceWithToggle
-          client:visible
-          basePrice={product.price}
-          installPrice={baseInstallationPrice}
-          currency="Br"
-          showToggle={showInstallation}
-          tags={product.tags}
-        />
+        <div class="p-price-actions">
+          <PriceWithToggle
+            client:visible
+            basePrice={product.price}
+            installPrice={baseInstallationPrice}
+            currency="Br"
+            showToggle={showInstallation}
+            tags={product.tags}
+            id={product.slug}
+            productId={product.id}
+            title={product.title}
+            image={resolveImageUrl(product.main_image)}
+          />
+        </div>
       </div>
-    </a>
+    </div>
   )
 }
 
@@ -188,7 +197,14 @@ const showLegacyArea = !areaTag && product.area;
 
         <div class="f-footer">
           <span class="f-price">{formatPrice(product.price)}</span>
-          <button class="add-btn large">
+          <button
+            class="add-btn large hero-add-to-cart"
+            data-id={product.slug}
+            data-name={product.title}
+            data-price={product.price}
+            data-image={resolveImageUrl(product.main_image)}
+            data-product-id={product.id?.toString() || ""}
+          >
             <span class="material-icons-round">shopping_cart</span>
           </button>
         </div>
@@ -226,6 +242,14 @@ const showLegacyArea = !areaTag && product.area;
     text-decoration: none;
     color: inherit;
     transition: transform 0.2s;
+  }
+  .p-title-link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+  }
+  .p-title-link:hover {
+    color: var(--primary);
   }
   .product-item:hover {
     transform: translateY(-4px);
@@ -470,9 +494,9 @@ const showLegacyArea = !areaTag && product.area;
     color: var(--text);
   }
   .add-btn.large {
-    width: 54px;
-    height: 54px;
-    border-radius: 16px; /* Squircle */
+    width: 72px; /* Increased from 54px */
+    height: 72px; /* Increased from 54px */
+    border-radius: 20px; /* Squircle */
     background: var(--primary);
     color: white;
     border: none;
@@ -481,7 +505,7 @@ const showLegacyArea = !areaTag && product.area;
     align-items: center;
     justify-content: center;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 10px 15px -3px rgba(0, 127, 128, 0.4);
+    box-shadow: 0 10px 20px -3px rgba(0, 127, 128, 0.4);
   }
   .add-btn.large:hover {
     background: var(--primary-dark);
@@ -489,7 +513,7 @@ const showLegacyArea = !areaTag && product.area;
     box-shadow: 0 20px 25px -5px rgba(0, 127, 128, 0.3);
   }
   .add-btn.large .material-icons-round {
-    font-size: 1.5rem;
+    font-size: 2rem; /* Increased from 1.5rem */
   }
 
   /* Minimal Variant */
@@ -544,3 +568,48 @@ const showLegacyArea = !areaTag && product.area;
     align-items: center;
   }
 </style>
+
+<script>
+  import { addItem } from "../store/cart";
+
+  function initHeroCart() {
+    const buttons =
+      document.querySelectorAll<HTMLButtonElement>(".hero-add-to-cart");
+    buttons.forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const { id, name, price, image, productId } = btn.dataset;
+
+        if (id && name && price) {
+          addItem({
+            id,
+            name,
+            price: Number(price),
+            image: image || "",
+            productId: productId ? Number(productId) : 0,
+            withInstallation: false,
+            installationPrice: 0,
+          });
+
+          // Visual feedback
+          const icon = btn.querySelector(".material-icons-round");
+          if (icon) {
+            const originalIcon = icon.textContent;
+            icon.textContent = "check";
+            btn.classList.add("success");
+            setTimeout(() => {
+              icon.textContent = originalIcon;
+              btn.classList.remove("success");
+            }, 1500);
+          }
+        }
+      });
+    });
+  }
+
+  // Run on load and after swaps
+  initHeroCart();
+  document.addEventListener("astro:after-swap", initHeroCart);
+</script>

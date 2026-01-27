@@ -136,7 +136,7 @@ const onPhoneInput = (e) => {
         <a href="/catalog">В каталог</a>
     </div>
 
-    <div v-else class="checkout-layout">
+    <div v-else class="checkout-layout-grid-v2">
         <!-- Form -->
         <div class="form-section card">
             <h2>Оформление заказа</h2>
@@ -203,7 +203,7 @@ const onPhoneInput = (e) => {
         </div>
 
         <!-- Summary Sidebar -->
-        <div class="summary-section">
+        <div class="summary-section sticky-sidebar">
             <div class="card summary-card">
                 <h3>Ваш заказ</h3>
                 <div class="items-list">
@@ -235,24 +235,16 @@ const onPhoneInput = (e) => {
 </div>
 </template>
 
-<style scoped>
-.checkout-container {
-    padding: 1rem 0;
-}
-
-.checkout-layout {
-    display: grid;
-    grid-template-columns: 1fr 380px;
-    gap: 2rem;
-    align-items: start;
-}
+<style>
+/* Layout Grid (Desktop) */
+/* Layout logic moved to Astro pages for global scope */
 
 .card {
     background: white;
-    padding: 2rem;
-    border-radius: 1.5rem;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-    border: 1px solid #f1f5f9;
+    padding: 2.5rem;
+    border-radius: 2rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+    border: 1px solid var(--border);
 }
 
 h2 {
@@ -365,6 +357,15 @@ input.invalid {
     color: #007f80;
 }
 
+.sticky-sidebar {
+    position: sticky;
+    top: 2rem;
+}
+
+.summary-card {
+    border-color: var(--primary-bg);
+}
+
 .mobile-action {
     display: none;
 }
@@ -381,7 +382,7 @@ input.invalid {
 }
 
 @media (max-width: 900px) {
-    .checkout-layout {
+    .checkout-layout-grid-v2 {
         grid-template-columns: 1fr;
         gap: 3rem;
     }

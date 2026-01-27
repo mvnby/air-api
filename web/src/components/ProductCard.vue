@@ -48,51 +48,59 @@ const showLegacyArea = computed(() => !areaTag.value && props.product.area);
 </script>
 
 <template>
-  <a v-if="variant === 'default'" :href="`/product/${product.slug}`" class="product-item card group">
-    <div class="p-img-box">
-      <img :src="resolveImageUrl(product.main_image)" :alt="product.title" />
+  <div v-if="variant === 'default'" class="product-item card group">
+    <a :href="`/product/${product.slug}`" class="product-link">
+      <div class="p-img-box">
+        <img :src="resolveImageUrl(product.main_image)" :alt="product.title" />
 
-      <!-- Top Left: Functionality Badges + Inverter -->
-      <div class="p-badge-list">
-        <span v-if="inverterTag" class="badge inverter-badge">{{ inverterTag.title }}</span>
-        <span v-else-if="showLegacyInverter" class="badge small">Инвертор</span>
-        
-        <template v-if="!product.tags && product.badges">
-            <span v-for="b in product.badges" :key="b.text" :class="['p-tag', b.class]">{{ b.text }}</span>
-        </template>
-      </div>
+        <!-- Top Left: Functionality Badges + Inverter -->
+        <div class="p-badge-list">
+          <span v-if="inverterTag" class="badge inverter-badge">{{ inverterTag.title }}</span>
+          <span v-else-if="showLegacyInverter" class="badge small">Инвертор</span>
+          
+          <template v-if="!product.tags && product.badges">
+              <span v-for="b in product.badges" :key="b.text" :class="['p-tag', b.class]">{{ b.text }}</span>
+          </template>
+        </div>
 
-      <!-- Top Right: Area -->
-      <div v-if="areaTag || showLegacyArea" class="p-top-right-badge">
-        {{ areaTag ? areaTag.title : `${product.area} м²` }}
-      </div>
+        <!-- Top Right: Area -->
+        <div v-if="areaTag || showLegacyArea" class="p-top-right-badge">
+          {{ areaTag ? areaTag.title : `${product.area} м²` }}
+        </div>
 
-      <!-- Bottom: Winter/Heat -->
-      <div v-if="winterTag" class="p-bottom-badge heat">
-        <span class="material-icons-round" style="font-size: 14px; margin-right: 4px;">wb_sunny</span>
-        {{ winterTag.title }}
+        <!-- Bottom: Winter/Heat -->
+        <div v-if="winterTag" class="p-bottom-badge heat">
+          <span class="material-icons-round" style="font-size: 14px; margin-right: 4px;">wb_sunny</span>
+          {{ winterTag.title }}
+        </div>
       </div>
+      <div class="p-info">
+        <!-- Only show legacy area info if we DON'T have a top-right badge for it -->
+        <span v-if="!areaTag && showLegacyArea" class="p-area-info">{{ `${product.area} м²` }}</span>
+
+        <h4>{{ product.title }}</h4>
+
+        <!-- Feature Tags -->
+        <div v-if="featureTags.length > 0" class="p-features-list">
+          <span v-for="tag in featureTags" :key="tag.id" :class="['feature-tag', tag.slug]">{{ tag.title }}</span>
+        </div>
+      </div>
+    </a>
+
+    <div class="p-actions">
+        <PriceWithToggle
+          :basePrice="product.price"
+          :installPrice="baseInstallationPrice"
+          currency="Br"
+          :showToggle="showInstallation"
+          :tags="product.tags"
+          :id="product.slug"
+          :productId="product.id"
+          :title="product.title"
+          :image="resolveImageUrl(product.main_image)"
+        />
     </div>
-    <div class="p-info">
-      <!-- Only show legacy area info if we DON'T have a top-right badge for it -->
-      <span v-if="!areaTag && showLegacyArea" class="p-area-info">{{ `${product.area} м²` }}</span>
-
-      <h4>{{ product.title }}</h4>
-
-      <!-- Feature Tags -->
-      <div v-if="featureTags.length > 0" class="p-features-list">
-        <span v-for="tag in featureTags" :key="tag.id" :class="['feature-tag', tag.slug]">{{ tag.title }}</span>
-      </div>
-
-      <PriceWithToggle
-        :basePrice="product.price"
-        :installPrice="baseInstallationPrice"
-        currency="Br"
-        :showToggle="showInstallation"
-        :tags="product.tags"
-      />
-    </div>
-  </a>
+  </div>
 
   <!-- Implement minimal/hero variants only if needed by Catalog (Catalog mostly uses default) -->
 </template>
@@ -213,24 +221,20 @@ const showLegacyArea = computed(() => !areaTag.value && props.product.area);
     white-space: nowrap;
   }
 
-  .p-info {
-    padding: 1.5rem;
+  .product-link {
+    text-decoration: none;
+    color: inherit;
     flex: 1;
     display: flex;
     flex-direction: column;
   }
-  .p-area-info {
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: var(--primary);
-    text-transform: uppercase;
-    margin-bottom: 0.5rem;
-    display: block;
+  .p-actions {
+    padding: 0 1.5rem 1.5rem;
   }
-  .p-info h4 {
-    font-size: 1.125rem;
-    margin-bottom: 1.5rem;
-    line-height: 1.4;
+  .p-info {
+    padding: 1.5rem 1.5rem 0.5rem;
     flex: 1;
+    display: flex;
+    flex-direction: column;
   }
 </style>

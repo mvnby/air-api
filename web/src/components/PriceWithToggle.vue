@@ -200,7 +200,7 @@ const addToCart = () => {
 
     <!-- Actions (Centered) -->
     <div class="actions-container">
-        <button class="btn-action primary" @click="addToCart">
+        <button class="btn-action primary" @click.stop="addToCart">
             <span class="material-icons-round">shopping_cart</span>
             В корзину
         </button>

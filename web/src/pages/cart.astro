@@ -10,7 +10,7 @@ import CartPageFn from "../components/cart/CartPage.vue";
     </div>
 </Layout>
 
-<style>
+<style is:global>
     .cart-page-wrapper {
         padding: 3rem 1.5rem;
     }
@@ -22,6 +22,31 @@ import CartPageFn from "../components/cart/CartPage.vue";
         background: linear-gradient(90deg, #0f172a, #334155);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+    }
+
+    /* FAIL-SAFE TWO-COLUMN GRID (FORCED DESKTOP) */
+    @media (min-width: 901px) {
+        .cart-layout-grid-v2 {
+            display: grid !important;
+            grid-template-columns: 1fr 380px !important;
+            gap: clamp(2rem, 4vw, 4rem) !important;
+            align-items: start !important;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .cart-summary {
+            position: sticky !important;
+            top: 100px !important;
+        }
+    }
+
+    @media (max-width: 900px) {
+        .cart-layout-grid-v2 {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 2rem !important;
+        }
     }
 
     @media (max-width: 640px) {

@@ -10,7 +10,7 @@ import CheckoutFormFn from "../components/checkout/CheckoutForm.vue";
     </div>
 </Layout>
 
-<style>
+<style is:global>
     .checkout-page-wrapper {
         padding: 3rem 1.5rem;
     }
@@ -22,6 +22,34 @@ import CheckoutFormFn from "../components/checkout/CheckoutForm.vue";
         background: linear-gradient(90deg, #0f172a, #334155);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+    }
+
+    /* FAIL-SAFE TWO-COLUMN GRID (FORCED DESKTOP) */
+    @media (min-width: 901px) {
+        .checkout-layout-grid-v2 {
+            display: grid !important;
+            grid-template-columns: 1fr 420px !important;
+            gap: clamp(2rem, 4vw, 4rem) !important;
+            align-items: start !important;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .sticky-sidebar {
+            position: sticky !important;
+            top: 100px !important;
+        }
+    }
+
+    @media (max-width: 900px) {
+        .checkout-layout-grid-v2 {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 2rem !important;
+        }
+        .summary-section {
+            order: -1;
+        }
     }
 
     @media (max-width: 640px) {
