@@ -13,7 +13,9 @@
     --text-muted: #6b7280;
     --border: #e5e7eb;
     --card-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-
+    /* Gradient Colors for Header */
+    --gradient-start: #007f80;
+    --gradient-end: #2dd4bf;
     /* Semantic Colors */
     --info: #0ea5e9;
     --info-bg: #e0f2fe;
@@ -150,6 +152,11 @@ ul {
 .btn-large {
     padding: 1rem 2rem;
     font-size: 1.1rem;
+}
+.gradient-text {
+	background: linear-gradient(90deg, var(--gradient-start), var(--gradient-end));
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
 }
 
 .badge {
