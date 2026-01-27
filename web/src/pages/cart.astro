@@ -5,12 +5,12 @@ import CartPageFn from "../components/cart/CartPage.vue";
 
 <Layout title="Корзина">
     <div class="container cart-page-wrapper">
-        <h1 class="page-title">Корзина товаров</h1>
+        <h1 class="gradient-text">Корзина товаров</h1>
         <CartPageFn client:load />
     </div>
 </Layout>
 
-<style>
+<style is:global>
     .cart-page-wrapper {
         padding: 3rem 1.5rem;
     }
@@ -19,9 +19,34 @@ import CartPageFn from "../components/cart/CartPage.vue";
         font-size: 2.5rem;
         line-height: 1.1;
         margin-bottom: 2rem;
-        background: linear-gradient(90deg, #0f172a, #334155);
+        background: linear-gradient(90deg, var(--primary), var(--primary-dark));
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+    }
+
+    /* FAIL-SAFE TWO-COLUMN GRID (FORCED DESKTOP) */
+    @media (min-width: 901px) {
+        .cart-layout-grid-v2 {
+            display: grid !important;
+            grid-template-columns: 1fr 380px !important;
+            gap: clamp(2rem, 4vw, 4rem) !important;
+            align-items: start !important;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .cart-summary {
+            position: sticky !important;
+            top: 100px !important;
+        }
+    }
+
+    @media (max-width: 900px) {
+        .cart-layout-grid-v2 {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 2rem !important;
+        }
     }
 
     @media (max-width: 640px) {

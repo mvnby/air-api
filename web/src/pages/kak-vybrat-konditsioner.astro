@@ -9,7 +9,7 @@ import PowerCalculator from "../components/PowerCalculator.vue";
 >
     <section class="page-header">
         <div class="container">
-            <h1>Подбор кондиционера</h1>
+            <h1 class="gradient-text">Подбор кондиционера</h1>
             <p class="breadcrumbs">Главная / Подбор</p>
         </div>
     </section>
@@ -19,7 +19,7 @@ import PowerCalculator from "../components/PowerCalculator.vue";
             <PowerCalculator client:load />
         </div>
 
-        <div class="content">
+        <div class="content prose">
             <h2>Как выбрать мощность?</h2>
             <p>
                 Самый важный параметр при выборе кондиционера — это его мощность
@@ -108,21 +108,21 @@ import PowerCalculator from "../components/PowerCalculator.vue";
     }
 
     .info-card {
-        background: #e0f2fe;
+        background: var(--info-bg);
         padding: 1.5rem;
         border-radius: 1.5rem;
         margin-bottom: 2rem;
-        border-left: 4px solid #0284c7;
+        border-left: 4px solid var(--info);
     }
 
     .info-card h3 {
-        color: #0369a1;
+        color: var(--info-text);
         font-size: 1.25rem;
         margin-bottom: 0.5rem;
     }
 
     .info-card p {
-        color: #0c4a6e;
+        color: var(--info-text);
         margin-bottom: 0.25rem;
     }
 
@@ -171,8 +171,8 @@ import PowerCalculator from "../components/PowerCalculator.vue";
     }
 
     .checklist .material-icons-round {
-        color: #f59e0b;
-        background: #fffbeb;
+        color: var(--warning-text);
+        background: var(--warning-bg);
         padding: 0.5rem;
         border-radius: 8px;
     }

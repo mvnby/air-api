@@ -13,17 +13,60 @@
     --text-muted: #6b7280;
     --border: #e5e7eb;
     --card-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    /* Gradient Colors for Header */
+    --gradient-start: #007f80;
+    --gradient-end: #2dd4bf;
+    /* Semantic Colors */
+    --info: #0ea5e9;
+    --info-bg: #e0f2fe;
+    --info-text: #0369a1;
+    --success: #10b981;
+    --success-bg: #dcfce7;
+    --success-text: #166534;
+    --warning: #f59e0b;
+    --warning-bg: #fffbeb;
+    --warning-text: #92400e;
+    --error: #ef4444;
+    --error-bg: #fee2e2;
+    --error-text: #991b1b;
+
+    /* Spacing Scale */
+    --space-xs: 0.5rem;
+    /* 8px */
+    --space-sm: 1rem;
+    /* 16px */
+    --space-md: 1.5rem;
+    /* 24px */
+    --space-lg: 2rem;
+    /* 32px */
+    --space-xl: 3rem;
+    /* 48px */
+    --space-xxl: 4rem;
+    /* 64px */
 }
 
 .dark {
-    --bg: #0f2323;
+    --bg: #0f172a;
+    /* Slate 900 per ui.md */
     --surface: #1e293b;
+    /* Slate 800 per ui.md */
     --surface-rgb: 30, 41, 59;
     --text: #f9fafb;
-    --text-muted: #9ca3af;
-    --border: #374151;
-    --secondary: #134e4a;
+    --text-muted: rgba(255, 255, 255, 0.6);
+    /* Per ui.md */
+    --border: #334155;
+    --secondary: #334155;
     --accent-light: #5eead4;
+
+    /* Semantic Colors Dark Mode Adjustments */
+    --info-bg: rgba(14, 165, 233, 0.15);
+    --info-text: #7dd3fc;
+    --success-bg: rgba(16, 185, 129, 0.15);
+    --success-text: #6ee7b7;
+    --warning-bg: rgba(245, 158, 11, 0.15);
+    --warning-text: #fcd34d;
+    --error-bg: rgba(239, 68, 68, 0.15);
+    --error-text: #fca5a5;
 }
 
 * {
@@ -37,6 +80,8 @@ body {
     background-color: var(--bg);
     color: var(--text);
     overflow-x: hidden;
+    line-height: 1.6;
+    /* Per ui.md */
     transition: background-color 0.3s ease, color 0.3s ease;
 }
 
@@ -47,6 +92,7 @@ h4,
 h5,
 h6 {
     font-family: 'Space Grotesk', sans-serif;
+    line-height: 1.2;
 }
 
 a {
@@ -60,7 +106,8 @@ ul {
 }
 
 .container {
-    max-width: 1280px;
+    max-width: 1200px;
+    /* Per ui.md */
     margin: 0 auto;
     padding: 0 1.5rem;
 }
@@ -105,6 +152,11 @@ ul {
 .btn-large {
     padding: 1rem 2rem;
     font-size: 1.1rem;
+}
+.gradient-text {
+	background: linear-gradient(90deg, var(--gradient-start), var(--gradient-end));
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
 }
 
 .badge {
@@ -164,7 +216,7 @@ ul {
 }
 
 .dark .sticky-nav {
-    background: rgba(30, 41, 59, 0.85);
+    background: rgba(var(--surface-rgb), 0.85);
 }
 
 .nav-container {
@@ -405,4 +457,57 @@ ul {
         grid-template-columns: 1fr;
         gap: 2.5rem;
     }
+}
+
+/* Prose Utility for Articles */
+.prose {
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.prose p {
+    margin-bottom: var(--space-md);
+    color: var(--text-muted);
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+    color: var(--text);
+    margin-top: var(--space-xl);
+    margin-bottom: var(--space-sm);
+    font-weight: 800;
+}
+
+.prose h1 {
+    font-size: 3rem;
+}
+
+.prose h2 {
+    font-size: 2.25rem;
+}
+
+.prose h3 {
+    font-size: 1.5rem;
+}
+
+.prose ul,
+.prose ol {
+    margin-bottom: var(--space-md);
+    padding-left: var(--space-md);
+}
+
+.prose li {
+    margin-bottom: var(--space-xs);
+    position: relative;
+}
+
+.prose ul li::before {
+    content: "•";
+    color: var(--primary);
+    position: absolute;
+    left: -1.2rem;
+    font-weight: bold;
 }

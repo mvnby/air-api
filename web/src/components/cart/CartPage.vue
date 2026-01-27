@@ -14,14 +14,14 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
 
 <template>
 <div class="cart-container">
-    <div v-if="items.length === 0" class="empty-state">
+    <div v-if="items.length === 0" key="empty" class="empty-state">
         <span class="material-icons-round empty-icon">shopping_cart</span>
         <h2>Корзина пуста</h2>
         <p>Перейдите в каталог, чтобы выбрать товары</p>
         <a href="/catalog" class="btn btn-primary">В каталог</a>
     </div>
 
-    <div v-else class="cart-layout">
+    <div v-if="items.length > 0" key="list" class="cart-layout-grid-v2">
         <!-- List -->
         <div class="cart-items">
             <div v-for="item in items" :key="item.id + item.withInstallation" class="cart-item">
@@ -88,68 +88,40 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
 </div>
 </template>
 
-<style scoped>
-.cart-container {
-    padding: 1rem 0;
-}
-
-.empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 4rem 1rem;
-    text-align: center;
-    gap: 1rem;
-    background: #f8fafc;
-    border-radius: 1rem;
-}
-.empty-icon {
-    font-size: 4rem;
-    color: #cbd5e1;
-}
-.empty-state h2 {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #334155;
-}
-.empty-state p {
-    color: #64748b;
-    margin-bottom: 1rem;
-}
-
-/* Layout */
-.cart-layout {
-    display: grid;
-    grid-template-columns: 1fr 340px;
-    gap: 2rem;
-}
+<style>
+/* Layout logic moved to Astro pages for global scope */
 
 /* Items */
 .cart-items {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 1rem;
 }
 
 .cart-item {
     display: grid;
-    grid-template-columns: 80px 1fr auto auto;
-    gap: 1.5rem;
+    grid-template-columns: 100px 1fr auto auto;
+    gap: 2rem;
     align-items: center;
-    background: white;
+    background: var(--surface);
     padding: 1rem;
-    border-radius: 1rem;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.03);
-    border: 1px solid #f1f5f9;
+    border-radius: 1.5rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+    border: 1px solid var(--border);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.cart-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.06);
 }
 
 .item-img img {
-    width: 80px;
-    height: 80px;
+    width: 100px;
+    height: 100px;
     object-fit: contain;
-    border-radius: 0.5rem;
-    background: #f8fafc;
+    border-radius: 1rem;
+    background: var(--bg);
+    padding: 0.5rem;
 }
 
 .item-info {
@@ -164,7 +136,7 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
 }
 .item-price {
     font-weight: 700;
-    color: #0f172a;
+    color: var(--text);
 }
 
 /* Install Toggle */
@@ -174,14 +146,14 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
     gap: 0.5rem;
     cursor: pointer;
     font-size: 0.9rem;
-    color: #64748b;
+    color: var(--primary);
     user-select: none;
     margin-top: 0.25rem;
 }
 .checkbox {
     width: 20px;
     height: 20px;
-    border: 2px solid #cbd5e1;
+    border: 2px solid var(--border);
     border-radius: 4px;
     display: flex;
     align-items: center;
@@ -211,7 +183,7 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    background: #f1f5f9;
+    background: var(--bg);
     padding: 4px;
     border-radius: 8px;
 }
@@ -222,11 +194,11 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
     align-items: center;
     justify-content: center;
     border: none;
-    background: white;
+    background: var(--surface);
     border-radius: 6px;
     cursor: pointer;
     font-weight: 600;
-    color: #334155;
+    color: var(--text);
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 .qty-btn:hover {
@@ -254,18 +226,18 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
 .item-total {
     font-weight: 700;
     font-size: 1.1rem;
-    color: #0f172a;
+    color: var(--text);
     min-width: 100px;
     text-align: right;
 }
 
 /* Summary */
 .cart-summary {
-    background: white;
-    padding: 1.5rem;
-    border-radius: 1.5rem;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-    border: 1px solid #f1f5f9;
+    background: var(--surface);
+    padding: 2rem;
+    border-radius: 2rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+    border: 1px solid var(--border);
     height: fit-content;
     position: sticky;
     top: 2rem;
@@ -274,18 +246,18 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
     font-size: 1.25rem;
     font-weight: 700;
     margin-bottom: 1.5rem;
-    color: #0f172a;
+    color: var(--text);
 }
 .summary-row {
     display: flex;
     justify-content: space-between;
     margin-bottom: 1rem;
     font-size: 0.95rem;
-    color: #64748b;
+    color: var(--text-muted);
 }
 .summary-divider {
     height: 1px;
-    background: #e2e8f0;
+    background: var(--border);
     margin: 1.5rem 0;
 }
 .summary-total {
@@ -294,7 +266,7 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
     align-items: center;
     font-size: 1.25rem;
     font-weight: 800;
-    color: #0f172a;
+    color: var(--text);
     margin-bottom: 1.5rem;
 }
 .checkout-btn {
@@ -317,7 +289,7 @@ const servicesTotal = () => items.value.reduce((sum, i) => sum + (i.withInstalla
 
 /* Mobile */
 @media (max-width: 900px) {
-    .cart-layout {
+    .cart-layout-grid {
         grid-template-columns: 1fr;
     }
 }

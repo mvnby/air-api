@@ -84,17 +84,47 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                                 const label =
                                     tag.title || tag.name || tag.slug || "";
                                 if (!label) return null;
+
+                                // Map tag slugs to icons and types
+                                let icon = "label";
+                                let type = "default";
+
+                                const slug = tag.slug.toLowerCase();
+                                if (slug.includes("inverter")) {
+                                    icon = "equalizer";
+                                    type = "primary";
+                                } else if (slug.includes("area")) {
+                                    icon = "straighten";
+                                    type = "info";
+                                } else if (slug.includes("winter")) {
+                                    icon = "ac_unit";
+                                    type = "warning";
+                                } else if (slug.includes("wifi")) {
+                                    icon = "wifi";
+                                    type = "success";
+                                } else if (
+                                    slug.includes("noise") ||
+                                    slug.includes("silent")
+                                ) {
+                                    icon = "volume_off";
+                                    type = "info";
+                                } else if (slug.includes("hit")) {
+                                    icon = "local_fire_department";
+                                    type = "error";
+                                }
+
                                 return (
-                                    <span
-                                        class={`badge ${tag.slug.includes("inverter") ? "inverter" : ""}`}
-                                    >
+                                    <span class={`badge ${type}`}>
+                                        <span class="material-icons-round badge-icon">
+                                            {icon}
+                                        </span>
                                         {label}
                                     </span>
                                 );
                             })
                         }
                     </div>
-                    <h1>{product.title}</h1>
+                    <h1 class="gradient-text">{product.title}</h1>
                     <div class="sku-row">
                         <span class="sku"
                             >Артикул: {
@@ -197,13 +227,17 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                                 <div class="dims-visual-row">
                                     {dimensions.inner && (
                                         <div class="dim-box inner">
-                                            <div class="box-visual">
-                                                <span class="w">
-                                                    {dimensions.inner.w}
-                                                </span>
-                                                <span class="h">
-                                                    {dimensions.inner.h}
-                                                </span>
+                                            <div class="box-visual-wrapper">
+                                                <div class="box-visual schematic-inner">
+                                                    <div class="inner-main-grill" />
+                                                    <div class="inner-vent-lines" />
+                                                    <div class="inner-display">
+                                                        <div class="display-value">
+                                                            22
+                                                        </div>
+                                                        <div class="display-glow" />
+                                                    </div>
+                                                </div>
                                             </div>
                                             <div class="box-info">
                                                 <span class="title">
@@ -224,13 +258,18 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                                     )}
                                     {dimensions.outer && (
                                         <div class="dim-box outer">
-                                            <div class="box-visual">
-                                                <span class="w">
-                                                    {dimensions.outer.w}
-                                                </span>
-                                                <span class="h">
-                                                    {dimensions.outer.h}
-                                                </span>
+                                            <div class="box-visual-wrapper">
+                                                <div class="box-visual schematic-outer">
+                                                    <div class="outer-mesh" />
+                                                    <div class="fan-circle">
+                                                        <div class="fan-hub" />
+                                                        <div class="fan-blades">
+                                                            <div class="blade b1" />
+                                                            <div class="blade b2" />
+                                                            <div class="blade b3" />
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                             <div class="box-info">
                                                 <span class="title">
@@ -330,9 +369,7 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
         font-size: 2.5rem;
         line-height: 1.1;
         margin: 0.5rem 0;
-        background: linear-gradient(90deg, #0f172a, #334155);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        color: var(--text);
     }
 
     .badges {
@@ -341,23 +378,50 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
         flex-wrap: wrap;
     }
     .badge {
-        background: #f1f5f9;
-        color: #475569;
+        background: var(--surface);
+        color: var(--text-muted);
         padding: 6px 12px;
         border-radius: 8px;
-        font-size: 0.85rem;
-        line-height: 1.4;
+        font-size: 0.8rem;
+        line-height: 1;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         display: inline-flex;
         align-items: center;
-        justify-content: center;
-        min-height: 28px;
+        gap: 0.4rem;
+        min-height: 32px;
+        border: 1px solid var(--border);
+        transition: all 0.2s;
     }
-    .badge.inverter {
-        background: rgba(0, 127, 128, 0.1);
-        color: #007f80;
+    .badge-icon {
+        font-size: 1rem;
+        opacity: 0.8;
+    }
+    .badge.primary {
+        background: var(--primary-bg);
+        color: var(--primary);
+        border-color: var(--primary);
+    }
+    .badge.info {
+        background: var(--info-bg);
+        color: var(--info);
+        border-color: var(--info);
+    }
+    .badge.warning {
+        background: var(--warning-bg);
+        color: var(--warning);
+        border-color: var(--warning);
+    }
+    .badge.success {
+        background: var(--success-bg);
+        color: var(--success);
+        border-color: var(--success);
+    }
+    .badge.error {
+        background: var(--error-bg);
+        color: var(--error);
+        border-color: var(--error);
     }
 
     .sku-row {
@@ -374,17 +438,18 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
     .year-label {
         font-size: 0.9rem;
         font-weight: 600;
-        color: #64748b;
-        background: #f8fafc;
-        padding: 2px 6px;
-        border-radius: 4px;
+        color: var(--text-muted);
+        background: var(--secondary);
+        padding: 2px 8px;
+        border-radius: 6px;
     }
 
     .price-section {
-        background: white;
-        padding: 2rem;
+        background: var(--surface);
+        padding: 2.5rem;
         border-radius: 2rem;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+        border: 1px solid var(--border);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
         margin-bottom: 2.5rem;
     }
 
@@ -443,20 +508,21 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
 
     .gallery-desc {
         margin-top: 2rem;
-        background: #f8fafc;
+        background: var(--secondary);
         padding: 1.5rem;
         border-radius: 1rem;
+        border: 1px solid var(--border);
     }
     .gallery-desc h3 {
         font-size: 1.1rem;
         font-weight: 700;
         margin-bottom: 0.5rem;
-        color: #334155;
+        color: var(--text);
     }
     .gallery-desc p {
         font-size: 0.95rem;
         line-height: 1.6;
-        color: #475569;
+        color: var(--text-muted);
     }
 
     /* Smart Specs */
@@ -470,7 +536,7 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
         font-size: 1.1rem;
         font-weight: 700;
         margin-bottom: 1rem;
-        color: #334155;
+        color: var(--text);
     }
 
     .specs-grid-3 {
@@ -488,8 +554,8 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
         align-items: center;
         text-align: center;
         gap: 0.5rem;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
-        border: 1px solid #f1f5f9;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+        border: 1px solid var(--border);
     }
 
     .icon {
@@ -528,8 +594,8 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
         display: flex;
         gap: 1.5rem;
         margin-top: 1rem;
-        font-size: 0.9rem;
-        color: #475569;
+        font-size: 0.95rem;
+        color: var(--text-muted);
         align-items: center;
     }
     .extra-item {
@@ -549,57 +615,189 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
         gap: 1rem;
     }
     .dim-box {
-        background: white;
+        background: var(--surface);
         padding: 1rem;
         border-radius: 1rem;
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 1rem;
-        border: 1px solid #f1f5f9;
+        border: 1px solid var(--border);
+    }
+    .box-visual-wrapper {
+        width: 100%;
+        height: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg);
+        border-radius: 0.75rem;
+        margin-bottom: 0.5rem;
     }
     .box-visual {
-        width: 100%;
-        height: 60px;
-        border: 2px solid #cbd5e1;
         border-radius: 4px;
         position: relative;
+        border: 2px solid var(--border);
+    }
+    .schematic-inner {
+        width: 140px;
+        height: 35px;
+        background: linear-gradient(to bottom, #fcfcfc, #f3f4f6);
+        display: flex;
+        align-items: center;
+        overflow: hidden;
+        border-radius: 4px 4px 12px 12px;
+        box-shadow: inset 0 -4px 10px rgba(0, 0, 0, 0.05);
+    }
+    .inner-main-grill {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 8px;
+        background: repeating-linear-gradient(
+            to right,
+            transparent,
+            transparent 4px,
+            var(--border) 4px,
+            var(--border) 5px
+        );
+        opacity: 0.3;
+    }
+    .inner-vent-lines {
+        position: absolute;
+        bottom: 6px;
+        left: 15px;
+        right: 15px;
+        height: 4px;
+        background: repeating-linear-gradient(
+            to right,
+            var(--border) 0,
+            var(--border) 2px,
+            transparent 2px,
+            transparent 6px
+        );
+        opacity: 0.4;
+    }
+    .inner-display {
+        position: absolute;
+        right: 18px;
+        top: 50%;
+        transform: translateY(-50%);
         display: flex;
         align-items: center;
         justify-content: center;
     }
-    .dim-box.inner .box-visual {
-        width: 80%;
-        border-color: #007f80;
-        background: rgba(0, 127, 128, 0.02);
+    .display-value {
+        font-family: monospace;
+        font-size: 10px;
+        font-weight: 800;
+        color: var(--primary);
+        z-index: 2;
+        opacity: 0.8;
     }
-    .dim-box.outer .box-visual {
-        width: 90%;
-        height: 80px;
-        border-color: #64748b;
-        background: rgba(100, 116, 139, 0.05);
+    .display-glow {
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        background: var(--primary);
+        filter: blur(6px);
+        opacity: 0.3;
+        border-radius: 50%;
+    }
+
+    .schematic-outer {
+        width: 100px;
+        height: 75px;
+        background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.05);
+    }
+    .outer-mesh {
+        position: absolute;
+        inset: 4px;
+        background-image: radial-gradient(circle, #cbd5e1 1px, transparent 1px);
+        background-size: 4px 4px;
+        opacity: 0.2;
+        pointer-events: none;
+    }
+    .fan-circle {
+        width: 54px;
+        height: 54px;
+        border: 2px solid rgba(0, 127, 128, 0.2);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        background: rgba(255, 255, 255, 0.4);
+        backdrop-filter: blur(1px);
+    }
+    .fan-hub {
+        width: 8px;
+        height: 8px;
+        background: #94a3b8;
+        border-radius: 50%;
+        z-index: 5;
+        box-shadow: 0 0 4px rgba(0, 0, 0, 0.1);
+    }
+    .fan-blades {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        animation: rotate-fan 4s linear infinite;
+    }
+    .blade {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 40%;
+        height: 12px;
+        background: linear-gradient(to right, #94a3b8, #cbd5e1);
+        border-radius: 50% 2px 2px 50%;
+        transform-origin: left center;
+    }
+    .b1 {
+        transform: rotate(0deg) translateX(4px);
+    }
+    .b2 {
+        transform: rotate(120deg) translateX(4px);
+    }
+    .b3 {
+        transform: rotate(240deg) translateX(4px);
+    }
+
+    @keyframes rotate-fan {
+        from {
+            transform: rotate(0deg);
+        }
+        to {
+            transform: rotate(360deg);
+        }
     }
 
     .box-info {
         text-align: center;
         display: flex;
         flex-direction: column;
+        gap: 0.25rem;
     }
     .box-info .title {
-        font-size: 0.8rem;
+        font-size: 0.85rem;
         font-weight: 600;
-        color: #64748b;
+        color: var(--text-muted);
     }
     .box-info .dims-text {
-        font-size: 0.9rem;
+        font-size: 1rem;
         font-weight: 700;
-        color: #0f172a;
-        margin-top: 2px;
+        color: var(--text);
     }
     .box-info .weight {
-        font-size: 0.8rem;
-        color: #94a3b8;
-        margin-top: 2px;
+        font-size: 0.85rem;
+        color: var(--text-muted);
     }
 
     /* Spoiler */
@@ -632,17 +830,23 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
         border-collapse: collapse;
     }
     .specs-table td {
-        padding: 0.75rem 0;
-        border-bottom: 1px solid #f1f5f9;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border);
         font-size: 0.95rem;
     }
+    .specs-table tr:nth-child(even) {
+        background: rgba(var(--surface-rgb), 0.3);
+    }
+    .specs-table tr:hover {
+        background: rgba(var(--primary-rgb), 0.05);
+    }
     .specs-table .key {
-        color: #64748b;
+        color: var(--text-muted);
         width: 50%;
     }
     .specs-table .val {
-        color: #0f172a;
-        font-weight: 500;
+        color: var(--text);
+        font-weight: 600;
     }
 
     /* Breakpoints */

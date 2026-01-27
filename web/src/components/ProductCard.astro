@@ -9,6 +9,7 @@ interface Props {
     slug: string;
     main_image?: string;
     description?: string; // For hero card
+    id?: number;
     // Supports both old and new data structures
     is_inverter?: boolean;
     area?: number;
@@ -75,8 +76,8 @@ const showLegacyArea = !areaTag && product.area;
 
 {
   variant === "default" && (
-    <a href={`/product/${product.slug}`} class="product-item card group">
-      <div class="p-img-box">
+    <div class="product-item card group">
+      <a href={`/product/${product.slug}`} class="p-img-box">
         <img src={resolveImageUrl(product.main_image)} alt={product.title} />
 
         {/* Top Left: Functionality Badges + Inverter (if it replaces the old spot) */}
@@ -115,14 +116,16 @@ const showLegacyArea = !areaTag && product.area;
             {winterTag.title}
           </div>
         )}
-      </div>
+      </a>
       <div class="p-info">
         {/* Only show legacy area info if we DON'T have a top-right badge for it */}
         {!areaTag && showLegacyArea && (
           <span class="p-area-info">{`${product.area} м²`}</span>
         )}
 
-        <h4>{product.title}</h4>
+        <a href={`/product/${product.slug}`} class="p-title-link">
+          <h4>{product.title}</h4>
+        </a>
 
         {/* Feature Tags moved here (under title) */}
         {featureTags.length > 0 && (
@@ -133,20 +136,22 @@ const showLegacyArea = !areaTag && product.area;
           </div>
         )}
 
-        <PriceWithToggle
-          client:visible
-          basePrice={product.price}
-          installPrice={baseInstallationPrice}
-          currency="Br"
-          showToggle={showInstallation}
-          tags={product.tags}
-        >
-          <div class="add-btn micro">
-            <span class="material-icons-round">shopping_cart</span>
-          </div>
-        </PriceWithToggle>
+        <div class="p-price-actions">
+          <PriceWithToggle
+            client:visible
+            basePrice={product.price}
+            installPrice={baseInstallationPrice}
+            currency="Br"
+            showToggle={showInstallation}
+            tags={product.tags}
+            id={product.slug}
+            productId={product.id}
+            title={product.title}
+            image={resolveImageUrl(product.main_image)}
+          />
+        </div>
       </div>
-    </a>
+    </div>
   )
 }
 
@@ -192,7 +197,14 @@ const showLegacyArea = !areaTag && product.area;
 
         <div class="f-footer">
           <span class="f-price">{formatPrice(product.price)}</span>
-          <button class="add-btn large">
+          <button
+            class="add-btn large hero-add-to-cart"
+            data-id={product.slug}
+            data-name={product.title}
+            data-price={product.price}
+            data-image={resolveImageUrl(product.main_image)}
+            data-product-id={product.id?.toString() || ""}
+          >
             <span class="material-icons-round">shopping_cart</span>
           </button>
         </div>
@@ -231,6 +243,14 @@ const showLegacyArea = !areaTag && product.area;
     color: inherit;
     transition: transform 0.2s;
   }
+  .p-title-link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+  }
+  .p-title-link:hover {
+    color: var(--primary);
+  }
   .product-item:hover {
     transform: translateY(-4px);
   }
@@ -262,22 +282,23 @@ const showLegacyArea = !areaTag && product.area;
     flex-direction: column;
     gap: 0.5rem;
     z-index: 2;
+    max-width: 60%; /* Prevent overlap with right badge */
   }
 
   .p-top-right-badge {
     position: absolute;
     top: 1rem;
     right: 1rem;
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--surface);
     backdrop-filter: blur(4px);
     padding: 0.25rem 0.6rem;
     border-radius: 8px;
     font-size: 0.75rem;
     font-weight: 700;
-    font-weight: 700;
-    color: #1e293b; /* Force dark text for contrast on white bg */
+    color: var(--text);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     z-index: 2;
+    border: 1px solid var(--border);
   }
 
   .p-bottom-badge {
@@ -296,11 +317,11 @@ const showLegacyArea = !areaTag && product.area;
   }
 
   .p-bottom-badge.heat {
-    background: linear-gradient(to right, #fff7ed, #fff1f2);
-    color: #c2410c;
-    border-top: 1px solid #ffedd5;
+    background: var(--warning-bg);
+    color: var(--warning-text);
+    border-top: 1px solid var(--warning);
     width: fit-content;
-    box-shadow: 2px -1px 1px -1px #fd050529;
+    box-shadow: 2px -1px 1px -1px var(--warning);
     border-radius: 0 10px 0 0;
   }
 
@@ -323,7 +344,7 @@ const showLegacyArea = !areaTag && product.area;
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
-    margin-bottom: 1.5rem;
+    margin-bottom: 0.5rem;
     margin-top: -0.5rem;
   }
 
@@ -341,6 +362,7 @@ const showLegacyArea = !areaTag && product.area;
     flex: 1;
     display: flex;
     flex-direction: column;
+    justify-content: space-between;
   }
   .p-area-info {
     font-size: 0.8rem;
@@ -474,9 +496,9 @@ const showLegacyArea = !areaTag && product.area;
     color: var(--text);
   }
   .add-btn.large {
-    width: 54px;
-    height: 54px;
-    border-radius: 16px; /* Squircle */
+    width: 72px; /* Increased from 54px */
+    height: 72px; /* Increased from 54px */
+    border-radius: 20px; /* Squircle */
     background: var(--primary);
     color: white;
     border: none;
@@ -485,7 +507,7 @@ const showLegacyArea = !areaTag && product.area;
     align-items: center;
     justify-content: center;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 10px 15px -3px rgba(0, 127, 128, 0.4);
+    box-shadow: 0 10px 20px -3px rgba(0, 127, 128, 0.4);
   }
   .add-btn.large:hover {
     background: var(--primary-dark);
@@ -493,7 +515,7 @@ const showLegacyArea = !areaTag && product.area;
     box-shadow: 0 20px 25px -5px rgba(0, 127, 128, 0.3);
   }
   .add-btn.large .material-icons-round {
-    font-size: 1.5rem;
+    font-size: 2rem; /* Increased from 1.5rem */
   }
 
   /* Minimal Variant */
@@ -548,3 +570,53 @@ const showLegacyArea = !areaTag && product.area;
     align-items: center;
   }
 </style>
+
+<script>
+  import { addItem } from "../store/cart";
+  import { addToast } from "../store/toast";
+
+  function initHeroCart() {
+    const buttons =
+      document.querySelectorAll<HTMLButtonElement>(".hero-add-to-cart");
+    buttons.forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const { id, name, price, image, productId } = btn.dataset;
+
+        if (id && name && price) {
+          addItem({
+            id,
+            name,
+            price: Number(price),
+            image: image || "",
+            productId: productId ? Number(productId) : 0,
+            withInstallation: false,
+            installationPrice: 0,
+          });
+
+          // Feedback: Toast + Button Morph
+          addToast(`Добавлено в корзину: ${name}`);
+
+          const icon = btn.querySelector(".material-icons-round");
+          if (icon) {
+            const originalIcon = icon.textContent;
+            icon.textContent = "check";
+            btn.classList.add("success");
+
+            // Revert after 2 seconds
+            setTimeout(() => {
+              icon.textContent = originalIcon;
+              btn.classList.remove("success");
+            }, 2000);
+          }
+        }
+      });
+    });
+  }
+
+  // Run on load and after swaps
+  initHeroCart();
+  document.addEventListener("astro:after-swap", initHeroCart);
+</script>

@@ -48,55 +48,59 @@ const showLegacyArea = computed(() => !areaTag.value && props.product.area);
 </script>
 
 <template>
-  <a v-if="variant === 'default'" :href="`/product/${product.slug}`" class="product-item card group">
-    <div class="p-img-box">
-      <img :src="resolveImageUrl(product.main_image)" :alt="product.title" />
+  <div v-if="variant === 'default'" class="product-item card group">
+    <a :href="`/product/${product.slug}`" class="product-link">
+      <div class="p-img-box">
+        <img :src="resolveImageUrl(product.main_image)" :alt="product.title" />
 
-      <!-- Top Left: Functionality Badges + Inverter -->
-      <div class="p-badge-list">
-        <span v-if="inverterTag" class="badge inverter-badge">{{ inverterTag.title }}</span>
-        <span v-else-if="showLegacyInverter" class="badge small">Инвертор</span>
-        
-        <template v-if="!product.tags && product.badges">
-            <span v-for="b in product.badges" :key="b.text" :class="['p-tag', b.class]">{{ b.text }}</span>
-        </template>
-      </div>
-
-      <!-- Top Right: Area -->
-      <div v-if="areaTag || showLegacyArea" class="p-top-right-badge">
-        {{ areaTag ? areaTag.title : `${product.area} м²` }}
-      </div>
-
-      <!-- Bottom: Winter/Heat -->
-      <div v-if="winterTag" class="p-bottom-badge heat">
-        <span class="material-icons-round" style="font-size: 14px; margin-right: 4px;">wb_sunny</span>
-        {{ winterTag.title }}
-      </div>
-    </div>
-    <div class="p-info">
-      <!-- Only show legacy area info if we DON'T have a top-right badge for it -->
-      <span v-if="!areaTag && showLegacyArea" class="p-area-info">{{ `${product.area} м²` }}</span>
-
-      <h4>{{ product.title }}</h4>
-
-      <!-- Feature Tags -->
-      <div v-if="featureTags.length > 0" class="p-features-list">
-        <span v-for="tag in featureTags" :key="tag.id" :class="['feature-tag', tag.slug]">{{ tag.title }}</span>
-      </div>
-
-      <PriceWithToggle
-        :basePrice="product.price"
-        :installPrice="baseInstallationPrice"
-        currency="Br"
-        :showToggle="showInstallation"
-        :tags="product.tags"
-      >
-        <div class="add-btn micro">
-          <span class="material-icons-round">shopping_cart</span>
+        <!-- Top Left: Functionality Badges + Inverter -->
+        <div class="p-badge-list">
+          <span v-if="inverterTag" class="badge inverter-badge">{{ inverterTag.title }}</span>
+          <span v-else-if="showLegacyInverter" class="badge small">Инвертор</span>
+          
+          <template v-if="!product.tags && product.badges">
+              <span v-for="b in product.badges" :key="b.text" :class="['p-tag', b.class]">{{ b.text }}</span>
+          </template>
         </div>
-      </PriceWithToggle>
+
+        <!-- Top Right: Area -->
+        <div v-if="areaTag || showLegacyArea" class="p-top-right-badge">
+          {{ areaTag ? areaTag.title : `${product.area} м²` }}
+        </div>
+
+        <!-- Bottom: Winter/Heat -->
+        <div v-if="winterTag" class="p-bottom-badge heat">
+          <span class="material-icons-round" style="font-size: 14px; margin-right: 4px;">wb_sunny</span>
+          {{ winterTag.title }}
+        </div>
+      </div>
+      <div class="p-info">
+        <!-- Only show legacy area info if we DON'T have a top-right badge for it -->
+        <span v-if="!areaTag && showLegacyArea" class="p-area-info">{{ `${product.area} м²` }}</span>
+
+        <h4>{{ product.title }}</h4>
+
+        <!-- Feature Tags -->
+        <div v-if="featureTags.length > 0" class="p-features-list">
+          <span v-for="tag in featureTags" :key="tag.id" :class="['feature-tag', tag.slug]">{{ tag.title }}</span>
+        </div>
+      </div>
+    </a>
+
+    <div class="p-actions">
+        <PriceWithToggle
+          :basePrice="product.price"
+          :installPrice="baseInstallationPrice"
+          currency="Br"
+          :showToggle="showInstallation"
+          :tags="product.tags"
+          :id="product.slug"
+          :productId="product.id"
+          :title="product.title"
+          :image="resolveImageUrl(product.main_image)"
+        />
     </div>
-  </a>
+  </div>
 
   <!-- Implement minimal/hero variants only if needed by Catalog (Catalog mostly uses default) -->
 </template>
@@ -149,15 +153,16 @@ const showLegacyArea = computed(() => !areaTag.value && props.product.area);
     position: absolute;
     top: 1rem;
     right: 1rem;
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--surface);
     backdrop-filter: blur(4px);
     padding: 0.25rem 0.6rem;
     border-radius: 8px;
     font-size: 0.75rem;
     font-weight: 700;
-    color: #1e293b;
+    color: var(--text);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     z-index: 2;
+    border: 1px solid var(--border);
   }
 
   .p-bottom-badge {
@@ -171,16 +176,16 @@ const showLegacyArea = computed(() => !areaTag.value && props.product.area);
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(var(--surface-rgb), 0.95);
     z-index: 2;
   }
 
   .p-bottom-badge.heat {
-    background: linear-gradient(to right, #fff7ed, #fff1f2);
-    color: #c2410c;
-    border-top: 1px solid #ffedd5;
+    background: var(--warning-bg);
+    color: var(--warning-text);
+    border-top: 1px solid var(--warning);
     width: fit-content;
-    box-shadow: 2px -1px 1px -1px #fd050529;
+    box-shadow: 2px -1px 1px -1px var(--warning);
     border-radius: 0 10px 0 0;
   }
 
@@ -202,9 +207,8 @@ const showLegacyArea = computed(() => !areaTag.value && props.product.area);
   .p-features-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-bottom: 1.5rem;
-    margin-top: -0.5rem;
+    gap: 0.375rem;
+    margin-top: 0.25rem;
   }
 
   .feature-tag {
@@ -216,47 +220,20 @@ const showLegacyArea = computed(() => !areaTag.value && props.product.area);
     white-space: nowrap;
   }
 
-  .p-info {
-    padding: 1.5rem;
+  .product-link {
+    text-decoration: none;
+    color: inherit;
     flex: 1;
     display: flex;
     flex-direction: column;
   }
-  .p-area-info {
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: var(--primary);
-    text-transform: uppercase;
-    margin-bottom: 0.5rem;
-    display: block;
+  .p-actions {
+    padding: 0 1.5rem 1.5rem;
   }
-  .p-info h4 {
-    font-size: 1.125rem;
-    margin-bottom: 1.5rem;
-    line-height: 1.4;
+  .p-info {
+    padding: .75rem 1.5rem 0.5rem;
     flex: 1;
-  }
-
-  .add-btn.micro {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    border: 1px solid var(--border, #e2e8f0);
     display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--surface, #fff);
-    cursor: pointer;
-    transition: all 0.2s;
-    color: var(--primary);
-  }
-  .add-btn.micro:hover {
-    background: var(--primary);
-    color: white;
-    border-color: var(--primary);
-  }
-  .add-btn .material-icons-round {
-    font-size: 1.2rem;
+    flex-direction: column;
   }
 </style>
