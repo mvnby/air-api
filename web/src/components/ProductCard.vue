@@ -90,11 +90,7 @@ const showLegacyArea = computed(() => !areaTag.value && props.product.area);
         currency="Br"
         :showToggle="showInstallation"
         :tags="product.tags"
-      >
-        <div class="add-btn micro">
-          <span class="material-icons-round">shopping_cart</span>
-        </div>
-      </PriceWithToggle>
+      />
     </div>
   </a>
 
@@ -149,15 +145,16 @@ const showLegacyArea = computed(() => !areaTag.value && props.product.area);
     position: absolute;
     top: 1rem;
     right: 1rem;
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--surface);
     backdrop-filter: blur(4px);
     padding: 0.25rem 0.6rem;
     border-radius: 8px;
     font-size: 0.75rem;
     font-weight: 700;
-    color: #1e293b;
+    color: var(--text);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     z-index: 2;
+    border: 1px solid var(--border);
   }
 
   .p-bottom-badge {
@@ -171,16 +168,16 @@ const showLegacyArea = computed(() => !areaTag.value && props.product.area);
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(var(--surface-rgb), 0.95);
     z-index: 2;
   }
 
   .p-bottom-badge.heat {
-    background: linear-gradient(to right, #fff7ed, #fff1f2);
-    color: #c2410c;
-    border-top: 1px solid #ffedd5;
+    background: var(--warning-bg);
+    color: var(--warning-text);
+    border-top: 1px solid var(--warning);
     width: fit-content;
-    box-shadow: 2px -1px 1px -1px #fd050529;
+    box-shadow: 2px -1px 1px -1px var(--warning);
     border-radius: 0 10px 0 0;
   }
 
@@ -235,28 +232,5 @@ const showLegacyArea = computed(() => !areaTag.value && props.product.area);
     margin-bottom: 1.5rem;
     line-height: 1.4;
     flex: 1;
-  }
-
-  .add-btn.micro {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    border: 1px solid var(--border, #e2e8f0);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--surface, #fff);
-    cursor: pointer;
-    transition: all 0.2s;
-    color: var(--primary);
-  }
-  .add-btn.micro:hover {
-    background: var(--primary);
-    color: white;
-    border-color: var(--primary);
-  }
-  .add-btn .material-icons-round {
-    font-size: 1.2rem;
   }
 </style>

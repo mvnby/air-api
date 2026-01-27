@@ -155,21 +155,22 @@ const addToCart = () => {
 
 <template>
   <div class="price-container" :class="{ 'size-large': large }">
-    <!-- Toggle: Only show if allowed (fixed price or default) -->
-   
-  <div class="price-wrapper">
-      <!-- Product Discount Badge (Sale Effect) -->
-      <div v-if="props.oldPrice" class="discount-badge squircle sale-badge">
-        -{{ discountPct }}%
-      </div>
-      
-      <span v-if="priceDisplay.old" class="old-price">
-          {{ priceDisplay.old }}
-      </span>
-      <span class="final-price" :class="{ pulse: isInstalled }">
-        {{ priceDisplay.current }}
-      </span>
-  </div>
+    <!-- Price Display -->
+    <div class="price-wrapper">
+        <!-- Sale Badge -->
+        <div v-if="props.oldPrice" class="discount-badge sale-badge">
+          -{{ discountPct }}%
+        </div>
+        
+        <span v-if="priceDisplay.old" class="old-price">
+            {{ priceDisplay.old }}
+        </span>
+        <span class="final-price" :class="{ 'pulse-primary': isInstalled }">
+          {{ priceDisplay.current }}
+        </span>
+    </div>
+
+    <!-- Toggle -->
     <div 
       v-if="shouldShowToggle"
       class="installation-toggle" 
@@ -182,34 +183,32 @@ const addToCart = () => {
             <span>Монтаж</span>
           </div>
           <div class="price-column">
-             <span class="inst-price" :class="{ 'line-through text-xs text-muted': discount > 0 }">
+             <span class="inst-price" :class="{ 'line-through text-muted': discount > 0 }">
                 +{{ effectiveInstallPrice }} {{ currency }}
              </span>
              <span v-if="discount > 0" class="discount-price">
                 +{{ finalInstallPrice }} {{ currency }}
              </span>
+          </div>
       </div>
     </div>
-  </div>
 
-    <!-- Non-fixed rate message (e.g. "from 500 Br") -->
+    <!-- Non-fixed rate message -->
     <div v-if="matchedRate && !matchedRate.is_fixed" class="non-fixed-message">
         Монтаж: <span class="inst-price">от {{ matchedRate.base_price }} {{ currency }}</span>
     </div>
 
-    <div class="p-footer">
-       <div class="actions">
-            <div class="actions-slot">
-                <button class="btn btn-primary btn-large" @click="addToCart">
-                    <span class="material-icons-round">shopping_cart</span>
-                    В корзину
-                </button>
-                <button class="btn btn-outline btn-large">
-                    <span class="material-icons-round">touch_app</span>
-                    Купить в 1 клик
-                </button>
-            </div>
-       </div>
+    <!-- Actions (Centered) -->
+    <div class="actions-container">
+        <button class="btn-action primary" @click="addToCart">
+            <span class="material-icons-round">shopping_cart</span>
+            В корзину
+        </button>
+        <!-- "Buy in 1 click" removed for micro cards, kept for large if requested? 
+             User specifically said remove quick order from thumbnails. 
+             In large view (product page) it might be useful, but user said "it doesn't work".
+             Removing from everywhere to be safe and clean.
+        -->
     </div>
   </div>
 </template>
@@ -219,185 +218,232 @@ const addToCart = () => {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: .25rem;
+    gap: 1.5rem;
+    width: 100%;
   }
 
-  .installation-toggle {
-    background: var(--secondary, #f1f5f9);
-    padding: 0.75rem 1rem;
-    border-radius: 1rem;
-    position: relative; /* For badge absolute positioning */
-    cursor: pointer;
-    margin-bottom: 1.5rem;
-    transition: background 0.2s;
-    border: 2px solid transparent;
-  }
-  .installation-toggle:hover {
-    background: rgba(0, 127, 128, 0.1);
+  /* Price Display */
+  .price-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      margin-bottom: 0.5rem;
   }
   
+  .old-price {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      text-decoration: line-through;
+      margin-bottom: -2px;
+  }
+
+  .final-price {
+    white-space: nowrap;
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--text);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .pulse-primary {
+    color: var(--primary);
+    transform: scale(1.05);
+  }
+
+  /* Discount Badge (Orange) */
+  .discount-badge {
+    position: absolute;
+    top: -12px;
+    right: -24px;
+    background: #f97316; /* Orange 500 */
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
+    z-index: 5;
+    transform: rotate(6deg);
+  }
+  
+  .sale-badge {
+      right: auto;
+      left: -28px;
+      transform: rotate(-6deg);
+  }
+
+  /* Toggle Row */
+  .installation-toggle {
+    width: 100%;
+    max-width: 320px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 0.75rem 1rem;
+    border-radius: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .installation-toggle:hover {
+    border-color: var(--primary);
+    background: rgba(var(--primary-rgb), 0.05);
+  }
+
+  .installation-toggle.active {
+    background: var(--primary-bg);
+    border-color: var(--primary);
+  }
+
   .toggle-content {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    width: 100%;
-    gap: 1.25rem;
+    gap: 1rem;
   }
 
   .toggle-control {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    font-weight: 600;
+    font-weight: 700;
     font-size: 0.95rem;
+    color: var(--text);
   }
+
   .toggle-switch {
-    width: 40px;
-    height: 22px;
+    width: 36px;
+    height: 20px;
     border-radius: 20px;
-    background: #cbd5e1;
+    background: var(--border);
     position: relative;
     transition: background 0.3s;
   }
+
   .toggle-switch::after {
     content: "";
     position: absolute;
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     background: white;
     border-radius: 50%;
     top: 3px;
     left: 3px;
     transition: all 0.3s;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
   }
-  .installation-toggle.active {
-    background: rgba(0, 127, 128, 0.05);
-    border-color: rgba(0, 127, 128, 0.2);
-  }
-  .installation-toggle.active .toggle-switch {
+
+  .active .toggle-switch {
     background: var(--primary);
   }
-  .installation-toggle.active .toggle-switch::after {
-    left: 21px;
+  .active .toggle-switch::after {
+    left: 19px;
   }
-  
+
   .price-column {
       display: flex;
       flex-direction: column;
       align-items: flex-end;
-      line-height: 1.1;
+      line-height: 1.2;
   }
+
   .inst-price {
     color: var(--text-muted);
-    font-weight: 500;
-    font-size: 0.9rem;
+    font-weight: 600;
+    font-size: 0.85rem;
   }
+
   .discount-price {
-      color: #0d9488; /* Teal-600 */
-      font-weight: 700;
+      color: var(--primary);
+      font-weight: 800;
       font-size: 0.95rem;
   }
-  .text-xs { font-size: 0.75rem; }
-  .text-muted { color: #94a3b8; }
+
   .line-through { text-decoration: line-through; }
+  .text-muted { color: var(--text-muted); }
 
-  /* Badge */
-  .discount-badge {
-    position: absolute;
-    top: -10px;
-    right: -5px;
-    background: #f97316; /* Orange-500 */
-    color: white;
-    font-size: 0.65rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    padding: 2px 8px;
-    border-radius: 8px; /* Squircle aprox */
-    box-shadow: 0 2px 5px rgba(249, 115, 22, 0.4);
-    transform: rotate(3deg);
-    animation: bounce 2s infinite;
-  }
-  .squircle {
-       border-radius: 6px; /* Smooth corners */
-  }
-
-  @keyframes bounce {
-      0%, 20%, 50%, 80%, 100% {transform: translateY(0) rotate(3deg);}
-      40% {transform: translateY(-3px) rotate(3deg);}
-      60% {transform: translateY(-2px) rotate(3deg);}
-  }
-
-  .p-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: auto;
-  }
-  
-  /* Price Wrapper for old/new stacking */
-  .price-wrapper {
+  /* Actions Container */
+  .actions-container {
+      width: 100%;
       display: flex;
-      flex-direction: column;
+      justify-content: center;
+  }
+
+  .btn-action {
+      display: flex;
       align-items: center;
-      position: relative;
-  }
-  
-  .old-price {
-      font-size: 0.9rem;
-      color: var(--text-muted);
-      text-decoration: line-through;
-      margin-bottom: -4px;
-      padding-top: 10px; /* Make space for badge */
-  }
-
-  .sale-badge {
-      top: -5px;
-      left: -5px;
-      right: auto;
-      transform: rotate(-3deg);
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.8rem 2rem;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+      font-family: inherit;
+      width: 100%;
+      max-width: 240px;
   }
 
-  .final-price {
-    white-space: nowrap;
-    font-size: 1.5rem;
-    font-weight: 800;
-    transition: transform 0.2s;
-    color: var(--text);
+  .btn-action.primary {
+      background: var(--primary);
+      color: white;
+      box-shadow: 0 4px 15px rgba(var(--primary-rgb), 0.3);
   }
+
+  .btn-action.primary:hover {
+      background: var(--primary-dark);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(var(--primary-rgb), 0.4);
+  }
+
+  .btn-action.primary:active {
+      transform: translateY(0);
+  }
+
+  /* Non-fixed message */
+  .non-fixed-message {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  /* Large View (Product Page) */
+  .size-large {
+    gap: 2rem;
+  }
+
   .size-large .final-price {
     font-size: 3.5rem;
   }
+
+  .size-large .btn-action {
+    max-width: 300px;
+    padding: 1.1rem 2.5rem;
+    font-size: 1.1rem;
+    border-radius: 16px;
+  }
+
   .size-large .installation-toggle {
+    max-width: 400px;
     padding: 1rem 1.5rem;
   }
+
   .size-large .toggle-control {
     font-size: 1.1rem;
   }
+
   .size-large .inst-price {
     font-size: 1rem;
   }
+
   .size-large .discount-price {
     font-size: 1.1rem;
   }
-  .pulse {
-    transform: scale(1.02);
-    color: var(--primary);
-  }
-  .actions {
-      display: flex;
-      width: 100%;
-      justify-content: center ;
-  }
-  .actions-slot {
-    width: 100%;
-    /* display: flex; gap: 1rem; */
-  }
-  
-  .non-fixed-message {
-    padding: 0.5rem 0;
-    font-size: 0.9rem;
-    color: var(--text-muted);
-    font-weight: 500;
+
+  @media (max-width: 640px) {
+    .size-large .final-price {
+        font-size: 2.5rem;
+    }
   }
 </style>
