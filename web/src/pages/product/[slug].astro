@@ -240,24 +240,24 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                                                     <rect x="88" y="90" width="160" height="18" rx="9" fill="var(--dim-fill-accent)" stroke="none"/>
                                                     <path d="M92 128 L244 128" opacity=".55" stroke="var(--dim-stroke)"/>
                                                     <path d="M96 134 L240 134" opacity=".35" stroke="var(--dim-stroke)"/>
-                                                    <circle cx="238" cy="146" r="3" fill="var(--dim-text)" opacity="0.5" stroke="none"/>
+                                                    <circle cx="238" cy="146" r="4" fill="var(--accent-light)" opacity="0.5" stroke="none"/>
                                                 </g>
 
                                                 <g stroke="var(--dim-stroke-light)" stroke-width="2" fill="none" stroke-linecap="round">
                                                     <g transform="translate(-40, 0)">
-                                                        <line x1="90" y1="58" x2="286" y2="58" marker-end="url(#arrow-inner-final)" marker-start="url(#arrow-inner-final)"></line>
+                                                        <line x1="90" y1="58" x2="286" y2="58"></line>
                                                         <line x1="90" y1="50" x2="90" y2="66"></line>
                                                         <line x1="286" y1="50" x2="286" y2="66"></line>
                                                     </g>
 
                                                     <g>
-                                                        <line x1="30" y1="78" x2="30" y2="154" marker-end="url(#arrow-inner-final)" marker-start="url(#arrow-inner-final)"></line>
+                                                        <line x1="30" y1="78" x2="30" y2="154"></line>
                                                         <line x1="22" y1="78" x2="38" y2="78"></line>
                                                         <line x1="22" y1="154" x2="38" y2="154"></line>
                                                     </g>
 
                                                     <g transform="translate(-25, -25)">
-                                                        <line x1="290" y1="170" x2="325" y2="135" marker-end="url(#arrow-inner-final)" marker-start="url(#arrow-inner-final)"></line>
+                                                        <line x1="290" y1="170" x2="325" y2="135"></line>
                                                         <line x1="285" y1="170" x2="295" y2="170"></line>
                                                         <line x1="320" y1="135" x2="330" y2="135"></line>
                                                     </g>
@@ -290,12 +290,6 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                                     {dimensions.outer && (
                                         <div class="dim-box outer" data-w={dimensions.outer.w} data-h={dimensions.outer.h} data-d={dimensions.outer.d} aria-label="Внешний блок: габариты">
                                             <svg viewBox="50 25 320 200" class="dims-svg" role="img">
-                                                {/* <defs>
-                                                    <marker id="arrow-outer-moved" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
-                                                        <path d="M0,0 L0,6 L9,3 z" fill="var(--dim-stroke-light)" />
-                                                    </marker>
-                                                </defs> */}
-
                                                 <g transform="translate(40, 0)" stroke="var(--dim-stroke)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
                                                     <rect x="78" y="74" width="190" height="120" rx="18" fill="var(--dim-fill-body)"/>
                                                     <rect x="96" y="92" width="104" height="84" rx="14" fill="var(--dim-fill-accent)" stroke="none"/>
@@ -316,16 +310,16 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                                                 </g>
 
                                                 <g stroke="var(--dim-stroke-light)" stroke-width="2" fill="none" stroke-linecap="round">
-                                                    <line x1="118" y1="56" x2="308" y2="56" marker-end="url(#arrow-outer-moved)" marker-start="url(#arrow-outer-moved)"></line>
+                                                    <line x1="118" y1="56" x2="308" y2="56" ></line>
                                                     <line x1="118" y1="48" x2="118" y2="64"></line>
                                                     <line x1="308" y1="48" x2="308" y2="64"></line>
 
-                                                    <line x1="90" y1="74" x2="90" y2="194" marker-end="url(#arrow-outer-moved)" marker-start="url(#arrow-outer-moved)"></line>
+                                                    <line x1="90" y1="74" x2="90" y2="194" ></line>
                                                     <line x1="82" y1="74" x2="98" y2="74"></line>
                                                     <line x1="82" y1="194" x2="98" y2="194"></line>
 
                                                     <g transform="translate(40, 0)">
-                                                        <line x1="290" y1="170" x2="325" y2="135" marker-end="url(#arrow-inner-final)" marker-start="url(#arrow-inner-final)"></line>
+                                                        <line x1="290" y1="170" x2="325" y2="135"></line>
                                                         <line x1="285" y1="170" x2="295" y2="170"></line>
                                                         <line x1="320" y1="135" x2="330" y2="135"></line>
                                                     </g>
@@ -800,47 +794,12 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
         border-radius: 50%;
     }
 
-    .schematic-outer {
-        width: 100px;
-        height: 75px;
-        background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 6px;
-        box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.05);
-    }
-    .outer-mesh {
-        position: absolute;
-        inset: 4px;
-        background-image: radial-gradient(circle, #cbd5e1 1px, transparent 1px);
-        background-size: 4px 4px;
-        opacity: 0.2;
-        pointer-events: none;
-    }
-    .fan-circle {
-        width: 54px;
-        height: 54px;
-        border: 2px solid rgba(0, 127, 128, 0.2);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        position: relative;
-        background: rgba(255, 255, 255, 0.4);
-        backdrop-filter: blur(1px);
-    }
-    .fan-hub {
-        width: 8px;
-        height: 8px;
-        background: #94a3b8;
-        border-radius: 50%;
-        z-index: 5;
-        box-shadow: 0 0 4px rgba(0, 0, 0, 0.1);
-    }
+
+   
     .fan-blades {
         transform-origin: 148px 134px;
         animation: spin-fan 4s linear infinite;
+        will-change: transform;
     }
 
 
@@ -865,7 +824,7 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
         color: var(--text-muted);
     }
     .dims-text {
-        font-size: 1rem;
+        font-size: 1.125rem;
         font-weight: 500;
         fill: var(--accent-light);
         font-family: 'Space Grotesk', monospace;
