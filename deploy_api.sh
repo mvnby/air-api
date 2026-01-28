@@ -22,7 +22,13 @@ rsync -avz --delete \
     --exclude 'media' \
     --exclude 'backups' \
     --exclude 'tmp' \
+    --exclude '.env' \
+    --exclude 'env.prod' \
     ./ "$REMOTE_HOST:$REMOTE_DIR"
+
+# 1.5. Deploy production environment file
+echo "⚙️  Setting up production environment..."
+rsync -avz ./env.prod "$REMOTE_HOST:$REMOTE_DIR/.env"
 
 # 2. Update Google tokens on remote
 echo "🔑 Syncing Google tokens..."

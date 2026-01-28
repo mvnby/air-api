@@ -44,6 +44,34 @@ BACKUP_FOLDER_ID=...   # Google Drive Folder ID for backups
 CORS_ORIGINS=["https://mvn.by","https://dev.mvn.by"]  # Allowed origins (comma-separated json list)
 ```
 
+### Environment Separation (Dev vs Production)
+
+The project uses **two separate environment files** to prevent configuration conflicts between local development and production:
+
+| Environment | File | Usage |
+|-------------|------|-------|
+| **Local/Dev** | `.env` | Used by `docker compose up` locally |
+| **Production** | `env.prod` | Deployed to server as `.env` |
+
+**Important:**
+- `.env` and `env.prod` are both **git-ignored** for security.
+- The `deploy_api.sh` script automatically copies `env.prod` to the server as `.env`.
+- This separation ensures:
+  - Different bot tokens (dev bot vs production bot)
+  - Different API URLs (`localhost` vs `https://api.mvn.by`)
+  - Different admin credentials if needed
+
+**Example differences:**
+```bash
+# .env (Local)
+BOT_TOKEN=123456:DEV_BOT_TOKEN
+PUBLIC_API_BASE=http://localhost:8000/api/v1
+
+# env.prod (Production)
+BOT_TOKEN=389060515:PRODUCTION_BOT_TOKEN
+PUBLIC_API_BASE=https://api.mvn.by/api/v1
+```
+
 ## 3. Running Services
 
 To build and start the backend services (App, Bot, Database):

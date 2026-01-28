@@ -35,3 +35,4 @@ backups/backup.sql
 /media/*
 web/temp/*
 .agent/workflows/plan.md
+env.prod
