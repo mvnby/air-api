@@ -17,14 +17,27 @@ depends_on = None
 
 
 def upgrade():
-    # Add installation snapshot fields to order_product_link
-    op.add_column('order_product_link', sa.Column('is_installation_included', sa.Boolean(), nullable=False, server_default='false'))
-    op.add_column('order_product_link', sa.Column('installation_price', sa.Integer(), nullable=False, server_default='0'))
-    op.add_column('order_product_link', sa.Column('installation_details', postgresql.JSON(astext_type=sa.Text()), nullable=True))
+    from sqlalchemy import inspect
     
-    # Remove server defaults after adding columns (they were only for existing rows)
-    op.alter_column('order_product_link', 'is_installation_included', server_default=None)
-    op.alter_column('order_product_link', 'installation_price', server_default=None)
+    connection = op.get_bind()
+    inspector = inspect(connection)
+    
+    # Get existing columns
+    existing_columns = [col['name'] for col in inspector.get_columns('order_product_link')]
+    
+    # Add installation snapshot fields to order_product_link only if they don't exist
+    if 'is_installation_included' not in existing_columns:
+        op.add_column('order_product_link', sa.Column('is_installation_included', sa.Boolean(), nullable=False, server_default='false'))
+        # Remove server default after adding column
+        op.alter_column('order_product_link', 'is_installation_included', server_default=None)
+    
+    if 'installation_price' not in existing_columns:
+        op.add_column('order_product_link', sa.Column('installation_price', sa.Integer(), nullable=False, server_default='0'))
+        # Remove server default after adding column
+        op.alter_column('order_product_link', 'installation_price', server_default=None)
+    
+    if 'installation_details' not in existing_columns:
+        op.add_column('order_product_link', sa.Column('installation_details', postgresql.JSON(astext_type=sa.Text()), nullable=True))
 
 
 def downgrade():

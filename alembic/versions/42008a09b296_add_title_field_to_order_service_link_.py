@@ -20,8 +20,15 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    # Add title column to order_service_link
-    op.add_column('order_service_link', sa.Column('title', sa.String(), nullable=True))
+    from sqlalchemy import inspect
+    
+    connection = op.get_bind()
+    inspector = inspect(connection)
+    existing_columns = [col['name'] for col in inspector.get_columns('order_service_link')]
+    
+    # Add title column to order_service_link only if it doesn't exist
+    if 'title' not in existing_columns:
+        op.add_column('order_service_link', sa.Column('title', sa.String(), nullable=True))
 
 
 def downgrade() -> None:
