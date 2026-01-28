@@ -798,8 +798,12 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
    
     .fan-blades {
         transform-origin: 148px 134px;
-        animation: spin-fan 4s linear infinite;
+        animation: spin-fan 6s linear infinite;
         will-change: transform;
+    }
+    /* При наведении на весь блок (dim-box) вентилятор ускоряется */
+    .dim-box:hover .fan-blades {
+        animation-duration: 2s; /* Вжух! */
     }
 
 
