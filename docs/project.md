@@ -114,6 +114,10 @@ We have successfully transitioned to a **Headless Commerce** architecture. The *
   * **Order Logic**: Rewrote `create_from_website` to split "Installation" into distinct `OrderServiceLink` items (Main Installation + Individual Add-ons).
   * **Title Formatting**: Implemented robust Russian title generation for installation services (e.g., "Монтаж кондиционера настенного типа, мощностью до 4 кВт...").
   * **Bug Fixes**: Solved backend crash (Lazy Loading recursion), CORS issues, and fixed a critical bug where installation discounts were lost during option updates.
+  * **Rich Service Calculator (Part 2)**: 
+    * **Grid UI**: Replaced the simple calculator with a modern CSS Grid layout featuring "Rich Options" (images, descriptions, selection states).
+    * **Service Splitting**: Enhanced the calculator's backend flow to split selected options into separate `OrderServiceLink` line items for the admin panel and Telegram notifications.
+    * **Integration**: Fully integrated with the `installationStore` and verified data integrity across the entire order creation pipeline.
 
 
 ## **The Rules (Don't Break These) 🚨**

@@ -1,11 +1,15 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
+import { useStore } from '@nanostores/vue';
 import { getInstallationRates, getGlobalConfig, createOrder } from '../utils/api';
+import { installationOptions, fetchInstallationOptions } from '../store/installation';
 
 const rates = ref([]);
 const loading = ref(true);
 const error = ref(null);
 const discount = ref(0);
+const options = useStore(installationOptions);
+const selectedOptions = ref([]);
 
 const selectedCategory = ref('');
 const selectedRateId = ref(null);
@@ -38,7 +42,8 @@ onMounted(async () => {
   try {
     const [data, config] = await Promise.all([
         getInstallationRates(),
-        getGlobalConfig()
+        getGlobalConfig(),
+        fetchInstallationOptions()
     ]);
     
     if (!data) {
@@ -108,15 +113,41 @@ watch(selectedCategory, (newVal) => {
   }
 });
 
+// Toggle Option
+const toggleOption = (id) => {
+    if (selectedOptions.value.includes(id)) {
+        selectedOptions.value = selectedOptions.value.filter(oid => oid !== id);
+    } else {
+        selectedOptions.value.push(id);
+    }
+};
+
+// Computed: Options Total
+const optionsTotal = computed(() => {
+    return selectedOptions.value.reduce((sum, id) => {
+        const opt = options.value.find(o => o.id === id);
+        return sum + (opt ? opt.price : 0);
+    }, 0);
+});
+
 // Calculation Logic
 const calculatedPrice = computed(() => {
   const rate = activeRate.value;
   if (!rate) return 0;
   
-  if (!rate.is_fixed) return rate.base_price;
-
-  const extraMeters = Math.max(0, currentMeters.value - rate.included_pipe_meters);
-  return rate.base_price + (extraMeters * rate.extra_pipe_price);
+  let total = 0;
+  
+  if (!rate.is_fixed) {
+      total = rate.base_price;
+  } else {
+      const extraMeters = Math.max(0, currentMeters.value - rate.included_pipe_meters);
+      total = rate.base_price + (extraMeters * rate.extra_pipe_price);
+  }
+  
+  // Add selected options
+  total += optionsTotal.value;
+  
+  return total;
 });
 
 const isFixedPrice = computed(() => activeRate.value?.is_fixed ?? true);
@@ -151,7 +182,10 @@ const submitOrder = async () => {
             product_id: null,
             quantity: 1,
             with_installation: true,
-            installation_price: calculatedPrice.value,
+            installation_price: calculatedPrice.value, // Total price (Main + Options)
+            installation_options: options.value
+                .filter(o => selectedOptions.value.includes(o.id))
+                .map(o => o.slug), // Send slugs
             installation_meta: {
                 source: "calculator_page",
                 type: tCategory(selectedCategory.value),
@@ -159,7 +193,7 @@ const submitOrder = async () => {
                 power_range: activeRate.value?.power_range || "Standard"
             }
         }],
-        comment: `Заказ на монтаж из калькулятора. ${currentMeters.value}м трассы.`
+        comment: `Заказ на монтаж из калькулятора. ${currentMeters.value}м трассы. Опции: ${selectedOptions.value.length}`
     };
 
     const res = await createOrder(payload);
@@ -239,6 +273,50 @@ const submitOrder = async () => {
         В базовый монтаж включено <strong>{{ activeRate?.included_pipe_meters || 3 }} метра</strong>. 
         Дополнительный метр: <strong>{{ activeRate?.extra_pipe_price }} BYN</strong>
       </p>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Options Grid -->
+    <div class="control-group" v-if="options.length > 0">
+        <label class="label">Дополнительные опции</label>
+        <div class="options-grid">
+            <div 
+                v-for="opt in options" 
+                :key="opt.id"
+                class="option-card glass-panel"
+                :class="{ active: selectedOptions.includes(opt.id) }"
+                @click="toggleOption(opt.id)"
+            >
+                <div class="option-image-wrapper">
+                     <img 
+                        v-if="opt.image" 
+                        :src="opt.image" 
+                        :alt="opt.name"
+                        loading="lazy"
+                        class="option-image"
+                     />
+                     <div v-else class="option-placeholder">
+                        <span class="material-icons-round">build</span>
+                     </div>
+                     
+                     <div class="checkmark" v-if="selectedOptions.includes(opt.id)">
+                        <span class="material-icons-round">check</span>
+                     </div>
+                </div>
+                
+                <div class="option-content">
+                    <div class="option-header">
+                        <span class="option-title">{{ opt.name }}</span>
+                        <span class="option-price">+{{ opt.price }} BYN</span>
+                    </div>
+                    
+                    <p class="option-desc" v-if="opt.description">
+                        {{ opt.description }}
+                    </p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="divider"></div>
@@ -716,5 +794,138 @@ const submitOrder = async () => {
 }
 .success-icon .material-icons-round {
     font-size: 4rem;
+}
+
+/* Options Grid */
+.options-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.option-card {
+    border: 2px solid transparent;
+    border-radius: 1rem;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    background: rgba(255, 255, 255, 0.6);
+    position: relative;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.option-card:hover {
+    transform: translateY(-2px);
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+}
+
+.option-card:active {
+    transform: translateY(0);
+}
+
+.option-card.active {
+    border-color: var(--primary);
+    background: #f0fdfa; /* Teal-50 */
+    box-shadow: 0 4px 12px rgba(13, 148, 136, 0.15);
+}
+
+.option-image-wrapper {
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: #f3f4f6;
+    position: relative;
+    overflow: hidden;
+}
+
+.option-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s;
+}
+
+.option-card:hover .option-image {
+    transform: scale(1.05);
+}
+
+.option-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9ca3af;
+    background: #f3f4f6;
+}
+.option-placeholder .material-icons-round {
+    font-size: 2.5rem;
+}
+
+.checkmark {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: var(--primary);
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: 10;
+}
+.checkmark .material-icons-round {
+    font-size: 16px;
+    font-weight: bold;
+}
+
+@keyframes popIn {
+    from { transform: scale(0); }
+    to { transform: scale(1); }
+}
+
+.option-content {
+    padding: 1rem;
+}
+
+.option-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+}
+
+.option-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+}
+
+.option-price {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--primary);
+    white-space: nowrap;
+    background: rgba(13, 148, 136, 0.1);
+    padding: 2px 6px;
+    border-radius: 6px;
+}
+
+.option-desc {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+    margin-top: 0.5rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 </style>

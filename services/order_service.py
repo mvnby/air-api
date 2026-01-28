@@ -377,16 +377,64 @@ class OrderService:
                              service_title += f", мощностью {power_raw}"
 
                 service_title += f", включая межблочную трассу {meters} м"
+                # Add to total
+                # Note: frontend usually passes the TOTAL meta price including options.
+                # But here we will calculate options separately to link them properly.
+                # To avoid double counting, we should SUBTRACT options cost from the "Main Install" price if the input `installation_price` included them.
+                # However, for Calculator flow, we can assume we want to break it down.
+                
+                # Fetch detailed options if present
+                options_slugs = item.get("installation_options", [])
+                options_cost = 0
+                service_links_to_add = []
+                
+                if options_slugs:
+                    stmt_opts = select(Service).where(Service.slug.in_(options_slugs))
+                    res_opts = await session.execute(stmt_opts)
+                    db_options = res_opts.scalars().all()
+                    
+                    for opt in db_options:
+                        options_cost += opt.base_price
+                        service_links_to_add.append({
+                            "title": f"Доп. опция: {opt.title}",
+                            "price": opt.base_price,
+                            "quantity": item["quantity"],
+                            "service_id": opt.id
+                        })
+
+                # Calculate Main Install Price
+                # If the incoming `installation_price` (total) includes options, we subtract them to get the base main install price.
+                # This ensures: Main + Options = Total.
+                main_install_price = installation_price - options_cost
+                
+                # Safety check: if main price goes negative (e.g. data mismatch), we keep it as is and just add extra services (assuming total was base).
+                # But typically calculator sends Grand Total.
+                if main_install_price < 0:
+                     logger.warning(f"Main install price becoming negative ({main_install_price})! Assuming input price was base-only.")
+                     main_install_price = installation_price
+                     # In this case, total_amount will increase by options_cost
+                     total_amount += options_cost * item["quantity"] # Add options on top
+                
+                # 1. Main Installation
                 installation_services.append({
                     "title": service_title,
-                    "price": installation_price,
+                    "price": main_install_price,
                     "quantity": item["quantity"]
                 })
                 
-                # Add to total
-                total_amount += installation_price * item["quantity"]
+                # 2. Add Options
+                installation_services.extend(service_links_to_add)
                 
-                added_items.append(f"{service_title} x{item['quantity']} ({installation_price} р.)")
+                # Add to total (Main + Options) or just original Total
+                # Since we recalculated, sum(components) should equal original total if logic matches.
+                # Let's trust the components we just built.
+                # total_amount was initialized to 0 for this item scope? No, it's global accumulator.
+                # We need to add THIS item's contribution.
+                # Contribution = (Main + Sum(Options)) * Qty
+                item_total = (main_install_price + options_cost) * item["quantity"]
+                total_amount += item_total
+                
+                added_items.append(f"{service_title} x{item['quantity']} ({item_total} р.)")
 
             else:
                 logger.warning(f"Product {product_id} not found/invalid in order creation")
