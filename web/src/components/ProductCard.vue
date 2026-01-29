@@ -91,7 +91,7 @@ const showLegacyArea = computed(() => !areaTag.value && props.product.area);
         <PriceWithToggle
           :basePrice="product.price"
           :installPrice="baseInstallationPrice"
-          currency="Br"
+          currency="р."
           :showToggle="showInstallation"
           :tags="product.tags"
           :id="product.slug"
