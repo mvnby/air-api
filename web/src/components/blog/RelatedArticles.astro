@@ -1,0 +1,33 @@
+---
+import { getCollection } from "astro:content";
+import ArticlePreview from "./ArticlePreview.astro";
+
+interface Props {
+    currentSlug: string;
+    tags?: string[];
+    count?: number;
+}
+
+const { currentSlug, count = 3 } = Astro.props;
+
+const allPosts = await getCollection("blog");
+const relatedPosts = allPosts
+    .filter((post) => post.slug !== currentSlug)
+    .sort(
+        (a, b) => (b.data.date?.valueOf() || 0) - (a.data.date?.valueOf() || 0),
+    )
+    .slice(0, count);
+
+if (relatedPosts.length === 0) return null;
+---
+
+<section class="mt-16 pt-8 border-t border-surface-200 dark:border-surface-700">
+    <h2 class="text-2xl font-bold mb-8 flex items-center gap-2">
+        <span class="material-icons-round text-primary-500">auto_stories</span>
+        Читайте также
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {relatedPosts.map((post) => <ArticlePreview post={post} />)}
+    </div>
+</section>

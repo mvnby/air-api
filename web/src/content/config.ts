@@ -7,7 +7,7 @@ const blogCollection = defineCollection({
     description: z.string(),
     image: z.string().optional(),
     date: z.date().optional(),
-    // Можно добавить теги, автора и т.д.
+    tags: z.array(z.string()).optional(),
   }),
 });
 

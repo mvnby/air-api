@@ -126,6 +126,13 @@ We have successfully transitioned to a **Headless Commerce** architecture. The *
   * **UI/UX Refinement**: Optimized `ArticleLayout.astro` with better header spacing (`pt-24/32`), teal gradients for headings, and high-resolution local images for technical articles.
   * **IDE Polish**: Resolved "Unknown at rule @tailwind" linting errors in VS Code via `settings.json` and custom CSS data.
 
+* **Phase 42**: **Content Strategy & Blog Infrastructure (COMPLETE)**.
+  * **Blog Engine**: Built a full MDX-based blog system with `ArticleLayout.astro`, `ArticlePreview.astro`, and automatic reading time calculation.
+  * **Content**: Published 3 high-value articles with custom-generated vector illustrations ("Inverter vs On/Off", "2-Stage Installation", "Smart AC").
+  * **Features**: Added "Related Articles" recommendation engine and "Expert Blog" badges.
+  * **Homepage**: Integrated "Featured Articles" section (4-column grid) to drive traffic from the main page.
+  * **SEO & UX**: Optimized H1 alignment, fixed metadata layouts, and implemented canonical/OG tags for better social sharing.
+
 ## **The Rules (Don't Break These) 🚨**
 
 1. **Service Layer Only**: Seriously, no raw SQL in routers or admin. I will find you.  
