@@ -1,0 +1,59 @@
+---
+import type { CollectionEntry } from "astro:content";
+
+interface Props {
+    post: CollectionEntry<"blog">;
+}
+
+const { post } = Astro.props;
+---
+
+<a
+    href={`/blog/${post.slug}`}
+    class="group flex flex-col h-full bg-surface-100 dark:bg-surface-800 rounded-xl overflow-hidden hover:shadow-lg transition-all duration-300 border border-transparent hover:border-primary-500/20"
+>
+    <div class="aspect-video w-full overflow-hidden relative">
+        <img
+            src={post.data.image || "/img/placeholder.png"}
+            alt={post.data.title}
+            class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+        />
+        <div
+            class="absolute inset-0 bg-primary-900/10 group-hover:bg-transparent transition-colors duration-300"
+        >
+        </div>
+    </div>
+
+    <div class="p-5 flex flex-col flex-grow">
+        <div class="flex items-center gap-2 text-xs text-text-400 mb-2">
+            <span class="material-icons-round text-sm">calendar_today</span>
+            <time datetime={post.data.date?.toISOString()}>
+                {
+                    post.data.date?.toLocaleDateString("ru-RU", {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                    })
+                }
+            </time>
+        </div>
+
+        <h3
+            class="text-xl font-bold mb-2 group-hover:text-primary-500 transition-colors line-clamp-2"
+        >
+            {post.data.title}
+        </h3>
+
+        <p class="text-text-300 text-sm line-clamp-3 mb-4 flex-grow">
+            {post.data.description}
+        </p>
+
+        <div
+            class="flex items-center text-primary-500 text-sm font-medium mt-auto group-hover:translate-x-1 transition-transform"
+        >
+            Читать статью <span class="material-icons-round text-base ml-1"
+                >arrow_forward</span
+            >
+        </div>
+    </div>
+</a>

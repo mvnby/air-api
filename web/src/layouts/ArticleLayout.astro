@@ -1,5 +1,6 @@
 ---
 import Layout from "./Layout.astro";
+import RelatedArticles from "../components/blog/RelatedArticles.astro";
 
 const { frontmatter } = Astro.props;
 
@@ -22,21 +23,22 @@ const publishDate = frontmatter.date
       >
       </div>
 
-      
       <header
-        class="max-w-4xl mx-auto mb-12 sm:mb-20 text-center relative z-10 px-4"
+        class="max-w-5xl mx-auto mb-12 sm:mb-20 text-center relative z-10 px-4"
       >
-        
-
-        <h1 class="gradient-text text-3xl sm:text-4xl md:text-5xl font-extrabold text-slate-900 mb-6 leading-tight font-heading">{frontmatter.title}</h1>
+        <h1
+          class="gradient-text text-center text-3xl sm:text-4xl md:text-5xl font-extrabold text-slate-900 mb-8 leading-tight font-heading"
+        >
+          {frontmatter.title}
+        </h1>
 
         <div
-          class="flex flex-wrap items-center justify-center gap-6 text-sm text-text-muted font-medium mb-10"
+          class="flex flex-wrap items-center justify-center gap-x-8 gap-y-4 text-sm text-text-muted font-medium mb-12"
         >
           {
             publishDate && (
               <div class="flex items-center gap-2">
-                <span class="material-icons-round text-base opacity-70">
+                <span class="material-icons-round text-lg opacity-70">
                   calendar_today
                 </span>
                 {publishDate}
@@ -44,26 +46,26 @@ const publishDate = frontmatter.date
             )
           }
           <div class="flex items-center gap-2">
-            <span class="material-icons-round text-base opacity-70"
-              >schedule</span>
+            <span class="material-icons-round text-lg opacity-70">schedule</span
+            >
             ~5 мин чтения
           </div>
           <div
-          class="badge inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400 text-xs font-bold uppercase tracking-wider border border-teal-100 dark:border-teal-800"
-        >
-          <span class="material-icons-round text-sm">auto_awesome</span>
-          Блог эксперта
-        </div>
+            class="badge inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400 text-xs font-bold uppercase tracking-wider border border-teal-100 dark:border-teal-800"
+          >
+            <span class="material-icons-round text-sm">verified</span>
+            Блог эксперта
+          </div>
         </div>
 
         {
           frontmatter.image && (
-            <div class="relative group">
+            <div class="relative group mx-auto max-w-4xl">
               <div class="absolute -inset-1 bg-gradient-to-r from-teal-500 to-cyan-500 rounded-[2.5rem] blur opacity-25 group-hover:opacity-40 transition duration-1000 group-hover:duration-200" />
               <img
                 src={frontmatter.image}
                 alt={frontmatter.title}
-                class="relative w-full h-[250px] sm:h-[400px] md:h-[500px] object-cover rounded-[2rem] shadow-2xl"
+                class="relative w-full h-auto max-h-[400px] object-cover rounded-[2rem] shadow-2xl mx-auto"
               />
             </div>
           )
@@ -78,8 +80,9 @@ const publishDate = frontmatter.date
         prose-blockquote:py-1 prose-blockquote:rounded-r-xl
         max-w-3xl"
       >
-     
         <slot />
+
+        <RelatedArticles currentSlug={Astro.params.slug as string} count={3} />
       </article>
     </div>
   </div>

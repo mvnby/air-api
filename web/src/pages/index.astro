@@ -2,6 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 import ProductCard from "../components/ProductCard.astro";
 import ProductGroup from "../components/ProductGroup.astro";
+import FeaturedArticles from "../components/blog/FeaturedArticles.astro";
 import { getInstallationPricingInfo } from "../utils/api";
 
 const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
@@ -99,7 +100,9 @@ const displayProduct = heroProduct || {
 				<div class="p-sub-text">
 					<h4>Как выбрать кондиционер?</h4>
 					<p>
-						Если вы не знаете, с чего начать выбор кондиционера, рекомендуем изучить наш гид. Мы собрали все на что нужно обратить внимание в первую очередь
+						Если вы не знаете, с чего начать выбор кондиционера,
+						рекомендуем изучить наш гид. Мы собрали все на что нужно
+						обратить внимание в первую очередь
 					</p>
 					<a href="/kak-vybrat-konditsioner" class="link"
 						>Узнать подробнее <span class="material-icons-round"
@@ -148,6 +151,9 @@ const displayProduct = heroProduct || {
 			limit={6}
 		/>
 	</div>
+
+	<FeaturedArticles />
+
 	<!-- Requested Faceted Group Example -->
 	<div class="container products-section">
 		<ProductGroup

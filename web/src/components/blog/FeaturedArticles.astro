@@ -1,0 +1,41 @@
+---
+import ArticlePreview from "./ArticlePreview.astro";
+import { getCollection } from "astro:content";
+
+const allPosts = await getCollection("blog");
+// Get 4 most recent posts
+const recentPosts = allPosts
+    .sort(
+        (a, b) => (b.data.date?.valueOf() || 0) - (a.data.date?.valueOf() || 0),
+    )
+    .slice(0, 4);
+---
+
+<section class="container mb-24">
+    <div
+        class="flex flex-col sm:flex-row justify-between items-end mb-10 gap-4"
+    >
+        <div>
+            <h2
+                class="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white font-heading mb-2"
+            >
+                Полезное в блоге
+            </h2>
+            <p class="text-text-muted text-lg">
+                Советы по выбору и эксплуатации
+            </p>
+        </div>
+
+        <a
+            href="/blog"
+            class="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-bold hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
+        >
+            Все статьи
+            <span class="material-icons-round">arrow_forward</span>
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {recentPosts.map((post) => <ArticlePreview post={post} />)}
+    </div>
+</section>
