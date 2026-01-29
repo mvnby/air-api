@@ -196,17 +196,18 @@ const showLegacyArea = !areaTag && product.area;
         )}
 
         <div class="f-footer">
-          <span class="f-price">{formatPrice(product.price)}</span>
-          <button
-            class="add-btn large hero-add-to-cart"
-            data-id={product.slug}
-            data-name={product.title}
-            data-price={product.price}
-            data-image={resolveImageUrl(product.main_image)}
-            data-product-id={product.id?.toString() || ""}
-          >
-            <span class="material-icons-round">shopping_cart</span>
-          </button>
+          <PriceWithToggle
+            client:visible
+            basePrice={product.price}
+            installPrice={baseInstallationPrice}
+            currency="Br"
+            showToggle={true}
+            tags={product.tags}
+            id={product.slug}
+            productId={product.id}
+            title={product.title}
+            image={resolveImageUrl(product.main_image)}
+          />
         </div>
       </div>
     </div>
@@ -572,51 +573,5 @@ const showLegacyArea = !areaTag && product.area;
 </style>
 
 <script>
-  import { addItem } from "../store/cart";
-  import { addToast } from "../store/toast";
-
-  function initHeroCart() {
-    const buttons =
-      document.querySelectorAll<HTMLButtonElement>(".hero-add-to-cart");
-    buttons.forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const { id, name, price, image, productId } = btn.dataset;
-
-        if (id && name && price) {
-          addItem({
-            id,
-            name,
-            price: Number(price),
-            image: image || "",
-            productId: productId ? Number(productId) : 0,
-            withInstallation: false,
-            installationPrice: 0,
-          });
-
-          // Feedback: Toast + Button Morph
-          addToast(`Добавлено в корзину: ${name}`);
-
-          const icon = btn.querySelector(".material-icons-round");
-          if (icon) {
-            const originalIcon = icon.textContent;
-            icon.textContent = "check";
-            btn.classList.add("success");
-
-            // Revert after 2 seconds
-            setTimeout(() => {
-              icon.textContent = originalIcon;
-              btn.classList.remove("success");
-            }, 2000);
-          }
-        }
-      });
-    });
-  }
-
-  // Run on load and after swaps
-  initHeroCart();
-  document.addEventListener("astro:after-swap", initHeroCart);
+  // Hero cart functionality now handled by PriceWithToggle component
 </script>
