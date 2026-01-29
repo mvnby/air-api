@@ -30,6 +30,7 @@ This URL is the **production API**, which:
 1. Cannot be accessed from `localhost` due to CORS policy
 2. Causes Vue components to fail API calls and not render
 
+<<<<<<< HEAD
 ## Solution
 
 For **local development**, use:
@@ -42,10 +43,21 @@ environment:
 
 > [!IMPORTANT]
 > **Before deploying to production**, revert `PUBLIC_API_URL` back to the production API URL!
+=======
+## Architecture Clarification
+
+> [!IMPORTANT]
+> The project uses **separate docker-compose files**:
+> - `docker-compose.yml` - **Local development** (uses `localhost:8000`)
+> - `docker-compose.web.yml` - **Production deploy** (uses `api.mvn.by`)
+
+This is the correct approach! No need to change files between environments.
+>>>>>>> d27e336 (fix(docker): Use localhost API for local development)
 
 ## Prevention Checklist for Future Agents
 
 1. **If Vue components don't render**: Check browser console for CORS errors
+<<<<<<< HEAD
 2. **If CORS errors exist**: Verify `PUBLIC_API_URL` in `docker-compose.yml`
 3. **For local dev**: `PUBLIC_API_URL` must point to `localhost:8000`
 4. **After changing env vars**: Run `docker compose up -d --build web` (not just restart)
@@ -53,5 +65,16 @@ environment:
 
 ## Related Files
 - `docker-compose.yml` - Environment configuration
+=======
+2. **If CORS errors exist**: Verify `PUBLIC_API_URL` in the active docker-compose file
+3. **For local dev** (`docker-compose.yml`): `PUBLIC_API_URL` must point to `localhost:8000`
+4. **For production** (`docker-compose.web.yml`): `PUBLIC_API_URL` points to `api.mvn.by`
+5. **After changing env vars**: Run `docker compose up -d --build web` (not just restart)
+6. **The `INTERNAL_API_URL`**: Uses Docker network DNS (`app:8000`) for SSR - this is CORRECT
+
+## Related Files
+- `docker-compose.yml` - Local dev environment
+- `docker-compose.web.yml` - Production environment
+>>>>>>> d27e336 (fix(docker): Use localhost API for local development)
 - `web/src/utils/api.js` - API URL resolution logic
 - `web/src/components/PriceWithToggle.vue` - Component that makes API calls
