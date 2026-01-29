@@ -118,7 +118,11 @@ We have successfully transitioned to a **Headless Commerce** architecture. The *
     * **Grid UI**: Replaced the simple calculator with a modern CSS Grid layout featuring "Rich Options" (images, descriptions, selection states).
     * **Service Splitting**: Enhanced the calculator's backend flow to split selected options into separate `OrderServiceLink` line items for the admin panel and Telegram notifications.
     * **Integration**: Fully integrated with the `installationStore` and verified data integrity across the entire order creation pipeline.
-
+* **Phase 41**: **Professional Content & Stable Infrastructure**.
+  * **Environment Isolation**: Implemented `env.prod` strategy for safe production deployments. Updated `deploy_api.sh` to handle secrets correctly.
+  * **MDX & Blog**: Integrated `astro-mdx` and `@tailwindcss/typography`. Created a robust Content Collection system for expert articles.
+  * **Component Library**: Added reusable MDX components like `WarningBlock.vue` and `CallToAction.vue`.
+  * **Branding**: Switched to SVG logos with reactive theme support (Teal/White).
 
 ## **The Rules (Don't Break These) 🚨**
 

@@ -1,0 +1,32 @@
+---
+import Layout from './Layout.astro';
+
+const { frontmatter } = Astro.props;
+---
+
+<Layout title={frontmatter.title} description={frontmatter.description}>
+  <div class="max-w-4xl mx-auto px-4 py-12 sm:py-20">
+    
+    <header class="text-center mb-12">
+      <div class="text-sm font-bold text-teal-600 uppercase tracking-wide mb-2">
+        Блог эксперта
+      </div>
+      <h1 class="text-3xl sm:text-4xl md:text-5xl font-extrabold text-slate-900 mb-6 leading-tight">
+        {frontmatter.title}
+      </h1>
+      
+      {frontmatter.image && (
+        <img 
+          src={frontmatter.image} 
+          alt={frontmatter.title} 
+          class="w-full h-64 md:h-[400px] object-cover rounded-2xl shadow-xl mt-8"
+        />
+      )}
+    </header>
+
+    <article class="prose prose-lg prose-teal prose-img:rounded-xl mx-auto text-slate-600">
+      <slot />
+    </article>
+
+  </div>
+</Layout>
