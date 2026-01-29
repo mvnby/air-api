@@ -53,7 +53,7 @@ services:
       - /app/node_modules
       - ./media:/app/public/media
     environment:
-      - PUBLIC_API_URL=http://api.mvn.by/api/v1 # For browser
+      - PUBLIC_API_URL=http://localhost:8000/api/v1 # For browser (local dev)
       - INTERNAL_API_URL=http://app:8000/api/v1 # For SSR
 
 volumes:
