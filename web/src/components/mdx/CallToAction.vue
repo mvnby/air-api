@@ -1,13 +1,22 @@
 <template>
-  <div class="my-10 p-8 bg-teal-600 rounded-2xl text-center shadow-lg text-white not-prose relative overflow-hidden group">
-    <div class="absolute top-0 left-0 w-full h-full opacity-10 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-white to-transparent pointer-events-none"></div>
+  <div class="my-12 p-8 md:p-12 glass border-teal-500/20 rounded-[2rem] text-center shadow-xl not-prose relative overflow-hidden group transition-all duration-500 hover:shadow-2xl hover:translate-y-[-4px]">
+    <!-- Animated Gradient Background -->
+    <div class="absolute inset-0 bg-gradient-to-br from-teal-600/10 via-transparent to-teal-500/5 dark:from-teal-400/5 dark:to-transparent pointer-events-none"></div>
+    <div class="absolute -top-24 -right-24 w-48 h-48 bg-teal-500/20 rounded-full blur-3xl group-hover:bg-teal-400/30 transition-colors duration-500"></div>
     
-    <h3 class="text-2xl font-bold mb-3 relative z-10">{{ text }}</h3>
-    <p v-if="subtext" class="mb-6 opacity-90 relative z-10">{{ subtext }}</p>
-    
-    <a :href="link" class="inline-block px-8 py-3 bg-white text-teal-700 font-bold rounded-full hover:bg-teal-50 transition-colors shadow-md relative z-10 no-underline">
-      {{ btnText }} →
-    </a>
+    <div class="relative z-10">
+      <h3 class="text-2xl md:text-3xl font-display font-extrabold mb-4 bg-gradient-to-r from-teal-600 to-teal-400 dark:from-teal-400 dark:to-teal-200 bg-clip-text text-transparent italic">
+        {{ text }}
+      </h3>
+      <p v-if="subtext" class="mb-8 text-lg text-slate-600 dark:text-slate-300/90 max-w-2xl mx-auto leading-relaxed">
+        {{ subtext }}
+      </p>
+      
+      <a :href="link" class="btn btn-primary btn-large px-10 py-4 text-lg inline-flex items-center group/btn">
+        {{ btnText }}
+        <span class="material-icons-round ml-2 transition-transform duration-300 group-hover/btn:translate-x-1">arrow_forward</span>
+      </a>
+    </div>
   </div>
 </template>
 

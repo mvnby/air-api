@@ -1,32 +1,99 @@
 ---
-import Layout from './Layout.astro';
+import Layout from "./Layout.astro";
 
 const { frontmatter } = Astro.props;
+
+// Formatting date if available
+const publishDate = frontmatter.date
+  ? new Date(frontmatter.date).toLocaleDateString("ru-RU", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })
+  : null;
 ---
 
 <Layout title={frontmatter.title} description={frontmatter.description}>
-  <div class="max-w-4xl mx-auto px-4 py-12 sm:py-20">
-    
-    <header class="text-center mb-12">
-      <div class="text-sm font-bold text-teal-600 uppercase tracking-wide mb-2">
-        Блог эксперта
+  <div class="pt-24 pb-16 sm:pt-32 sm:pb-24 overflow-hidden bg-bg">
+    <div class="container relative blog-container">
+      <!-- Decorative background elements -->
+      <div
+        class="absolute -top-24 -left-24 w-96 h-96 bg-teal-500/5 rounded-full blur-3xl pointer-events-none"
+      >
       </div>
-      <h1 class="text-3xl sm:text-4xl md:text-5xl font-extrabold text-slate-900 mb-6 leading-tight">
-        {frontmatter.title}
-      </h1>
+
       
-      {frontmatter.image && (
-        <img 
-          src={frontmatter.image} 
-          alt={frontmatter.title} 
-          class="w-full h-64 md:h-[400px] object-cover rounded-2xl shadow-xl mt-8"
-        />
-      )}
-    </header>
+      <header
+        class="max-w-4xl mx-auto mb-12 sm:mb-20 text-center relative z-10 px-4"
+      >
+        
 
-    <article class="prose prose-lg prose-teal prose-img:rounded-xl mx-auto text-slate-600">
-      <slot />
-    </article>
+        <h1 class="gradient-text text-3xl sm:text-4xl md:text-5xl font-extrabold text-slate-900 mb-6 leading-tight font-heading">{frontmatter.title}</h1>
 
+        <div
+          class="flex flex-wrap items-center justify-center gap-6 text-sm text-text-muted font-medium mb-10"
+        >
+          {
+            publishDate && (
+              <div class="flex items-center gap-2">
+                <span class="material-icons-round text-base opacity-70">
+                  calendar_today
+                </span>
+                {publishDate}
+              </div>
+            )
+          }
+          <div class="flex items-center gap-2">
+            <span class="material-icons-round text-base opacity-70"
+              >schedule</span>
+            ~5 мин чтения
+          </div>
+          <div
+          class="badge inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400 text-xs font-bold uppercase tracking-wider border border-teal-100 dark:border-teal-800"
+        >
+          <span class="material-icons-round text-sm">auto_awesome</span>
+          Блог эксперта
+        </div>
+        </div>
+
+        {
+          frontmatter.image && (
+            <div class="relative group">
+              <div class="absolute -inset-1 bg-gradient-to-r from-teal-500 to-cyan-500 rounded-[2.5rem] blur opacity-25 group-hover:opacity-40 transition duration-1000 group-hover:duration-200" />
+              <img
+                src={frontmatter.image}
+                alt={frontmatter.title}
+                class="relative w-full h-[250px] sm:h-[400px] md:h-[500px] object-cover rounded-[2rem] shadow-2xl"
+              />
+            </div>
+          )
+        }
+      </header>
+      <article
+        class="prose prose-lg sm:prose-xl prose-teal dark:prose-invert mx-auto px-4 md:px-0
+        prose-headings:font-display prose-headings:font-extrabold prose-headings:tracking-tight
+        prose-a:text-teal-600 dark:prose-a:text-teal-400 prose-a:no-underline hover:prose-a:underline
+        prose-img:rounded-3xl prose-img:shadow-lg prose-strong:text-text dark:prose-strong:text-white
+        prose-blockquote:border-teal-500 prose-blockquote:bg-teal-50/50 dark:prose-blockquote:bg-teal-900/10
+        prose-blockquote:py-1 prose-blockquote:rounded-r-xl
+        max-w-3xl"
+      >
+     
+        <slot />
+      </article>
+    </div>
   </div>
 </Layout>
+
+<style is:global>
+  /* Custom prose adjustments to match ui.md */
+  .prose h2 {
+    @apply text-3xl sm:text-4xl mt-16 mb-8 text-slate-800 dark:text-slate-100;
+  }
+  .prose h3 {
+    @apply text-2xl sm:text-3xl mt-12 mb-6 text-slate-800 dark:text-slate-100;
+  }
+  .prose p {
+    @apply leading-[1.8] text-slate-600 dark:text-slate-300;
+  }
+</style>
