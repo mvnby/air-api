@@ -204,7 +204,7 @@ const addToCart = () => {
     <!-- Actions (Centered) -->
     <div class="actions-container">
         <button 
-            class="btn-action primary" 
+            class="btn-action primary js-track-cart" 
             :class="{ success: buttonState === 'success' }"
             @click.stop="addToCart"
         >

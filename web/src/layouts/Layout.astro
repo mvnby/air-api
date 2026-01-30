@@ -162,7 +162,7 @@ const address = config["address"] || SITE_CONFIG.address;
 					<HeaderCart client:load />
 					<a
 						href={`tel:${phoneClean}`}
-						class="btn btn-primary call-btn"
+						class="btn btn-primary call-btn js-track-phone"
 					>
 						<span class="material-icons-round">call</span>
 						<span class="btn-text">Позвонить</span>
@@ -215,7 +215,9 @@ const address = config["address"] || SITE_CONFIG.address;
 						</li>
 						<li>
 							<span class="material-icons-round mini">phone</span>
-							<a href={`tel:${phoneClean}`}>{phone}</a>
+							<a href={`tel:${phoneClean}`} class="js-track-phone"
+								>{phone}</a
+							>
 						</li>
 						<li>
 							<span class="material-icons-round mini">email</span>

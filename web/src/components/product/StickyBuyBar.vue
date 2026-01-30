@@ -5,7 +5,7 @@
         <span class="label">Итого:</span>
         <span class="price-val">{{ formattedPrice }}</span>
       </div>
-      <button class="btn btn-primary btn-sm" @click="scrollToBuy">
+      <button class="btn btn-primary btn-sm js-track-cart" @click="scrollToBuy">
         <span class="material-icons-round">shopping_cart</span>
         В корзину
       </button>
