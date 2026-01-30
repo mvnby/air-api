@@ -14,6 +14,7 @@ class BackupService:
         self.db_name = os.getenv("POSTGRES_DB", "air_conditioners")
         self.db_host = "db" # In docker network it is 'db'
         self.backup_folder_id = os.getenv("BACKUP_FOLDER_ID")
+        self.media_dir = "media"
         
         if not os.path.exists(BACKUP_DIR):
             os.makedirs(BACKUP_DIR)
@@ -50,38 +51,126 @@ class BackupService:
             logger.error(f"Backup failed: {e}")
             raise Exception("Backup creation failed")
 
+    def create_media_archive(self) -> str:
+        """
+        Archives the media/ directory into a tar.gz file.
+        Returns the absolute path to the archive.
+        """
+        if not os.path.exists(self.media_dir):
+            logger.warning(f"Media directory '{self.media_dir}' not found. Skipping media backup.")
+            return None
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"media_backup_{timestamp}.tar.gz"
+        filepath = os.path.join(BACKUP_DIR, filename)
+
+        command = [
+            "tar",
+            "-czf", filepath,
+            self.media_dir
+        ]
+
+        logger.info(f"Starting legacy media backup for {self.media_dir}...")
+        try:
+            subprocess.run(command, check=True)
+            logger.info(f"Media archive created successfully: {filepath}")
+            return filepath
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Media backup failed: {e}")
+            return None
+
+    def _rotate_backups(self):
+        """
+        Keeps only the last 10 backups in Google Drive.
+        Deletes older files.
+        """
+        if not self.backup_folder_id:
+            return
+
+        try:
+            files = google_service.list_files(self.backup_folder_id, limit=50)
+            
+            # Filter files to likely be ours (optional, but good safety)
+            # For now, we assume this folder is dedicated to backups
+            
+            # If we have distinct types (sql vs tar.gz), we might want to rotate them separately
+            # Or just keep last N files total. 
+            # Let's keep last 10 SETS (approx 20 files if we have sql + tar.gz)
+            # Simple approach: Keep last 20 files.
+            
+            input_limit = 10 * 2 # 10 SQL + 10 Media
+            
+            if len(files) > input_limit:
+                files_to_delete = files[input_limit:]
+                logger.info(f"Rotation: Deleting {len(files_to_delete)} old backup files...")
+                
+                for f in files_to_delete:
+                    logger.info(f"Deleting older backup: {f['name']} (created {f['createdTime']})")
+                    google_service.delete_file(f['id'])
+            else:
+                logger.info(f"Rotation check passed: {len(files)} files (Limit: {input_limit})")
+
+        except Exception as e:
+            logger.error(f"Backup rotation failed: {e}")
+
     def perform_backup(self, cleanup: bool = True):
         """
-        Full backup cycle: Dump -> Upload -> Clean (optional).
+        Full backup cycle: Dump DB + Archive Media -> Upload -> Rotate -> Clean (optional).
         """
         if not self.backup_folder_id:
             logger.warning("BACKUP_FOLDER_ID not set. Skipping upload.")
             return
 
-        filepath = None
+        created_files = []
         try:
-            # 1. Create Dump
-            filepath = self.create_dump()
-            filename = os.path.basename(filepath)
-
-            # 2. Upload to Google Drive
-            logger.info(f"Uploading {filename} to Google Drive ({self.backup_folder_id})...")
-            file_id = google_service.upload_file(
-                file_path=filepath,
-                filename=filename,
-                mime_type="application/sql",
-                folder_id=self.backup_folder_id
-            )
-            logger.info(f"Uploaded successfully. File ID: {file_id}")
-
-            # 3. Clean up local file
-            if cleanup and os.path.exists(filepath):
-                os.remove(filepath)
-                logger.info("Local backup file removed.")
-            elif not cleanup:
-                logger.info(f"Local backup file kept at: {filepath}")
+            # 1. Create DB Dump
+            db_filepath = self.create_dump()
+            created_files.append(db_filepath)
             
-            return file_id
+            # 2. Create Media Archive
+            media_filepath = self.create_media_archive()
+            if media_filepath:
+                created_files.append(media_filepath)
+
+            # 3. Upload to Google Drive
+            uploaded_count = 0
+            for fpath in created_files:
+                filename = os.path.basename(fpath)
+                mime = "application/sql" if fpath.endswith(".sql") else "application/gzip"
+                
+                logger.info(f"Uploading {filename} to Google Drive...")
+                google_service.upload_file(
+                    file_path=fpath,
+                    filename=filename,
+                    mime_type=mime,
+                    folder_id=self.backup_folder_id
+                )
+                uploaded_count += 1
+            
+            logger.info(f"Uploaded {uploaded_count} backup files successfully.")
+
+            # 4. Rotate Backups
+            self._rotate_backups()
+
+            # 5. Clean up local files
+            if cleanup:
+                for fpath in created_files:
+                    if os.path.exists(fpath):
+                        os.remove(fpath)
+                logger.info("Local backup files removed.")
+            else:
+                logger.info(f"Local backup files kept: {created_files}")
+            
+            return True
+
+        except Exception as e:
+            logger.error(f"Backup cycle failed: {e}")
+            # Try to cleanup even if failed
+            for fpath in created_files:
+                if fpath and os.path.exists(fpath):
+                    try: os.remove(fpath) 
+                    except: pass
+            raise e
 
         except Exception as e:
             logger.error(f"Backup cycle failed: {e}")

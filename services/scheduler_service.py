@@ -4,7 +4,7 @@ from typing import List
 from sqlmodel import select
 from core.database import async_session_maker
 from models import Product
-from datetime import datetime
+from datetime import datetime, timedelta
 from parsers.onliner import OnlinerParser
 from core.logger import logger
 from services.backup_service import backup_service
@@ -148,25 +148,29 @@ class SchedulerService:
             logger.info(f"🔄 Auto-deferred {len(stalled_orders)} stalled orders.")
 
     async def _backup_loop(self):
-        """Runs database backup every 24 hours."""
+        """Runs database backup every day at 3:00 AM."""
         while True:
             try:
-                # Calculate sleep time until next run (e.g., 3 AM)
-                # For simplicity, we just run it 24h loop, starting immediately or after a small delay?
-                # Let's run it once at startup (or after short delay) and then every 24h
-                # OR better: run at 03:00 UTC
-                
                 now = datetime.now()
-                # Run backups?
-                logger.info("⏳ Starting Daily Backup...")
+                target_time = now.replace(hour=3, minute=0, second=0, microsecond=0)
+                
+                # If 3 AM has already passed today, schedule for tomorrow
+                if now >= target_time:
+                    target_time += timedelta(days=1)
+                
+                wait_seconds = (target_time - now).total_seconds()
+                logger.info(f"⏳ Next Backup scheduled for {target_time} (in {wait_seconds/3600:.2f} hours)")
+                
+                await asyncio.sleep(wait_seconds)
+                
+                logger.info("⏳ Starting Daily Backup (DB + Media)...")
                 # We need to run sync method in thread executor because subprocess is blocking
                 await asyncio.to_thread(backup_service.perform_backup, cleanup=True)
                 logger.info("✅ Daily Backup Completed.")
                 
             except Exception as e:
                 logger.error(f"❌ Backup Loop Error: {e}")
-            
-            # Sleep 24h
-            await asyncio.sleep(24 * 3600)
+                # Retry in 1 hour if it crashed to avoid loop spam
+                await asyncio.sleep(3600)
 
 scheduler_service = SchedulerService()

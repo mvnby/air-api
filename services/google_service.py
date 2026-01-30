@@ -691,27 +691,33 @@ class GoogleDocsService:
         except Exception as e:
             raise Exception(f"Google Drive Upload Error: {str(e)}")
 
-    def download_file(self, file_id: str) -> BytesIO:
+            return file_io
+        except Exception as e:
+             raise Exception(f"Google Drive Download Error: {str(e)}")
+
+    def list_files(self, folder_id: str, limit: int = 20) -> List[Dict[str, Any]]:
         """
-        Скачивает файл из Google Drive (бинарный).
+        Возвращает список файлов в папке, отсортированный по дате создания (DESC).
         """
         if not self.creds or not self.creds.valid:
             self._authenticate()
         
         try:
             drive_service = build('drive', 'v3', credentials=self.creds)
-            request = drive_service.files().get_media(fileId=file_id)
             
-            file_io = BytesIO()
-            downloader = MediaIoBaseDownload(file_io, request)
+            query = f"'{folder_id}' in parents and trashed = false"
             
-            done = False
-            while not done:
-                status, done = downloader.next_chunk()
+            results = drive_service.files().list(
+                q=query,
+                pageSize=limit,
+                fields="nextPageToken, files(id, name, createdTime)",
+                orderBy="createdTime desc"
+            ).execute()
             
-            file_io.seek(0)
-            return file_io
+            return results.get('files', [])
+            
         except Exception as e:
-             raise Exception(f"Google Drive Download Error: {str(e)}")
+            logger.error(f"Google Drive List Files Error: {e}")
+            return []
 
 google_service = GoogleDocsService()

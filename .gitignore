@@ -36,4 +36,4 @@ backups/backup.sql
 web/temp/*
 .agent/workflows/plan.md
 env.prod
-.agent/skills/brainstorm.md
+.agent/*
