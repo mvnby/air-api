@@ -3,24 +3,39 @@ import Layout from "../layouts/Layout.astro";
 import ProductCard from "../components/ProductCard.astro";
 import ProductGroup from "../components/ProductGroup.astro";
 import FeaturedArticles from "../components/blog/FeaturedArticles.astro";
-import { getInstallationPricingInfo } from "../utils/api";
+import {
+	getInstallationPricingInfo,
+	getGlobalConfig,
+	getProductBySlug,
+	getCatalog,
+} from "../utils/api";
 
 const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
-import { getProductById } from "../utils/api";
+const config = await getGlobalConfig();
 
-const heroProduct = await getProductById(63);
+let heroProduct = null;
+if (config && config.hero_product) {
+	heroProduct = await getProductBySlug(config.hero_product);
+}
 
-// Fallback if product 63 not found (prevent crash)
-const displayProduct = heroProduct || {
-	title: "Haier Coral Expert",
-	price: 1399,
-	slug: "haier-coral",
-	main_image:
-		"https://lh3.googleusercontent.com/aida-public/AB6AXuCJ9hM1wPSDne42j3c73oSgAT919piozP7uewktSZ65sf4wj5_kHtyPyb93VjYjG1Z1ePYKgwwOrPWYP8m5qfhVfHvL8UBqWbfXDOWBa0g-HmvZJGujd-rXIAHGOVXQjyphznvogsQJPjx_LXNhnRWhkHsSjYmBELj_UoMApNOW44UMtGnbcrKgZwW9AMKEnATanS8miDOCPIx9641OEeQgqbgQbcemmrbnB8ME2XXUi3VkwPi4aeF3jHDl6F3BJDQAfkErAjwuny0",
-	description:
-		"Инверторная сплит-система с функцией самоочистки и тихим режимом.",
-	is_inverter: true,
-};
+// Fallback: Try to get a "Hit" product
+if (!heroProduct) {
+	const hits = await getCatalog({ tag_slugs: ["hit"], limit: 1 });
+	if (hits && hits.items && hits.items.length > 0) {
+		heroProduct = hits.items[0];
+	}
+}
+
+// Last Resort: Any product (Newest)
+if (!heroProduct) {
+	const any = await getCatalog({ limit: 1 });
+	if (any && any.items && any.items.length > 0) {
+		heroProduct = any.items[0];
+	}
+}
+
+// No hardcoded fallback. If null, card is hidden.
+const displayProduct = heroProduct;
 ---
 
 <Layout title="Главная">
@@ -63,7 +78,11 @@ const displayProduct = heroProduct || {
 			</div>
 
 			<div class="hero-visual">
-				<ProductCard product={displayProduct} variant="hero" />
+				{
+					displayProduct && (
+						<ProductCard product={displayProduct} variant="hero" />
+					)
+				}
 			</div>
 		</div>
 	</section>
@@ -512,7 +531,7 @@ const displayProduct = heroProduct || {
 		font-size: 0.85rem;
 		color: var(--text-muted);
 	}
-	.m-price-box {	
+	.m-price-box {
 		padding: 0.5rem 1rem;
 		border-radius: 10px;
 		display: flex;

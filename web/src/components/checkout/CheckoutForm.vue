@@ -1,7 +1,8 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useStore } from '@nanostores/vue';
-import { cartItems, cartTotal, clearCart } from '../../store/cart';
+import { cartItems, cartTotal, clearCart, refreshPrices } from '../../store/cart';
+import { createOrder, getProductBySlug } from '../../utils/api';
 
 // State
 const form = ref({
@@ -30,15 +31,12 @@ const validate = () => {
     return Object.keys(errors.value).length === 0;
 };
 
-// API
-const API_URL = import.meta.env.PUBLIC_API_URL || 'https://api.mvn.by'; 
-// Note: In development it might be localhost:8000. 
-// Ideally should use existing api utils but wrapping POST separately here for clarity or import `createOrder` if exists.
-// I will assume we fetch directly or use a helper. 
-// Given current Utils: `api.ts` has getProducts, getInstallationRates etc.
-// Let's implement fetch here for now.
+// Refresh prices on mount to ensure freshness
+onMounted(() => {
+    refreshPrices();
+});
 
-const submitOrder = async () => {
+const submitOrderHandler = async () => {
     if (!validate()) return;
     if (items.value.length === 0) return;
 
@@ -47,13 +45,14 @@ const submitOrder = async () => {
 
     try {
         // Prepare items with ID resolution
+        // Note: now refreshPrices ensures we have productId, but in case it's missing (e.g. offline/fail),
+        // we might still try to fetch or fail gracefully.
+        
         const orderItems = await Promise.all(items.value.map(async (i) => {
             let pid = i.productId;
             if (!pid) {
-                // Fallback: Fetch ID by slug from API
+                // Fallback: Fetch ID by slug from API if not in store
                 try {
-                   // We need to dynamic import or assume api is available
-                   const { getProductBySlug } = await import('../../utils/api'); 
                    const p = await getProductBySlug(i.id);
                    if (p && p.id) pid = p.id;
                 } catch (e) {
@@ -72,7 +71,7 @@ const submitOrder = async () => {
                 installation_meta: i.withInstallation ? {
                     source: "web_calculator",
                     discount_applied: true,
-                    base_rate: i.installationPrice ? i.installationPrice + 100 : 0,  // Assuming 100 BYN discount
+                    base_rate: i.installationPrice ? i.installationPrice + 100 : 0,  // Assuming 100 BYN discount rough calc if not strict
                     meters: i.installationMeters || 3,
                     options: i.installationOptions || []
                 } : null,
@@ -90,25 +89,10 @@ const submitOrder = async () => {
             items: orderItems
         };
 
-        const response = await fetch(`${API_URL}/orders`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload)
-        });
+        const res = await createOrder(payload);
 
-        if (!response.ok) {
-            const errData = await response.json();
-            let msg = 'Ошибка при создании заказа';
-            if (errData.detail) {
-                if (Array.isArray(errData.detail)) {
-                    msg = errData.detail.map(e => `${e.loc[e.loc.length-1]}: ${e.msg}`).join('; ');
-                } else {
-                    msg = errData.detail;
-                }
-            }
-            throw new Error(msg);
+        if (!res) {
+             throw new Error('Ошибка при создании заказа. Пожалуйста, попробуйте позже.');
         }
 
         // Success
@@ -117,7 +101,14 @@ const submitOrder = async () => {
 
     } catch (e) {
         console.error(e);
-        submitError.value = e.message;
+        // If API unified error handling threw with structure
+        if (e.details && Array.isArray(e.details.detail)) {
+             submitError.value = e.details.detail.map(err => `${err.loc.join('.')}: ${err.msg}`).join('; ');
+        } else if (e.details && typeof e.details.detail === 'string') {
+             submitError.value = e.details.detail;
+        } else {
+             submitError.value = e.message;
+        }
     } finally {
         isSubmitting.value = false;
     }
@@ -125,9 +116,7 @@ const submitOrder = async () => {
 
 // Phone mask helper (simplistic)
 const onPhoneInput = (e) => {
-    let val = e.target.value.replace(/\D/g, '');
-    // Only basic cleaning, full mask logic is complex without library
-    // We'll leave it simple for now or use library if available
+    // Only basic cleaning
     form.value.phone = e.target.value; 
 }
 </script>
@@ -144,7 +133,7 @@ const onPhoneInput = (e) => {
         <div class="form-section card">
             <h2>Оформление заказа</h2>
             
-            <form @submit.prevent="submitOrder" class="checkout-form">
+            <form @submit.prevent="submitOrderHandler" class="checkout-form">
                 <div class="form-group">
                     <label for="name">Имя <span class="req">*</span></label>
                     <input 
@@ -222,7 +211,7 @@ const onPhoneInput = (e) => {
                 </div>
                 
                 <div class="desktop-action">
-                    <button @click="submitOrder" class="btn btn-primary btn-block big" :disabled="isSubmitting">
+                    <button @click="submitOrderHandler" class="btn btn-primary btn-block big" :disabled="isSubmitting">
                          {{ isSubmitting ? 'Отправка...' : 'Подтвердить заказ' }}
                     </button>
                      <p class="privacy-note">Нажимая кнопку, вы соглашаетесь с условиями обработки персональных данных</p>
