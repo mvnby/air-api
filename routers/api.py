@@ -407,41 +407,17 @@ async def get_catalog(
         meta=Meta(total=total, page=page, limit=limit, pages=pages)
     )
 
-@router.get("/v1/products/{product_id}", response_model=ProductResponse)
-async def get_product_by_id(product_id: int, session: AsyncSession = Depends(get_session)):
-    """Get product details by ID (Hybrid Access)."""
-    product = await ProductDAO.get_by_id(session, product_id)
-    if not product:
-        raise HTTPException(status_code=404, detail=f"Product with ID '{product_id}' not found")
-    return _map_product_to_response(product)
-
-@router.post("/v1/products/prices", response_model=List[ProductPriceResponse])
-async def get_products_prices(
-    ids: List[int],
-    session: AsyncSession = Depends(get_session)
-):
-    """Batch check for product prices and availability."""
-    products = await ProductDAO.get_by_ids(session, ids)
-    return [
-        ProductPriceResponse(
-            id=p.id,
-            price=p.price,
-            in_stock=p.is_published
-        ) for p in products
-    ]
-
-@router.get("/v1/products/{slug}", response_model=ProductResponse)
-async def get_product_by_slug(slug: str, session: AsyncSession = Depends(get_session)):
+@router.get("/v1/products/{identifier}", response_model=ProductResponse)
+async def get_product_by_identifier(identifier: str, session: AsyncSession = Depends(get_session)):
     """
-    Get product details by slug.
+    Get product details by ID or slug (Hybrid Access).
     
     Returns full product information including tags, specifications, and images.
     Raises 404 if product not found.
     """
-    product = await ProductDAO.get_by_slug(session, slug)
+    product = await ProductService.get_product_by_identifier(session, identifier)
     if not product:
-        raise HTTPException(status_code=404, detail=f"Product with slug '{slug}' not found")
-    
+        raise HTTPException(status_code=404, detail=f"Product with identifier '{identifier}' not found")
     return _map_product_to_response(product)
 
 # --- CONTENT ENDPOINTS ---

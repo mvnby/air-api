@@ -130,6 +130,15 @@ class ProductService:
         return None
 
     @staticmethod
+    async def get_product_by_identifier(session: AsyncSession, identifier: str) -> Optional[Product]:
+        """Fetch a single product by ID (if numeric) or slug (Hybrid Access)."""
+        if identifier.isdigit():
+            product = await ProductDAO.get_by_id(session, int(identifier))
+            if product:
+                return product
+        return await ProductDAO.get_by_slug(session, identifier)
+
+    @staticmethod
     async def get_all(session: AsyncSession) -> List[Dict[str, Any]]:
         """Get all published products, formatted for bot."""
         products = await ProductDAO.get_all_published(session)
