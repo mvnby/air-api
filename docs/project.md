@@ -50,6 +50,7 @@
 * **Phase 40 (Rich Options)**: Enhanced Installation Calculator. Services now support rich metadata (images, slugs) and are split into distinct line items in orders.
 * **Phase 41 (Infrastructure)**: Fixed PostCSS/Tailwind build pipeline in Docker.
 * **Phase 42 (Content)**: Implemented MDX Blog Engine. Added Content Collections, Reading Time, and Related Articles.
+* **Phase 43 (Network/Optimization)**: Unified API Client (`/api/v1` default). Optimized Network Layer (dynamic SSR/Client base URL). Removed legacy hardcoded URLs. Integrated real-time price refreshing in Cart.
 
 ## 4. Critical Directives (Rules)
 

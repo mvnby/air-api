@@ -132,6 +132,51 @@ export function toggleInstallation(id: string, currentWithInstallation: boolean)
     }
 }
 
+export async function refreshPrices() {
+    const current = cartItems.get();
+    if (current.length === 0) return;
+
+    // Extract Slugs or IDs (using ID if available, else slug)
+    // Actually our refreshProductPrices handles both, but let's prefer Slug as it is the main ID in cart (item.id)
+    // Check if we have numeric IDs? item.productId
+
+    // We can just fetch by slug because item.id is slug
+    const idsToFetch = current.map(i => i.id);
+
+    try {
+        // Dynamic import to avoid circular dependencies if any, though utils/api shouldn't depend on store
+        const { refreshProductPrices } = await import('../utils/api');
+        const freshProducts: any[] = await refreshProductPrices(idsToFetch);
+
+        if (!freshProducts || freshProducts.length === 0) return;
+
+        // Create a map for quick lookup
+        const productMap = new Map();
+        freshProducts.forEach(p => {
+            productMap.set(p.slug, p);
+        });
+
+        const updated = current.map(item => {
+            const fresh = productMap.get(item.id);
+            if (fresh) {
+                // Update price and ensure ID is set
+                return {
+                    ...item,
+                    price: fresh.price,
+                    productId: fresh.id, // Update numeric ID just in case
+                    name: fresh.title, // Sync name if changed
+                    image: fresh.main_image // Sync image
+                };
+            }
+            return item;
+        });
+
+        cartItems.set(updated);
+    } catch (e) {
+        console.error("Failed to refresh cart prices", e);
+    }
+}
+
 export function clearCart() {
     cartItems.set([]);
 }

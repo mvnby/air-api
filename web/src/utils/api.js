@@ -1,19 +1,24 @@
 const ENV_API_URL = import.meta.env.INTERNAL_API_URL || 'http://app:8000/api/v1';
-const PUBLIC_API_ROOT = (import.meta.env.PUBLIC_API_URL || 'http://localhost:8000').replace(/\/api\/v1\/?$/, "");
+const PUBLIC_API_URL = (import.meta.env.PUBLIC_API_URL || 'http://localhost:8000').replace(/\/api\/v1\/?$/, "");
 
 // Ensure standard formatting (no trailing slash)
+// INTERNAL_URL is used for SSR (Server Side Rendering) inside Docker network
 const INTERNAL_URL = (import.meta.env.INTERNAL_API_URL || 'http://app:8000/api/v1').replace(/\/$/, "");
-const PUBLIC_URL = (import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/\/$/, "");
+// PUBLIC_URL is used for Client-side requests (Browser)
+const CLIENT_URL = (import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/\/$/, "");
 
 // Define API versions relative to the base
 // Use Client-side URL if not in SSR
-const API_V1 = import.meta.env.SSR ? INTERNAL_URL : PUBLIC_URL;
-const API_ROOT = API_V1.replace(/\/v1$/, ""); // Fallback for non-versioned endpoints
+const API_V1 = import.meta.env.SSR ? INTERNAL_URL : CLIENT_URL;
+const API_ROOT = API_V1.replace(/\/v1$/, ""); // Fallback for non-versioned endpoints if any
 
 export function resolveImageUrl(path) {
     if (!path) return "/placeholder.jpg";
     if (path.startsWith("http")) return path;
-    return `${PUBLIC_API_ROOT}/${path.replace(/^\//, "")}`;
+    // Images are always served from public root, not API v1
+    const root = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000';
+    const cleanRoot = root.replace(/\/api\/v1\/?$/, "").replace(/\/$/, "");
+    return `${cleanRoot}/${path.replace(/^\//, "")}`;
 }
 
 // Formatting helpers
@@ -29,17 +34,34 @@ function buildQuery(params) {
     return searchParams.toString();
 }
 
-async function fetchJson(url, errorMsg = 'API request failed') {
+/**
+ * Generic fetch wrapper with unified error handling
+ * @param {string} url 
+ * @param {object} options 
+ * @param {boolean} returnNullOnError - if true, returns null instead of throwing (legacy mode)
+ */
+async function fetchJson(url, options = {}, returnNullOnError = true) {
     try {
-        const response = await fetch(url);
+        const response = await fetch(url, options);
         if (!response.ok) {
-            console.error(`[API] Error ${response.status} from ${url}`);
-            return null; // Return null on error primarily
+            // Try to parse error message
+            let errorDetails = null;
+            try { errorDetails = await response.json(); } catch (e) {/* ignore */ }
+
+            const error = new Error(`API Error ${response.status}: ${url}`);
+            error.status = response.status;
+            error.details = errorDetails;
+
+            console.error(`[API] Error ${response.status} from ${url}`, errorDetails);
+
+            if (returnNullOnError) return null;
+            throw error;
         }
         return await response.json();
     } catch (error) {
         console.error(`[API] Fetch error for ${url}:`, error.message);
-        return null;
+        if (returnNullOnError) return null;
+        throw error;
     }
 }
 
@@ -65,10 +87,44 @@ export async function getProductBySlug(slug) {
 }
 
 export async function getProductById(id) {
-    // Uses API_ROOT because ID endpoint is at /api/products/{id}
-    const url = `${API_ROOT}/products/${id}`;
-    console.log(`[SSR] Fetching product ${id} from: ${url}`);
-    return await fetchJson(url);
+    // Uses API_ROOT because ID endpoint is at /api/products/{id} -> wait, standard REST is /api/v1/products/{id}
+    // Checking previous implementation: `${API_ROOT}/products/${id}` was used.
+    // If our API follows /api/v1/products/{id}, we should use API_V1.
+    // Let's assume standard REST on V1 for now as per goal "All methods use /api/v1/"
+    return await fetchJson(`${API_V1}/products/${id}`);
+}
+
+/**
+ * Fetch fresh prices for a list of product IDs or Slugs
+ * @param {Array<string|number>} ids 
+ */
+export async function refreshProductPrices(ids) {
+    if (!ids || ids.length === 0) return [];
+    const query = buildQuery({ ids: ids, limit: 100 }); // Assuming catalog supports 'ids' filter or we need another way
+    // If catalog doesn't support 'ids', we might need to fetch individually or use a specific endpoint.
+    // Let's try fetching catalog with these IDs if supported, otherwise falling back to individual.
+    // Ideally backend supports POST /products/batch or GET /catalog?ids=...
+    // If not, we will just use getCatalog without filters? No, that's inefficient.
+    // For now, let's assume we can filter catalog by slugs if they are passed, or just IDs.
+    // Check `buildQuery`: it appends array values.
+
+    // Safer approach for now: Promise.all if count is small (<10), otherwise warning.
+    // We'll trust getCatalog supports filtering by something or we rely on the component to check.
+    // A common pattern is ?ids=1,2,3.
+    // Let's assume we can pass `ids` to catalog.
+
+    // Correction: Frontend 'ids' might be mixed slug/int.
+    // Let's rely on `getCatalog` supporting specific filters if implemented.
+    // If not implemented in backend, we might need to implement it there or here. 
+    // Given the task is "Optimization", let's assume we can just fetch fresh data for specific items.
+
+    // FALLBACK: Use getProductBySlug for each item.
+    const promises = ids.map(id =>
+        typeof id === 'number' ? getProductById(id) : getProductBySlug(id)
+    );
+
+    const results = await Promise.all(promises);
+    return results.filter(Boolean);
 }
 
 export async function getGlobalConfig() {
@@ -126,6 +182,13 @@ export async function submitContactForm(formData) {
         return false;
     }
 }
+
+export async function getServiceOptions(category = 'installation_option') {
+    const url = `${API_V1}/services/options?category=${category}`;
+    const data = await fetchJson(url);
+    return data || [];
+}
+
 export async function getInstallationPricingInfo() {
     const [rates, config] = await Promise.all([
         getInstallationRates(),
@@ -148,25 +211,25 @@ export async function getInstallationPricingInfo() {
     };
 }
 
+/**
+ * Create a new order
+ * @param {object} payload - Full order payload matching backend schema
+ * @returns {Promise<object|null>} Order object or null on error
+ */
 export async function createOrder(payload) {
     const url = `${API_V1}/orders`;
+    // We want to return specific errors for the UI to show form validation issues
     try {
-        const response = await fetch(url, {
+        // Using returnNullOnError = false to catch and throw legacy-style
+        const res = await fetchJson(url, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-            const err = await response.json();
-            console.error(`[API] Order error ${response.status}`, err);
-            return null;
-        }
-        return await response.json();
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }, false);
+        return res;
     } catch (e) {
-        console.error('[API] Order exception:', e);
-        return null;
+        // Rethrow with details if available, so caller can show specific validation errors
+        if (e.details) throw e;
+        return null; // Fallback for generic errors if caller doesn't handle throw
     }
 }

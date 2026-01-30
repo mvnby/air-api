@@ -1,8 +1,5 @@
 import { atom } from 'nanostores';
-
-const ENV_API_URL = import.meta.env.INTERNAL_API_URL || 'http://app:8000/api/v1';
-const PUBLIC_API_URL = (import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/\/$/, "");
-const API_V1 = import.meta.env.SSR ? ENV_API_URL : PUBLIC_API_URL;
+import { getServiceOptions } from '../utils/api';
 
 export interface InstallationOption {
     id: number;
@@ -17,10 +14,8 @@ export const installationOptions = atom<InstallationOption[]>([]);
 
 export async function fetchInstallationOptions() {
     try {
-        const res = await fetch(`${API_V1}/services/options?category=installation_option`);
-        if (!res.ok) throw new Error('Failed to fetch options');
+        const data = await getServiceOptions('installation_option');
 
-        const data = await res.json();
         // Backend returns ServiceResponse: { id, title, slug, base_price, image, description ... }
         const mapped: InstallationOption[] = data.map((item: any) => ({
             id: item.id,
