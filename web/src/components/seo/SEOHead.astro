@@ -1,0 +1,93 @@
+---
+export interface Props {
+    title: string;
+    description: string;
+    image?: string;
+    type?: "website" | "product" | "article";
+    price?: number;
+    currency?: string;
+}
+
+const {
+    title,
+    description,
+    image,
+    type = "website",
+    price,
+    currency = "BYN",
+} = Astro.props;
+
+const site = Astro.site ? Astro.site.toString() : Astro.url.origin;
+const canonicalURL = new URL(Astro.url.pathname, site);
+
+const resolveImage = (img: string | undefined): URL => {
+    if (!img) {
+        return new URL("/default-og.png", site);
+    }
+    // Check if the image is already a complete URL
+    try {
+        return new URL(img);
+    } catch (e) {
+        // If not, treat as relative to site
+        return new URL(img, site);
+    }
+};
+
+const resolvedImage = resolveImage(image);
+
+const schema =
+    type === "product" && price
+        ? {
+              "@context": "https://schema.org",
+              "@type": "Product",
+              name: title,
+              image: resolvedImage.toString(),
+              description: description,
+              offers: {
+                  "@type": "Offer",
+                  priceCurrency: currency,
+                  price: price,
+                  availability: "https://schema.org/InStock",
+              },
+          }
+        : null;
+---
+
+<!-- Global Metadata -->
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<meta name="generator" content={Astro.generator} />
+
+<!-- Canonical URL -->
+<link rel="canonical" href={canonicalURL} />
+
+<!-- Primary Meta Tags -->
+<title>{title}</title>
+<meta name="title" content={title} />
+<meta name="description" content={description} />
+
+<!-- Open Graph / Facebook -->
+<meta property="og:type" content={type} />
+<meta property="og:url" content={Astro.url} />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:image" content={resolvedImage} />
+
+<!-- Twitter -->
+<meta property="twitter:card" content="summary_large_image" />
+<meta property="twitter:url" content={Astro.url} />
+<meta property="twitter:title" content={title} />
+<meta property="twitter:description" content={description} />
+<meta property="twitter:image" content={resolvedImage} />
+
+<!-- JSON-LD Structured Data -->
+{
+    schema && (
+        <script
+            is:inline
+            type="application/ld+json"
+            set:html={JSON.stringify(schema)}
+        />
+    )
+}

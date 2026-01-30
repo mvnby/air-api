@@ -4,12 +4,15 @@ import { getGlobalConfig } from "../utils/api";
 import { SITE_CONFIG } from "../config";
 import HeaderCart from "../components/cart/HeaderCart.vue";
 import ToastContainer from "../components/ui/ToastContainer.vue";
+import SEOHead from "../components/seo/SEOHead.astro";
 
 interface Props {
 	title: string;
 	description?: string;
 	image?: string;
-	type?: "website" | "article";
+	type?: "website" | "product" | "article";
+	price?: number;
+	currency?: string;
 	articleDate?: string;
 }
 // Читаем переменную из окружения (она прокидывается скриптом)
@@ -18,9 +21,11 @@ const isDev = siteUrl.includes("dev.mvn.by");
 
 const {
 	title,
-	description = "Premium Air Conditioning store",
-	image = "/img/og-default.png",
+	description = "Кондиционеры в Витебске. Продажа, монтаж, обслуживание",
+	image,
 	type = "website",
+	price,
+	currency,
 	articleDate,
 } = Astro.props;
 
@@ -31,9 +36,6 @@ const phone = config["phone"] || SITE_CONFIG.phone;
 const phoneClean = config["phone_clean"] || SITE_CONFIG.phoneClean;
 const email = config["email"] || SITE_CONFIG.email;
 const address = config["address"] || SITE_CONFIG.address;
-
-const canonicalURL = new URL(Astro.url.pathname, siteUrl || "https://mvn.by");
-const socialImageURL = new URL(image, siteUrl || "https://mvn.by");
 ---
 
 <!doctype html>
@@ -41,35 +43,31 @@ const socialImageURL = new URL(image, siteUrl || "https://mvn.by");
 	<head>
 		<meta charset="UTF-8" />
 		{isDev && <meta name="robots" content="noindex, nofollow" />}
-		<meta name="description" content={description} />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<meta name="generator" content={Astro.generator} />
-		<link rel="canonical" href={canonicalURL} />
-		<title>{title} | МАСТЕР ВОЗДУХА</title>
+
+		<SEOHead
+			title={`${title} | МАСТЕР ВОЗДУХА`}
+			description={description}
+			image={image}
+			type={type}
+			price={price}
+			currency={currency}
+			siteUrl={siteUrl}
+			canonicalURL={Astro.url.pathname}
+		/>
+
 		<link
 			href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"
 			rel="stylesheet"
 		/>
 
-		<!-- Open Graph / Facebook -->
-		<meta property="og:type" content={type} />
-		<meta property="og:url" content={canonicalURL} />
-		<meta property="og:title" content={title} />
-		<meta property="og:description" content={description} />
-		<meta property="og:image" content={socialImageURL} />
 		{
 			articleDate && (
 				<meta property="article:published_time" content={articleDate} />
 			)
 		}
-
-		<!-- Twitter -->
-		<meta property="twitter:card" content="summary_large_image" />
-		<meta property="twitter:url" content={canonicalURL} />
-		<meta property="twitter:title" content={title} />
-		<meta property="twitter:description" content={description} />
-		<meta property="twitter:image" content={socialImageURL} />
 
 		<script is:inline>
 			const theme = (() => {

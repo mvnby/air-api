@@ -2,9 +2,11 @@ import { defineConfig } from 'astro/config';
 import vue from '@astrojs/vue';
 import mdx from '@astrojs/mdx';
 import tailwind from '@astrojs/tailwind';
+import sitemap from '@astrojs/sitemap';
 
 // https://astro.build/config
 export default defineConfig({
-  integrations: [vue(), mdx(), tailwind()],
+  site: 'https://mvn.by',
+  integrations: [vue(), mdx(), tailwind(), sitemap()],
   output: 'static'
 });
