@@ -1,7 +1,8 @@
 from sqladmin import ModelView, action, expose, BaseView
 from sqladmin.fields import AjaxSelectMultipleField, QueryAjaxModelLoader
 from markupsafe import Markup
-from wtforms import TextAreaField, FileField
+from wtforms import TextAreaField, FileField, StringField
+from wtforms.validators import DataRequired
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 import slugify
@@ -31,7 +32,7 @@ class ProductAdmin(ModelView, model=Product):
     
     # --- ФОРМА: Порядок полей ---
     form_columns = [
-        "title", "description", "price", "old_price", "area", "is_inverter", "power_cooling",
+        "title", "slug", "description", "price", "old_price", "area", "is_inverter", "power_cooling",
         "main_image", "images", 
         "tags",  # M2M handled by form_ajax_refs
         "specs", "is_published", "source_url"
@@ -51,15 +52,25 @@ class ProductAdmin(ModelView, model=Product):
     form_overrides = {
         "description": TextAreaField,
         "images": TextAreaField,
+        # "slug" removed from overrides
     }
-
-    # --- Extra fields (только для файла, НЕ для tags!) ---
+    
+    # --- Form Args: Override validators and label ---
+    form_args = {
+        "slug": {
+            "validators": [DataRequired()],
+            "label": "Slug Re-Attempt",
+            "description": "Уникальный URL"
+        }
+    }
+    
+    # --- Extra fields (только для файла!) ---
     form_extra_fields = {
         "main_image_file": FileField("Загрузить фото (изменит путь выше)"),
     }
 
     form_edit_rules = [
-        "title", "description", "area", "is_inverter", "power_cooling", "price", "old_price", "source_url",
+        "title", "slug", "description", "area", "is_inverter", "power_cooling", "price", "old_price", "source_url",
         "is_published", "main_image", "main_image_file", "images",
         "tags", "specs"
     ]
@@ -85,7 +96,7 @@ class ProductAdmin(ModelView, model=Product):
             query = query.where(Product.id.in_(tag_subquery))
         
         return query
-
+    
     def detail_query(self, request):
         query = super().detail_query(request)
         return query.options(selectinload(Product.tags).selectinload(Tag.group))
