@@ -48,7 +48,8 @@ const address = config["address"] || SITE_CONFIG.address;
 		<meta name="generator" content={Astro.generator} />
 
 		<!-- Google Tag Manager -->
-		<script is:inline>
+		<script is:inline define:vars={{ gtmId: import.meta.env.PUBLIC_GTM_ID }}
+		>
 			(function (w, d, s, l, i) {
 				w[l] = w[l] || [];
 				w[l].push({
@@ -61,13 +62,7 @@ const address = config["address"] || SITE_CONFIG.address;
 				j.async = true;
 				j.src = "https://www.googletagmanager.com/gtm.js?id=" + i + dl;
 				f.parentNode.insertBefore(j, f);
-			})(
-				window,
-				document,
-				"script",
-				"dataLayer",
-				import.meta.env.PUBLIC_GTM_ID,
-			);
+			})(window, document, "script", "dataLayer", gtmId);
 		</script>
 		<!-- End Google Tag Manager -->
 
@@ -78,8 +73,6 @@ const address = config["address"] || SITE_CONFIG.address;
 			type={type}
 			price={price}
 			currency={currency}
-			siteUrl={siteUrl}
-			canonicalURL={Astro.url.pathname}
 		/>
 
 		<link
