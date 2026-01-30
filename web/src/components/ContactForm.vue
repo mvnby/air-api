@@ -1,6 +1,7 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { submitContactForm } from '../utils/api';
+import IMask from 'imask';
 
 const props = defineProps({
   title: {
@@ -27,10 +28,33 @@ const form = ref({
   message: ''
 });
 
+const phoneInput = ref(null);
+let mask = null;
 const isSubmitting = ref(false);
 const isSuccess = ref(false);
 
+onMounted(() => {
+    if (phoneInput.value) {
+        mask = IMask(phoneInput.value, {
+            mask: '+{375} (00) 000-00-00',
+            lazy: false,
+            placeholderChar: '_'
+        });
+        
+        // Initial sync
+        mask.on('accept', () => {
+            form.value.phone = mask.value;
+        });
+    }
+});
+
 const submitForm = async () => {
+  // Validate phone
+  if (!mask || !mask.masked.isComplete) {
+      alert('Пожалуйста, введите полный номер телефона');
+      return;
+  }
+
   isSubmitting.value = true;
   
   // Combine subject with message if present
@@ -50,6 +74,7 @@ const submitForm = async () => {
     setTimeout(() => {
         isSuccess.value = false;
         form.value = { name: '', phone: '', message: '' };
+        if (mask) mask.value = ''; // Reset mask value
     }, 5000);
   } else {
     alert('Ошибка отправки. Попробуйте позже.');
@@ -87,6 +112,7 @@ const submitForm = async () => {
         <input 
           type="tel" 
           id="phone" 
+          ref="phoneInput"
           v-model="form.phone" 
           placeholder="+375 (XX) XXX-XX-XX"
           required

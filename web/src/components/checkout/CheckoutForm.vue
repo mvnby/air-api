@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useStore } from '@nanostores/vue';
 import { cartItems, cartTotal, clearCart, refreshPrices } from '../../store/cart';
-import { createOrder, getProductBySlug } from '../../utils/api';
+import { createOrder, getProductBySlug, getCompanyByUnp, getBankBySearch } from '../../utils/api';
 import IMask from 'imask';
 
 // State
@@ -13,13 +13,18 @@ const form = ref({
     comment: '',
     type: 'individual',
     inn: '',
-    full_legal_name: ''
+    full_legal_name: '',
+    legal_address: '',
+    iban: '',
+    bic: '',
+    bank_name: ''
 });
 const isLegalEntity = ref(false);
 const phoneInput = ref(null);
 let mask = null;
 const errors = ref({});
 const isSubmitting = ref(false);
+const isLoadingData = ref(false);
 const submitError = ref(null);
 
 const items = useStore(cartItems);
@@ -39,6 +44,7 @@ const validate = () => {
     if (isLegalEntity.value) {
         if (!form.value.inn) errors.value.inn = 'Введите УНП';
         if (!form.value.full_legal_name) errors.value.full_legal_name = 'Введите название организации';
+        if (!form.value.legal_address) errors.value.legal_address = 'Введите юридический адрес';
     }
 
     return Object.keys(errors.value).length === 0;
@@ -61,6 +67,48 @@ onMounted(() => {
         });
     }
 });
+
+// Auto-fill UNP
+const onUnpBlur = async () => {
+    if (!form.value.inn || form.value.inn.length !== 9) return;
+    
+    isLoadingData.value = true;
+    try {
+        const data = await getCompanyByUnp(form.value.inn);
+        // EGR API structure: { row: { vnaimp: "...", vpadres: "..." } }
+        if (data && data.row) {
+             // Remove quotes " from name if needed, or keep them
+             form.value.full_legal_name = data.row.vnaimp || form.value.full_legal_name;
+             form.value.legal_address = data.row.vpadres || form.value.legal_address;
+        }
+    } catch (e) {
+        console.error("Failed to fetch EGR data", e);
+    } finally {
+        isLoadingData.value = false;
+    }
+};
+
+// Auto-fill IBAN
+const onIbanBlur = async () => {
+     if (!form.value.iban || form.value.iban.length < 10) return;
+     
+     // Basic cleanup
+     const ibanClean = form.value.iban.replace(/\s/g, '').toUpperCase();
+     form.value.iban = ibanClean;
+     
+     isLoadingData.value = true;
+     try {
+        const data = await getBankBySearch(ibanClean);
+        if (data && data.name) {
+             form.value.bank_name = data.name + ', ' + data.address;
+             form.value.bic = data.bic;
+        }
+     } catch (e) {
+         console.error("Failed to fetch Bank data", e);
+     } finally {
+         isLoadingData.value = false;
+     }
+};
 
 const submitOrderHandler = async () => {
     if (!validate()) return;
@@ -112,7 +160,11 @@ const submitOrderHandler = async () => {
                 address: form.value.address,
                 type: isLegalEntity.value ? 'company' : 'individual',
                 inn: isLegalEntity.value ? form.value.inn : null,
-                full_legal_name: isLegalEntity.value ? form.value.full_legal_name : null
+                full_legal_name: isLegalEntity.value ? form.value.full_legal_name : null,
+                legal_address: isLegalEntity.value ? form.value.legal_address : null,
+                iban: isLegalEntity.value ? form.value.iban : null,
+                bic: isLegalEntity.value ? form.value.bic : null,
+                bank_name: isLegalEntity.value ? form.value.bank_name : null
             },
             comment: form.value.comment,
             items: orderItems
@@ -142,8 +194,6 @@ const submitOrderHandler = async () => {
         isSubmitting.value = false;
     }
 };
-
-// Phone mask helper removed, using IMask
 </script>
 
 <template>
@@ -197,13 +247,17 @@ const submitOrderHandler = async () => {
                     <div v-if="isLegalEntity" class="legal-fields-wrapper">
                         <div class="form-group">
                             <label for="inn">УНП <span class="req">*</span></label>
-                            <input 
-                                type="text" 
-                                id="inn" 
-                                v-model="form.inn" 
-                                :class="{ invalid: errors.inn }"
-                                placeholder="9-значный номер"
-                            />
+                            <div class="input-with-loader">
+                                <input 
+                                    type="text" 
+                                    id="inn" 
+                                    v-model="form.inn" 
+                                    @blur="onUnpBlur"
+                                    :class="{ invalid: errors.inn }"
+                                    placeholder="9-значный номер"
+                                />
+                                <span v-if="isLoadingData" class="loader-icon material-icons-round">sync</span>
+                            </div>
                             <span v-if="errors.inn" class="err-msg">{{ errors.inn }}</span>
                         </div>
 
@@ -217,6 +271,53 @@ const submitOrderHandler = async () => {
                                 placeholder='ООО "Мастер Воздуха"'
                             />
                             <span v-if="errors.full_legal_name" class="err-msg">{{ errors.full_legal_name }}</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="legal_address">Юридический адрес <span class="req">*</span></label>
+                            <input 
+                                type="text" 
+                                id="legal_address" 
+                                v-model="form.legal_address" 
+                                :class="{ invalid: errors.legal_address }"
+                                placeholder="г. Минск, ул. ..."
+                            />
+                            <span v-if="errors.legal_address" class="err-msg">{{ errors.legal_address }}</span>
+                        </div>
+
+                        <div class="divider-small"></div>
+                        <h4 class="sub-header">Банковские реквизиты</h4>
+
+                        <div class="form-group">
+                            <label for="iban">IBAN (Расчетный счет)</label>
+                            <input 
+                                type="text" 
+                                id="iban" 
+                                v-model="form.iban" 
+                                @blur="onIbanBlur"
+                                placeholder="BYxx ARBK ..."
+                            />
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group half">
+                                <label for="bic">BIC (Код банка)</label>
+                                <input 
+                                    type="text" 
+                                    id="bic" 
+                                    v-model="form.bic" 
+                                    placeholder="ARBKBY2X"
+                                />
+                            </div>
+                            <div class="form-group half">
+                                <label for="bank_name">Название банка</label>
+                                <input 
+                                    type="text" 
+                                    id="bank_name" 
+                                    v-model="form.bank_name" 
+                                    placeholder="ОАО 'Белинвестбанк'"
+                                />
+                            </div>
                         </div>
                     </div>
                 </Transition>
@@ -528,5 +629,38 @@ input.invalid {
         display: block;
         margin-top: 2rem;
     }
+}
+
+.input-with-loader {
+    position: relative;
+}
+.loader-icon {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #007f80;
+    animation: spin 1s linear infinite;
+    font-size: 1.2rem;
+}
+@keyframes spin { 100% { transform: translateY(-50%) rotate(360deg); } }
+
+.divider-small {
+    height: 1px;
+    background: rgba(0, 127, 128, 0.1);
+    margin: 1.5rem 0 1rem 0;
+}
+.sub-header {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+}
+.form-row {
+    display: flex;
+    gap: 1rem;
+}
+.form-row .half {
+    flex: 1;
 }
 </style>

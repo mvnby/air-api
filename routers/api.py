@@ -320,6 +320,70 @@ async def find_bank(
     
     return {"error": "Банк не найден", "debug_bic": bic_from_iban or target_bic}
 
+# --- PUBLIC PROXIES (For Frontend Auto-fill) ---
+
+@router.get("/v1/proxy/egr")
+async def public_proxy_egr(unp: str):
+    """Public proxy for Belarus EGR (Ministry of Taxes) API."""
+    # Reusing the logic from admin proxy, strictly read-only
+    url = f"http://grp.nalog.gov.by/api/grp-public/data?unp={unp}&type=json&charset=UTF-8"
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, timeout=10.0)
+            return response.json()
+        except Exception as e:
+            return {"error": str(e)}
+
+@router.get("/v1/proxy/bank")
+async def public_find_bank(search: str = Query(None, description="BIC код или IBAN")):
+    """Public proxy to find bank details by IBAN/BIC."""
+    # Reuse the same logic as the admin endpoint
+    # Since find_bank logic is coupled with admin endpoint details, we'll just call the same logic helper if possible,
+    # but here I'll just copy the implementation to keep it clean and independent if admin logic changes.
+    # Actually, better to just call the implementation function if we extracted it, but for now duplicate the logic to separate concerns (admin vs public).
+    
+    # 1. Normalization
+    if not search:
+         return [] # Don't return full list to public to avoid data scraping, only search
+
+    query = search.strip().replace(" ", "").upper()
+    target_bic = query
+    
+    banks = await get_all_banks()
+    found_bank = None
+    
+    bic_from_iban = None
+    if len(query) >= 8 and query.startswith("BY"):
+         bic_from_iban = query[4:8]
+
+    for bank in banks:
+        cd_bank = bank.get("CDBank", "")
+        is_active = bank.get("DtEnd") is None
+        
+        if cd_bank == target_bic:
+            if is_active:
+                found_bank = bank
+                break
+            elif not found_bank:
+                found_bank = bank
+            
+        if bic_from_iban and cd_bank.startswith(bic_from_iban):
+            if is_active:
+                found_bank = bank
+                break
+            elif not found_bank:
+                found_bank = bank
+
+    if found_bank:
+        return {
+            "name": found_bank.get("NmBankShort"),
+            "address": found_bank.get("AdrBank"),
+            "bic": found_bank.get("CDBank"),
+            "swift": found_bank.get("CDBank")
+        }
+    
+    return {"error": "Банк не найден"}
+
 @router.post("/products/{product_id}/generate-description")
 async def generate_product_description(
     product_id: int,
@@ -510,7 +574,11 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
         comment=payload.comment,
         customer_type=payload.customer.type,
         customer_inn=payload.customer.inn,
-        customer_legal_name=payload.customer.full_legal_name
+        customer_legal_name=payload.customer.full_legal_name,
+        customer_legal_address=payload.customer.legal_address,
+        customer_iban=payload.customer.iban,
+        customer_bic=payload.customer.bic,
+        customer_bank_name=payload.customer.bank_name
     )
     
     # Отправляем уведомление админам в Telegram

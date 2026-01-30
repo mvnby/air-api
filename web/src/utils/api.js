@@ -251,6 +251,16 @@ export async function createOrder(payload) {
     } catch (e) {
         // Rethrow with details if available, so caller can show specific validation errors
         if (e.details) throw e;
-        return null; // Fallback for generic errors if caller doesn't handle throw
     }
+}
+
+// Smart Checkout Helpers
+export async function getCompanyByUnp(unp) {
+    if (!unp) return null;
+    return await fetchJson(`${API_V1}/proxy/egr?unp=${unp}`);
+}
+
+export async function getBankBySearch(search) {
+    if (!search) return null;
+    return await fetchJson(`${API_V1}/proxy/bank?search=${search}`);
 }

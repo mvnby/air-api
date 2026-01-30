@@ -92,6 +92,10 @@ class CustomerPayload(BaseModel):
     type: str = "individual" # "individual" or "company"
     full_legal_name: Optional[str] = None
     inn: Optional[str] = None
+    legal_address: Optional[str] = None
+    iban: Optional[str] = None
+    bic: Optional[str] = None
+    bank_name: Optional[str] = None
 
 class OrderPayload(BaseModel):
     customer: CustomerPayload

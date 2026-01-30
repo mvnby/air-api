@@ -53,6 +53,7 @@
 * **Phase 43 (Network/Optimization)**: Unified API Client (`/api/v1` default). Optimized Network Layer (dynamic SSR/Client base URL). Removed legacy hardcoded URLs. Integrated real-time price refreshing in Cart.
 * **Phase 44 (Backup System)**: Upgraded `BackupService` to archive media (`.tar.gz`). Implemented automated Google Drive rotation (last 20 files). Strict daily scheduling at 3:00 AM.
 * **Phase 45 (SEO & Marketing)**: Implemented complete SEO package: Sitemap, dynamic Meta Tags, Open Graph visuals, and JSON-LD structured data. Integrated Google Tag Manager (GTM). Hardened `Layout` with robust script injection.
+* **Phase 46 (Smart Checkout)**: Implemented B2B "Smart Checkout". Added `imask` phone masking (+375). Created public proxy endpoints (`/v1/proxy/egr`, `/v1/proxy/bank`) for secure, unauthenticated auto-fill of Organization names and Bank details. Updated `Customer` model to persist B2B data (`UNP`, `IBAN`, `BIC`).
 
 ## 4. Critical Directives (Rules)
 
