@@ -44,6 +44,11 @@ class ProductResponse(ProductBase):
     specs: Dict[str, Any] = {}
     images: List[str] = []
 
+class ProductPriceResponse(BaseModel):
+    id: int
+    price: int
+    in_stock: bool = True
+
 class CatalogResponse(BaseModel):
     items: List[ProductResponse]
     meta: Meta

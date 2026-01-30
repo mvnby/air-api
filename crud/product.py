@@ -45,6 +45,15 @@ class ProductDAO:
         return list(result.scalars().all())
 
     @staticmethod
+    async def get_by_ids(session: AsyncSession, product_ids: List[int]) -> List[Product]:
+        """Fetch multiple products by ID."""
+        if not product_ids:
+            return []
+        stmt = select(Product).where(Product.id.in_(product_ids))
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    @staticmethod
     def _apply_common_filters(
         stmt,
         area_min: Optional[int] = None,
