@@ -11,8 +11,7 @@ export PUBLIC_SITE_URL="https://dev.mvn.by"
 # Ensure build process can access the Local API (Host -> Container Port 8000)
 export INTERNAL_API_URL="http://localhost:8000/api/v1"
 # Ensure client-side JS points to Production API
-# Ensure client-side JS points to Production API
-# export PUBLIC_API_URL="https://dev.mvn.by/api/v1" # Removed to use the one below
+export PUBLIC_API_URL="https://dev.mvn.by/api/v1"
 
 echo "========================================"
 echo "🚀 Deploying WEB (SSG) to $WEB_HOST..."
