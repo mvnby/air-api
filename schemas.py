@@ -89,6 +89,9 @@ class CustomerPayload(BaseModel):
     phone: str
     email: Optional[str] = None
     address: Optional[str] = None # For delivery
+    type: str = "individual" # "individual" or "company"
+    full_legal_name: Optional[str] = None
+    inn: Optional[str] = None
 
 class OrderPayload(BaseModel):
     customer: CustomerPayload

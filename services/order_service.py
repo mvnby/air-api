@@ -47,7 +47,10 @@ class OrderService:
         customer_address: Optional[str],
         items: List[Dict[str, Any]],  # [{"product_id": int, "quantity": int}]
         lead_source: LeadSource = LeadSource.SITE,
-        comment: Optional[str] = None
+        comment: Optional[str] = None,
+        customer_type: str = "individual",
+        customer_inn: Optional[str] = None,
+        customer_legal_name: Optional[str] = None
     ) -> Order:
         """
         Create order from website checkout.
@@ -92,8 +95,10 @@ class OrderService:
                 name=customer_name,
                 phone=phone_clean,
                 email=customer_email,
-                type=CustomerType.individual,
-                actual_address=customer_address
+                type=CustomerType.company if customer_type == "company" else CustomerType.individual,
+                actual_address=customer_address,
+                inn=customer_inn,
+                full_legal_name=customer_legal_name
             )
             session.add(customer)
             await session.flush()
@@ -102,7 +107,16 @@ class OrderService:
             # Update address if provided
             if customer_address:
                 customer.actual_address = customer_address
-                session.add(customer)
+            
+            # Update B2B info if provided (individual -> company conversion or updating company data)
+            if customer_type == "company":
+                customer.type = CustomerType.company
+                if customer_inn:
+                    customer.inn = customer_inn
+                if customer_legal_name:
+                    customer.full_legal_name = customer_legal_name
+            
+            session.add(customer)
 
         # 2. Create order with lead_source
         order = Order(

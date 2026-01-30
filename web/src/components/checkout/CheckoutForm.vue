@@ -3,14 +3,21 @@ import { ref, computed, onMounted } from 'vue';
 import { useStore } from '@nanostores/vue';
 import { cartItems, cartTotal, clearCart, refreshPrices } from '../../store/cart';
 import { createOrder, getProductBySlug } from '../../utils/api';
+import IMask from 'imask';
 
 // State
 const form = ref({
     name: '',
     phone: '',
     address: '',
-    comment: ''
+    comment: '',
+    type: 'individual',
+    inn: '',
+    full_legal_name: ''
 });
+const isLegalEntity = ref(false);
+const phoneInput = ref(null);
+let mask = null;
 const errors = ref({});
 const isSubmitting = ref(false);
 const submitError = ref(null);
@@ -23,17 +30,36 @@ const formatPrice = (p) => p.toLocaleString('ru-RU') + ' р.';
 const validate = () => {
     errors.value = {};
     if (!form.value.name) errors.value.name = 'Введите имя';
-    if (!form.value.phone) errors.value.phone = 'Введите телефон';
-    // Simple phone check, basic length
-    if (form.value.phone && form.value.phone.replace(/\D/g, '').length < 9) {
-        errors.value.phone = 'Некорректный номер';
+    
+    // Phone validation with IMask
+    if (!mask || !mask.masked.isComplete) {
+        errors.value.phone = 'Введите полный номер телефона';
     }
+
+    if (isLegalEntity.value) {
+        if (!form.value.inn) errors.value.inn = 'Введите УНП';
+        if (!form.value.full_legal_name) errors.value.full_legal_name = 'Введите название организации';
+    }
+
     return Object.keys(errors.value).length === 0;
 };
 
 // Refresh prices on mount to ensure freshness
 onMounted(() => {
     refreshPrices();
+    
+    if (phoneInput.value) {
+        mask = IMask(phoneInput.value, {
+            mask: '+{375} (00) 000-00-00',
+            lazy: false,
+            placeholderChar: '_'
+        });
+        
+        // Initial sync
+        mask.on('accept', () => {
+            form.value.phone = mask.value;
+        });
+    }
 });
 
 const submitOrderHandler = async () => {
@@ -83,7 +109,10 @@ const submitOrderHandler = async () => {
             customer: {
                 name: form.value.name,
                 phone: form.value.phone,
-                address: form.value.address
+                address: form.value.address,
+                type: isLegalEntity.value ? 'company' : 'individual',
+                inn: isLegalEntity.value ? form.value.inn : null,
+                full_legal_name: isLegalEntity.value ? form.value.full_legal_name : null
             },
             comment: form.value.comment,
             items: orderItems
@@ -114,11 +143,7 @@ const submitOrderHandler = async () => {
     }
 };
 
-// Phone mask helper (simplistic)
-const onPhoneInput = (e) => {
-    // Only basic cleaning
-    form.value.phone = e.target.value; 
-}
+// Phone mask helper removed, using IMask
 </script>
 
 <template>
@@ -151,13 +176,50 @@ const onPhoneInput = (e) => {
                     <input 
                         type="tel" 
                         id="phone" 
-                        v-model="form.phone" 
-                        @input="onPhoneInput"
+                        ref="phoneInput"
                         :class="{ invalid: errors.phone }"
                         placeholder="+375 (XX) XXX-XX-XX"
                     />
                     <span v-if="errors.phone" class="err-msg">{{ errors.phone }}</span>
                 </div>
+
+                <!-- B2B Toggle -->
+                <div class="form-group checkbox-group">
+                    <label class="checkbox-container">
+                        <input type="checkbox" v-model="isLegalEntity" />
+                        <span class="checkmark"></span>
+                        <span class="label-text">Оформить на юридическое лицо (организацию)</span>
+                    </label>
+                </div>
+
+                <!-- B2B Fields -->
+                <Transition name="slide-fade">
+                    <div v-if="isLegalEntity" class="legal-fields-wrapper">
+                        <div class="form-group">
+                            <label for="inn">УНП <span class="req">*</span></label>
+                            <input 
+                                type="text" 
+                                id="inn" 
+                                v-model="form.inn" 
+                                :class="{ invalid: errors.inn }"
+                                placeholder="9-значный номер"
+                            />
+                            <span v-if="errors.inn" class="err-msg">{{ errors.inn }}</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="legal_name">Название организации <span class="req">*</span></label>
+                            <input 
+                                type="text" 
+                                id="legal_name" 
+                                v-model="form.full_legal_name" 
+                                :class="{ invalid: errors.full_legal_name }"
+                                placeholder='ООО "Мастер Воздуха"'
+                            />
+                            <span v-if="errors.full_legal_name" class="err-msg">{{ errors.full_legal_name }}</span>
+                        </div>
+                    </div>
+                </Transition>
 
                 <div class="form-group">
                     <label for="address">Адрес доставки</label>
@@ -369,6 +431,86 @@ input.invalid {
     align-items: center;
     gap: 0.5rem;
     font-size: 0.9rem;
+}
+
+/* B2B Elements */
+.checkbox-group {
+    margin-top: 0.5rem;
+    margin-bottom: 2rem;
+}
+
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+    user-select: none;
+    font-weight: 500;
+    color: var(--text);
+}
+
+.checkbox-container input {
+    display: none;
+}
+
+.checkmark {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    position: relative;
+    transition: all 0.2s;
+    background: var(--bg);
+}
+
+.checkbox-container input:checked ~ .checkmark {
+    background: #007f80;
+    border-color: #007f80;
+}
+
+.checkmark:after {
+    content: "";
+    position: absolute;
+    display: none;
+    left: 6px;
+    top: 2px;
+    width: 5px;
+    height: 10px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.checkbox-container input:checked ~ .checkmark:after {
+    display: block;
+}
+
+.legal-fields-wrapper {
+    background: rgba(0, 127, 128, 0.03);
+    padding: 1.5rem;
+    border-radius: 1rem;
+    border: 1px dashed rgba(0, 127, 128, 0.2);
+    margin-bottom: 1.5rem;
+}
+
+/* Animations */
+.slide-fade-enter-active {
+  transition: all 0.3s ease-out;
+}
+
+.slide-fade-leave-active {
+  transition: all 0.2s cubic-bezier(1, 0.5, 0.8, 1);
+}
+
+.slide-fade-enter-from,
+.slide-fade-leave-to {
+  transform: translateY(-20px);
+  opacity: 0;
+  max-height: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  overflow: hidden;
 }
 
 @media (max-width: 900px) {

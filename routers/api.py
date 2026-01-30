@@ -507,7 +507,10 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
         customer_address=payload.customer.address,
         items=items,
         lead_source=LeadSource.SITE,
-        comment=payload.comment
+        comment=payload.comment,
+        customer_type=payload.customer.type,
+        customer_inn=payload.customer.inn,
+        customer_legal_name=payload.customer.full_legal_name
     )
     
     # Отправляем уведомление админам в Telegram
