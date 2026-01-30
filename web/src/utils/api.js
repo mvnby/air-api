@@ -87,10 +87,6 @@ export async function getProductBySlug(slug) {
 }
 
 export async function getProductById(id) {
-    // Uses API_ROOT because ID endpoint is at /api/products/{id} -> wait, standard REST is /api/v1/products/{id}
-    // Checking previous implementation: `${API_ROOT}/products/${id}` was used.
-    // If our API follows /api/v1/products/{id}, we should use API_V1.
-    // Let's assume standard REST on V1 for now as per goal "All methods use /api/v1/"
     return await fetchJson(`${API_V1}/products/${id}`);
 }
 
@@ -130,6 +126,31 @@ export async function refreshProductPrices(ids) {
 export async function getGlobalConfig() {
     const data = await fetchJson(`${API_V1}/config`);
     return data || {};
+}
+
+/**
+ * Validate availability and prices for cart items (Batch)
+ * @param {Array<number>} ids - List of product IDs
+ * @returns {Promise<Array<{id: number, price: number, in_stock: boolean}>>}
+ */
+export async function validateCartItems(ids) {
+    if (!ids || ids.length === 0) return [];
+    try {
+        // Filter for numbers only to be safe
+        const validIds = ids.filter(id => typeof id === 'number');
+        if (validIds.length === 0) return [];
+
+        return await fetchJson(`${API_V1}/products/prices`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(validIds),
+        });
+    } catch (e) {
+        console.error('[API] validateCartItems failed:', e);
+        return [];
+    }
 }
 
 let _installationRatesPromise = null;

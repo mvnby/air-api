@@ -20,6 +20,7 @@ from schemas import (
     CatalogResponse,
     Meta,
     ProductResponse,
+    ProductPriceResponse,
     ArticleResponse,
     ServiceResponse,
     OrderPayload,
@@ -104,18 +105,7 @@ def _validate_pagination(page: int, limit: int) -> None:
         raise HTTPException(status_code=400, detail="Limit must be between 1 and 1000")
 
 
-@router.get("/products")
-async def get_products(session: AsyncSession = Depends(get_session)):
-    """Get all published products."""
-    products = await ProductService.get_all(session)
-    return {"items": products}
-
-
-@router.get("/products/{product_id}")
-async def get_product(product_id: int, session: AsyncSession = Depends(get_session)):
-    """Get a single product by ID."""
-    product = await ProductService.get_by_id(session, product_id)
-    return product
+# Legacy endpoints /products and /products/{id} removed in favor of /v1/products
 
 
 @router.get("/products/search")
@@ -346,6 +336,7 @@ async def generate_product_description(
 # --- V1 HEADLESS COMMERCE API ---
 
 @router.get("/v1/catalog", response_model=CatalogResponse)
+@router.get("/v1/products", response_model=CatalogResponse)
 async def get_catalog(
     page: int = 1,
     limit: int = 20,
@@ -415,6 +406,29 @@ async def get_catalog(
         items=mapped_items,
         meta=Meta(total=total, page=page, limit=limit, pages=pages)
     )
+
+@router.get("/v1/products/{product_id}", response_model=ProductResponse)
+async def get_product_by_id(product_id: int, session: AsyncSession = Depends(get_session)):
+    """Get product details by ID (Hybrid Access)."""
+    product = await ProductDAO.get_by_id(session, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail=f"Product with ID '{product_id}' not found")
+    return _map_product_to_response(product)
+
+@router.post("/v1/products/prices", response_model=List[ProductPriceResponse])
+async def get_products_prices(
+    ids: List[int],
+    session: AsyncSession = Depends(get_session)
+):
+    """Batch check for product prices and availability."""
+    products = await ProductDAO.get_by_ids(session, ids)
+    return [
+        ProductPriceResponse(
+            id=p.id,
+            price=p.price,
+            in_stock=p.is_published
+        ) for p in products
+    ]
 
 @router.get("/v1/products/{slug}", response_model=ProductResponse)
 async def get_product_by_slug(slug: str, session: AsyncSession = Depends(get_session)):
