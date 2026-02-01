@@ -40,4 +40,4 @@ num2words
 #Script Dependencies
 requests
 Pillow
-duckduckgo_search
+ddgs>=9.10.0
