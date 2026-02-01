@@ -54,6 +54,7 @@
 * **Phase 44 (Backup System)**: Upgraded `BackupService` to archive media (`.tar.gz`). Implemented automated Google Drive rotation (last 20 files). Strict daily scheduling at 3:00 AM.
 * **Phase 45 (SEO & Marketing)**: Implemented complete SEO package: Sitemap, dynamic Meta Tags, Open Graph visuals, and JSON-LD structured data. Integrated Google Tag Manager (GTM). Hardened `Layout` with robust script injection.
 * **Phase 46 (Smart Checkout)**: Implemented B2B "Smart Checkout". Added `imask` phone masking (+375). Created public proxy endpoints (`/v1/proxy/egr`, `/v1/proxy/bank`) for secure, unauthenticated auto-fill of Organization names and Bank details. Updated `Customer` model to persist B2B data (`UNP`, `IBAN`, `BIC`).
+* **Phase 47 (Manager Tools)**: Implemented a dedicated Manager Dashboard (`/manager`). Features include DuckDuckGo image search integration, one-click WebP conversion/upload, and "Find Image" workflow for products. Solved 500 errors by switching to `ddgs` and fixed persistence issues with explicit SQL updates.
 
 ## 4. Critical Directives (Rules)
 
