@@ -132,10 +132,14 @@ async def upload_image(
     
     session.add(new_image)
     
-    # Also update main_image if it's empty
-    if not product.main_image:
-        product.main_image = relative_url
-        session.add(product)
+    # Always update main_image if this is a main product image (not installation)
+    # The user explicitly selected this image for the product, so we should use it.
+    if not is_installation:
+        # Use explicit update statement to ensure DB persistence
+        # (Direct object assignment was occasionally failing to commit)
+        from sqlmodel import update
+        statement = update(Product).where(Product.id == product_id).values(main_image=relative_url)
+        await session.execute(statement)
         
     await session.commit()
     await session.refresh(new_image)
