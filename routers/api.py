@@ -26,7 +26,8 @@ from schemas import (
     OrderPayload,
     OrderResponse,
     TagResponse,
-    TagGroupResponse
+    TagGroupResponse,
+    ProductImageResponse
 )
 from crud.product import ProductDAO
 from models import Article, Service, Order, Customer, OrderStatus, OrderProductLink, CustomerType
@@ -80,6 +81,18 @@ def _map_product_to_response(product: Product) -> ProductResponse:
         except Exception:
             images = []  # Fallback if JSON parsing fails
 
+            
+    # Map gallery images
+    gallery = []
+    if product.gallery_images:
+        for img in product.gallery_images:
+            gallery.append(ProductImageResponse(
+                id=img.id,
+                url=img.url,
+                is_installation_photo=img.is_installation_photo,
+                product_id=img.product_id
+            ))
+
     return ProductResponse(
         id=product.id,
         title=product.title,
@@ -94,7 +107,8 @@ def _map_product_to_response(product: Product) -> ProductResponse:
         created_at=product.created_at,
         tags=p_tags,
         specs=specs or {},
-        images=images or []
+        images=images or [],
+        gallery_images=gallery
     )
 
 def _validate_pagination(page: int, limit: int) -> None:

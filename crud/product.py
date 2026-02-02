@@ -19,27 +19,30 @@ class ProductDAO:
 
     @staticmethod
     async def get_by_id(session: AsyncSession, product_id: int) -> Optional[Product]:
-        """Fetch a single product by ID with tags loaded."""
+        """Fetch a single product by ID with tags and gallery loaded."""
         stmt = select(Product).where(Product.id == product_id).options(
-            selectinload(Product.tags).selectinload(Tag.group)
+            selectinload(Product.tags).selectinload(Tag.group),
+            selectinload(Product.gallery_images)
         )
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
 
     @staticmethod
     async def get_by_slug(session: AsyncSession, slug: str) -> Optional[Product]:
-        """Fetch a single product by slug with tags loaded."""
+        """Fetch a single product by slug with tags and gallery loaded."""
         stmt = select(Product).where(Product.slug == slug).options(
-            selectinload(Product.tags).selectinload(Tag.group)
+            selectinload(Product.tags).selectinload(Tag.group),
+            selectinload(Product.gallery_images)
         )
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
 
     @staticmethod
     async def get_all_published(session: AsyncSession) -> List[Product]:
-        """Fetch all published products with tags loaded."""
+        """Fetch all published products with tags and gallery loaded."""
         stmt = select(Product).where(Product.is_published == True).options(
-            selectinload(Product.tags).selectinload(Tag.group)
+            selectinload(Product.tags).selectinload(Tag.group),
+            selectinload(Product.gallery_images)
         )
         result = await session.execute(stmt)
         return list(result.scalars().all())
@@ -49,7 +52,9 @@ class ProductDAO:
         """Fetch multiple products by ID."""
         if not product_ids:
             return []
-        stmt = select(Product).where(Product.id.in_(product_ids))
+        stmt = select(Product).where(Product.id.in_(product_ids)).options(
+             selectinload(Product.gallery_images)
+        )
         result = await session.execute(stmt)
         return list(result.scalars().all())
 
@@ -87,6 +92,8 @@ class ProductDAO:
                 stmt = stmt.where(Product.id.in_(subq))
         
         return stmt
+
+    # ... filters ...
 
     @staticmethod
     def _apply_faceted_filters(
@@ -130,7 +137,8 @@ class ProductDAO:
         Flexible product filtering with pagination and sorting.
         """
         stmt = select(Product).options(
-            selectinload(Product.tags).selectinload(Tag.group)
+            selectinload(Product.tags).selectinload(Tag.group),
+            selectinload(Product.gallery_images)
         )
         
         stmt = ProductDAO._apply_common_filters(

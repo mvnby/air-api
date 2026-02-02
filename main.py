@@ -15,7 +15,9 @@ from core.logger import logger
 from core.security import AdminAuthBackend
 from routers import admin as admin_router
 from routers import api as api_router
+from routers import manager_tools
 from admin import admin_views
+from starlette.responses import FileResponse
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 @asynccontextmanager
@@ -72,10 +74,41 @@ app.add_middleware(
 # Include routers
 app.include_router(admin_router.router)
 app.include_router(api_router.router)
+app.include_router(manager_tools.router)
 
 # Static files
 app.mount(f"/{settings.STATIC_DIR}", StaticFiles(directory=os.path.join(BASE_DIR, settings.STATIC_DIR)), name="static")
-app.mount("/media", StaticFiles(directory=os.path.join(BASE_DIR, "media")), name="media")
+# Mount media from web/public/media where existing files function
+media_dir = os.path.join(BASE_DIR, "web", "public", "media")
+if not os.path.exists(media_dir):
+    media_dir = os.path.join(BASE_DIR, "media") # Fallback
+app.mount("/media", StaticFiles(directory=media_dir), name="media")
+
+# Manager Dashboard SPA
+# 1. Mount assets explicitly to bypass the catch-all
+manager_dist = os.path.join(BASE_DIR, "manager_frontend", "dist")
+logger.info(f"Manager Dist Path: {manager_dist}, Exists: {os.path.exists(manager_dist)}")
+
+if os.path.exists(manager_dist):
+    app.mount("/manager/assets", StaticFiles(directory=os.path.join(manager_dist, "assets")), name="manager_assets")
+else:
+    logger.warning("Manager frontend dist directory not found!")
+
+    # 2. Catch-all for SPA routes to serve index.html
+@app.get("/manager/{full_path:path}")
+async def serve_manager_app(full_path: str):
+    index_path = os.path.join(manager_dist, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return JSONResponse(status_code=404, content={"message": "Dashboard not built"})
+    
+# 3. Root redirect/serve for /manager
+@app.get("/manager", include_in_schema=False)
+async def serve_manager_root():
+    index_path = os.path.join(manager_dist, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return JSONResponse(status_code=404, content={"message": "Dashboard not built"})
 
 # Setup SQLAdmin with authentication
 admin = Admin(
