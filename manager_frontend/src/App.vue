@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { api, type Product } from './api';
 import { Search, RefreshCw } from 'lucide-vue-next';
 
+// ... (state refs) ...
 const products = ref<Product[]>([]);
 const loading = ref(false);
 const showModal = ref(false);
@@ -17,16 +18,34 @@ const reuseQuery = ref('');
 const reuseResults = ref<any[]>([]);
 const activeTab = ref<'search' | 'reuse'>('search');
 
+// Scroll lock
+watch(showModal, (val) => {
+  if (val) {
+    document.body.style.overflow = 'hidden';
+  } else {
+    document.body.style.overflow = '';
+  }
+});
+
 const loadProducts = async () => {
   loading.value = true;
   try {
     const data = await api.getProducts(100);
-    products.value = data.items || data; // Adjust based on API structure
+    products.value = data.items || data;
   } catch (e) {
     console.error(e);
   } finally {
     loading.value = false;
   }
+};
+
+const refreshSelectedProduct = () => {
+    if (selectedProduct.value) {
+        const fresh = products.value.find(p => p.id === selectedProduct.value!.id);
+        if (fresh) {
+            selectedProduct.value = fresh;
+        }
+    }
 };
 
 const openSearchModal = (product: Product) => {
@@ -35,21 +54,16 @@ const openSearchModal = (product: Product) => {
   imageQuery.value = product.title;
   imageSearchResults.value = [];
   showModal.value = true;
-  console.log('showModal set to true');
-  handleImageSearch(); // Auto search
+  handleImageSearch();
 };
 
 const handleImageSearch = async () => {
-    console.log('handleImageSearch called', imageQuery.value);
     if (!imageQuery.value) return;
     searchLoading.value = true;
     try {
-        console.log('Calling api.searchImages...');
         const results = await api.searchImages(imageQuery.value);
-        console.log('Results:', results);
         imageSearchResults.value = results;
     } catch (e) {
-        console.error('Search failed', e);
         alert('Search failed');
     } finally {
         searchLoading.value = false;
@@ -70,11 +84,8 @@ const addToGallery = async (url: string) => {
     uploadingImageId.value = url;
     try {
         await api.linkSearchResult(selectedProduct.value.id, url);
-        // Add to local gallery list (we need to fetch product again or push to list)
-        // For simplicity, let's reload the product or push result if we had a full gallery list
-        // We will update logic to fetch full product details including gallery
-        // For now, reload products to refresh view
-        loadProducts();
+        await loadProducts();
+        refreshSelectedProduct();
         alert('Added to gallery');
     } catch (e) {
         alert('Failed to add');
@@ -109,7 +120,8 @@ const reuseImage = async (sourceUrl: string) => {
     try {
         await api.reuseImage(selectedProduct.value.id, sourceUrl);
         alert('Image reused');
-        loadProducts(); // refresh
+        await loadProducts();
+        refreshSelectedProduct();
     } catch (e) { alert('Failed'); }
 };
 
@@ -117,35 +129,45 @@ const setAsMain = async (id: number) => {
     try {
         await api.setMainImage(id);
         alert('Updated');
-        loadProducts();
+        await loadProducts();
+        refreshSelectedProduct();
     } catch (e) { alert('Failed'); }
 };
 
+const confirmDeleteId = ref<number | null>(null);
+
 const removeFromGallery = async (id: number) => {
-    if (!confirm('Are you sure?')) return;
+    if (confirmDeleteId.value !== id) {
+        confirmDeleteId.value = id;
+        setTimeout(() => { if(confirmDeleteId.value === id) confirmDeleteId.value = null; }, 3000); // Reset after 3s
+        return;
+    }
+    
+    confirmDeleteId.value = null;
     try {
         await api.deleteGalleryImage(id);
-        loadProducts();
+        await loadProducts();
+        refreshSelectedProduct();
     } catch (e) { alert('Failed'); }
 };
+
+// ... existing selectImage ...
+
+// In template:
+// Change max-h-[90vh] to h-[90vh]
+// Change h-full to flex-1 min-h-0
+
 
 const selectImage = async (url: string) => {
     if (!selectedProduct.value || uploadingImageId.value) return;
     
-    uploadingImageId.value = url; // Lock interactions for this image
+    uploadingImageId.value = url; 
     
     try {
         const response = await api.uploadImage(selectedProduct.value.id, url);
-        // Assuming response contains { url: string, id: number }
         if (response && response.url) {
-             // Update local state immediately
-             const productIndex = products.value.findIndex(p => p.id === selectedProduct.value?.id);
-             if (productIndex !== -1 && products.value[productIndex]) {
-                 products.value[productIndex].main_image = response.url;
-             }
-             if (selectedProduct.value) {
-                 selectedProduct.value.main_image = response.url;
-             }
+             await loadProducts();
+             refreshSelectedProduct();
              showModal.value = false;
         } else {
              alert('Upload succeeded but no URL returned');
@@ -153,7 +175,7 @@ const selectImage = async (url: string) => {
     } catch (e) {
         alert('Upload failed');
     } finally {
-        uploadingImageId.value = null; // Unlock
+        uploadingImageId.value = null;
     }
 };
 
@@ -232,7 +254,7 @@ onMounted(() => {
     
     <!-- Search / Manage Modal -->
     <div v-if="showModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" @click.self="showModal = false">
-        <div class="bg-white rounded-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+        <div class="bg-white rounded-xl w-full max-w-6xl h-[90vh] flex flex-col">
             <!-- Tabs -->
             <div class="flex border-b bg-gray-50 rounded-t-xl">
                  <button 
@@ -253,7 +275,7 @@ onMounted(() => {
             <!-- Tab Content -->
             <div class="flex-1 overflow-hidden flex flex-col min-h-0">
                 <!-- SEARCH TAB -->
-                <div v-if="activeTab === 'search'" class="flex flex-col h-full">
+                <div v-if="activeTab === 'search'" class="flex flex-col flex-1 min-h-0">
                      <div class="p-4 border-b flex gap-4 bg-white">
                         <input v-model="imageQuery" @keyup.enter="handleImageSearch" class="flex-1 border rounded px-4 py-2" placeholder="Search query..." />
                         <button @click="handleImageSearch" class="bg-blue-600 text-white px-6 rounded hover:bg-blue-700">Search</button>
@@ -263,7 +285,7 @@ onMounted(() => {
                         <div v-if="searchLoading" class="text-center py-10">Searching DuckDuckGo...</div>
                         <div v-else class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
                              <!-- Search Results -->
-                            <div v-for="(r, idx) in imageSearchResults" :key="idx" class="group relative bg-white rounded shadow hover:shadow-lg transition-all">
+                             <div v-for="(r, idx) in imageSearchResults" :key="idx" class="group relative bg-white rounded shadow hover:shadow-lg transition-all">
                                 <div class="aspect-square bg-gray-200 relative overflow-hidden">
                                      <img :src="r.thumbnail || r.image" class="w-full h-full object-contain p-2" loading="lazy" />
                                      <!-- Hover Actions -->
@@ -286,21 +308,23 @@ onMounted(() => {
                 </div>
                 
                 <!-- REUSE TAB -->
-                <div v-if="activeTab === 'reuse'" class="flex flex-col h-full">
+                <div v-if="activeTab === 'reuse'" class="flex flex-col flex-1 min-h-0">
                      <div class="p-4 border-b flex gap-4 bg-white">
                         <input v-model="reuseQuery" @keyup.enter="handleReuseSearch" class="flex-1 border rounded px-4 py-2" placeholder="Search product model (e.g. Forest 09)..." />
                         <button @click="handleReuseSearch" class="bg-blue-600 text-white px-6 rounded hover:bg-blue-700">Find</button>
                     </div>
                     <div class="flex-1 overflow-y-auto p-4 bg-gray-100">
-                        <div v-for="p in reuseResults" :key="p.id" class="bg-white p-4 rounded shadow mb-4">
-                            <h4 class="font-bold mb-2">{{ p.title }}</h4>
-                            <div class="flex gap-4">
-                                <div v-if="p.main_image" class="group relative w-32 h-32 bg-gray-100 rounded overflow-hidden">
-                                    <img :src="getImageUrl(p.main_image)" class="w-full h-full object-cover" />
+                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            <div v-for="p in reuseResults" :key="p.id" class="bg-white rounded shadow overflow-hidden group">
+                                <div class="aspect-video bg-gray-200 relative">
+                                    <img v-if="p.main_image" :src="getImageUrl(p.main_image)" class="w-full h-full object-cover" />
+                                    <div v-else class="w-full h-full flex items-center justify-center text-gray-400 text-xs">No Image</div>
+                                    
                                      <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center">
-                                         <button @click="reuseImage(p.main_image)" class="text-white text-sm bg-blue-600 px-2 py-1 rounded">Copy</button>
-                                     </div>
+                                         <button @click="reuseImage(p.main_image)" class="text-white text-sm bg-blue-600 px-3 py-2 rounded">Copy Image</button>
+                                    </div>
                                 </div>
+                                <div class="p-2 text-sm font-medium truncate" :title="p.title">{{ p.title }}</div>
                             </div>
                         </div>
                     </div>
@@ -324,7 +348,13 @@ onMounted(() => {
                     <!-- Actions -->
                     <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-1 p-2">
                          <button @click="setAsMain(img.id)" class="text-[10px] bg-white text-black px-2 py-1 rounded hover:bg-gray-200 w-full">Make Main</button>
-                         <button @click="removeFromGallery(img.id)" class="text-[10px] bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700 w-full">Delete</button>
+                         <button 
+                            @click="removeFromGallery(img.id)" 
+                            class="text-[10px] text-white px-2 py-1 rounded w-full transition-colors"
+                            :class="confirmDeleteId === img.id ? 'bg-red-800 font-bold' : 'bg-red-600 hover:bg-red-700'"
+                         >
+                            {{ confirmDeleteId === img.id ? 'Confirm?' : 'Delete' }}
+                         </button>
                     </div>
                  </div>
             </div>

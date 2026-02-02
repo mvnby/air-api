@@ -147,10 +147,31 @@ async def _process_and_save_image(
         statement = update(Product).where(Product.id == product_id).values(main_image=relative_url)
         await session.execute(statement)
         
+    # Sync legacy images
+    await _sync_legacy_images(session, product_id)
+    
     await session.commit()
     await session.refresh(new_image)
     
     return {"url": relative_url, "id": new_image.id}
+
+async def _sync_legacy_images(session: AsyncSession, product_id: int):
+    """Sync ProductImage records to Product.images JSON field."""
+    product = await session.get(Product, product_id)
+    if not product:
+        return
+
+    # Fetch all gallery images
+    stmt = select(ProductImage).where(ProductImage.product_id == product_id)
+    result = await session.execute(stmt)
+    images = result.scalars().all()
+    
+    # Update JSON field with list of URLs
+    # Filter out installation photos if we don't want them in main carousel? 
+    # Usually main carousel shows all product photos. Installation photos might be separate?
+    # For now, include all user-uploaded gallery images.
+    product.images = [img.url for img in images if not img.is_installation_photo]
+    session.add(product)
 
 @router.post("/gallery/link-search-result")
 async def link_search_result(
@@ -223,6 +244,10 @@ async def delete_gallery_image(
         # Continue to delete DB record anyway
 
     await session.delete(image)
+    # Sync legacy
+    if product:
+        await _sync_legacy_images(session, product.id)
+    
     await session.commit()
     return {"message": "Image deleted"}
 
@@ -260,6 +285,10 @@ async def reuse_image(
         is_installation_photo=False 
     )
     session.add(new_image)
+    
+    # Sync legacy
+    await _sync_legacy_images(session, product_id)
+    
     await session.commit()
     return {"message": "Image linked", "id": new_image.id}
 
