@@ -213,6 +213,33 @@ class ProductService:
                 t_dict['group'] = tag.group.model_dump()
             tags_data.append(t_dict)
         data['tags'] = tags_data
+
+        # --- GALLERY FIX & SYNC (Phase 47/48) ---
+        # The Manager App writes to 'gallery_images' (Relation), 
+        # but Frontend/Admin read 'images' (Legacy JSON).
+        # We bridge this gap here by populating 'images' from the relation.
+        
+        # 1. Get images from relation and sort them
+        # Sort priority: 
+        #   - Product photos first (is_installation_photo=False)
+        #   - Then by ID (creation order)
+        gallery = sorted(
+            product.gallery_images, 
+            key=lambda x: (x.is_installation_photo, x.id)
+        )
+
+        # 2. Populate Legacy JSON field (URLs only) for Frontend/Admin compatibility
+        # Filter out installation photos if we only want product shots in the main gallery
+        # (Though usually customers want to see everything). 
+        # Let's include everything for now, or maybe only is_installation_photo=False?
+        # User request implies "Gallery" which usually means product photos.
+        # But let's verify if 'images' should contain installation photos.
+        # Frontend distinguishes them? No, frontend just loops.
+        # We will include ALL, but sorted (Installation last).
+        data['images'] = [img.url for img in gallery]
+
+        # 3. Populate New Field (Full Objects) for advanced UI
+        data['gallery_images'] = [img.model_dump() for img in gallery]
         
         return data
 
