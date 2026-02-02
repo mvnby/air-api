@@ -15,6 +15,7 @@ from core.logger import logger
 from core.security import AdminAuthBackend
 from routers import admin as admin_router
 from routers import api as api_router
+from routers import auth as auth_router
 from routers import manager_tools
 from admin import admin_views
 from starlette.responses import FileResponse
@@ -73,6 +74,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(admin_router.router)
+app.include_router(auth_router.router)
 app.include_router(api_router.router)
 app.include_router(manager_tools.router)
 

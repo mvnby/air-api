@@ -20,6 +20,14 @@ const activeTab = ref<'search' | 'reuse' | 'upload'>('search');
 const uploadDragActive = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
 
+// Auth state
+const isAuthenticated = ref(false);
+const showLoginModal = ref(false);
+const loginUsername = ref('');
+const loginPassword = ref('');
+const loginLoading = ref(false);
+const loginError = ref('');
+
 const handleFileSelect = async (e: Event) => {
     const input = e.target as HTMLInputElement;
     if (input.files && input.files.length > 0) {
@@ -59,11 +67,39 @@ watch(showModal, (val) => {
   }
 });
 
+const handleLogin = async () => {
+    loginLoading.value = true;
+    loginError.value = '';
+    try {
+        await api.login(loginUsername.value, loginPassword.value);
+        isAuthenticated.value = true;
+        showLoginModal.value = false;
+        await loadProducts();
+    } catch (e) {
+        loginError.value = 'Invalid credentials';
+    } finally {
+        loginLoading.value = false;
+    }
+};
+
+const checkAuth = async () => {
+    try {
+        await api.checkAuth();
+        isAuthenticated.value = true;
+        // After auth confirmed, load data
+        loadProducts();
+    } catch (e) {
+        isAuthenticated.value = false;
+        showLoginModal.value = true;
+    }
+};
+
 const loadProducts = async () => {
   loading.value = true;
   try {
     const data = await api.getProducts(100);
-    products.value = data.items || data;
+    // Handle { items: [...], meta: ... } response
+    products.value = data.items ? data.items : (Array.isArray(data) ? data : []);
   } catch (e) {
     console.error(e);
   } finally {
@@ -212,11 +248,48 @@ const selectImage = async (url: string) => {
 };
 
 onMounted(() => {
-  loadProducts();
+  checkAuth();
 });
 </script>
 
 <template>
+  <!-- Login Modal -->
+  <div v-if="showLoginModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-xl p-8 max-w-md w-full mx-4">
+      <h2 class="text-2xl font-bold mb-6 text-center">Manager Login</h2>
+      <form @submit.prevent="handleLogin" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+          <input 
+            v-model="loginUsername" 
+            type="text" 
+            required
+            class="w-full border rounded px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Enter username"
+          />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+          <input 
+            v-model="loginPassword" 
+            type="password" 
+            required
+            class="w-full border rounded px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Enter password"
+          />
+        </div>
+        <div v-if="loginError" class="text-red-600 text-sm">{{ loginError }}</div>
+        <button 
+          type="submit" 
+          :disabled="loginLoading"
+          class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {{ loginLoading ? 'Logging in...' : 'Login' }}
+        </button>
+      </form>
+    </div>
+  </div>
+
   <div class="min-h-screen bg-gray-50 p-8">
     <div class="max-w-7xl mx-auto">
       <header class="mb-8 flex justify-between items-center">
