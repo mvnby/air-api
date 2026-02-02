@@ -76,6 +76,7 @@ async def upload_image(
         raise HTTPException(status_code=404, detail="Product not found")
 
     # Use helper. Default behavior for upload is to set main image if not installation
+    # Use helper. Default behavior for upload is to set main image if not installation
     set_main = not is_installation
     return await _process_and_save_image(url, product_id, session, set_main=set_main, is_installation=is_installation)
 
@@ -87,7 +88,6 @@ async def _process_and_save_image(
     is_installation: bool = False
 ):
     """Helper to download, convert, save, and link image."""
-    # 1. Download
     try:
         async with httpx.AsyncClient(follow_redirects=True) as client:
             resp = await client.get(url, timeout=10.0)
@@ -97,7 +97,17 @@ async def _process_and_save_image(
         logger.error(f"Failed to download image: {e}")
         raise HTTPException(status_code=400, detail=f"Failed to download image: {str(e)}")
 
-    # 2. Process (WebP)
+    return await _save_image_from_bytes(image_content, product_id, session, set_main, is_installation)
+
+async def _save_image_from_bytes(
+    image_content: bytes,
+    product_id: int,
+    session: AsyncSession,
+    set_main: bool,
+    is_installation: bool = False
+):
+    """Process bytes (convert to WebP), save to disk, and link to product."""
+    # 1. Process (WebP)
     try:
         def process_image(content):
             img = Image.open(BytesIO(content))
@@ -112,7 +122,7 @@ async def _process_and_save_image(
         logger.error(f"Failed to process image: {e}")
         raise HTTPException(status_code=400, detail="Invalid image file")
 
-    # 3. Save to Disk
+    # 2. Save to Disk
     base_media_path = os.path.join("web", "public", "media")
     if not os.path.exists(base_media_path):
         base_media_path = "media"
@@ -131,7 +141,7 @@ async def _process_and_save_image(
         logger.error(f"Failed to save file: {e}")
         raise HTTPException(status_code=500, detail="Failed to save image file")
 
-    # 4. Create DB Record
+    # 3. Create DB Record
     relative_url = f"/media/products/{product_id}/{filename}"
     
     new_image = ProductImage(
@@ -154,6 +164,58 @@ async def _process_and_save_image(
     await session.refresh(new_image)
     
     return {"url": relative_url, "id": new_image.id}
+
+from fastapi import UploadFile, File
+
+@router.post("/upload-local-images")
+async def upload_local_images(
+    product_id: int = Query(..., description="ID of the product"),
+    files: List[UploadFile] = File(...),
+    is_installation: bool = Query(False),
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username)
+):
+    """Upload multiple local files, convert to WebP, and attach to product."""
+    logger.info(f"Manager {username} uploading {len(files)} local images for product {product_id}")
+    
+    product = await session.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    uploaded_images = []
+    
+    for file in files:
+        try:
+            content = await file.read()
+            # Set main only if it's the first image and product has no main image? 
+            # Or simplified: Local uploads don't auto-set main unless product has NONE.
+            
+            # Check if product has main image currently
+            # (We need to re-fetch or trust the object, but object might be stale if we iterate)
+            # Safe bet: separate query or just don't set main for batch uploads to be safe?
+            # User request: "possibility to download multiple images". 
+            # Let's say: first image in batch becomes main IF product has no main image.
+            
+            should_set_main = False
+            if not product.main_image and not is_installation and len(uploaded_images) == 0:
+                 should_set_main = True
+                 
+            result = await _save_image_from_bytes(content, product_id, session, set_main=should_set_main, is_installation=is_installation)
+            uploaded_images.append(result)
+            
+            # If we set main, update local object to prevent next loop from trying
+            if should_set_main:
+                product.main_image = result["url"]
+                
+        except Exception as e:
+            logger.error(f"Failed to upload file {file.filename}: {e}")
+            # We continue with other files or Validation Error?
+            # Let's continue and return what succeeded? Or fail all? 
+            # For simplicity, fail on invalid file? Or skip?
+            # Let's skip and log.
+            pass
+            
+    return {"uploaded": len(uploaded_images), "images": uploaded_images}
 
 async def _sync_legacy_images(session: AsyncSession, product_id: int):
     """Sync ProductImage records to Product.images JSON field."""

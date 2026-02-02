@@ -27,6 +27,21 @@ export const api = {
         return res.json();
     },
 
+    async uploadLocalImages(productId: number, files: FileList | File[]) {
+        const formData = new FormData();
+        Array.from(files).forEach(file => {
+            formData.append('files', file);
+        });
+
+        const res = await fetch(`${API_BASE}/upload-local-images?product_id=${productId}`, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!res.ok) throw new Error('Upload failed');
+        return res.json();
+    },
+
     async linkSearchResult(productId: number, imageUrl: string) {
         // We use uploadImage but we might want a specific endpoint if logic differs.
         // For now, let's reuse uploadImage as it does exactly what we want (download + link), 

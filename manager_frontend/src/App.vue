@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { api, type Product } from './api';
-import { Search, RefreshCw } from 'lucide-vue-next';
+import { Search, RefreshCw, UploadCloud } from 'lucide-vue-next';
 
 // ... (state refs) ...
 const products = ref<Product[]>([]);
@@ -16,7 +16,39 @@ const cleanupStats = ref<any>(null);
 const showCleanupModal = ref(false);
 const reuseQuery = ref('');
 const reuseResults = ref<any[]>([]);
-const activeTab = ref<'search' | 'reuse'>('search');
+const activeTab = ref<'search' | 'reuse' | 'upload'>('search');
+const uploadDragActive = ref(false);
+const fileInput = ref<HTMLInputElement | null>(null);
+
+const handleFileSelect = async (e: Event) => {
+    const input = e.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+        await uploadFiles(input.files);
+    }
+};
+
+const handleDrop = async (e: DragEvent) => {
+    uploadDragActive.value = false;
+    if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        await uploadFiles(e.dataTransfer.files);
+    }
+};
+
+const uploadFiles = async (files: FileList) => {
+    if (!selectedProduct.value) return;
+    searchLoading.value = true;
+    try {
+        const res = await api.uploadLocalImages(selectedProduct.value.id, files);
+        alert(`Uploaded ${res.uploaded} images`);
+        await loadProducts();
+        refreshSelectedProduct();
+    } catch (e) {
+        alert('Upload failed');
+        console.error(e);
+    } finally {
+        searchLoading.value = false;
+    }
+};
 
 // Scroll lock
 watch(showModal, (val) => {
@@ -267,6 +299,11 @@ onMounted(() => {
                     class="px-6 py-3 font-medium border-b-2"
                     :class="activeTab === 'reuse' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'"
                  >Reuse from Catalog</button>
+                 <button 
+                    @click="activeTab = 'upload'" 
+                    class="px-6 py-3 font-medium border-b-2"
+                    :class="activeTab === 'upload' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'"
+                 >Upload Image</button>
                  <div class="flex-1 flex justify-end items-center px-4">
                      <button @click="showModal = false" class="text-gray-500 hover:text-gray-700">Close</button>
                  </div>
@@ -326,6 +363,31 @@ onMounted(() => {
                                 </div>
                                 <div class="p-2 text-sm font-medium truncate" :title="p.title">{{ p.title }}</div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- UPLOAD TAB -->
+                <div v-if="activeTab === 'upload'" class="flex flex-col flex-1 min-h-0 p-8 items-center justify-center bg-gray-50">
+                    <div 
+                        class="w-full max-w-2xl border-4 border-dashed rounded-xl p-12 flex flex-col items-center justify-center transition-colors cursor-pointer"
+                        :class="uploadDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400 bg-white'"
+                        @dragenter.prevent="uploadDragActive = true"
+                        @dragleave.prevent="uploadDragActive = false"
+                        @dragover.prevent
+                        @drop.prevent="handleDrop"
+                        @click="fileInput?.click()"
+                    >
+                        <input type="file" ref="fileInput" multiple accept="image/*" class="hidden" @change="handleFileSelect" />
+                        <UploadCloud class="w-16 h-16 text-gray-400 mb-4" :class="{ 'text-blue-500': uploadDragActive }" />
+                        <h3 class="text-xl font-medium text-gray-700 mb-2">
+                            {{ uploadDragActive ? 'Drop files here' : 'Drag & Drop images here' }}
+                        </h3>
+                        <p class="text-gray-500 mb-6">or click to browse local files</p>
+                        
+                        <div v-if="searchLoading" class="flex items-center gap-2 text-blue-600 font-medium">
+                            <div class="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                            Uploading...
                         </div>
                     </div>
                 </div>
