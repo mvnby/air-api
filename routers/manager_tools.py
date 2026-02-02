@@ -123,9 +123,10 @@ async def _save_image_from_bytes(
         raise HTTPException(status_code=400, detail="Invalid image file")
 
     # 2. Save to Disk
-    base_media_path = os.path.join("web", "public", "media")
+    # Use root 'media' directory (Unified Storage)
+    base_media_path = "media"
     if not os.path.exists(base_media_path):
-        base_media_path = "media"
+        os.makedirs(base_media_path, exist_ok=True)
         
     product_media_dir = os.path.join(base_media_path, "products", str(product_id))
     os.makedirs(product_media_dir, exist_ok=True)
@@ -296,9 +297,8 @@ async def delete_gallery_image(
     try:
         if image.url.startswith("/media/"):
             relative_path = image.url.lstrip("/") # media/products/...
-            # Assuming standard structure
-            base_path = os.path.join("web", "public")
-            full_path = os.path.join(base_path, relative_path)
+            # Assuming standard structure (root based)
+            full_path = relative_path # it's already relative to root
             if os.path.exists(full_path):
                 os.remove(full_path)
     except Exception as e:
@@ -375,7 +375,7 @@ async def cleanup_media(
     known_urls.update(res_gallery.scalars().all())
     
     # 2. Scan disk
-    base_dir = os.path.join("web", "public", "media", "products")
+    base_dir = os.path.join("media", "products")
     deleted_count = 0
     reclaimed_bytes = 0
     
@@ -391,8 +391,8 @@ async def cleanup_media(
             # We match what's in DB: /media/products/... (often with leading slash)
             
             # Construct DB-style relative path
-            # root is like web/public/media/products/123
-            rel_dir = os.path.relpath(root, os.path.join("web", "public")) # media/products/123
+            # root is like media/products/123
+            rel_dir = root # media/products/123
             db_path_rel = os.path.join(rel_dir, file) # media/products/123/foo.webp
             db_path_abs = "/" + db_path_rel # /media/products/123/foo.webp
             

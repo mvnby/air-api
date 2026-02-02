@@ -20,10 +20,10 @@ def calculate_area_tag(cooling_kw: float) -> Optional[str]:
         return "area-50"
     return "area-50-plus"
 
-def get_auto_tags(metrics: Dict[str, any]) -> List[str]:
+def get_auto_tags(metrics: Dict[str, any], specs: Dict[str, any] = {}) -> List[str]:
     """
-    Returns a list of TAG SLUGS based on parsed metrics.
-    Includes: Area, Inverter status, and Winter heating capability.
+    Returns a list of TAG SLUGS based on parsed metrics and specs.
+    Includes: Area, Inverter status, Winter heating, and Type (Wall).
     """
     tags = []
     
@@ -46,5 +46,17 @@ def get_auto_tags(metrics: Dict[str, any]) -> List[str]:
         elif min_temp <= -25: tags.append("winter-25")
         elif min_temp <= -20: tags.append("winter-20")
         elif min_temp <= -15: tags.append("winter-15")
+
+    # 4. Wall Type Check
+    # 'Тип внутреннего блока' : 'настенный'
+    unit_type = specs.get('Тип внутреннего блока', '').lower()
+    if 'настенный' in unit_type:
+        tags.append("wall")
+    elif 'подпотолочный' in unit_type:
+        tags.append("ceiling")
+    elif 'канальный' in unit_type:
+        tags.append("duct")
+    elif 'кассетный' in unit_type:
+        tags.append("cassette")
 
     return tags

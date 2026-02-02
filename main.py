@@ -78,10 +78,10 @@ app.include_router(manager_tools.router)
 
 # Static files
 app.mount(f"/{settings.STATIC_DIR}", StaticFiles(directory=os.path.join(BASE_DIR, settings.STATIC_DIR)), name="static")
-# Mount media from web/public/media where existing files function
-media_dir = os.path.join(BASE_DIR, "web", "public", "media")
+# Mount media from root 'media' folder (shared volume)
+media_dir = os.path.join(BASE_DIR, "media")
 if not os.path.exists(media_dir):
-    media_dir = os.path.join(BASE_DIR, "media") # Fallback
+    os.makedirs(media_dir, exist_ok=True)
 app.mount("/media", StaticFiles(directory=media_dir), name="media")
 
 # Manager Dashboard SPA

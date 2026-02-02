@@ -56,7 +56,7 @@ class ImporterService:
             
             # 1. Get Auto Tags (Slugs) based on metrics
             metrics = data.get('metrics', {})
-            auto_slugs = get_auto_tags(metrics)
+            auto_slugs = get_auto_tags(metrics, specs=data.get('specs', {}))
             
             # 2. Resolve Auto Tags by SLUG
             for slug in auto_slugs:
@@ -97,15 +97,11 @@ class ImporterService:
                     main_image_url, 'products', slug
                 )
             
-            # Gallery Images
-            gallery_urls = data.get('images', [])
+            # --- STOP LEGACY GALLERY PARSING (Phase 48) ---
+            # We no longer download 'images' array from Onliner/Source.
+            # Only 'main_image' is kept.
+            # Gallery is filled manually via Manager App.
             local_gallery_images = []
-            for img_url in gallery_urls:
-                local_path = await ImageService.download_and_save_image(
-                    img_url, 'products', slug
-                )
-                if local_path:
-                    local_gallery_images.append(local_path)
 
             product = Product(
                 title=data['title'],
@@ -116,7 +112,7 @@ class ImporterService:
                 is_inverter=metrics.get('is_inverter', False),
                 power_cooling=metrics.get('power_cooling'),
                 main_image=local_main_image,  # Use local path
-                images=local_gallery_images,  # Use local paths
+                images=[],  # Explicitly empty legacy JSON
                 tags=tag_objects,
                 specs=data.get('specs', {}),
                 is_published=is_published,

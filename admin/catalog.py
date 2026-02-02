@@ -81,7 +81,10 @@ class ProductAdmin(ModelView, model=Product):
     def list_query(self, request):
         from sqlalchemy import func
         query = super().list_query(request)
-        query = query.options(selectinload(Product.tags).selectinload(Tag.group))
+        query = query.options(
+            selectinload(Product.tags).selectinload(Tag.group),
+            selectinload(Product.gallery_images)
+        )
         
         # Handle tag_ids filtering from URL
         tag_ids = request.query_params.getlist('tag_ids')

@@ -214,6 +214,10 @@ class ProductService:
             tags_data.append(t_dict)
         data['tags'] = tags_data
 
+        # Ensure main_image has leading slash for Frontend
+        if data.get('main_image') and not data['main_image'].startswith('/'):
+            data['main_image'] = '/' + data['main_image']
+
         # --- GALLERY FIX & SYNC (Phase 47/48) ---
         # The Manager App writes to 'gallery_images' (Relation), 
         # but Frontend/Admin read 'images' (Legacy JSON).
@@ -228,18 +232,23 @@ class ProductService:
             key=lambda x: (x.is_installation_photo, x.id)
         )
 
+        # Helper to ensure web path
+        def to_web_path(path: str) -> str:
+            if path and not path.startswith('/'):
+                return f"/{path}"
+            return path
+
         # 2. Populate Legacy JSON field (URLs only) for Frontend/Admin compatibility
-        # Filter out installation photos if we only want product shots in the main gallery
-        # (Though usually customers want to see everything). 
-        # Let's include everything for now, or maybe only is_installation_photo=False?
-        # User request implies "Gallery" which usually means product photos.
-        # But let's verify if 'images' should contain installation photos.
-        # Frontend distinguishes them? No, frontend just loops.
-        # We will include ALL, but sorted (Installation last).
-        data['images'] = [img.url for img in gallery]
+        # Ensure all paths start with / to work in Manager App and Frontend
+        data['images'] = [to_web_path(img.url) for img in gallery]
 
         # 3. Populate New Field (Full Objects) for advanced UI
-        data['gallery_images'] = [img.model_dump() for img in gallery]
+        gallery_data = []
+        for img in gallery:
+            img_dict = img.model_dump()
+            img_dict['url'] = to_web_path(img_dict['url'])
+            gallery_data.append(img_dict)
+        data['gallery_images'] = gallery_data
         
         return data
 
