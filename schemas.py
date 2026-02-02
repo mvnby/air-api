@@ -39,10 +39,16 @@ class TagResponse(BaseModel):
     group: Optional[TagGroupResponse] = None
     group_title: Optional[str] = None
 
+class ProductImageResponse(BaseModel):
+    id: int
+    url: str
+    is_installation_photo: bool
+
 class ProductResponse(ProductBase):
     tags: List[TagResponse] = []
     specs: Dict[str, Any] = {}
-    images: List[str] = []
+    images: List[str] = [] # Legacy
+    gallery_images: List[ProductImageResponse] = [] # New
 
 class ProductPriceResponse(BaseModel):
     id: int
