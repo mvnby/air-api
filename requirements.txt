@@ -26,6 +26,9 @@ python-multipart
 itsdangerous>=2.0.0
 alembic
 
+#Auth
+pyjwt
+
 #Telegram Bot
 
 aiogram>=3.0.0
@@ -40,4 +43,4 @@ num2words
 #Script Dependencies
 requests
 Pillow
-ddgs>=9.10.0
+duckduckgo-search>=6.0.0

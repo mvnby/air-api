@@ -17,9 +17,17 @@ from models import Product, ProductImage
 import httpx
 from PIL import Image
 from io import BytesIO
-from ddgs import DDGS
+from duckduckgo_search import DDGS
 
 router = APIRouter(prefix="/api/manager", tags=["manager"])
+
+@router.get("/me")
+async def check_auth_status(username: str = Depends(get_current_username)):
+    """
+    Check if current user is authenticated.
+    Returns username if valid, 401 otherwise (via Depends).
+    """
+    return {"username": username, "status": "authenticated"}
 
 @router.post("/search-images", response_model=List[dict])
 async def search_images(
@@ -35,9 +43,11 @@ async def search_images(
     
     try:
         # DBGS is synchronous, run in executor
+        # Using updated approach for v6+
         results = await asyncio.to_thread(
             lambda: list(DDGS().images(q, max_results=max_results))
         )
+        
         # Extract relevant fields
         images = []
         for r in results:
@@ -49,12 +59,20 @@ async def search_images(
                     "thumbnail": r.get('thumbnail')
                 })
         return images
+        
     except Exception as e:
-        logger.error(f"Error searching images: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Search failed: {str(e)}"
-        )
+        logger.error(f"Error searching images (DDG): {e}")
+        # Return empty list or specific error instead of 500
+        # Check if it is a rate limit or connection error
+        if "Ratelimit" in str(e) or "403" in str(e):
+             # Silently return empty list to not break UI, or handle specifically?
+             # User requested: "Better to return empty list [] or understandable error".
+             # Let's return empty list for graceful degradation.
+             logger.warning(f"DDG Ratelimit hit for query: {q}")
+             return []
+        
+        # For other errors, also fallback to empty list but log error
+        return []
 
 @router.post("/upload-image")
 async def upload_image(
