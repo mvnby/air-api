@@ -23,7 +23,7 @@ class ProductAdmin(ModelView, model=Product):
     edit_template = "sqladmin/product_edit.html"
     
     # --- КОЛОНКИ ---
-    column_list = ["id", "formatted_title", "price", "main_image", "formatted_area", "is_published"]
+    column_list = ["id", "formatted_title", "price", "main_image", "gallery_status", "formatted_area", "is_published"]
     column_searchable_list = ["title", "description"]
     column_default_sort = ("created_at", True)
     column_editable_list = ["is_published"]
@@ -33,7 +33,8 @@ class ProductAdmin(ModelView, model=Product):
     # --- ФОРМА: Порядок полей ---
     form_columns = [
         "title", "slug", "description", "price", "old_price", "area", "is_inverter", "power_cooling",
-        "main_image", "images", 
+        "main_image", 
+        "images", # Legacy field (Read-Only)
         "tags",  # M2M handled by form_ajax_refs
         "specs", "is_published", "source_url"
     ]
@@ -80,7 +81,10 @@ class ProductAdmin(ModelView, model=Product):
     def list_query(self, request):
         from sqlalchemy import func
         query = super().list_query(request)
-        query = query.options(selectinload(Product.tags).selectinload(Tag.group))
+        query = query.options(
+            selectinload(Product.tags).selectinload(Tag.group),
+            selectinload(Product.gallery_images)
+        )
         
         # Handle tag_ids filtering from URL
         tag_ids = request.query_params.getlist('tag_ids')
@@ -138,7 +142,8 @@ class ProductAdmin(ModelView, model=Product):
         "main_image": format_image,
         "formatted_title": format_product_title,
         "formatted_area": format_area,
-        "price": format_price
+        "price": format_price,
+        "gallery_status": lambda m, c: Markup(f'<span class="badge bg-blue-lt">{len(m.gallery_images)} фото</span>') if m.gallery_images else Markup('<span class="badge bg-secondary-lt">Нет</span>')
     }
     
     column_labels = {
@@ -146,7 +151,21 @@ class ProductAdmin(ModelView, model=Product):
         "formatted_area": "Площадь",
         "price": "Цена",
         "main_image": "Фото",
+        "gallery_status": "Галерея",
         "is_published": "Включён"
+    }
+    
+    # Make legacy images field read-only
+    form_args = {
+        "slug": {
+            "validators": [DataRequired()],
+            "label": "Slug Re-Attempt",
+            "description": "Уникальный URL"
+        },
+        "images": {
+            "render_kw": {"readonly": True, "style": "background-color: #f8f9fa;"},
+            "description": "⚠️ Редактирование галереи перенесено в Manager App"
+        }
     }
 
     # --- Сохранение: обработка файла через ProductService ---

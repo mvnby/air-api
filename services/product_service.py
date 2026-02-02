@@ -213,6 +213,42 @@ class ProductService:
                 t_dict['group'] = tag.group.model_dump()
             tags_data.append(t_dict)
         data['tags'] = tags_data
+
+        # Ensure main_image has leading slash for Frontend
+        if data.get('main_image') and not data['main_image'].startswith('/'):
+            data['main_image'] = '/' + data['main_image']
+
+        # --- GALLERY FIX & SYNC (Phase 47/48) ---
+        # The Manager App writes to 'gallery_images' (Relation), 
+        # but Frontend/Admin read 'images' (Legacy JSON).
+        # We bridge this gap here by populating 'images' from the relation.
+        
+        # 1. Get images from relation and sort them
+        # Sort priority: 
+        #   - Product photos first (is_installation_photo=False)
+        #   - Then by ID (creation order)
+        gallery = sorted(
+            product.gallery_images, 
+            key=lambda x: (x.is_installation_photo, x.id)
+        )
+
+        # Helper to ensure web path
+        def to_web_path(path: str) -> str:
+            if path and not path.startswith('/'):
+                return f"/{path}"
+            return path
+
+        # 2. Populate Legacy JSON field (URLs only) for Frontend/Admin compatibility
+        # Ensure all paths start with / to work in Manager App and Frontend
+        data['images'] = [to_web_path(img.url) for img in gallery]
+
+        # 3. Populate New Field (Full Objects) for advanced UI
+        gallery_data = []
+        for img in gallery:
+            img_dict = img.model_dump()
+            img_dict['url'] = to_web_path(img_dict['url'])
+            gallery_data.append(img_dict)
+        data['gallery_images'] = gallery_data
         
         return data
 
