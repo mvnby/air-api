@@ -7,6 +7,8 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
+from sqlalchemy import func
+from schemas import BulkSpecUpdate, SpecsKeysResponse
 
 from core.database import get_session
 from core.config import settings
@@ -429,4 +431,52 @@ async def cleanup_media(
         "deleted_count": deleted_count,
         "reclaimed_bytes": reclaimed_bytes,
         "files": report[:50] # Limit report size
+    }
+
+@router.post("/specs/bulk-update", operation_id="bulk_update_specs")
+async def bulk_update_specs(
+    payload: BulkSpecUpdate,
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username)
+):
+    """
+    Массовое добавление или обновление характеристик.
+    Идеально для установки диаметров труб для целой серии кондиционеров сразу.
+    """
+    logger.info(f"Manager {username} bulk updating specs for {len(payload.product_ids)} products. Op: {payload.operation}")
+    
+    # Получаем товары
+    stmt = select(Product).where(Product.id.in_(payload.product_ids))
+    result = await session.execute(stmt)
+    products = result.scalars().all()
+    
+    updated_count = 0
+    
+    for product in products:
+        # Важно: создаем копию, чтобы SQLAlchemy детектил изменение JSON
+        current_specs = dict(product.specs) if product.specs else {}
+        
+        if payload.operation == "replace":
+            # Полная замена (опасно, но иногда нужно)
+            current_specs = payload.specs
+            
+        elif payload.operation == "delete_keys":
+            # Удаляем указанные ключи
+            for key in payload.specs.keys():
+                current_specs.pop(key, None)
+                
+        else: # "merge" (default)
+            # Добавляем новые или обновляем существующие
+            current_specs.update(payload.specs)
+            
+        # Присваиваем обратно
+        product.specs = current_specs
+        session.add(product)
+        updated_count += 1
+        
+    await session.commit()
+    
+    return {
+        "message": f"Updated specs for {updated_count} products", 
+        "operation": payload.operation
     }

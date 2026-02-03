@@ -59,6 +59,15 @@ class CatalogResponse(BaseModel):
     items: List[ProductResponse]
     meta: Meta
 
+class BulkSpecUpdate(BaseModel):
+    product_ids: List[int]
+    specs: Dict[str, Any]  # Словарь характеристик для добавления/обновления
+    operation: str = "merge" # "merge" (добавить/обновить), "replace" (затереть всё старое), "delete_keys" (удалить эти ключи)
+
+class SpecsKeysResponse(BaseModel):
+    keys: List[str]
+    total_products_using: Dict[str, int] # Статистика: ключ -> кол-во товаров
+
 # --- CONTENT ---
 
 class ArticleResponse(BaseModel):
