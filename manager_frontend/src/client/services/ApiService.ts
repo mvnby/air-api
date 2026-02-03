@@ -239,7 +239,7 @@ export class ApiService {
      * @returns CatalogResponse Successful Response
      * @throws ApiError
      */
-    public static getCatalogApiV1ProductsGet(
+    public static getProductsV1(
         page: number = 1,
         limit: number = 20,
         sort: string = 'newest',
@@ -297,7 +297,7 @@ export class ApiService {
      * @returns CatalogResponse Successful Response
      * @throws ApiError
      */
-    public static getCatalogApiV1CatalogGet(
+    public static getProducts(
         page: number = 1,
         limit: number = 20,
         sort: string = 'newest',
@@ -337,7 +337,7 @@ export class ApiService {
      * @returns ProductResponse Successful Response
      * @throws ApiError
      */
-    public static getProductByIdentifierApiV1ProductsIdentifierGet(
+    public static getProduct(
         identifier: string,
     ): CancelablePromise<ProductResponse> {
         return __request(OpenAPI, {
@@ -441,7 +441,7 @@ export class ApiService {
      * @returns OrderResponse Successful Response
      * @throws ApiError
      */
-    public static createOrderApiV1OrdersPost(
+    public static createOrder(
         requestBody: OrderPayload,
     ): CancelablePromise<OrderResponse> {
         return __request(OpenAPI, {
@@ -461,7 +461,7 @@ export class ApiService {
      * @returns any Successful Response
      * @throws ApiError
      */
-    public static getGlobalConfigApiV1ConfigGet(): CancelablePromise<any> {
+    public static getConfig(): CancelablePromise<any> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/config',

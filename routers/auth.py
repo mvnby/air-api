@@ -9,7 +9,7 @@ import secrets
 
 router = APIRouter(tags=["login"])
 
-@router.post("/login/access-token")
+@router.post("/login/access-token", operation_id="login_access_token")
 def login_access_token(
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends()
@@ -49,7 +49,7 @@ def login_access_token(
         max_age=int(access_token_expires.total_seconds()),
         expires=int(access_token_expires.total_seconds()),
         samesite="lax",
-        secure=False, # Set to True in Prod with HTTPS
+        secure=settings.is_production, # Set to True in Prod with HTTPS
     )
     
     return {

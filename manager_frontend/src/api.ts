@@ -1,89 +1,75 @@
-import { OpenAPI } from './client/core/OpenAPI';
-import { ManagerService } from './client/services/ManagerService';
-import { LoginService } from './client/services/LoginService';
-import { ApiService } from './client/services/ApiService';
-// Re-export common models if needed, or define local interfaces compatible with frontend
-// import type { ProductResponse } from './client/models/ProductResponse';
+import {
+    OpenAPI,
+    LoginService,
+    ManagerService,
+    ApiService,
+    type ProductResponse as Product // Используем ProductResponse как Product
+} from './client';
 
-// Configure base URL (relative to origin, proxied by Vite)
-OpenAPI.BASE = import.meta.env.VITE_API_URL || '/api/manager'.replace('/api/manager', '');
-// Logic: If VITE_API_URL is set (e.g. http://localhost:8000), use it.
-// Otherwise default to '' (empty) so requests go to '/api/...' relative to current host.
-// But generated client uses full paths from schema: e.g. '/api/manager/search-images'.
-// So OpenAPI.BASE should be empty string if serving from same origin/proxy.
-OpenAPI.BASE = '';
+// 1. Настройка глобального конфига клиента
+// Указываем, что нужно отправлять cookies (для авторизации)
 OpenAPI.WITH_CREDENTIALS = true;
+// Если API живет на том же домене/порту (через прокси), можно оставить BASE пустым или '/'
+// OpenAPI.BASE = 'http://localhost:8000'; // Раскомментируй для локальной разработки без прокси
 
-// Keep existing interface for backward compatibility if needed, 
-// though we usually rely on generated specific responses.
-export interface Product {
-    id: number;
-    title: string;
-    price: number;
-    main_image?: string | null;
-    is_published: boolean;
-    gallery_images?: Array<{ id: number, url: string, is_installation_photo: boolean }>;
-}
+export { type Product }; // Экспортируем тип наружу
 
 export const api = {
+    // --- SEARCH & IMAGES (ManagerTools) ---
     async searchImages(query: string) {
-        return ManagerService.searchImagesApiManagerSearchImagesPost(query);
+        return await ManagerService.searchImages(query);
     },
 
     async uploadImage(productId: number, imageUrl: string, isInstallation: boolean = false) {
-        return ManagerService.uploadImageApiManagerUploadImagePost(imageUrl, productId, isInstallation);
+        return await ManagerService.uploadImage(imageUrl, productId, isInstallation);
     },
 
     async uploadLocalImages(productId: number, files: FileList | File[]) {
-        // Convert FileList/Array to Array<Blob> as expected by generated client
-        const fileArray = Array.from(files);
-        return ManagerService.uploadLocalImagesApiManagerUploadLocalImagesPost(
-            productId,
-            { files: fileArray },
-            false // isInstallation (default false in original)
-        );
-    },
-
-    async linkSearchResult(productId: number, imageUrl: string) {
-        return ManagerService.linkSearchResultApiManagerGalleryLinkSearchResultPost(imageUrl, productId);
-    },
-
-    async setMainImage(imageId: number) {
-        return ManagerService.setMainImageApiManagerGallerySetMainPost(imageId);
-    },
-
-    async deleteGalleryImage(imageId: number) {
-        return ManagerService.deleteGalleryImageApiManagerGalleryImageIdDelete(imageId);
-    },
-
-    async reuseSearch(q: string) {
-        return ManagerService.reuseSearchApiManagerGalleryReuseSearchGet(q);
-    },
-
-    async reuseImage(productId: number, sourceUrl: string) {
-        return ManagerService.reuseImageApiManagerGalleryReuseImagePost(productId, sourceUrl);
-    },
-
-    async cleanupMedia(dryRun: boolean) {
-        return ManagerService.cleanupMediaApiManagerCleanupMediaPost(dryRun);
-    },
-
-    // Legacy API reuse -> Now using generated ApiService
-    async getProducts(limit = 50, page = 1) {
-        // ApiService.getCatalogApiV1ProductsGet returns CatalogResponse
-        return ApiService.getCatalogApiV1ProductsGet(page, limit);
-    },
-
-    async login(username: string, password: string) {
-        // LoginService expects FormData object
-        return LoginService.loginAccessTokenLoginAccessTokenPost({
-            username,
-            password,
-            grant_type: 'password' // OAuth2 standard usually requires this, let's check generated model if needed
+        return await ManagerService.uploadLocalImages(productId, {
+            files: Array.from(files)
         });
     },
 
+    async linkSearchResult(productId: number, imageUrl: string) {
+        return await ManagerService.linkSearchResult(imageUrl, productId);
+    },
+
+    async setMainImage(imageId: number) {
+        return await ManagerService.setMainImage(imageId);
+    },
+
+    async deleteGalleryImage(imageId: number) {
+        return await ManagerService.deleteImage(imageId);
+    },
+
+    async reuseSearch(q: string) {
+        return await ManagerService.reuseSearch(q);
+    },
+
+    async reuseImage(productId: number, sourceUrl: string) {
+        return await ManagerService.reuseImage(productId, sourceUrl);
+    },
+
+    async cleanupMedia(dryRun: boolean) {
+        return await ManagerService.cleanupMedia(dryRun);
+    },
+
+    // --- PRODUCTS (Public API) ---
+    async getProducts(limit = 50, page = 1) {
+        return await ApiService.getProducts(page, limit);
+    },
+
+    // --- AUTH ---
+    async login(username: string, password: string) {
+        // Используем LoginService. OAuth2 форма требует отправки formData
+        const response = await LoginService.loginAccessToken({
+            username,
+            password,
+        });
+        return response;
+    },
+
     async checkAuth() {
-        return ManagerService.checkAuthStatusApiManagerMeGet();
+        return await ManagerService.readUserMe();
     }
 };

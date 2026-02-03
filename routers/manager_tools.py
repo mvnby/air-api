@@ -21,7 +21,7 @@ from duckduckgo_search import DDGS
 
 router = APIRouter(prefix="/api/manager", tags=["manager"])
 
-@router.get("/me")
+@router.get("/me", operation_id="read_user_me")
 async def check_auth_status(username: str = Depends(get_current_username)):
     """
     Check if current user is authenticated.
@@ -29,7 +29,7 @@ async def check_auth_status(username: str = Depends(get_current_username)):
     """
     return {"username": username, "status": "authenticated"}
 
-@router.post("/search-images", response_model=List[dict])
+@router.post("/search-images", response_model=List[dict], operation_id="search_images")
 async def search_images(
     q: str = Query(..., description="Query string for image search"),
     max_results: int = 20,
@@ -74,7 +74,7 @@ async def search_images(
         # For other errors, also fallback to empty list but log error
         return []
 
-@router.post("/upload-image")
+@router.post("/upload-image", operation_id="upload_image")
 async def upload_image(
     url: str = Query(..., description="URL of the image to download"),
     product_id: int = Query(..., description="ID of the product to attach image to"),
@@ -186,7 +186,7 @@ async def _save_image_from_bytes(
 
 from fastapi import UploadFile, File
 
-@router.post("/upload-local-images")
+@router.post("/upload-local-images", operation_id="upload_local_images")
 async def upload_local_images(
     product_id: int = Query(..., description="ID of the product"),
     files: List[UploadFile] = File(...),
@@ -254,7 +254,7 @@ async def _sync_legacy_images(session: AsyncSession, product_id: int):
     product.images = [img.url for img in images if not img.is_installation_photo]
     session.add(product)
 
-@router.post("/gallery/link-search-result")
+@router.post("/gallery/link-search-result", operation_id="link_search_result")
 async def link_search_result(
     url: str = Query(..., description="URL of the image"),
     product_id: int = Query(..., description="ID of the product"),
@@ -268,7 +268,7 @@ async def link_search_result(
         
     return await _process_and_save_image(url, product_id, session, set_main=False)
 
-@router.post("/gallery/set-main")
+@router.post("/gallery/set-main", operation_id="set_main_image")
 async def set_main_image(
     image_id: int = Query(..., description="ID of the ProductImage to set as main"),
     session: AsyncSession = Depends(get_session),
@@ -289,7 +289,7 @@ async def set_main_image(
     await session.commit()
     return {"message": "Main image updated", "url": image.url}
 
-@router.delete("/gallery/{image_id}")
+@router.delete("/gallery/{image_id}", operation_id="delete_image")
 async def delete_gallery_image(
     image_id: int,
     session: AsyncSession = Depends(get_session),
@@ -331,7 +331,7 @@ async def delete_gallery_image(
     await session.commit()
     return {"message": "Image deleted"}
 
-@router.get("/gallery/reuse-search")
+@router.get("/gallery/reuse-search", operation_id="reuse_search")
 async def reuse_search(
     q: str = Query(..., min_length=2),
     session: AsyncSession = Depends(get_session),
@@ -345,7 +345,7 @@ async def reuse_search(
     # Return simple list
     return [{"id": p.id, "title": p.title, "main_image": p.main_image} for p in products]
 
-@router.post("/gallery/reuse-image")
+@router.post("/gallery/reuse-image", operation_id="reuse_image")
 async def reuse_image(
     product_id: int = Query(...),
     source_image_url: str = Query(...),
@@ -372,7 +372,7 @@ async def reuse_image(
     await session.commit()
     return {"message": "Image linked", "id": new_image.id}
 
-@router.post("/cleanup-media")
+@router.post("/cleanup-media", operation_id="cleanup_media")
 async def cleanup_media(
     dry_run: bool = Query(False),
     session: AsyncSession = Depends(get_session),

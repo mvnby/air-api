@@ -413,8 +413,8 @@ async def generate_product_description(
 
 # --- V1 HEADLESS COMMERCE API ---
 
-@router.get("/v1/catalog", response_model=CatalogResponse)
-@router.get("/v1/products", response_model=CatalogResponse)
+@router.get("/v1/catalog", response_model=CatalogResponse, operation_id="get_products")
+@router.get("/v1/products", response_model=CatalogResponse, operation_id="get_products_v1")
 async def get_catalog(
     page: int = 1,
     limit: int = 20,
@@ -485,7 +485,7 @@ async def get_catalog(
         meta=Meta(total=total, page=page, limit=limit, pages=pages)
     )
 
-@router.get("/v1/products/{identifier}", response_model=ProductResponse)
+@router.get("/v1/products/{identifier}", response_model=ProductResponse, operation_id="get_product")
 async def get_product_by_identifier(identifier: str, session: AsyncSession = Depends(get_session)):
     """
     Get product details by ID or slug (Hybrid Access).
@@ -548,7 +548,7 @@ async def get_installation_rates(session: AsyncSession = Depends(get_session)):
 
 # --- ORDER ENDPOINTS ---
 
-@router.post("/v1/orders", response_model=OrderResponse)
+@router.post("/v1/orders", response_model=OrderResponse, operation_id="create_order")
 async def create_order(payload: OrderPayload, session: AsyncSession = Depends(get_session)):
     """
     Create a new order from website.
@@ -663,7 +663,7 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
 
 # --- CONFIG ENDPOINTS ---
 
-@router.get("/v1/config")
+@router.get("/v1/config", operation_id="get_config")
 async def get_global_config(session: AsyncSession = Depends(get_session)):
     """
     Get all global configuration parameters as a key-value dictionary.

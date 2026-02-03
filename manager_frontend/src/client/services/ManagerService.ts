@@ -2,7 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { Body_upload_local_images_api_manager_upload_local_images_post } from '../models/Body_upload_local_images_api_manager_upload_local_images_post';
+import type { Body_upload_local_images } from '../models/Body_upload_local_images';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -14,7 +14,7 @@ export class ManagerService {
      * @returns any Successful Response
      * @throws ApiError
      */
-    public static checkAuthStatusApiManagerMeGet(): CancelablePromise<any> {
+    public static readUserMe(): CancelablePromise<any> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/me',
@@ -29,7 +29,7 @@ export class ManagerService {
      * @returns any Successful Response
      * @throws ApiError
      */
-    public static searchImagesApiManagerSearchImagesPost(
+    public static searchImages(
         q: string,
         maxResults: number = 20,
     ): CancelablePromise<Array<Record<string, any>>> {
@@ -55,7 +55,7 @@ export class ManagerService {
      * @returns any Successful Response
      * @throws ApiError
      */
-    public static uploadImageApiManagerUploadImagePost(
+    public static uploadImage(
         url: string,
         productId: number,
         isInstallation: boolean = false,
@@ -82,9 +82,9 @@ export class ManagerService {
      * @returns any Successful Response
      * @throws ApiError
      */
-    public static uploadLocalImagesApiManagerUploadLocalImagesPost(
+    public static uploadLocalImages(
         productId: number,
-        formData: Body_upload_local_images_api_manager_upload_local_images_post,
+        formData: Body_upload_local_images,
         isInstallation: boolean = false,
     ): CancelablePromise<any> {
         return __request(OpenAPI, {
@@ -109,7 +109,7 @@ export class ManagerService {
      * @returns any Successful Response
      * @throws ApiError
      */
-    public static linkSearchResultApiManagerGalleryLinkSearchResultPost(
+    public static linkSearchResult(
         url: string,
         productId: number,
     ): CancelablePromise<any> {
@@ -132,7 +132,7 @@ export class ManagerService {
      * @returns any Successful Response
      * @throws ApiError
      */
-    public static setMainImageApiManagerGallerySetMainPost(
+    public static setMainImage(
         imageId: number,
     ): CancelablePromise<any> {
         return __request(OpenAPI, {
@@ -153,7 +153,7 @@ export class ManagerService {
      * @returns any Successful Response
      * @throws ApiError
      */
-    public static deleteGalleryImageApiManagerGalleryImageIdDelete(
+    public static deleteImage(
         imageId: number,
     ): CancelablePromise<any> {
         return __request(OpenAPI, {
@@ -174,7 +174,7 @@ export class ManagerService {
      * @returns any Successful Response
      * @throws ApiError
      */
-    public static reuseSearchApiManagerGalleryReuseSearchGet(
+    public static reuseSearch(
         q: string,
     ): CancelablePromise<any> {
         return __request(OpenAPI, {
@@ -196,7 +196,7 @@ export class ManagerService {
      * @returns any Successful Response
      * @throws ApiError
      */
-    public static reuseImageApiManagerGalleryReuseImagePost(
+    public static reuseImage(
         productId: number,
         sourceImageUrl: string,
     ): CancelablePromise<any> {
@@ -219,7 +219,7 @@ export class ManagerService {
      * @returns any Successful Response
      * @throws ApiError
      */
-    public static cleanupMediaApiManagerCleanupMediaPost(
+    public static cleanupMedia(
         dryRun: boolean = false,
     ): CancelablePromise<any> {
         return __request(OpenAPI, {
