@@ -63,9 +63,18 @@ async def db(db_engine):
     await connection.close()
 
 @pytest.fixture(scope="function")
-async def async_client():
-    from httpx import AsyncClient
-    from main import app  # Local import to avoid circular issues
+async def async_client(db):
+    from httpx import AsyncClient, ASGITransport
+    from main import app
+    from core.database import get_session
+
+    async def override_get_session():
+        yield db
+
+    app.dependency_overrides[get_session] = override_get_session
     
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
+    
+    app.dependency_overrides.clear()
