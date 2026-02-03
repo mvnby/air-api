@@ -2,7 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type Body_upload_local_images_api_manager_upload_local_images_post = {
+export type Body_upload_local_images = {
     files: Array<Blob>;
 };
 

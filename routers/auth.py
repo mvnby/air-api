@@ -9,7 +9,7 @@ import secrets
 
 router = APIRouter(tags=["login"])
 
-@router.post("/login/access-token")
+@router.post("/login/access-token", operation_id="login_access_token")
 def login_access_token(
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends()

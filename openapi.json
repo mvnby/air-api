@@ -479,12 +479,12 @@
         ],
         "summary": "Login Access Token",
         "description": "OAuth2 compatible token login, get an access token for future requests.\nSets 'access_token' cookie as well.",
-        "operationId": "login_access_token_login_access_token_post",
+        "operationId": "login_access_token",
         "requestBody": {
           "content": {
             "application/x-www-form-urlencoded": {
               "schema": {
-                "$ref": "#/components/schemas/Body_login_access_token_login_access_token_post"
+                "$ref": "#/components/schemas/Body_login_access_token"
               }
             }
           },
@@ -496,7 +496,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "title": "Response Login Access Token Login Access Token Post"
+                  "title": "Response Login Access Token"
                 }
               }
             }
@@ -943,7 +943,7 @@
         ],
         "summary": "Get Catalog",
         "description": "Get paginated product catalog with filtering and sorting.\n\n**Filters:**\n- `min_price`, `max_price`: Price range filter\n- `area_min`, `area_max`: Area coverage filter\n- `tag_slugs`: Filter by tag slugs (e.g., 'inverter', 'chigo', 'area-25')\n- `is_inverter`: Filter by inverter technology\n\n**Sorting:**\n- `newest`: Recently added products (default)\n- `price_asc`: Price low to high\n- `price_desc`: Price high to low\n- `area_asc`: Area low to high\n- `area_desc`: Area high to low",
-        "operationId": "get_catalog_api_v1_products_get",
+        "operationId": "get_products_v1",
         "parameters": [
           {
             "name": "page",
@@ -1106,7 +1106,7 @@
         ],
         "summary": "Get Catalog",
         "description": "Get paginated product catalog with filtering and sorting.\n\n**Filters:**\n- `min_price`, `max_price`: Price range filter\n- `area_min`, `area_max`: Area coverage filter\n- `tag_slugs`: Filter by tag slugs (e.g., 'inverter', 'chigo', 'area-25')\n- `is_inverter`: Filter by inverter technology\n\n**Sorting:**\n- `newest`: Recently added products (default)\n- `price_asc`: Price low to high\n- `price_desc`: Price high to low\n- `area_asc`: Area low to high\n- `area_desc`: Area high to low",
-        "operationId": "get_catalog_api_v1_catalog_get",
+        "operationId": "get_products",
         "parameters": [
           {
             "name": "page",
@@ -1269,7 +1269,7 @@
         ],
         "summary": "Get Product By Identifier",
         "description": "Get product details by ID or slug (Hybrid Access).\n\nReturns full product information including tags, specifications, and images.\nRaises 404 if product not found.",
-        "operationId": "get_product_by_identifier_api_v1_products__identifier__get",
+        "operationId": "get_product",
         "parameters": [
           {
             "name": "identifier",
@@ -1475,7 +1475,7 @@
         ],
         "summary": "Create Order",
         "description": "Create a new order from website.\n\nAccepts customer information and cart items. Creates or updates customer record,\ncreates order with NEW_LEAD status and lead_source=SITE.\n\nReturns created order details.",
-        "operationId": "create_order_api_v1_orders_post",
+        "operationId": "create_order",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1517,7 +1517,7 @@
         ],
         "summary": "Get Global Config",
         "description": "Get all global configuration parameters as a key-value dictionary.\nExample: {\"phone\": \"+37529...\", \"email\": \"...\"}",
-        "operationId": "get_global_config_api_v1_config_get",
+        "operationId": "get_config",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1537,7 +1537,7 @@
         ],
         "summary": "Check Auth Status",
         "description": "Check if current user is authenticated.\nReturns username if valid, 401 otherwise (via Depends).",
-        "operationId": "check_auth_status_api_manager_me_get",
+        "operationId": "read_user_me",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1562,7 +1562,7 @@
         ],
         "summary": "Search Images",
         "description": "Search for images using DuckDuckGo.\nReturns a list of image objects: {image, width, height, ...}",
-        "operationId": "search_images_api_manager_search_images_post",
+        "operationId": "search_images",
         "security": [
           {
             "OAuth2PasswordBearer": []
@@ -1602,7 +1602,7 @@
                     "type": "object",
                     "additionalProperties": true
                   },
-                  "title": "Response Search Images Api Manager Search Images Post"
+                  "title": "Response Search Images"
                 }
               }
             }
@@ -1627,7 +1627,7 @@
         ],
         "summary": "Upload Image",
         "description": "Download image from URL, convert to WebP, save to local storage, \nand create a ProductImage record linked to the product.",
-        "operationId": "upload_image_api_manager_upload_image_post",
+        "operationId": "upload_image",
         "security": [
           {
             "OAuth2PasswordBearer": []
@@ -1698,7 +1698,7 @@
         ],
         "summary": "Upload Local Images",
         "description": "Upload multiple local files, convert to WebP, and attach to product.",
-        "operationId": "upload_local_images_api_manager_upload_local_images_post",
+        "operationId": "upload_local_images",
         "security": [
           {
             "OAuth2PasswordBearer": []
@@ -1732,7 +1732,7 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/Body_upload_local_images_api_manager_upload_local_images_post"
+                "$ref": "#/components/schemas/Body_upload_local_images"
               }
             }
           }
@@ -1766,7 +1766,7 @@
         ],
         "summary": "Link Search Result",
         "description": "Add a search result image to gallery (download and link). Does NOT set as main image.",
-        "operationId": "link_search_result_api_manager_gallery_link_search_result_post",
+        "operationId": "link_search_result",
         "security": [
           {
             "OAuth2PasswordBearer": []
@@ -1825,7 +1825,7 @@
         ],
         "summary": "Set Main Image",
         "description": "Set a specific gallery image as the product's main image.",
-        "operationId": "set_main_image_api_manager_gallery_set_main_post",
+        "operationId": "set_main_image",
         "security": [
           {
             "OAuth2PasswordBearer": []
@@ -1873,7 +1873,7 @@
         ],
         "summary": "Delete Gallery Image",
         "description": "Delete an image from the gallery (and disk).",
-        "operationId": "delete_gallery_image_api_manager_gallery__image_id__delete",
+        "operationId": "delete_image",
         "security": [
           {
             "OAuth2PasswordBearer": []
@@ -1919,7 +1919,7 @@
         ],
         "summary": "Reuse Search",
         "description": "Search for products to reuse images from.",
-        "operationId": "reuse_search_api_manager_gallery_reuse_search_get",
+        "operationId": "reuse_search",
         "security": [
           {
             "OAuth2PasswordBearer": []
@@ -1966,7 +1966,7 @@
         ],
         "summary": "Reuse Image",
         "description": "Link an existing image URL to another product.",
-        "operationId": "reuse_image_api_manager_gallery_reuse_image_post",
+        "operationId": "reuse_image",
         "security": [
           {
             "OAuth2PasswordBearer": []
@@ -2021,7 +2021,7 @@
         ],
         "summary": "Cleanup Media",
         "description": "Delete orphaned media files not referenced in DB.",
-        "operationId": "cleanup_media_api_manager_cleanup_media_post",
+        "operationId": "cleanup_media",
         "security": [
           {
             "OAuth2PasswordBearer": []
@@ -2147,7 +2147,7 @@
         ],
         "title": "ArticleResponse"
       },
-      "Body_login_access_token_login_access_token_post": {
+      "Body_login_access_token": {
         "properties": {
           "grant_type": {
             "anyOf": [
@@ -2204,7 +2204,7 @@
           "username",
           "password"
         ],
-        "title": "Body_login_access_token_login_access_token_post"
+        "title": "Body_login_access_token"
       },
       "Body_upload_images_admin_api_upload_images_post": {
         "properties": {
@@ -2234,7 +2234,7 @@
         ],
         "title": "Body_upload_images_admin_api_upload_images_post"
       },
-      "Body_upload_local_images_api_manager_upload_local_images_post": {
+      "Body_upload_local_images": {
         "properties": {
           "files": {
             "items": {
@@ -2249,7 +2249,7 @@
         "required": [
           "files"
         ],
-        "title": "Body_upload_local_images_api_manager_upload_local_images_post"
+        "title": "Body_upload_local_images"
       },
       "CartItemPayload": {
         "properties": {
