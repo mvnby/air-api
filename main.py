@@ -19,7 +19,7 @@ if settings.SENTRY_DSN:
         dsn=settings.SENTRY_DSN,
         traces_sample_rate=1.0,
         profiles_sample_rate=1.0,
-        environment="production" if "dev" not in settings.CORS_ORIGINS[0] else "development"
+        environment=settings.ENVIRONMENT
     )
 
 from core.security import AdminAuthBackend

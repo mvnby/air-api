@@ -49,7 +49,7 @@ def login_access_token(
         max_age=int(access_token_expires.total_seconds()),
         expires=int(access_token_expires.total_seconds()),
         samesite="lax",
-        secure=False, # Set to True in Prod with HTTPS
+        secure=settings.is_production, # Set to True in Prod with HTTPS
     )
     
     return {

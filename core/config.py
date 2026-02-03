@@ -10,14 +10,26 @@ class Settings(BaseSettings):
     ADMIN_IDS: str = ""
     ADMIN_ID: int = 0
     SECRET_KEY: str
+    ENVIRONMENT: str = "local"
     
     # CORS Settings
-    CORS_ORIGINS: list[str] = [
-        "https://mvn.by",
-        "https://dev.mvn.by",
-        "http://localhost:4321",
-        "http://localhost:3000",
-    ]
+    @property
+    def CORS_ORIGINS(self) -> list[str]:
+        if self.ENVIRONMENT == "production":
+            return [
+                "https://mvn.by",
+                "https://dev.mvn.by",
+            ]
+        return [
+            "https://mvn.by",
+            "https://dev.mvn.by",
+            "http://localhost:4321",
+            "http://localhost:3000",
+        ]
+    
+    @property
+    def is_production(self) -> bool:
+        return self.ENVIRONMENT == "production"
     
     # HTTP Basic Auth
     ADMIN_USERNAME: str
