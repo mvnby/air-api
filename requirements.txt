@@ -44,3 +44,8 @@ num2words
 requests
 Pillow
 duckduckgo-search>=6.0.0
+sentry-sdk[fastapi]
+pytest
+pytest-asyncio
+httpx
+pytest-env

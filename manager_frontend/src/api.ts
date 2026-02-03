@@ -1,129 +1,89 @@
-const API_BASE = '/api/manager';
+import { OpenAPI } from './client/core/OpenAPI';
+import { ManagerService } from './client/services/ManagerService';
+import { LoginService } from './client/services/LoginService';
+import { ApiService } from './client/services/ApiService';
+// Re-export common models if needed, or define local interfaces compatible with frontend
+// import type { ProductResponse } from './client/models/ProductResponse';
 
+// Configure base URL (relative to origin, proxied by Vite)
+OpenAPI.BASE = import.meta.env.VITE_API_URL || '/api/manager'.replace('/api/manager', '');
+// Logic: If VITE_API_URL is set (e.g. http://localhost:8000), use it.
+// Otherwise default to '' (empty) so requests go to '/api/...' relative to current host.
+// But generated client uses full paths from schema: e.g. '/api/manager/search-images'.
+// So OpenAPI.BASE should be empty string if serving from same origin/proxy.
+OpenAPI.BASE = '';
+OpenAPI.WITH_CREDENTIALS = true;
+
+// Keep existing interface for backward compatibility if needed, 
+// though we usually rely on generated specific responses.
 export interface Product {
     id: number;
     title: string;
     price: number;
-    main_image?: string;
+    main_image?: string | null;
     is_published: boolean;
     gallery_images?: Array<{ id: number, url: string, is_installation_photo: boolean }>;
 }
 
 export const api = {
     async searchImages(query: string) {
-        const res = await fetch(`${API_BASE}/search-images?q=${encodeURIComponent(query)}`, {
-            method: 'POST',
-            credentials: 'include',
-        });
-        if (!res.ok) throw new Error('Search failed');
-        // Now returns objects { image, width, height, ... }
-        return res.json() as Promise<any[]>;
+        return ManagerService.searchImagesApiManagerSearchImagesPost(query);
     },
 
     async uploadImage(productId: number, imageUrl: string, isInstallation: boolean = false) {
-        const res = await fetch(`${API_BASE}/upload-image?product_id=${productId}&url=${encodeURIComponent(imageUrl)}&is_installation=${isInstallation}`, {
-            method: 'POST',
-            credentials: 'include',
-        });
-        if (!res.ok) throw new Error('Upload failed');
-        return res.json();
+        return ManagerService.uploadImageApiManagerUploadImagePost(imageUrl, productId, isInstallation);
     },
 
     async uploadLocalImages(productId: number, files: FileList | File[]) {
-        const formData = new FormData();
-        Array.from(files).forEach(file => {
-            formData.append('files', file);
-        });
-
-        const res = await fetch(`${API_BASE}/upload-local-images?product_id=${productId}`, {
-            method: 'POST',
-            body: formData,
-            credentials: 'include',
-        });
-
-        if (!res.ok) throw new Error('Upload failed');
-        return res.json();
+        // Convert FileList/Array to Array<Blob> as expected by generated client
+        const fileArray = Array.from(files);
+        return ManagerService.uploadLocalImagesApiManagerUploadLocalImagesPost(
+            productId,
+            { files: fileArray },
+            false // isInstallation (default false in original)
+        );
     },
 
     async linkSearchResult(productId: number, imageUrl: string) {
-        // We use uploadImage but we might want a specific endpoint if logic differs.
-        // For now, let's reuse uploadImage as it does exactly what we want (download + link), 
-        // BUT we need to ensure it doesn't auto-set main image if we don't want it to.
-        // The current backend sets main image if not installation. 
-        // We might want to add a flag to uploadImage or use the new link-search-result endpoint.
-        // Let's use the new endpoint if we implemented it, or use uploadImage if we want standard behavior.
-        // The implementation plan says "Add to gallery (without setting main immediately)".
-        // My backend implementation for link-search-result was "pass" (oops). 
-        // Let's fix that. For now, I'll assume I'll fix the backend to actually do the work.
-        // Or I can just use uploadImage and accept it sets main for now, or add a query param.
-
-        // Actually, let's use the new endpoint path, assuming I'll provide a real implementation.
-        const res = await fetch(`${API_BASE}/gallery/link-search-result?product_id=${productId}&url=${encodeURIComponent(imageUrl)}`, {
-            method: 'POST',
-            credentials: 'include',
-        });
-        if (!res.ok) throw new Error('Link failed');
-        return res.json();
+        return ManagerService.linkSearchResultApiManagerGalleryLinkSearchResultPost(imageUrl, productId);
     },
 
     async setMainImage(imageId: number) {
-        const res = await fetch(`${API_BASE}/gallery/set-main?image_id=${imageId}`, { method: 'POST', credentials: 'include' });
-        if (!res.ok) throw new Error('Failed to set main image');
-        return res.json();
+        return ManagerService.setMainImageApiManagerGallerySetMainPost(imageId);
     },
 
     async deleteGalleryImage(imageId: number) {
-        const res = await fetch(`${API_BASE}/gallery/${imageId}`, { method: 'DELETE', credentials: 'include' });
-        if (!res.ok) throw new Error('Failed to delete image');
-        return res.json();
+        return ManagerService.deleteGalleryImageApiManagerGalleryImageIdDelete(imageId);
     },
 
     async reuseSearch(q: string) {
-        const res = await fetch(`${API_BASE}/gallery/reuse-search?q=${encodeURIComponent(q)}`, { credentials: 'include' });
-        if (!res.ok) throw new Error('Reuse search failed');
-        return res.json();
+        return ManagerService.reuseSearchApiManagerGalleryReuseSearchGet(q);
     },
 
     async reuseImage(productId: number, sourceUrl: string) {
-        const res = await fetch(`${API_BASE}/gallery/reuse-image?product_id=${productId}&source_image_url=${encodeURIComponent(sourceUrl)}`, { method: 'POST', credentials: 'include' });
-        if (!res.ok) throw new Error('Reuse failed');
-        return res.json();
+        return ManagerService.reuseImageApiManagerGalleryReuseImagePost(productId, sourceUrl);
     },
 
     async cleanupMedia(dryRun: boolean) {
-        const res = await fetch(`${API_BASE}/cleanup-media?dry_run=${dryRun}`, { method: 'POST', credentials: 'include' });
-        if (!res.ok) throw new Error('Cleanup failed');
-        return res.json();
+        return ManagerService.cleanupMediaApiManagerCleanupMediaPost(dryRun);
     },
 
-    // Legacy API reuse
+    // Legacy API reuse -> Now using generated ApiService
     async getProducts(limit = 50, page = 1) {
-        const res = await fetch(`/api/v1/products?limit=${limit}&page=${page}`);
-        if (!res.ok) throw new Error('Failed to load products');
-        return res.json();
+        // ApiService.getCatalogApiV1ProductsGet returns CatalogResponse
+        return ApiService.getCatalogApiV1ProductsGet(page, limit);
     },
 
     async login(username: string, password: string) {
-        const formData = new URLSearchParams();
-        formData.append('username', username);
-        formData.append('password', password);
-
-        const res = await fetch('/login/access-token', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: formData,
-            credentials: 'include',
+        // LoginService expects FormData object
+        return LoginService.loginAccessTokenLoginAccessTokenPost({
+            username,
+            password,
+            grant_type: 'password' // OAuth2 standard usually requires this, let's check generated model if needed
         });
-
-        if (!res.ok) throw new Error('Login failed');
-        return res.json();
     },
 
     async checkAuth() {
-        const res = await fetch(`${API_BASE}/me`, { credentials: 'include' });
-        if (!res.ok) throw new Error('Not authenticated');
-        return res.json();
+        return ManagerService.checkAuthStatusApiManagerMeGet();
     }
 };

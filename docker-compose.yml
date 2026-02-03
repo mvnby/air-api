@@ -11,7 +11,20 @@ services:
     ports:
       - "5432:5432"
     volumes:
+
       - postgres_data:/var/lib/postgresql/data
+
+  db_test:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mvnadmin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-securepass}
+      POSTGRES_DB: air_conditioners_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data_test:/var/lib/postgresql/data
 
   app:
     build: .
@@ -58,3 +71,6 @@ services:
 
 volumes:
   postgres_data:
+  postgres_data_test:
+
+
