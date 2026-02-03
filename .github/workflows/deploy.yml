@@ -1,0 +1,130 @@
+name: Deploy to Production 🚀
+
+on:
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  # Secrets needed:
+  # SSH_KEY (Private Key for root@api and user@web)
+  # SSH_HOST_API (89.39.120.97)
+  # SSH_HOST_WEB (178.159.240.174)
+  # SSH_USER_API (root)
+  # SSH_USER_WEB (user2154318)
+
+jobs:
+  # ======================================================
+  # 1. BACKEND DEPLOYMENT (Docker -> mvn-api)
+  # ======================================================
+  deploy-backend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Manager Frontend (Required for Backend Image)
+        working-directory: ./manager_frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Lowercase Repo Name
+        run: echo "REPO=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
+      - name: Build and push Backend (App + Bot)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+             ghcr.io/${{ env.REPO }}/backend:latest
+             ghcr.io/${{ env.REPO }}/backend:${{ github.sha }}
+
+      - name: Deploy on API Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST_API }}
+          username: ${{ secrets.SSH_USER_API }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd ~/app
+            
+            # Pull new images
+            # Note: Server needs to be logged in to GHCR or package must be Public.
+            docker compose pull
+            
+            # Restart services
+            # Only app and bot (and db if needed, but usually just code changes)
+            docker compose up -d app bot
+            
+            # Cleanup old images
+            docker image prune -f
+
+  # ======================================================
+  # 2. FRONTEND DEPLOYMENT (Static -> mvn-web)
+  # ======================================================
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    needs: deploy-backend # Wait for API to be ready
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: ./web
+        run: npm ci
+
+      - name: Build Astro Site
+        working-directory: ./web
+        env:
+           # PRODUCTION API URL
+           PUBLIC_API_URL: https://mvn.by/api/v1
+        run: npm run build
+
+      - name: Clean Remote Directory
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST_WEB }}
+          username: ${{ secrets.SSH_USER_WEB }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+             # Clean the target directory before upload (optional but cleaner)
+             # Adjust path based on where Nginx looks. Assuming ~/www/mvn or similar
+             # rm -rf /var/www/mvn/dist/* 
+             # For safety I will skip explicit rm -rf and trust rsync/scp to overwrite
+             echo "Ready to receive files"
+
+      - name: Upload Static Files via SCP
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SSH_HOST_WEB }}
+          username: ${{ secrets.SSH_USER_WEB }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "web/dist/*"
+          target: "/var/www/user2154318/data/www/mvn.by"
+          strip_components: 2 # strips 'web/dist', uploading contents directly

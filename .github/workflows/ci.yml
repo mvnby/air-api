@@ -1,0 +1,62 @@
+name: CI (Test & Lint)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Dummy Env
+        run: |
+          echo "POSTGRES_USER=postgres" >> .env
+          echo "POSTGRES_PASSWORD=postgres" >> .env
+          echo "POSTGRES_DB=air_conditioners" >> .env
+          # IMPORTANT: Inside docker network, host is 'db' (service name)
+          echo "POSTGRES_SERVER=db" >> .env
+          echo "POSTGRES_PORT=5432" >> .env
+          # Construct URL explicitly to be safe
+          echo "DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/air_conditioners" >> .env
+
+          echo "SECRET_KEY=dummy_secret_for_tests" >> .env
+          echo "BOT_TOKEN=dummy_token" >> .env
+          echo "ADMIN_USERNAME=admin" >> .env
+          echo "ADMIN_PASSWORD=admin" >> .env
+          echo "ENVIRONMENT=test" >> .env
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Manager Frontend
+        working-directory: ./manager_frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Start Services
+        run: docker compose up -d --build
+
+      - name: Wait for DB
+        run: |
+          echo "Waiting for Postgres to be ready..."
+          # Try to use pg_isready inside the db service
+          for i in $(seq 1 60); do
+            # Note: Using default postgres user for check inside container
+            docker compose exec -T db pg_isready -U postgres -d air_conditioners >/dev/null 2>&1 && { echo "Postgres ready"; exit 0; }
+            echo "Postgres not ready ($i/60) - sleeping 1s"
+            sleep 1
+          done
+          echo "Postgres did not become ready in time"
+          docker compose logs db --tail=50
+          exit 1
+
+      - name: Run Pytest
+        # using the 'app' service where the code lives
+        run: docker compose exec -T app pytest -v
