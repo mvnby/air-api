@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 import { api, type Product } from './api';
-import { Search, RefreshCw, UploadCloud } from 'lucide-vue-next';
+import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square } from 'lucide-vue-next';
+import BulkSpecsModal from './components/BulkSpecsModal.vue';
 
 // ... (state refs) ...
 const products = ref<Product[]>([]);
@@ -19,6 +20,40 @@ const reuseResults = ref<any[]>([]);
 const activeTab = ref<'search' | 'reuse' | 'upload'>('search');
 const uploadDragActive = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
+
+// Bulk Actions
+const selectedProductIds = ref<Set<number>>(new Set());
+const showBulkSpecsModal = ref(false);
+
+const toggleSelection = (id: number) => {
+    if (selectedProductIds.value.has(id)) {
+        selectedProductIds.value.delete(id);
+    } else {
+        selectedProductIds.value.add(id);
+    }
+};
+
+const allSelected = computed(() => {
+    return products.value.length > 0 && selectedProductIds.value.size === products.value.length;
+});
+
+const toggleSelectAll = () => {
+    if (allSelected.value) {
+        selectedProductIds.value.clear();
+    } else {
+        products.value.forEach(p => selectedProductIds.value.add(p.id));
+    }
+};
+
+const openBulkUpdate = () => {
+    if (selectedProductIds.value.size === 0) return;
+    showBulkSpecsModal.value = true;
+};
+
+const handleBulkSuccess = async () => {
+    await loadProducts();
+    selectedProductIds.value.clear();
+};
 
 // Auth state
 const isAuthenticated = ref(false);
@@ -293,8 +328,23 @@ onMounted(() => {
   <div class="min-h-screen bg-gray-50 p-8">
     <div class="max-w-7xl mx-auto">
       <header class="mb-8 flex justify-between items-center">
-        <h1 class="text-3xl font-bold text-gray-900">Manager Dashboard</h1>
+        <div class="flex items-center gap-4">
+            <h1 class="text-3xl font-bold text-gray-900">Manager Dashboard</h1>
+            <div v-if="selectedProductIds.size > 0" class="flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-lg border border-blue-100">
+                <span class="text-sm font-medium text-blue-800">{{ selectedProductIds.size }} selected</span>
+                <button @click="openBulkUpdate" class="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">
+                    <Edit3 class="w-3 h-3" /> Edit Specs
+                </button>
+                <button @click="selectedProductIds.clear()" class="text-xs text-blue-500 hover:text-blue-700 underline">Clear</button>
+            </div>
+        </div>
         <div class="flex gap-2">
+            <!-- Select All Button -->
+             <button @click="toggleSelectAll" class="px-4 py-2 bg-white border rounded hover:bg-gray-50 flex items-center gap-2 text-gray-700">
+                <CheckSquare v-if="allSelected" class="w-4 h-4 text-blue-600" />
+                <Square v-else class="w-4 h-4 text-gray-400" />
+                Select All
+            </button>
             <button @click="showCleanupModal = true" class="px-4 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200">
                 Cleanup Media
             </button>
@@ -308,7 +358,17 @@ onMounted(() => {
       <div v-if="loading" class="text-center py-20">Loading...</div>
       
       <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        <div v-for="product in products" :key="product.id" class="bg-white rounded-lg shadow overflow-hidden group">
+        <div v-for="product in products" :key="product.id" 
+             class="bg-white rounded-lg shadow overflow-hidden group border-2 transition-colors relative"
+             :class="selectedProductIds.has(product.id) ? 'border-blue-500' : 'border-transparent'"
+        >
+             <!-- Selection Checkbox Overlay -->
+             <div class="absolute top-2 left-2 z-10">
+                 <button @click.stop="toggleSelection(product.id)" class="bg-white rounded shadow hover:bg-gray-50 p-1">
+                     <CheckSquare v-if="selectedProductIds.has(product.id)" class="w-5 h-5 text-blue-600 fill-blue-50" />
+                     <Square v-else class="w-5 h-5 text-gray-400" />
+                 </button>
+             </div>
             <div class="aspect-video bg-gray-200 relative">
                 <img v-if="product.main_image" :src="getImageUrl(product.main_image)" class="w-full h-full object-cover" />
                 <div v-else class="w-full h-full flex items-center justify-center text-gray-400">
@@ -496,4 +556,10 @@ onMounted(() => {
         </div>
     </div>
   </div>
+    <!-- Bulk Specs Modal -->
+    <BulkSpecsModal 
+        v-model="showBulkSpecsModal"
+        :selected-product-ids="Array.from(selectedProductIds)"
+        @success="handleBulkSuccess"
+    />
 </template>

@@ -59,6 +59,19 @@ export const api = {
         return await ApiService.getProducts(page, limit);
     },
 
+    async getPublicSpecKeys() {
+        return await ApiService.getPublicSpecKeys();
+    },
+
+    // --- BULK TOOLS ---
+    async bulkUpdateSpecs(productIds: number[], specs: Record<string, any>, operation: 'merge' | 'replace' | 'delete_keys' = 'merge') {
+        return await ManagerService.bulkUpdateSpecs({
+            product_ids: productIds,
+            specs: specs,
+            operation: operation
+        });
+    },
+
     // --- AUTH ---
     async login(username: string, password: string) {
         // Используем LoginService. OAuth2 форма требует отправки formData
