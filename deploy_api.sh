@@ -7,10 +7,20 @@ REMOTE_DIR="/opt/air-api"
 DOCKER_COMPOSE_FILE="docker-compose.api.yml"
 
 echo "========================================"
-echo "🚀 Deploying API to $REMOTE_HOST..."
+echo "🚀 Deploying API + Manager to $REMOTE_HOST..."
 echo "========================================"
 
-# 1. Sync files (code + alembic migrations)
+# 0. Pre-flight: Check if manager frontend is built
+echo "🔍 Checking pre-built artifacts..."
+if [ ! -d "./manager_frontend/dist" ]; then
+    echo "❌ ERROR: manager_frontend/dist not found!"
+    echo "📦 Please build the manager frontend first:"
+    echo "   cd manager_frontend && npm run build"
+    exit 1
+fi
+echo "✅ Manager frontend dist found"
+
+# 1. Sync files (code + alembic migrations + manager dist)
 echo "📂 Syncing files..."
 rsync -avz --delete \
     --exclude 'web/' \
@@ -55,6 +65,7 @@ echo "🔍 Checking logs..."
 ssh "$REMOTE_HOST" "cd $REMOTE_DIR && docker compose logs app --tail=10"
 
 echo ""
-echo "✅ API Deployment Complete!"
+echo "✅ API + Manager Deployment Complete!"
 echo "   Admin: https://api.mvn.by/admin/"
+echo "   Manager: https://api.mvn.by/manager/"
 echo "   Health: https://api.mvn.by/api/health"

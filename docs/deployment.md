@@ -72,15 +72,141 @@ BOT_TOKEN=389060515:PRODUCTION_BOT_TOKEN
 PUBLIC_API_BASE=https://api.mvn.by/api/v1
 ```
 
-## 3. Running Services
+## 2.5. DevOps Risks Audit
 
-To build and start the backend services (App, Bot, Database):
+> [!CAUTION]
+> The following are known risks and limitations in the current deployment process. These are documented for transparency and future improvement.
+
+### Secret Management
+- **Risk**: Secrets stored in plain text files (`env.prod`, `.env`)
+- **Mitigation**: Files are git-ignored and transferred via SSH
+- **Future**: Consider using HashiCorp Vault or cloud secret managers
+
+### Local Build Dependencies
+- **Risk**: Deployments require a properly configured developer machine with Node.js, npm, Python
+- **Mitigation**: Document required versions in README
+- **Impact**: Team members need identical dev environments
+
+### SSH Key Requirements
+- **Risk**: Deployment scripts require pre-configured SSH access to `mvn-api` and `mvn-web` hosts
+- **Mitigation**: Document SSH setup in onboarding
+- **Impact**: New team members need SSH keys distributed manually
+
+### No Pre-Deployment Testing
+- **Risk**: No automated tests run before deployment
+- **Mitigation**: Manual testing recommended
+- **Future**: Add GitHub Actions CI/CD pipeline
+
+### Manual Media Syncing
+- **Risk**: Media files (`/media/`) must be manually synced with `sync_media.sh`
+- **Impact**: Risk of serving stale images if sync is forgotten
+- **Future**: Consider object storage (S3/Cloudflare R2)
+
+### Build on Production (VPS Resource Impact)
+- **Status**: Previously used multi-stage Docker builds on server
+- **Solution**: ✅ **Resolved** - Now using local builds + artifact push strategy
+- **Benefit**: Minimal VPS resource usage during deployment
+
+## 3. Deployment Strategy
+
+**We use a "Local Build → Push Artifacts" strategy** to minimize VPS resource usage.
+
+### Key Principles:
+1. **Build locally** on your development machine
+2. **Push artifacts** (compiled bundles) to servers
+3. **Fast Docker rebuilds** (just file copying, no compilation on server)
+
+---
+
+## 4. Deploying Backend API + Manager Dashboard
+
+The backend and manager dashboard are deployed together to `api.mvn.by`.
+
+### Step 1: Build Manager Frontend Locally
+
+```bash
+cd manager_frontend
+npm install
+npm run build
+```
+
+This creates `manager_frontend/dist/` with the compiled Vue application.
+
+### Step 2: Deploy to Production
+
+```bash
+# From project root
+./deploy_api.sh
+```
+
+**What happens:**
+1. ✅ Pre-flight check: Verifies `manager_frontend/dist` exists
+2. 📂 Syncs code + migrations + manager artifacts to server
+3. ⚙️ Copies `env.prod` to server as `.env`
+4. 🐳 Rebuilds Docker containers (fast - just file copy)
+5. 📦 Runs database migrations
+6. 🔄 Restarts services
+
+### Step 3: Verify
+
+- **Admin Panel**: https://api.mvn.by/admin/
+- **Manager Dashboard**: https://api.mvn.by/manager/
+- **Health Check**: https://api.mvn.by/api/health
+
+---
+
+## 5. Deploying Web Frontend
+
+The main website is deployed to either `dev.mvn.by` or `mvn.by`.
+
+### Step 1: Build Web Frontend Locally
+
+```bash
+# Option A: Manual build
+cd web
+npm install
+npm run build
+
+# Option B: Recommended (uses production API data)
+./build_with_prod_data.sh
+```
+
+This creates `web/dist/` with the compiled Astro static site.
+
+### Step 2: Deploy to Dev or Production
+
+```bash
+# Deploy to DEV environment (dev.mvn.by)
+./deploy_web.sh dev
+
+# Deploy to PRODUCTION (mvn.by)
+./deploy_web.sh prod
+```
+
+**What happens:**
+1. ✅ Pre-flight check: Verifies `web/dist` exists
+2. 🖼️ Syncs media from API server (for static assets)
+3. 📡 Uploads static files to web host
+4. 🤖 Configures robots.txt based on environment
+
+### Step 3: Verify
+
+- **Dev**: https://dev.mvn.by
+- **Production**: https://mvn.by
+
+---
+
+## 6. Local Development
+
+To run services locally for development:
+
 ```bash
 docker compose up -d --build
 ```
+
 *Note: This starts `app`, `bot`, and `db`. The `web` container is for local development or generation only.*
 
-## 4. Monitoring & Logs
+### Monitoring & Logs
 
 View combined logs:
 ```bash
@@ -93,20 +219,14 @@ docker compose logs -f app
 docker compose logs -f bot
 ```
 
-## 5. Updating the Application
+---
 
-To update to the latest version:
-```bash
-git pull origin main
-docker compose up -d --build
-```
-
-> [!CAUTION]
-> If there were **database schema changes** (new columns, tables), you MUST run migrations BEFORE restarting. See Section 5.5.
-
-## 5.5 Database Migrations (Alembic)
+## 7. Database Migrations (Alembic)
 
 We use **Alembic** for database schema versioning. This ensures that schema changes are applied consistently across all environments.
+
+> [!CAUTION]
+> If there were **database schema changes** (new columns, tables), you MUST run migrations BEFORE restarting Docker containers.
 
 ### When to Use Migrations
 
@@ -144,20 +264,11 @@ git commit -m "migration: add installation columns"
 
 ### Production Deployment Workflow
 
-**Step 1: Deploy code to server**
-```bash
-git pull origin main
-```
+Use the provided scripts from your local machine:
+- For Backend/Manager: `./deploy_api.sh`
+- For Web: `./deploy_web.sh prod`
 
-**Step 2: Run migrations BEFORE restarting the app**
-```bash
-docker compose exec app alembic upgrade head
-```
-
-**Step 3: Restart the application**
-```bash
-docker compose up -d --build
-```
+These scripts handle syncing, migrations, and restarts automatically.
 
 ### Useful Alembic Commands
 
@@ -187,7 +298,7 @@ ssh mvn-api "cd /opt/air-api && docker compose exec db psql -U mvnadmin -d air_c
 > [!WARNING]
 > Manual fixes are a **temporary solution**. Always create a proper migration afterwards to keep the schema in sync.
 
-## 6. Backups and Recovery
+## 8. Backups and Recovery
 
 ### Automated Backups
 The system is configured to automatically backup the database every 24 hours. Backups are:
@@ -219,7 +330,7 @@ docker compose exec app python restore.py --file backups/your_backup_file.sql --
 docker compose exec app python restore.py --drive-id <GOOGLE_DRIVE_FILE_ID>
 ```
 
-## 7. Nginx Configuration (api.mvn.by)
+## 9. Nginx Configuration (api.mvn.by)
 
 The backend server (`api.mvn.by`) acts as the API endpoint for the static site.
 
@@ -243,7 +354,7 @@ server {
     }
 }
 
-## 8. Media Synchronization
+## 10. Media Synchronization
 
 To synchronize local media files (images, uploads) with the remote server:
 
