@@ -12,6 +12,16 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from core.database import engine, init_db, async_session_maker
 from core.config import settings
 from core.logger import logger
+import sentry_sdk
+
+if settings.SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        traces_sample_rate=1.0,
+        profiles_sample_rate=1.0,
+        environment="production" if "dev" not in settings.CORS_ORIGINS[0] else "development"
+    )
+
 from core.security import AdminAuthBackend
 from routers import admin as admin_router
 from routers import api as api_router

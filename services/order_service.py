@@ -192,6 +192,8 @@ class OrderService:
                     # Construct title based on meta
                     meta = item.get("installation_meta", {})
                     meters = meta.get("meters", 3)
+                    type_raw = meta.get("type", "General")
+                    power_raw = meta.get("power_range", "")
                     
                     
                     # Robust Title Generation using Product Attributes + Mappings

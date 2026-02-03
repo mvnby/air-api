@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     
     # Automation
     SCHEDULER_INTERVAL: int = 6 # hours
+
+    # Monitoring
+    SENTRY_DSN: str = ""
+
     
     model_config = SettingsConfigDict(
         env_file=".env",
