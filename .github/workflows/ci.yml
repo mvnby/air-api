@@ -1,0 +1,38 @@
+name: CI (Test & Lint)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Dummy Env
+        run: |
+          echo "POSTGRES_USER=postgres" >> .env
+          echo "POSTGRES_PASSWORD=postgres" >> .env
+          echo "POSTGRES_DB=air_conditioners" >> .env
+          echo "SECRET_KEY=dummy_secret_for_tests" >> .env
+          echo "BOT_TOKEN=dummy_token" >> .env
+          echo "ADMIN_USERNAME=admin" >> .env
+          echo "ADMIN_PASSWORD=admin" >> .env
+          echo "ENVIRONMENT=test" >> .env
+
+      - name: Start Services
+        run: docker compose up -d --build
+
+      - name: Wait for DB
+        run: |
+          echo "Waiting for DB to be healthy..."
+          sleep 15
+          # Ideally, use a wait-for-it script or pg_isready if available in the runner
+          # But for simplicity, a sleep is often enough for a quick start in CI
+
+      - name: Run Pytest
+        # using the 'app' service where the code lives
+        run: docker compose exec -T app pytest -v

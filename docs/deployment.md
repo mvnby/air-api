@@ -94,8 +94,8 @@ PUBLIC_API_BASE=https://api.mvn.by/api/v1
 
 ### No Pre-Deployment Testing
 - **Risk**: No automated tests run before deployment
-- **Mitigation**: Manual testing recommended
-- **Future**: Add GitHub Actions CI/CD pipeline
+- **Mitigation**: GitHub Actions CI/CD pipeline
+- **Status**: ✅ **Resolved** - `ci.yml` runs generic tests on every push.
 
 ### Manual Media Syncing
 - **Risk**: Media files (`/media/`) must be manually synced with `sync_media.sh`
@@ -109,12 +109,12 @@ PUBLIC_API_BASE=https://api.mvn.by/api/v1
 
 ## 3. Deployment Strategy
 
-**We use a "Local Build → Push Artifacts" strategy** to minimize VPS resource usage.
+**We use a "GitHub Actions Build → Push Artifacts" strategy** (Continuous Delivery).
 
 ### Key Principles:
-1. **Build locally** on your development machine
-2. **Push artifacts** (compiled bundles) to servers
-3. **Fast Docker rebuilds** (just file copying, no compilation on server)
+1. **CI (Continuous Integration)**: `ci.yml` builds and tests the stack on every push.
+2. **CD (Continuous Delivery)**: `deploy.yml` builds images on GitHub, pushes to generic registry (GHCR), and triggers the server to pull and restart.
+3. **Zero-Downtime-ish**: Server only restarts containers, no heavy building.
 
 ---
 
@@ -364,4 +364,29 @@ To synchronize local media files (images, uploads) with the remote server:
 This uses `rsync` to upload contents of `./media/` to `/opt/air-api/media` on the `mvn-api` host.
 *Note: Requires SSH access configured for `mvn-api` alias.*
 ```
+
+## 11. GitHub Actions CI/CD
+
+We have two automated workflows:
+
+### A. CI (`ci.yml`) - The Gatekeeper
+- **Triggers**: On every `push` or `pull_request` to `main`.
+- **What it does**:
+    1. Spins up the full Docker Compose stack (including `db_run` and `db`).
+    2. Runs `pytest` inside the `app` container.
+- **Goal**: Prevent broken code from entering the repository.
+
+### B. Deploy (`deploy.yml`) - The Shipper
+- **Triggers**: **Manual Only** (Go to Actions -> "Deploy to Production" -> "Run workflow").
+- **What it does**:
+    1. Builds Docker images (`backend`, `web`) on GitHub.
+    2. Pushes images to **GitHub Container Registry (GHCR)**.
+    3. SSHs into the production server.
+    4. Copies `docker-compose.prod.yml` to the server.
+    5. Runs `docker compose pull && docker compose up -d`.
+- **Secrets Required (GitHub Repo Settings)**:
+    - `SSH_HOST`: IP of the server.
+    - `SSH_USER`: Username (e.g., `root` or `maksim`).
+    - `SSH_KEY`: Private SSH Key (PEM format).
+
 
