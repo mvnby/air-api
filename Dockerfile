@@ -17,5 +17,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
+# Copy pre-built manager frontend (must exist locally before docker build)
+# If manager_frontend/dist doesn't exist, this will fail - run 'npm run build' first
+COPY manager_frontend/dist /app/manager_frontend/dist
+
 # Command to run the application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
