@@ -23,6 +23,17 @@ jobs:
           echo "ADMIN_PASSWORD=admin" >> .env
           echo "ENVIRONMENT=test" >> .env
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Manager Frontend
+        working-directory: ./manager_frontend
+        run: |
+          npm ci
+          npm run build
+
       - name: Start Services
         run: docker compose up -d --build
 
