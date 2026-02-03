@@ -11,6 +11,7 @@ import {
     getPerformance,
     getOtherSpecs,
 } from "../../utils/specs";
+import { formatAllSpecs } from "../../utils/spec-dictionary";
 
 export async function getStaticPaths() {
     const products = await getProducts();
@@ -643,10 +644,10 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                     <div class="specs-content">
                         <table class="specs-table">
                             {
-                                Object.entries(otherSpecs).map(
-                                    ([key, value]) => (
+                                formatAllSpecs(specs).map(
+                                    ({ label, value }) => (
                                         <tr>
-                                            <td class="key">{key}</td>
+                                            <td class="key">{label}</td>
                                             <td class="val">{value}</td>
                                         </tr>
                                     ),

@@ -1,6 +1,8 @@
 const ENV_API_URL = import.meta.env.INTERNAL_API_URL || 'http://app:8000/api/v1';
 const PUBLIC_API_URL = (import.meta.env.PUBLIC_API_URL || 'http://localhost:8000').replace(/\/api\/v1\/?$/, "");
 
+// Re-export spec formatting utilities
+export { formatSpec, formatAllSpecs, SPEC_DICT } from './spec-dictionary';
 // Ensure standard formatting (no trailing slash)
 // INTERNAL_URL is used for SSR (Server Side Rendering) inside Docker network
 const INTERNAL_URL = (import.meta.env.INTERNAL_API_URL || 'http://app:8000/api/v1').replace(/\/$/, "");
