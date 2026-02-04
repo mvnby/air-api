@@ -57,12 +57,28 @@ jobs:
              ghcr.io/${{ env.REPO }}/backend:latest
              ghcr.io/${{ env.REPO }}/backend:${{ github.sha }}
 
+      # Diagnostic step: Check if API server is reachable
+      - name: Test API Server Connectivity
+        run: |
+          echo "🔍 Testing connection to API server..."
+          echo "Host: ${{ secrets.SSH_HOST_API }}"
+          echo "User: ${{ secrets.SSH_USER_API }}"
+          
+          # Test if host is reachable (allow failure for diagnosis)
+          ping -c 3 ${{ secrets.SSH_HOST_API }} || echo "⚠️ Ping failed, but SSH might still work"
+          
+          # Test if SSH port 22 is open
+          nc -zv ${{ secrets.SSH_HOST_API }} 22 2>&1 || echo "⚠️ Port 22 check failed"
+          
+          echo "✅ Connectivity tests completed"
+
       - name: Deploy on API Server
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SSH_HOST_API }}
           username: ${{ secrets.SSH_USER_API }}
           key: ${{ secrets.SSH_KEY }}
+          debug: true  # Enable verbose SSH logging
           script: |
             cd ~/app
             
