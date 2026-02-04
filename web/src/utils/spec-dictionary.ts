@@ -80,7 +80,8 @@ function normalizeUnits(text: string): string {
         .replace(/м2/gi, 'м²')   // м2 → м²
         .replace(/m2/gi, 'м²')   // m2 → м²
         .replace(/м3/gi, 'м³')   // м3 → м³
-        .replace(/m3/gi, 'м³');  // m3 → м³
+        .replace(/m3/gi, 'м³')   // m3 → м³
+        .replace(/куб\.?\s*м\/ч/gi, 'м³/ч');  // куб → м³
 }
 
 /**
@@ -155,34 +156,41 @@ export function formatAllSpecs(specs: Record<string, any>) {
     const processedKeys = new Set<string>();
 
     // 1. Сначала проходим по нашему "Золотому стандарту" (Словарь)
-    // Это для новых MDV и будущих товаров
     for (const [key, def] of Object.entries(SPEC_DICT)) {
-        if (specs[key] !== undefined && specs[key] !== null && specs[key] !== "") {
+        // Вызываем твой умный форматер!
+        // Он сам добавит 'кВт', сам сделает 'Да/Нет'
+        const formatted = formatSpec(key, specs[key]);
+        
+        if (formatted) {
             result.push({
-                label: def.label,
-                value: String(specs[key]),
+                label: formatted.label,
+                value: formatted.value,
                 group: def.group || "main"
             });
             processedKeys.add(key);
         }
     }
 
-    // 2. Теперь собираем "Legacy" (Старые товары с русскими ключами)
-    // Если ключ еще не обработан и это не служебное поле — добавляем его
+    // 2. Теперь собираем "Legacy" (то, чего нет в словаре)
     for (const [key, value] of Object.entries(specs)) {
-        if (processedKeys.has(key)) continue; // Уже добавили выше
+        if (processedKeys.has(key)) continue;
 
-        // Игнорируем явно служебные поля (если вдруг они просочились)
-        if (key === 'inverter' || key === 'model_indoor' || key === 'model_outdoor') continue;
+        // Фильтр служебных полей
+        if (['inverter', 'model_indoor', 'model_outdoor', 'id', 'slug'].includes(key)) continue;
 
         if (value !== undefined && value !== null && value !== "") {
+            // Для Legacy полей у нас нет словаря, поэтому выводим как есть.
+            // Но если вдруг там true/false, можно тоже красиво обработать:
+            let displayValue = String(value);
+            if (value === true) displayValue = "Да";
+            if (value === false) displayValue = "Нет";
+
             result.push({
-                label: key, // Используем сам ключ как название ("Мощность охлаждения")
-                value: String(value),
-                group: "main" // Или "other", зависит от твоих табов. "main" обычно показывается всегда.
+                label: key,
+                value: displayValue,
+                group: "main"
             });
         }
     }
-
     return result;
 }
