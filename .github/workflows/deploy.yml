@@ -46,7 +46,8 @@ jobs:
           npm run build
 
       - name: Lowercase Repo Name
-        run: echo "REPO=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+        id: prep
+        run: echo "repo=${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
 
       - name: Build and push Backend (App + Bot)
         uses: docker/build-push-action@v5
@@ -54,8 +55,8 @@ jobs:
           context: .
           push: true
           tags: |
-             ghcr.io/${{ env.REPO }}/backend:latest
-             ghcr.io/${{ env.REPO }}/backend:${{ github.sha }}
+             ghcr.io/${{ steps.prep.outputs.repo }}/backend:latest
+             ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ github.sha }}
 
       # Diagnostic step: Check if API server is reachable
       - name: Test API Server Connectivity
