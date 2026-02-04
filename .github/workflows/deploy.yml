@@ -122,7 +122,9 @@ jobs:
       - name: Build Astro Site
         working-directory: ./web
         env:
-           # PRODUCTION API URL (using subdomain - web nginx doesn't proxy /api paths)
+           # SSR Build: Use production API for static generation
+           INTERNAL_API_URL: https://api.mvn.by/api/v1
+           # Client-side: Use production API  
            # CRITICAL: API Router prefix is /api, full path: https://api.mvn.by/api/v1
            PUBLIC_API_URL: https://api.mvn.by/api/v1
            # Google Tag Manager ID
