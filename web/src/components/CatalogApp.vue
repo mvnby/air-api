@@ -211,6 +211,42 @@ const pageDescription = computed(() => {
     return "Современные системы кондиционирования для идеального климата в вашем доме и офисе.";
 });
 
+const groupedProducts = computed(() => {
+    const groups = {};
+    
+    products.value.forEach(product => {
+        // Find brand tag
+        const brandTag = product.tags?.find(t => 
+            t.group?.slug === 'brand' || t.group_slug === 'brand'
+        );
+        
+        const brandName = brandTag ? brandTag.title : 'Другие бренды';
+        const brandSortOrder = brandTag ? (brandTag.sort_order ?? 999) : 1000;
+        
+        if (!groups[brandName]) {
+            groups[brandName] = {
+                brandName,
+                brandSortOrder,
+                items: []
+            };
+        }
+        groups[brandName].items.push(product);
+    });
+    
+    // Sort products inside each brand by price
+    Object.values(groups).forEach(group => {
+        group.items.sort((a, b) => (a.price || 0) - (b.price || 0));
+    });
+    
+    // Sort brands by sort_order, then by name
+    return Object.values(groups).sort((a, b) => {
+        if (a.brandSortOrder !== b.brandSortOrder) {
+            return a.brandSortOrder - b.brandSortOrder;
+        }
+        return a.brandName.localeCompare(b.brandName);
+    });
+});
+
 </script>
 
 <template>
@@ -331,15 +367,18 @@ const pageDescription = computed(() => {
         Загрузка...
     </div>
     
-    <div v-else-if="products.length > 0" class="products-area">
-        <div class="grid">
-             <ProductCard 
-                v-for="product in products" 
-                :key="product.id" 
-                :product="product" 
-                :showInstallation="true"
-             />
-        </div>
+    <div v-else-if="groupedProducts.length > 0" class="catalog-content">
+        <section v-for="group in groupedProducts" :key="group.brandName" class="brand-section">
+            <h2 class="brand-header">{{ group.brandName }}</h2>
+            <div class="grid">
+                 <ProductCard 
+                    v-for="product in group.items" 
+                    :key="product.id" 
+                    :product="product" 
+                    :showInstallation="true"
+                 />
+            </div>
+        </section>
     </div>
     
     <div v-else class="empty-status card">
@@ -479,9 +518,30 @@ const pageDescription = computed(() => {
         font-size: 1.2rem;
     }
 
-    /* Grid */
-    .products-area {
+    /* Grid & Catalog Content */
+    .catalog-content {
         width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 4rem;
+    }
+
+    .brand-section {
+        position: relative;
+    }
+
+    .brand-header {
+        position: sticky;
+        top: 4rem; /* Adjust based on navbar height */
+        z-index: 10;
+        background: var(--background);
+        padding: 1rem 0;
+        margin-bottom: 2rem;
+        font-size: 2rem;
+        font-weight: 800;
+        border-bottom: 1px solid var(--border);
+        color: var(--text);
+        box-shadow: 0 10px 10px -10px rgba(0,0,0,0.05);
     }
 
     .grid {
