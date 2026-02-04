@@ -27,7 +27,8 @@ from schemas import (
     OrderResponse,
     TagResponse,
     TagGroupResponse,
-    ProductImageResponse
+    ProductImageResponse,
+    SpecsKeysResponse
 )
 from crud.product import ProductDAO
 from models import Article, Service, Order, Customer, OrderStatus, OrderProductLink, CustomerType
@@ -90,7 +91,6 @@ def _map_product_to_response(product: Product) -> ProductResponse:
                 id=img.id,
                 url=img.url,
                 is_installation_photo=img.is_installation_photo,
-                product_id=img.product_id
             ))
 
     return ProductResponse(
@@ -193,6 +193,28 @@ async def admin_search_products(
     result = await session.execute(stmt)
     products = result.scalars().all()
     return [{"id": p.id, "text": p.title, "price": p.price} for p in products]
+
+@router.get("/v1/specs/keys", response_model=SpecsKeysResponse, operation_id="get_public_spec_keys")
+async def get_public_spec_keys(
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Публичный список всех доступных характеристик.
+    Используется для построения динамических фильтров на сайте.
+    """
+    # Логика та же самая, но доступ открыт всем
+    stmt = select(Product.specs)
+    result = await session.execute(stmt)
+    all_specs = result.scalars().all()
+    
+    stats = {}
+    for spec_dict in all_specs:
+        if spec_dict:
+            for key in spec_dict.keys():
+                stats[key] = stats.get(key, 0) + 1
+            
+    sorted_keys = sorted(stats.keys())
+    return SpecsKeysResponse(keys=sorted_keys, total_products_using=stats)
 
 @router.get("/admin/services/search")
 async def admin_search_services(

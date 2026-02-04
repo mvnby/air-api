@@ -11,6 +11,7 @@ import {
     getPerformance,
     getOtherSpecs,
 } from "../../utils/specs";
+import { formatAllSpecs } from "../../utils/spec-dictionary";
 
 export async function getStaticPaths() {
     const products = await getProducts();
@@ -32,9 +33,15 @@ if (!product) {
 }
 
 const specs = product.specs || {};
-const images = [product.main_image, ...(product.images || [])]
-    .filter(Boolean)
-    .map(resolveImageUrl);
+const galleryUrls = product.gallery_images?.length 
+    ? product.gallery_images.map((img: any) => img.url) 
+    : (product.images || []);
+
+// 3. Собираем всё вместе: Главное фото + Галерея
+const images = [product.main_image, ...galleryUrls]
+    .filter(Boolean)            // Убираем null/undefined
+    .map(resolveImageUrl);      // Превращаем в полные ссылки
+
 const mainImage = images[0];
 
 // Grouped Specs
@@ -643,10 +650,10 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                     <div class="specs-content">
                         <table class="specs-table">
                             {
-                                Object.entries(otherSpecs).map(
-                                    ([key, value]) => (
+                                formatAllSpecs(specs).map(
+                                    ({ label, value }) => (
                                         <tr>
-                                            <td class="key">{key}</td>
+                                            <td class="key">{label}</td>
                                             <td class="val">{value}</td>
                                         </tr>
                                     ),

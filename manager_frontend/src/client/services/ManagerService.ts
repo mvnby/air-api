@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { Body_upload_local_images } from '../models/Body_upload_local_images';
+import type { BulkSpecUpdate } from '../models/BulkSpecUpdate';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -228,6 +229,27 @@ export class ManagerService {
             query: {
                 'dry_run': dryRun,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Bulk Update Specs
+     * Массовое добавление или обновление характеристик.
+     * Идеально для установки диаметров труб для целой серии кондиционеров сразу.
+     * @param requestBody
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static bulkUpdateSpecs(
+        requestBody: BulkSpecUpdate,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/specs/bulk-update',
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

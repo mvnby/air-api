@@ -8,6 +8,7 @@ import type { OrderPayload } from '../models/OrderPayload';
 import type { OrderResponse } from '../models/OrderResponse';
 import type { ProductResponse } from '../models/ProductResponse';
 import type { ServiceResponse } from '../models/ServiceResponse';
+import type { SpecsKeysResponse } from '../models/SpecsKeysResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -68,6 +69,19 @@ export class ApiService {
             errors: {
                 422: `Validation Error`,
             },
+        });
+    }
+    /**
+     * Get Public Spec Keys
+     * Публичный список всех доступных характеристик.
+     * Используется для построения динамических фильтров на сайте.
+     * @returns SpecsKeysResponse Successful Response
+     * @throws ApiError
+     */
+    public static getPublicSpecKeys(): CancelablePromise<SpecsKeysResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/specs/keys',
         });
     }
     /**

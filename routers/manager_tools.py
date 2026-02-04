@@ -3,10 +3,15 @@ import os
 import uuid
 from datetime import datetime
 import asyncio
+import json
+import ast
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
+from sqlalchemy import func
+from schemas import BulkSpecUpdate, SpecsKeysResponse
 
 from core.database import get_session
 from core.config import settings
@@ -429,4 +434,211 @@ async def cleanup_media(
         "deleted_count": deleted_count,
         "reclaimed_bytes": reclaimed_bytes,
         "files": report[:50] # Limit report size
+    }
+
+@router.post("/specs/bulk-update", operation_id="bulk_update_specs")
+async def bulk_update_specs(
+    payload: BulkSpecUpdate,
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username)
+):
+    """
+    Массовое добавление или обновление характеристик.
+    Идеально для установки диаметров труб для целой серии кондиционеров сразу.
+    """
+    logger.info(f"Manager {username} bulk updating specs for {len(payload.product_ids)} products. Op: {payload.operation}")
+    
+    # Получаем товары
+    stmt = select(Product).where(Product.id.in_(payload.product_ids))
+    result = await session.execute(stmt)
+    products = result.scalars().all()
+    
+    updated_count = 0
+    
+    for product in products:
+        # Важно: создаем копию, чтобы SQLAlchemy детектил изменение JSON
+        current_specs = dict(product.specs) if product.specs else {}
+        
+        if payload.operation == "replace":
+            # Полная замена (опасно, но иногда нужно)
+            current_specs = payload.specs
+            
+        elif payload.operation == "delete_keys":
+            # Удаляем указанные ключи
+            for key in payload.specs.keys():
+                current_specs.pop(key, None)
+                
+        else: # "merge" (default)
+            # Добавляем новые или обновляем существующие
+            current_specs.update(payload.specs)
+            
+        # Присваиваем обратно
+        product.specs = current_specs
+        session.add(product)
+        updated_count += 1
+        
+    await session.commit()
+    
+    return {
+        "message": f"Updated specs for {updated_count} products", 
+        "operation": payload.operation
+    }
+
+# --- MIGRATION / NORMALIZATION TOOLS ---
+
+# Словарь перевода: Старый ключ (Onliner) -> Новый ключ (System)
+LEGACY_TO_SYSTEM_MAP = {
+    # Основное
+    "Тип кондиционера": "type",
+    "Дата выхода на рынок": "release_year",
+    "Тип внутреннего блока": "indoor_type",
+    "Режим работы": "modes",
+    "Цвет": "color",
+    "Wi-Fi": "wifi_ready",
+    "Инверторная технология": "inverter",
+    "Внутренний блок": "_delete_", # Мусорные поля помечаем на удаление
+    "Наружный блок": "_delete_",
+    "Пульт дистанционного управления": "_delete_", 
+
+    # Производительность
+    "Мощность охлаждения": "capacity_cooling_kw",
+    "Мощность обогрева": "capacity_heating_kw",
+    "Обслуживаемая площадь": "area_m2",
+    "Потребляемая мощность при охлаждении": "power_cons_cooling_kw",
+    "Потребляемая мощность при обогреве": "power_cons_heating_kw",
+    "Энергоэффективность при охлаждении (EER)": "eer",
+    "Энергоэффективность при обогреве (COP)": "cop",
+    "Максимальный расход воздуха внутреннего блока": "airflow_max",
+
+    # Трубы и монтаж
+    "Максимальная длина магистрали": "pipe_max_length",
+    "Перепад высот": "pipe_max_height",
+    "Хладагент (фреон)": "freon_type",
+    "Рабочая температура при охлаждении": "temp_range_cool",
+    "Рабочая температура при обогреве": "temp_range_heat",
+
+    # Шум
+    "Шум внутреннего блока": "noise_indoor",
+    "Шум наружного блока": "noise_outdoor",
+
+    # Габариты (Onliner style - раздельные)
+    "Ширина внутреннего блока": "width_indoor",
+    "Высота внутреннего блока": "height_indoor",
+    "Глубина внутреннего блока": "depth_indoor",
+    "Ширина наружного блока": "width_outdoor",
+    "Высота наружного блока": "height_outdoor",
+    "Глубина наружного блока": "depth_outdoor",
+    "Вес внутреннего блока": "weight_indoor",
+    "Вес наружного блока": "weight_outdoor",
+    
+    # MDV (если вдруг уже есть кириллица с сайта MDV)
+    "Модель внутреннего блока": "model_indoor",
+    "Модель наружного блока": "model_outdoor",
+}
+
+def _clean_legacy_value(key: str, value: any):
+    """Очищает значения (да -> True, удаление лишних единиц измерения)"""
+    if isinstance(value, str):
+        v_lower = value.lower().strip()
+        
+        # Булевы значения
+        if v_lower == "да":
+            return True
+        if v_lower == "нет":
+            return False
+            
+        # Чистка цифр (опционально, пока можно оставить строки для безопасности)
+        # Если захочешь превратить "3.4 кВт" в число 3.4, раскомментируй:
+        # if key in ["capacity_cooling_kw", "area_m2", "pipe_max_length"]:
+        #     return re.sub(r"[^\d\.,-]", "", value).strip()
+            
+    return value
+
+@router.post("/specs/normalize-legacy", operation_id="normalize_legacy_specs")
+async def normalize_legacy_specs(
+    dry_run: bool = Query(True, description="Если True - не сохраняет изменения в БД, только показывает пример"),
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username)
+):
+    """
+    Массовая миграция характеристик.
+    Переводит ключи Onliner (кириллица) в System (английский).
+    """
+    logger.info(f"Starting specs normalization (dry_run={dry_run}) by {username}")
+    
+    # Берем все товары, у которых есть specs
+    stmt = select(Product).where(Product.specs != None)
+    result = await session.execute(stmt)
+    products = result.scalars().all()
+    
+    updated_count = 0
+    preview_log = [] # Пример изменений для ответа
+    
+    for product in products:
+        try:
+            old_specs = product.specs
+            
+            # 1. Если это None - пропускаем
+            if old_specs is None:
+                continue
+
+            if isinstance(old_specs, str):
+                try:
+                    # Попытка 1: Честный JSON
+                    old_specs = json.loads(old_specs)
+                except json.JSONDecodeError:
+                    try:
+                        # Попытка 2: Python dict string (одинарные кавычки)
+                        old_specs = ast.literal_eval(old_specs)
+                    except (ValueError, SyntaxError):
+                        # Если совсем мусор
+                        logger.warning(f"Product {product.id} has invalid format: {old_specs}")
+                        continue
+
+            # 3. Если после всех попыток это все еще не словарь - пропускаем
+            if not isinstance(old_specs, dict):
+                continue
+                
+            # --- Дальше старая логика ---
+            new_specs = {}
+            changed = False
+            
+            for old_key, val in old_specs.items(): # Теперь здесь точно словарь!
+                new_key = LEGACY_TO_SYSTEM_MAP.get(old_key, old_key)
+                
+                if new_key == "_delete_":
+                    changed = True
+                    continue
+                
+                new_val = _clean_legacy_value(new_key, val)
+                
+                if new_key != old_key or new_val != val:
+                    changed = True
+                    
+                new_specs[new_key] = new_val
+                
+            if changed:
+                if not dry_run:
+                    product.specs = new_specs
+                    session.add(product)
+                updated_count += 1
+                if len(preview_log) < 5:
+                    preview_log.append({
+                        "id": product.id,
+                        "before_sample": list(old_specs.keys())[:2],
+                        "after_sample": list(new_specs.keys())[:2]
+                    })
+        except Exception as e:
+            logger.error(f"Error normalizing product {product.id}: {e}")
+            continue
+
+    if not dry_run:
+        await session.commit()
+        
+    return {
+        "message": "Normalization complete",
+        "dry_run": dry_run,
+        "products_processed": len(products),
+        "products_updated": updated_count,
+        "sample_changes": preview_log
     }
