@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue';
 import ProductCard from './ProductCard.vue';
 import { getCatalog } from '../utils/api';
+import { getBrandConfig } from '../utils/brands';
 
 const props = defineProps({
   initialProducts: {
@@ -74,7 +75,7 @@ const fetchProducts = async () => {
         const apiParams = {
             tag_slugs: apiTags,
             page: params.page,
-            limit: 12,
+            limit: 100,
             sort: params.sort,
             area_min: params.area_min,
             area_max: params.area_max
@@ -221,12 +222,15 @@ const groupedProducts = computed(() => {
         );
         
         const brandName = brandTag ? brandTag.title : 'Другие бренды';
+        const brandSlug = brandTag ? brandTag.slug : 'other';
         const brandSortOrder = brandTag ? (brandTag.sort_order ?? 999) : 1000;
         
         if (!groups[brandName]) {
             groups[brandName] = {
                 brandName,
+                brandSlug,
                 brandSortOrder,
+                config: getBrandConfig(brandSlug),
                 items: []
             };
         }
@@ -369,7 +373,19 @@ const groupedProducts = computed(() => {
     
     <div v-else-if="groupedProducts.length > 0" class="catalog-content">
         <section v-for="group in groupedProducts" :key="group.brandName" class="brand-section">
-            <h2 class="brand-header">{{ group.brandName }}</h2>
+            <div class="brand-header-wrapper">
+                <div class="brand-header-container">
+                    <img 
+                        v-if="group.config.logo" 
+                        :src="group.config.logo" 
+                        :alt="group.brandName"
+                        class="brand-logo"
+                    />
+                    <h2 v-else class="brand-title" :class="group.config.color">
+                        {{ group.brandName }}
+                    </h2>
+                </div>
+            </div>
             <div class="grid">
                  <ProductCard 
                     v-for="product in group.items" 
@@ -387,18 +403,6 @@ const groupedProducts = computed(() => {
         <p>Попробуйте изменить параметры поиска.</p>
     </div>
 
-    <!-- Pagination -->
-    <div v-if="meta.pages > 1 && !loading" class="pagination">
-        <button 
-            v-for="p in meta.pages" 
-            :key="p"
-            @click="goToPage(p)"
-            class="page-link"
-            :class="{ active: Number(meta.page) === p }"
-        >
-            {{ p }}
-        </button>
-    </div>
   </div>
 </template>
 
@@ -530,18 +534,35 @@ const groupedProducts = computed(() => {
         position: relative;
     }
 
-    .brand-header {
+    .brand-header-wrapper {
         position: sticky;
-        top: 4rem; /* Adjust based on navbar height */
+        top: 0;
         z-index: 10;
-        background: var(--background);
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--border);
+        margin: 2rem 0;
+        transition: all 0.3s ease;
+    }
+
+    .brand-header-container {
+        display: flex;
+        align-items: center;
         padding: 1rem 0;
-        margin-bottom: 2rem;
+    }
+
+    .brand-logo {
+        height: 2.5rem;
+        object-fit: contain;
+        display: block;
+    }
+
+    .brand-title {
         font-size: 2rem;
         font-weight: 800;
-        border-bottom: 1px solid var(--border);
         color: var(--text);
-        box-shadow: 0 10px 10px -10px rgba(0,0,0,0.05);
+        margin: 0;
     }
 
     .grid {
