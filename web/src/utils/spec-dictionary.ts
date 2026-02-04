@@ -150,15 +150,39 @@ export function formatSpec(key: string, value: any): { label: string; value: str
  * @param specs - Raw specs object from API
  * @returns Array of formatted specs (only known keys)
  */
-export function formatAllSpecs(specs: Record<string, any>): Array<{ label: string; value: string }> {
-    const formatted: Array<{ label: string; value: string }> = [];
+export function formatAllSpecs(specs: Record<string, any>) {
+    const result: Array<{ label: string; value: string; group: string }> = [];
+    const processedKeys = new Set<string>();
 
-    for (const [key, value] of Object.entries(specs)) {
-        const formatted_spec = formatSpec(key, value);
-        if (formatted_spec) {
-            formatted.push(formatted_spec);
+    // 1. Сначала проходим по нашему "Золотому стандарту" (Словарь)
+    // Это для новых MDV и будущих товаров
+    for (const [key, def] of Object.entries(SPEC_DICT)) {
+        if (specs[key] !== undefined && specs[key] !== null && specs[key] !== "") {
+            result.push({
+                label: def.label,
+                value: String(specs[key]),
+                group: def.group || "main"
+            });
+            processedKeys.add(key);
         }
     }
 
-    return formatted;
+    // 2. Теперь собираем "Legacy" (Старые товары с русскими ключами)
+    // Если ключ еще не обработан и это не служебное поле — добавляем его
+    for (const [key, value] of Object.entries(specs)) {
+        if (processedKeys.has(key)) continue; // Уже добавили выше
+
+        // Игнорируем явно служебные поля (если вдруг они просочились)
+        if (key === 'inverter' || key === 'model_indoor' || key === 'model_outdoor') continue;
+
+        if (value !== undefined && value !== null && value !== "") {
+            result.push({
+                label: key, // Используем сам ключ как название ("Мощность охлаждения")
+                value: String(value),
+                group: "main" // Или "other", зависит от твоих табов. "main" обычно показывается всегда.
+            });
+        }
+    }
+
+    return result;
 }
