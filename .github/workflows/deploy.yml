@@ -57,25 +57,45 @@ jobs:
              ghcr.io/${{ env.REPO }}/backend:latest
              ghcr.io/${{ env.REPO }}/backend:${{ github.sha }}
 
+      # Diagnostic step: Check if API server is reachable
+      - name: Test API Server Connectivity
+        run: |
+          echo "🔍 Testing connection to API server..."
+          echo "Host: ${{ secrets.SSH_HOST_API }}"
+          echo "User: ${{ secrets.SSH_USER_API }}"
+          
+          # Test if host is reachable (allow failure for diagnosis)
+          ping -c 3 ${{ secrets.SSH_HOST_API }} || echo "⚠️ Ping failed, but SSH might still work"
+          
+          # Test if SSH port 22 is open
+          nc -zv ${{ secrets.SSH_HOST_API }} 22 2>&1 || echo "⚠️ Port 22 check failed"
+          
+          echo "✅ Connectivity tests completed"
+
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Add server to known_hosts to avoid interactive prompt
+          ssh-keyscan -H ${{ secrets.SSH_HOST_API }} >> ~/.ssh/known_hosts
+
       - name: Deploy on API Server
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.SSH_HOST_API }}
-          username: ${{ secrets.SSH_USER_API }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            cd ~/app
+        run: |
+          ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} << 'ENDSSH'
+            cd /opt/air-api
             
-            # Pull new images
-            # Note: Server needs to be logged in to GHCR or package must be Public.
+            echo "📥 Pulling latest Docker images..."
             docker compose pull
             
-            # Restart services
-            # Only app and bot (and db if needed, but usually just code changes)
+            echo "🔄 Restarting services..."
             docker compose up -d app bot
             
-            # Cleanup old images
+            echo "🧹 Cleaning up old images..."
             docker image prune -f
+            
+            echo "✅ Deployment completed!"
+          ENDSSH
 
   # ======================================================
   # 2. FRONTEND DEPLOYMENT (Static -> mvn-web)
@@ -102,29 +122,28 @@ jobs:
       - name: Build Astro Site
         working-directory: ./web
         env:
-           # PRODUCTION API URL
-           PUBLIC_API_URL: https://mvn.by/api/v1
+           # SSR Build: Use production API for static generation
+           INTERNAL_API_URL: https://api.mvn.by/api/v1
+           # Client-side: Use production API  
+           # CRITICAL: API Router prefix is /api, full path: https://api.mvn.by/api/v1
+           PUBLIC_API_URL: https://api.mvn.by/api/v1
+           # Google Tag Manager ID
+           PUBLIC_GTM_ID: GTM-5CR6WBBC
         run: npm run build
 
-      - name: Clean Remote Directory
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.SSH_HOST_WEB }}
-          username: ${{ secrets.SSH_USER_WEB }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-             # Clean the target directory before upload (optional but cleaner)
-             # Adjust path based on where Nginx looks. Assuming ~/www/mvn or similar
-             # rm -rf /var/www/mvn/dist/* 
-             # For safety I will skip explicit rm -rf and trust rsync/scp to overwrite
-             echo "Ready to receive files"
+      - name: Setup SSH Key for Web Server
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SSH_HOST_WEB }} >> ~/.ssh/known_hosts
 
-      - name: Upload Static Files via SCP
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.SSH_HOST_WEB }}
-          username: ${{ secrets.SSH_USER_WEB }}
-          key: ${{ secrets.SSH_KEY }}
-          source: "web/dist/*"
-          target: "/var/www/user2154318/data/www/mvn.by"
-          strip_components: 2 # strips 'web/dist', uploading contents directly
+      - name: Deploy to Web Server
+        run: |
+          # Upload files using rsync over SSH
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key" \
+            web/dist/ \
+            ${{ secrets.SSH_USER_WEB }}@${{ secrets.SSH_HOST_WEB }}:/var/www/user2154318/data/www/mvn.by/
+          
+          echo "✅ Frontend deployment completed!"
