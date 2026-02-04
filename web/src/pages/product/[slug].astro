@@ -33,16 +33,20 @@ if (!product) {
 }
 
 const specs = product.specs || {};
-const galleryUrls = product.gallery_images?.length 
-    ? product.gallery_images.map((img: any) => img.url) 
-    : (product.images || []);
+const galleryUrls = product.gallery_images?.length
+    ? product.gallery_images.map((img: any) => img.url)
+    : [];
 
 // 3. Собираем всё вместе: Главное фото + Галерея
+// Исключаем legacy product.images так как они низкого качества
 const images = [product.main_image, ...galleryUrls]
-    .filter(Boolean)            // Убираем null/undefined
-    .map(resolveImageUrl);      // Превращаем в полные ссылки
+    .filter(Boolean) // Убираем null/undefined
+    .map(resolveImageUrl); // Превращаем в полные ссылки
 
-const mainImage = images[0];
+// Дедупликация (на случай если main_image также есть в gallery_images)
+const uniqueImages = [...new Set(images)];
+
+const mainImage = uniqueImages[0];
 
 // Grouped Specs
 const dimensions = getDimensions(specs);
@@ -78,7 +82,7 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
             <div class="visuals-col">
                 <Gallery
                     client:visible
-                    images={images}
+                    images={uniqueImages}
                     initialImage={mainImage}
                 />
                 {

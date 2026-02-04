@@ -15,16 +15,22 @@
         :key="idx"
         class="thumb-item"
         :class="{ active: img === activeImage }"
+        v-show="!brokenImages.has(img)"
         @click="activeImage = img"
       >
-        <img :src="img" loading="lazy" alt="Thumbnail" />
+        <img 
+          :src="img" 
+          loading="lazy" 
+          alt="Thumbnail"
+          @error="handleImageError(img)"
+        />
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, reactive } from 'vue';
 
 const props = defineProps({
   images: {
@@ -38,10 +44,22 @@ const props = defineProps({
 });
 
 const activeImage = ref(props.initialImage || props.images[0]);
+const brokenImages = reactive(new Set());
 
 watch(() => props.initialImage, (newVal) => {
   if (newVal) activeImage.value = newVal;
 });
+
+const handleImageError = (url) => {
+  brokenImages.add(url);
+  // If the currently active image is broken, try to switch to the first working one
+  if (activeImage.value === url) {
+    const firstWorking = props.images.find(img => !brokenImages.has(img));
+    if (firstWorking) {
+      activeImage.value = firstWorking;
+    }
+  }
+};
 
 const zoomImage = () => {
     // Optional: Implement lightbox or zoom logic here
