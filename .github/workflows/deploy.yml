@@ -123,7 +123,8 @@ jobs:
         working-directory: ./web
         env:
            # PRODUCTION API URL (using subdomain - web nginx doesn't proxy /api paths)
-           PUBLIC_API_URL: https://api.mvn.by/v1
+           # CRITICAL: API Router prefix is /api, full path: https://api.mvn.by/api/v1
+           PUBLIC_API_URL: https://api.mvn.by/api/v1
            # Google Tag Manager ID
            PUBLIC_GTM_ID: GTM-5CR6WBBC
         run: npm run build
