@@ -2,6 +2,7 @@ export interface SpecDefinition {
     label: string;
     unit?: string;
     type?: 'boolean' | 'string' | 'number';
+    group?: string;
 }
 
 export const SPEC_DICT: Record<string, SpecDefinition> = {
@@ -25,9 +26,6 @@ export const SPEC_DICT: Record<string, SpecDefinition> = {
     airflow_max: { label: "Расход воздуха", unit: "м³/ч" },
 
     // Pipes & Installation
-    pipe_max_length: { label: "Макс. длина трассы", unit: "м" },
-    pipe_max_height: { label: "Перепад высот", unit: "м" },
-    freon_type: { label: "Фреон" },
     temp_range_cool: { label: "Раб. темп. (охлаждение)", unit: "°C" },
     temp_range_heat: { label: "Раб. темп. (обогрев)", unit: "°C" },
 
@@ -45,7 +43,31 @@ export const SPEC_DICT: Record<string, SpecDefinition> = {
 
     // MDV specific
     model_indoor: { label: "Модель вн. блока" },
-    model_outdoor: { label: "Модель нар. блока" }
+    model_outdoor: { label: "Модель нар. блока" },
+    // --- МОНТАЖ (Самое вкусное для монтажников) ---
+    cable_power: { label: "Кабель питания", group: "installation" },
+    cable_interconnect: { label: "Межблочный кабель", group: "installation" },
+    power_supply_location: { label: "Подключение питания", group: "installation" },
+
+    pipe_liquid: { label: "Диаметр трубок (жидкость)", group: "installation" },
+    pipe_gas: { label: "Диаметр трубок (газ)", group: "installation" },
+    pipe_max_length: { label: "Макс. длина трассы", unit: "м", group: "installation" },
+    pipe_max_height: { label: "Макс. перепад высот", unit: "м", group: "installation" },
+
+    // --- ТЕХНОЛОГИИ ---
+    compressor_brand: { label: "Компрессор", group: "tech" },
+    compressor_type: { label: "Тип компрессора", group: "tech" },
+    freon_type: { label: "Фреон", group: "tech" },
+
+    // --- ДЛЯ ПРОФИ (Диапазоны) ---
+    // Можно вывести, если хочется, или использовать только для фильтров
+    min_temp_cool: { label: "Мин. t° охлаждения", group: "performance" },
+    min_temp_heat: { label: "Мин. t° обогрева", group: "performance" },
+
+    // Номиналы мы обычно не выводим отдельно, если есть общий range, 
+    // но если хочешь показать мин-макс потребление:
+    power_cons_cooling_min_kw: { label: "Потр. охлаждение (мин)", group: "energy" },
+    power_cons_cooling_max_kw: { label: "Потр. охлаждение (макс)", group: "energy" },
 };
 
 /**

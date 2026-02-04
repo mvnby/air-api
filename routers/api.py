@@ -91,7 +91,6 @@ def _map_product_to_response(product: Product) -> ProductResponse:
                 id=img.id,
                 url=img.url,
                 is_installation_photo=img.is_installation_photo,
-                product_id=img.product_id
             ))
 
     return ProductResponse(

@@ -33,9 +33,15 @@ if (!product) {
 }
 
 const specs = product.specs || {};
-const images = [product.main_image, ...(product.images || [])]
-    .filter(Boolean)
-    .map(resolveImageUrl);
+const galleryUrls = product.gallery_images?.length 
+    ? product.gallery_images.map((img: any) => img.url) 
+    : (product.images || []);
+
+// 3. Собираем всё вместе: Главное фото + Галерея
+const images = [product.main_image, ...galleryUrls]
+    .filter(Boolean)            // Убираем null/undefined
+    .map(resolveImageUrl);      // Превращаем в полные ссылки
+
 const mainImage = images[0];
 
 // Grouped Specs
