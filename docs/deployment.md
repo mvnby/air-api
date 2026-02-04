@@ -67,6 +67,29 @@ The workflow requires these env vars in the build step:
 1. **deploy-backend:** Builds and pushes Docker image, deploys to API server
 2. **deploy-frontend:** Builds Astro site, uploads to web server via SCP
 
+## Safety Checks 🛡️
+
+To prevent deploying an empty site (when API is down or config is wrong), we added a pre-build check:
+
+**Script:** `web/scripts/check-api.js`
+
+**Logic:**
+1. Checks config endpoint (`/config`)
+2. Checks catalog endpoint (`/catalog?limit=1`)
+3. **Fails build if:** 
+   - API is unreachable
+   - Product count is 0
+
+**Integration:**
+Configured in `web/package.json`:
+```json
+"scripts": {
+  "check-api": "node scripts/check-api.js",
+  "build": "npm run check-api && astro build"
+}
+```
+If `check-api` fails, `astro build` will NOT run, protecting the production site.
+
 ## Common Issues
 
 ### Issue: Catalog shows "Товары не найдены"
