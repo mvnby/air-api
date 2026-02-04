@@ -72,26 +72,30 @@ jobs:
           
           echo "✅ Connectivity tests completed"
 
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Add server to known_hosts to avoid interactive prompt
+          ssh-keyscan -H ${{ secrets.SSH_HOST_API }} >> ~/.ssh/known_hosts
+
       - name: Deploy on API Server
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.SSH_HOST_API }}
-          username: ${{ secrets.SSH_USER_API }}
-          key: ${{ secrets.SSH_KEY }}
-          debug: true  # Enable verbose SSH logging
-          script: |
+        run: |
+          ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} << 'ENDSSH'
             cd ~/app
             
-            # Pull new images
-            # Note: Server needs to be logged in to GHCR or package must be Public.
+            echo "📥 Pulling latest Docker images..."
             docker compose pull
             
-            # Restart services
-            # Only app and bot (and db if needed, but usually just code changes)
+            echo "🔄 Restarting services..."
             docker compose up -d app bot
             
-            # Cleanup old images
+            echo "🧹 Cleaning up old images..."
             docker image prune -f
+            
+            echo "✅ Deployment completed!"
+          ENDSSH
 
   # ======================================================
   # 2. FRONTEND DEPLOYMENT (Static -> mvn-web)
