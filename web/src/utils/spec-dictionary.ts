@@ -14,6 +14,8 @@ export const SPEC_DICT: Record<string, SpecDefinition> = {
     color: { label: "Цвет" },
     wifi_ready: { label: "Wi-Fi", type: "boolean" },
     inverter: { label: "Инвертор", type: "boolean" },
+    country: { label: "Страна производства" },
+    indoor_units_count: { label: "Кол-во внутренних блоков" },
 
     // Performance
     capacity_cooling_kw: { label: "Мощность охлаждения", unit: "кВт" },
@@ -68,6 +70,12 @@ export const SPEC_DICT: Record<string, SpecDefinition> = {
     // но если хочешь показать мин-макс потребление:
     power_cons_cooling_min_kw: { label: "Потр. охлаждение (мин)", group: "energy" },
     power_cons_cooling_max_kw: { label: "Потр. охлаждение (макс)", group: "energy" },
+
+    // --- ПРЕМИУМ ФУНКЦИИ ---
+    self_cleaning: { label: "Самоочистка", type: "boolean", group: "tech" },
+    fresh_air: { label: "Приток свежего воздуха", type: "boolean", group: "tech" },
+    smart_home: { label: "Умный дом", type: "boolean", group: "tech" },
+    voice_control: { label: "Голосовое управление", type: "boolean", group: "tech" },
 };
 
 /**

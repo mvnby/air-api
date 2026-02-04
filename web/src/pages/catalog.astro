@@ -8,7 +8,13 @@ const page = searchParams.get("page") || "1";
 const sort = searchParams.get("sort") || "newest";
 const tagSlugsRaw = searchParams.get("tag_slugs");
 const is_inverter = searchParams.get("is_inverter");
-const area_max = searchParams.get("area_max");
+const area_min = searchParams.get("area_min");
+let area_max = searchParams.get("area_max");
+
+// Smart Default: if no area/inverter/tags specified, default to area_max=29
+if (!tagSlugsRaw && !is_inverter && !area_min && !area_max) {
+    area_max = "29";
+}
 
 let tag_slugs: string[] = [];
 if (tagSlugsRaw) {
@@ -56,6 +62,7 @@ const data = await getCatalog({
             : is_inverter === "false"
               ? false
               : undefined,
+    area_min: area_min ? parseInt(area_min) : undefined,
     area_max: area_max ? parseInt(area_max) : undefined,
 });
 const products = (data.items || []) as Product[];
@@ -64,19 +71,6 @@ const meta = data.meta || { total: 0, page: 1, limit: 12, pages: 1 };
 
 <Layout title="Каталог кондиционеров в Витебске">
     <div class="container catalog-page">
-        <header class="catalog-header">
-            <div class="breadcrumb">
-                <a href="/">Главная</a>
-                <span class="sep">/</span>
-                <span>Каталог</span>
-            </div>
-            <h1 class="gradient-text">Каталог кондиционеров в Витебске</h1>
-            <p style="max-width: 600px; color: var(--text-muted);">
-                Современные системы кондиционирования для идеального климата в
-                вашем доме и офисе.
-            </p>
-        </header>
-
         <CatalogApp client:load initialProducts={products} initialMeta={meta} />
     </div>
 </Layout>
