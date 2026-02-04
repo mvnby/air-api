@@ -36,6 +36,7 @@ class TagResponse(BaseModel):
     title: str
     slug: str
     is_public: bool = True
+    sort_order: int = 0
     group: Optional[TagGroupResponse] = None
     group_title: Optional[str] = None
 

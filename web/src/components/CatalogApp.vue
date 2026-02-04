@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue';
 import ProductCard from './ProductCard.vue';
 import { getCatalog } from '../utils/api';
+import { getBrandConfig } from '../utils/brands';
 
 const props = defineProps({
   initialProducts: {
@@ -37,27 +38,34 @@ const getParamsFromUrl = () => {
     params.tag_slugs = tags;
     params.page = sp.get('page') || 1;
     params.sort = sp.get('sort') || 'newest';
+    params.area_min = sp.get('area_min') || null;
+    params.area_max = sp.get('area_max') || null;
     return params;
 };
 
-// Update activeTags from URL
+const currentAreaMin = ref(null);
+const currentAreaMax = ref(null);
+
+// Update activeTags and Area from URL
 const syncStateFromUrl = () => {
     const params = getParamsFromUrl();
     activeTags.value = params.tag_slugs || [];
+    
+    // Only update area if they are present in URL, otherwise keep current (to support defaults)
+    if (params.area_min || params.area_max) {
+        currentAreaMin.value = params.area_min;
+        currentAreaMax.value = params.area_max;
+    } else if (params.tag_slugs.length === 0) {
+        // If NO filters at all, apply default
+        currentAreaMin.value = null;
+        currentAreaMax.value = '29';
+    }
 };
 
 const fetchProducts = async () => {
     loading.value = true;
     try {
         const params = getParamsFromUrl();
-        
-        // Ensure 'wall' logic (replicated from catalog.astro)
-        // If we are filtering, we assume Wall unless specified otherwise?
-        // Let's keep it simple: Just pass what's in URL.
-        // But if URL is empty, we must add 'wall' to match default view?
-        // Actually, if URL is empty, activeTags is empty.
-        // The API call needs 'wall' if no specific type is requested.
-        // Let's add 'wall' to the API params if not present, but NOT to the URL (to keep URL clean).
         
         const apiTags = [...(params.tag_slugs || [])];
         if (!apiTags.includes('wall')) {
@@ -67,8 +75,10 @@ const fetchProducts = async () => {
         const apiParams = {
             tag_slugs: apiTags,
             page: params.page,
-            limit: 12,
-            sort: params.sort
+            limit: 100,
+            sort: params.sort,
+            area_min: params.area_min,
+            area_max: params.area_max
         };
 
         const data = await getCatalog(apiParams);
@@ -89,10 +99,12 @@ const updateUrlAndFetch = () => {
     if (activeTags.value.length > 0) {
         sp.set('tag_slugs', activeTags.value.join(','));
     }
-    
-    // Reset page on filter change? Yes usually.
-    // But if we are just called from toggle, we should reset page.
-    // We'll reset page in toggle functions.
+
+    // Update area
+    sp.delete('area_min');
+    sp.delete('area_max');
+    if (currentAreaMin.value) sp.set('area_min', currentAreaMin.value);
+    if (currentAreaMax.value) sp.set('area_max', currentAreaMax.value);
     
     const newUrl = `${window.location.pathname}?${sp.toString()}`;
     window.history.pushState({}, '', newUrl);
@@ -148,10 +160,32 @@ const goToPage = (p) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
+const setAreaFilter = (min, max) => {
+    currentAreaMin.value = min;
+    currentAreaMax.value = max;
+    
+    const sp = new URLSearchParams(window.location.search);
+    sp.set('page', '1');
+    const newUrl = `${window.location.pathname}?${sp.toString()}`;
+    window.history.replaceState({}, '', newUrl);
+
+    updateUrlAndFetch();
+};
+
 onMounted(() => {
-    if (window.location.search) {
-        syncStateFromUrl();
+    const sp = new URLSearchParams(window.location.search);
+    const hasFilters = sp.has('tag_slugs') || sp.has('area_min') || sp.has('area_max') || sp.has('is_inverter');
+    
+    syncStateFromUrl();
+    
+    if (window.location.search && hasFilters) {
         fetchProducts();
+    } else if (!hasFilters) {
+        // If no filters, we already set the default in syncStateFromUrl.
+        // But we might need to fetch if Astro didn't.
+        // Actually, Astro SHOULD have fetched with area_max=29.
+        // Let's verify by fetching if products are empty or if we want to be sure.
+        // But to avoid double fetch on landing, we can skip it if initialProducts is present.
     }
 });
 
@@ -160,11 +194,123 @@ const isHeatingActive = computed(() => {
     return activeTags.value.includes('winter-25') || activeTags.value.includes('winter-30');
 });
 
+const isAreaActive = (min, max) => {
+    return currentAreaMin.value == min && currentAreaMax.value == max;
+};
+
+const pageTitle = computed(() => {
+    if (isAreaActive(null, '29')) return "Кондиционеры для небольших помещений (до 25 м²)";
+    if (isAreaActive('30', '39')) return "Кондиционеры для средних помещений (до 35 м²)";
+    if (isAreaActive('40', '59')) return "Кондиционеры для больших помещений (до 50 м²)";
+    if (isAreaActive('60', null)) return "Мощные кондиционеры (от 60 м²)";
+    return "Каталог кондиционеров в Витебске";
+});
+
+const pageDescription = computed(() => {
+    if (isAreaActive(null, '29')) return "Тихие и энергоэффективные модели, идеально подходящие для спален и детских комнат.";
+    if (isAreaActive('40', '59')) return "Производительные сплит-системы для просторных гостиных и офисов.";
+    return "Современные системы кондиционирования для идеального климата в вашем доме и офисе.";
+});
+
+const groupedProducts = computed(() => {
+    const groups = {};
+    
+    products.value.forEach(product => {
+        // Find brand tag
+        const brandTag = product.tags?.find(t => 
+            t.group?.slug === 'brand' || t.group_slug === 'brand'
+        );
+        
+        const brandName = brandTag ? brandTag.title : 'Другие бренды';
+        const brandSlug = brandTag ? brandTag.slug : 'other';
+        const brandSortOrder = brandTag ? (brandTag.sort_order ?? 999) : 1000;
+        
+        if (!groups[brandName]) {
+            groups[brandName] = {
+                brandName,
+                brandSlug,
+                brandSortOrder,
+                config: getBrandConfig(brandSlug),
+                items: []
+            };
+        }
+        groups[brandName].items.push(product);
+    });
+    
+    // Sort products inside each brand by price
+    Object.values(groups).forEach(group => {
+        group.items.sort((a, b) => (a.price || 0) - (b.price || 0));
+    });
+    
+    // Sort brands by sort_order, then by name
+    return Object.values(groups).sort((a, b) => {
+        if (a.brandSortOrder !== b.brandSortOrder) {
+            return a.brandSortOrder - b.brandSortOrder;
+        }
+        return a.brandName.localeCompare(b.brandName);
+    });
+});
+
 </script>
 
 <template>
   <div>
-    <!-- Filters Bar -->
+    <!-- Dynamic Header -->
+    <header class="catalog-header">
+        <div class="breadcrumb">
+            <a href="/">Главная</a>
+            <span class="sep">/</span>
+            <span>Каталог</span>
+        </div>
+        <h1 class="gradient-text">{{ pageTitle }}</h1>
+        <p style="max-width: 700px; color: var(--text-muted); min-height: 3em;">
+            {{ pageDescription }}
+        </p>
+    </header>
+
+    <!-- Area Selection (Primary Filter Row) -->
+    <div class="area-filters">
+        <div class="filter-label">Площадь помещения:</div>
+        <div class="chips-row">
+            <button 
+                class="chip" 
+                :class="{ active: isAreaActive(null, '29') }"
+                @click="setAreaFilter(null, '29')"
+            >
+                До 25 м²
+            </button>
+            <button 
+                class="chip" 
+                :class="{ active: isAreaActive('30', '39') }"
+                @click="setAreaFilter('30', '39')"
+            >
+                До 35 м²
+            </button>
+            <button 
+                class="chip" 
+                :class="{ active: isAreaActive('40', '59') }"
+                @click="setAreaFilter('40', '59')"
+            >
+                До 50 м²
+            </button>
+            <button 
+                class="chip" 
+                :class="{ active: isAreaActive('60', null) }"
+                @click="setAreaFilter('60', null)"
+            >
+                60+ м²
+            </button>
+            <button 
+                class="chip" 
+                :class="{ active: isAreaActive(null, null) }"
+                @click="setAreaFilter(null, null)"
+            >
+                Все
+            </button>
+        </div>
+    </div>
+
+    <!-- Secondary Filters Bar -->
     <div class="filters-bar">
         <!-- Inverter -->
         <button 
@@ -176,15 +322,7 @@ const isHeatingActive = computed(() => {
             Инвертор
         </button>
 
-        <!-- Area 25m -->
-        <button 
-            class="filter-btn" 
-            :class="{ active: isTagActive('area-25') }"
-            @click="toggleTag('area-25')"
-        >
-            <span class="material-icons-round icon">straighten</span>
-            До 25 кв.м
-        </button>
+        <!-- Removed generic Area 25m as it's now in main row -->
 
         <!-- Calculator Link -->
         <a 
@@ -233,15 +371,30 @@ const isHeatingActive = computed(() => {
         Загрузка...
     </div>
     
-    <div v-else-if="products.length > 0" class="products-area">
-        <div class="grid">
-             <ProductCard 
-                v-for="product in products" 
-                :key="product.id" 
-                :product="product" 
-                :showInstallation="true"
-             />
-        </div>
+    <div v-else-if="groupedProducts.length > 0" class="catalog-content">
+        <section v-for="group in groupedProducts" :key="group.brandName" class="brand-section">
+            <div class="brand-header-wrapper">
+                <div class="brand-header-container">
+                    <img 
+                        v-if="group.config.logo" 
+                        :src="group.config.logo" 
+                        :alt="group.brandName"
+                        class="brand-logo"
+                    />
+                    <h2 v-else class="brand-title" :class="group.config.color">
+                        {{ group.brandName }}
+                    </h2>
+                </div>
+            </div>
+            <div class="grid">
+                 <ProductCard 
+                    v-for="product in group.items" 
+                    :key="product.id" 
+                    :product="product" 
+                    :showInstallation="true"
+                 />
+            </div>
+        </section>
     </div>
     
     <div v-else class="empty-status card">
@@ -250,28 +403,86 @@ const isHeatingActive = computed(() => {
         <p>Попробуйте изменить параметры поиска.</p>
     </div>
 
-    <!-- Pagination -->
-    <div v-if="meta.pages > 1 && !loading" class="pagination">
-        <button 
-            v-for="p in meta.pages" 
-            :key="p"
-            @click="goToPage(p)"
-            class="page-link"
-            :class="{ active: Number(meta.page) === p }"
-        >
-            {{ p }}
-        </button>
-    </div>
   </div>
 </template>
 
 <style scoped>
+    /* Catalog Header (moved from Astro) */
+    .catalog-header {
+        margin-bottom: 2rem;
+    }
+    .breadcrumb {
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 500;
+    }
+    .breadcrumb a {
+        color: inherit;
+        text-decoration: none;
+    }
+    .breadcrumb a:hover {
+        color: var(--primary);
+    }
+    .sep {
+        opacity: 0.5;
+    }
+    .catalog-header h1 {
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+        font-weight: 800;
+        line-height: 1.1;
+    }
+
+    /* Area Filters */
+    .area-filters {
+        margin-bottom: 1.5rem;
+    }
+    .filter-label {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.75rem;
+    }
+    .chips-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+    .chip {
+        padding: 0.5rem 1.25rem;
+        border-radius: 12px;
+        background: var(--surface);
+        border: 2px solid var(--border);
+        font-weight: 700;
+        font-size: 0.95rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        color: var(--text);
+        font-family: inherit;
+    }
+    .chip:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+    .chip.active {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+        box-shadow: 0 4px 12px rgba(0, 127, 128, 0.2);
+    }
+
     /* Filters Bar */
     .filters-bar {
         display: flex;
         align-items: center;
         gap: 1rem;
-        margin-bottom: 2rem;
+        margin-bottom: 2.5rem;
         overflow-x: auto;
         padding-bottom: 0.5rem;
         scrollbar-width: thin;
@@ -311,9 +522,47 @@ const isHeatingActive = computed(() => {
         font-size: 1.2rem;
     }
 
-    /* Grid */
-    .products-area {
+    /* Grid & Catalog Content */
+    .catalog-content {
         width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 4rem;
+    }
+
+    .brand-section {
+        position: relative;
+    }
+
+    .brand-header-wrapper {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--border);
+        margin: 2rem 0;
+        transition: all 0.3s ease;
+    }
+
+    .brand-header-container {
+        display: flex;
+        align-items: center;
+        padding: 1rem 0;
+    }
+
+    .brand-logo {
+        height: 2.5rem;
+        object-fit: contain;
+        display: block;
+    }
+
+    .brand-title {
+        font-size: 2rem;
+        font-weight: 800;
+        color: var(--text);
+        margin: 0;
     }
 
     .grid {

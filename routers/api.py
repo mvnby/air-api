@@ -58,6 +58,7 @@ def _map_product_to_response(product: Product) -> ProductResponse:
                 title=t.title, 
                 slug=t.slug, 
                 is_public=t.is_public,
+                sort_order=t.sort_order,
                 group=g_resp,
                 group_title=t.group.title if t.group else None
             ))

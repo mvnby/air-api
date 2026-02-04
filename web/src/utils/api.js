@@ -15,7 +15,7 @@ const API_V1 = import.meta.env.SSR ? INTERNAL_URL : CLIENT_URL;
 const API_ROOT = API_V1.replace(/\/v1$/, ""); // Fallback for non-versioned endpoints if any
 
 export function resolveImageUrl(path) {
-    if (!path) return "/placeholder.jpg";
+    if (!path) return "/no-photo.png";
     if (path.startsWith("http")) return path;
     // Images are always served from public root, not API v1
     const root = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000';
