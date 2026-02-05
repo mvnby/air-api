@@ -6,6 +6,7 @@ import PriceWithToggle from "../../components/PriceWithToggle.vue";
 // @ts-expect-error Vue SFC with script setup
 import Gallery from "../../components/product/Gallery.vue";
 import StickyBuyBar from "../../components/product/StickyBuyBar.vue";
+import FeaturesBentoGrid from "../../components/product/FeaturesBentoGrid.vue";
 import {
     getDimensions,
     getPerformance,
@@ -174,6 +175,8 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                         image={mainImage}
                     />
                 </div>
+
+                <FeaturesBentoGrid client:visible product={product} />
 
                 <!-- Smart Specs -->
                 <div class="smart-specs">
