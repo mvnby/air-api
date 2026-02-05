@@ -186,11 +186,16 @@ const addToCart = () => {
             <span>Монтаж</span>
           </div>
           <div class="price-column">
-             <span class="inst-price" :class="{ 'line-through text-muted': discount > 0 }">
+             <div v-if="discount > 0" class="price-row-stack">
+                <span class="inst-price line-through text-muted small">
+                  {{ effectiveInstallPrice }}
+                </span>
+                <span class="discount-price">
+                  +{{ finalInstallPrice }} {{ currency }}
+                </span>
+             </div>
+             <span v-else class="inst-price">
                 +{{ effectiveInstallPrice }} {{ currency }}
-             </span>
-             <span v-if="discount > 0" class="discount-price">
-                +{{ finalInstallPrice }} {{ currency }}
              </span>
           </div>
       </div>
@@ -353,10 +358,21 @@ const addToCart = () => {
       line-height: 1.2;
   }
 
+  .price-row-stack {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+  }
+
   .inst-price {
     color: var(--text-muted);
     font-weight: 600;
     font-size: 0.85rem;
+  }
+
+  .inst-price.small {
+      font-size: 0.75rem;
+      margin-bottom: -2px;
   }
 
   .discount-price {

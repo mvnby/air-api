@@ -13,6 +13,7 @@ import {
     getOtherSpecs,
 } from "../../utils/specs";
 import { formatAllSpecs } from "../../utils/spec-dictionary";
+import { generateBentoCards } from "../../utils/bento-cards";
 
 export async function getStaticPaths() {
     const products = await getProducts();
@@ -53,6 +54,9 @@ const mainImage = uniqueImages[0];
 const dimensions = getDimensions(specs);
 const performance = getPerformance(specs);
 const otherSpecs = getOtherSpecs(specs);
+
+// Generate Bento Cards
+const bentoCards = generateBentoCards(product);
 
 const publicTags = (product.tags || []).filter((t: any) => t.is_public);
 ---
@@ -176,7 +180,7 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                     />
                 </div>
 
-                <FeaturesBentoGrid client:visible product={product} />
+                <FeaturesBentoGrid client:visible cards={bentoCards} />
 
                 <!-- Smart Specs -->
                 <div class="smart-specs">
@@ -757,45 +761,61 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
         flex-wrap: wrap;
     }
     .badge {
-        background: var(--surface);
+        background: var(--secondary);
         color: var(--text-muted);
-        padding: 6px 12px;
-        border-radius: 8px;
-        font-size: 0.8rem;
+        padding: 4px 10px;
+        border-radius: 10px;
+        font-size: 0.75rem;
         line-height: 1;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.02em;
         display: inline-flex;
         align-items: center;
-        gap: 0.4rem;
-        min-height: 32px;
+        gap: 0.35rem;
+        min-height: 28px;
         border: 1px solid var(--border);
         transition: all 0.2s;
     }
     .badge-icon {
-        font-size: 1rem;
-        opacity: 0.8;
+        font-size: 0.95rem;
+        opacity: 0.7;
     }
     .badge.primary {
-        background: var(--primary-bg);
+        background: rgba(0, 127, 128, 0.08);
         color: var(--primary);
-        border-color: var(--primary);
+        border-color: rgba(0, 127, 128, 0.2);
     }
     .badge.info {
         background: var(--info-bg);
-        color: var(--info);
-        border-color: var(--info);
+        color: var(--info-text);
+        border-color: rgba(14, 165, 233, 0.2);
     }
     .badge.warning {
         background: var(--warning-bg);
-        color: var(--warning);
-        border-color: var(--warning);
+        color: var(--warning-text);
+        border-color: rgba(245, 158, 11, 0.2);
     }
     .badge.success {
         background: var(--success-bg);
-        color: var(--success);
-        border-color: var(--success);
+        color: var(--success-text);
+        border-color: rgba(16, 185, 129, 0.2);
+    }
+    .badge.error {
+        background: var(--error-bg);
+        color: var(--error-text);
+        border-color: rgba(239, 68, 68, 0.2);
+    }
+
+    .dark .badge {
+        background: rgba(255, 255, 255, 0.05);
+        color: rgba(255, 255, 255, 0.7);
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+    .dark .badge.primary {
+        background: rgba(45, 212, 191, 0.12);
+        color: var(--accent-light);
+        border-color: rgba(45, 212, 191, 0.3);
     }
     .badge.error {
         background: var(--error-bg);
