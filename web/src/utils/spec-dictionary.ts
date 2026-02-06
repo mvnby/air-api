@@ -17,6 +17,16 @@ export const SPEC_DICT: Record<string, SpecDefinition> = {
     country: { label: "Страна производства" },
     indoor_units_count: { label: "Кол-во внутренних блоков" },
 
+    // Controls & Modes
+    remote_control: { label: "Пульт ДУ", type: "boolean" },
+    timer: { label: "Таймер", type: "boolean" },
+    airflow_direction: { label: "Регулировка направления потока", type: "boolean" },
+    fan_speed: { label: "Регулировка скорости вентилятора", type: "boolean" },
+    autorestart: { label: "Авторестарт", type: "boolean" },
+    turbo_mode: { label: "Турбо-режим", type: "boolean" },
+    sleep_mode: { label: "Режим «Сон»", type: "boolean" },
+    dehumidification: { label: "Осушение воздуха", type: "boolean" },
+
     // Performance
     capacity_cooling_kw: { label: "Мощность охлаждения", unit: "кВт" },
     capacity_heating_kw: { label: "Мощность обогрева", unit: "кВт" },
@@ -74,8 +84,17 @@ export const SPEC_DICT: Record<string, SpecDefinition> = {
     // --- ПРЕМИУМ ФУНКЦИИ ---
     self_cleaning: { label: "Самоочистка", type: "boolean", group: "tech" },
     fresh_air: { label: "Приток свежего воздуха", type: "boolean", group: "tech" },
-    smart_home: { label: "Умный дом", type: "boolean", group: "tech" },
+    smart_home_integration: { label: "Умный дом", type: "boolean", group: "tech" },
     voice_control: { label: "Голосовое управление", type: "boolean", group: "tech" },
+
+    // Filters
+    bio_filter: { label: "Биофильтр", type: "boolean", group: "tech" },
+    plasma_filter: { label: "Плазменный фильтр", type: "boolean", group: "tech" },
+    ionizer: { label: "Ионизатор", type: "boolean", group: "tech" },
+    carbon_filter: { label: "Угольный фильтр", type: "boolean", group: "tech" },
+    photocatalytic_filter: { label: "Фотокаталитический фильтр", type: "boolean", group: "tech" },
+    electrostatic_filter: { label: "Электростатический фильтр", type: "boolean", group: "tech" },
+    uv_sterilization: { label: "УФ-стерилизация", type: "boolean", group: "tech" },
 };
 
 /**
@@ -168,7 +187,7 @@ export function formatAllSpecs(specs: Record<string, any>) {
         // Вызываем твой умный форматер!
         // Он сам добавит 'кВт', сам сделает 'Да/Нет'
         const formatted = formatSpec(key, specs[key]);
-        
+
         if (formatted) {
             result.push({
                 label: formatted.label,

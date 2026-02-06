@@ -84,6 +84,7 @@ const zoomImage = () => {
   flex-direction: column;
   gap: 1.5rem;
   width: 100%;
+  min-width: 0; /* Important for flex/grid children to shrink */
 }
 
 .main-image-wrapper {
@@ -136,6 +137,8 @@ const zoomImage = () => {
   padding: 4px; /* Space for focus rings */
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none; /* Firefox */
+  width: 100%;
+  max-width: 100%;
 }
 .thumbnails-track::-webkit-scrollbar {
     display: none; /* Chrome/Safari */
@@ -151,6 +154,8 @@ const zoomImage = () => {
   background: var(--surface, white);
   transition: all 0.2s ease;
   border: 1px solid var(--border);
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .thumb-item img {

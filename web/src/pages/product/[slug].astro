@@ -1203,7 +1203,7 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
     /* Breakpoints */
     @media (max-width: 900px) {
         .product-grid {
-            grid-template-columns: 1fr;
+            grid-template-columns: minmax(0, 1fr);
             gap: 2rem;
         }
         .visuals-col {
