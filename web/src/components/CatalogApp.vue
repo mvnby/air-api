@@ -12,6 +12,18 @@ const props = defineProps({
   initialMeta: {
     type: Object,
     default: () => ({ total: 0, page: 1, limit: 12, pages: 1 })
+  },
+  forcedTitle: {
+    type: String,
+    default: ''
+  },
+  forcedDescription: {
+    type: String,
+    default: ''
+  },
+  lockedInitialFilters: {
+    type: Object,
+    default: null
   }
 });
 
@@ -40,11 +52,29 @@ const getParamsFromUrl = () => {
     params.sort = sp.get('sort') || 'newest';
     params.area_min = sp.get('area_min') || null;
     params.area_max = sp.get('area_max') || null;
+    params.is_inverter = sp.get('is_inverter') === 'true'
+      ? true
+      : sp.get('is_inverter') === 'false'
+        ? false
+        : null;
     return params;
 };
 
 const currentAreaMin = ref(null);
 const currentAreaMax = ref(null);
+const lockedFilters = computed(() => props.lockedInitialFilters || null);
+
+const applyLockedState = () => {
+    if (!lockedFilters.value) return false;
+
+    const lockedTags = Array.isArray(lockedFilters.value.tag_slugs)
+        ? lockedFilters.value.tag_slugs
+        : [];
+    activeTags.value = [...lockedTags];
+    currentAreaMin.value = lockedFilters.value.area_min != null ? String(lockedFilters.value.area_min) : null;
+    currentAreaMax.value = lockedFilters.value.area_max != null ? String(lockedFilters.value.area_max) : null;
+    return true;
+};
 
 // Update activeTags and Area from URL
 const syncStateFromUrl = () => {
@@ -56,9 +86,11 @@ const syncStateFromUrl = () => {
         currentAreaMin.value = params.area_min;
         currentAreaMax.value = params.area_max;
     } else if (params.tag_slugs.length === 0) {
-        // If NO filters at all, apply default
-        currentAreaMin.value = null;
-        currentAreaMax.value = '29';
+        // If NO filters in URL, try preset state for virtual pages before fallback default.
+        if (!applyLockedState()) {
+            currentAreaMin.value = null;
+            currentAreaMax.value = '29';
+        }
     }
 };
 
@@ -78,7 +110,8 @@ const fetchProducts = async () => {
             limit: 100,
             sort: params.sort,
             area_min: params.area_min,
-            area_max: params.area_max
+            area_max: params.area_max,
+            is_inverter: params.is_inverter
         };
 
         const data = await getCatalog(apiParams);
@@ -199,6 +232,7 @@ const isAreaActive = (min, max) => {
 };
 
 const pageTitle = computed(() => {
+    if (props.forcedTitle) return props.forcedTitle;
     if (isAreaActive(null, '29')) return "Кондиционеры для небольших помещений (до 25 м²)";
     if (isAreaActive('30', '39')) return "Кондиционеры для средних помещений (до 35 м²)";
     if (isAreaActive('40', '59')) return "Кондиционеры для больших помещений (до 50 м²)";
@@ -207,6 +241,7 @@ const pageTitle = computed(() => {
 });
 
 const pageDescription = computed(() => {
+    if (props.forcedDescription) return props.forcedDescription;
     if (isAreaActive(null, '29')) return "Тихие и энергоэффективные модели, идеально подходящие для спален и детских комнат.";
     if (isAreaActive('40', '59')) return "Производительные сплит-системы для просторных гостиных и офисов.";
     return "Современные системы кондиционирования для идеального климата в вашем доме и офисе.";

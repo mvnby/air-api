@@ -1,0 +1,77 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import CatalogApp from "../../components/CatalogApp.vue";
+import type { VirtualCategoryConfig } from "../../config/virtual-categories";
+import { VIRTUAL_CATEGORIES } from "../../config/virtual-categories";
+import { getCatalog } from "../../utils/api";
+import { buildCatalogQueryFromVirtual } from "../../utils/virtual-category";
+
+export async function getStaticPaths() {
+    return VIRTUAL_CATEGORIES.map((category) => ({
+        params: { virtual: category.slug },
+        props: { category },
+    }));
+}
+
+interface Product {
+    title: string;
+    price: number;
+    slug: string;
+    main_image?: string;
+    description?: string;
+    is_inverter?: boolean;
+    area?: number;
+    badges?: Array<{ text: string; class?: string }>;
+    tags?: Array<{
+        title: string;
+        slug: string;
+        is_public: boolean;
+        sort_order?: number;
+        group?: {
+            slug: string;
+            is_public: boolean;
+        };
+    }>;
+}
+
+interface Props {
+    category: VirtualCategoryConfig;
+}
+
+const { category } = Astro.props as Props;
+if (!category) {
+    return Astro.redirect("/404");
+}
+
+const query = buildCatalogQueryFromVirtual(category);
+const data = await getCatalog(query);
+const products = (data.items || []) as Product[];
+const meta = data.meta || { total: 0, page: 1, limit: 12, pages: 1 };
+const robotsValue = category.indexable === false ? "noindex,follow" : undefined;
+---
+
+<Layout
+    title={category.seoTitle}
+    description={category.seoDescription}
+    canonical={`/catalog/${category.slug}`}
+    robots={robotsValue}
+>
+    <div class="container catalog-page">
+        <CatalogApp
+            client:load
+            initialProducts={products}
+            initialMeta={meta}
+            forcedTitle={category.h1}
+            forcedDescription={category.intro || category.seoDescription}
+            lockedInitialFilters={category.filters}
+        />
+    </div>
+</Layout>
+
+<style>
+    .catalog-page {
+        padding: 2rem 1.5rem;
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+</style>

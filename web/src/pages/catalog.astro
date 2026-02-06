@@ -2,33 +2,77 @@
 import Layout from "../layouts/Layout.astro";
 import CatalogApp from "../components/CatalogApp.vue";
 import { getCatalog } from "../utils/api";
+import { matchVirtualCategoryByFilters } from "../utils/virtual-category";
+import {
+    VIRTUAL_CATEGORIES,
+    type CatalogSort,
+} from "../config/virtual-categories";
 
 const { searchParams } = Astro.url;
+const hasQueryParams = Array.from(searchParams.keys()).length > 0;
 const page = searchParams.get("page") || "1";
-const sort = searchParams.get("sort") || "newest";
-const tagSlugsRaw = searchParams.get("tag_slugs");
-const is_inverter = searchParams.get("is_inverter");
-const area_min = searchParams.get("area_min");
-let area_max = searchParams.get("area_max");
+const sortRaw = searchParams.get("sort") || "newest";
+const allowedSorts: CatalogSort[] = [
+    "newest",
+    "price_asc",
+    "price_desc",
+    "area_asc",
+    "area_desc",
+];
+const sort: CatalogSort = allowedSorts.includes(sortRaw as CatalogSort)
+    ? (sortRaw as CatalogSort)
+    : "newest";
+const tagSlugsRaw = searchParams.getAll("tag_slugs");
+const isInverterRaw = searchParams.get("is_inverter");
+const areaMinRaw = searchParams.get("area_min");
+let areaMaxRaw = searchParams.get("area_max");
 
 // Smart Default: if no area/inverter/tags specified, default to area_max=29
-if (!tagSlugsRaw && !is_inverter && !area_min && !area_max) {
-    area_max = "29";
+if (tagSlugsRaw.length === 0 && !isInverterRaw && !areaMinRaw && !areaMaxRaw) {
+    areaMaxRaw = "29";
 }
 
-let tag_slugs: string[] = [];
-if (tagSlugsRaw) {
-    tag_slugs = tagSlugsRaw
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-}
+const userTagSlugs = tagSlugsRaw
+    .flatMap((value) => value.split(","))
+    .map((s) => s.trim())
+    .filter(Boolean);
 
-// Enforce 'wall' tag if no specific type is requested (Simple logic: just always add 'wall' for now as per user request to hide semi-prom)
-// Or better: check if user requested a different type. If not, add wall.
-// For now, I'll just append 'wall' if it's not present, assuming this page is for Wall units primarily.
+const parsedIsInverter =
+    isInverterRaw === "true"
+        ? true
+        : isInverterRaw === "false"
+          ? false
+          : undefined;
+
+const parsedAreaMin = areaMinRaw ? parseInt(areaMinRaw, 10) : undefined;
+const parsedAreaMax = areaMaxRaw ? parseInt(areaMaxRaw, 10) : undefined;
+
+let tag_slugs: string[] = [...userTagSlugs];
 if (!tag_slugs.includes("wall")) {
     tag_slugs.push("wall");
+}
+
+let canonicalPath = "/catalog";
+let robotsValue: string | undefined;
+
+if (hasQueryParams) {
+    const matchedVirtual = matchVirtualCategoryByFilters({
+        sort,
+        tag_slugs: userTagSlugs,
+        is_inverter: parsedIsInverter,
+        area_min: parsedAreaMin,
+        area_max: parsedAreaMax,
+    });
+    if (matchedVirtual) {
+        canonicalPath = `/catalog/${matchedVirtual.slug}`;
+    }
+    robotsValue = "noindex,follow";
+}
+
+if (tag_slugs.length > 0) {
+    tag_slugs = tag_slugs
+        .map((s) => s.trim())
+        .filter(Boolean);
 }
 
 interface Product {
@@ -57,23 +101,118 @@ const data = await getCatalog({
     limit: 100,
     sort,
     tag_slugs,
-    is_inverter:
-        is_inverter === "true"
-            ? true
-            : is_inverter === "false"
-              ? false
-              : undefined,
-    area_min: area_min ? parseInt(area_min) : undefined,
-    area_max: area_max ? parseInt(area_max) : undefined,
+    is_inverter: parsedIsInverter,
+    area_min: parsedAreaMin,
+    area_max: parsedAreaMax,
 });
 const products = (data.items || []) as Product[];
 const meta = data.meta || { total: 0, page: 1, limit: 12, pages: 1 };
 ---
 
-<Layout title="Каталог кондиционеров в Витебске">
+<Layout
+    title="Каталог кондиционеров в Витебске"
+    canonical={canonicalPath}
+    robots={robotsValue}
+>
     <div class="container catalog-page">
         <CatalogApp client:load initialProducts={products} initialMeta={meta} />
     </div>
+    <script is:inline define:vars={{ virtualCategories: VIRTUAL_CATEGORIES }}>
+        (() => {
+            if (typeof window === "undefined") return;
+
+            const sp = new URLSearchParams(window.location.search);
+            if (Array.from(sp.keys()).length === 0) return;
+
+            const parseTags = () => {
+                const tags = [];
+                sp.getAll("tag_slugs").forEach((raw) => {
+                    raw.split(",").forEach((tag) => {
+                        const clean = tag.trim().toLowerCase();
+                        if (clean) tags.push(clean);
+                    });
+                });
+                return tags;
+            };
+
+            const normalizeTags = (tags) =>
+                [...new Set(tags.filter((tag) => tag !== "wall"))].sort();
+
+            const sortRaw = sp.get("sort") || "newest";
+            const allowedSorts = [
+                "newest",
+                "price_asc",
+                "price_desc",
+                "area_asc",
+                "area_desc",
+            ];
+            const sort = allowedSorts.includes(sortRaw) ? sortRaw : "newest";
+
+            const toNumber = (value) => {
+                if (!value) return undefined;
+                const parsed = Number.parseInt(value, 10);
+                return Number.isFinite(parsed) ? parsed : undefined;
+            };
+
+            const normalizedInput = {
+                sort,
+                tag_slugs: normalizeTags(parseTags()),
+                is_inverter:
+                    sp.get("is_inverter") === "true"
+                        ? true
+                        : sp.get("is_inverter") === "false"
+                          ? false
+                          : undefined,
+                area_min: toNumber(sp.get("area_min")),
+                area_max: toNumber(sp.get("area_max")),
+            };
+
+            const matched = virtualCategories.find((category) => {
+                const normalizedCategory = {
+                    sort: category.filters.sort || "newest",
+                    tag_slugs: normalizeTags(category.filters.tag_slugs || []),
+                    is_inverter:
+                        typeof category.filters.is_inverter === "boolean"
+                            ? category.filters.is_inverter
+                            : undefined,
+                    area_min: category.filters.area_min,
+                    area_max: category.filters.area_max,
+                };
+
+                return (
+                    normalizedInput.sort === normalizedCategory.sort &&
+                    normalizedInput.is_inverter ===
+                        normalizedCategory.is_inverter &&
+                    normalizedInput.area_min === normalizedCategory.area_min &&
+                    normalizedInput.area_max === normalizedCategory.area_max &&
+                    normalizedInput.tag_slugs.length ===
+                        normalizedCategory.tag_slugs.length &&
+                    normalizedInput.tag_slugs.every(
+                        (tag, idx) => tag === normalizedCategory.tag_slugs[idx],
+                    )
+                );
+            });
+
+            const canonicalPath = matched ? `/catalog/${matched.slug}` : "/catalog";
+            const canonicalUrl = new URL(
+                canonicalPath,
+                window.location.origin,
+            ).toString();
+
+            const canonicalNode = document.querySelector('link[rel="canonical"]');
+            if (canonicalNode) {
+                canonicalNode.setAttribute("href", canonicalUrl);
+            }
+
+            let robotsNode = document.querySelector('meta[name="robots"]');
+            if (!robotsNode) {
+                robotsNode = document.createElement("meta");
+                robotsNode.setAttribute("name", "robots");
+                document.head.appendChild(robotsNode);
+            }
+            robotsNode.setAttribute("content", "noindex,follow");
+        })();
+    </script>
 </Layout>
 
 <style>
