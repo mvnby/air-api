@@ -4,6 +4,7 @@ from parsers.onliner import OnlinerParser
 from core.database import async_session_maker
 from models import Product
 from services.image_service import ImageService
+from services.spec_normalizer import normalize_specs
 
 class ImporterService:
     def __init__(self):
@@ -114,7 +115,7 @@ class ImporterService:
                 main_image=local_main_image,  # Use local path
                 images=[],  # Explicitly empty legacy JSON
                 tags=tag_objects,
-                specs=data.get('specs', {}),
+                specs=normalize_specs(data.get('specs', {})),
                 is_published=is_published,
                 source_url=url
             )
