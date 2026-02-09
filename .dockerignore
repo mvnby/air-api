@@ -1,0 +1,38 @@
+# VCS / CI metadata
+.git
+.github
+
+# Local environments and caches
+.venv
+venv
+__pycache__
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.idea
+.vscode
+
+# Python artifacts
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Frontend folders not needed in backend runtime image
+web
+manager_frontend/node_modules
+manager_frontend/.vite
+manager_frontend/.nuxt
+
+# Keep only prebuilt manager frontend assets for backend static serving
+manager_frontend/*
+!manager_frontend/dist/
+!manager_frontend/dist/**
+
+# Local build outputs
+dist
+build
+
+# Environment files
+.env
+.env.*
