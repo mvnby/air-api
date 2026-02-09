@@ -1894,7 +1894,7 @@
           "manager"
         ],
         "summary": "Delete Gallery Image",
-        "description": "Delete an image from the gallery (and disk).",
+        "description": "Delete an image link; physical file is deleted only if unreferenced globally.",
         "operationId": "delete_image",
         "security": [
           {
@@ -2036,6 +2036,198 @@
         }
       }
     },
+    "/api/manager/gallery/common-images": {
+      "get": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Get Common Gallery Images",
+        "description": "Return non-installation images shared by all selected products.",
+        "operationId": "get_common_gallery_images",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_ids",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "description": "Selected product IDs",
+              "title": "Product Ids"
+            },
+            "description": "Selected product IDs"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CommonGalleryImageResponse"
+                  },
+                  "title": "Response Get Common Gallery Images"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/gallery/bulk-add": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Bulk Add Gallery Images",
+        "description": "Append image links to selected products without removing existing gallery items.",
+        "operationId": "bulk_add_gallery_images",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkGalleryAddRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/gallery/bulk-upload-local": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Bulk Upload Local Images",
+        "description": "Upload local files once and attach to all selected products.",
+        "operationId": "bulk_upload_local_images",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_bulk_upload_local_images"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/gallery/bulk-delete-common": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Bulk Delete Common Gallery Images",
+        "description": "Delete selected common image links from selected products only.",
+        "operationId": "bulk_delete_common_gallery_images",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkGalleryDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/cleanup-media": {
       "post": {
         "tags": [
@@ -2128,6 +2320,55 @@
         ]
       }
     },
+    "/api/manager/specs/normalize-legacy": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Normalize Legacy Specs",
+        "description": "\u041c\u0430\u0441\u0441\u043e\u0432\u0430\u044f \u043c\u0438\u0433\u0440\u0430\u0446\u0438\u044f \u0445\u0430\u0440\u0430\u043a\u0442\u0435\u0440\u0438\u0441\u0442\u0438\u043a.\n\u041f\u0435\u0440\u0435\u0432\u043e\u0434\u0438\u0442 \u043a\u043b\u044e\u0447\u0438 Onliner (\u043a\u0438\u0440\u0438\u043b\u043b\u0438\u0446\u0430) \u0432 System (\u0430\u043d\u0433\u043b\u0438\u0439\u0441\u043a\u0438\u0439).",
+        "operationId": "normalize_legacy_specs",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dry_run",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "\u0415\u0441\u043b\u0438 True - \u043d\u0435 \u0441\u043e\u0445\u0440\u0430\u043d\u044f\u0435\u0442 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u0432 \u0411\u0414, \u0442\u043e\u043b\u044c\u043a\u043e \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442 \u043f\u0440\u0438\u043c\u0435\u0440",
+              "default": true,
+              "title": "Dry Run"
+            },
+            "description": "\u0415\u0441\u043b\u0438 True - \u043d\u0435 \u0441\u043e\u0445\u0440\u0430\u043d\u044f\u0435\u0442 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u0432 \u0411\u0414, \u0442\u043e\u043b\u044c\u043a\u043e \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442 \u043f\u0440\u0438\u043c\u0435\u0440"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/manager/{full_path}": {
       "get": {
         "summary": "Serve Manager App",
@@ -2213,6 +2454,39 @@
           "created_at"
         ],
         "title": "ArticleResponse"
+      },
+      "Body_bulk_upload_local_images": {
+        "properties": {
+          "product_ids_json": {
+            "type": "string",
+            "title": "Product Ids Json",
+            "description": "JSON array of product ids"
+          },
+          "files": {
+            "items": {
+              "type": "string",
+              "format": "binary"
+            },
+            "type": "array",
+            "title": "Files"
+          },
+          "is_installation": {
+            "type": "boolean",
+            "title": "Is Installation",
+            "default": false
+          },
+          "set_main": {
+            "type": "boolean",
+            "title": "Set Main",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_ids_json",
+          "files"
+        ],
+        "title": "Body_bulk_upload_local_images"
       },
       "Body_login_access_token": {
         "properties": {
@@ -2317,6 +2591,74 @@
           "files"
         ],
         "title": "Body_upload_local_images"
+      },
+      "BulkGalleryAddRequest": {
+        "properties": {
+          "product_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Product Ids"
+          },
+          "source_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Urls"
+          },
+          "set_main": {
+            "type": "boolean",
+            "title": "Set Main",
+            "default": false
+          },
+          "skip_existing": {
+            "type": "boolean",
+            "title": "Skip Existing",
+            "default": true
+          },
+          "is_installation": {
+            "type": "boolean",
+            "title": "Is Installation",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_ids",
+          "source_urls"
+        ],
+        "title": "BulkGalleryAddRequest"
+      },
+      "BulkGalleryDeleteRequest": {
+        "properties": {
+          "product_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Product Ids"
+          },
+          "urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Urls"
+          },
+          "exclude_installation": {
+            "type": "boolean",
+            "title": "Exclude Installation",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_ids",
+          "urls"
+        ],
+        "title": "BulkGalleryDeleteRequest"
       },
       "BulkSpecUpdate": {
         "properties": {
@@ -2423,6 +2765,24 @@
           "meta"
         ],
         "title": "CatalogResponse"
+      },
+      "CommonGalleryImageResponse": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "product_count": {
+            "type": "integer",
+            "title": "Product Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "product_count"
+        ],
+        "title": "CommonGalleryImageResponse"
       },
       "CustomerPayload": {
         "properties": {
@@ -2926,6 +3286,11 @@
             "type": "boolean",
             "title": "Is Public",
             "default": true
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order",
+            "default": 0
           },
           "group": {
             "anyOf": [

@@ -457,15 +457,26 @@ ul {
     .container {
         padding: 0 1rem;
     }
+    
+    .footer {
+        padding: 3rem 0 2rem;
+        margin-top: 3rem;
+    }
 
     .nav-links,
-    .btn-text {
+    .btn-text,
+    .logo-text {
         display: none;
     }
 
     .footer-grid {
-        grid-template-columns: 1fr;
-        gap: 2.5rem;
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem 1rem;
+    }
+    
+    .footer-brand {
+        grid-column: span 2;
+        gap: 1rem;
     }
 }
 

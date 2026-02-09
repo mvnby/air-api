@@ -1,17 +1,23 @@
-from typing import List, Optional
+from typing import Dict, List, Optional, Set
 import os
-import uuid
+import hashlib
 from datetime import datetime
 import asyncio
 import json
 import ast
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from sqlalchemy import func
-from schemas import BulkSpecUpdate, SpecsKeysResponse
+from schemas import (
+    BulkSpecUpdate,
+    SpecsKeysResponse,
+    BulkGalleryAddRequest,
+    BulkGalleryDeleteRequest,
+    CommonGalleryImageResponse,
+)
 
 from core.database import get_session
 from core.config import settings
@@ -129,7 +135,7 @@ async def _save_image_from_bytes(
     set_main: bool,
     is_installation: bool = False
 ):
-    """Process bytes (convert to WebP), save to disk, and link to product."""
+    """Process bytes, deduplicate file storage by hash, and link to product."""
     # 1. Process (WebP)
     try:
         def process_image(content):
@@ -145,36 +151,42 @@ async def _save_image_from_bytes(
         logger.error(f"Failed to process image: {e}")
         raise HTTPException(status_code=400, detail="Invalid image file")
 
-    # 2. Save to Disk
-    # Use root 'media' directory (Unified Storage)
+    # 2. Save deduplicated file in shared storage
+    content_hash = hashlib.sha256(webp_content).hexdigest()
     base_media_path = "media"
-    if not os.path.exists(base_media_path):
-        os.makedirs(base_media_path, exist_ok=True)
-        
-    product_media_dir = os.path.join(base_media_path, "products", str(product_id))
-    os.makedirs(product_media_dir, exist_ok=True)
-    
-    filename = f"{uuid.uuid4()}.webp"
-    file_path = os.path.join(product_media_dir, filename)
-    
-    try:
-        async with asyncio.Lock():
-            with open(file_path, "wb") as f:
-                f.write(webp_content)
-    except Exception as e:
-        logger.error(f"Failed to save file: {e}")
-        raise HTTPException(status_code=500, detail="Failed to save image file")
+    shared_dir = os.path.join(base_media_path, "products", "shared")
+    os.makedirs(shared_dir, exist_ok=True)
+    filename = f"{content_hash}.webp"
+    file_path = os.path.join(shared_dir, filename)
 
-    # 3. Create DB Record
-    relative_url = f"/media/products/{product_id}/{filename}"
-    
-    new_image = ProductImage(
-        product_id=product_id,
-        url=relative_url,
-        is_installation_photo=is_installation
+    if not os.path.exists(file_path):
+        try:
+            async with asyncio.Lock():
+                with open(file_path, "wb") as f:
+                    f.write(webp_content)
+        except Exception as e:
+            logger.error(f"Failed to save file: {e}")
+            raise HTTPException(status_code=500, detail="Failed to save image file")
+
+    # 3. Create DB Record if not already linked to this product
+    relative_url = f"/media/products/shared/{filename}"
+    existing_stmt = select(ProductImage).where(
+        ProductImage.product_id == product_id,
+        ProductImage.url == relative_url,
     )
-    session.add(new_image)
-    
+    existing_result = await session.execute(existing_stmt)
+    existing_link = existing_result.scalar_one_or_none()
+
+    if existing_link is None:
+        new_image = ProductImage(
+            product_id=product_id,
+            url=relative_url,
+            is_installation_photo=is_installation
+        )
+        session.add(new_image)
+    else:
+        new_image = existing_link
+
     # Update main_image if requested
     if set_main and not is_installation:
         from sqlmodel import update
@@ -188,8 +200,6 @@ async def _save_image_from_bytes(
     await session.refresh(new_image)
     
     return {"url": relative_url, "id": new_image.id}
-
-from fastapi import UploadFile, File
 
 @router.post("/upload-local-images", operation_id="upload_local_images")
 async def upload_local_images(
@@ -259,6 +269,48 @@ async def _sync_legacy_images(session: AsyncSession, product_id: int):
     product.images = [img.url for img in images if not img.is_installation_photo]
     session.add(product)
 
+async def _remove_file_if_unreferenced(session: AsyncSession, url: str):
+    """Delete physical file only when no ProductImage/Product.main_image references remain."""
+    gallery_ref_stmt = select(func.count()).select_from(ProductImage).where(ProductImage.url == url)
+    gallery_refs = (await session.execute(gallery_ref_stmt)).scalar_one()
+
+    main_ref_stmt = select(func.count()).select_from(Product).where(Product.main_image == url)
+    main_refs = (await session.execute(main_ref_stmt)).scalar_one()
+
+    if gallery_refs > 0 or main_refs > 0:
+        return
+
+    if not url.startswith("/media/"):
+        return
+
+    path = url.lstrip("/")
+    if os.path.exists(path):
+        try:
+            os.remove(path)
+        except Exception as exc:
+            logger.error(f"Failed to delete unreferenced file {url}: {exc}")
+
+async def _get_common_gallery_urls(
+    session: AsyncSession,
+    product_ids: List[int],
+    exclude_installation: bool = True,
+) -> Set[str]:
+    """Get image URLs present in all selected products."""
+    if not product_ids:
+        return set()
+
+    stmt = select(ProductImage).where(ProductImage.product_id.in_(product_ids))
+    if exclude_installation:
+        stmt = stmt.where(ProductImage.is_installation_photo == False)  # noqa: E712
+
+    rows = (await session.execute(stmt)).scalars().all()
+    by_url: Dict[str, Set[int]] = {}
+    target_ids = set(product_ids)
+    for row in rows:
+        by_url.setdefault(row.url, set()).add(row.product_id)
+
+    return {url for url, linked in by_url.items() if linked == target_ids}
+
 @router.post("/gallery/link-search-result", operation_id="link_search_result")
 async def link_search_result(
     url: str = Query(..., description="URL of the image"),
@@ -300,40 +352,27 @@ async def delete_gallery_image(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username)
 ):
-    """Delete an image from the gallery (and disk)."""
+    """Delete an image link; physical file is deleted only if unreferenced globally."""
     image = await session.get(ProductImage, image_id)
     if not image:
         raise HTTPException(status_code=404, detail="Image not found")
-        
+
+    image_url = image.url
+
     # Check if it's the main image
     product = await session.get(Product, image.product_id)
     if product and product.main_image == image.url:
-         # Optional: Reset main image or forbid? 
-         # Let's warn or clear it. Clearing is safer.
          from sqlmodel import update
          statement = update(Product).where(Product.id == product.id).values(main_image=None)
          await session.execute(statement)
-
-    # Delete file from disk
-    # url is like /media/products/123/uuid.webp
-    # We need to map it back to web/public/media...
-    try:
-        if image.url.startswith("/media/"):
-            relative_path = image.url.lstrip("/") # media/products/...
-            # Assuming standard structure (root based)
-            full_path = relative_path # it's already relative to root
-            if os.path.exists(full_path):
-                os.remove(full_path)
-    except Exception as e:
-        logger.error(f"Failed to delete file {image.url}: {e}")
-        # Continue to delete DB record anyway
 
     await session.delete(image)
     # Sync legacy
     if product:
         await _sync_legacy_images(session, product.id)
-    
+
     await session.commit()
+    await _remove_file_if_unreferenced(session, image_url)
     return {"message": "Image deleted"}
 
 @router.get("/gallery/reuse-search", operation_id="reuse_search")
@@ -363,11 +402,19 @@ async def reuse_image(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
+    existing_stmt = select(ProductImage).where(
+        ProductImage.product_id == product_id,
+        ProductImage.url == source_image_url,
+    )
+    existing = (await session.execute(existing_stmt)).scalar_one_or_none()
+    if existing:
+        return {"message": "Image already linked", "id": existing.id}
+
     # Create new ProductImage with SAME URL
     new_image = ProductImage(
         product_id=product_id,
         url=source_image_url,
-        is_installation_photo=False 
+        is_installation_photo=False
     )
     session.add(new_image)
     
@@ -376,6 +423,213 @@ async def reuse_image(
     
     await session.commit()
     return {"message": "Image linked", "id": new_image.id}
+
+@router.get(
+    "/gallery/common-images",
+    response_model=List[CommonGalleryImageResponse],
+    operation_id="get_common_gallery_images",
+)
+async def get_common_gallery_images(
+    product_ids: List[int] = Query(..., description="Selected product IDs"),
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username),
+):
+    """Return non-installation images shared by all selected products."""
+    if not product_ids:
+        raise HTTPException(status_code=400, detail="product_ids is required")
+
+    common_urls = await _get_common_gallery_urls(
+        session=session,
+        product_ids=product_ids,
+        exclude_installation=True,
+    )
+    return [
+        CommonGalleryImageResponse(url=url, product_count=len(product_ids))
+        for url in sorted(common_urls)
+    ]
+
+@router.post("/gallery/bulk-add", operation_id="bulk_add_gallery_images")
+async def bulk_add_gallery_images(
+    payload: BulkGalleryAddRequest,
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username),
+):
+    """Append image links to selected products without removing existing gallery items."""
+    if not payload.product_ids:
+        raise HTTPException(status_code=400, detail="product_ids is required")
+    if not payload.source_urls:
+        raise HTTPException(status_code=400, detail="source_urls is required")
+
+    unique_product_ids = list(dict.fromkeys(payload.product_ids))
+    unique_urls = [u for u in dict.fromkeys(payload.source_urls) if u]
+    if not unique_urls:
+        raise HTTPException(status_code=400, detail="No valid source_urls provided")
+
+    products_stmt = select(Product.id).where(Product.id.in_(unique_product_ids))
+    existing_product_ids = set((await session.execute(products_stmt)).scalars().all())
+    missing = sorted(set(unique_product_ids) - existing_product_ids)
+    if missing:
+        raise HTTPException(status_code=404, detail=f"Products not found: {missing}")
+
+    added = 0
+    skipped = 0
+    first_url = unique_urls[0]
+
+    for product_id in unique_product_ids:
+        for url in unique_urls:
+            existing_stmt = select(ProductImage.id).where(
+                ProductImage.product_id == product_id,
+                ProductImage.url == url,
+            )
+            existing = (await session.execute(existing_stmt)).scalar_one_or_none()
+            if existing and payload.skip_existing:
+                skipped += 1
+                continue
+            if not existing:
+                session.add(
+                    ProductImage(
+                        product_id=product_id,
+                        url=url,
+                        is_installation_photo=payload.is_installation,
+                    )
+                )
+                added += 1
+            else:
+                skipped += 1
+
+        if payload.set_main and not payload.is_installation:
+            product = await session.get(Product, product_id)
+            if product:
+                product.main_image = first_url
+                session.add(product)
+
+        await _sync_legacy_images(session, product_id)
+
+    await session.commit()
+    return {
+        "message": "Bulk image add completed",
+        "products_count": len(unique_product_ids),
+        "added_links": added,
+        "skipped_existing": skipped,
+    }
+
+@router.post("/gallery/bulk-upload-local", operation_id="bulk_upload_local_images")
+async def bulk_upload_local_images(
+    product_ids_json: str = Form(..., description="JSON array of product ids"),
+    files: List[UploadFile] = File(...),
+    is_installation: bool = Form(False),
+    set_main: bool = Form(False),
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username),
+):
+    """Upload local files once and attach to all selected products."""
+    try:
+        product_ids = json.loads(product_ids_json)
+        if not isinstance(product_ids, list):
+            raise ValueError()
+        unique_product_ids = list(dict.fromkeys(int(pid) for pid in product_ids))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid product_ids_json")
+
+    if not unique_product_ids:
+        raise HTTPException(status_code=400, detail="product_ids is required")
+    if not files:
+        raise HTTPException(status_code=400, detail="files is required")
+
+    products_stmt = select(Product.id).where(Product.id.in_(unique_product_ids))
+    existing_product_ids = set((await session.execute(products_stmt)).scalars().all())
+    missing = sorted(set(unique_product_ids) - existing_product_ids)
+    if missing:
+        raise HTTPException(status_code=404, detail=f"Products not found: {missing}")
+
+    file_payloads: List[bytes] = []
+    for file in files:
+        content = await file.read()
+        if content:
+            file_payloads.append(content)
+
+    if not file_payloads:
+        raise HTTPException(status_code=400, detail="No valid files uploaded")
+
+    uploaded = 0
+    for product_id in unique_product_ids:
+        for idx, content in enumerate(file_payloads):
+            should_set_main = set_main and idx == 0 and not is_installation
+            await _save_image_from_bytes(
+                image_content=content,
+                product_id=product_id,
+                session=session,
+                set_main=should_set_main,
+                is_installation=is_installation,
+            )
+            uploaded += 1
+
+    return {
+        "message": "Bulk upload completed",
+        "products_count": len(unique_product_ids),
+        "files_count": len(file_payloads),
+        "uploaded_links": uploaded,
+    }
+
+@router.post("/gallery/bulk-delete-common", operation_id="bulk_delete_common_gallery_images")
+async def bulk_delete_common_gallery_images(
+    payload: BulkGalleryDeleteRequest,
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username),
+):
+    """Delete selected common image links from selected products only."""
+    if not payload.product_ids:
+        raise HTTPException(status_code=400, detail="product_ids is required")
+    if not payload.urls:
+        raise HTTPException(status_code=400, detail="urls is required")
+
+    unique_product_ids = list(dict.fromkeys(payload.product_ids))
+    unique_urls = [u for u in dict.fromkeys(payload.urls) if u]
+    if not unique_urls:
+        raise HTTPException(status_code=400, detail="No valid urls provided")
+
+    common_urls = await _get_common_gallery_urls(
+        session=session,
+        product_ids=unique_product_ids,
+        exclude_installation=payload.exclude_installation,
+    )
+    invalid_urls = [u for u in unique_urls if u not in common_urls]
+    if invalid_urls:
+        raise HTTPException(
+            status_code=400,
+            detail={"message": "Only common images can be deleted in bulk mode", "not_common": invalid_urls},
+        )
+
+    deleted_links = 0
+    for product_id in unique_product_ids:
+        stmt = select(ProductImage).where(
+            ProductImage.product_id == product_id,
+            ProductImage.url.in_(unique_urls),
+        )
+        if payload.exclude_installation:
+            stmt = stmt.where(ProductImage.is_installation_photo == False)  # noqa: E712
+        rows = (await session.execute(stmt)).scalars().all()
+        for row in rows:
+            await session.delete(row)
+            deleted_links += 1
+
+        product = await session.get(Product, product_id)
+        if product and product.main_image in unique_urls:
+            product.main_image = None
+            session.add(product)
+
+        await _sync_legacy_images(session, product_id)
+
+    await session.commit()
+
+    for url in unique_urls:
+        await _remove_file_if_unreferenced(session, url)
+
+    return {
+        "message": "Bulk delete completed",
+        "products_count": len(unique_product_ids),
+        "deleted_links": deleted_links,
+    }
 
 @router.post("/cleanup-media", operation_id="cleanup_media")
 async def cleanup_media(

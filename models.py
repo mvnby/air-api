@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any
 from sqlmodel import SQLModel, Field, JSON, Column, Relationship
-from sqlalchemy import BigInteger, String
+from sqlalchemy import BigInteger, String, UniqueConstraint
 from datetime import datetime
 
 class ProductTagLink(SQLModel, table=True):
@@ -101,6 +101,9 @@ class Product(SQLModel, table=True):
 class ProductImage(SQLModel, table=True):
     """Gallery images for products, including installation photos."""
     __tablename__ = "product_image"
+    __table_args__ = (
+        UniqueConstraint("product_id", "url", name="uq_product_image_product_id_url"),
+    )
     id: Optional[int] = Field(default=None, primary_key=True)
     product_id: int = Field(foreign_key="product.id", index=True)
     url: str
