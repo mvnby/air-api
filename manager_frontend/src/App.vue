@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue';
 import { api, type Product } from './api';
-import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square } from 'lucide-vue-next';
+import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images } from 'lucide-vue-next';
 import BulkSpecsModal from './components/BulkSpecsModal.vue';
 
 // ... (state refs) ...
@@ -9,6 +9,7 @@ const products = ref<Product[]>([]);
 const loading = ref(false);
 const showModal = ref(false);
 const selectedProduct = ref<Product | null>(null);
+const modalMode = ref<'single' | 'bulk'>('single');
 const imageSearchResults = ref<any[]>([]);
 const searchLoading = ref(false);
 const imageQuery = ref('');
@@ -24,6 +25,8 @@ const fileInput = ref<HTMLInputElement | null>(null);
 // Bulk Actions
 const selectedProductIds = ref<Set<number>>(new Set());
 const showBulkSpecsModal = ref(false);
+const commonGalleryImages = ref<Array<{ url: string; product_count: number }>>([]);
+const commonGalleryLoading = ref(false);
 
 const toggleSelection = (id: number) => {
     if (selectedProductIds.value.has(id)) {
@@ -36,6 +39,8 @@ const toggleSelection = (id: number) => {
 const allSelected = computed(() => {
     return products.value.length > 0 && selectedProductIds.value.size === products.value.length;
 });
+const selectedIdsArray = computed(() => Array.from(selectedProductIds.value));
+const isBulkMode = computed(() => modalMode.value === 'bulk');
 
 const toggleSelectAll = () => {
     if (allSelected.value) {
@@ -48,6 +53,35 @@ const toggleSelectAll = () => {
 const openBulkUpdate = () => {
     if (selectedProductIds.value.size === 0) return;
     showBulkSpecsModal.value = true;
+};
+
+const loadCommonGallery = async () => {
+    if (selectedIdsArray.value.length === 0) {
+        commonGalleryImages.value = [];
+        return;
+    }
+    commonGalleryLoading.value = true;
+    try {
+        commonGalleryImages.value = await api.getCommonGalleryImages(selectedIdsArray.value);
+    } catch (e) {
+        commonGalleryImages.value = [];
+        console.error(e);
+    } finally {
+        commonGalleryLoading.value = false;
+    }
+};
+
+const openBulkImageModal = async () => {
+    if (selectedProductIds.value.size === 0) return;
+    modalMode.value = 'bulk';
+    selectedProduct.value = null;
+    imageQuery.value = '';
+    imageSearchResults.value = [];
+    reuseQuery.value = '';
+    reuseResults.value = [];
+    activeTab.value = 'search';
+    showModal.value = true;
+    await loadCommonGallery();
 };
 
 const handleBulkSuccess = async () => {
@@ -78,13 +112,19 @@ const handleDrop = async (e: DragEvent) => {
 };
 
 const uploadFiles = async (files: FileList) => {
-    if (!selectedProduct.value) return;
+    if (!selectedProduct.value && !isBulkMode.value) return;
     searchLoading.value = true;
     try {
-        const res = await api.uploadLocalImages(selectedProduct.value.id, files);
-        alert(`Uploaded ${res.uploaded} images`);
+        if (isBulkMode.value) {
+            const res = await api.bulkUploadLocalImages(selectedIdsArray.value, files);
+            alert(`Uploaded ${res.uploaded_links} links`);
+            await loadCommonGallery();
+        } else {
+            const res = await api.uploadLocalImages(selectedProduct.value!.id, files);
+            alert(`Uploaded ${res.uploaded} images`);
+            refreshSelectedProduct();
+        }
         await loadProducts();
-        refreshSelectedProduct();
     } catch (e) {
         alert('Upload failed');
         console.error(e);
@@ -99,6 +139,7 @@ watch(showModal, (val) => {
     document.body.style.overflow = 'hidden';
   } else {
     document.body.style.overflow = '';
+    confirmDeleteUrl.value = null;
   }
 });
 
@@ -153,6 +194,7 @@ const refreshSelectedProduct = () => {
 
 const openSearchModal = (product: Product) => {
   console.log('openSearchModal', product);
+  modalMode.value = 'single';
   selectedProduct.value = product;
   imageQuery.value = product.title;
   imageSearchResults.value = [];
@@ -182,14 +224,26 @@ const getImageUrl = (path: string) => {
 
 const uploadingImageId = ref<string | null>(null);
 
+const bulkAddFromUrls = async (urls: string[], setMain: boolean) => {
+    if (!isBulkMode.value || urls.length === 0) return;
+    await api.bulkAddGalleryImages(selectedIdsArray.value, urls, setMain, true, false);
+    await loadProducts();
+    await loadCommonGallery();
+};
+
 const addToGallery = async (url: string) => {
-    if (!selectedProduct.value) return;
+    if (!selectedProduct.value && !isBulkMode.value) return;
     uploadingImageId.value = url;
     try {
-        await api.linkSearchResult(selectedProduct.value.id, url);
-        await loadProducts();
-        refreshSelectedProduct();
-        alert('Added to gallery');
+        if (isBulkMode.value) {
+            await bulkAddFromUrls([url], false);
+            alert('Added to selected products');
+        } else {
+            await api.linkSearchResult(selectedProduct.value!.id, url);
+            await loadProducts();
+            refreshSelectedProduct();
+            alert('Added to gallery');
+        }
     } catch (e) {
         alert('Failed to add');
     } finally {
@@ -219,12 +273,17 @@ const handleReuseSearch = async () => {
 };
 
 const reuseImage = async (sourceUrl: string) => {
-    if (!selectedProduct.value) return;
+    if (!selectedProduct.value && !isBulkMode.value) return;
     try {
-        await api.reuseImage(selectedProduct.value.id, sourceUrl);
-        alert('Image reused');
-        await loadProducts();
-        refreshSelectedProduct();
+        if (isBulkMode.value) {
+            await bulkAddFromUrls([sourceUrl], false);
+            alert('Image reused for selected products');
+        } else {
+            await api.reuseImage(selectedProduct.value!.id, sourceUrl);
+            alert('Image reused');
+            await loadProducts();
+            refreshSelectedProduct();
+        }
     } catch (e) { alert('Failed'); }
 };
 
@@ -238,6 +297,7 @@ const setAsMain = async (id: number) => {
 };
 
 const confirmDeleteId = ref<number | null>(null);
+const confirmDeleteUrl = ref<string | null>(null);
 
 const removeFromGallery = async (id: number) => {
     if (confirmDeleteId.value !== id) {
@@ -254,6 +314,26 @@ const removeFromGallery = async (id: number) => {
     } catch (e) { alert('Failed'); }
 };
 
+const removeCommonImage = async (url: string) => {
+    if (!isBulkMode.value) return;
+    if (confirmDeleteUrl.value !== url) {
+        confirmDeleteUrl.value = url;
+        setTimeout(() => {
+            if (confirmDeleteUrl.value === url) confirmDeleteUrl.value = null;
+        }, 3000);
+        return;
+    }
+
+    confirmDeleteUrl.value = null;
+    try {
+        await api.bulkDeleteCommonImages(selectedIdsArray.value, [url], true);
+        await loadProducts();
+        await loadCommonGallery();
+    } catch (e) {
+        alert('Failed');
+    }
+};
+
 // ... existing selectImage ...
 
 // In template:
@@ -262,18 +342,23 @@ const removeFromGallery = async (id: number) => {
 
 
 const selectImage = async (url: string) => {
-    if (!selectedProduct.value || uploadingImageId.value) return;
+    if ((!selectedProduct.value && !isBulkMode.value) || uploadingImageId.value) return;
     
     uploadingImageId.value = url; 
     
     try {
-        const response = await api.uploadImage(selectedProduct.value.id, url);
-        if (response && response.url) {
-             await loadProducts();
-             refreshSelectedProduct();
-             showModal.value = false;
+        if (isBulkMode.value) {
+            await bulkAddFromUrls([url], true);
+            alert('Set as main for selected products');
         } else {
-             alert('Upload succeeded but no URL returned');
+            const response = await api.uploadImage(selectedProduct.value!.id, url);
+            if (response && response.url) {
+                 await loadProducts();
+                 refreshSelectedProduct();
+                 showModal.value = false;
+            } else {
+                 alert('Upload succeeded but no URL returned');
+            }
         }
     } catch (e) {
         alert('Upload failed');
@@ -332,6 +417,9 @@ onMounted(() => {
             <h1 class="text-3xl font-bold text-gray-900">Manager Dashboard</h1>
             <div v-if="selectedProductIds.size > 0" class="flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-lg border border-blue-100">
                 <span class="text-sm font-medium text-blue-800">{{ selectedProductIds.size }} selected</span>
+                <button @click="openBulkImageModal" class="flex items-center gap-1 bg-slate-700 text-white px-3 py-1 rounded text-sm hover:bg-slate-800">
+                    <Images class="w-3 h-3" /> Edit Images
+                </button>
                 <button @click="openBulkUpdate" class="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">
                     <Edit3 class="w-3 h-3" /> Edit Specs
                 </button>
@@ -437,6 +525,9 @@ onMounted(() => {
                     class="px-6 py-3 font-medium border-b-2"
                     :class="activeTab === 'upload' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'"
                  >Upload Image</button>
+                 <div v-if="isBulkMode" class="flex items-center text-sm text-slate-600 px-3">
+                    Bulk mode: {{ selectedIdsArray.length }} products
+                 </div>
                  <div class="flex-1 flex justify-end items-center px-4">
                      <button @click="showModal = false" class="text-gray-500 hover:text-gray-700">Close</button>
                  </div>
@@ -461,10 +552,10 @@ onMounted(() => {
                                      <!-- Hover Actions -->
                                      <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
                                          <button @click="selectImage(r.image)" class="w-full bg-blue-600 text-white text-xs py-1 rounded hover:bg-blue-700">
-                                             Set as MAIN
+                                             {{ isBulkMode ? 'Set MAIN for all' : 'Set as MAIN' }}
                                          </button>
                                          <button @click="addToGallery(r.image)" class="w-full bg-slate-600 text-white text-xs py-1 rounded hover:bg-slate-700">
-                                             Add to Gallery
+                                             {{ isBulkMode ? 'Add to all' : 'Add to Gallery' }}
                                          </button>
                                      </div>
                                 </div>
@@ -491,7 +582,9 @@ onMounted(() => {
                                     <div v-else class="w-full h-full flex items-center justify-center text-gray-400 text-xs">No Image</div>
                                     
                                      <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center">
-                                         <button @click="reuseImage(p.main_image)" class="text-white text-sm bg-blue-600 px-3 py-2 rounded">Copy Image</button>
+                                         <button @click="reuseImage(p.main_image)" class="text-white text-sm bg-blue-600 px-3 py-2 rounded">
+                                            {{ isBulkMode ? 'Copy to all' : 'Copy Image' }}
+                                         </button>
                                     </div>
                                 </div>
                                 <div class="p-2 text-sm font-medium truncate" :title="p.title">{{ p.title }}</div>
@@ -529,29 +622,52 @@ onMounted(() => {
             <!-- Current Product Gallery Preview (Footer) -->
             <div class="h-48 bg-white border-t p-4 overflow-x-auto flex gap-4 shrink-0">
                 <div class="w-64 shrink-0 flex items-center justify-center text-gray-400 border-r pr-4">
-                    Current Gallery
+                    {{ isBulkMode ? 'Common Gallery (all selected)' : 'Current Gallery' }}
                 </div>
-                 <!-- Main Image -->
-                 <div v-if="selectedProduct?.main_image" class="relative group w-32 shrink-0 border-2 border-green-500 rounded overflow-hidden">
-                    <img :src="getImageUrl(selectedProduct.main_image)" class="w-full h-full object-cover" />
-                    <span class="absolute top-0 left-0 bg-green-500 text-white text-[10px] px-1">MAIN</span>
-                 </div>
-                 
-                 <!-- Gallery Items -->
-                 <div v-if="selectedProduct?.gallery_images" v-for="img in selectedProduct.gallery_images.filter(i => !i.is_installation_photo)" :key="img.id" class="relative group w-32 shrink-0 border rounded overflow-hidden">
-                    <img :src="getImageUrl(img.url)" class="w-full h-full object-cover" />
-                    <!-- Actions -->
-                    <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-1 p-2">
-                         <button @click="setAsMain(img.id)" class="text-[10px] bg-white text-black px-2 py-1 rounded hover:bg-gray-200 w-full">Make Main</button>
-                         <button 
-                            @click="removeFromGallery(img.id)" 
-                            class="text-[10px] text-white px-2 py-1 rounded w-full transition-colors"
-                            :class="confirmDeleteId === img.id ? 'bg-red-800 font-bold' : 'bg-red-600 hover:bg-red-700'"
-                         >
-                            {{ confirmDeleteId === img.id ? 'Confirm?' : 'Delete' }}
-                         </button>
+                <template v-if="isBulkMode">
+                    <div v-if="commonGalleryLoading" class="text-sm text-gray-500 flex items-center">
+                        Loading common images...
                     </div>
-                 </div>
+                    <div
+                        v-for="img in commonGalleryImages"
+                        :key="img.url"
+                        class="relative group w-32 shrink-0 border rounded overflow-hidden"
+                    >
+                        <img :src="getImageUrl(img.url)" class="w-full h-full object-cover" />
+                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-1 p-2">
+                            <button
+                                @click="removeCommonImage(img.url)"
+                                class="text-[10px] text-white px-2 py-1 rounded w-full transition-colors"
+                                :class="confirmDeleteUrl === img.url ? 'bg-red-800 font-bold' : 'bg-red-600 hover:bg-red-700'"
+                            >
+                                {{ confirmDeleteUrl === img.url ? 'Confirm?' : 'Delete for all' }}
+                            </button>
+                        </div>
+                    </div>
+                </template>
+                <template v-else>
+                    <!-- Main Image -->
+                    <div v-if="selectedProduct?.main_image" class="relative group w-32 shrink-0 border-2 border-green-500 rounded overflow-hidden">
+                        <img :src="getImageUrl(selectedProduct.main_image)" class="w-full h-full object-cover" />
+                        <span class="absolute top-0 left-0 bg-green-500 text-white text-[10px] px-1">MAIN</span>
+                    </div>
+
+                    <!-- Gallery Items -->
+                    <div v-if="selectedProduct?.gallery_images" v-for="img in selectedProduct.gallery_images.filter(i => !i.is_installation_photo)" :key="img.id" class="relative group w-32 shrink-0 border rounded overflow-hidden">
+                        <img :src="getImageUrl(img.url)" class="w-full h-full object-cover" />
+                        <!-- Actions -->
+                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-1 p-2">
+                             <button @click="setAsMain(img.id)" class="text-[10px] bg-white text-black px-2 py-1 rounded hover:bg-gray-200 w-full">Make Main</button>
+                             <button
+                                @click="removeFromGallery(img.id)"
+                                class="text-[10px] text-white px-2 py-1 rounded w-full transition-colors"
+                                :class="confirmDeleteId === img.id ? 'bg-red-800 font-bold' : 'bg-red-600 hover:bg-red-700'"
+                             >
+                                {{ confirmDeleteId === img.id ? 'Confirm?' : 'Delete' }}
+                             </button>
+                        </div>
+                    </div>
+                </template>
             </div>
         </div>
     </div>

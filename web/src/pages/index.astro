@@ -63,7 +63,10 @@ const displayProduct = heroProduct;
 						Подобрать кондиционер
 						<span class="material-icons-round">arrow_forward</span>
 					</a>
-					<a href="/catalog/inverter" class="btn btn-outline btn-large">
+					<a
+						href="/catalog/inverter"
+						class="btn btn-outline btn-large"
+					>
 						Инверторные модели
 					</a>
 				</div>
@@ -694,6 +697,11 @@ const displayProduct = heroProduct;
 		.hero-actions,
 		.hero-features {
 			justify-content: center;
+			flex-direction: column;
+			align-items: center;
+		}
+		.hero-actions .btn {
+			width: 100%;
 		}
 		.hero-p {
 			margin-left: auto;

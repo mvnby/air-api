@@ -54,6 +54,91 @@ export const api = {
         return await ManagerService.cleanupMedia(dryRun);
     },
 
+    async getCommonGalleryImages(productIds: number[]) {
+        const params = new URLSearchParams();
+        for (const id of productIds) {
+            params.append('product_ids', String(id));
+        }
+        const res = await fetch(`/api/manager/gallery/common-images?${params.toString()}`, {
+            credentials: 'include',
+        });
+        if (!res.ok) {
+            throw new Error(`Failed to load common images: ${res.status}`);
+        }
+        return await res.json();
+    },
+
+    async bulkAddGalleryImages(
+        productIds: number[],
+        sourceUrls: string[],
+        setMain: boolean = false,
+        skipExisting: boolean = true,
+        isInstallation: boolean = false,
+    ) {
+        const res = await fetch('/api/manager/gallery/bulk-add', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                product_ids: productIds,
+                source_urls: sourceUrls,
+                set_main: setMain,
+                skip_existing: skipExisting,
+                is_installation: isInstallation,
+            }),
+        });
+        if (!res.ok) {
+            throw new Error(`Failed to bulk add images: ${res.status}`);
+        }
+        return await res.json();
+    },
+
+    async bulkDeleteCommonImages(
+        productIds: number[],
+        urls: string[],
+        excludeInstallation: boolean = true,
+    ) {
+        const res = await fetch('/api/manager/gallery/bulk-delete-common', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                product_ids: productIds,
+                urls,
+                exclude_installation: excludeInstallation,
+            }),
+        });
+        if (!res.ok) {
+            throw new Error(`Failed to bulk delete images: ${res.status}`);
+        }
+        return await res.json();
+    },
+
+    async bulkUploadLocalImages(
+        productIds: number[],
+        files: FileList | File[],
+        isInstallation: boolean = false,
+        setMain: boolean = false,
+    ) {
+        const form = new FormData();
+        form.append('product_ids_json', JSON.stringify(productIds));
+        form.append('is_installation', String(isInstallation));
+        form.append('set_main', String(setMain));
+        for (const file of Array.from(files)) {
+            form.append('files', file);
+        }
+
+        const res = await fetch('/api/manager/gallery/bulk-upload-local', {
+            method: 'POST',
+            credentials: 'include',
+            body: form,
+        });
+        if (!res.ok) {
+            throw new Error(`Failed to bulk upload images: ${res.status}`);
+        }
+        return await res.json();
+    },
+
     // --- PRODUCTS (Public API) ---
     async getProducts(limit = 50, page = 1) {
         return await ApiService.getProducts(page, limit);

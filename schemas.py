@@ -65,6 +65,22 @@ class BulkSpecUpdate(BaseModel):
     specs: Dict[str, Any]  # Словарь характеристик для добавления/обновления
     operation: str = "merge" # "merge" (добавить/обновить), "replace" (затереть всё старое), "delete_keys" (удалить эти ключи)
 
+class BulkGalleryAddRequest(BaseModel):
+    product_ids: List[int]
+    source_urls: List[str]
+    set_main: bool = False
+    skip_existing: bool = True
+    is_installation: bool = False
+
+class BulkGalleryDeleteRequest(BaseModel):
+    product_ids: List[int]
+    urls: List[str]
+    exclude_installation: bool = True
+
+class CommonGalleryImageResponse(BaseModel):
+    url: str
+    product_count: int
+
 class SpecsKeysResponse(BaseModel):
     keys: List[str]
     total_products_using: Dict[str, int] # Статистика: ключ -> кол-во товаров

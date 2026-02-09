@@ -88,6 +88,9 @@ jobs:
             
             echo "📥 Pulling latest Docker images..."
             docker compose pull
+
+            echo "📦 Running database migrations..."
+            docker compose run --rm app alembic upgrade head
             
             echo "🔄 Restarting services..."
             docker compose up -d app bot
