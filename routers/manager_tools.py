@@ -17,15 +17,18 @@ from schemas import (
     BulkGalleryAddRequest,
     BulkGalleryDeleteRequest,
     CommonGalleryImageResponse,
+    ProductUpdate,
+    BulkRoundRequest,
 )
 
 from core.database import get_session
 from core.config import settings
 from core.security import get_current_username
 from core.logger import logger
-from models import Product, ProductImage, Order, Customer, OrderStatus, LeadSource
+from models import Product, ProductImage, Order, OrderProductLink, Customer, ProductTagLink, Tag, TagGroup
 from crud.product import ProductDAO
 from crud.order import OrderDAO
+from services.product_service import ProductService
 
 import httpx
 from PIL import Image
@@ -921,94 +924,9 @@ async def list_products_for_manager(
     Paginated product list for manager UI.
     Unlike the public catalog, this can show unpublished products.
     """
-    from sqlalchemy.orm import selectinload
-    
-    # Build query manually to support search + unpublished
-    stmt = select(Product).options(
-        selectinload(Product.gallery_images)
+    return await ProductService.get_manager_list(
+        session, page, limit, search, is_published, area_min, area_max, is_inverter, sort
     )
-    
-    count_stmt = select(func.count(Product.id))
-    
-    # Filter by published status (None = show all)
-    if is_published is not None:
-        stmt = stmt.where(Product.is_published == is_published)
-        count_stmt = count_stmt.where(Product.is_published == is_published)
-    
-    # Filter by Area
-    if area_min is not None:
-        stmt = stmt.where(Product.area >= area_min)
-        count_stmt = count_stmt.where(Product.area >= area_min)
-    if area_max is not None:
-        stmt = stmt.where(Product.area <= area_max)
-        count_stmt = count_stmt.where(Product.area <= area_max)
-        
-    # Filter by Inverter
-    if is_inverter is not None:
-        stmt = stmt.where(Product.is_inverter == is_inverter)
-        count_stmt = count_stmt.where(Product.is_inverter == is_inverter)
-    
-    # Search by title
-    if search:
-        stmt = stmt.where(Product.title.ilike(f"%{search}%"))
-        count_stmt = count_stmt.where(Product.title.ilike(f"%{search}%"))
-    
-    # Sorting
-    if sort == "price_asc":
-        stmt = stmt.order_by(Product.price.asc())
-    elif sort == "price_desc":
-        stmt = stmt.order_by(Product.price.desc())
-    elif sort == "title":
-        stmt = stmt.order_by(Product.title.asc())
-    else:  # newest
-        stmt = stmt.order_by(Product.id.desc())
-    
-    # Pagination
-    offset = (page - 1) * limit
-    stmt = stmt.offset(offset).limit(limit)
-    
-    result = await session.execute(stmt)
-    products = result.scalars().all()
-    
-    total_result = await session.execute(count_stmt)
-    total = total_result.scalar() or 0
-    
-    items = []
-    for p in products:
-        gallery = [{"id": img.id, "url": img.url, "is_installation_photo": img.is_installation_photo} for img in (p.gallery_images or [])]
-        
-        specs = p.specs
-        if isinstance(specs, str):
-            try:
-                specs = ast.literal_eval(specs)
-            except Exception:
-                specs = {}
-        
-        items.append({
-            "id": p.id,
-            "title": p.title,
-            "slug": p.slug,
-            "price": p.price,
-            "old_price": p.old_price,
-            "area": p.area,
-            "is_inverter": p.is_inverter,
-            "power_cooling": p.power_cooling,
-            "main_image": p.main_image,
-            "is_published": p.is_published,
-            "created_at": p.created_at.isoformat() if p.created_at else None,
-            "specs": specs or {},
-            "gallery_images": gallery,
-        })
-    
-    return {
-        "items": items,
-        "meta": {
-            "page": page,
-            "limit": limit,
-            "total": total,
-            "pages": (total + limit - 1) // limit if limit else 1,
-        }
-    }
 
 
 @router.get("/orders")
@@ -1200,3 +1118,47 @@ async def list_customers_for_manager(
         }
     }
 
+@router.patch("/products/{product_id}", operation_id="update_product")
+async def update_product(
+    product_id: int,
+    data: ProductUpdate,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    """
+    Update individual product fields.
+    """
+    update_data = data.dict(exclude_unset=True)
+    tag_ids = update_data.pop("tag_ids", None)
+    
+    result = await ProductService.update_product(session, product_id, update_data, tag_ids)
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="Product not found")
+        
+    return result
+
+@router.post("/products/bulk-round-price", operation_id="bulk_round_price")
+async def bulk_round_price(
+    request: BulkRoundRequest,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    """
+    Round prices down to the nearest multiple of 50.
+    """
+    if not request.product_ids:
+        return {"message": "No products selected", "updated_count": 0}
+        
+    return await ProductService.bulk_round_prices(session, request.product_ids)
+
+
+@router.get("/tags/all", operation_id="get_all_tags")
+async def get_all_tags(
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    """
+    Return all tags grouped by TagGroup for the product editor.
+    """
+    return await ProductService.get_all_tags(session)

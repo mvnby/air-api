@@ -3,7 +3,7 @@ Repository Layer: Product Data Access Object (DAO).
 Pure database operations. No business logic.
 All methods accept AsyncSession as first argument for DI/transaction control.
 """
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from sqlmodel import select, func, and_, desc, asc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -210,7 +210,110 @@ class ProductDAO:
         return False
     
     @staticmethod
+    async def update_full(
+        session: AsyncSession, 
+        product_id: int, 
+        update_data: Dict[str, Any],
+        tag_ids: Optional[List[int]] = None
+    ) -> Optional[Product]:
+        """
+        Update product fields and optionally tags.
+        """
+        # Load with tags to update relationship if needed
+        stmt = select(Product).where(Product.id == product_id).options(selectinload(Product.tags))
+        result = await session.execute(stmt)
+        product = result.scalar_one_or_none()
+        
+        if not product:
+            return None
+            
+        for key, value in update_data.items():
+            setattr(product, key, value)
+            
+        if tag_ids is not None:
+            # Fetch tags to link
+            tag_stmt = select(Tag).where(Tag.id.in_(tag_ids))
+            tag_result = await session.execute(tag_stmt)
+            new_tags = tag_result.scalars().all()
+            product.tags = list(new_tags)
+            
+        session.add(product)
+        await session.commit()
+        await session.refresh(product)
+        return product
+
+    @staticmethod
+    async def get_for_manager(
+        session: AsyncSession,
+        page: int = 1,
+        limit: int = 40,
+        search: Optional[str] = None,
+        is_published: Optional[bool] = None,
+        area_min: Optional[int] = None,
+        area_max: Optional[int] = None,
+        is_inverter: Optional[bool] = None,
+        sort: str = "newest"
+    ) -> tuple[List[Product], int]:
+        """
+        Fetch products for manager UI with pagination and filtering.
+        Returns (items, total_count).
+        """
+        # Base query
+        stmt = select(Product).options(
+            selectinload(Product.gallery_images),
+            selectinload(Product.tags).selectinload(Tag.group),
+        )
+        
+        count_stmt = select(func.count(Product.id))
+        
+        # Filters
+        if is_published is not None:
+            stmt = stmt.where(Product.is_published == is_published)
+            count_stmt = count_stmt.where(Product.is_published == is_published)
+            
+        if area_min is not None:
+            stmt = stmt.where(Product.area >= area_min)
+            count_stmt = count_stmt.where(Product.area >= area_min)
+            
+        if area_max is not None:
+            stmt = stmt.where(Product.area <= area_max)
+            count_stmt = count_stmt.where(Product.area <= area_max)
+            
+        if is_inverter is not None:
+            stmt = stmt.where(Product.is_inverter == is_inverter)
+            count_stmt = count_stmt.where(Product.is_inverter == is_inverter)
+            
+        if search:
+            # Simple ILIKE search for now
+            stmt = stmt.where(Product.title.ilike(f"%{search}%"))
+            count_stmt = count_stmt.where(Product.title.ilike(f"%{search}%"))
+            
+        # Sorting
+        if sort == "price_asc":
+            stmt = stmt.order_by(Product.price.asc())
+        elif sort == "price_desc":
+            stmt = stmt.order_by(Product.price.desc())
+        elif sort == "title":
+            stmt = stmt.order_by(Product.title.asc())
+        else:  # newest or default
+            stmt = stmt.order_by(Product.id.desc())
+            
+        # Pagination
+        offset = (page - 1) * limit
+        stmt = stmt.offset(offset).limit(limit)
+        
+        # Execute
+        total_result = await session.execute(count_stmt)
+        total = total_result.scalar() or 0
+        
+        result = await session.execute(stmt)
+        items = list(result.scalars().all())
+        
+        return items, total
+
+    @staticmethod
     async def get_for_generation(session: AsyncSession, product_id: int) -> Optional[Product]:
+
         """
         Загружает товар со ВСЕЙ иерархией: Теги + Их Группы.
         Нужно для понимания контекста (какой тег к чему относится).

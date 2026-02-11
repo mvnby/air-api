@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue';
 import { api, type Product } from '../api';
-import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images } from 'lucide-vue-next';
+import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images, Settings } from 'lucide-vue-next';
 import BulkSpecsModal from '../components/BulkSpecsModal.vue';
+import ProductEditModal from '../components/ProductEditModal.vue';
 
 // Product state
 const products = ref<Product[]>([]);
 const loading = ref(false);
 const showModal = ref(false);
 const selectedProduct = ref<Product | null>(null);
+const editingProduct = ref<Product | null>(null);
+const showEditModal = ref(false);
 const modalMode = ref<'single' | 'bulk'>('single');
 const imageSearchResults = ref<any[]>([]);
 const searchLoading = ref(false);
@@ -27,6 +30,11 @@ const selectedProductIds = ref<Set<number>>(new Set());
 const showBulkSpecsModal = ref(false);
 const commonGalleryImages = ref<Array<{ url: string; product_count: number }>>([]);
 const commonGalleryLoading = ref(false);
+const bulkRoundLoading = ref(false);
+
+// Price inline editing
+const editingPriceId = ref<number | null>(null);
+const priceBuffer = ref<string>('');
 
 // Lazy Loading
 const page = ref(1);
@@ -202,6 +210,63 @@ const loadMore = async () => {
     }
 };
 
+const startEditingPrice = (product: Product) => {
+    editingPriceId.value = product.id;
+    priceBuffer.value = String(product.price);
+};
+
+const cancelEditingPrice = () => {
+    editingPriceId.value = null;
+    priceBuffer.value = '';
+};
+
+const savePrice = async (product: Product) => {
+    const newPrice = parseInt(priceBuffer.value);
+    if (isNaN(newPrice)) {
+        alert('Некорректная цена');
+        return;
+    }
+    if (newPrice === product.price) {
+        cancelEditingPrice();
+        return;
+    }
+
+    try {
+        await api.updateProduct(product.id, { price: newPrice });
+        product.price = newPrice;
+        cancelEditingPrice();
+    } catch (e) {
+        alert('Ошибка при сохранении цены');
+        console.error(e);
+    }
+};
+
+const confirmingRound = ref(false);
+
+const handleBulkRoundPrices = async () => {
+    if (selectedProductIds.value.size === 0) return;
+    
+    if (!confirmingRound.value) {
+        confirmingRound.value = true;
+        // Auto-cancel after 4 seconds
+        setTimeout(() => { confirmingRound.value = false; }, 4000);
+        return;
+    }
+    
+    confirmingRound.value = false;
+    bulkRoundLoading.value = true;
+    try {
+        await api.bulkRoundPrices(selectedIdsArray.value);
+        await loadProducts();
+        selectedProductIds.value.clear();
+    } catch (e) {
+        alert('Ошибка при округлении');
+        console.error(e);
+    } finally {
+        bulkRoundLoading.value = false;
+    }
+};
+
 const refreshSelectedProduct = () => {
     if (selectedProduct.value) {
         const fresh = products.value.find(p => p.id === selectedProduct.value!.id);
@@ -218,6 +283,15 @@ const openSearchModal = (product: Product) => {
   imageSearchResults.value = [];
   showModal.value = true;
   handleImageSearch();
+};
+
+const openEditModal = (product: Product) => {
+    editingProduct.value = product;
+    showEditModal.value = true;
+};
+
+const handleEditSuccess = async () => {
+    await loadProducts();
 };
 
 const handleImageSearch = async () => {
@@ -409,6 +483,15 @@ onMounted(() => {
               <button @click="openBulkUpdate" class="flex items-center gap-1 bg-teal-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-teal-700 transition-colors">
                   <Edit3 class="w-3.5 h-3.5" /> Характеристики
               </button>
+              <button 
+                @click="handleBulkRoundPrices" 
+                :disabled="bulkRoundLoading"
+                class="flex items-center gap-1 px-3 py-1.5 rounded-md text-sm transition-all disabled:opacity-50"
+                :class="confirmingRound ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse ring-2 ring-red-300' : 'bg-amber-600 hover:bg-amber-700 text-white'"
+              >
+                  <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': bulkRoundLoading }" />
+                  {{ confirmingRound ? 'Подтвердить?' : 'Округлить цены' }}
+              </button>
               <button @click="selectedProductIds.clear()" class="text-xs text-teal-600 hover:text-teal-800 underline ml-1">Сбросить</button>
           </div>
       </div>
@@ -499,15 +582,39 @@ onMounted(() => {
                 </div>
                 
                 <!-- Overlay Actions -->
-                <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <button @click="openSearchModal(product)" class="bg-teal-600 text-white px-4 py-2 rounded-full flex items-center gap-2 hover:bg-teal-700 text-sm font-medium transition-colors">
-                        <Search class="w-4 h-4" /> Управление
+                <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                    <button @click="openSearchModal(product)" class="bg-teal-600 text-white px-4 py-2 rounded-full flex items-center gap-2 hover:bg-teal-700 text-sm font-medium transition-colors w-36 justify-center">
+                        <Images class="w-4 h-4" /> Фото
+                    </button>
+                    <button @click="openEditModal(product)" class="bg-white text-gray-900 px-4 py-2 rounded-full flex items-center gap-2 hover:bg-gray-100 text-sm font-medium transition-colors w-36 justify-center">
+                        <Settings class="w-4 h-4 text-teal-600" /> Изменить
                     </button>
                 </div>
             </div>
             <div class="p-3.5">
                 <h3 class="font-medium text-gray-900 text-sm truncate" :title="product.title">{{ product.title }}</h3>
-                <p class="text-teal-700 font-semibold text-sm mt-0.5">{{ product.price }} руб.</p>
+                <div class="mt-0.5 h-6 flex items-center">
+                    <template v-if="editingPriceId === product.id">
+                        <input 
+                            v-model="priceBuffer"
+                            type="number"
+                            @blur="savePrice(product)"
+                            @keyup.enter="savePrice(product)"
+                            @keyup.esc="cancelEditingPrice"
+                            class="w-24 px-1 py-0.5 border border-teal-500 rounded text-sm outline-none bg-teal-50"
+                            auto-focus
+                        />
+                        <span class="text-xs text-teal-600 ml-1">руб.</span>
+                    </template>
+                    <p 
+                        v-else 
+                        @click.stop="startEditingPrice(product)"
+                        class="text-teal-700 font-semibold text-sm cursor-pointer hover:bg-teal-50 rounded px-1 -ml-1 transition-colors"
+                        title="Нажмите, чтобы изменить цену"
+                    >
+                        {{ product.price }} руб.
+                    </p>
+                </div>
                 <!-- Mini Gallery Preview -->
                 <div class="flex gap-1 mt-2 overflow-hidden h-7" v-if="product.gallery_images && product.gallery_images.length">
                     <img v-for="img in product.gallery_images.slice(0, 6)" :key="img.id" :src="getImageUrl(img.url)" class="w-7 h-7 object-cover rounded" />
@@ -719,5 +826,12 @@ onMounted(() => {
         v-model="showBulkSpecsModal"
         :selected-product-ids="Array.from(selectedProductIds)"
         @success="handleBulkSuccess"
+    />
+
+    <!-- Individual Edit Modal -->
+    <ProductEditModal 
+        v-model="showEditModal"
+        :product="editingProduct"
+        @success="handleEditSuccess"
     />
 </template>

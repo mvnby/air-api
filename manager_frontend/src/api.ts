@@ -211,4 +211,32 @@ export const api = {
         if (!res.ok) throw new Error(`Failed to load customers: ${res.status}`);
         return await res.json();
     },
+
+    async updateProduct(id: number, data: Partial<Product>) {
+        const res = await fetch(`/api/manager/products/${id}`, {
+            method: 'PATCH',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error(`Failed to update product: ${res.status}`);
+        return await res.json();
+    },
+
+    async bulkRoundPrices(productIds: number[]) {
+        const res = await fetch('/api/manager/products/bulk-round-price', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product_ids: productIds }),
+        });
+        if (!res.ok) throw new Error(`Failed to round prices: ${res.status}`);
+        return await res.json();
+    },
+
+    async getAllTags() {
+        const res = await fetch('/api/manager/tags/all', { credentials: 'include' });
+        if (!res.ok) throw new Error(`Failed to load tags: ${res.status}`);
+        return await res.json();
+    },
 };

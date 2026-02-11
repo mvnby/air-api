@@ -139,3 +139,17 @@ class OrderResponse(BaseModel):
     status: str
     total_amount: float
     created_at: datetime
+
+# --- MANAGER TOOLS ---
+
+class ProductUpdate(BaseModel):
+    title: Optional[str] = None
+    price: Optional[int] = None
+    old_price: Optional[int] = None
+    slug: Optional[str] = None
+    specs: Optional[Dict[str, Any]] = None
+    is_published: Optional[bool] = None
+    tag_ids: Optional[List[int]] = None
+
+class BulkRoundRequest(BaseModel):
+    product_ids: List[int]
