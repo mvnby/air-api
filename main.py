@@ -27,6 +27,7 @@ from routers import admin as admin_router
 from routers import api as api_router
 from routers import auth as auth_router
 from routers import manager_tools
+from routers import manager_orders
 from admin import admin_views
 from starlette.responses import FileResponse
 
@@ -87,6 +88,7 @@ app.include_router(admin_router.router)
 app.include_router(auth_router.router)
 app.include_router(api_router.router)
 app.include_router(manager_tools.router)
+app.include_router(manager_orders.router)
 
 # Static files
 app.mount(f"/{settings.STATIC_DIR}", StaticFiles(directory=os.path.join(BASE_DIR, settings.STATIC_DIR)), name="static")

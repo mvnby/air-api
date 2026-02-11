@@ -1,3 +1,72 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --mv-teal: #007f80;
+  --mv-bg: #0f172a;
+  --mv-card-radius: 2rem;
+  --mv-btn-radius: 12px;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif;
+  background: var(--mv-bg);
+  color: #e2e8f0;
+}
+
+.btn-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 0;
+  border-radius: var(--mv-btn-radius);
+  background: var(--mv-teal);
+  padding: 0.45rem 0.8rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+}
+
+.btn-mini:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-mini-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid #475569;
+  border-radius: var(--mv-btn-radius);
+  background: transparent;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.field-input {
+  width: 100%;
+  border: 1px solid #334155;
+  border-radius: var(--mv-btn-radius);
+  background: #0b1223;
+  padding: 0.6rem 0.75rem;
+  color: #e2e8f0;
+}
+
+.field-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--mv-teal) 60%, transparent);
+  outline-offset: 1px;
+}
+
+.field-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: #cbd5e1;
+}

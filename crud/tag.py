@@ -1,7 +1,7 @@
 """
 Repository Layer: Tag Data Access Object (DAO).
 """
-from typing import List, Optional
+from typing import List
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload

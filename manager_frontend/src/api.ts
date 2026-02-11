@@ -2,31 +2,84 @@ import {
     OpenAPI,
     LoginService,
     ManagerService,
+    ManagerOrdersService,
+    AdminService,
     ApiService,
-    type ProductResponse as Product // Используем ProductResponse как Product
+    type ProductUpdate,
+    type ProductResponse as Product,
+    type ManagerOrderUpdatePayload,
 } from './client';
 
-// 1. Настройка глобального конфига клиента
-// Указываем, что нужно отправлять cookies (для авторизации)
 OpenAPI.WITH_CREDENTIALS = true;
-// Если API живет на том же домене/порту (через прокси), можно оставить BASE пустым или '/'
-// OpenAPI.BASE = 'http://localhost:8000'; // Раскомментируй для локальной разработки без прокси
 
-export { type Product }; // Экспортируем тип наружу
+export type Segment = 'b2c' | 'b2b';
+export type DashboardView = 'kanban' | 'list';
+export { type Product };
 
 export const api = {
-    // --- SEARCH & IMAGES (ManagerTools) ---
+    async login(username: string, password: string) {
+        return await LoginService.loginAccessToken({ username, password });
+    },
+
+    async checkAuth() {
+        return await ManagerService.readUserMe();
+    },
+
+    async getManagerOrders(params: {
+        segment: Segment;
+        page?: number;
+        limit?: number;
+        status?: string;
+        search?: string;
+        overdueOnly?: boolean;
+        sort?: string;
+    }) {
+        return await ManagerOrdersService.getManagerOrders(
+            params.segment,
+            params.page ?? 1,
+            params.limit ?? 50,
+            params.status ?? undefined,
+            params.search ?? undefined,
+            params.overdueOnly ?? false,
+            params.sort ?? 'created_at_desc',
+        );
+    },
+
+    async getManagerOrderDetail(orderId: number) {
+        return await ManagerOrdersService.getManagerOrderDetail(orderId);
+    },
+
+    async patchManagerOrder(orderId: number, payload: ManagerOrderUpdatePayload) {
+        return await ManagerOrdersService.patchManagerOrder(orderId, payload);
+    },
+
+    async generateManagerOrderDoc(orderId: number, docType: string) {
+        return await ManagerOrdersService.generateManagerOrderDocument(orderId, docType);
+    },
+
+    async moveOrderStatus(orderId: number, newStatus: string) {
+        return await AdminService.moveOrderStatusAdminApiOrderMovePost({
+            order_id: orderId,
+            new_status: newStatus,
+        });
+    },
+
+    // Legacy Product Manager methods
+    async getProducts(limit = 50, page = 1) {
+        return await ApiService.getProducts(page, limit);
+    },
+
     async searchImages(query: string) {
         return await ManagerService.searchImages(query);
     },
 
-    async uploadImage(productId: number, imageUrl: string, isInstallation: boolean = false) {
+    async uploadImage(productId: number, imageUrl: string, isInstallation = false) {
         return await ManagerService.uploadImage(imageUrl, productId, isInstallation);
     },
 
     async uploadLocalImages(productId: number, files: FileList | File[]) {
         return await ManagerService.uploadLocalImages(productId, {
-            files: Array.from(files)
+            files: Array.from(files),
         });
     },
 
@@ -50,128 +103,56 @@ export const api = {
         return await ManagerService.reuseImage(productId, sourceUrl);
     },
 
-    async cleanupMedia(dryRun: boolean) {
-        return await ManagerService.cleanupMedia(dryRun);
-    },
-
     async getCommonGalleryImages(productIds: number[]) {
-        const params = new URLSearchParams();
-        for (const id of productIds) {
-            params.append('product_ids', String(id));
-        }
-        const res = await fetch(`/api/manager/gallery/common-images?${params.toString()}`, {
-            credentials: 'include',
-        });
-        if (!res.ok) {
-            throw new Error(`Failed to load common images: ${res.status}`);
-        }
-        return await res.json();
+        return await ManagerService.getCommonGalleryImages(productIds);
     },
 
     async bulkAddGalleryImages(
         productIds: number[],
         sourceUrls: string[],
-        setMain: boolean = false,
-        skipExisting: boolean = true,
-        isInstallation: boolean = false,
+        setMain = false,
+        skipExisting = true,
+        isInstallation = false,
     ) {
-        const res = await fetch('/api/manager/gallery/bulk-add', {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                product_ids: productIds,
-                source_urls: sourceUrls,
-                set_main: setMain,
-                skip_existing: skipExisting,
-                is_installation: isInstallation,
-            }),
+        return await ManagerService.bulkAddGalleryImages({
+            product_ids: productIds,
+            source_urls: sourceUrls,
+            set_main: setMain,
+            skip_existing: skipExisting,
+            is_installation: isInstallation,
         });
-        if (!res.ok) {
-            throw new Error(`Failed to bulk add images: ${res.status}`);
-        }
-        return await res.json();
     },
 
     async bulkDeleteCommonImages(
         productIds: number[],
         urls: string[],
-        excludeInstallation: boolean = true,
+        excludeInstallation = true,
     ) {
-        const res = await fetch('/api/manager/gallery/bulk-delete-common', {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                product_ids: productIds,
-                urls,
-                exclude_installation: excludeInstallation,
-            }),
+        return await ManagerService.bulkDeleteCommonGalleryImages({
+            product_ids: productIds,
+            urls,
+            exclude_installation: excludeInstallation,
         });
-        if (!res.ok) {
-            throw new Error(`Failed to bulk delete images: ${res.status}`);
-        }
-        return await res.json();
     },
 
     async bulkUploadLocalImages(
         productIds: number[],
         files: FileList | File[],
-        isInstallation: boolean = false,
-        setMain: boolean = false,
+        isInstallation = false,
+        setMain = false,
     ) {
-        const form = new FormData();
-        form.append('product_ids_json', JSON.stringify(productIds));
-        form.append('is_installation', String(isInstallation));
-        form.append('set_main', String(setMain));
-        for (const file of Array.from(files)) {
-            form.append('files', file);
-        }
-
-        const res = await fetch('/api/manager/gallery/bulk-upload-local', {
-            method: 'POST',
-            credentials: 'include',
-            body: form,
-        });
-        if (!res.ok) {
-            throw new Error(`Failed to bulk upload images: ${res.status}`);
-        }
-        return await res.json();
-    },
-
-    // --- PRODUCTS (Public API) ---
-    async getProducts(limit = 50, page = 1) {
-        return await ApiService.getProducts(page, limit);
-    },
-
-    async getPublicSpecKeys() {
-        return await ApiService.getPublicSpecKeys();
-    },
-
-    // --- BULK TOOLS ---
-    async bulkUpdateSpecs(productIds: number[], specs: Record<string, any>, operation: 'merge' | 'replace' | 'delete_keys' = 'merge') {
-        return await ManagerService.bulkUpdateSpecs({
-            product_ids: productIds,
-            specs: specs,
-            operation: operation
+        return await ManagerService.bulkUploadLocalImages({
+            product_ids_json: JSON.stringify(productIds),
+            is_installation: isInstallation,
+            set_main: setMain,
+            files: Array.from(files),
         });
     },
 
-    // --- AUTH ---
-    async login(username: string, password: string) {
-        // Используем LoginService. OAuth2 форма требует отправки formData
-        const response = await LoginService.loginAccessToken({
-            username,
-            password,
-        });
-        return response;
+    async cleanupMedia(dryRun: boolean) {
+        return await ManagerService.cleanupMedia(dryRun);
     },
 
-    async checkAuth() {
-        return await ManagerService.readUserMe();
-    },
-
-    // --- MANAGER LIST ENDPOINTS (Stitch) ---
     async getManagerProducts(
         page = 1,
         limit = 40,
@@ -180,63 +161,53 @@ export const api = {
         areaMin?: number,
         areaMax?: number,
         isInverter?: boolean,
-        sort = 'newest'
+        sort = 'newest',
     ) {
-        const params = new URLSearchParams({ page: String(page), limit: String(limit), sort });
-        if (search) params.set('search', search);
-        if (isPublished !== undefined) params.set('is_published', String(isPublished));
-        if (areaMin !== undefined) params.set('area_min', String(areaMin));
-        if (areaMax !== undefined) params.set('area_max', String(areaMax));
-        if (isInverter !== undefined) params.set('is_inverter', String(isInverter));
-
-        const res = await fetch(`/api/manager/products/list?${params}`, { credentials: 'include' });
-        if (!res.ok) throw new Error(`Failed to load products: ${res.status}`);
-        return await res.json();
-    },
-
-    async getManagerOrders(page = 1, limit = 20, status?: string, search?: string) {
-        const params = new URLSearchParams({ page: String(page), limit: String(limit) });
-        if (status) params.set('status', status);
-        if (search) params.set('search', search);
-        const res = await fetch(`/api/manager/orders?${params}`, { credentials: 'include' });
-        if (!res.ok) throw new Error(`Failed to load orders: ${res.status}`);
-        return await res.json();
+        return await ManagerService.getManagerProducts(
+            page,
+            limit,
+            search ?? undefined,
+            isPublished ?? undefined,
+            areaMin ?? undefined,
+            areaMax ?? undefined,
+            isInverter ?? undefined,
+            sort,
+        );
     },
 
     async getManagerCustomers(page = 1, limit = 20, search?: string, type?: string) {
-        const params = new URLSearchParams({ page: String(page), limit: String(limit) });
-        if (search) params.set('search', search);
-        if (type) params.set('type', type);
-        const res = await fetch(`/api/manager/customers?${params}`, { credentials: 'include' });
-        if (!res.ok) throw new Error(`Failed to load customers: ${res.status}`);
-        return await res.json();
+        return await ManagerService.getManagerCustomers(page, limit, search ?? undefined, type ?? undefined);
     },
 
-    async updateProduct(id: number, data: Partial<Product>) {
-        const res = await fetch(`/api/manager/products/${id}`, {
-            method: 'PATCH',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-        });
-        if (!res.ok) throw new Error(`Failed to update product: ${res.status}`);
-        return await res.json();
+    async updateProduct(id: number, data: ProductUpdate) {
+        return await ManagerService.updateProduct(id, data);
     },
 
     async bulkRoundPrices(productIds: number[]) {
-        const res = await fetch('/api/manager/products/bulk-round-price', {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ product_ids: productIds }),
-        });
-        if (!res.ok) throw new Error(`Failed to round prices: ${res.status}`);
-        return await res.json();
+        return await ManagerService.bulkRoundPrice({ product_ids: productIds });
     },
 
     async getAllTags() {
-        const res = await fetch('/api/manager/tags/all', { credentials: 'include' });
-        if (!res.ok) throw new Error(`Failed to load tags: ${res.status}`);
-        return await res.json();
+        return await ManagerService.getAllTags();
+    },
+
+    async searchProducts(q: string) {
+        return await ApiService.adminSearchProductsApiAdminProductsSearchGet(q);
+    },
+
+    async searchServices(q: string) {
+        return await ApiService.adminSearchServicesApiAdminServicesSearchGet(q);
+    },
+
+    async getPublicSpecKeys() {
+        return await ApiService.getPublicSpecKeys();
+    },
+
+    async bulkUpdateSpecs(productIds: number[], specs: Record<string, unknown>, operation: 'merge' | 'replace' | 'delete_keys' = 'merge') {
+        return await ManagerService.bulkUpdateSpecs({
+            product_ids: productIds,
+            specs,
+            operation,
+        });
     },
 };

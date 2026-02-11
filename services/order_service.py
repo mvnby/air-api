@@ -3,6 +3,8 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
+from sqlalchemy import func, or_, cast, String, delete
+from sqlalchemy.orm import selectinload
 
 from crud.order import OrderDAO
 from crud.product import ProductDAO
@@ -724,3 +726,277 @@ class OrderService:
     async def update_status(session: AsyncSession, order_id: int, new_status: Any) -> bool:
         """Update order status."""
         return await OrderDAO.update_status(session, order_id, new_status)
+
+    @staticmethod
+    def _map_customer_brief(customer: Optional[Customer]) -> Optional[Dict[str, Any]]:
+        if not customer:
+            return None
+        return {
+            "id": int(customer.id or 0),
+            "type": customer.type.value if hasattr(customer.type, "value") else str(customer.type or CustomerType.individual.value),
+            "name": customer.name or "Без имени",
+            "phone": customer.phone or "",
+            "full_legal_name": customer.full_legal_name,
+            "inn": customer.inn,
+        }
+
+    @staticmethod
+    def _map_order_list_item(order: Order) -> Dict[str, Any]:
+        return {
+            "id": int(order.id or 0),
+            "status": order.status.value if hasattr(order.status, "value") else str(order.status or OrderStatus.NEW_LEAD.value),
+            "created_at": order.created_at,
+            "updated_at": order.updated_at,
+            "next_followup_date": order.next_followup_date,
+            "assessment_date": order.assessment_date,
+            "installation_date": order.installation_date,
+            "total_amount": float(order.total_amount or 0),
+            "total_cost": float(order.total_cost or 0),
+            "margin": float(order.margin or 0),
+            "is_paid": bool(order.is_paid),
+            "comment": order.comment,
+            "delivery_address": order.delivery_address,
+            "customer": OrderService._map_customer_brief(order.customer),
+        }
+
+    @staticmethod
+    def _map_product_line(link: OrderProductLink) -> Dict[str, Any]:
+        product_title = link.product.title if link.product else f"Товар #{link.product_id}"
+        line_total = (link.price + (link.installation_price or 0)) * link.quantity
+        return {
+            "id": link.id,
+            "product_id": link.product_id,
+            "product_title": product_title,
+            "quantity": link.quantity,
+            "price": link.price,
+            "cost": link.cost,
+            "is_installation_included": bool(link.is_installation_included),
+            "installation_price": int(link.installation_price or 0),
+            "line_total": line_total,
+        }
+
+    @staticmethod
+    def _map_service_line(link: OrderServiceLink) -> Dict[str, Any]:
+        service_title = link.title or (link.service.title if link.service else f"Услуга #{link.service_id}")
+        line_total = link.price * link.quantity
+        return {
+            "id": link.id,
+            "service_id": link.service_id,
+            "service_title": service_title,
+            "quantity": link.quantity,
+            "price": link.price,
+            "cost": link.cost,
+            "line_total": line_total,
+        }
+
+    @staticmethod
+    async def get_orders_for_manager(
+        session: AsyncSession,
+        customer_segment: str,
+        page: int,
+        limit: int,
+        status: Optional[str] = None,
+        search: Optional[str] = None,
+        overdue_only: bool = False,
+        sort: str = "created_at_desc",
+    ) -> Dict[str, Any]:
+        from schemas import Meta
+
+        segment_map = {
+            "b2c": CustomerType.individual,
+            "b2b": CustomerType.company,
+        }
+        customer_type = segment_map.get(customer_segment.lower())
+        if not customer_type:
+            raise ValueError(f"Invalid segment: {customer_segment}")
+
+        base_stmt = (
+            select(Order)
+            .join(Customer, Order.customer_id == Customer.id)
+            .options(
+                selectinload(Order.customer),
+                selectinload(Order.product_links).selectinload(OrderProductLink.product),
+                selectinload(Order.service_links).selectinload(OrderServiceLink.service),
+            )
+            .where(Customer.type == customer_type)
+        )
+
+        count_stmt = (
+            select(func.count(Order.id))
+            .join(Customer, Order.customer_id == Customer.id)
+            .where(Customer.type == customer_type)
+        )
+
+        if status:
+            try:
+                status_enum = OrderStatus(status)
+                base_stmt = base_stmt.where(Order.status == status_enum)
+                count_stmt = count_stmt.where(Order.status == status_enum)
+            except ValueError as exc:
+                raise ValueError(f"Invalid status: {status}") from exc
+
+        if search:
+            like = f"%{search.strip()}%"
+            search_clause = or_(
+                Customer.name.ilike(like),
+                Customer.phone.ilike(like),
+                Customer.full_legal_name.ilike(like),
+                Customer.inn.ilike(like),
+                cast(Order.id, String).ilike(like),
+            )
+            base_stmt = base_stmt.where(search_clause)
+            count_stmt = count_stmt.where(search_clause)
+
+        if overdue_only:
+            now = datetime.now()
+            base_stmt = base_stmt.where(
+                Order.next_followup_date.is_not(None),
+                Order.next_followup_date < now,
+            )
+            count_stmt = count_stmt.where(
+                Order.next_followup_date.is_not(None),
+                Order.next_followup_date < now,
+            )
+
+        sort_map = {
+            "created_at_desc": Order.created_at.desc(),
+            "created_at_asc": Order.created_at.asc(),
+            "updated_at_desc": Order.updated_at.desc(),
+            "updated_at_asc": Order.updated_at.asc(),
+            "followup_asc": Order.next_followup_date.asc().nullslast(),
+            "followup_desc": Order.next_followup_date.desc().nullslast(),
+            "margin_desc": Order.margin.desc(),
+            "margin_asc": Order.margin.asc(),
+        }
+        order_by = sort_map.get(sort, Order.created_at.desc())
+        base_stmt = base_stmt.order_by(order_by).offset((page - 1) * limit).limit(limit)
+
+        total_result = await session.execute(count_stmt)
+        total = int(total_result.scalar() or 0)
+
+        result = await session.execute(base_stmt)
+        orders = list(result.scalars().all())
+        items = [OrderService._map_order_list_item(order) for order in orders]
+
+        pages = (total + limit - 1) // limit if limit > 0 else 0
+        return {
+            "items": items,
+            "meta": Meta(total=total, page=page, limit=limit, pages=pages),
+        }
+
+    @staticmethod
+    async def get_order_detail_for_manager(session: AsyncSession, order_id: int) -> Optional[Dict[str, Any]]:
+        stmt = (
+            select(Order)
+            .where(Order.id == order_id)
+            .options(
+                selectinload(Order.customer),
+                selectinload(Order.product_links).selectinload(OrderProductLink.product),
+                selectinload(Order.service_links).selectinload(OrderServiceLink.service),
+            )
+        )
+        result = await session.execute(stmt)
+        order = result.scalars().first()
+        if not order:
+            return None
+
+        data = OrderService._map_order_list_item(order)
+        data["product_lines"] = [OrderService._map_product_line(link) for link in order.product_links]
+        data["service_lines"] = [OrderService._map_service_line(link) for link in order.service_links]
+        return data
+
+    @staticmethod
+    async def build_manager_order_line_defaults(
+        session: AsyncSession,
+        product_id: Optional[int] = None,
+        service_id: Optional[int] = None,
+    ) -> Dict[str, int]:
+        if product_id is not None:
+            product = await session.get(Product, product_id)
+            return {"cost": int(getattr(product, "cost", 0) or 0)} if product else {"cost": 0}
+        if service_id is not None:
+            service = await session.get(Service, service_id)
+            return {"cost": int(getattr(service, "base_price", 0) or 0)} if service else {"cost": 0}
+        return {"cost": 0}
+
+    @staticmethod
+    async def update_order_for_manager(
+        session: AsyncSession,
+        order_id: int,
+        payload: Any,
+    ) -> Optional[Dict[str, Any]]:
+        order = await session.get(Order, order_id)
+        if not order:
+            return None
+
+        fields_set = getattr(payload, "model_fields_set", None)
+        if fields_set is None:
+            fields_set = getattr(payload, "__fields_set__", set())
+
+        if "status" in fields_set and payload.status is not None:
+            try:
+                order.status = OrderStatus(payload.status)
+            except ValueError as exc:
+                raise ValueError(f"Invalid status: {payload.status}") from exc
+        if "next_followup_date" in fields_set:
+            order.next_followup_date = payload.next_followup_date
+        if "assessment_date" in fields_set:
+            order.assessment_date = payload.assessment_date
+        if "installation_date" in fields_set:
+            order.installation_date = payload.installation_date
+        if "comment" in fields_set:
+            order.comment = payload.comment
+        if "is_paid" in fields_set and payload.is_paid is not None:
+            order.is_paid = payload.is_paid
+
+        if "products" in fields_set or "services" in fields_set:
+            if "products" in fields_set and payload.products is not None:
+                await session.execute(delete(OrderProductLink).where(OrderProductLink.order_id == order_id))
+                for product_line in payload.products:
+                    if product_line.quantity <= 0:
+                        raise ValueError("Product quantity must be > 0")
+                    if product_line.price < 0:
+                        raise ValueError("Product price cannot be negative")
+                    defaults = await OrderService.build_manager_order_line_defaults(
+                        session=session,
+                        product_id=product_line.product_id,
+                    )
+                    new_product_link = OrderProductLink(
+                        order_id=order_id,
+                        product_id=product_line.product_id,
+                        quantity=product_line.quantity,
+                        price=product_line.price,
+                        cost=product_line.cost if product_line.cost is not None else defaults["cost"],
+                    )
+                    session.add(new_product_link)
+
+            if "services" in fields_set and payload.services is not None:
+                await session.execute(delete(OrderServiceLink).where(OrderServiceLink.order_id == order_id))
+                for service_line in payload.services:
+                    if service_line.quantity <= 0:
+                        raise ValueError("Service quantity must be > 0")
+                    if service_line.price < 0:
+                        raise ValueError("Service price cannot be negative")
+                    if not service_line.title:
+                        raise ValueError("Service title is required")
+                    defaults = await OrderService.build_manager_order_line_defaults(
+                        session=session,
+                        service_id=service_line.service_id,
+                    )
+                    new_service_link = OrderServiceLink(
+                        order_id=order_id,
+                        service_id=service_line.service_id,
+                        title=service_line.title,
+                        quantity=service_line.quantity,
+                        price=service_line.price,
+                        cost=service_line.cost if service_line.cost is not None else defaults["cost"],
+                    )
+                    session.add(new_service_link)
+
+            await session.flush()
+            await session.refresh(order, attribute_names=["product_links", "service_links", "installers"])
+            order.calculate_totals()
+
+        session.add(order)
+        await session.commit()
+        return await OrderService.get_order_detail_for_manager(session, order_id)

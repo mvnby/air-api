@@ -8,6 +8,7 @@ export type TagResponse = {
     title: string;
     slug: string;
     is_public?: boolean;
+    sort_order?: number;
     group?: (TagGroupResponse | null);
     group_title?: (string | null);
 };

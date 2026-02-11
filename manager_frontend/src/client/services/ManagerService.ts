@@ -2,8 +2,14 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { Body_bulk_upload_local_images } from '../models/Body_bulk_upload_local_images';
 import type { Body_upload_local_images } from '../models/Body_upload_local_images';
+import type { BulkGalleryAddRequest } from '../models/BulkGalleryAddRequest';
+import type { BulkGalleryDeleteRequest } from '../models/BulkGalleryDeleteRequest';
+import type { BulkRoundRequest } from '../models/BulkRoundRequest';
 import type { BulkSpecUpdate } from '../models/BulkSpecUpdate';
+import type { CommonGalleryImageResponse } from '../models/CommonGalleryImageResponse';
+import type { ProductUpdate } from '../models/ProductUpdate';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -149,7 +155,7 @@ export class ManagerService {
     }
     /**
      * Delete Gallery Image
-     * Delete an image from the gallery (and disk).
+     * Delete an image link; physical file is deleted only if unreferenced globally.
      * @param imageId
      * @returns any Successful Response
      * @throws ApiError
@@ -214,6 +220,87 @@ export class ManagerService {
         });
     }
     /**
+     * Get Common Gallery Images
+     * Return non-installation images shared by all selected products.
+     * @param productIds Selected product IDs
+     * @returns CommonGalleryImageResponse Successful Response
+     * @throws ApiError
+     */
+    public static getCommonGalleryImages(
+        productIds: Array<number>,
+    ): CancelablePromise<Array<CommonGalleryImageResponse>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/gallery/common-images',
+            query: {
+                'product_ids': productIds,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Bulk Add Gallery Images
+     * Append image links to selected products without removing existing gallery items.
+     * @param requestBody
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static bulkAddGalleryImages(
+        requestBody: BulkGalleryAddRequest,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/gallery/bulk-add',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Bulk Upload Local Images
+     * Upload local files once and attach to all selected products.
+     * @param formData
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static bulkUploadLocalImages(
+        formData: Body_bulk_upload_local_images,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/gallery/bulk-upload-local',
+            formData: formData,
+            mediaType: 'multipart/form-data',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Bulk Delete Common Gallery Images
+     * Delete selected common image links from selected products only.
+     * @param requestBody
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static bulkDeleteCommonGalleryImages(
+        requestBody: BulkGalleryDeleteRequest,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/gallery/bulk-delete-common',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Cleanup Media
      * Delete orphaned media files not referenced in DB.
      * @param dryRun
@@ -253,6 +340,159 @@ export class ManagerService {
             errors: {
                 422: `Validation Error`,
             },
+        });
+    }
+    /**
+     * Normalize Legacy Specs
+     * Массовая миграция характеристик.
+     * Переводит ключи Onliner (кириллица) в System (английский).
+     * @param dryRun Если True - не сохраняет изменения в БД, только показывает пример
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static normalizeLegacySpecs(
+        dryRun: boolean = true,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/specs/normalize-legacy',
+            query: {
+                'dry_run': dryRun,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Products For Manager
+     * Paginated product list for manager UI.
+     * Unlike the public catalog, this can show unpublished products.
+     * @param page
+     * @param limit
+     * @param search
+     * @param isPublished
+     * @param areaMin
+     * @param areaMax
+     * @param isInverter
+     * @param sort
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static getManagerProducts(
+        page: number = 1,
+        limit: number = 40,
+        search?: (string | null),
+        isPublished?: (boolean | null),
+        areaMin?: (number | null),
+        areaMax?: (number | null),
+        isInverter?: (boolean | null),
+        sort: string = 'newest',
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/products/list',
+            query: {
+                'page': page,
+                'limit': limit,
+                'search': search,
+                'is_published': isPublished,
+                'area_min': areaMin,
+                'area_max': areaMax,
+                'is_inverter': isInverter,
+                'sort': sort,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Customers For Manager
+     * Paginated customer list for manager UI.
+     * Includes order count per customer.
+     * @param page
+     * @param limit
+     * @param search
+     * @param type
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static getManagerCustomers(
+        page: number = 1,
+        limit: number = 20,
+        search?: (string | null),
+        type?: (string | null),
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/customers',
+            query: {
+                'page': page,
+                'limit': limit,
+                'search': search,
+                'type': type,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Update Product
+     * Update individual product fields.
+     * @param productId
+     * @param requestBody
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static updateProduct(
+        productId: number,
+        requestBody: ProductUpdate,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/products/{product_id}',
+            path: {
+                'product_id': productId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Bulk Round Price
+     * Round prices down to the nearest multiple of 50.
+     * @param requestBody
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static bulkRoundPrice(
+        requestBody: BulkRoundRequest,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/products/bulk-round-price',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get All Tags
+     * Return all tags grouped by TagGroup for the product editor.
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static getAllTags(): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/tags/all',
         });
     }
 }

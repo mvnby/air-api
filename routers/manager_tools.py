@@ -25,9 +25,7 @@ from core.database import get_session
 from core.config import settings
 from core.security import get_current_username
 from core.logger import logger
-from models import Product, ProductImage, Order, OrderProductLink, Customer, ProductTagLink, Tag, TagGroup
-from crud.product import ProductDAO
-from crud.order import OrderDAO
+from models import Product, ProductImage, Order, Customer
 from services.product_service import ProductService
 
 import httpx
@@ -902,12 +900,11 @@ async def normalize_legacy_specs(
         "sample_changes": preview_log
     }
 
-
 # =============================================
 # Manager List Endpoints (Stitch Integration)
 # =============================================
 
-@router.get("/products/list")
+@router.get("/products/list", operation_id="get_manager_products")
 async def list_products_for_manager(
     page: int = Query(1, ge=1),
     limit: int = Query(40, ge=1, le=100),
@@ -929,110 +926,7 @@ async def list_products_for_manager(
     )
 
 
-@router.get("/orders")
-async def list_orders_for_manager(
-    page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
-    status_filter: Optional[str] = Query(None, alias="status"),
-    search: Optional[str] = Query(None),
-    session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
-):
-    """
-    Paginated order list for manager UI.
-    Includes customer info and product summaries.
-    """
-    from sqlalchemy.orm import selectinload
-    from models import OrderProductLink
-    
-    stmt = select(Order).options(
-        selectinload(Order.customer),
-        selectinload(Order.product_links).selectinload(OrderProductLink.product),
-    )
-    
-    count_stmt = select(func.count(Order.id))
-    
-    # Filter by status
-    if status_filter:
-        stmt = stmt.where(Order.status == status_filter)
-        count_stmt = count_stmt.where(Order.status == status_filter)
-    
-    # Search by title or customer name (join)
-    if search:
-        from sqlalchemy import or_
-        stmt = stmt.outerjoin(Customer, Order.customer_id == Customer.id).where(
-            or_(
-                Order.title.ilike(f"%{search}%"),
-                Customer.name.ilike(f"%{search}%"),
-                Customer.phone.ilike(f"%{search}%"),
-            )
-        )
-        count_stmt = count_stmt.outerjoin(Customer, Order.customer_id == Customer.id).where(
-            or_(
-                Order.title.ilike(f"%{search}%"),
-                Customer.name.ilike(f"%{search}%"),
-                Customer.phone.ilike(f"%{search}%"),
-            )
-        )
-    
-    # Sort newest first
-    stmt = stmt.order_by(Order.created_at.desc())
-    
-    # Pagination
-    offset = (page - 1) * limit
-    stmt = stmt.offset(offset).limit(limit)
-    
-    result = await session.execute(stmt)
-    orders = result.unique().scalars().all()
-    
-    total_result = await session.execute(count_stmt)
-    total = total_result.scalar() or 0
-    
-    items = []
-    for o in orders:
-        # Build product summary
-        product_summaries = []
-        for link in (o.product_links or []):
-            product_summaries.append({
-                "product_id": link.product_id,
-                "title": link.product.title if link.product else f"Product #{link.product_id}",
-                "quantity": link.quantity,
-                "price": link.price,
-            })
-        
-        items.append({
-            "id": o.id,
-            "title": o.title,
-            "status": o.status,
-            "lead_source": o.lead_source,
-            "total_amount": o.total_amount,
-            "total_cost": o.total_cost,
-            "margin": o.margin,
-            "is_paid": o.is_paid,
-            "customer": {
-                "id": o.customer.id,
-                "name": o.customer.name,
-                "phone": o.customer.phone,
-                "type": o.customer.type,
-            } if o.customer else None,
-            "products": product_summaries,
-            "created_at": o.created_at.isoformat() if o.created_at else None,
-            "installation_date": o.installation_date.isoformat() if o.installation_date else None,
-            "comment": o.comment,
-        })
-    
-    return {
-        "items": items,
-        "meta": {
-            "page": page,
-            "limit": limit,
-            "total": total,
-            "pages": (total + limit - 1) // limit if limit else 1,
-        }
-    }
-
-
-@router.get("/customers")
+@router.get("/customers", operation_id="get_manager_customers")
 async def list_customers_for_manager(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
@@ -1046,10 +940,10 @@ async def list_customers_for_manager(
     Includes order count per customer.
     """
     from sqlalchemy import or_
-    
+
     stmt = select(Customer)
     count_stmt = select(func.count(Customer.id))
-    
+
     if search:
         stmt = stmt.where(
             or_(
@@ -1067,24 +961,22 @@ async def list_customers_for_manager(
                 Customer.email.ilike(f"%{search}%"),
             )
         )
-    
+
     if customer_type:
         stmt = stmt.where(Customer.type == customer_type)
         count_stmt = count_stmt.where(Customer.type == customer_type)
-    
+
     stmt = stmt.order_by(Customer.created_at.desc())
-    
-    # Pagination
+
     offset = (page - 1) * limit
     stmt = stmt.offset(offset).limit(limit)
-    
+
     result = await session.execute(stmt)
     customers = result.scalars().all()
-    
+
     total_result = await session.execute(count_stmt)
     total = total_result.scalar() or 0
-    
-    # Get order counts in one query
+
     customer_ids = [c.id for c in customers]
     order_counts = {}
     if customer_ids:
@@ -1093,7 +985,7 @@ async def list_customers_for_manager(
         ).group_by(Order.customer_id)
         oc_result = await session.execute(oc_stmt)
         order_counts = dict(oc_result.all())
-    
+
     items = []
     for c in customers:
         items.append({
@@ -1107,7 +999,7 @@ async def list_customers_for_manager(
             "created_at": c.created_at.isoformat() if c.created_at else None,
             "order_count": order_counts.get(c.id, 0),
         })
-    
+
     return {
         "items": items,
         "meta": {
@@ -1117,6 +1009,7 @@ async def list_customers_for_manager(
             "pages": (total + limit - 1) // limit if limit else 1,
         }
     }
+
 
 @router.patch("/products/{product_id}", operation_id="update_product")
 async def update_product(
@@ -1130,13 +1023,14 @@ async def update_product(
     """
     update_data = data.dict(exclude_unset=True)
     tag_ids = update_data.pop("tag_ids", None)
-    
+
     result = await ProductService.update_product(session, product_id, update_data, tag_ids)
-    
+
     if not result:
         raise HTTPException(status_code=404, detail="Product not found")
-        
+
     return result
+
 
 @router.post("/products/bulk-round-price", operation_id="bulk_round_price")
 async def bulk_round_price(
@@ -1149,7 +1043,7 @@ async def bulk_round_price(
     """
     if not request.product_ids:
         return {"message": "No products selected", "updated_count": 0}
-        
+
     return await ProductService.bulk_round_prices(session, request.product_ids)
 
 

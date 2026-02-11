@@ -140,7 +140,98 @@ class OrderResponse(BaseModel):
     total_amount: float
     created_at: datetime
 
-# --- MANAGER TOOLS ---
+
+class OrderCustomerBrief(BaseModel):
+    id: int
+    type: str
+    name: str
+    phone: str
+    full_legal_name: Optional[str] = None
+    inn: Optional[str] = None
+
+
+class OrderProductLineResponse(BaseModel):
+    id: int
+    product_id: Optional[int] = None
+    product_title: str
+    quantity: int
+    price: int
+    cost: int
+    is_installation_included: bool
+    installation_price: int
+    line_total: int
+
+
+class OrderServiceLineResponse(BaseModel):
+    id: int
+    service_id: Optional[int] = None
+    service_title: str
+    quantity: int
+    price: int
+    cost: int
+    line_total: int
+
+
+class ManagerOrderListItemResponse(BaseModel):
+    id: int
+    status: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    next_followup_date: Optional[datetime] = None
+    assessment_date: Optional[datetime] = None
+    installation_date: Optional[datetime] = None
+    total_amount: float
+    total_cost: float
+    margin: float
+    is_paid: bool
+    comment: Optional[str] = None
+    delivery_address: Optional[str] = None
+    customer: Optional[OrderCustomerBrief] = None
+
+
+class ManagerOrderDetailResponse(ManagerOrderListItemResponse):
+    product_lines: List[OrderProductLineResponse] = []
+    service_lines: List[OrderServiceLineResponse] = []
+
+
+class ManagerOrderListResponse(BaseModel):
+    items: List[ManagerOrderListItemResponse]
+    meta: Meta
+
+
+class ManagerOrderProductLinePayload(BaseModel):
+    link_id: Optional[int] = None
+    product_id: int
+    quantity: int
+    price: int
+    cost: Optional[int] = None
+
+
+class ManagerOrderServiceLinePayload(BaseModel):
+    link_id: Optional[int] = None
+    service_id: Optional[int] = None
+    title: str
+    quantity: int
+    price: int
+    cost: Optional[int] = None
+
+
+class ManagerOrderUpdatePayload(BaseModel):
+    status: Optional[str] = None
+    next_followup_date: Optional[datetime] = None
+    assessment_date: Optional[datetime] = None
+    installation_date: Optional[datetime] = None
+    comment: Optional[str] = None
+    is_paid: Optional[bool] = None
+    products: Optional[List[ManagerOrderProductLinePayload]] = None
+    services: Optional[List[ManagerOrderServiceLinePayload]] = None
+
+
+class ManagerOrderDocumentResponse(BaseModel):
+    doc_id: int
+    doc_type: str
+    edit_url: str
+
 
 class ProductUpdate(BaseModel):
     title: Optional[str] = None
@@ -150,6 +241,7 @@ class ProductUpdate(BaseModel):
     specs: Optional[Dict[str, Any]] = None
     is_published: Optional[bool] = None
     tag_ids: Optional[List[int]] = None
+
 
 class BulkRoundRequest(BaseModel):
     product_ids: List[int]
