@@ -297,9 +297,132 @@ class ProductService:
         product.main_image = web_path
         session.add(product)
         await session.commit()
-        await session.refresh(product)
+        return {"message": "Product updated", "id": product.id}
+
+    @staticmethod
+    async def get_manager_list(
+        session: AsyncSession,
+        page: int = 1,
+        limit: int = 40,
+        search: Optional[str] = None,
+        is_published: Optional[bool] = None,
+        area_min: Optional[int] = None,
+        area_max: Optional[int] = None,
+        is_inverter: Optional[bool] = None,
+        sort: str = "newest"
+    ) -> Dict[str, Any]:
+        """
+        Get paginated product list for manager.
+        """
+        import ast
+        from crud.product import ProductDAO
         
-        return web_path
+        items, total = await ProductDAO.get_for_manager(
+            session, page, limit, search, is_published, area_min, area_max, is_inverter, sort
+        )
+        
+        # Format response
+        formatted_items = []
+        for p in items:
+            gallery = [{"id": img.id, "url": img.url, "is_installation_photo": img.is_installation_photo} for img in (p.gallery_images or [])]
+            
+            specs = p.specs
+            if isinstance(specs, str):
+                try:
+                    specs = ast.literal_eval(specs)
+                except Exception:
+                    specs = {}
+            
+            formatted_items.append({
+                "id": p.id,
+                "title": p.title,
+                "slug": p.slug,
+                "price": p.price,
+                "old_price": p.old_price,
+                "area": p.area,
+                "is_inverter": p.is_inverter,
+                "power_cooling": p.power_cooling,
+                "main_image": p.main_image,
+                "is_published": p.is_published,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+                "specs": specs or {},
+                "gallery_images": gallery,
+                "tags": [{"id": t.id, "title": t.title, "slug": t.slug, "group_title": t.group.title if t.group else None, "group_color": t.group.color if t.group else "secondary"} for t in (p.tags or [])],
+            })
+            
+        return {
+            "items": formatted_items,
+            "meta": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": (total + limit - 1) // limit if limit else 1,
+            }
+        }
+
+    @staticmethod
+    async def update_product(
+        session: AsyncSession,
+        product_id: int,
+        update_data: Dict[str, Any],
+        tag_ids: Optional[List[int]] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Update product and return simple success message.
+        """
+        from crud.product import ProductDAO
+        product = await ProductDAO.update_full(session, product_id, update_data, tag_ids)
+        if not product:
+            return None
+        return {"message": "Product updated", "id": product.id}
+
+    @staticmethod
+    async def bulk_round_prices(
+        session: AsyncSession,
+        product_ids: List[int]
+    ) -> Dict[str, Any]:
+        """
+        Round prices down to nearest 50.
+        """
+        from crud.product import ProductDAO
+        products = await ProductDAO.get_by_ids(session, product_ids)
+        updated_count = 0
+        
+        for product in products:
+            # Round down to nearest 50: 1388 -> 1350, 1236 -> 1200
+            new_price = (product.price // 50) * 50
+            if new_price != product.price:
+                product.price = new_price
+                session.add(product)
+                updated_count += 1
+                
+        if updated_count > 0:
+            await session.commit()
+            
+        return {"message": "Prices rounded", "updated_count": updated_count}
+
+    @staticmethod
+    async def get_all_tags(session: AsyncSession) -> List[Dict[str, Any]]:
+        """
+        Get all tags grouped by TagGroup.
+        """
+        from crud.tag import TagDAO
+        groups = await TagDAO.get_all_grouped(session)
+        
+        return [
+            {
+                "id": g.id,
+                "title": g.title,
+                "slug": g.slug,
+                "color": g.color,
+                "allow_multiple": g.allow_multiple,
+                "tags": [
+                    {"id": t.id, "title": t.title, "slug": t.slug}
+                    for t in sorted(g.tags, key=lambda x: (x.sort_order, x.title))
+                ],
+            }
+            for g in groups
+        ]
 
     @staticmethod
     async def add_gallery_images(

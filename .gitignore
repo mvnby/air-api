@@ -31,7 +31,7 @@ AI_AGENT_CONTEXT.md
 credentials.json
 client_secret.json
 token.json
-backups/backup.sql
+backups/*
 /media/*
 web/temp/*
 .agent/workflows/plan.md
