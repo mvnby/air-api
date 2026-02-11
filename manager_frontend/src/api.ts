@@ -169,5 +169,46 @@ export const api = {
 
     async checkAuth() {
         return await ManagerService.readUserMe();
-    }
+    },
+
+    // --- MANAGER LIST ENDPOINTS (Stitch) ---
+    async getManagerProducts(
+        page = 1,
+        limit = 40,
+        search?: string,
+        isPublished?: boolean,
+        areaMin?: number,
+        areaMax?: number,
+        isInverter?: boolean,
+        sort = 'newest'
+    ) {
+        const params = new URLSearchParams({ page: String(page), limit: String(limit), sort });
+        if (search) params.set('search', search);
+        if (isPublished !== undefined) params.set('is_published', String(isPublished));
+        if (areaMin !== undefined) params.set('area_min', String(areaMin));
+        if (areaMax !== undefined) params.set('area_max', String(areaMax));
+        if (isInverter !== undefined) params.set('is_inverter', String(isInverter));
+
+        const res = await fetch(`/api/manager/products/list?${params}`, { credentials: 'include' });
+        if (!res.ok) throw new Error(`Failed to load products: ${res.status}`);
+        return await res.json();
+    },
+
+    async getManagerOrders(page = 1, limit = 20, status?: string, search?: string) {
+        const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+        if (status) params.set('status', status);
+        if (search) params.set('search', search);
+        const res = await fetch(`/api/manager/orders?${params}`, { credentials: 'include' });
+        if (!res.ok) throw new Error(`Failed to load orders: ${res.status}`);
+        return await res.json();
+    },
+
+    async getManagerCustomers(page = 1, limit = 20, search?: string, type?: string) {
+        const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+        if (search) params.set('search', search);
+        if (type) params.set('type', type);
+        const res = await fetch(`/api/manager/customers?${params}`, { credentials: 'include' });
+        if (!res.ok) throw new Error(`Failed to load customers: ${res.status}`);
+        return await res.json();
+    },
 };

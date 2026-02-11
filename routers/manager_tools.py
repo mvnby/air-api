@@ -23,7 +23,9 @@ from core.database import get_session
 from core.config import settings
 from core.security import get_current_username
 from core.logger import logger
-from models import Product, ProductImage
+from models import Product, ProductImage, Order, Customer, OrderStatus, LeadSource
+from crud.product import ProductDAO
+from crud.order import OrderDAO
 
 import httpx
 from PIL import Image
@@ -896,3 +898,305 @@ async def normalize_legacy_specs(
         "products_updated": updated_count,
         "sample_changes": preview_log
     }
+
+
+# =============================================
+# Manager List Endpoints (Stitch Integration)
+# =============================================
+
+@router.get("/products/list")
+async def list_products_for_manager(
+    page: int = Query(1, ge=1),
+    limit: int = Query(40, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    is_published: Optional[bool] = Query(None),
+    area_min: Optional[int] = Query(None),
+    area_max: Optional[int] = Query(None),
+    is_inverter: Optional[bool] = Query(None),
+    sort: str = Query("newest"),
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    """
+    Paginated product list for manager UI.
+    Unlike the public catalog, this can show unpublished products.
+    """
+    from sqlalchemy.orm import selectinload
+    
+    # Build query manually to support search + unpublished
+    stmt = select(Product).options(
+        selectinload(Product.gallery_images)
+    )
+    
+    count_stmt = select(func.count(Product.id))
+    
+    # Filter by published status (None = show all)
+    if is_published is not None:
+        stmt = stmt.where(Product.is_published == is_published)
+        count_stmt = count_stmt.where(Product.is_published == is_published)
+    
+    # Filter by Area
+    if area_min is not None:
+        stmt = stmt.where(Product.area >= area_min)
+        count_stmt = count_stmt.where(Product.area >= area_min)
+    if area_max is not None:
+        stmt = stmt.where(Product.area <= area_max)
+        count_stmt = count_stmt.where(Product.area <= area_max)
+        
+    # Filter by Inverter
+    if is_inverter is not None:
+        stmt = stmt.where(Product.is_inverter == is_inverter)
+        count_stmt = count_stmt.where(Product.is_inverter == is_inverter)
+    
+    # Search by title
+    if search:
+        stmt = stmt.where(Product.title.ilike(f"%{search}%"))
+        count_stmt = count_stmt.where(Product.title.ilike(f"%{search}%"))
+    
+    # Sorting
+    if sort == "price_asc":
+        stmt = stmt.order_by(Product.price.asc())
+    elif sort == "price_desc":
+        stmt = stmt.order_by(Product.price.desc())
+    elif sort == "title":
+        stmt = stmt.order_by(Product.title.asc())
+    else:  # newest
+        stmt = stmt.order_by(Product.id.desc())
+    
+    # Pagination
+    offset = (page - 1) * limit
+    stmt = stmt.offset(offset).limit(limit)
+    
+    result = await session.execute(stmt)
+    products = result.scalars().all()
+    
+    total_result = await session.execute(count_stmt)
+    total = total_result.scalar() or 0
+    
+    items = []
+    for p in products:
+        gallery = [{"id": img.id, "url": img.url, "is_installation_photo": img.is_installation_photo} for img in (p.gallery_images or [])]
+        
+        specs = p.specs
+        if isinstance(specs, str):
+            try:
+                specs = ast.literal_eval(specs)
+            except Exception:
+                specs = {}
+        
+        items.append({
+            "id": p.id,
+            "title": p.title,
+            "slug": p.slug,
+            "price": p.price,
+            "old_price": p.old_price,
+            "area": p.area,
+            "is_inverter": p.is_inverter,
+            "power_cooling": p.power_cooling,
+            "main_image": p.main_image,
+            "is_published": p.is_published,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "specs": specs or {},
+            "gallery_images": gallery,
+        })
+    
+    return {
+        "items": items,
+        "meta": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": (total + limit - 1) // limit if limit else 1,
+        }
+    }
+
+
+@router.get("/orders")
+async def list_orders_for_manager(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    status_filter: Optional[str] = Query(None, alias="status"),
+    search: Optional[str] = Query(None),
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    """
+    Paginated order list for manager UI.
+    Includes customer info and product summaries.
+    """
+    from sqlalchemy.orm import selectinload
+    from models import OrderProductLink
+    
+    stmt = select(Order).options(
+        selectinload(Order.customer),
+        selectinload(Order.product_links).selectinload(OrderProductLink.product),
+    )
+    
+    count_stmt = select(func.count(Order.id))
+    
+    # Filter by status
+    if status_filter:
+        stmt = stmt.where(Order.status == status_filter)
+        count_stmt = count_stmt.where(Order.status == status_filter)
+    
+    # Search by title or customer name (join)
+    if search:
+        from sqlalchemy import or_
+        stmt = stmt.outerjoin(Customer, Order.customer_id == Customer.id).where(
+            or_(
+                Order.title.ilike(f"%{search}%"),
+                Customer.name.ilike(f"%{search}%"),
+                Customer.phone.ilike(f"%{search}%"),
+            )
+        )
+        count_stmt = count_stmt.outerjoin(Customer, Order.customer_id == Customer.id).where(
+            or_(
+                Order.title.ilike(f"%{search}%"),
+                Customer.name.ilike(f"%{search}%"),
+                Customer.phone.ilike(f"%{search}%"),
+            )
+        )
+    
+    # Sort newest first
+    stmt = stmt.order_by(Order.created_at.desc())
+    
+    # Pagination
+    offset = (page - 1) * limit
+    stmt = stmt.offset(offset).limit(limit)
+    
+    result = await session.execute(stmt)
+    orders = result.unique().scalars().all()
+    
+    total_result = await session.execute(count_stmt)
+    total = total_result.scalar() or 0
+    
+    items = []
+    for o in orders:
+        # Build product summary
+        product_summaries = []
+        for link in (o.product_links or []):
+            product_summaries.append({
+                "product_id": link.product_id,
+                "title": link.product.title if link.product else f"Product #{link.product_id}",
+                "quantity": link.quantity,
+                "price": link.price,
+            })
+        
+        items.append({
+            "id": o.id,
+            "title": o.title,
+            "status": o.status,
+            "lead_source": o.lead_source,
+            "total_amount": o.total_amount,
+            "total_cost": o.total_cost,
+            "margin": o.margin,
+            "is_paid": o.is_paid,
+            "customer": {
+                "id": o.customer.id,
+                "name": o.customer.name,
+                "phone": o.customer.phone,
+                "type": o.customer.type,
+            } if o.customer else None,
+            "products": product_summaries,
+            "created_at": o.created_at.isoformat() if o.created_at else None,
+            "installation_date": o.installation_date.isoformat() if o.installation_date else None,
+            "comment": o.comment,
+        })
+    
+    return {
+        "items": items,
+        "meta": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": (total + limit - 1) // limit if limit else 1,
+        }
+    }
+
+
+@router.get("/customers")
+async def list_customers_for_manager(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    customer_type: Optional[str] = Query(None, alias="type"),
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    """
+    Paginated customer list for manager UI.
+    Includes order count per customer.
+    """
+    from sqlalchemy import or_
+    
+    stmt = select(Customer)
+    count_stmt = select(func.count(Customer.id))
+    
+    if search:
+        stmt = stmt.where(
+            or_(
+                Customer.name.ilike(f"%{search}%"),
+                Customer.phone.ilike(f"%{search}%"),
+                Customer.inn.ilike(f"%{search}%"),
+                Customer.email.ilike(f"%{search}%"),
+            )
+        )
+        count_stmt = count_stmt.where(
+            or_(
+                Customer.name.ilike(f"%{search}%"),
+                Customer.phone.ilike(f"%{search}%"),
+                Customer.inn.ilike(f"%{search}%"),
+                Customer.email.ilike(f"%{search}%"),
+            )
+        )
+    
+    if customer_type:
+        stmt = stmt.where(Customer.type == customer_type)
+        count_stmt = count_stmt.where(Customer.type == customer_type)
+    
+    stmt = stmt.order_by(Customer.created_at.desc())
+    
+    # Pagination
+    offset = (page - 1) * limit
+    stmt = stmt.offset(offset).limit(limit)
+    
+    result = await session.execute(stmt)
+    customers = result.scalars().all()
+    
+    total_result = await session.execute(count_stmt)
+    total = total_result.scalar() or 0
+    
+    # Get order counts in one query
+    customer_ids = [c.id for c in customers]
+    order_counts = {}
+    if customer_ids:
+        oc_stmt = select(Order.customer_id, func.count(Order.id)).where(
+            Order.customer_id.in_(customer_ids)
+        ).group_by(Order.customer_id)
+        oc_result = await session.execute(oc_stmt)
+        order_counts = dict(oc_result.all())
+    
+    items = []
+    for c in customers:
+        items.append({
+            "id": c.id,
+            "name": c.name,
+            "phone": c.phone,
+            "email": c.email,
+            "type": c.type,
+            "inn": c.inn,
+            "full_legal_name": c.full_legal_name,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+            "order_count": order_counts.get(c.id, 0),
+        })
+    
+    return {
+        "items": items,
+        "meta": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": (total + limit - 1) // limit if limit else 1,
+        }
+    }
+
