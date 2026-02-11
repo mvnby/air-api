@@ -46,6 +46,8 @@ jobs:
         run: |
           npm ci
           npm run build
+          ls -la
+          ls -la dist || echo "No dist folder found"
 
       - name: Lowercase Repo Name
         id: prep
@@ -169,9 +171,28 @@ jobs:
       - name: Setup SSH Key for Web Server
         run: |
           mkdir -p ~/.ssh
+          
+          if [ -z "${{ secrets.SSH_KEY }}" ]; then
+            echo "::error::SSH_KEY secret is missing or empty"
+            exit 1
+          fi
+          
+          if [ -z "${{ secrets.SSH_HOST_WEB }}" ]; then
+            echo "::error::SSH_HOST_WEB secret is missing or empty"
+            exit 1
+          fi
+
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.SSH_HOST_WEB }} >> ~/.ssh/known_hosts
+          
+          echo "Scanning host: ${{ secrets.SSH_HOST_WEB }}"
+          ssh-keyscan -v -H ${{ secrets.SSH_HOST_WEB }} >> ~/.ssh/known_hosts 2> ssh_scan_error.log || cat ssh_scan_error.log
+          
+          if [ ! -s ~/.ssh/known_hosts ]; then
+             echo "::error::known_hosts file is empty. ssh-keyscan failed."
+             cat ssh_scan_error.log
+             exit 1
+          fi
 
       - name: Deploy to Web Server
         run: |
