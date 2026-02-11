@@ -105,19 +105,24 @@ jobs:
           # Add server to known_hosts to avoid interactive prompt
           ssh-keyscan -H ${{ secrets.SSH_HOST_API }} >> ~/.ssh/known_hosts
 
+      - name: Copy Compose Files to Server
+        run: |
+          scp -i ~/.ssh/deploy_key -v docker-compose.yml docker-compose.prod.yml ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}:/opt/air-api/
+
+
       - name: Deploy on API Server
         run: |
           ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} << 'ENDSSH'
             cd /opt/air-api
             
             echo "📥 Pulling latest Docker images..."
-            docker compose pull
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
 
             echo "📦 Running database migrations..."
-            docker compose run --rm app alembic upgrade head
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm app alembic upgrade head
             
             echo "🔄 Restarting services..."
-            docker compose up -d app bot
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d app bot
             
             echo "🧹 Cleaning up old images..."
             docker image prune -f
