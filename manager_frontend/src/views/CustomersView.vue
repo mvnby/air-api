@@ -8,6 +8,7 @@ const customers = ref<any[]>([]);
 const loading = ref(false);
 const searchQuery = ref('');
 const typeFilter = ref('');
+const showAllCustomers = ref(false);
 const page = ref(1);
 const meta = ref({ total: 0, pages: 1, limit: 20 });
 
@@ -25,6 +26,7 @@ async function loadCustomers() {
       meta.value.limit,
       searchQuery.value || undefined,
       typeFilter.value || undefined,
+      !showAllCustomers.value,
     );
     customers.value = data.items;
     meta.value = data.meta;
@@ -91,6 +93,10 @@ onMounted(loadCustomers);
               :class="typeFilter === 'company' ? 'bg-white text-teal-700 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700'"
           >Юр. лица</button>
         </div>
+        <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700">
+          <input v-model="showAllCustomers" type="checkbox" @change="onTypeChange" />
+          Показать всех
+        </label>
       </div>
     </div>
 
@@ -105,6 +111,7 @@ onMounted(loadCustomers);
       <Users :size="64" color="#ccc" />
       <h2>Клиенты не найдены</h2>
       <p v-if="searchQuery || typeFilter">Попробуйте изменить фильтры или поисковый запрос</p>
+      <p v-else-if="!showAllCustomers">Пока нет клиентов со сделками. Включите “Показать всех”, чтобы увидеть весь справочник.</p>
       <p v-else>Клиенты появятся здесь при создании заказов</p>
     </div>
 

@@ -94,6 +94,9 @@ class SchedulerService:
         # Run backup loop (once a day)
         asyncio.create_task(self._backup_loop())
 
+        # Run lead archive loop (once a day)
+        asyncio.create_task(self._lead_archive_loop())
+
         # Keep the main loop alive 
         while True:
             await asyncio.sleep(3600)
@@ -171,6 +174,20 @@ class SchedulerService:
             except Exception as e:
                 logger.error(f"❌ Backup Loop Error: {e}")
                 # Retry in 1 hour if it crashed to avoid loop spam
+                await asyncio.sleep(3600)
+
+    async def _lead_archive_loop(self):
+        """Archives lost/spam leads older than 90 days once every 24 hours."""
+        while True:
+            try:
+                logger.info("⏳ Lead archive job started...")
+                from services.lead_service import LeadService
+                async with async_session_maker() as session:
+                    archived_count = await LeadService.archive_expired_lost_leads(session=session, older_than_days=90)
+                logger.info(f"✅ Lead archive job done. Archived: {archived_count}")
+                await asyncio.sleep(24 * 3600)
+            except Exception as e:
+                logger.error(f"❌ Lead archive loop error: {e}")
                 await asyncio.sleep(3600)
 
 scheduler_service = SchedulerService()

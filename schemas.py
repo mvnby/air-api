@@ -233,6 +233,79 @@ class ManagerOrderDocumentResponse(BaseModel):
     edit_url: str
 
 
+class LeadResponse(BaseModel):
+    id: int
+    status: str
+    source: str
+    segment_hint: str
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    inn: Optional[str] = None
+    company_name: Optional[str] = None
+    request_text: str
+    loss_reason: Optional[str] = None
+    next_followup_date: Optional[datetime] = None
+    archived_at: Optional[datetime] = None
+    converted_order_id: Optional[int] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class LeadListResponse(BaseModel):
+    items: List[LeadResponse]
+    meta: Meta
+
+
+class LeadCreatePayload(BaseModel):
+    source: str = "manager"
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    inn: Optional[str] = None
+    company_name: Optional[str] = None
+    segment_hint: Optional[str] = None
+    request_text: str
+    next_followup_date: Optional[datetime] = None
+
+
+class LeadUpdatePayload(BaseModel):
+    status: Optional[str] = None
+    source: Optional[str] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    inn: Optional[str] = None
+    company_name: Optional[str] = None
+    segment_hint: Optional[str] = None
+    request_text: Optional[str] = None
+    loss_reason: Optional[str] = None
+    next_followup_date: Optional[datetime] = None
+    archived_at: Optional[datetime] = None
+
+
+class LeadQualifyPayload(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    inn: Optional[str] = None
+    full_legal_name: Optional[str] = None
+    delivery_address: Optional[str] = None
+    customer_type: Optional[str] = None
+    order_comment: Optional[str] = None
+
+
+class LeadLossPayload(BaseModel):
+    status: str = "lost"
+    loss_reason: Optional[str] = None
+
+
+class LeadQualifyResponse(BaseModel):
+    lead: LeadResponse
+    customer_id: int
+    order_id: int
+
+
 class ProductUpdate(BaseModel):
     title: Optional[str] = None
     price: Optional[int] = None

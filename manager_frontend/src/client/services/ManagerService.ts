@@ -415,6 +415,7 @@ export class ManagerService {
      * @param limit
      * @param search
      * @param type
+     * @param onlyWithOrders
      * @returns any Successful Response
      * @throws ApiError
      */
@@ -423,6 +424,7 @@ export class ManagerService {
         limit: number = 20,
         search?: (string | null),
         type?: (string | null),
+        onlyWithOrders: boolean = true,
     ): CancelablePromise<any> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -432,6 +434,7 @@ export class ManagerService {
                 'limit': limit,
                 'search': search,
                 'type': type,
+                'only_with_orders': onlyWithOrders,
             },
             errors: {
                 422: `Validation Error`,

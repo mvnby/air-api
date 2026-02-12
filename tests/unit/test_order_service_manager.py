@@ -9,7 +9,7 @@ from services.order_service import OrderService
 @pytest.mark.asyncio
 async def test_service_get_orders_for_manager_segment_and_search(db):
     c1 = Customer(name="Alice", phone="+375291111111", type=CustomerType.individual)
-    c2 = Customer(name="Acme LLC", phone="+375292222222", type=CustomerType.company, inn="999000111")
+    c2 = Customer(name="Acme LLC", phone="+375292222222", type=CustomerType.individual, inn="999000111")
     db.add(c1)
     db.add(c2)
     await db.commit()
@@ -21,11 +21,25 @@ async def test_service_get_orders_for_manager_segment_and_search(db):
     await db.commit()
 
     b2c = await OrderService.get_orders_for_manager(db, "b2c", page=1, limit=20)
-    assert all(item["customer"]["type"] == "individual" for item in b2c["items"])
+    assert len(b2c["items"]) == 1
+    assert b2c["items"][0]["customer"]["name"] == "Alice"
 
     b2b = await OrderService.get_orders_for_manager(db, "b2b", page=1, limit=20, search="999000111")
     assert len(b2b["items"]) == 1
-    assert b2b["items"][0]["customer"]["type"] == "company"
+    assert b2b["items"][0]["customer"]["name"] == "Acme LLC"
+
+
+@pytest.mark.asyncio
+async def test_service_get_orders_for_manager_b2c_includes_legacy_without_customer(db):
+    db.add(Order(customer_id=None, status=OrderStatus.NEW_LEAD, comment="legacy"))
+    await db.commit()
+
+    b2c = await OrderService.get_orders_for_manager(db, "b2c", page=1, limit=20)
+    assert len(b2c["items"]) == 1
+    assert b2c["items"][0]["customer"] is None
+
+    b2b = await OrderService.get_orders_for_manager(db, "b2b", page=1, limit=20)
+    assert len(b2b["items"]) == 0
 
 
 @pytest.mark.asyncio

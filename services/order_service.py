@@ -3,7 +3,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-from sqlalchemy import func, or_, cast, String, delete
+from sqlalchemy import func, or_, and_, not_, cast, String, delete
 from sqlalchemy.orm import selectinload
 
 from crud.order import OrderDAO
@@ -802,29 +802,31 @@ class OrderService:
     ) -> Dict[str, Any]:
         from schemas import Meta
 
-        segment_map = {
-            "b2c": CustomerType.individual,
-            "b2b": CustomerType.company,
-        }
-        customer_type = segment_map.get(customer_segment.lower())
-        if not customer_type:
+        segment = customer_segment.lower()
+        if segment not in {"b2c", "b2b"}:
             raise ValueError(f"Invalid segment: {customer_segment}")
+
+        # B2B = explicit company OR customer has non-empty INN.
+        # B2C = everything else (including legacy orders without linked customer).
+        has_inn = and_(Customer.inn.is_not(None), func.length(func.trim(Customer.inn)) > 0)
+        is_b2b = or_(Customer.type == CustomerType.company, has_inn)
+        segment_clause = is_b2b if segment == "b2b" else or_(Customer.id.is_(None), not_(is_b2b))
 
         base_stmt = (
             select(Order)
-            .join(Customer, Order.customer_id == Customer.id)
+            .outerjoin(Customer, Order.customer_id == Customer.id)
             .options(
                 selectinload(Order.customer),
                 selectinload(Order.product_links).selectinload(OrderProductLink.product),
                 selectinload(Order.service_links).selectinload(OrderServiceLink.service),
             )
-            .where(Customer.type == customer_type)
+            .where(segment_clause)
         )
 
         count_stmt = (
             select(func.count(Order.id))
-            .join(Customer, Order.customer_id == Customer.id)
-            .where(Customer.type == customer_type)
+            .outerjoin(Customer, Order.customer_id == Customer.id)
+            .where(segment_clause)
         )
 
         if status:

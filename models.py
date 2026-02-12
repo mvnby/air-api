@@ -155,6 +155,34 @@ class CustomerType(str, Enum):
     individual = "individual"
     company = "company"
 
+class LeadStatus(str, Enum):
+    new = "new"
+    contacted = "contacted"
+    qualified = "qualified"
+    lost = "lost"
+    spam = "spam"
+
+class LeadIntakeSource(str, Enum):
+    phone = "phone"
+    site = "site"
+    bot = "bot"
+    email = "email"
+    manager = "manager"
+    other = "other"
+
+class LeadSegmentHint(str, Enum):
+    unknown = "unknown"
+    b2c = "b2c"
+    b2b = "b2b"
+
+class LeadLossReason(str, Enum):
+    no_product = "no_product"
+    no_budget = "no_budget"
+    no_response = "no_response"
+    duplicate = "duplicate"
+    spam = "spam"
+    other = "other"
+
 class Customer(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     
@@ -188,6 +216,32 @@ class Customer(SQLModel, table=True):
 
     def __str__(self):
         return self.name
+
+class Lead(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    status: LeadStatus = Field(default=LeadStatus.new, sa_column=Column(String, index=True))
+    source: LeadIntakeSource = Field(default=LeadIntakeSource.manager, sa_column=Column(String, index=True))
+    segment_hint: LeadSegmentHint = Field(default=LeadSegmentHint.unknown, sa_column=Column(String, index=True))
+    loss_reason: Optional[LeadLossReason] = Field(default=None, sa_column=Column(String, index=True, nullable=True))
+
+    name: Optional[str] = None
+    phone: Optional[str] = Field(default=None, index=True)
+    email: Optional[str] = Field(default=None, index=True)
+    inn: Optional[str] = Field(default=None, index=True)
+    company_name: Optional[str] = None
+    request_text: str = Field(default="")
+
+    next_followup_date: Optional[datetime] = None
+    archived_at: Optional[datetime] = Field(default=None, index=True)
+
+    converted_order_id: Optional[int] = Field(default=None, foreign_key="order.id")
+
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
+
+    def __str__(self):
+        return f"Lead #{self.id} ({self.status})"
         
 # --- SHOPPING CART (PHASE 27) ---
 

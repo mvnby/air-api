@@ -3,11 +3,16 @@ import {
     LoginService,
     ManagerService,
     ManagerOrdersService,
+    ManagerLeadsService,
     AdminService,
     ApiService,
     type ProductUpdate,
     type ProductResponse as Product,
     type ManagerOrderUpdatePayload,
+    type LeadCreatePayload,
+    type LeadUpdatePayload,
+    type LeadQualifyPayload,
+    type LeadLossPayload,
 } from './client';
 
 OpenAPI.WITH_CREDENTIALS = true;
@@ -62,6 +67,44 @@ export const api = {
             order_id: orderId,
             new_status: newStatus,
         });
+    },
+
+    async getManagerLeads(params: {
+        page?: number;
+        limit?: number;
+        status?: string;
+        source?: string;
+        search?: string;
+        overdueOnly?: boolean;
+        includeArchived?: boolean;
+        sort?: string;
+    }) {
+        return await ManagerLeadsService.getManagerLeads(
+            params.page ?? 1,
+            params.limit ?? 20,
+            params.status ?? undefined,
+            params.source ?? undefined,
+            params.search ?? undefined,
+            params.overdueOnly ?? false,
+            params.includeArchived ?? false,
+            params.sort ?? 'created_at_desc',
+        );
+    },
+
+    async createManagerLead(payload: LeadCreatePayload) {
+        return await ManagerLeadsService.createManagerLead(payload);
+    },
+
+    async patchManagerLead(leadId: number, payload: LeadUpdatePayload) {
+        return await ManagerLeadsService.patchManagerLead(leadId, payload);
+    },
+
+    async qualifyManagerLead(leadId: number, payload: LeadQualifyPayload) {
+        return await ManagerLeadsService.qualifyManagerLead(leadId, payload);
+    },
+
+    async markManagerLeadLost(leadId: number, payload: LeadLossPayload) {
+        return await ManagerLeadsService.markManagerLeadLost(leadId, payload);
     },
 
     // Legacy Product Manager methods
@@ -175,8 +218,8 @@ export const api = {
         );
     },
 
-    async getManagerCustomers(page = 1, limit = 20, search?: string, type?: string) {
-        return await ManagerService.getManagerCustomers(page, limit, search ?? undefined, type ?? undefined);
+    async getManagerCustomers(page = 1, limit = 20, search?: string, type?: string, onlyWithOrders = true) {
+        return await ManagerService.getManagerCustomers(page, limit, search ?? undefined, type ?? undefined, onlyWithOrders);
     },
 
     async updateProduct(id: number, data: ProductUpdate) {

@@ -58,6 +58,7 @@
 * **Phase 48 (Manager Polish)**: Enhanced Manager Dashboard with **Gallery Management** (add/delete/promote), **Reuse from Catalog** tool, and reactive UI updates. Replaced `window.confirm` with custom UI. Validated dual-storage strategy: `gallery_images` (relation) as source of truth. Added **Local Image Upload** (Drag & Drop + Multi-select) via `POST /upload-local-images`. Fixed Media Storage conflict (consolidated to root `media`). Enabled auto-tagging for Unit Types (Wall/Duct/etc). ensured absolute URLs in API for Manager App consistency.
 * **Phase 49 (Stabilization)**: Paused feature development to pay down technical debt. Implemented **Pytest Infrastructure** with isolated `db_test` container. Migrated legacy scripts to unit/integration tests. Integrated **Sentry** SDK for monitoring. Introduced **OpenAPI Codegen** for Frontend, replacing manual fetch calls with a generated, type-safe Client (`manager_frontend/src/client`). Fixed critical schema bugs in `OrderService` and `Product` models.
 * **Phase 50 (Manager Bulk Tools)**: Implemented **Bulk Specs Editor** in Manager Dashboard using a Modal UI. Features include dynamic key/value rows, autocomplete for spec keys, and support for Merge/Replace/Delete operations. Integrated `BulkSpecsModal.vue` into the product list with multi-selection support. Updated API Client to expose `bulkUpdateSpecs` and `getPublicSpecKeys`.
+* **Phase 51 (CRM Leads + Orders UX)**: Implemented **Lead Funnel Without Customer Pollution**. Added `Lead` domain model and manager endpoints (`/api/manager/leads`) with qualification flow into `Customer + Order`. Added auto-archival for `lost/spam` leads after 90 days. Manager UI now includes Leads screen, updated sidebar navigation, customer list default filter (`only_with_orders=true`), and orders dashboard stability fixes (B2C/B2B segmentation alignment + request race protection + robust error rendering).
 
 1.  **Service Layer Pattern**: NEVER write raw SQL or business logic in Routers/Admin views. Always use `services/`.
 2.  **Session Management**: Always instantiate a new session when calling services from the Admin panel:
@@ -102,3 +103,7 @@
     -   Located in `web/src/content/blog/`.
     -   Must use `.mdx`.
     -   Images: `web/public/img/blog/` (referenced as `/img/blog/...`).
+5.  **CRM Hygiene**:
+    -   New raw inquiries should be created as `Lead`, not as `Customer`.
+    -   Convert to `Customer + Order` only after qualification.
+    -   `lost/spam` leads are operationally hidden and later archived.

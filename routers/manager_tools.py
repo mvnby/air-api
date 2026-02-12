@@ -27,6 +27,7 @@ from core.security import get_current_username
 from core.logger import logger
 from models import Product, ProductImage, Order, Customer
 from services.product_service import ProductService
+from services.customer_service import CustomerService
 
 import httpx
 from PIL import Image
@@ -932,6 +933,7 @@ async def list_customers_for_manager(
     limit: int = Query(20, ge=1, le=100),
     search: Optional[str] = Query(None),
     customer_type: Optional[str] = Query(None, alias="type"),
+    only_with_orders: bool = Query(True),
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
@@ -939,76 +941,14 @@ async def list_customers_for_manager(
     Paginated customer list for manager UI.
     Includes order count per customer.
     """
-    from sqlalchemy import or_
-
-    stmt = select(Customer)
-    count_stmt = select(func.count(Customer.id))
-
-    if search:
-        stmt = stmt.where(
-            or_(
-                Customer.name.ilike(f"%{search}%"),
-                Customer.phone.ilike(f"%{search}%"),
-                Customer.inn.ilike(f"%{search}%"),
-                Customer.email.ilike(f"%{search}%"),
-            )
-        )
-        count_stmt = count_stmt.where(
-            or_(
-                Customer.name.ilike(f"%{search}%"),
-                Customer.phone.ilike(f"%{search}%"),
-                Customer.inn.ilike(f"%{search}%"),
-                Customer.email.ilike(f"%{search}%"),
-            )
-        )
-
-    if customer_type:
-        stmt = stmt.where(Customer.type == customer_type)
-        count_stmt = count_stmt.where(Customer.type == customer_type)
-
-    stmt = stmt.order_by(Customer.created_at.desc())
-
-    offset = (page - 1) * limit
-    stmt = stmt.offset(offset).limit(limit)
-
-    result = await session.execute(stmt)
-    customers = result.scalars().all()
-
-    total_result = await session.execute(count_stmt)
-    total = total_result.scalar() or 0
-
-    customer_ids = [c.id for c in customers]
-    order_counts = {}
-    if customer_ids:
-        oc_stmt = select(Order.customer_id, func.count(Order.id)).where(
-            Order.customer_id.in_(customer_ids)
-        ).group_by(Order.customer_id)
-        oc_result = await session.execute(oc_stmt)
-        order_counts = dict(oc_result.all())
-
-    items = []
-    for c in customers:
-        items.append({
-            "id": c.id,
-            "name": c.name,
-            "phone": c.phone,
-            "email": c.email,
-            "type": c.type,
-            "inn": c.inn,
-            "full_legal_name": c.full_legal_name,
-            "created_at": c.created_at.isoformat() if c.created_at else None,
-            "order_count": order_counts.get(c.id, 0),
-        })
-
-    return {
-        "items": items,
-        "meta": {
-            "page": page,
-            "limit": limit,
-            "total": total,
-            "pages": (total + limit - 1) // limit if limit else 1,
-        }
-    }
+    return await CustomerService.list_for_manager(
+        session=session,
+        page=page,
+        limit=limit,
+        search=search,
+        customer_type=customer_type,
+        only_with_orders=only_with_orders,
+    )
 
 
 @router.patch("/products/{product_id}", operation_id="update_product")

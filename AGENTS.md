@@ -57,6 +57,7 @@ Run from `manager_frontend/`:
 - Build: `npm run build`
 - Preview build: `npm run preview`
 - Regenerate API client from backend OpenAPI: `npm run gen:api`
+  - Note: this project uses `--useUnionTypes` in codegen to avoid TS enum re-export issues.
 
 ## Workflows
 
@@ -96,7 +97,9 @@ Use this after large catalog imports or when unknown spec keys appear.
 1. Treat `manager_frontend/` as the evolving admin UI for modern workflows.
 2. Current implemented focus:
    - convenient product photo editing,
-   - bulk editing of product specs.
+   - bulk editing of product specs,
+   - CRM Orders dashboard (B2C/B2B, Kanban/List),
+   - Leads funnel (`/api/manager/leads`) with qualification into `Customer + Order`.
 3. Future direction:
    - migrate broader admin entities and flows from legacy SQLAdmin UX to Vue-based reactive UX.
 4. When API contracts change:
@@ -104,8 +107,23 @@ Use this after large catalog imports or when unknown spec keys appear.
    - refresh typed client with `npm run gen:api` in `manager_frontend/`,
    - verify photo/spec bulk-edit flows end-to-end.
 
+### 5) Leads Funnel Workflow
+
+1. Create raw incoming requests as `Lead` (do not create `Customer` directly).
+2. Work lead statuses: `new` -> `contacted` -> (`qualified` | `lost` | `spam`).
+3. Qualification path:
+   - deduplicate customer by `phone/email/inn`,
+   - create/update `Customer`,
+   - create `Order` with `status=new_lead`, `lead_source=manager`,
+   - store `converted_order_id` in `Lead`.
+4. Lost/spam lifecycle:
+   - excluded from default active lead list,
+   - auto-archived after 90 days by scheduler.
+5. Orders Kanban shows only real orders; leads stay separate until qualification.
+
 ## Notes
 
 - `docker-compose.yml` service names are `app`, `db`, `web`, `bot` (not `mvn-app`).
 - `scripts/normalize_legacy.py` uses shared normalization logic from `services/spec_normalizer.py`; keep both in sync.
 - Legacy admin (`admin/`, SQLAdmin) and manager app (`manager_frontend/`, Vue) currently coexist; prefer implementing new rich admin UX in manager app.
+- Manager list endpoints enforce pagination limits (`limit <= 100`); keep frontend requests within this bound.

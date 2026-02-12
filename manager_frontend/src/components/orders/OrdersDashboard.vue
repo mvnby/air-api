@@ -50,14 +50,26 @@ const setToast = (message: string) => {
 };
 
 const getErrorMessage = (error: unknown): string => {
-  const maybe = error as { body?: { detail?: string }; status?: number; message?: string };
-  if (maybe?.body?.detail) return maybe.body.detail;
+  const maybe = error as { body?: { detail?: unknown }; status?: number; message?: string; statusText?: string };
+  const detail = maybe?.body?.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    const first = detail[0] as { msg?: string; loc?: unknown[] };
+    if (first?.msg) {
+      const loc = Array.isArray(first.loc) ? first.loc.join('.') : '';
+      return loc ? `${loc}: ${first.msg}` : first.msg;
+    }
+    return JSON.stringify(detail);
+  }
+  if (detail && typeof detail === 'object') return JSON.stringify(detail);
   if (maybe?.message) return maybe.message;
-  if (maybe?.status) return `HTTP ${maybe.status}`;
+  if (maybe?.status) return `HTTP ${maybe.status}${maybe.statusText ? ` ${maybe.statusText}` : ''}`;
   return 'Неизвестная ошибка';
 };
 
+let loadRequestId = 0;
 const loadOrders = async () => {
+  const requestId = ++loadRequestId;
   loading.value = true;
   try {
     const response = await api.getManagerOrders({
@@ -67,13 +79,22 @@ const loadOrders = async () => {
       overdueOnly: overdueOnly.value,
       sort: sort.value,
       page: 1,
-      limit: 200,
+      limit: 100,
     });
+    if (requestId !== loadRequestId) return;
     orders.value = response.items;
   } catch (error) {
+    if (requestId !== loadRequestId) return;
     console.error(error);
+    const maybe = error as { status?: number };
+    if (maybe?.status === 401) {
+      showLoginModal.value = true;
+      setToast('Требуется повторный вход');
+      return;
+    }
     setToast(`Не удалось загрузить сделки: ${getErrorMessage(error)}`);
   } finally {
+    if (requestId !== loadRequestId) return;
     loading.value = false;
   }
 };

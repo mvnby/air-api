@@ -29,7 +29,7 @@ async def _auth_headers(async_client):
 @pytest.mark.asyncio
 async def test_manager_orders_list_segment_filter(async_client, db):
     c1 = Customer(name="B2C", phone="+375291111111", type=CustomerType.individual)
-    c2 = Customer(name="B2B", phone="+375292222222", type=CustomerType.company, inn="123456789")
+    c2 = Customer(name="B2B", phone="+375292222222", type=CustomerType.individual, inn="123456789")
     db.add(c1)
     db.add(c2)
     await db.commit()
@@ -38,19 +38,22 @@ async def test_manager_orders_list_segment_filter(async_client, db):
 
     db.add(Order(customer_id=c1.id, status=OrderStatus.NEW_LEAD, total_amount=100))
     db.add(Order(customer_id=c2.id, status=OrderStatus.NEW_LEAD, total_amount=200))
+    db.add(Order(customer_id=None, status=OrderStatus.NEW_LEAD, total_amount=50))
     await db.commit()
 
     headers = await _auth_headers(async_client)
 
     r_b2c = await async_client.get("/api/manager/orders?segment=b2c", headers=headers)
     assert r_b2c.status_code == 200
-    for item in r_b2c.json()["items"]:
-        assert item["customer"]["type"] == "individual"
+    b2c_items = r_b2c.json()["items"]
+    assert any(item["customer"] is None for item in b2c_items)
+    assert all((item["customer"] is None) or (item["customer"]["inn"] in (None, "")) for item in b2c_items)
 
     r_b2b = await async_client.get("/api/manager/orders?segment=b2b", headers=headers)
     assert r_b2b.status_code == 200
-    for item in r_b2b.json()["items"]:
-        assert item["customer"]["type"] == "company"
+    b2b_items = r_b2b.json()["items"]
+    assert len(b2b_items) == 1
+    assert b2b_items[0]["customer"]["inn"] == "123456789"
 
 
 @pytest.mark.asyncio

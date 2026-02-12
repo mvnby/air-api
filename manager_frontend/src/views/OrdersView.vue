@@ -37,12 +37,13 @@ const SOURCE_MAP: Record<string, string> = {
 async function loadOrders() {
   loading.value = true;
   try {
-    const data = await api.getManagerOrders(
-      page.value,
-      meta.value.limit,
-      statusFilter.value || undefined,
-      searchQuery.value || undefined,
-    );
+    const data = await api.getManagerOrders({
+      segment: 'b2c',
+      page: page.value,
+      limit: meta.value.limit,
+      status: statusFilter.value || undefined,
+      search: searchQuery.value || undefined,
+    });
     orders.value = data.items;
     meta.value = data.meta;
   } catch (e) {

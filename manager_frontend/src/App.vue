@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
-import { Package, ShoppingCart, Users } from 'lucide-vue-next';
+import { Package, ShoppingCart, Users, UserPlus } from 'lucide-vue-next';
 import { api } from './api';
 import ProductsView from './views/ProductsView.vue';
 import CustomersView from './views/CustomersView.vue';
 import OrdersKanbanView from './views/OrdersKanbanView.vue';
+import LeadsView from './views/LeadsView.vue';
 
 const isAuthenticated = ref(false);
 const showLoginModal = ref(false);
@@ -16,12 +17,14 @@ const loginError = ref('');
 const currentPath = ref(window.location.pathname);
 
 const navItems = [
-  { path: '/manager/products', label: 'Кондиционеры', icon: Package },
+  { path: '/manager/leads', label: 'Лиды', icon: UserPlus },
   { path: '/manager/orders/kanban', label: 'Заказы', icon: ShoppingCart },
+  { path: '/manager/products', label: 'Кондиционеры', icon: Package },
   { path: '/manager/customers', label: 'Клиенты', icon: Users },
 ];
 
 const currentView = computed(() => {
+  if (currentPath.value.startsWith('/manager/leads')) return 'leads';
   if (currentPath.value.startsWith('/manager/orders')) return 'orders';
   if (currentPath.value.startsWith('/manager/customers')) return 'customers';
   return 'products';
@@ -64,7 +67,7 @@ const checkAuth = async () => {
 
 onMounted(() => {
   if (window.location.pathname === '/manager') {
-    navigate('/manager/products');
+    navigate('/manager/leads');
   }
   window.addEventListener('popstate', onPopState);
   checkAuth();
@@ -148,7 +151,8 @@ onBeforeUnmount(() => {
     </aside>
 
     <main class="flex-1 overflow-auto">
-      <OrdersKanbanView v-if="currentView === 'orders'" />
+      <LeadsView v-if="currentView === 'leads'" />
+      <OrdersKanbanView v-else-if="currentView === 'orders'" />
       <CustomersView v-else-if="currentView === 'customers'" />
       <ProductsView v-else />
     </main>
