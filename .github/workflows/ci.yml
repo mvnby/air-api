@@ -45,17 +45,19 @@ jobs:
 
       - name: Wait for DB
         run: |
-          echo "Waiting for Postgres to be ready..."
-          # Try to use pg_isready inside the db service
+          echo "Waiting for Postgres (main) to be ready..."
           for i in $(seq 1 60); do
-            # Note: Using default postgres user for check inside container
-            docker compose exec -T db pg_isready -U postgres -d air_conditioners >/dev/null 2>&1 && { echo "Postgres ready"; exit 0; }
+            docker compose exec -T db pg_isready -U postgres -d air_conditioners >/dev/null 2>&1 && { echo "Postgres (main) ready"; break; }
             echo "Postgres not ready ($i/60) - sleeping 1s"
             sleep 1
           done
-          echo "Postgres did not become ready in time"
-          docker compose logs db --tail=50
-          exit 1
+
+          echo "Waiting for Postgres (test) to be ready..."
+          for i in $(seq 1 60); do
+            docker compose exec -T db_test pg_isready -U postgres -d air_conditioners_test >/dev/null 2>&1 && { echo "Postgres (test) ready"; break; }
+            echo "Postgres test not ready ($i/60) - sleeping 1s"
+            sleep 1
+          done
 
       - name: Run Pytest
         # using the 'app' service where the code lives

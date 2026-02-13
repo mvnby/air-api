@@ -5,13 +5,18 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
-# Ensure we are using the TEST database
-# (This is a safety check in case pytest.ini is ignored)
-encoded_url = os.getenv("DATABASE_URL", "")
-if "test" not in encoded_url and ":memory:" not in encoded_url:
-    # Fallback or error? 
-    # Let's trust pytest.ini but log a warning if needed
-    pass
+# CRITICAL: Always use the TEST database for tests.
+# Construct the test DB URL from env vars, pointing to the db_test service.
+_pg_user = os.environ.get("POSTGRES_USER", "mvnadmin")
+_pg_pass = os.environ.get("POSTGRES_PASSWORD", "securepass")
+_test_db_host = os.environ.get("TEST_DB_HOST", "db_test")  # Docker service name
+_test_db_name = "air_conditioners_test"
+TEST_DATABASE_URL = f"postgresql+asyncpg://{_pg_user}:{_pg_pass}@{_test_db_host}:5432/{_test_db_name}"
+
+# Safety net: abort if the URL doesn't contain 'test'
+assert "test" in TEST_DATABASE_URL.lower(), (
+    f"SAFETY: Refusing to run tests against a non-test database! URL={TEST_DATABASE_URL}"
+)
 
 # event_loop fixture removed to let pytest-asyncio handle it with scope=session
 
@@ -20,13 +25,9 @@ if "test" not in encoded_url and ":memory:" not in encoded_url:
 async def db_engine():
     """
     Create a fresh database engine for the test session.
-    Waits for the DB to be ready.
+    Always uses the dedicated test database (db_test service).
     """
-    database_url = os.environ.get("DATABASE_URL")
-    if not database_url:
-        raise ValueError("DATABASE_URL is not set for tests")
-    
-    engine = create_async_engine(database_url, echo=False)
+    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 
     # Basic check if DB is up
     async with engine.begin() as conn:
