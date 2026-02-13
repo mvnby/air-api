@@ -109,12 +109,13 @@ jobs:
           # Copy compose files to project dir (requires write access)
           scp -i ~/.ssh/deploy_key -v docker-compose.yml docker-compose.prod.yml ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}:/opt/air-api/
           
-          # Copy deploy script to /tmp to avoid permission issues or file locking
-          scp -i ~/.ssh/deploy_key -v scripts/deploy.sh ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}:/tmp/deploy.sh
-
       - name: Execute Deployment Script
         run: |
-          ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "GHCR_PAT='${{ secrets.GHCR_PAT }}' GITHUB_ACTOR='${{ github.actor }}' bash /tmp/deploy.sh"
+          # Transfer script via pipe to avoid SCP issues
+          cat scripts/deploy.sh | ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/deploy.sh"
+          
+          # Execute script
+          ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "chmod +x /tmp/deploy.sh && GHCR_PAT='${{ secrets.GHCR_PAT }}' GITHUB_ACTOR='${{ github.actor }}' bash /tmp/deploy.sh"
 
   # ======================================================
   # 2. FRONTEND DEPLOYMENT (Static -> mvn-web)
