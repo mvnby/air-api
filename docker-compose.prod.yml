@@ -26,6 +26,9 @@ services:
       - "8000:8000"
     volumes:
       - ./media:/app/media
+      - ./token.json:/app/token.json
+      - ./client_secret.json:/app/client_secret.json
+      - ./credentials.json:/app/credentials.json
 
   bot:
     image: ghcr.io/mvnby/air-api/backend:latest
