@@ -107,7 +107,7 @@ jobs:
           ssh-keyscan -H ${{ secrets.SSH_HOST_API }} >> ~/.ssh/known_hosts
           
           # Copy compose files to project dir (requires write access)
-          scp -i ~/.ssh/deploy_key -v docker-compose.yml docker-compose.prod.yml ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}:/opt/air-api/
+          scp -i ~/.ssh/deploy_key -v docker-compose.prod.yml ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}:/opt/air-api/
           
       - name: Execute Deployment Script
         run: |
