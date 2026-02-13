@@ -121,6 +121,10 @@ async def test_manager_order_detail_uses_snapshot_prices(async_client, db):
     db.add(product)
     await db.commit()
 
+    # Expunge the order from the session's identity map so the endpoint's
+    # selectinload creates a fresh instance with up-to-date product_links.
+    db.expunge(order)
+
     headers = await _auth_headers(async_client)
     response = await async_client.get(f"/api/manager/orders/{order.id}", headers=headers)
     assert response.status_code == 200
