@@ -99,47 +99,18 @@ jobs:
           
           echo "✅ Connectivity tests completed"
 
-      - name: Setup SSH Key
+      - name: Copy Compose Files and Scripts to Server
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          # Add server to known_hosts to avoid interactive prompt
           ssh-keyscan -H ${{ secrets.SSH_HOST_API }} >> ~/.ssh/known_hosts
+          
+          scp -i ~/.ssh/deploy_key -v docker-compose.yml docker-compose.prod.yml scripts/deploy.sh ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}:/opt/air-api/
 
-      - name: Copy Compose Files to Server
+      - name: Execute Deployment Script
         run: |
-          scp -i ~/.ssh/deploy_key -v docker-compose.yml docker-compose.prod.yml ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}:/opt/air-api/
-
-
-      - name: Deploy on API Server
-        run: |
-          ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} << ENDSSH
-            set -e  # Fail on any error
-            
-            cd /opt/air-api
-            
-            echo "🔑 Logging into GHCR..."
-            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-            echo "📥 Pulling latest Docker images..."
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-
-            echo "📦 Running database migrations..."
-            # Use -T to disable pseudo-tty allocation which might cause issues in non-interactive SSH
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml run -T --rm app alembic upgrade head
-            
-            echo "🛑 Stopping old containers (to force clean restart)..."
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml stop app bot || true
-            
-            echo "🔄 Starting services with new image..."
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate app bot
-            
-            echo "🧹 Cleaning up old images..."
-            docker image prune -f
-            
-            echo "✅ Deployment completed successfully!"
-          ENDSSH
+          ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "GHCR_PAT='${{ secrets.GHCR_PAT }}' GITHUB_ACTOR='${{ github.actor }}' bash /opt/air-api/deploy.sh"
 
   # ======================================================
   # 2. FRONTEND DEPLOYMENT (Static -> mvn-web)
