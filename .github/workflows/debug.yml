@@ -1,0 +1,37 @@
+name: Test Google API 🔐
+
+on: [workflow_dispatch]
+
+jobs:
+  test-google:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SSH_HOST_API }} >> ~/.ssh/known_hosts
+
+      - name: Run Google Diagnostic
+        run: |
+          ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} << 'ENDSSH'
+            cd /opt/air-api
+            echo "🧪 Running diagnostic inside the app container..."
+            # Execute python snippet inside the running app container
+            docker compose -f docker-compose.prod.yml exec -T app python3 -c "
+            try:
+                from services.google_service import google_service
+                import os
+                print('✅ Python Import: Successful')
+                print(f'🔍 File token.json exists in container: {os.path.exists(\"token.json\")}')
+                status = google_service.get_token_status()
+                print(f'📊 Token Status: {status}')
+                if status.get(\"valid\"):
+                    print(\"🚀 GOOGLE API INTEGRATION: WORKING\")
+                else:
+                    print(\"❌ GOOGLE API INTEGRATION: TOKEN INVALID OR EXPIRED\")
+            except Exception as e:
+                print(f'❌ DIAGNOSTIC FAILED: {str(e)}')
+            "
+          ENDSSH
