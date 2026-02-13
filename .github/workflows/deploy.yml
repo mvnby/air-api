@@ -115,6 +115,8 @@ jobs:
       - name: Deploy on API Server
         run: |
           ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} << ENDSSH
+            set -e  # Fail on any error
+            
             cd /opt/air-api
             
             echo "🔑 Logging into GHCR..."
@@ -124,15 +126,19 @@ jobs:
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
 
             echo "📦 Running database migrations..."
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm app alembic upgrade head
+            # Use -T to disable pseudo-tty allocation which might cause issues in non-interactive SSH
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml run -T --rm app alembic upgrade head
             
-            echo "🔄 Restarting services..."
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d app bot
+            echo "🛑 Stopping old containers (to force clean restart)..."
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml stop app bot || true
+            
+            echo "🔄 Starting services with new image..."
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate app bot
             
             echo "🧹 Cleaning up old images..."
             docker image prune -f
             
-            echo "✅ Deployment completed!"
+            echo "✅ Deployment completed successfully!"
           ENDSSH
 
   # ======================================================
