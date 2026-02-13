@@ -17,22 +17,37 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} << 'ENDSSH'
             cd /opt/air-api
-            echo "🧪 Running diagnostic inside the app container..."
-            # Execute python snippet inside the running app container WITHOUT leading spaces
-            docker compose -f docker-compose.prod.yml exec -T app python3 -c "
+            echo "🧪 Starting diagnostic..."
+            
+            # Use heredoc to send script into the container
+            docker compose -f docker-compose.prod.yml exec -T app python3 << 'ENDPYTHON'
 try:
-    from services.google_service import google_service
     import os
-    print('✅ Python Import: Successful')
-    print(f'🔍 File token.json exists: {os.path.exists(\"token.json\")}')
-    print(f'🔍 File client_secret.json exists: {os.path.exists(\"client_secret.json\")}')
+    from services.google_service import google_service
+    
+    print('✅ Python Environment: OK')
+    
+    # Check physical files
+    files = ['token.json', 'client_secret.json', 'credentials.json']
+    for f in files:
+        exists = os.path.exists(f)
+        status = '✅' if exists else '❌'
+        print(f'{status} File {f} exists in container')
+
+    # Check logic
     status = google_service.get_token_status()
-    print(f'📊 Token Status: {status}')
-    if status.get(\"valid\") or (status.get(\"exists\") and not status.get(\"expired\")):
-        print(\"🚀 GOOGLE API INTEGRATION: WORKING\")
+    print(f'📊 Token Status Detailed: {status}')
+    
+    if status.get("valid"):
+        print("🚀 RESULT: GOOGLE API INTEGRATION IS FULLY FUNCTIONAL")
+    elif status.get("exists") and not status.get("expired"):
+         print("🚀 RESULT: GOOGLE API INTEGRATION IS WORKING (token exists and not expired)")
     else:
-        print(\"❌ GOOGLE API INTEGRATION: TOKEN INVALID OR EXPIRED\")
+        print("⚠️ RESULT: GOOGLE API MAY NEED RE-AUTHENTICATION")
+        
 except Exception as e:
-    print(f'❌ DIAGNOSTIC FAILED: {str(e)}')
-"
+    print(f'💥 DIAGNOSTIC CRASHED: {str(e)}')
+    import traceback
+    traceback.print_exc()
+ENDPYTHON
           ENDSSH
