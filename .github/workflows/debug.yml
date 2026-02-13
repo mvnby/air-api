@@ -13,16 +13,16 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.SSH_HOST_API }} >> ~/.ssh/known_hosts
 
-      - name: Fetch Docker Logs
+      - name: Prune and Check Disk
         run: |
           ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} << 'ENDSSH'
-            cd /opt/air-api
-            echo "🐳 Docker PS:"
-            docker ps -a
+            echo "💾 Disk Usage Before:"
+            df -h
             
-            echo "\n📄 App Logs (Last 100 lines):"
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail=100 app
-
-            echo "\n🤖 Bot Logs (Last 50 lines):"
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail=50 bot
+            echo "🧹 Pruning Docker System..."
+            # Force prune of all unused images, containers, networks
+            docker system prune -af
+            
+            echo "💾 Disk Usage After:"
+            df -h
           ENDSSH
