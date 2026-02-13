@@ -114,9 +114,12 @@ jobs:
 
       - name: Deploy on API Server
         run: |
-          ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} << 'ENDSSH'
+          ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} << ENDSSH
             cd /opt/air-api
             
+            echo "🔑 Logging into GHCR..."
+            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
             echo "📥 Pulling latest Docker images..."
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
 
