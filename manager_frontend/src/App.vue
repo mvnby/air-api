@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
-import { Package, ShoppingCart, Users, UserPlus } from 'lucide-vue-next';
+import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2 } from 'lucide-vue-next';
 import { api } from './api';
 import ProductsView from './views/ProductsView.vue';
 import CustomersView from './views/CustomersView.vue';
@@ -13,6 +13,7 @@ const loginUsername = ref('');
 const loginPassword = ref('');
 const loginLoading = ref(false);
 const loginError = ref('');
+const rebuildLoading = ref(false);
 
 const currentPath = ref(window.location.pathname);
 
@@ -52,6 +53,19 @@ const handleLogin = async () => {
     loginError.value = 'Invalid credentials';
   } finally {
     loginLoading.value = false;
+  }
+};
+
+const handleRebuild = async () => {
+  if (!confirm('Вы уверены, что хотите обновить сайт? Это займет около 2 минут.')) return;
+  rebuildLoading.value = true;
+  try {
+    const result = await api.rebuildWeb();
+    alert(result.message || 'Сборка запущена! Сайт обновится через пару минут.');
+  } catch (err: any) {
+    alert('Ошибка при запуске сборки: ' + err.message);
+  } finally {
+    rebuildLoading.value = false;
   }
 };
 
@@ -148,6 +162,21 @@ onBeforeUnmount(() => {
           {{ item.label }}
         </button>
       </nav>
+
+      <div class="p-3 border-t border-gray-100 mt-auto">
+        <button
+          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all"
+          :class="rebuildLoading
+            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+            : 'bg-teal-600 text-white hover:bg-teal-700 shadow-sm hover:shadow-md'"
+          :disabled="rebuildLoading"
+          @click="handleRebuild"
+        >
+          <Loader2 v-if="rebuildLoading" class="w-5 h-5 animate-spin" />
+          <Zap v-else class="w-5 h-5" />
+          {{ rebuildLoading ? 'Сборка...' : 'Обновить сайт' }}
+        </button>
+      </div>
     </aside>
 
     <main class="flex-1 overflow-auto">

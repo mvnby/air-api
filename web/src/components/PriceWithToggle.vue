@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { getInstallationRates, getGlobalConfig } from '../utils/api';
+import { getInstallationRates, getGlobalConfig, getProductById } from '../utils/api';
 import { addItem } from '../store/cart';
 import { addToast } from '../store/toast';
 
@@ -25,15 +25,23 @@ const discount = ref(0);
 const loading = ref(true);
 const buttonState = ref('default');
 
+const liveBasePrice = ref(props.basePrice);
+const liveOldPrice = ref(props.oldPrice);
+
 onMounted(async () => {
     try {
-        const [ratesData, configData] = await Promise.all([
+        const [ratesData, configData, freshProduct] = await Promise.all([
             getInstallationRates(),
-            getGlobalConfig()
+            getGlobalConfig(),
+            props.productId ? getProductById(props.productId) : Promise.resolve(null)
         ]);
         rates.value = ratesData || [];
         if (configData && configData.install_discount) {
             discount.value = parseInt(configData.install_discount, 10) || 0;
+        }
+        if (freshProduct && freshProduct.price !== undefined) {
+            liveBasePrice.value = freshProduct.price;
+            liveOldPrice.value = freshProduct.old_price || 0;
         }
     } finally {
         loading.value = false;
@@ -97,7 +105,7 @@ const priceDisplay = computed(() => {
     // Case 1: No match or non-fixed -> Just Product Price
     if (!matchedRate.value || !matchedRate.value.is_fixed) {
          return {
-             current: format(props.basePrice),
+             current: format(liveBasePrice.value),
              old: null
          };
     }
@@ -105,14 +113,14 @@ const priceDisplay = computed(() => {
     // Case 2: Fixed rate but NOT toggled -> Just Product Price
     if (!isInstalled.value) {
         return {
-            current: format(props.basePrice),
+            current: format(liveBasePrice.value),
             old: null
         };
     }
 
     // Case 3: Fixed rate + Toggled -> Product + Discounted Install
-    const total = props.basePrice + finalInstallPrice.value;
-    const oldTotal = props.basePrice + effectiveInstallPrice.value;
+    const total = liveBasePrice.value + finalInstallPrice.value;
+    const oldTotal = liveBasePrice.value + effectiveInstallPrice.value;
 
     return {
         current: format(total),
@@ -121,9 +129,9 @@ const priceDisplay = computed(() => {
 });
 
 const discountPct = computed(() => {
-    if (!props.oldPrice || !props.basePrice) return 0;
-    const diff = props.oldPrice - props.basePrice;
-    return Math.round((diff / props.oldPrice) * 100);
+    if (!liveOldPrice.value || !liveBasePrice.value) return 0;
+    const diff = liveOldPrice.value - liveBasePrice.value;
+    return Math.round((diff / liveOldPrice.value) * 100);
 });
 
 const toggle = (e) => {
@@ -138,7 +146,7 @@ const addToCart = () => {
     addItem({
         id: props.id,
         name: props.title,
-        price: props.basePrice,
+        price: liveBasePrice.value,
         image: props.image,
         productId: props.productId,
         withInstallation: isInstalled.value,
@@ -161,7 +169,7 @@ const addToCart = () => {
     <!-- Price Display -->
     <div class="price-wrapper">
         <!-- Sale Badge -->
-        <div v-if="props.oldPrice" class="discount-badge sale-badge">
+        <div v-if="liveOldPrice" class="discount-badge sale-badge">
           -{{ discountPct }}%
         </div>
         

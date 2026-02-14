@@ -74,6 +74,10 @@ class Settings(BaseSettings):
     # Monitoring
     SENTRY_DSN: str = ""
 
+    # GitHub Actions (for Turbo Rebuilds)
+    GITHUB_TOKEN: str = ""
+    GITHUB_OWNER: str = "mvnby"
+    GITHUB_REPO: str = "air-api"
     
     model_config = SettingsConfigDict(
         env_file=".env",

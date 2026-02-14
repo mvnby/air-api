@@ -253,4 +253,20 @@ export const api = {
             operation,
         });
     },
+
+    async rebuildWeb() {
+        // Manually implement the request for the new endpoint
+        const response = await fetch('/api/system/rebuild-web', {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+            },
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+            throw new Error(error.detail || 'Failed to trigger rebuild');
+        }
+        return await response.json();
+    },
 };
