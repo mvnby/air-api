@@ -24,11 +24,13 @@ const sort: CatalogSort = allowedSorts.includes(sortRaw as CatalogSort)
     : "newest";
 const tagSlugsRaw = searchParams.getAll("tag_slugs");
 const isInverterRaw = searchParams.get("is_inverter");
+const hasWifiRaw = searchParams.get("has_wifi");
+const heatingMinRaw = searchParams.get("heating_min");
 const areaMinRaw = searchParams.get("area_min");
 let areaMaxRaw = searchParams.get("area_max");
 
 // Smart Default: if no area/inverter/tags specified, default to area_max=29
-if (tagSlugsRaw.length === 0 && !isInverterRaw && !areaMinRaw && !areaMaxRaw) {
+if (tagSlugsRaw.length === 0 && !isInverterRaw && !hasWifiRaw && !heatingMinRaw && !areaMinRaw && !areaMaxRaw) {
     areaMaxRaw = "29";
 }
 
@@ -43,14 +45,17 @@ const parsedIsInverter =
         : isInverterRaw === "false"
           ? false
           : undefined;
+const parsedHasWifi =
+    hasWifiRaw === "true"
+        ? true
+        : hasWifiRaw === "false"
+          ? false
+          : undefined;
 
 const parsedAreaMin = areaMinRaw ? parseInt(areaMinRaw, 10) : undefined;
 const parsedAreaMax = areaMaxRaw ? parseInt(areaMaxRaw, 10) : undefined;
-
-let tag_slugs: string[] = [...userTagSlugs];
-if (!tag_slugs.includes("wall")) {
-    tag_slugs.push("wall");
-}
+const parsedHeatingMin = heatingMinRaw ? parseInt(heatingMinRaw, 10) : undefined;
+const tag_slugs: string[] = [...userTagSlugs];
 
 let canonicalPath = "/catalog";
 let robotsValue: string | undefined;
@@ -60,6 +65,8 @@ if (hasQueryParams) {
         sort,
         tag_slugs: userTagSlugs,
         is_inverter: parsedIsInverter,
+        has_wifi: parsedHasWifi,
+        heating_min: parsedHeatingMin,
         area_min: parsedAreaMin,
         area_max: parsedAreaMax,
     });
@@ -67,12 +74,6 @@ if (hasQueryParams) {
         canonicalPath = `/catalog/${matchedVirtual.slug}`;
     }
     robotsValue = "noindex,follow";
-}
-
-if (tag_slugs.length > 0) {
-    tag_slugs = tag_slugs
-        .map((s) => s.trim())
-        .filter(Boolean);
 }
 
 interface Product {
@@ -102,6 +103,8 @@ const data = await getCatalog({
     sort,
     tag_slugs,
     is_inverter: parsedIsInverter,
+    has_wifi: parsedHasWifi,
+    heating_min: parsedHeatingMin,
     area_min: parsedAreaMin,
     area_max: parsedAreaMax,
 });
@@ -163,6 +166,13 @@ const meta = data.meta || { total: 0, page: 1, limit: 12, pages: 1 };
                         : sp.get("is_inverter") === "false"
                           ? false
                           : undefined,
+                has_wifi:
+                    sp.get("has_wifi") === "true"
+                        ? true
+                        : sp.get("has_wifi") === "false"
+                          ? false
+                          : undefined,
+                heating_min: toNumber(sp.get("heating_min")),
                 area_min: toNumber(sp.get("area_min")),
                 area_max: toNumber(sp.get("area_max")),
             };
@@ -175,6 +185,11 @@ const meta = data.meta || { total: 0, page: 1, limit: 12, pages: 1 };
                         typeof category.filters.is_inverter === "boolean"
                             ? category.filters.is_inverter
                             : undefined,
+                    has_wifi:
+                        typeof category.filters.has_wifi === "boolean"
+                            ? category.filters.has_wifi
+                            : undefined,
+                    heating_min: category.filters.heating_min,
                     area_min: category.filters.area_min,
                     area_max: category.filters.area_max,
                 };
@@ -183,6 +198,8 @@ const meta = data.meta || { total: 0, page: 1, limit: 12, pages: 1 };
                     normalizedInput.sort === normalizedCategory.sort &&
                     normalizedInput.is_inverter ===
                         normalizedCategory.is_inverter &&
+                    normalizedInput.has_wifi === normalizedCategory.has_wifi &&
+                    normalizedInput.heating_min === normalizedCategory.heating_min &&
                     normalizedInput.area_min === normalizedCategory.area_min &&
                     normalizedInput.area_max === normalizedCategory.area_max &&
                     normalizedInput.tag_slugs.length ===

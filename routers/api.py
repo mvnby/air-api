@@ -20,6 +20,7 @@ from schemas import (
     CatalogResponse,
     Meta,
     ProductResponse,
+    ProductSiblingResponse,
     ProductPriceResponse,
     ArticleResponse,
     ServiceResponse,
@@ -28,7 +29,8 @@ from schemas import (
     TagResponse,
     TagGroupResponse,
     ProductImageResponse,
-    SpecsKeysResponse
+    SpecsKeysResponse,
+    FiltersConfigResponse,
 )
 from crud.product import ProductDAO
 from models import Article, Service, Order, Customer, OrderStatus, OrderProductLink, CustomerType
@@ -39,7 +41,10 @@ logger = logging.getLogger(__name__)
 
 # --- HELPER FUNCTIONS ---
 
-def _map_product_to_response(product: Product) -> ProductResponse:
+def _map_product_to_response(
+    product: Product,
+    series_siblings: Optional[List[Product]] = None,
+) -> ProductResponse:
     """Convert Product model to ProductResponse schema."""
     p_tags = []
     # Ensure tags are loaded
@@ -64,7 +69,6 @@ def _map_product_to_response(product: Product) -> ProductResponse:
             ))
     
     # Handle potentially string-encoded JSON fields
-    import json
     specs = product.specs
     if isinstance(specs, str):
         try:
@@ -74,6 +78,8 @@ def _map_product_to_response(product: Product) -> ProductResponse:
             specs = ast.literal_eval(specs)
         except Exception:
             specs = {}  # Fallback if JSON parsing fails
+    if isinstance(specs, dict):
+        specs = {k: v for k, v in specs.items() if not str(k).startswith("__")}
             
     images = product.images
     if isinstance(images, str):
@@ -94,6 +100,20 @@ def _map_product_to_response(product: Product) -> ProductResponse:
                 is_installation_photo=img.is_installation_photo,
             ))
 
+    siblings_payload = [
+        ProductSiblingResponse(
+            id=item.id,
+            title=item.title,
+            slug=item.slug,
+            price=item.price,
+            old_price=item.old_price,
+            area=item.area,
+            is_inverter=item.is_inverter,
+            main_image=item.main_image,
+        )
+        for item in (series_siblings or [])
+    ]
+
     return ProductResponse(
         id=product.id,
         title=product.title,
@@ -109,7 +129,8 @@ def _map_product_to_response(product: Product) -> ProductResponse:
         tags=p_tags,
         specs=specs or {},
         images=images or [],
-        gallery_images=gallery
+        gallery_images=gallery,
+        series_siblings=siblings_payload,
     )
 
 def _validate_pagination(page: int, limit: int) -> None:
@@ -212,10 +233,18 @@ async def get_public_spec_keys(
     for spec_dict in all_specs:
         if spec_dict:
             for key in spec_dict.keys():
+                if str(key).startswith("__"):
+                    continue
                 stats[key] = stats.get(key, 0) + 1
             
     sorted_keys = sorted(stats.keys())
     return SpecsKeysResponse(keys=sorted_keys, total_products_using=stats)
+
+
+@router.get("/v1/filters/config", response_model=FiltersConfigResponse, operation_id="get_filters_config")
+async def get_filters_config(session: AsyncSession = Depends(get_session)):
+    """Return filter configuration for storefront controls."""
+    return await ProductService.get_filters_config(session)
 
 @router.get("/admin/services/search")
 async def admin_search_services(
@@ -446,6 +475,8 @@ async def get_catalog(
     max_price: Optional[int] = None,
     area_min: Optional[int] = None,
     area_max: Optional[int] = None,
+    heating_min: Optional[int] = None,
+    has_wifi: Optional[bool] = None,
     tag_slugs: Optional[List[str]] = Query(None),
     is_inverter: Optional[bool] = None,
     session: AsyncSession = Depends(get_session)
@@ -456,7 +487,9 @@ async def get_catalog(
     **Filters:**
     - `min_price`, `max_price`: Price range filter
     - `area_min`, `area_max`: Area coverage filter
-    - `tag_slugs`: Filter by tag slugs (e.g., 'inverter', 'chigo', 'area-25')
+    - `heating_min`: Min outdoor heating temperature support (e.g. -25)
+    - `has_wifi`: Wi-Fi availability
+    - `tag_slugs`: Filter by tag slugs for brand/series/expert-badge groups
     - `is_inverter`: Filter by inverter technology
     
     **Sorting:**
@@ -479,6 +512,8 @@ async def get_catalog(
         area_max=area_max,
         min_price=min_price,
         max_price=max_price,
+        heating_min=heating_min,
+        has_wifi=has_wifi,
         is_inverter=is_inverter,
         # We pass None for tag_slugs because we handle it via faceted_tag_ids now
         tag_slugs=None, 
@@ -494,6 +529,8 @@ async def get_catalog(
         area_max=area_max,
         min_price=min_price,
         max_price=max_price,
+        heating_min=heating_min,
+        has_wifi=has_wifi,
         is_inverter=is_inverter,
         tag_slugs=None,
         faceted_tag_ids=faceted_tag_ids,
@@ -519,7 +556,8 @@ async def get_product_by_identifier(identifier: str, session: AsyncSession = Dep
     product = await ProductService.get_product_by_identifier(session, identifier)
     if not product:
         raise HTTPException(status_code=404, detail=f"Product with identifier '{identifier}' not found")
-    return _map_product_to_response(product)
+    siblings = await ProductService.get_series_siblings(session, product, limit=8)
+    return _map_product_to_response(product, series_siblings=siblings)
 
 # --- CONTENT ENDPOINTS ---
 

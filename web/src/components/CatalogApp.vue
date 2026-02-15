@@ -31,6 +31,9 @@ const products = ref(props.initialProducts);
 const meta = ref(props.initialMeta);
 const loading = ref(false);
 const activeTags = ref([]);
+const currentIsInverter = ref(null);
+const currentHasWifi = ref(null);
+const currentHeatingMin = ref(null);
 
 // --- URL & State Management ---
 
@@ -52,6 +55,12 @@ const getParamsFromUrl = () => {
     params.sort = sp.get('sort') || 'newest';
     params.area_min = sp.get('area_min') || null;
     params.area_max = sp.get('area_max') || null;
+    params.has_wifi = sp.get('has_wifi') === 'true'
+      ? true
+      : sp.get('has_wifi') === 'false'
+        ? false
+        : null;
+    params.heating_min = sp.get('heating_min') || null;
     params.is_inverter = sp.get('is_inverter') === 'true'
       ? true
       : sp.get('is_inverter') === 'false'
@@ -73,6 +82,9 @@ const applyLockedState = () => {
     activeTags.value = [...lockedTags];
     currentAreaMin.value = lockedFilters.value.area_min != null ? String(lockedFilters.value.area_min) : null;
     currentAreaMax.value = lockedFilters.value.area_max != null ? String(lockedFilters.value.area_max) : null;
+    currentIsInverter.value = typeof lockedFilters.value.is_inverter === 'boolean' ? lockedFilters.value.is_inverter : null;
+    currentHasWifi.value = typeof lockedFilters.value.has_wifi === 'boolean' ? lockedFilters.value.has_wifi : null;
+    currentHeatingMin.value = lockedFilters.value.heating_min != null ? String(lockedFilters.value.heating_min) : null;
     return true;
 };
 
@@ -80,12 +92,20 @@ const applyLockedState = () => {
 const syncStateFromUrl = () => {
     const params = getParamsFromUrl();
     activeTags.value = params.tag_slugs || [];
+    currentIsInverter.value = params.is_inverter;
+    currentHasWifi.value = params.has_wifi;
+    currentHeatingMin.value = params.heating_min;
     
     // Only update area if they are present in URL, otherwise keep current (to support defaults)
     if (params.area_min || params.area_max) {
         currentAreaMin.value = params.area_min;
         currentAreaMax.value = params.area_max;
-    } else if (params.tag_slugs.length === 0) {
+    } else if (
+        params.tag_slugs.length === 0 &&
+        params.is_inverter === null &&
+        params.has_wifi === null &&
+        params.heating_min === null
+    ) {
         // If NO filters in URL, try preset state for virtual pages before fallback default.
         if (!applyLockedState()) {
             currentAreaMin.value = null;
@@ -98,20 +118,17 @@ const fetchProducts = async () => {
     loading.value = true;
     try {
         const params = getParamsFromUrl();
-        
-        const apiTags = [...(params.tag_slugs || [])];
-        if (!apiTags.includes('wall')) {
-             apiTags.push('wall');
-        }
 
         const apiParams = {
-            tag_slugs: apiTags,
+            tag_slugs: params.tag_slugs,
             page: params.page,
             limit: 100,
             sort: params.sort,
             area_min: params.area_min,
             area_max: params.area_max,
-            is_inverter: params.is_inverter
+            is_inverter: params.is_inverter,
+            has_wifi: params.has_wifi,
+            heating_min: params.heating_min,
         };
 
         const data = await getCatalog(apiParams);
@@ -138,6 +155,14 @@ const updateUrlAndFetch = () => {
     sp.delete('area_max');
     if (currentAreaMin.value) sp.set('area_min', currentAreaMin.value);
     if (currentAreaMax.value) sp.set('area_max', currentAreaMax.value);
+
+    // Update JSONB/column filters
+    sp.delete('is_inverter');
+    sp.delete('has_wifi');
+    sp.delete('heating_min');
+    if (currentIsInverter.value !== null) sp.set('is_inverter', String(currentIsInverter.value));
+    if (currentHasWifi.value !== null) sp.set('has_wifi', String(currentHasWifi.value));
+    if (currentHeatingMin.value !== null) sp.set('heating_min', String(currentHeatingMin.value));
     
     const newUrl = `${window.location.pathname}?${sp.toString()}`;
     window.history.pushState({}, '', newUrl);
@@ -163,24 +188,26 @@ const toggleTag = (slug) => {
     updateUrlAndFetch();
 };
 
-const toggleMultiTags = (slugs) => {
-    // Check if ALL provided slugs are active. If so, deactivate all.
-    // Otherwise, activate all (or missing ones).
-    const allActive = slugs.every(s => activeTags.value.includes(s));
-    
-    if (allActive) {
-        activeTags.value = activeTags.value.filter(t => !slugs.includes(t));
-    } else {
-        slugs.forEach(s => {
-            if (!activeTags.value.includes(s)) activeTags.value.push(s);
-        });
+const toggleBooleanFilter = (key) => {
+    if (key === 'is_inverter') {
+        currentIsInverter.value = currentIsInverter.value === true ? null : true;
+    } else if (key === 'has_wifi') {
+        currentHasWifi.value = currentHasWifi.value === true ? null : true;
     }
-     // Reset page to 1
+
     const sp = new URLSearchParams(window.location.search);
     sp.set('page', '1');
     const newUrl = `${window.location.pathname}?${sp.toString()}`;
     window.history.replaceState({}, '', newUrl);
+    updateUrlAndFetch();
+};
 
+const toggleHeatingFilter = () => {
+    currentHeatingMin.value = currentHeatingMin.value ? null : '-20';
+    const sp = new URLSearchParams(window.location.search);
+    sp.set('page', '1');
+    const newUrl = `${window.location.pathname}?${sp.toString()}`;
+    window.history.replaceState({}, '', newUrl);
     updateUrlAndFetch();
 };
 
@@ -207,7 +234,7 @@ const setAreaFilter = (min, max) => {
 
 onMounted(() => {
     const sp = new URLSearchParams(window.location.search);
-    const hasFilters = sp.has('tag_slugs') || sp.has('area_min') || sp.has('area_max') || sp.has('is_inverter');
+    const hasFilters = sp.has('tag_slugs') || sp.has('area_min') || sp.has('area_max') || sp.has('is_inverter') || sp.has('has_wifi') || sp.has('heating_min');
     
     syncStateFromUrl();
     
@@ -224,8 +251,11 @@ onMounted(() => {
 
 // Computed active states for complex buttons
 const isHeatingActive = computed(() => {
-    return activeTags.value.includes('winter-25') || activeTags.value.includes('winter-30');
+    return currentHeatingMin.value !== null;
 });
+
+const isInverterActive = computed(() => currentIsInverter.value === true);
+const isWifiActive = computed(() => currentHasWifi.value === true);
 
 const isAreaActive = (min, max) => {
     return currentAreaMin.value == min && currentAreaMax.value == max;
@@ -350,8 +380,8 @@ const groupedProducts = computed(() => {
         <!-- Inverter -->
         <button 
             class="filter-btn" 
-            :class="{ active: isTagActive('inverter') }"
-            @click="toggleTag('inverter')"
+            :class="{ active: isInverterActive }"
+            @click="toggleBooleanFilter('is_inverter')"
         >
             <span class="material-icons-round icon">equalizer</span>
             Инвертор
@@ -373,7 +403,7 @@ const groupedProducts = computed(() => {
         <button 
             class="filter-btn" 
             :class="{ active: isHeatingActive }"
-            @click="toggleMultiTags(['winter-25', 'winter-30'])"
+            @click="toggleHeatingFilter"
         >
             <span class="material-icons-round icon">ac_unit</span>
             Обогрев в мороз
@@ -382,22 +412,13 @@ const groupedProducts = computed(() => {
         <!-- WiFi -->
         <button 
             class="filter-btn" 
-            :class="{ active: isTagActive('wifi-builtin') }"
-            @click="toggleTag('wifi-builtin')"
+            :class="{ active: isWifiActive }"
+            @click="toggleBooleanFilter('has_wifi')"
         >
             <span class="material-icons-round icon">wifi</span>
             Wi-Fi модуль
         </button>
 
-        <!-- Quiet -->
-        <button 
-            class="filter-btn" 
-            :class="{ active: isTagActive('noise-silent') }"
-            @click="toggleTag('noise-silent')"
-        >
-            <span class="material-icons-round icon">volume_off</span>
-            Тихий режим
-        </button>
     </div>
 
     <!-- Grid -->

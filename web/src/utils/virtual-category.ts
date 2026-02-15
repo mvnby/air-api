@@ -10,6 +10,8 @@ export interface CatalogQuery {
     sort?: CatalogSort;
     tag_slugs?: string[];
     is_inverter?: boolean;
+    has_wifi?: boolean;
+    heating_min?: number;
     area_min?: number;
     area_max?: number;
 }
@@ -18,12 +20,14 @@ interface NormalizedFilters {
     sort: CatalogSort;
     tag_slugs: string[];
     is_inverter?: boolean;
+    has_wifi?: boolean;
+    heating_min?: number;
     area_min?: number;
     area_max?: number;
 }
 
 const DEFAULT_SORT: CatalogSort = "newest";
-const TECHNICAL_DEFAULT_TAGS = new Set(["wall"]);
+const TECHNICAL_DEFAULT_TAGS = new Set<string>();
 
 function normalizeTags(tags: string[] = []): string[] {
     const clean = tags
@@ -53,6 +57,11 @@ function normalizeFilters(filters: CatalogQuery): NormalizedFilters {
             typeof filters.is_inverter === "boolean"
                 ? filters.is_inverter
                 : undefined,
+        has_wifi:
+            typeof filters.has_wifi === "boolean"
+                ? filters.has_wifi
+                : undefined,
+        heating_min: normalizeNumber(filters.heating_min),
         area_min: normalizeNumber(filters.area_min),
         area_max: normalizeNumber(filters.area_max),
     };
@@ -62,6 +71,8 @@ function areFiltersEqual(left: NormalizedFilters, right: NormalizedFilters) {
     return (
         left.sort === right.sort &&
         left.is_inverter === right.is_inverter &&
+        left.has_wifi === right.has_wifi &&
+        left.heating_min === right.heating_min &&
         left.area_min === right.area_min &&
         left.area_max === right.area_max &&
         left.tag_slugs.length === right.tag_slugs.length &&
@@ -72,17 +83,14 @@ function areFiltersEqual(left: NormalizedFilters, right: NormalizedFilters) {
 export function buildCatalogQueryFromVirtual(
     config: VirtualCategoryConfig,
 ): CatalogQuery {
-    const tags = [...(config.filters.tag_slugs || [])];
-    if (!tags.includes("wall")) {
-        tags.push("wall");
-    }
-
     return {
         page: 1,
         limit: 100,
         sort: config.filters.sort || DEFAULT_SORT,
-        tag_slugs: tags,
+        tag_slugs: [...(config.filters.tag_slugs || [])],
         is_inverter: config.filters.is_inverter,
+        has_wifi: config.filters.has_wifi,
+        heating_min: config.filters.heating_min,
         area_min: config.filters.area_min,
         area_max: config.filters.area_max,
     };
@@ -98,6 +106,8 @@ export function matchVirtualCategoryByFilters(
             sort: category.filters.sort || DEFAULT_SORT,
             tag_slugs: category.filters.tag_slugs || [],
             is_inverter: category.filters.is_inverter,
+            has_wifi: category.filters.has_wifi,
+            heating_min: category.filters.heating_min,
             area_min: category.filters.area_min,
             area_max: category.filters.area_max,
         });

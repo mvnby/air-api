@@ -16,6 +16,8 @@ export interface VirtualCategoryConfig {
         area_min?: number;
         area_max?: number;
         is_inverter?: boolean;
+        has_wifi?: boolean;
+        heating_min?: number;
         sort?: CatalogSort;
     };
     indexable?: boolean;
@@ -30,7 +32,6 @@ export const VIRTUAL_CATEGORIES: VirtualCategoryConfig[] = [
         h1: "Инверторные кондиционеры в Витебске",
         intro: "Подбор инверторных сплит-систем с монтажом и гарантией в Витебске.",
         filters: {
-            tag_slugs: ["inverter"],
             is_inverter: true,
             sort: "newest",
         },
@@ -44,7 +45,7 @@ export const VIRTUAL_CATEGORIES: VirtualCategoryConfig[] = [
         h1: "Кондиционеры с Wi-Fi в Витебске",
         intro: "Подберем сплит-системы с управлением через приложение и голосовые ассистенты.",
         filters: {
-            tag_slugs: ["wifi-builtin"],
+            has_wifi: true,
             sort: "newest",
         },
         indexable: true,
@@ -57,7 +58,7 @@ export const VIRTUAL_CATEGORIES: VirtualCategoryConfig[] = [
         h1: "Кондиционеры для обогрева зимой в Витебске",
         intro: "Модели для межсезонья и зимней эксплуатации с профессиональным монтажом.",
         filters: {
-            tag_slugs: ["winter-25", "winter-30"],
+            heating_min: -20,
             sort: "newest",
         },
         indexable: true,

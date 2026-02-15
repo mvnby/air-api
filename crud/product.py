@@ -4,116 +4,161 @@ Pure database operations. No business logic.
 All methods accept AsyncSession as first argument for DI/transaction control.
 """
 from typing import Optional, List, Dict, Any
-from sqlmodel import select, func, and_, desc, asc
+
+from sqlalchemy import Integer, Boolean, cast, func, and_, or_
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlmodel import select
 
-from models import Product, Tag, ProductTagLink
+from models import Product, Tag, TagGroup, ProductTagLink
+
+
+ALLOWED_FILTER_GROUP_SLUGS = {"brand", "series", "expert-badge"}
 
 
 class ProductDAO:
-    """
-    Data Access Object for Product entity.
-    Methods are static and receive session as argument.
-    """
-
     @staticmethod
     async def get_by_id(session: AsyncSession, product_id: int) -> Optional[Product]:
-        """Fetch a single product by ID with tags and gallery loaded."""
         stmt = select(Product).where(Product.id == product_id).options(
             selectinload(Product.tags).selectinload(Tag.group),
-            selectinload(Product.gallery_images)
+            selectinload(Product.gallery_images),
         )
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
 
     @staticmethod
     async def get_by_slug(session: AsyncSession, slug: str) -> Optional[Product]:
-        """Fetch a single product by slug with tags and gallery loaded."""
         stmt = select(Product).where(Product.slug == slug).options(
             selectinload(Product.tags).selectinload(Tag.group),
-            selectinload(Product.gallery_images)
+            selectinload(Product.gallery_images),
         )
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
 
     @staticmethod
     async def get_all_published(session: AsyncSession) -> List[Product]:
-        """Fetch all published products with tags and gallery loaded."""
         stmt = select(Product).where(Product.is_published == True).options(
             selectinload(Product.tags).selectinload(Tag.group),
-            selectinload(Product.gallery_images)
+            selectinload(Product.gallery_images),
         )
         result = await session.execute(stmt)
         return list(result.scalars().all())
 
     @staticmethod
     async def get_by_ids(session: AsyncSession, product_ids: List[int]) -> List[Product]:
-        """Fetch multiple products by ID."""
         if not product_ids:
             return []
         stmt = select(Product).where(Product.id.in_(product_ids)).options(
-             selectinload(Product.gallery_images)
+            selectinload(Product.gallery_images)
         )
         result = await session.execute(stmt)
         return list(result.scalars().all())
 
     @staticmethod
+    def _json_int_expr(session: AsyncSession, key: str):
+        dialect = session.bind.dialect.name if session.bind is not None else ""
+        if dialect == "sqlite":
+            return cast(func.json_extract(Product.specs, f"$.{key}"), Integer)
+        return cast(func.jsonb_extract_path_text(cast(Product.specs, JSONB), key), Integer)
+
+    @staticmethod
+    def _json_bool_expr(session: AsyncSession, key: str):
+        dialect = session.bind.dialect.name if session.bind is not None else ""
+        if dialect == "sqlite":
+            return cast(func.json_extract(Product.specs, f"$.{key}"), Integer)
+        return cast(func.jsonb_extract_path_text(cast(Product.specs, JSONB), key), Boolean)
+
+    @staticmethod
     def _apply_common_filters(
+        session: AsyncSession,
         stmt,
         area_min: Optional[int] = None,
         area_max: Optional[int] = None,
         min_price: Optional[int] = None,
         max_price: Optional[int] = None,
         is_inverter: Optional[bool] = None,
+        heating_min: Optional[int] = None,
+        has_wifi: Optional[bool] = None,
         tag_slugs: Optional[List[str]] = None,
-        is_published: bool = True
+        is_published: Optional[bool] = True,
     ):
         if is_published is not None:
             stmt = stmt.where(Product.is_published == is_published)
-        
+
         if area_min is not None:
             stmt = stmt.where(Product.area >= area_min)
         if area_max is not None:
             stmt = stmt.where(Product.area <= area_max)
-            
+
         if min_price is not None:
             stmt = stmt.where(Product.price >= min_price)
         if max_price is not None:
             stmt = stmt.where(Product.price <= max_price)
-            
+
         if is_inverter is not None:
             stmt = stmt.where(Product.is_inverter == is_inverter)
-            
+
+        if heating_min is not None:
+            stmt = stmt.where(ProductDAO._json_int_expr(session, "__filter_min_heat") <= heating_min)
+
+        if has_wifi is not None:
+            wifi_expr = ProductDAO._json_bool_expr(session, "__filter_wifi")
+            legacy_wifi_tag_subq = (
+                select(ProductTagLink.product_id)
+                .join(Tag, ProductTagLink.tag_id == Tag.id)
+                .where(Tag.slug == "wifi-builtin")
+            )
+            if session.bind is not None and session.bind.dialect.name == "sqlite":
+                if has_wifi:
+                    stmt = stmt.where(
+                        or_(
+                            wifi_expr == 1,
+                            Product.id.in_(legacy_wifi_tag_subq),
+                        )
+                    )
+                else:
+                    stmt = stmt.where(
+                        and_(
+                            wifi_expr == 0,
+                            ~Product.id.in_(legacy_wifi_tag_subq),
+                        )
+                    )
+            else:
+                if has_wifi:
+                    stmt = stmt.where(
+                        or_(
+                            wifi_expr == True,
+                            Product.id.in_(legacy_wifi_tag_subq),
+                        )
+                    )
+                else:
+                    stmt = stmt.where(
+                        and_(
+                            wifi_expr == False,
+                            ~Product.id.in_(legacy_wifi_tag_subq),
+                        )
+                    )
+
         if tag_slugs:
             for slug in tag_slugs:
-                # Join to Tag to filter by slug
-                subq = select(ProductTagLink.product_id).join(Tag, ProductTagLink.tag_id == Tag.id).where(Tag.slug == slug)
-                stmt = stmt.where(Product.id.in_(subq))
-        
-        return stmt
-
-    # ... filters ...
-
-    @staticmethod
-    def _apply_faceted_filters(
-        stmt,
-        faceted_tag_ids: Optional[dict[int, list[int]]] = None
-    ):
-        """
-        Apply faceted filtering:
-        - Tags within the same group are combined with OR.
-        - Groups are combined with AND.
-        """
-        if faceted_tag_ids:
-            for group_id, tag_ids in faceted_tag_ids.items():
-                if not tag_ids:
-                    continue
-                # Subquery for products having ANY of the tags in this group
                 subq = (
                     select(ProductTagLink.product_id)
-                    .where(ProductTagLink.tag_id.in_(tag_ids))
+                    .join(Tag, ProductTagLink.tag_id == Tag.id)
+                    .where(Tag.slug == slug)
+                    .where(Tag.group.has(TagGroup.slug.in_(ALLOWED_FILTER_GROUP_SLUGS)))
                 )
+                stmt = stmt.where(Product.id.in_(subq))
+
+        return stmt
+
+    @staticmethod
+    def _apply_faceted_filters(stmt, faceted_tag_ids: Optional[dict[int, list[int]]] = None):
+        if faceted_tag_ids:
+            for _, tag_ids in faceted_tag_ids.items():
+                if not tag_ids:
+                    continue
+                subq = select(ProductTagLink.product_id).where(ProductTagLink.tag_id.in_(tag_ids))
                 stmt = stmt.where(Product.id.in_(subq))
         return stmt
 
@@ -126,43 +171,48 @@ class ProductDAO:
         min_price: Optional[int] = None,
         max_price: Optional[int] = None,
         is_inverter: Optional[bool] = None,
+        heating_min: Optional[int] = None,
+        has_wifi: Optional[bool] = None,
         tag_slugs: Optional[List[str]] = None,
-        is_published: bool = True,
+        is_published: Optional[bool] = True,
         sort: str = "newest",
         page: int = 1,
         limit: int = 20,
-        faceted_tag_ids: Optional[dict[int, list[int]]] = None
+        faceted_tag_ids: Optional[dict[int, list[int]]] = None,
     ) -> List[Product]:
-        """
-        Flexible product filtering with pagination and sorting.
-        """
         stmt = select(Product).options(
             selectinload(Product.tags).selectinload(Tag.group),
-            selectinload(Product.gallery_images)
+            selectinload(Product.gallery_images),
         )
-        
+
         stmt = ProductDAO._apply_common_filters(
-            stmt, area_min, area_max, min_price, max_price, is_inverter, tag_slugs, is_published
+            session,
+            stmt,
+            area_min=area_min,
+            area_max=area_max,
+            min_price=min_price,
+            max_price=max_price,
+            is_inverter=is_inverter,
+            heating_min=heating_min,
+            has_wifi=has_wifi,
+            tag_slugs=tag_slugs,
+            is_published=is_published,
         )
-        
         stmt = ProductDAO._apply_faceted_filters(stmt, faceted_tag_ids)
-        
-        # Sorting
+
         if sort == "price_asc":
             stmt = stmt.order_by(Product.price.asc())
         elif sort == "price_desc":
-             stmt = stmt.order_by(Product.price.desc())
+            stmt = stmt.order_by(Product.price.desc())
         elif sort == "area_asc":
             stmt = stmt.order_by(Product.area.asc())
         elif sort == "area_desc":
-             stmt = stmt.order_by(Product.area.desc())
-        else: # newest
+            stmt = stmt.order_by(Product.area.desc())
+        else:
             stmt = stmt.order_by(Product.created_at.desc())
 
-        # Pagination
         offset = (page - 1) * limit
         stmt = stmt.offset(offset).limit(limit)
-        
         result = await session.execute(stmt)
         return list(result.scalars().all())
 
@@ -175,14 +225,25 @@ class ProductDAO:
         min_price: Optional[int] = None,
         max_price: Optional[int] = None,
         is_inverter: Optional[bool] = None,
+        heating_min: Optional[int] = None,
+        has_wifi: Optional[bool] = None,
         tag_slugs: Optional[List[str]] = None,
-        is_published: bool = True,
-        faceted_tag_ids: Optional[dict[int, list[int]]] = None
+        is_published: Optional[bool] = True,
+        faceted_tag_ids: Optional[dict[int, list[int]]] = None,
     ) -> int:
-        """Count total results for pagination metadata."""
         stmt = select(func.count(Product.id))
         stmt = ProductDAO._apply_common_filters(
-            stmt, area_min, area_max, min_price, max_price, is_inverter, tag_slugs, is_published
+            session,
+            stmt,
+            area_min=area_min,
+            area_max=area_max,
+            min_price=min_price,
+            max_price=max_price,
+            is_inverter=is_inverter,
+            heating_min=heating_min,
+            has_wifi=has_wifi,
+            tag_slugs=tag_slugs,
+            is_published=is_published,
         )
         stmt = ProductDAO._apply_faceted_filters(stmt, faceted_tag_ids)
         result = await session.execute(stmt)
@@ -190,39 +251,33 @@ class ProductDAO:
 
     @staticmethod
     async def update_price(session: AsyncSession, product_id: int, new_price: int) -> bool:
-        """Update product price. Returns True if successful."""
         product = await session.get(Product, product_id)
-        if product:
-            product.price = new_price
-            session.add(product)
-            await session.commit()
-            return True
-        return False
+        if not product:
+            return False
+        product.price = new_price
+        session.add(product)
+        await session.commit()
+        return True
 
     @staticmethod
     async def delete(session: AsyncSession, product_id: int) -> bool:
-        """Delete product. Returns True if successful."""
         product = await session.get(Product, product_id)
-        if product:
-            await session.delete(product)
-            await session.commit()
-            return True
-        return False
+        if not product:
+            return False
+        await session.delete(product)
+        await session.commit()
+        return True
 
     @staticmethod
     async def update_full(
         session: AsyncSession,
         product_id: int,
         update_data: Dict[str, Any],
-        tag_ids: Optional[List[int]] = None
+        tag_ids: Optional[List[int]] = None,
     ) -> Optional[Product]:
-        """
-        Update product fields and optionally tags.
-        """
         stmt = select(Product).where(Product.id == product_id).options(selectinload(Product.tags))
         result = await session.execute(stmt)
         product = result.scalar_one_or_none()
-
         if not product:
             return None
 
@@ -232,8 +287,7 @@ class ProductDAO:
         if tag_ids is not None:
             tag_stmt = select(Tag).where(Tag.id.in_(tag_ids))
             tag_result = await session.execute(tag_stmt)
-            new_tags = tag_result.scalars().all()
-            product.tags = list(new_tags)
+            product.tags = list(tag_result.scalars().all())
 
         session.add(product)
         await session.commit()
@@ -250,17 +304,12 @@ class ProductDAO:
         area_min: Optional[int] = None,
         area_max: Optional[int] = None,
         is_inverter: Optional[bool] = None,
-        sort: str = "newest"
+        sort: str = "newest",
     ) -> tuple[List[Product], int]:
-        """
-        Fetch products for manager UI with pagination and filtering.
-        Returns (items, total_count).
-        """
         stmt = select(Product).options(
             selectinload(Product.gallery_images),
             selectinload(Product.tags).selectinload(Tag.group),
         )
-
         count_stmt = select(func.count(Product.id))
 
         if is_published is not None:
@@ -295,130 +344,16 @@ class ProductDAO:
         offset = (page - 1) * limit
         stmt = stmt.offset(offset).limit(limit)
 
-        total_result = await session.execute(count_stmt)
-        total = total_result.scalar() or 0
-
+        total = (await session.execute(count_stmt)).scalar() or 0
         result = await session.execute(stmt)
-        items = list(result.scalars().all())
-
-        return items, total
-    
-    @staticmethod
-    async def update_full(
-        session: AsyncSession, 
-        product_id: int, 
-        update_data: Dict[str, Any],
-        tag_ids: Optional[List[int]] = None
-    ) -> Optional[Product]:
-        """
-        Update product fields and optionally tags.
-        """
-        # Load with tags to update relationship if needed
-        stmt = select(Product).where(Product.id == product_id).options(selectinload(Product.tags))
-        result = await session.execute(stmt)
-        product = result.scalar_one_or_none()
-        
-        if not product:
-            return None
-            
-        for key, value in update_data.items():
-            setattr(product, key, value)
-            
-        if tag_ids is not None:
-            # Fetch tags to link
-            tag_stmt = select(Tag).where(Tag.id.in_(tag_ids))
-            tag_result = await session.execute(tag_stmt)
-            new_tags = tag_result.scalars().all()
-            product.tags = list(new_tags)
-            
-        session.add(product)
-        await session.commit()
-        await session.refresh(product)
-        return product
-
-    @staticmethod
-    async def get_for_manager(
-        session: AsyncSession,
-        page: int = 1,
-        limit: int = 40,
-        search: Optional[str] = None,
-        is_published: Optional[bool] = None,
-        area_min: Optional[int] = None,
-        area_max: Optional[int] = None,
-        is_inverter: Optional[bool] = None,
-        sort: str = "newest"
-    ) -> tuple[List[Product], int]:
-        """
-        Fetch products for manager UI with pagination and filtering.
-        Returns (items, total_count).
-        """
-        # Base query
-        stmt = select(Product).options(
-            selectinload(Product.gallery_images),
-            selectinload(Product.tags).selectinload(Tag.group),
-        )
-        
-        count_stmt = select(func.count(Product.id))
-        
-        # Filters
-        if is_published is not None:
-            stmt = stmt.where(Product.is_published == is_published)
-            count_stmt = count_stmt.where(Product.is_published == is_published)
-            
-        if area_min is not None:
-            stmt = stmt.where(Product.area >= area_min)
-            count_stmt = count_stmt.where(Product.area >= area_min)
-            
-        if area_max is not None:
-            stmt = stmt.where(Product.area <= area_max)
-            count_stmt = count_stmt.where(Product.area <= area_max)
-            
-        if is_inverter is not None:
-            stmt = stmt.where(Product.is_inverter == is_inverter)
-            count_stmt = count_stmt.where(Product.is_inverter == is_inverter)
-            
-        if search:
-            # Simple ILIKE search for now
-            stmt = stmt.where(Product.title.ilike(f"%{search}%"))
-            count_stmt = count_stmt.where(Product.title.ilike(f"%{search}%"))
-            
-        # Sorting
-        if sort == "price_asc":
-            stmt = stmt.order_by(Product.price.asc())
-        elif sort == "price_desc":
-            stmt = stmt.order_by(Product.price.desc())
-        elif sort == "title":
-            stmt = stmt.order_by(Product.title.asc())
-        else:  # newest or default
-            stmt = stmt.order_by(Product.id.desc())
-            
-        # Pagination
-        offset = (page - 1) * limit
-        stmt = stmt.offset(offset).limit(limit)
-        
-        # Execute
-        total_result = await session.execute(count_stmt)
-        total = total_result.scalar() or 0
-        
-        result = await session.execute(stmt)
-        items = list(result.scalars().all())
-        
-        return items, total
+        return list(result.scalars().all()), total
 
     @staticmethod
     async def get_for_generation(session: AsyncSession, product_id: int) -> Optional[Product]:
-
-        """
-        Загружает товар со ВСЕЙ иерархией: Теги + Их Группы.
-        Нужно для понимания контекста (какой тег к чему относится).
-        """
         statement = (
             select(Product)
             .where(Product.id == product_id)
-            .options(
-                # Жадная загрузка: Product -> Tags -> Group
-                selectinload(Product.tags).selectinload(Tag.group)
-            )
+            .options(selectinload(Product.tags).selectinload(Tag.group))
         )
         result = await session.execute(statement)
         return result.scalar_one_or_none()

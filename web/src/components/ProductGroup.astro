@@ -4,21 +4,42 @@ import { getCatalog } from "../utils/api";
 
 interface Props {
     title?: string;
-    tags: string[];
+    tags?: string[];
+    filters?: {
+        area_min?: number;
+        area_max?: number;
+        is_inverter?: boolean;
+        has_wifi?: boolean;
+        heating_min?: number;
+    };
     limit?: number;
 }
 
-const { title, tags, limit = 4 } = Astro.props;
+const { title, tags = [], filters = {}, limit = 4 } = Astro.props;
 
 // Fetch products based on tags
 // The API now supports faceted filtering: OR within groups, AND between groups.
 const data = await getCatalog({
     tag_slugs: tags,
+    area_min: filters.area_min,
+    area_max: filters.area_max,
+    is_inverter: filters.is_inverter,
+    has_wifi: filters.has_wifi,
+    heating_min: filters.heating_min,
     limit: limit,
     sort: "area_asc", // Default sort by area for these groups usually makes sense? Or let it be default.
 });
 
 const products = data.items || [];
+const viewAllParams = new URLSearchParams();
+if (tags.length) {
+    viewAllParams.set("tag_slugs", tags.join(","));
+}
+if (filters.area_min != null) viewAllParams.set("area_min", String(filters.area_min));
+if (filters.area_max != null) viewAllParams.set("area_max", String(filters.area_max));
+if (filters.is_inverter != null) viewAllParams.set("is_inverter", String(filters.is_inverter));
+if (filters.has_wifi != null) viewAllParams.set("has_wifi", String(filters.has_wifi));
+if (filters.heating_min != null) viewAllParams.set("heating_min", String(filters.heating_min));
 ---
 
 {
@@ -28,7 +49,7 @@ const products = data.items || [];
                 <div class="group-header">
                     <h3>{title}</h3>
                     <a
-                        href={`/catalog?tag_slugs=${tags.join(",")}`}
+                        href={`/catalog?${viewAllParams.toString()}`}
                         class="view-all"
                     >
                         Смотреть все{" "}

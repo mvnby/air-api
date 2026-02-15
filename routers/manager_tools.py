@@ -28,6 +28,7 @@ from core.logger import logger
 from models import Product, ProductImage, Order, Customer
 from services.product_service import ProductService
 from services.customer_service import CustomerService
+from services.spec_normalizer import normalize_specs
 
 import httpx
 from PIL import Image
@@ -719,7 +720,7 @@ async def bulk_update_specs(
         
         if payload.operation == "replace":
             # Полная замена (опасно, но иногда нужно)
-            current_specs = payload.specs
+            current_specs = dict(payload.specs)
             
         elif payload.operation == "delete_keys":
             # Удаляем указанные ключи
@@ -729,7 +730,8 @@ async def bulk_update_specs(
         else: # "merge" (default)
             # Добавляем новые или обновляем существующие
             current_specs.update(payload.specs)
-            
+
+        current_specs = normalize_specs(current_specs)
         # Присваиваем обратно
         product.specs = current_specs
         session.add(product)

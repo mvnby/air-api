@@ -78,6 +78,11 @@ export async function getCatalog(params = {}) {
     return data;
 }
 
+export async function getFiltersConfig() {
+    const data = await fetchJson(`${API_V1}/filters/config`);
+    return data || { price: { min: null, max: null }, area: { min: null, max: null }, brands: [], expert_tags: [] };
+}
+
 export async function getProducts() {
     // Fetch all products for SSG (limit 1000 for now)
     const data = await getCatalog({ limit: 1000 });

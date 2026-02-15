@@ -16,6 +16,7 @@ class TagGroup(SQLModel, table=True):
     title: str = Field(index=True)
     slug: str = Field(unique=True, index=True)
     is_public: bool = Field(default=True)
+    is_expert_badge: bool = Field(default=False, index=True)
     color: str = Field(default="secondary") # Bootstrap classes: primary, success, info, warning, danger, secondary
     sort_order: int = Field(default=0)
     allow_multiple: bool = Field(default=False)

@@ -45,11 +45,24 @@ class ProductImageResponse(BaseModel):
     url: str
     is_installation_photo: bool
 
+
+class ProductSiblingResponse(BaseModel):
+    id: int
+    title: str
+    slug: Optional[str]
+    price: int
+    old_price: Optional[int]
+    area: int
+    is_inverter: bool
+    main_image: Optional[str]
+
+
 class ProductResponse(ProductBase):
     tags: List[TagResponse] = []
     specs: Dict[str, Any] = {}
     images: List[str] = [] # Legacy
     gallery_images: List[ProductImageResponse] = [] # New
+    series_siblings: List[ProductSiblingResponse] = []
 
 class ProductPriceResponse(BaseModel):
     id: int
@@ -84,6 +97,24 @@ class CommonGalleryImageResponse(BaseModel):
 class SpecsKeysResponse(BaseModel):
     keys: List[str]
     total_products_using: Dict[str, int] # Статистика: ключ -> кол-во товаров
+
+
+class FilterRange(BaseModel):
+    min: Optional[int] = None
+    max: Optional[int] = None
+
+
+class FilterTagOption(BaseModel):
+    id: int
+    title: str
+    slug: str
+
+
+class FiltersConfigResponse(BaseModel):
+    price: FilterRange
+    area: FilterRange
+    brands: List[FilterTagOption] = []
+    expert_tags: List[FilterTagOption] = []
 
 # --- CONTENT ---
 

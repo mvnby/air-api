@@ -55,26 +55,27 @@ const catalogUrl = computed(() => {
     if (!recommendedModel.value.slug) return '/contacts'; // Redirect to contacts for large areas
 
     const params = new URLSearchParams();
-    const tags = [];
-
-    // Area tag
-    tags.push(recommendedModel.value.slug);
+    const areaMap = {
+        'area-20': { area_max: '29' },
+        'area-25': { area_max: '29' },
+        'area-35': { area_min: '30', area_max: '39' },
+        'area-50': { area_min: '40', area_max: '59' },
+        'area-70': { area_min: '60', area_max: '70' },
+        'area-80': { area_min: '71' },
+    };
+    const areaPreset = areaMap[recommendedModel.value.slug];
+    if (areaPreset?.area_min) params.set('area_min', areaPreset.area_min);
+    if (areaPreset?.area_max) params.set('area_max', areaPreset.area_max);
 
     // Feature tags
     if (isInverter.value) {
-        tags.push('inverter'); 
+        params.set('is_inverter', 'true');
     }
     if (hasWifi.value) {
-        tags.push('wifi-builtin');
+        params.set('has_wifi', 'true');
     }
     if (hasWinterHeating.value) {
-        tags.push('winter-20');
-        tags.push('winter-25');
-        tags.push('winter-30');
-    }
-
-    if (tags.length > 0) {
-        params.set('tag_slugs', tags.join(','));
+        params.set('heating_min', '-20');
     }
 
     return `/catalog?${params.toString()}`;
