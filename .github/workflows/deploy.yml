@@ -117,6 +117,19 @@ jobs:
           # Execute script
           ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "chmod +x /tmp/deploy.sh && GHCR_PAT='${{ secrets.GHCR_PAT }}' GITHUB_ACTOR='${{ github.actor }}' bash /tmp/deploy.sh"
 
+      - name: Optional Post-Deploy Backend Ops
+        if: ${{ secrets.RUN_POST_DEPLOY_OPS == 'true' }}
+        run: |
+          cat scripts/ops_post_deploy.sh | ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/ops_post_deploy.sh"
+
+          ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
+            chmod +x /tmp/ops_post_deploy.sh && \
+            RUN_NORMALIZE_LEGACY='${{ secrets.RUN_NORMALIZE_LEGACY }}' \
+            HIDE_LEGACY_GROUPS='${{ secrets.HIDE_LEGACY_GROUPS }}' \
+            RUN_REPORT_LEGACY_LINKS='${{ secrets.RUN_REPORT_LEGACY_LINKS }}' \
+            RUN_CLEANUP_LEGACY_LINKS='${{ secrets.RUN_CLEANUP_LEGACY_LINKS }}' \
+            bash /tmp/ops_post_deploy.sh"
+
   # ======================================================
   # 2. FRONTEND DEPLOYMENT (Static -> mvn-web)
   # ======================================================
