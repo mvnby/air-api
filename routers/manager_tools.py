@@ -26,6 +26,7 @@ from models import Product, ProductImage, Order, Customer
 from services.product_service import ProductService
 from services.customer_service import CustomerService
 from services.manager_media_service import ManagerMediaService
+from services.manager_specs_service import ManagerSpecsService
 from services.spec_normalizer import normalize_specs
 
 router = APIRouter(prefix="/api/manager", tags=["manager"])
@@ -380,42 +381,7 @@ async def bulk_update_specs(
     """
     logger.info(f"Manager {username} bulk updating specs for {len(payload.product_ids)} products. Op: {payload.operation}")
     
-    # Получаем товары
-    stmt = select(Product).where(Product.id.in_(payload.product_ids))
-    result = await session.execute(stmt)
-    products = result.scalars().all()
-    
-    updated_count = 0
-    
-    for product in products:
-        # Важно: создаем копию, чтобы SQLAlchemy детектил изменение JSON
-        current_specs = dict(product.specs) if product.specs else {}
-        
-        if payload.operation == "replace":
-            # Полная замена (опасно, но иногда нужно)
-            current_specs = dict(payload.specs)
-            
-        elif payload.operation == "delete_keys":
-            # Удаляем указанные ключи
-            for key in payload.specs.keys():
-                current_specs.pop(key, None)
-                
-        else: # "merge" (default)
-            # Добавляем новые или обновляем существующие
-            current_specs.update(payload.specs)
-
-        current_specs = normalize_specs(current_specs)
-        # Присваиваем обратно
-        product.specs = current_specs
-        session.add(product)
-        updated_count += 1
-        
-    await session.commit()
-    
-    return {
-        "message": f"Updated specs for {updated_count} products", 
-        "operation": payload.operation
-    }
+    return await ManagerSpecsService.bulk_update_specs(session, payload)
 
 # --- MIGRATION / NORMALIZATION TOOLS ---
 
