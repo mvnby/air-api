@@ -264,3 +264,134 @@ class ManagerMediaService:
         for row in rows:
             by_url.setdefault(row.url, set()).add(row.product_id)
         return {url for url, linked in by_url.items() if linked == target_ids}
+
+    @staticmethod
+    async def bulk_add_gallery_images(
+        session: AsyncSession,
+        *,
+        product_ids: List[int],
+        source_urls: List[str],
+        is_installation: bool,
+        skip_existing: bool,
+        set_main: bool,
+    ) -> dict:
+        if not product_ids:
+            raise ValueError("product_ids is required")
+        if not source_urls:
+            raise ValueError("source_urls is required")
+
+        unique_product_ids = list(dict.fromkeys(product_ids))
+        unique_urls = [url for url in dict.fromkeys(source_urls) if url]
+        if not unique_urls:
+            raise ValueError("No valid source_urls provided")
+
+        products_stmt = select(Product.id).where(Product.id.in_(unique_product_ids))
+        existing_product_ids = set((await session.execute(products_stmt)).scalars().all())
+        missing = sorted(set(unique_product_ids) - existing_product_ids)
+        if missing:
+            raise LookupError(f"Products not found: {missing}")
+
+        added = 0
+        skipped = 0
+        first_url = unique_urls[0]
+
+        for product_id in unique_product_ids:
+            for url in unique_urls:
+                existing_stmt = select(ProductImage.id).where(
+                    ProductImage.product_id == product_id,
+                    ProductImage.url == url,
+                )
+                existing = (await session.execute(existing_stmt)).scalar_one_or_none()
+                if existing and skip_existing:
+                    skipped += 1
+                    continue
+                if not existing:
+                    session.add(
+                        ProductImage(
+                            product_id=product_id,
+                            url=url,
+                            is_installation_photo=is_installation,
+                        )
+                    )
+                    added += 1
+                else:
+                    skipped += 1
+
+            if set_main and not is_installation:
+                product = await session.get(Product, product_id)
+                if product:
+                    product.main_image = first_url
+                    session.add(product)
+
+            await ManagerMediaService.sync_legacy_images(session, product_id)
+
+        await session.commit()
+        return {
+            "message": "Bulk image add completed",
+            "products_count": len(unique_product_ids),
+            "added_links": added,
+            "skipped_existing": skipped,
+        }
+
+    @staticmethod
+    async def bulk_delete_common_gallery_images(
+        session: AsyncSession,
+        *,
+        product_ids: List[int],
+        urls: List[str],
+        exclude_installation: bool,
+    ) -> dict:
+        if not product_ids:
+            raise ValueError("product_ids is required")
+        if not urls:
+            raise ValueError("urls is required")
+
+        unique_product_ids = list(dict.fromkeys(product_ids))
+        unique_urls = [url for url in dict.fromkeys(urls) if url]
+        if not unique_urls:
+            raise ValueError("No valid urls provided")
+
+        common_urls = await ManagerMediaService.get_common_gallery_urls(
+            session=session,
+            product_ids=unique_product_ids,
+            exclude_installation=exclude_installation,
+        )
+        invalid_urls = [url for url in unique_urls if url not in common_urls]
+        if invalid_urls:
+            raise ValueError(
+                {
+                    "message": "Only common images can be deleted in bulk mode",
+                    "not_common": invalid_urls,
+                }
+            )
+
+        deleted_links = 0
+        for product_id in unique_product_ids:
+            stmt = select(ProductImage).where(
+                ProductImage.product_id == product_id,
+                ProductImage.url.in_(unique_urls),
+            )
+            if exclude_installation:
+                stmt = stmt.where(ProductImage.is_installation_photo == False)  # noqa: E712
+            rows = (await session.execute(stmt)).scalars().all()
+            for row in rows:
+                await session.delete(row)
+                deleted_links += 1
+
+            product = await session.get(Product, product_id)
+            if product and product.main_image in unique_urls:
+                product.main_image = None
+                session.add(product)
+
+            await ManagerMediaService.sync_legacy_images(session, product_id)
+
+        await session.commit()
+
+        for url in unique_urls:
+            await ManagerMediaService.remove_file_if_unreferenced(session, url)
+
+        return {
+            "message": "Bulk delete completed",
+            "products_count": len(unique_product_ids),
+            "deleted_links": deleted_links,
+        }
