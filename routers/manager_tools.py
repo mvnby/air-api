@@ -1,11 +1,9 @@
 from typing import List, Optional
 from datetime import datetime
 import asyncio
-import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 from schemas import (
     BulkSpecUpdate,
     SpecsKeysResponse,
@@ -20,7 +18,6 @@ from core.database import get_session
 from core.config import settings
 from core.security import get_current_username
 from core.logger import logger
-from models import Product, ProductImage, Order, Customer
 from services.manager_catalog_service import ManagerCatalogService
 from services.manager_legacy_specs_service import ManagerLegacySpecsService
 from services.manager_media_orchestrator_service import ManagerMediaOrchestratorService
@@ -221,35 +218,10 @@ async def bulk_upload_local_images(
 ):
     """Upload local files once and attach to all selected products."""
     try:
-        product_ids = json.loads(product_ids_json)
-        if not isinstance(product_ids, list):
-            raise ValueError()
-        unique_product_ids = list(dict.fromkeys(int(pid) for pid in product_ids))
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid product_ids_json")
-
-    if not unique_product_ids:
-        raise HTTPException(status_code=400, detail="product_ids is required")
-    if not files:
-        raise HTTPException(status_code=400, detail="files is required")
-
-    products_stmt = select(Product.id).where(Product.id.in_(unique_product_ids))
-    existing_product_ids = set((await session.execute(products_stmt)).scalars().all())
-    missing = sorted(set(unique_product_ids) - existing_product_ids)
-    if missing:
-        raise HTTPException(status_code=404, detail=f"Products not found: {missing}")
-
-    file_payloads: List[bytes] = []
-    for file in files:
-        content = await file.read()
-        if content:
-            file_payloads.append(content)
-
-    try:
-        return await ManagerMediaService.bulk_upload_local_images(
+        return await ManagerMediaOrchestratorService.bulk_upload_local_images(
             session=session,
-            product_ids=unique_product_ids,
-            file_payloads=file_payloads,
+            product_ids_json=product_ids_json,
+            files=files,
             is_installation=is_installation,
             set_main=set_main,
         )
