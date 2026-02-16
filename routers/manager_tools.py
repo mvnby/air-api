@@ -23,6 +23,7 @@ from core.logger import logger
 from models import Product, ProductImage, Order, Customer
 from services.manager_catalog_service import ManagerCatalogService
 from services.manager_legacy_specs_service import ManagerLegacySpecsService
+from services.manager_media_orchestrator_service import ManagerMediaOrchestratorService
 from services.manager_media_service import ManagerMediaService
 from services.manager_specs_service import ManagerSpecsService
 
@@ -63,23 +64,15 @@ async def upload_image(
     and create a ProductImage record linked to the product.
     """
     logger.info(f"Manager {username} uploading image for product {product_id} from {url}")
-    
-    # 1. Verify product exists
-    product = await session.get(Product, product_id)
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-
-    # Use helper. Default behavior for upload is to set main image if not installation
-    # Use helper. Default behavior for upload is to set main image if not installation
-    set_main = not is_installation
     try:
-        return await ManagerMediaService.process_and_save_image(
+        return await ManagerMediaOrchestratorService.upload_image_from_url(
+            session=session,
             url=url,
             product_id=product_id,
-            session=session,
-            set_main=set_main,
             is_installation=is_installation,
         )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -95,51 +88,15 @@ async def upload_local_images(
 ):
     """Upload multiple local files, convert to WebP, and attach to product."""
     logger.info(f"Manager {username} uploading {len(files)} local images for product {product_id}")
-    
-    product = await session.get(Product, product_id)
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-
-    uploaded_images = []
-    
-    for file in files:
-        try:
-            content = await file.read()
-            # Set main only if it's the first image and product has no main image? 
-            # Or simplified: Local uploads don't auto-set main unless product has NONE.
-            
-            # Check if product has main image currently
-            # (We need to re-fetch or trust the object, but object might be stale if we iterate)
-            # Safe bet: separate query or just don't set main for batch uploads to be safe?
-            # User request: "possibility to download multiple images". 
-            # Let's say: first image in batch becomes main IF product has no main image.
-            
-            should_set_main = False
-            if not product.main_image and not is_installation and len(uploaded_images) == 0:
-                 should_set_main = True
-
-            result = await ManagerMediaService.save_image_from_bytes(
-                image_content=content,
-                product_id=product_id,
-                session=session,
-                set_main=should_set_main,
-                is_installation=is_installation,
-            )
-            uploaded_images.append(result)
-            
-            # If we set main, update local object to prevent next loop from trying
-            if should_set_main:
-                product.main_image = result["url"]
-                
-        except Exception as e:
-            logger.error(f"Failed to upload file {file.filename}: {e}")
-            # We continue with other files or Validation Error?
-            # Let's continue and return what succeeded? Or fail all? 
-            # For simplicity, fail on invalid file? Or skip?
-            # Let's skip and log.
-            pass
-            
-    return {"uploaded": len(uploaded_images), "images": uploaded_images}
+    try:
+        return await ManagerMediaOrchestratorService.upload_local_images(
+            session=session,
+            product_id=product_id,
+            files=files,
+            is_installation=is_installation,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 @router.post("/gallery/link-search-result", operation_id="link_search_result")
 async def link_search_result(
@@ -149,18 +106,14 @@ async def link_search_result(
     username: str = Depends(get_current_username)
 ):
     """Add a search result image to gallery (download and link). Does NOT set as main image."""
-    product = await session.get(Product, product_id)
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-
     try:
-        return await ManagerMediaService.process_and_save_image(
+        return await ManagerMediaOrchestratorService.link_search_result(
+            session=session,
             url=url,
             product_id=product_id,
-            session=session,
-            set_main=False,
-            is_installation=False,
         )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
