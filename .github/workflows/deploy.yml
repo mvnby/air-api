@@ -118,12 +118,12 @@ jobs:
           ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "chmod +x /tmp/deploy.sh && GHCR_PAT='${{ secrets.GHCR_PAT }}' GITHUB_ACTOR='${{ github.actor }}' bash /tmp/deploy.sh"
 
       - name: Optional Post-Deploy Backend Ops
-        if: ${{ secrets.RUN_POST_DEPLOY_OPS == 'true' }}
         run: |
           cat scripts/ops_post_deploy.sh | ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/ops_post_deploy.sh"
 
           ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
             chmod +x /tmp/ops_post_deploy.sh && \
+            RUN_POST_DEPLOY_OPS='${{ secrets.RUN_POST_DEPLOY_OPS }}' \
             RUN_NORMALIZE_LEGACY='${{ secrets.RUN_NORMALIZE_LEGACY }}' \
             HIDE_LEGACY_GROUPS='${{ secrets.HIDE_LEGACY_GROUPS }}' \
             RUN_REPORT_LEGACY_LINKS='${{ secrets.RUN_REPORT_LEGACY_LINKS }}' \
