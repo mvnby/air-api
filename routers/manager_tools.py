@@ -280,63 +280,19 @@ async def bulk_add_gallery_images(
     username: str = Depends(get_current_username),
 ):
     """Append image links to selected products without removing existing gallery items."""
-    if not payload.product_ids:
-        raise HTTPException(status_code=400, detail="product_ids is required")
-    if not payload.source_urls:
-        raise HTTPException(status_code=400, detail="source_urls is required")
-
-    unique_product_ids = list(dict.fromkeys(payload.product_ids))
-    unique_urls = [u for u in dict.fromkeys(payload.source_urls) if u]
-    if not unique_urls:
-        raise HTTPException(status_code=400, detail="No valid source_urls provided")
-
-    products_stmt = select(Product.id).where(Product.id.in_(unique_product_ids))
-    existing_product_ids = set((await session.execute(products_stmt)).scalars().all())
-    missing = sorted(set(unique_product_ids) - existing_product_ids)
-    if missing:
-        raise HTTPException(status_code=404, detail=f"Products not found: {missing}")
-
-    added = 0
-    skipped = 0
-    first_url = unique_urls[0]
-
-    for product_id in unique_product_ids:
-        for url in unique_urls:
-            existing_stmt = select(ProductImage.id).where(
-                ProductImage.product_id == product_id,
-                ProductImage.url == url,
-            )
-            existing = (await session.execute(existing_stmt)).scalar_one_or_none()
-            if existing and payload.skip_existing:
-                skipped += 1
-                continue
-            if not existing:
-                session.add(
-                    ProductImage(
-                        product_id=product_id,
-                        url=url,
-                        is_installation_photo=payload.is_installation,
-                    )
-                )
-                added += 1
-            else:
-                skipped += 1
-
-        if payload.set_main and not payload.is_installation:
-            product = await session.get(Product, product_id)
-            if product:
-                product.main_image = first_url
-                session.add(product)
-
-        await _sync_legacy_images(session, product_id)
-
-    await session.commit()
-    return {
-        "message": "Bulk image add completed",
-        "products_count": len(unique_product_ids),
-        "added_links": added,
-        "skipped_existing": skipped,
-    }
+    try:
+        return await ManagerMediaService.bulk_add_gallery_images(
+            session=session,
+            product_ids=payload.product_ids,
+            source_urls=payload.source_urls,
+            is_installation=payload.is_installation,
+            skip_existing=payload.skip_existing,
+            set_main=payload.set_main,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=exc.args[0]) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 @router.post("/gallery/bulk-upload-local", operation_id="bulk_upload_local_images")
 async def bulk_upload_local_images(
@@ -403,58 +359,15 @@ async def bulk_delete_common_gallery_images(
     username: str = Depends(get_current_username),
 ):
     """Delete selected common image links from selected products only."""
-    if not payload.product_ids:
-        raise HTTPException(status_code=400, detail="product_ids is required")
-    if not payload.urls:
-        raise HTTPException(status_code=400, detail="urls is required")
-
-    unique_product_ids = list(dict.fromkeys(payload.product_ids))
-    unique_urls = [u for u in dict.fromkeys(payload.urls) if u]
-    if not unique_urls:
-        raise HTTPException(status_code=400, detail="No valid urls provided")
-
-    common_urls = await _get_common_gallery_urls(
-        session=session,
-        product_ids=unique_product_ids,
-        exclude_installation=payload.exclude_installation,
-    )
-    invalid_urls = [u for u in unique_urls if u not in common_urls]
-    if invalid_urls:
-        raise HTTPException(
-            status_code=400,
-            detail={"message": "Only common images can be deleted in bulk mode", "not_common": invalid_urls},
+    try:
+        return await ManagerMediaService.bulk_delete_common_gallery_images(
+            session=session,
+            product_ids=payload.product_ids,
+            urls=payload.urls,
+            exclude_installation=payload.exclude_installation,
         )
-
-    deleted_links = 0
-    for product_id in unique_product_ids:
-        stmt = select(ProductImage).where(
-            ProductImage.product_id == product_id,
-            ProductImage.url.in_(unique_urls),
-        )
-        if payload.exclude_installation:
-            stmt = stmt.where(ProductImage.is_installation_photo == False)  # noqa: E712
-        rows = (await session.execute(stmt)).scalars().all()
-        for row in rows:
-            await session.delete(row)
-            deleted_links += 1
-
-        product = await session.get(Product, product_id)
-        if product and product.main_image in unique_urls:
-            product.main_image = None
-            session.add(product)
-
-        await _sync_legacy_images(session, product_id)
-
-    await session.commit()
-
-    for url in unique_urls:
-        await _remove_file_if_unreferenced(session, url)
-
-    return {
-        "message": "Bulk delete completed",
-        "products_count": len(unique_product_ids),
-        "deleted_links": deleted_links,
-    }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=exc.args[0]) from exc
 
 @router.post("/cleanup-media", operation_id="cleanup_media")
 async def cleanup_media(
