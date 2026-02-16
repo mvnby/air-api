@@ -21,8 +21,7 @@ from core.config import settings
 from core.security import get_current_username
 from core.logger import logger
 from models import Product, ProductImage, Order, Customer
-from services.product_service import ProductService
-from services.customer_service import CustomerService
+from services.manager_catalog_service import ManagerCatalogService
 from services.manager_legacy_specs_service import ManagerLegacySpecsService
 from services.manager_media_service import ManagerMediaService
 from services.manager_specs_service import ManagerSpecsService
@@ -415,8 +414,16 @@ async def list_products_for_manager(
     Paginated product list for manager UI.
     Unlike the public catalog, this can show unpublished products.
     """
-    return await ProductService.get_manager_list(
-        session, page, limit, search, is_published, area_min, area_max, is_inverter, sort
+    return await ManagerCatalogService.list_products(
+        session=session,
+        page=page,
+        limit=limit,
+        search=search,
+        is_published=is_published,
+        area_min=area_min,
+        area_max=area_max,
+        is_inverter=is_inverter,
+        sort=sort,
     )
 
 
@@ -434,7 +441,7 @@ async def list_customers_for_manager(
     Paginated customer list for manager UI.
     Includes order count per customer.
     """
-    return await CustomerService.list_for_manager(
+    return await ManagerCatalogService.list_customers(
         session=session,
         page=page,
         limit=limit,
@@ -454,10 +461,11 @@ async def update_product(
     """
     Update individual product fields.
     """
-    update_data = data.dict(exclude_unset=True)
-    tag_ids = update_data.pop("tag_ids", None)
-
-    result = await ProductService.update_product(session, product_id, update_data, tag_ids)
+    result = await ManagerCatalogService.update_product(
+        session=session,
+        product_id=product_id,
+        data=data,
+    )
 
     if not result:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -474,10 +482,7 @@ async def bulk_round_price(
     """
     Round prices down to the nearest multiple of 50.
     """
-    if not request.product_ids:
-        return {"message": "No products selected", "updated_count": 0}
-
-    return await ProductService.bulk_round_prices(session, request.product_ids)
+    return await ManagerCatalogService.bulk_round_prices(session=session, request=request)
 
 
 @router.get("/tags/all", operation_id="get_all_tags")
@@ -488,4 +493,4 @@ async def get_all_tags(
     """
     Return all tags grouped by TagGroup for the product editor.
     """
-    return await ProductService.get_all_tags(session)
+    return await ManagerCatalogService.get_all_tags(session)
