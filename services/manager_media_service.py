@@ -19,6 +19,72 @@ from models import Product, ProductImage
 
 class ManagerMediaService:
     @staticmethod
+    async def set_main_image(session: AsyncSession, image_id: int) -> dict:
+        image = await session.get(ProductImage, image_id)
+        if not image:
+            raise ValueError("Image not found")
+
+        product = await session.get(Product, image.product_id)
+        if not product:
+            raise ValueError("Product not found")
+
+        statement = update(Product).where(Product.id == product.id).values(main_image=image.url)
+        await session.execute(statement)
+        await session.commit()
+        return {"message": "Main image updated", "url": image.url}
+
+    @staticmethod
+    async def delete_gallery_image(session: AsyncSession, image_id: int) -> dict:
+        image = await session.get(ProductImage, image_id)
+        if not image:
+            raise ValueError("Image not found")
+
+        image_url = image.url
+        product = await session.get(Product, image.product_id)
+        if product and product.main_image == image.url:
+            statement = update(Product).where(Product.id == product.id).values(main_image=None)
+            await session.execute(statement)
+
+        await session.delete(image)
+        if product:
+            await ManagerMediaService.sync_legacy_images(session, product.id)
+
+        await session.commit()
+        await ManagerMediaService.remove_file_if_unreferenced(session, image_url)
+        return {"message": "Image deleted"}
+
+    @staticmethod
+    async def search_reuse_products(session: AsyncSession, query: str, limit: int = 10) -> List[dict]:
+        statement = select(Product).where(Product.title.ilike(f"%{query}%")).limit(limit)
+        result = await session.execute(statement)
+        products = result.scalars().all()
+        return [{"id": p.id, "title": p.title, "main_image": p.main_image} for p in products]
+
+    @staticmethod
+    async def reuse_image_link(session: AsyncSession, product_id: int, source_image_url: str) -> dict:
+        product = await session.get(Product, product_id)
+        if not product:
+            raise ValueError("Product not found")
+
+        existing_stmt = select(ProductImage).where(
+            ProductImage.product_id == product_id,
+            ProductImage.url == source_image_url,
+        )
+        existing = (await session.execute(existing_stmt)).scalar_one_or_none()
+        if existing:
+            return {"message": "Image already linked", "id": existing.id}
+
+        new_image = ProductImage(
+            product_id=product_id,
+            url=source_image_url,
+            is_installation_photo=False,
+        )
+        session.add(new_image)
+        await ManagerMediaService.sync_legacy_images(session, product_id)
+        await session.commit()
+        return {"message": "Image linked", "id": new_image.id}
+
+    @staticmethod
     async def search_images(query: str, max_results: int = 20) -> List[dict]:
         """
         Search images in DuckDuckGo and return normalized lightweight payload.

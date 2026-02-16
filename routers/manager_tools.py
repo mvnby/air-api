@@ -210,19 +210,10 @@ async def set_main_image(
     username: str = Depends(get_current_username)
 ):
     """Set a specific gallery image as the product's main image."""
-    image = await session.get(ProductImage, image_id)
-    if not image:
-        raise HTTPException(status_code=404, detail="Image not found")
-        
-    product = await session.get(Product, image.product_id)
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-
-    from sqlmodel import update
-    statement = update(Product).where(Product.id == product.id).values(main_image=image.url)
-    await session.execute(statement)
-    await session.commit()
-    return {"message": "Main image updated", "url": image.url}
+    try:
+        return await ManagerMediaService.set_main_image(session, image_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 @router.delete("/gallery/{image_id}", operation_id="delete_image")
 async def delete_gallery_image(
@@ -231,27 +222,10 @@ async def delete_gallery_image(
     username: str = Depends(get_current_username)
 ):
     """Delete an image link; physical file is deleted only if unreferenced globally."""
-    image = await session.get(ProductImage, image_id)
-    if not image:
-        raise HTTPException(status_code=404, detail="Image not found")
-
-    image_url = image.url
-
-    # Check if it's the main image
-    product = await session.get(Product, image.product_id)
-    if product and product.main_image == image.url:
-         from sqlmodel import update
-         statement = update(Product).where(Product.id == product.id).values(main_image=None)
-         await session.execute(statement)
-
-    await session.delete(image)
-    # Sync legacy
-    if product:
-        await _sync_legacy_images(session, product.id)
-
-    await session.commit()
-    await _remove_file_if_unreferenced(session, image_url)
-    return {"message": "Image deleted"}
+    try:
+        return await ManagerMediaService.delete_gallery_image(session, image_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 @router.get("/gallery/reuse-search", operation_id="reuse_search")
 async def reuse_search(
@@ -260,12 +234,7 @@ async def reuse_search(
     username: str = Depends(get_current_username)
 ):
     """Search for products to reuse images from."""
-    statement = select(Product).where(Product.title.ilike(f"%{q}%")).limit(10)
-    result = await session.execute(statement)
-    products = result.scalars().all()
-    
-    # Return simple list
-    return [{"id": p.id, "title": p.title, "main_image": p.main_image} for p in products]
+    return await ManagerMediaService.search_reuse_products(session, q)
 
 @router.post("/gallery/reuse-image", operation_id="reuse_image")
 async def reuse_image(
@@ -275,32 +244,10 @@ async def reuse_image(
     username: str = Depends(get_current_username)
 ):
     """Link an existing image URL to another product."""
-    # Verify product
-    product = await session.get(Product, product_id)
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-
-    existing_stmt = select(ProductImage).where(
-        ProductImage.product_id == product_id,
-        ProductImage.url == source_image_url,
-    )
-    existing = (await session.execute(existing_stmt)).scalar_one_or_none()
-    if existing:
-        return {"message": "Image already linked", "id": existing.id}
-
-    # Create new ProductImage with SAME URL
-    new_image = ProductImage(
-        product_id=product_id,
-        url=source_image_url,
-        is_installation_photo=False
-    )
-    session.add(new_image)
-    
-    # Sync legacy
-    await _sync_legacy_images(session, product_id)
-    
-    await session.commit()
-    return {"message": "Image linked", "id": new_image.id}
+    try:
+        return await ManagerMediaService.reuse_image_link(session, product_id, source_image_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 @router.get(
     "/gallery/common-images",
