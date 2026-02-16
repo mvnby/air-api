@@ -11,6 +11,8 @@ from services.documents.factory import DocumentFactory
 
 class DocumentService:
     """Сервис для работы с документами заказов через Google Drive"""
+
+    ALLOWED_DOC_TYPES = {"contract", "invoice", "work_order", "act", "offer", "tn2", "ttn1"}
     
     @staticmethod
     async def create_or_get_document(
@@ -43,6 +45,26 @@ class DocumentService:
         
         # 2. Создаем новый документ
         return await DocumentService._create_new_document(session, order_id, doc_type)
+
+    @staticmethod
+    async def generate_manager_order_document(
+        session: AsyncSession,
+        order_id: int,
+        doc_type: str,
+    ) -> dict:
+        if doc_type not in DocumentService.ALLOWED_DOC_TYPES:
+            raise ValueError(f"Unsupported document type: {doc_type}")
+
+        doc = await DocumentService.create_or_get_document(
+            session=session,
+            order_id=order_id,
+            doc_type=doc_type,
+        )
+        return {
+            "doc_id": doc.id,
+            "doc_type": doc.doc_type,
+            "edit_url": doc.google_edit_url,
+        }
     
     @staticmethod
     async def _create_new_document(

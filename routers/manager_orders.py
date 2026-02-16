@@ -17,8 +17,6 @@ from services.order_service import OrderService
 
 router = APIRouter(prefix="/api/manager/orders", tags=["manager-orders"])
 
-ALLOWED_DOC_TYPES = {"contract", "invoice", "work_order", "act", "offer", "tn2", "ttn1"}
-
 
 @router.get("", response_model=ManagerOrderListResponse, operation_id="get_manager_orders")
 async def get_manager_orders(
@@ -87,15 +85,13 @@ async def generate_manager_order_document(
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
 ):
-    if doc_type not in ALLOWED_DOC_TYPES:
-        raise HTTPException(status_code=400, detail=f"Unsupported document type: {doc_type}")
     try:
-        doc = await DocumentService.create_or_get_document(session=session, order_id=order_id, doc_type=doc_type)
+        return await DocumentService.generate_manager_order_document(
+            session=session,
+            order_id=order_id,
+            doc_type=doc_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-    return {
-        "doc_id": doc.id,
-        "doc_type": doc.doc_type,
-        "edit_url": doc.google_edit_url,
-    }
