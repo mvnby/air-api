@@ -13,6 +13,7 @@ import logging
 
 from core.database import get_session
 from services.product_service import ProductService
+from services.product_serialization import sanitize_specs, parse_legacy_images
 from models import Product, Tag, TagGroup, ProductTagLink
 from services.description_generator import DescriptionGeneratorService
 import httpx
@@ -68,26 +69,8 @@ def _map_product_to_response(
                 group_title=t.group.title if t.group else None
             ))
     
-    # Handle potentially string-encoded JSON fields
-    specs = product.specs
-    if isinstance(specs, str):
-        try:
-            # Replace single quotes with double quotes for valid JSON if needed, 
-            # but usually it's better to try literal_eval if it's a python repr
-            import ast
-            specs = ast.literal_eval(specs)
-        except Exception:
-            specs = {}  # Fallback if JSON parsing fails
-    if isinstance(specs, dict):
-        specs = {k: v for k, v in specs.items() if not str(k).startswith("__")}
-            
-    images = product.images
-    if isinstance(images, str):
-        try:
-            import ast
-            images = ast.literal_eval(images)
-        except Exception:
-            images = []  # Fallback if JSON parsing fails
+    specs = sanitize_specs(product.specs)
+    images = parse_legacy_images(product.images)
 
             
     # Map gallery images

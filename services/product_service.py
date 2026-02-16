@@ -2,7 +2,6 @@
 Service Layer: Product business logic.
 """
 from typing import Optional, List, Dict, Any
-import ast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -12,6 +11,7 @@ from thefuzz import process
 from crud.product import ProductDAO
 from models import Product, Tag, TagGroup, ProductTagLink
 from services.spec_normalizer import normalize_specs
+from services.product_serialization import sanitize_specs, to_web_path
 
 
 ALLOWED_FILTER_GROUP_SLUGS = {"brand", "series", "expert-badge"}
@@ -31,18 +31,6 @@ def transliterate(text: str) -> str:
     for char in text.lower():
         result.append(TRANSLIT_MAP.get(char, char))
     return "".join(result)
-
-
-def _sanitize_specs(specs: Any) -> Dict[str, Any]:
-    value = specs
-    if isinstance(value, str):
-        try:
-            value = ast.literal_eval(value)
-        except Exception:
-            value = {}
-    if not isinstance(value, dict):
-        return {}
-    return {k: v for k, v in value.items() if not str(k).startswith("__")}
 
 
 class ProductService:
@@ -268,11 +256,6 @@ class ProductService:
             key=lambda item: (item.is_installation_photo, item.id),
         )
 
-        def to_web_path(path: str) -> str:
-            if path and not path.startswith("/"):
-                return f"/{path}"
-            return path
-
         data["images"] = [to_web_path(img.url) for img in gallery]
         data["gallery_images"] = [
             {
@@ -281,7 +264,7 @@ class ProductService:
             }
             for img in gallery
         ]
-        data["specs"] = _sanitize_specs(data.get("specs"))
+        data["specs"] = sanitize_specs(data.get("specs"))
         return data
 
     @staticmethod
@@ -340,7 +323,7 @@ class ProductService:
                     "main_image": p.main_image,
                     "is_published": p.is_published,
                     "created_at": p.created_at.isoformat() if p.created_at else None,
-                    "specs": _sanitize_specs(p.specs),
+                    "specs": sanitize_specs(p.specs),
                     "gallery_images": [
                         {
                             "id": img.id,
