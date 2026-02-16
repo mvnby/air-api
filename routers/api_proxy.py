@@ -41,6 +41,16 @@ async def get_all_banks():
     return []
 
 
+async def _fetch_egr_data(unp: str) -> dict:
+    url = f"http://grp.nalog.gov.by/api/grp-public/data?unp={unp}&type=json&charset=UTF-8"
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, timeout=10.0)
+            return response.json()
+        except Exception as e:
+            return {"error": str(e)}
+
+
 def _normalize_bank_search_query(search: str) -> tuple[str, str | None]:
     query = search.strip().replace(" ", "").upper()
     bic_from_iban = query[4:8] if len(query) >= 8 and query.startswith("BY") else None
@@ -83,13 +93,7 @@ async def proxy_egr(
     username: str = Depends(get_current_username),
 ):
     """Proxy for Belarus EGR (Ministry of Taxes) API."""
-    url = f"http://grp.nalog.gov.by/api/grp-public/data?unp={unp}&type=json&charset=UTF-8"
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(url, timeout=10.0)
-            return response.json()
-        except Exception as e:
-            return {"error": str(e)}
+    return await _fetch_egr_data(unp)
 
 
 @router.get("/admin/proxy/bank")
@@ -114,13 +118,7 @@ async def find_bank(
 @router.get("/v1/proxy/egr")
 async def public_proxy_egr(unp: str):
     """Public proxy for Belarus EGR (Ministry of Taxes) API."""
-    url = f"http://grp.nalog.gov.by/api/grp-public/data?unp={unp}&type=json&charset=UTF-8"
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(url, timeout=10.0)
-            return response.json()
-        except Exception as e:
-            return {"error": str(e)}
+    return await _fetch_egr_data(unp)
 
 
 @router.get("/v1/proxy/bank")
