@@ -28,13 +28,12 @@ from core.logger import logger
 from models import Product, ProductImage, Order, Customer
 from services.product_service import ProductService
 from services.customer_service import CustomerService
+from services.manager_media_service import ManagerMediaService
 from services.spec_normalizer import normalize_specs
 
 import httpx
 from PIL import Image
 from io import BytesIO
-from duckduckgo_search import DDGS
-
 router = APIRouter(prefix="/api/manager", tags=["manager"])
 
 @router.get("/me", operation_id="read_user_me")
@@ -57,38 +56,7 @@ async def search_images(
     """
     logger.info(f"Manager {username} searching images for: {q}")
     
-    try:
-        # DBGS is synchronous, run in executor
-        # Using updated approach for v6+
-        results = await asyncio.to_thread(
-            lambda: list(DDGS().images(q, max_results=max_results))
-        )
-        
-        # Extract relevant fields
-        images = []
-        for r in results:
-            if r.get('image'):
-                images.append({
-                    "image": r.get('image'),
-                    "width": r.get('width'),
-                    "height": r.get('height'),
-                    "thumbnail": r.get('thumbnail')
-                })
-        return images
-        
-    except Exception as e:
-        logger.error(f"Error searching images (DDG): {e}")
-        # Return empty list or specific error instead of 500
-        # Check if it is a rate limit or connection error
-        if "Ratelimit" in str(e) or "403" in str(e):
-             # Silently return empty list to not break UI, or handle specifically?
-             # User requested: "Better to return empty list [] or understandable error".
-             # Let's return empty list for graceful degradation.
-             logger.warning(f"DDG Ratelimit hit for query: {q}")
-             return []
-        
-        # For other errors, also fallback to empty list but log error
-        return []
+    return await ManagerMediaService.search_images(q, max_results=max_results)
 
 @router.post("/upload-image", operation_id="upload_image")
 async def upload_image(
