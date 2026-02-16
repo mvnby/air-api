@@ -10,8 +10,9 @@ from thefuzz import process
 
 from crud.product import ProductDAO
 from models import Product, Tag, TagGroup, ProductTagLink
+from services.product_dict_mapper import map_product_to_dict
 from services.spec_normalizer import normalize_specs
-from services.product_serialization import sanitize_specs, to_web_path
+from services.product_serialization import sanitize_specs
 
 
 ALLOWED_FILTER_GROUP_SLUGS = {"brand", "series", "expert-badge"}
@@ -237,35 +238,12 @@ class ProductService:
 
     @staticmethod
     def _to_dict(product: Product) -> Dict[str, Any]:
-        data = product.model_dump()
-        data["categories"] = [t.title for t in product.tags]
-
-        tags_data = []
-        for tag in product.tags:
-            tag_dict = tag.model_dump()
-            if tag.group:
-                tag_dict["group"] = tag.group.model_dump()
-            tags_data.append(tag_dict)
-        data["tags"] = tags_data
-
-        if data.get("main_image") and not data["main_image"].startswith("/"):
-            data["main_image"] = "/" + data["main_image"]
-
-        gallery = sorted(
-            product.gallery_images,
-            key=lambda item: (item.is_installation_photo, item.id),
+        return map_product_to_dict(
+            product,
+            include_tag_groups=True,
+            include_media=True,
+            sanitize_specs_payload=True,
         )
-
-        data["images"] = [to_web_path(img.url) for img in gallery]
-        data["gallery_images"] = [
-            {
-                **img.model_dump(),
-                "url": to_web_path(img.url),
-            }
-            for img in gallery
-        ]
-        data["specs"] = sanitize_specs(data.get("specs"))
-        return data
 
     @staticmethod
     async def save_main_image(
