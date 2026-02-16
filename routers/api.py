@@ -14,6 +14,7 @@ import logging
 from core.database import get_session
 from services.product_service import ProductService
 from services.product_serialization import sanitize_specs, parse_legacy_images
+from routers.api_content import router as content_router
 from models import Product, Tag, TagGroup, ProductTagLink
 from services.description_generator import DescriptionGeneratorService
 import httpx
@@ -23,8 +24,6 @@ from schemas import (
     ProductResponse,
     ProductSiblingResponse,
     ProductPriceResponse,
-    ArticleResponse,
-    ServiceResponse,
     OrderPayload,
     OrderResponse,
     TagResponse,
@@ -34,10 +33,11 @@ from schemas import (
     FiltersConfigResponse,
 )
 from crud.product import ProductDAO
-from models import Article, Service, Order, Customer, OrderStatus, OrderProductLink, CustomerType
+from models import Order, Customer, OrderStatus, OrderProductLink, CustomerType
 from fastapi import HTTPException
 
 router = APIRouter(prefix="/api", tags=["api"])
+router.include_router(content_router)
 logger = logging.getLogger(__name__)
 
 # --- HELPER FUNCTIONS ---
@@ -542,54 +542,6 @@ async def get_product_by_identifier(identifier: str, session: AsyncSession = Dep
     siblings = await ProductService.get_series_siblings(session, product, limit=8)
     return _map_product_to_response(product, series_siblings=siblings)
 
-# --- CONTENT ENDPOINTS ---
-
-@router.get("/v1/content/articles", response_model=List[ArticleResponse])
-async def get_articles(session: AsyncSession = Depends(get_session)):
-    """Get list of published articles ordered by creation date (newest first)."""
-    from services.article_service import ArticleService
-    return await ArticleService.get_all_published(session)
-
-@router.get("/v1/content/articles/{slug}", response_model=ArticleResponse)
-async def get_article(slug: str, session: AsyncSession = Depends(get_session)):
-    """Get article details by slug. Returns 404 if not found or not published."""
-    from services.article_service import ArticleService
-    article = await ArticleService.get_by_slug(session, slug)
-    if not article:
-        raise HTTPException(status_code=404, detail=f"Article with slug '{slug}' not found")
-    return article
-
-@router.get("/v1/content/services", response_model=List[ServiceResponse])
-async def get_services(session: AsyncSession = Depends(get_session)):
-    """Get list of all available services (Legacy, redirects to valid logic)."""
-    # Maintain partial backward compatibility or update to filtered
-    stmt = select(Service).where(Service.is_active == True).order_by(Service.id)
-    result = await session.execute(stmt)
-    return result.scalars().all()
-
-@router.get("/v1/services/options", response_model=List[ServiceResponse])
-async def get_service_options(
-    category: str = "installation_option",
-    session: AsyncSession = Depends(get_session)
-):
-    """
-    Get rich installation options.
-    """
-    stmt = (
-        select(Service)
-        .where(Service.is_active == True)
-        .where(Service.category == category)
-        .order_by(Service.base_price) 
-    )
-    result = await session.execute(stmt)
-    return result.scalars().all()
-
-@router.get("/v1/installation-rates")
-async def get_installation_rates(session: AsyncSession = Depends(get_session)):
-    """Get all installation rates."""
-    from services.installation_service import InstallationService
-    return await InstallationService.get_all(session)
-
 # --- ORDER ENDPOINTS ---
 
 @router.post("/v1/orders", response_model=OrderResponse, operation_id="create_order")
@@ -704,19 +656,3 @@ async def create_order(payload: OrderPayload, session: AsyncSession = Depends(ge
         total_amount=order.total_amount,
         created_at=order.created_at
     )
-
-# --- CONFIG ENDPOINTS ---
-
-@router.get("/v1/config", operation_id="get_config")
-async def get_global_config(session: AsyncSession = Depends(get_session)):
-    """
-    Get all global configuration parameters as a key-value dictionary.
-    Example: {"phone": "+37529...", "email": "..."}
-    """
-    from models import GlobalConfig
-    stmt = select(GlobalConfig)
-    result = await session.execute(stmt)
-    configs = result.scalars().all()
-    
-    # Convert list of configs to simple key-value dict
-    return {c.key: c.value for c in configs}
