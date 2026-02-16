@@ -8,6 +8,20 @@
 
 - `docs/git-workflow.md`
 
+## API-роутеры после декомпозиции
+
+Основной входной модуль API: `routers/api.py` (компоновщик).
+
+Доменные роутеры:
+
+- `routers/api_products.py` — публичный каталог/товары/specs/filters config.
+- `routers/api_orders.py` — публичное создание заказа с сайта.
+- `routers/api_content.py` — статьи, услуги, глобальная конфигурация.
+- `routers/api_proxy.py` — proxy-эндпоинты ЕГР/банки.
+- `routers/api_admin.py` — admin search + health.
+
+Правило поддержки: новую API-функциональность добавляйте в соответствующий доменный роутер, не возвращайте монолит в `routers/api.py`.
+
 ## 🛠️ Нормализация характеристик (Specs)
 
 Система автоматически нормализует характеристики при импорте (приводит русские ключи к системным, чистит значения). Однако, при добавлении большого количества новых товаров (например, +100 шт.), могут появиться новые вариации ключей.
@@ -22,7 +36,7 @@
    Запустите скрипт анализа, чтобы найти новые, "неопознанные" ключи. Он покажет самые частые ненормализованные ключи и предложит варианты исправления.
 
    ```bash
-   docker compose exec mvn-app python3 scripts/analyze_spec_keys.py
+   docker compose exec app python3 scripts/analyze_spec_keys.py
    ```
 
 2. **Обновить карту ключей**
@@ -36,5 +50,5 @@
    Чтобы "починить" уже загруженные товары, запустите скрипт нормализации. Он пройдет по всей базе и перепишет `specs` с учетом новых правил.
 
    ```bash
-   docker compose exec mvn-app python3 scripts/normalize_legacy.py
+   docker compose exec app python3 scripts/normalize_legacy.py
    ```
