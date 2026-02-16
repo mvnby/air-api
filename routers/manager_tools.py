@@ -1,4 +1,4 @@
-from typing import List, Optional, Set
+from typing import List, Optional
 from datetime import datetime
 import asyncio
 import json
@@ -72,40 +72,9 @@ async def upload_image(
     # Use helper. Default behavior for upload is to set main image if not installation
     # Use helper. Default behavior for upload is to set main image if not installation
     set_main = not is_installation
-    return await _process_and_save_image(url, product_id, session, set_main=set_main, is_installation=is_installation)
-
-async def _process_and_save_image(
-    url: str, 
-    product_id: int, 
-    session: AsyncSession, 
-    set_main: bool,
-    is_installation: bool = False
-):
-    """Helper to download, convert, save, and link image."""
     try:
         return await ManagerMediaService.process_and_save_image(
             url=url,
-            product_id=product_id,
-            session=session,
-            set_main=set_main,
-            is_installation=is_installation,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-async def _save_image_from_bytes(
-    image_content: bytes,
-    product_id: int,
-    session: AsyncSession,
-    set_main: bool,
-    is_installation: bool = False
-):
-    """Process bytes, deduplicate file storage by hash, and link to product."""
-    try:
-        return await ManagerMediaService.save_image_from_bytes(
-            image_content=image_content,
             product_id=product_id,
             session=session,
             set_main=set_main,
@@ -148,8 +117,14 @@ async def upload_local_images(
             should_set_main = False
             if not product.main_image and not is_installation and len(uploaded_images) == 0:
                  should_set_main = True
-                 
-            result = await _save_image_from_bytes(content, product_id, session, set_main=should_set_main, is_installation=is_installation)
+
+            result = await ManagerMediaService.save_image_from_bytes(
+                image_content=content,
+                product_id=product_id,
+                session=session,
+                set_main=should_set_main,
+                is_installation=is_installation,
+            )
             uploaded_images.append(result)
             
             # If we set main, update local object to prevent next loop from trying
@@ -166,26 +141,6 @@ async def upload_local_images(
             
     return {"uploaded": len(uploaded_images), "images": uploaded_images}
 
-async def _sync_legacy_images(session: AsyncSession, product_id: int):
-    """Sync ProductImage records to Product.images JSON field."""
-    await ManagerMediaService.sync_legacy_images(session, product_id)
-
-async def _remove_file_if_unreferenced(session: AsyncSession, url: str):
-    """Delete physical file only when no ProductImage/Product.main_image references remain."""
-    await ManagerMediaService.remove_file_if_unreferenced(session, url)
-
-async def _get_common_gallery_urls(
-    session: AsyncSession,
-    product_ids: List[int],
-    exclude_installation: bool = True,
-) -> Set[str]:
-    """Get image URLs present in all selected products."""
-    return await ManagerMediaService.get_common_gallery_urls(
-        session,
-        product_ids,
-        exclude_installation=exclude_installation,
-    )
-
 @router.post("/gallery/link-search-result", operation_id="link_search_result")
 async def link_search_result(
     url: str = Query(..., description="URL of the image"),
@@ -197,8 +152,19 @@ async def link_search_result(
     product = await session.get(Product, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-        
-    return await _process_and_save_image(url, product_id, session, set_main=False)
+
+    try:
+        return await ManagerMediaService.process_and_save_image(
+            url=url,
+            product_id=product_id,
+            session=session,
+            set_main=False,
+            is_installation=False,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 @router.post("/gallery/set-main", operation_id="set_main_image")
 async def set_main_image(
@@ -260,7 +226,7 @@ async def get_common_gallery_images(
     if not product_ids:
         raise HTTPException(status_code=400, detail="product_ids is required")
 
-    common_urls = await _get_common_gallery_urls(
+    common_urls = await ManagerMediaService.get_common_gallery_urls(
         session=session,
         product_ids=product_ids,
         exclude_installation=True,
