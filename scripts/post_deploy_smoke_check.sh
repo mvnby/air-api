@@ -25,12 +25,16 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
-HEALTH_URL="${BASE_URL}/health"
+HEALTH_URL_PRIMARY="${BASE_URL}/health"
+HEALTH_URL_FALLBACK="${BASE_URL}/api/health"
 PRODUCTS_URL="${BASE_URL}/api/v1/products?limit=5"
 FILTERS_URL="${BASE_URL}/api/v1/filters/config"
 
-log request "GET ${HEALTH_URL}"
-health_payload="$(curl -fsS "${HEALTH_URL}")"
+log request "GET ${HEALTH_URL_PRIMARY} (fallback: ${HEALTH_URL_FALLBACK})"
+health_payload="$(curl -fsS "${HEALTH_URL_PRIMARY}" 2>/dev/null || true)"
+if [[ -z "${health_payload}" ]]; then
+  health_payload="$(curl -fsS "${HEALTH_URL_FALLBACK}")"
+fi
 
 log request "GET ${PRODUCTS_URL}"
 products_payload="$(curl -fsS "${PRODUCTS_URL}")"
