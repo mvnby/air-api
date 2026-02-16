@@ -26,7 +26,9 @@ from core.security import AdminAuthBackend
 from routers import admin as admin_router
 from routers import api as api_router
 from routers import auth as auth_router
+from routers import manager_catalog
 from routers import manager_media
+from routers import manager_specs
 from routers import manager_tools
 from routers import manager_orders
 from routers import manager_leads
@@ -90,7 +92,9 @@ app.add_middleware(
 app.include_router(admin_router.router)
 app.include_router(auth_router.router)
 app.include_router(api_router.router)
+app.include_router(manager_catalog.router)
 app.include_router(manager_media.router)
+app.include_router(manager_specs.router)
 app.include_router(manager_tools.router)
 app.include_router(manager_orders.router)
 app.include_router(manager_leads.router)
