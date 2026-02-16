@@ -1,7 +1,7 @@
 import pytest
 
 from crud.product import ProductDAO
-from models import Product, Tag, TagGroup
+from models import Product, ProductTagLink, Tag, TagGroup
 from services.product_service import ProductService
 from services.spec_normalizer import normalize_specs
 
@@ -54,10 +54,14 @@ async def test_jsonb_filters_and_allowed_tag_groups(db):
     await db.refresh(p1)
     await db.refresh(p2)
 
-    p1.tags.extend([brand_tag, expert_tag, technical_tag])
-    p2.tags.append(technical_tag)
-    db.add(p1)
-    db.add(p2)
+    db.add_all(
+        [
+            ProductTagLink(product_id=p1.id, tag_id=brand_tag.id),
+            ProductTagLink(product_id=p1.id, tag_id=expert_tag.id),
+            ProductTagLink(product_id=p1.id, tag_id=technical_tag.id),
+            ProductTagLink(product_id=p2.id, tag_id=technical_tag.id),
+        ]
+    )
     await db.commit()
 
     filtered = await ProductDAO.get_filtered(

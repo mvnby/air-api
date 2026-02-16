@@ -5,7 +5,7 @@ All methods accept AsyncSession as first argument for DI/transaction control.
 """
 from typing import Optional, List, Dict, Any
 
-from sqlalchemy import Integer, Boolean, cast, func, and_, or_
+from sqlalchemy import Integer, Boolean, cast, func, and_, or_, exists
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -148,7 +148,13 @@ class ProductDAO:
                     .where(Tag.slug == slug)
                     .where(Tag.group.has(TagGroup.slug.in_(ALLOWED_FILTER_GROUP_SLUGS)))
                 )
-                stmt = stmt.where(Product.id.in_(subq))
+                allowed_slug_exists = (
+                    select(Tag.id)
+                    .where(Tag.slug == slug)
+                    .where(Tag.group.has(TagGroup.slug.in_(ALLOWED_FILTER_GROUP_SLUGS)))
+                )
+                # Backcompat: technical/legacy slugs should be ignored (not zero-result).
+                stmt = stmt.where(or_(~exists(allowed_slug_exists), Product.id.in_(subq)))
 
         return stmt
 

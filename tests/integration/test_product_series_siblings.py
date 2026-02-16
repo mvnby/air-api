@@ -1,6 +1,6 @@
 import pytest
 
-from models import Product, Tag, TagGroup
+from models import Product, ProductTagLink, Tag, TagGroup
 
 
 @pytest.mark.asyncio
@@ -35,12 +35,16 @@ async def test_product_detail_contains_series_siblings(async_client, db):
     await db.refresh(sibling_same_brand)
     await db.refresh(sibling_other_brand)
 
-    main.tags.extend([brand_a, series_x])
-    sibling_same_brand.tags.extend([brand_a, series_x])
-    sibling_other_brand.tags.extend([brand_b, series_x])
-    db.add(main)
-    db.add(sibling_same_brand)
-    db.add(sibling_other_brand)
+    db.add_all(
+        [
+            ProductTagLink(product_id=main.id, tag_id=brand_a.id),
+            ProductTagLink(product_id=main.id, tag_id=series_x.id),
+            ProductTagLink(product_id=sibling_same_brand.id, tag_id=brand_a.id),
+            ProductTagLink(product_id=sibling_same_brand.id, tag_id=series_x.id),
+            ProductTagLink(product_id=sibling_other_brand.id, tag_id=brand_b.id),
+            ProductTagLink(product_id=sibling_other_brand.id, tag_id=series_x.id),
+        ]
+    )
     await db.commit()
 
     response = await async_client.get("/api/v1/products/main")

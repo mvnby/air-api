@@ -182,14 +182,19 @@ class ProductService:
             if tag.group and tag.group.slug == "brand"
         }
 
+        series_product_ids = (
+            select(ProductTagLink.product_id)
+            .where(ProductTagLink.tag_id.in_(series_tag_ids))
+            .distinct()
+            .subquery()
+        )
+
         stmt = (
             select(Product)
-            .join(ProductTagLink, ProductTagLink.product_id == Product.id)
+            .join(series_product_ids, Product.id == series_product_ids.c.product_id)
             .where(Product.id != product.id)
             .where(Product.is_published == True)
-            .where(ProductTagLink.tag_id.in_(series_tag_ids))
             .options(selectinload(Product.tags).selectinload(Tag.group))
-            .distinct()
         )
         candidates = list((await session.execute(stmt)).scalars().all())
 
