@@ -4,13 +4,14 @@ import asyncio
 import hashlib
 import os
 from io import BytesIO
-from typing import List
+from typing import List, Set
 
 import httpx
 from core.logger import logger
 from duckduckgo_search import DDGS
 from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func
 from sqlmodel import select, update
 
 from models import Product, ProductImage
@@ -154,3 +155,46 @@ class ManagerMediaService:
 
         product.images = [img.url for img in images if not img.is_installation_photo]
         session.add(product)
+
+    @staticmethod
+    async def remove_file_if_unreferenced(session: AsyncSession, url: str) -> None:
+        """Delete physical file only when no ProductImage/Product.main_image references remain."""
+        gallery_ref_stmt = select(func.count()).select_from(ProductImage).where(ProductImage.url == url)
+        gallery_refs = (await session.execute(gallery_ref_stmt)).scalar_one()
+
+        main_ref_stmt = select(func.count()).select_from(Product).where(Product.main_image == url)
+        main_refs = (await session.execute(main_ref_stmt)).scalar_one()
+
+        if gallery_refs > 0 or main_refs > 0:
+            return
+        if not url.startswith("/media/"):
+            return
+
+        path = url.lstrip("/")
+        if os.path.exists(path):
+            try:
+                os.remove(path)
+            except Exception as exc:
+                logger.error(f"Failed to delete unreferenced file {url}: {exc}")
+
+    @staticmethod
+    async def get_common_gallery_urls(
+        session: AsyncSession,
+        product_ids: List[int],
+        *,
+        exclude_installation: bool = True,
+    ) -> Set[str]:
+        """Get image URLs present in all selected products."""
+        if not product_ids:
+            return set()
+
+        stmt = select(ProductImage).where(ProductImage.product_id.in_(product_ids))
+        if exclude_installation:
+            stmt = stmt.where(ProductImage.is_installation_photo == False)  # noqa: E712
+
+        rows = (await session.execute(stmt)).scalars().all()
+        by_url = {}
+        target_ids = set(product_ids)
+        for row in rows:
+            by_url.setdefault(row.url, set()).add(row.product_id)
+        return {url for url, linked in by_url.items() if linked == target_ids}

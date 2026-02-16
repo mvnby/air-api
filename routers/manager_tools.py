@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Set
+from typing import List, Optional, Set
 import os
 from datetime import datetime
 import asyncio
@@ -9,7 +9,6 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-from sqlalchemy import func
 from schemas import (
     BulkSpecUpdate,
     SpecsKeysResponse,
@@ -176,24 +175,7 @@ async def _sync_legacy_images(session: AsyncSession, product_id: int):
 
 async def _remove_file_if_unreferenced(session: AsyncSession, url: str):
     """Delete physical file only when no ProductImage/Product.main_image references remain."""
-    gallery_ref_stmt = select(func.count()).select_from(ProductImage).where(ProductImage.url == url)
-    gallery_refs = (await session.execute(gallery_ref_stmt)).scalar_one()
-
-    main_ref_stmt = select(func.count()).select_from(Product).where(Product.main_image == url)
-    main_refs = (await session.execute(main_ref_stmt)).scalar_one()
-
-    if gallery_refs > 0 or main_refs > 0:
-        return
-
-    if not url.startswith("/media/"):
-        return
-
-    path = url.lstrip("/")
-    if os.path.exists(path):
-        try:
-            os.remove(path)
-        except Exception as exc:
-            logger.error(f"Failed to delete unreferenced file {url}: {exc}")
+    await ManagerMediaService.remove_file_if_unreferenced(session, url)
 
 async def _get_common_gallery_urls(
     session: AsyncSession,
@@ -201,20 +183,11 @@ async def _get_common_gallery_urls(
     exclude_installation: bool = True,
 ) -> Set[str]:
     """Get image URLs present in all selected products."""
-    if not product_ids:
-        return set()
-
-    stmt = select(ProductImage).where(ProductImage.product_id.in_(product_ids))
-    if exclude_installation:
-        stmt = stmt.where(ProductImage.is_installation_photo == False)  # noqa: E712
-
-    rows = (await session.execute(stmt)).scalars().all()
-    by_url: Dict[str, Set[int]] = {}
-    target_ids = set(product_ids)
-    for row in rows:
-        by_url.setdefault(row.url, set()).add(row.product_id)
-
-    return {url for url, linked in by_url.items() if linked == target_ids}
+    return await ManagerMediaService.get_common_gallery_urls(
+        session,
+        product_ids,
+        exclude_installation=exclude_installation,
+    )
 
 @router.post("/gallery/link-search-result", operation_id="link_search_result")
 async def link_search_result(
