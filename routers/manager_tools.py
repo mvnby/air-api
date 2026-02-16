@@ -329,28 +329,18 @@ async def bulk_upload_local_images(
         if content:
             file_payloads.append(content)
 
-    if not file_payloads:
-        raise HTTPException(status_code=400, detail="No valid files uploaded")
-
-    uploaded = 0
-    for product_id in unique_product_ids:
-        for idx, content in enumerate(file_payloads):
-            should_set_main = set_main and idx == 0 and not is_installation
-            await _save_image_from_bytes(
-                image_content=content,
-                product_id=product_id,
-                session=session,
-                set_main=should_set_main,
-                is_installation=is_installation,
-            )
-            uploaded += 1
-
-    return {
-        "message": "Bulk upload completed",
-        "products_count": len(unique_product_ids),
-        "files_count": len(file_payloads),
-        "uploaded_links": uploaded,
-    }
+    try:
+        return await ManagerMediaService.bulk_upload_local_images(
+            session=session,
+            product_ids=unique_product_ids,
+            file_payloads=file_payloads,
+            is_installation=is_installation,
+            set_main=set_main,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 @router.post("/gallery/bulk-delete-common", operation_id="bulk_delete_common_gallery_images")
 async def bulk_delete_common_gallery_images(

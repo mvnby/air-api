@@ -395,3 +395,45 @@ class ManagerMediaService:
             "products_count": len(unique_product_ids),
             "deleted_links": deleted_links,
         }
+
+    @staticmethod
+    async def bulk_upload_local_images(
+        session: AsyncSession,
+        *,
+        product_ids: List[int],
+        file_payloads: List[bytes],
+        is_installation: bool,
+        set_main: bool,
+    ) -> dict:
+        if not product_ids:
+            raise ValueError("product_ids is required")
+        if not file_payloads:
+            raise ValueError("No valid files uploaded")
+
+        unique_product_ids = list(dict.fromkeys(product_ids))
+
+        products_stmt = select(Product.id).where(Product.id.in_(unique_product_ids))
+        existing_product_ids = set((await session.execute(products_stmt)).scalars().all())
+        missing = sorted(set(unique_product_ids) - existing_product_ids)
+        if missing:
+            raise LookupError(f"Products not found: {missing}")
+
+        uploaded = 0
+        for product_id in unique_product_ids:
+            for idx, content in enumerate(file_payloads):
+                should_set_main = set_main and idx == 0 and not is_installation
+                await ManagerMediaService.save_image_from_bytes(
+                    image_content=content,
+                    product_id=product_id,
+                    session=session,
+                    set_main=should_set_main,
+                    is_installation=is_installation,
+                )
+                uploaded += 1
+
+        return {
+            "message": "Bulk upload completed",
+            "products_count": len(unique_product_ids),
+            "files_count": len(file_payloads),
+            "uploaded_links": uploaded,
+        }
