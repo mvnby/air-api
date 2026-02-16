@@ -51,8 +51,8 @@ class ImporterService:
             tag_objects = []
             
             from models import Tag
-            from sqlmodel import or_
             import slugify
+            from sqlalchemy.orm import selectinload
             from services.tag_logic import get_auto_tags
             
             # 1. Get Auto Tags (Slugs) based on metrics
@@ -61,7 +61,7 @@ class ImporterService:
             
             # 2. Resolve Auto Tags by SLUG
             for slug in auto_slugs:
-                stmt = select(Tag).where(Tag.slug == slug)
+                stmt = select(Tag).options(selectinload(Tag.group)).where(Tag.slug == slug)
                 result = await session.execute(stmt)
                 tag = result.scalar_one_or_none()
                 if tag:
@@ -72,9 +72,11 @@ class ImporterService:
                 t_name = t_name.strip()
                 if not t_name: continue
                 
-                stmt = select(Tag).where(Tag.title == t_name)
+                stmt = select(Tag).options(selectinload(Tag.group)).where(Tag.title == t_name)
                 result = await session.execute(stmt)
                 tag = result.scalar_one_or_none()
+                if tag and tag.group and tag.group.slug in {"area", "compressor-type"}:
+                    continue
                 
                 if not tag:
                     slug = slugify.slugify(t_name)

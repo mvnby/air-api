@@ -30,6 +30,7 @@ export function generateBentoCards(product: any): BentoCard[] {
     };
 
     const hasTag = (tag: string) => (product.tags || []).some((t: any) => t.slug === tag || t.slug?.includes(tag));
+    const compressorNorm = String(specs.compressor_type_norm || '').toLowerCase();
 
     // --- Priority 1: Area ---
     // REMOVED per user feedback
@@ -84,7 +85,9 @@ export function generateBentoCards(product: any): BentoCard[] {
         }
 
         const badges: string[] = [];
-        if (specs.is_inverter || hasTag('inverter')) badges.push('Инвертор');
+        if (compressorNorm === 'full_dc') badges.push('Full DC Inverter');
+        else if (compressorNorm === 'inverter' || specs.is_inverter || product.is_inverter) badges.push('Инвертор');
+        else if (compressorNorm === 'on_off') badges.push('On/Off');
         if (specs.energy_class_cool) badges.push(`A${specs.energy_class_cool.replace('A', '')}`);
 
         cards.push({
@@ -163,7 +166,14 @@ export function generateBentoCards(product: any): BentoCard[] {
     }
 
     // --- Priority 2: WiFi ---
-    const isWifi = specs.wifi_ready === true || specs.wifi_ready === 'true' || specs.wifi_ready === 'Да' || hasTag('wifi');
+    const isWifi =
+        specs.wifi_ready === true ||
+        specs.wifi_ready === 'true' ||
+        specs.wifi_ready === 'Да' ||
+        specs['wifi-ready'] === true ||
+        specs['wifi-ready'] === 'true' ||
+        specs['wifi-builtin'] === true ||
+        specs['wifi-builtin'] === 'true';
     if (isWifi) {
         cards.push({
             id: 'wifi',

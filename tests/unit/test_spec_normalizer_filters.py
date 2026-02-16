@@ -28,3 +28,14 @@ def test_enrich_filter_keys_rebuilds_stale_values():
     assert specs["__filter_min_heat"] == -25
     assert specs["__filter_wifi"] is False
     assert "__filter_noise_min" not in specs
+
+
+def test_compressor_type_norm_variants():
+    full_dc = normalize_specs({"inverter_type": "Full DC Inverter"})
+    assert full_dc["compressor_type_norm"] == "full_dc"
+
+    inverter = normalize_specs({"inverter_type": "Inverter", "inverter": True})
+    assert inverter["compressor_type_norm"] == "inverter"
+
+    on_off = normalize_specs({"inverter_type": "on/off", "inverter": False})
+    assert on_off["compressor_type_norm"] == "on_off"

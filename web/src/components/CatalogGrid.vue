@@ -84,7 +84,7 @@ const fetchProducts = async () => {
 onMounted(() => {
   // If there are search params (that change the result from default), fetch.
   // Default is /catalog (no params).
-  // If /catalog?tag_slugs=area-25, we MUST fetch because initialProducts is just Wall (default).
+  // If /catalog has query params, fetch dynamic result instead of SSR default list.
   if (window.location.search) {
       fetchProducts();
   }

@@ -167,6 +167,27 @@ def _parse_bool(value: Any) -> bool | None:
     return None
 
 
+def _normalize_compressor_type(value: Any, inverter_value: Any) -> str | None:
+    text = str(value or "").strip().lower().replace("ё", "е")
+    text = text.replace("—", "-")
+    text = re.sub(r"\s+", " ", text)
+
+    if text:
+        if "full dc" in text or "full-dc" in text or "dc inverter" in text:
+            return "full_dc"
+        if "on/off" in text or "on off" in text or "on-off" in text or "onoff" in text:
+            return "on_off"
+        if "inverter" in text or "инвертор" in text:
+            return "inverter"
+
+    inverter_flag = _parse_bool(inverter_value)
+    if inverter_flag is True:
+        return "inverter"
+    if inverter_flag is False:
+        return "on_off"
+    return None
+
+
 def _classify_wifi_value(value: Any) -> str | None:
     if isinstance(value, bool):
         return "builtin" if value else "none"
@@ -288,6 +309,7 @@ def enrich_filter_keys(
     for key in list(enriched.keys()):
         if key.startswith("__filter_"):
             del enriched[key]
+    enriched.pop("compressor_type_norm", None)
 
     heat_numbers = _parse_numbers(enriched.get("temp_range_heat"))
     if heat_numbers:
@@ -302,6 +324,13 @@ def enrich_filter_keys(
     noise_numbers = _parse_numbers(enriched.get("noise_indoor"))
     if noise_numbers:
         enriched["__filter_noise_min"] = min(noise_numbers)
+
+    compressor_type_norm = _normalize_compressor_type(
+        enriched.get("inverter_type"),
+        enriched.get("inverter"),
+    )
+    if compressor_type_norm:
+        enriched["compressor_type_norm"] = compressor_type_norm
 
     return enriched
 

@@ -31,6 +31,13 @@ const inGroup = (tag, ...slugs) => {
   return tag.group && slugs.includes(tag.group.slug);
 };
 const toBool = (value) => value === true || value === 'true' || value === 1 || value === '1';
+const resolveCompressorLabel = (product) => {
+  const raw = String(product?.specs?.compressor_type_norm || '').trim().toLowerCase();
+  if (raw === 'full_dc') return 'Full DC Inverter';
+  if (raw === 'on_off') return 'On/Off';
+  if (raw === 'inverter') return 'Инвертор';
+  return product?.is_inverter ? 'Инвертор' : null;
+};
 const parseMinHeat = (specs = {}) => {
   const fromRange = specs.temp_range_heat;
   if (typeof fromRange === 'string') {
@@ -44,13 +51,7 @@ const parseMinHeat = (specs = {}) => {
   }
   return null;
 };
-const formatAreaBadge = (rawAreaTag, rawArea) => {
-  if (rawAreaTag && typeof rawAreaTag.title === 'string' && rawAreaTag.title.trim()) {
-    const text = rawAreaTag.title.trim();
-    if (/до/i.test(text)) return text;
-    if (/м²|м2/i.test(text)) return `До ${text}`;
-    return text;
-  }
+const formatAreaBadge = (rawArea) => {
   if (rawArea) return `До ${rawArea} м²`;
   return '';
 };
@@ -61,10 +62,9 @@ const validTags = computed(() => (props.product.tags || []).filter(
 ));
 
 // 2. Extract Specific Badges
-const inverterTag = computed(() => validTags.value.find((t) => inGroup(t, "compressor-type")));
-const areaTag = computed(() => validTags.value.find((t) => inGroup(t, "area")));
 const winterTag = computed(() => validTags.value.find((t) => inGroup(t, "winter")));
 const featureTags = computed(() => validTags.value.filter((t) => inGroup(t, "features", "design")));
+const compressorBadge = computed(() => resolveCompressorLabel(props.product));
 const wifiBadgeText = computed(() => {
   const specs = props.product.specs || {};
   if (toBool(specs['wifi-builtin']) || toBool(specs.wifi_ready)) return 'Wi-Fi встроенный';
@@ -87,8 +87,7 @@ const displayFeatureTags = computed(() => {
 });
 
 // Fallback for legacy props if no tags present
-const showLegacyInverter = computed(() => !inverterTag.value && props.product.is_inverter);
-const showLegacyArea = computed(() => !areaTag.value && props.product.area);
+const showAreaBadge = computed(() => Boolean(props.product.area));
 </script>
 
 <template>
@@ -99,8 +98,7 @@ const showLegacyArea = computed(() => !areaTag.value && props.product.area);
 
         <!-- Top Left: Functionality Badges + Inverter -->
         <div class="p-badge-list">
-          <span v-if="inverterTag" class="badge inverter-badge">{{ inverterTag.title }}</span>
-          <span v-else-if="showLegacyInverter" class="badge small">Инвертор</span>
+          <span v-if="compressorBadge" class="badge inverter-badge">{{ compressorBadge }}</span>
           
           <template v-if="!product.tags && product.badges">
               <span v-for="b in product.badges" :key="b.text" :class="['p-tag', b.class]">{{ b.text }}</span>
@@ -108,8 +106,8 @@ const showLegacyArea = computed(() => !areaTag.value && props.product.area);
         </div>
 
         <!-- Top Right: Area -->
-        <div v-if="areaTag || showLegacyArea" class="p-top-right-badge">
-          {{ formatAreaBadge(areaTag, product.area) }}
+        <div v-if="showAreaBadge" class="p-top-right-badge">
+          {{ formatAreaBadge(product.area) }}
         </div>
 
         <!-- Bottom: Winter/Heat -->
