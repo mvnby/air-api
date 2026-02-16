@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from crud.favorite import FavoriteDAO
 from models import Product
+from services.product_dict_mapper import map_product_to_dict
 
 
 class FavoriteService:
@@ -30,6 +31,4 @@ class FavoriteService:
     @staticmethod
     def _to_dict(product: Product) -> Dict[str, Any]:
         """Convert Product to dict with bot-compatible format."""
-        data = product.model_dump()
-        data['categories'] = [t.title for t in product.tags]
-        return data
+        return map_product_to_dict(product)
