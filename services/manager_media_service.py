@@ -437,3 +437,44 @@ class ManagerMediaService:
             "files_count": len(file_payloads),
             "uploaded_links": uploaded,
         }
+
+    @staticmethod
+    async def cleanup_media(session: AsyncSession, *, dry_run: bool = False) -> dict:
+        """Delete orphaned product media files not referenced in DB."""
+        stmt_main = select(Product.main_image).where(Product.main_image != None)
+        res_main = await session.execute(stmt_main)
+        known_urls = set(res_main.scalars().all())
+
+        stmt_gallery = select(ProductImage.url)
+        res_gallery = await session.execute(stmt_gallery)
+        known_urls.update(res_gallery.scalars().all())
+
+        base_dir = os.path.join("media", "products")
+        deleted_count = 0
+        reclaimed_bytes = 0
+
+        if not os.path.exists(base_dir):
+            return {"message": "Media directory not found", "deleted": 0}
+
+        report = []
+        for root, _, files in os.walk(base_dir):
+            for file_name in files:
+                full_path = os.path.join(root, file_name)
+                db_path_rel = os.path.join(root, file_name)
+                db_path_abs = "/" + db_path_rel
+
+                if db_path_abs not in known_urls and db_path_rel not in known_urls:
+                    size = os.path.getsize(full_path)
+                    if not dry_run:
+                        os.remove(full_path)
+
+                    deleted_count += 1
+                    reclaimed_bytes += size
+                    report.append(db_path_abs)
+
+        return {
+            "dry_run": dry_run,
+            "deleted_count": deleted_count,
+            "reclaimed_bytes": reclaimed_bytes,
+            "files": report[:50],
+        }

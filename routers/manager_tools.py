@@ -1,5 +1,4 @@
 from typing import List, Optional, Set
-import os
 from datetime import datetime
 import asyncio
 import json
@@ -367,56 +366,7 @@ async def cleanup_media(
 ):
     """Delete orphaned media files not referenced in DB."""
     logger.info(f"Starting media cleanup (dry_run={dry_run}) by {username}")
-    
-    # 1. Gather all known images from DB
-    # Product.main_image
-    stmt_main = select(Product.main_image).where(Product.main_image != None)
-    res_main = await session.execute(stmt_main)
-    known_urls = set(res_main.scalars().all())
-    
-    # ProductImage.url
-    stmt_gallery = select(ProductImage.url)
-    res_gallery = await session.execute(stmt_gallery)
-    known_urls.update(res_gallery.scalars().all())
-    
-    # 2. Scan disk
-    base_dir = os.path.join("media", "products")
-    deleted_count = 0
-    reclaimed_bytes = 0
-    
-    if not os.path.exists(base_dir):
-        return {"message": "Media directory not found", "deleted": 0}
-
-    report = []
-
-    for root, dirs, files in os.walk(base_dir):
-        for file in files:
-            full_path = os.path.join(root, file)
-            # path relative to web/public, e.g. media/products/123/foo.webp
-            # We match what's in DB: /media/products/... (often with leading slash)
-            
-            # Construct DB-style relative path
-            # root is like media/products/123
-            rel_dir = root # media/products/123
-            db_path_rel = os.path.join(rel_dir, file) # media/products/123/foo.webp
-            db_path_abs = "/" + db_path_rel # /media/products/123/foo.webp
-            
-            if db_path_abs not in known_urls and db_path_rel not in known_urls:
-                # ORPHAN
-                size = os.path.getsize(full_path)
-                if not dry_run:
-                    os.remove(full_path)
-                
-                deleted_count += 1
-                reclaimed_bytes += size
-                report.append(db_path_abs)
-
-    return {
-        "dry_run": dry_run,
-        "deleted_count": deleted_count,
-        "reclaimed_bytes": reclaimed_bytes,
-        "files": report[:50] # Limit report size
-    }
+    return await ManagerMediaService.cleanup_media(session, dry_run=dry_run)
 
 @router.post("/specs/bulk-update", operation_id="bulk_update_specs")
 async def bulk_update_specs(
