@@ -36,6 +36,91 @@ def transliterate(text: str) -> str:
 
 class ProductService:
     @staticmethod
+    def validate_public_pagination(page: int, limit: int) -> None:
+        if page < 1:
+            raise ValueError("Page must be >= 1")
+        if limit < 1 or limit > 1000:
+            raise ValueError("Limit must be between 1 and 1000")
+
+    @staticmethod
+    async def get_public_spec_keys(session: AsyncSession) -> Dict[str, Any]:
+        stmt = select(Product.specs)
+        result = await session.execute(stmt)
+        all_specs = result.scalars().all()
+
+        stats: Dict[str, int] = {}
+        for spec_dict in all_specs:
+            if not spec_dict:
+                continue
+            for key in spec_dict.keys():
+                if str(key).startswith("__"):
+                    continue
+                stats[key] = stats.get(key, 0) + 1
+
+        return {"keys": sorted(stats.keys()), "total_products_using": stats}
+
+    @staticmethod
+    async def get_catalog_page(
+        session: AsyncSession,
+        *,
+        page: int = 1,
+        limit: int = 20,
+        sort: str = "newest",
+        min_price: Optional[int] = None,
+        max_price: Optional[int] = None,
+        area_min: Optional[int] = None,
+        area_max: Optional[int] = None,
+        heating_min: Optional[int] = None,
+        has_wifi: Optional[bool] = None,
+        tag_slugs: Optional[List[str]] = None,
+        is_inverter: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        faceted_tag_ids = None
+        if tag_slugs:
+            faceted_tag_ids = await ProductService.resolve_slugs_to_grouped_ids(session, tag_slugs)
+
+        items = await ProductDAO.get_filtered(
+            session,
+            area_min=area_min,
+            area_max=area_max,
+            min_price=min_price,
+            max_price=max_price,
+            heating_min=heating_min,
+            has_wifi=has_wifi,
+            is_inverter=is_inverter,
+            tag_slugs=None,
+            faceted_tag_ids=faceted_tag_ids,
+            sort=sort,
+            page=page,
+            limit=limit,
+            is_published=True,
+        )
+        total = await ProductDAO.count_filtered(
+            session,
+            area_min=area_min,
+            area_max=area_max,
+            min_price=min_price,
+            max_price=max_price,
+            heating_min=heating_min,
+            has_wifi=has_wifi,
+            is_inverter=is_inverter,
+            tag_slugs=None,
+            faceted_tag_ids=faceted_tag_ids,
+            is_published=True,
+        )
+
+        pages = (total + limit - 1) // limit if limit > 0 else 0
+        return {
+            "items": items,
+            "meta": {
+                "total": total,
+                "page": page,
+                "limit": limit,
+                "pages": pages,
+            },
+        }
+
+    @staticmethod
     async def search(
         session: AsyncSession,
         query: Optional[str] = None,

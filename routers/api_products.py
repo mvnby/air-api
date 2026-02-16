@@ -4,12 +4,9 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 
 from core.database import get_session
 from core.security import get_current_username
-from crud.product import ProductDAO
-from models import Product
 from schemas import (
     CatalogResponse,
     FiltersConfigResponse,
@@ -24,28 +21,10 @@ from services.product_service import ProductService
 router = APIRouter(tags=["api"])
 
 
-def _validate_pagination(page: int, limit: int) -> None:
-    if page < 1:
-        raise HTTPException(status_code=400, detail="Page must be >= 1")
-    if limit < 1 or limit > 1000:
-        raise HTTPException(status_code=400, detail="Limit must be between 1 and 1000")
-
-
 @router.get("/v1/specs/keys", response_model=SpecsKeysResponse, operation_id="get_public_spec_keys")
 async def get_public_spec_keys(session: AsyncSession = Depends(get_session)):
-    stmt = select(Product.specs)
-    result = await session.execute(stmt)
-    all_specs = result.scalars().all()
-
-    stats = {}
-    for spec_dict in all_specs:
-        if spec_dict:
-            for key in spec_dict.keys():
-                if str(key).startswith("__"):
-                    continue
-                stats[key] = stats.get(key, 0) + 1
-
-    return SpecsKeysResponse(keys=sorted(stats.keys()), total_products_using=stats)
+    payload = await ProductService.get_public_spec_keys(session)
+    return SpecsKeysResponse(**payload)
 
 
 @router.get("/v1/filters/config", response_model=FiltersConfigResponse, operation_id="get_filters_config")
@@ -79,46 +58,29 @@ async def get_catalog(
     is_inverter: Optional[bool] = None,
     session: AsyncSession = Depends(get_session),
 ):
-    _validate_pagination(page, limit)
+    try:
+        ProductService.validate_public_pagination(page, limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    faceted_tag_ids = None
-    if tag_slugs:
-        faceted_tag_ids = await ProductService.resolve_slugs_to_grouped_ids(session, tag_slugs)
-
-    items = await ProductDAO.get_filtered(
+    payload = await ProductService.get_catalog_page(
         session,
-        area_min=area_min,
-        area_max=area_max,
-        min_price=min_price,
-        max_price=max_price,
-        heating_min=heating_min,
-        has_wifi=has_wifi,
-        is_inverter=is_inverter,
-        tag_slugs=None,
-        faceted_tag_ids=faceted_tag_ids,
-        sort=sort,
         page=page,
         limit=limit,
-        is_published=True,
-    )
-    total = await ProductDAO.count_filtered(
-        session,
-        area_min=area_min,
-        area_max=area_max,
+        sort=sort,
         min_price=min_price,
         max_price=max_price,
+        area_min=area_min,
+        area_max=area_max,
         heating_min=heating_min,
         has_wifi=has_wifi,
+        tag_slugs=tag_slugs,
         is_inverter=is_inverter,
-        tag_slugs=None,
-        faceted_tag_ids=faceted_tag_ids,
-        is_published=True,
     )
 
-    pages = (total + limit - 1) // limit if limit > 0 else 0
     return CatalogResponse(
-        items=[map_product_to_response(product) for product in items],
-        meta=Meta(total=total, page=page, limit=limit, pages=pages),
+        items=[map_product_to_response(product) for product in payload["items"]],
+        meta=Meta(**payload["meta"]),
     )
 
 
