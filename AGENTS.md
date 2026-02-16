@@ -121,6 +121,32 @@ Use this after large catalog imports or when unknown spec keys appear.
    - auto-archived after 90 days by scheduler.
 5. Orders Kanban shows only real orders; leads stay separate until qualification.
 
+### 6) Prod Data Ops Without Git
+
+Production server intentionally runs from Docker images only (no git checkout in `/opt/air-api`).
+
+1. Trigger path:
+   - Backend deploy pulls `ghcr` image and recreates `app`/`bot`.
+   - Optional post-deploy ops run via `scripts/ops_post_deploy.sh`.
+2. Safe defaults:
+   - `OPS_MODE=report_only`
+   - `RUN_NORMALIZE_LEGACY=false`
+   - `RUN_CLEANUP_LEGACY_LINKS=false`
+   - `RUN_REPORT_LEGACY_LINKS=true`
+   - `DRY_RUN=true`
+3. Manual commands on prod:
+   - Report only:
+     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/report_legacy_tag_links.py`
+   - Normalize:
+     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/normalize_legacy.py`
+   - Cleanup dry-run:
+     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/cleanup_legacy_tag_links.py`
+   - Cleanup execute (manual-only):
+     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/cleanup_legacy_tag_links.py --execute`
+4. Policy:
+   - Cleanup is manual and explicit only.
+   - Post-deploy smoke-check must pass (`/health`, `/api/v1/products?limit=5`, `/api/v1/filters/config`) before considering deploy successful.
+
 ## Notes
 
 - `docker-compose.yml` service names are `app`, `db`, `web`, `bot` (not `mvn-app`).

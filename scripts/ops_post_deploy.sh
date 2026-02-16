@@ -3,26 +3,61 @@ set -euo pipefail
 
 COMPOSE="docker compose -f docker-compose.prod.yml"
 PROJECT_DIR="/opt/air-api"
+OPS_SUMMARY_FILE="${OPS_SUMMARY_FILE:-/tmp/ops_summary.txt}"
 
-RUN_NORMALIZE_LEGACY="${RUN_NORMALIZE_LEGACY:-true}"
-HIDE_LEGACY_GROUPS="${HIDE_LEGACY_GROUPS:-area}"
+OPS_MODE="${OPS_MODE:-report_only}" # report_only | normalize_report | full
+RUN_NORMALIZE_LEGACY="${RUN_NORMALIZE_LEGACY:-false}"
+HIDE_LEGACY_GROUPS="${HIDE_LEGACY_GROUPS:-}"
 RUN_REPORT_LEGACY_LINKS="${RUN_REPORT_LEGACY_LINKS:-true}"
 RUN_CLEANUP_LEGACY_LINKS="${RUN_CLEANUP_LEGACY_LINKS:-false}"
+DRY_RUN="${DRY_RUN:-true}"
 RUN_POST_DEPLOY_OPS="${RUN_POST_DEPLOY_OPS:-false}"
 
-echo "=== Post-Deploy Ops: start ==="
-echo "RUN_POST_DEPLOY_OPS=${RUN_POST_DEPLOY_OPS}"
-echo "RUN_NORMALIZE_LEGACY=${RUN_NORMALIZE_LEGACY}"
-echo "HIDE_LEGACY_GROUPS=${HIDE_LEGACY_GROUPS}"
-echo "RUN_REPORT_LEGACY_LINKS=${RUN_REPORT_LEGACY_LINKS}"
-echo "RUN_CLEANUP_LEGACY_LINKS=${RUN_CLEANUP_LEGACY_LINKS}"
+log() {
+  local stage="$1"
+  shift
+  echo "[ops][${stage}] $*"
+}
+
+summary() {
+  echo "$*" >> "${OPS_SUMMARY_FILE}"
+}
+
+: > "${OPS_SUMMARY_FILE}"
+log init "start"
+log init "RUN_POST_DEPLOY_OPS=${RUN_POST_DEPLOY_OPS}"
+log init "OPS_MODE=${OPS_MODE}"
+log init "RUN_NORMALIZE_LEGACY=${RUN_NORMALIZE_LEGACY}"
+log init "HIDE_LEGACY_GROUPS=${HIDE_LEGACY_GROUPS:-<empty>}"
+log init "RUN_REPORT_LEGACY_LINKS=${RUN_REPORT_LEGACY_LINKS}"
+log init "RUN_CLEANUP_LEGACY_LINKS=${RUN_CLEANUP_LEGACY_LINKS}"
+log init "DRY_RUN=${DRY_RUN}"
 
 if [[ "${RUN_POST_DEPLOY_OPS}" != "true" ]]; then
-  echo "[ops] RUN_POST_DEPLOY_OPS is not true, skipping."
+  log init "RUN_POST_DEPLOY_OPS is not true, skipping."
+  summary "mode=skipped"
+  summary "reason=RUN_POST_DEPLOY_OPS is not true"
   exit 0
 fi
 
+if ! command -v docker >/dev/null 2>&1; then
+  log preflight "docker is not installed"
+  exit 1
+fi
+if ! command -v docker compose >/dev/null 2>&1; then
+  log preflight "docker compose is not available"
+  exit 1
+fi
+if [[ ! -d "${PROJECT_DIR}" ]]; then
+  log preflight "project dir not found: ${PROJECT_DIR}"
+  exit 1
+fi
+
 cd "${PROJECT_DIR}"
+if [[ ! -f "docker-compose.prod.yml" ]]; then
+  log preflight "docker-compose.prod.yml not found in ${PROJECT_DIR}"
+  exit 1
+fi
 
 run_in_app() {
   ${COMPOSE} exec -T app sh -lc "$1"
@@ -32,43 +67,107 @@ script_exists() {
   run_in_app "test -f $1"
 }
 
-echo "[ops] Ensuring app is running..."
-${COMPOSE} up -d app >/dev/null
+normalize_enabled="false"
+report_enabled="true"
+cleanup_enabled="false"
+case "${OPS_MODE}" in
+  report_only)
+    normalize_enabled="false"
+    report_enabled="true"
+    cleanup_enabled="false"
+    ;;
+  normalize_report)
+    normalize_enabled="true"
+    report_enabled="true"
+    cleanup_enabled="false"
+    ;;
+  full)
+    normalize_enabled="true"
+    report_enabled="true"
+    cleanup_enabled="${RUN_CLEANUP_LEGACY_LINKS}"
+    ;;
+  *)
+    log preflight "unsupported OPS_MODE=${OPS_MODE}"
+    exit 1
+    ;;
+esac
 
 if [[ "${RUN_NORMALIZE_LEGACY}" == "true" ]]; then
+  normalize_enabled="true"
+fi
+if [[ "${RUN_REPORT_LEGACY_LINKS}" == "false" ]]; then
+  report_enabled="false"
+fi
+
+log preflight "Ensuring app is running..."
+${COMPOSE} up -d app >/dev/null
+
+ops_actions=()
+ops_skipped=()
+
+if [[ "${normalize_enabled}" == "true" ]]; then
   if script_exists "scripts/normalize_legacy.py"; then
-    echo "[ops] Running normalize_legacy.py"
+    log normalize "Running normalize_legacy.py"
     run_in_app "python3 scripts/normalize_legacy.py"
+    ops_actions+=("normalize_legacy")
   else
-    echo "[ops] Skip normalize: scripts/normalize_legacy.py not found in image"
+    log normalize "Skip: scripts/normalize_legacy.py not found in image"
+    ops_skipped+=("normalize_legacy:missing_script")
   fi
+else
+  ops_skipped+=("normalize_legacy:disabled")
 fi
 
 if [[ -n "${HIDE_LEGACY_GROUPS}" ]]; then
   if script_exists "scripts/hide_legacy_tag_groups.py"; then
-    echo "[ops] Hiding legacy groups: ${HIDE_LEGACY_GROUPS}"
+    log hide "Hiding legacy groups: ${HIDE_LEGACY_GROUPS}"
     run_in_app "python3 scripts/hide_legacy_tag_groups.py --groups ${HIDE_LEGACY_GROUPS}"
+    ops_actions+=("hide_legacy_groups")
   else
-    echo "[ops] Skip hide groups: scripts/hide_legacy_tag_groups.py not found in image"
+    log hide "Skip: scripts/hide_legacy_tag_groups.py not found in image"
+    ops_skipped+=("hide_legacy_groups:missing_script")
   fi
+else
+  ops_skipped+=("hide_legacy_groups:disabled")
 fi
 
-if [[ "${RUN_REPORT_LEGACY_LINKS}" == "true" ]]; then
+if [[ "${report_enabled}" == "true" ]]; then
   if script_exists "scripts/report_legacy_tag_links.py"; then
-    echo "[ops] Report legacy links"
+    log report "Report legacy links"
     run_in_app "python3 scripts/report_legacy_tag_links.py"
+    ops_actions+=("report_legacy_links")
   else
-    echo "[ops] Skip report: scripts/report_legacy_tag_links.py not found in image"
+    log report "Skip: scripts/report_legacy_tag_links.py not found in image"
+    ops_skipped+=("report_legacy_links:missing_script")
   fi
+else
+  ops_skipped+=("report_legacy_links:disabled")
 fi
 
-if [[ "${RUN_CLEANUP_LEGACY_LINKS}" == "true" ]]; then
+if [[ "${cleanup_enabled}" == "true" ]]; then
   if script_exists "scripts/cleanup_legacy_tag_links.py"; then
-    echo "[ops] Cleanup legacy links (execute=true)"
-    run_in_app "python3 scripts/cleanup_legacy_tag_links.py --execute"
+    if [[ "${DRY_RUN}" == "true" ]]; then
+      log cleanup "Cleanup dry-run"
+      run_in_app "python3 scripts/cleanup_legacy_tag_links.py"
+      ops_actions+=("cleanup_legacy_links:dry_run")
+    else
+      log cleanup "Cleanup execute=true"
+      run_in_app "python3 scripts/cleanup_legacy_tag_links.py --execute"
+      ops_actions+=("cleanup_legacy_links:execute")
+    fi
   else
-    echo "[ops] Skip cleanup: scripts/cleanup_legacy_tag_links.py not found in image"
+    log cleanup "Skip: scripts/cleanup_legacy_tag_links.py not found in image"
+    ops_skipped+=("cleanup_legacy_links:missing_script")
   fi
+else
+  ops_skipped+=("cleanup_legacy_links:disabled")
 fi
 
-echo "=== Post-Deploy Ops: done ==="
+summary "mode=${OPS_MODE}"
+summary "actions_run=${ops_actions[*]:-none}"
+summary "actions_skipped=${ops_skipped[*]:-none}"
+summary "dry_run=${DRY_RUN}"
+log summary "mode=${OPS_MODE}"
+log summary "actions_run=${ops_actions[*]:-none}"
+log summary "actions_skipped=${ops_skipped[*]:-none}"
+log done "completed"
