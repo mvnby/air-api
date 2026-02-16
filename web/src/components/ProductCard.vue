@@ -133,6 +133,7 @@ const showAreaBadge = computed(() => Boolean(props.product.area));
           currency="р."
           :showToggle="showInstallation"
           :tags="product.tags"
+          :area="product.area"
           :id="product.slug"
           :productId="product.id"
           :title="product.title"

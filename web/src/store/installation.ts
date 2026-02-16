@@ -1,5 +1,5 @@
 import { atom } from 'nanostores';
-import { getServiceOptions } from '../utils/api';
+import { getServiceOptions, resolveImageUrl } from '../utils/api';
 
 export interface InstallationOption {
     id: number;
@@ -22,7 +22,7 @@ export async function fetchInstallationOptions() {
             name: item.title,
             slug: item.slug,
             price: item.base_price,
-            image: item.image,
+            image: item.image ? resolveImageUrl(item.image) : undefined,
             description: item.description
         }));
 
