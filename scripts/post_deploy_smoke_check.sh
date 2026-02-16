@@ -29,11 +29,15 @@ HEALTH_URL_PRIMARY="${BASE_URL}/health"
 HEALTH_URL_FALLBACK="${BASE_URL}/api/health"
 PRODUCTS_URL="${BASE_URL}/api/v1/products?limit=5"
 FILTERS_URL="${BASE_URL}/api/v1/filters/config"
+HEALTH_URL_USED=""
 
 log request "GET ${HEALTH_URL_PRIMARY} (fallback: ${HEALTH_URL_FALLBACK})"
 health_payload="$(curl -fsS "${HEALTH_URL_PRIMARY}" 2>/dev/null || true)"
 if [[ -z "${health_payload}" ]]; then
   health_payload="$(curl -fsS "${HEALTH_URL_FALLBACK}")"
+  HEALTH_URL_USED="${HEALTH_URL_FALLBACK}"
+else
+  HEALTH_URL_USED="${HEALTH_URL_PRIMARY}"
 fi
 
 log request "GET ${PRODUCTS_URL}"
@@ -71,5 +75,7 @@ PY
 
 summary "smoke_status=passed"
 summary "base_url=${BASE_URL}"
+summary "health_url_used=${HEALTH_URL_USED}"
 summary "checks=health,products,filters_config"
+log info "health_url_used=${HEALTH_URL_USED}"
 log done "smoke checks passed"
