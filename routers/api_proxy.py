@@ -41,6 +41,42 @@ async def get_all_banks():
     return []
 
 
+def _normalize_bank_search_query(search: str) -> tuple[str, str | None]:
+    query = search.strip().replace(" ", "").upper()
+    bic_from_iban = query[4:8] if len(query) >= 8 and query.startswith("BY") else None
+    return query, bic_from_iban
+
+
+def _extract_bank_response(bank: dict) -> dict:
+    return {
+        "name": bank.get("NmBankShort"),
+        "address": bank.get("AdrBank"),
+        "bic": bank.get("CDBank"),
+        "swift": bank.get("CDBank"),
+    }
+
+
+def _find_best_bank_match(banks: list[dict], target_bic: str, bic_from_iban: str | None) -> dict | None:
+    found_bank = None
+    for bank in banks:
+        cd_bank = bank.get("CDBank", "")
+        is_active = bank.get("DtEnd") is None
+
+        if cd_bank == target_bic:
+            if is_active:
+                return bank
+            if not found_bank:
+                found_bank = bank
+
+        if bic_from_iban and cd_bank.startswith(bic_from_iban):
+            if is_active:
+                return bank
+            if not found_bank:
+                found_bank = bank
+
+    return found_bank
+
+
 @router.get("/admin/proxy/egr")
 async def proxy_egr(
     unp: str,
@@ -65,40 +101,12 @@ async def find_bank(
     if not search:
         return await get_all_banks()
 
-    query = search.strip().replace(" ", "").upper()
-    target_bic = query
+    target_bic, bic_from_iban = _normalize_bank_search_query(search)
     banks = await get_all_banks()
-
-    found_bank = None
-    bic_from_iban = None
-    if len(query) >= 8 and query.startswith("BY"):
-        bic_from_iban = query[4:8]
-
-    for bank in banks:
-        cd_bank = bank.get("CDBank", "")
-        is_active = bank.get("DtEnd") is None
-
-        if cd_bank == target_bic:
-            if is_active:
-                found_bank = bank
-                break
-            if not found_bank:
-                found_bank = bank
-
-        if bic_from_iban and cd_bank.startswith(bic_from_iban):
-            if is_active:
-                found_bank = bank
-                break
-            if not found_bank:
-                found_bank = bank
+    found_bank = _find_best_bank_match(banks, target_bic, bic_from_iban)
 
     if found_bank:
-        return {
-            "name": found_bank.get("NmBankShort"),
-            "address": found_bank.get("AdrBank"),
-            "bic": found_bank.get("CDBank"),
-            "swift": found_bank.get("CDBank"),
-        }
+        return _extract_bank_response(found_bank)
 
     return {"error": "Банк не найден", "debug_bic": bic_from_iban or target_bic}
 
@@ -121,39 +129,11 @@ async def public_find_bank(search: str = Query(None, description="BIC код и�
     if not search:
         return []
 
-    query = search.strip().replace(" ", "").upper()
-    target_bic = query
+    target_bic, bic_from_iban = _normalize_bank_search_query(search)
     banks = await get_all_banks()
-    found_bank = None
-
-    bic_from_iban = None
-    if len(query) >= 8 and query.startswith("BY"):
-        bic_from_iban = query[4:8]
-
-    for bank in banks:
-        cd_bank = bank.get("CDBank", "")
-        is_active = bank.get("DtEnd") is None
-
-        if cd_bank == target_bic:
-            if is_active:
-                found_bank = bank
-                break
-            if not found_bank:
-                found_bank = bank
-
-        if bic_from_iban and cd_bank.startswith(bic_from_iban):
-            if is_active:
-                found_bank = bank
-                break
-            if not found_bank:
-                found_bank = bank
+    found_bank = _find_best_bank_match(banks, target_bic, bic_from_iban)
 
     if found_bank:
-        return {
-            "name": found_bank.get("NmBankShort"),
-            "address": found_bank.get("AdrBank"),
-            "bic": found_bank.get("CDBank"),
-            "swift": found_bank.get("CDBank"),
-        }
+        return _extract_bank_response(found_bank)
 
     return {"error": "Банк не найден"}
