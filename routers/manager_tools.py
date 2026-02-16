@@ -1,6 +1,5 @@
 from typing import Dict, List, Optional, Set
 import os
-import hashlib
 from datetime import datetime
 import asyncio
 import json
@@ -31,9 +30,6 @@ from services.customer_service import CustomerService
 from services.manager_media_service import ManagerMediaService
 from services.spec_normalizer import normalize_specs
 
-import httpx
-from PIL import Image
-from io import BytesIO
 router = APIRouter(prefix="/api/manager", tags=["manager"])
 
 @router.get("/me", operation_id="read_user_me")
@@ -91,15 +87,17 @@ async def _process_and_save_image(
 ):
     """Helper to download, convert, save, and link image."""
     try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            resp = await client.get(url, timeout=10.0)
-            resp.raise_for_status()
-            image_content = resp.content
-    except Exception as e:
-        logger.error(f"Failed to download image: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to download image: {str(e)}")
-
-    return await _save_image_from_bytes(image_content, product_id, session, set_main, is_installation)
+        return await ManagerMediaService.process_and_save_image(
+            url=url,
+            product_id=product_id,
+            session=session,
+            set_main=set_main,
+            is_installation=is_installation,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 async def _save_image_from_bytes(
     image_content: bytes,
@@ -109,70 +107,18 @@ async def _save_image_from_bytes(
     is_installation: bool = False
 ):
     """Process bytes, deduplicate file storage by hash, and link to product."""
-    # 1. Process (WebP)
     try:
-        def process_image(content):
-            img = Image.open(BytesIO(content))
-            if img.mode in ("RGBA", "P"):
-                img = img.convert("RGB")
-            output = BytesIO()
-            img.save(output, format="WEBP", quality=85)
-            return output.getvalue()
-
-        webp_content = await asyncio.to_thread(process_image, image_content)
-    except Exception as e:
-        logger.error(f"Failed to process image: {e}")
-        raise HTTPException(status_code=400, detail="Invalid image file")
-
-    # 2. Save deduplicated file in shared storage
-    content_hash = hashlib.sha256(webp_content).hexdigest()
-    base_media_path = "media"
-    shared_dir = os.path.join(base_media_path, "products", "shared")
-    os.makedirs(shared_dir, exist_ok=True)
-    filename = f"{content_hash}.webp"
-    file_path = os.path.join(shared_dir, filename)
-
-    if not os.path.exists(file_path):
-        try:
-            async with asyncio.Lock():
-                with open(file_path, "wb") as f:
-                    f.write(webp_content)
-        except Exception as e:
-            logger.error(f"Failed to save file: {e}")
-            raise HTTPException(status_code=500, detail="Failed to save image file")
-
-    # 3. Create DB Record if not already linked to this product
-    relative_url = f"/media/products/shared/{filename}"
-    existing_stmt = select(ProductImage).where(
-        ProductImage.product_id == product_id,
-        ProductImage.url == relative_url,
-    )
-    existing_result = await session.execute(existing_stmt)
-    existing_link = existing_result.scalar_one_or_none()
-
-    if existing_link is None:
-        new_image = ProductImage(
+        return await ManagerMediaService.save_image_from_bytes(
+            image_content=image_content,
             product_id=product_id,
-            url=relative_url,
-            is_installation_photo=is_installation
+            session=session,
+            set_main=set_main,
+            is_installation=is_installation,
         )
-        session.add(new_image)
-    else:
-        new_image = existing_link
-
-    # Update main_image if requested
-    if set_main and not is_installation:
-        from sqlmodel import update
-        statement = update(Product).where(Product.id == product_id).values(main_image=relative_url)
-        await session.execute(statement)
-        
-    # Sync legacy images
-    await _sync_legacy_images(session, product_id)
-    
-    await session.commit()
-    await session.refresh(new_image)
-    
-    return {"url": relative_url, "id": new_image.id}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 @router.post("/upload-local-images", operation_id="upload_local_images")
 async def upload_local_images(
@@ -226,21 +172,7 @@ async def upload_local_images(
 
 async def _sync_legacy_images(session: AsyncSession, product_id: int):
     """Sync ProductImage records to Product.images JSON field."""
-    product = await session.get(Product, product_id)
-    if not product:
-        return
-
-    # Fetch all gallery images
-    stmt = select(ProductImage).where(ProductImage.product_id == product_id)
-    result = await session.execute(stmt)
-    images = result.scalars().all()
-    
-    # Update JSON field with list of URLs
-    # Filter out installation photos if we don't want them in main carousel? 
-    # Usually main carousel shows all product photos. Installation photos might be separate?
-    # For now, include all user-uploaded gallery images.
-    product.images = [img.url for img in images if not img.is_installation_photo]
-    session.add(product)
+    await ManagerMediaService.sync_legacy_images(session, product_id)
 
 async def _remove_file_if_unreferenced(session: AsyncSession, url: str):
     """Delete physical file only when no ProductImage/Product.main_image references remain."""
