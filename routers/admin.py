@@ -4,14 +4,13 @@ from fastapi.responses import RedirectResponse
 from services.importer_service import ImporterService
 from core.database import async_session_maker
 from core.security import get_current_username, check_admin_session
-from models import Product, Order
 from routers import admin_docs
-from sqlmodel import select
-from sqlalchemy.orm import selectinload
+from routers import admin_schedule
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 importer_service = ImporterService()
 router.include_router(admin_docs.router)
+router.include_router(admin_schedule.router)
 
 @router.get("/stats")
 async def get_dashboard_stats(
@@ -113,102 +112,6 @@ async def move_order_status(
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-@router.get("/api/admin/installers/search")
-async def search_installers(
-    q: str = "",
-    username: str = Depends(get_current_username)
-):
-    """
-    Search installers for Select2.
-    """
-    from models import Installer
-    async with async_session_maker() as session:
-        stmt = select(Installer).where(Installer.is_active == True)
-        if q:
-            stmt = stmt.where(Installer.name.ilike(f"%{q}%"))
-        
-        result = await session.execute(stmt)
-        installers = result.scalars().all()
-        
-        return [
-            {
-                "id": i.id,
-                "text": f"{i.name} (TG: {i.telegram_id or '-'})",
-                "default_rate": i.default_rate or 0
-            }
-            for i in installers
-        ]
-
-@router.get("/calendar/events")
-async def get_calendar_events(
-    start: Optional[str] = None,
-    end: Optional[str] = None,
-    username: str = Depends(get_current_username)
-):
-    """
-    Get events for FullCalendar (Orders with Installation or Assessment dates).
-    """
-    from models import Order, OrderStatus, OrderInstaller
-    from sqlalchemy import or_
-    from sqlalchemy.orm import selectinload
-
-    async with async_session_maker() as session:
-        # Query orders that have EITHER installation OR assessment date
-        # Restrict by date range if provided (FullCalendar sends ISO strings)
-        # For simplicity, we fetch all relevant futures for now or simple filter
-        
-        stmt = select(Order).options(
-            selectinload(Order.installers).selectinload(OrderInstaller.installer)
-        ).where(
-            or_(
-                Order.installation_date.is_not(None),
-                Order.assessment_date.is_not(None)
-            )
-        )
-        
-        if start:
-            # Simple optimization: filter roughly if dates are passed
-            # In validation phase we can refine strict date filtering
-            pass
-
-        result = await session.execute(stmt)
-        orders = result.scalars().all()
-        
-        events = []
-        for o in orders:
-            # 1. Assessment Event (Blue)
-            if o.assessment_date:
-                events.append({
-                    "id": f"assess_{o.id}",
-                    "title": f"🔍 Замер: {o.delivery_address or 'Без адреса'}",
-                    "start": o.assessment_date.isoformat(),
-                    "color": "#3b82f6", # Blue
-                    "extendedProps": {"order_id": o.id}
-                })
-            
-            # 2. Installation Event (Green/Gray)
-            if o.installation_date:
-                color = "#22c55e" # Green (Confirmed)
-                if o.status == OrderStatus.COMPLETED:
-                    color = "#6b7280" # Gray (Done)
-                elif o.status == OrderStatus.CANCELED:
-                    color = "#ef4444" # Red
-                
-                # Build installer names string
-                installers_str = ""
-                if o.installers:
-                    installers_str = " (" + ", ".join([i.installer.name for i in o.installers if i.installer]) + ")"
-
-                events.append({
-                    "id": f"install_{o.id}",
-                    "title": f"🛠️ Монтаж: {o.delivery_address or 'Без адреса'}{installers_str}",
-                    "start": o.installation_date.isoformat(),
-                    "color": color,
-                    "extendedProps": {"order_id": o.id}
-                })
-                
-        return events
-        
 @router.post("/api/upload_images")
 async def upload_images(
     files: List[UploadFile],
