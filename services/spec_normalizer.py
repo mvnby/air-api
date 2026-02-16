@@ -1,5 +1,5 @@
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Sequence
 
 # 1. Маппинг (Русский -> Системный)
 KEY_MAP = {
@@ -212,7 +212,76 @@ def _classify_wifi_value(value: Any) -> str | None:
     return None
 
 
-def enrich_filter_keys(specs: Dict[str, Any]) -> Dict[str, Any]:
+def _apply_wifi_state(
+    specs: Dict[str, Any],
+    wifi_tag_slugs: Optional[Sequence[str]] = None,
+    strict_wifi_from_tags: bool = False,
+) -> Dict[str, Any]:
+    enriched = dict(specs)
+    raw_wifi_value = enriched.get("wifi_ready")
+
+    # Drop stale keys and rebuild consistently.
+    for key in ("wifi_ready", "wifi-builtin", "wifi-ready", "__filter_wifi", "__filter_wifi_builtin"):
+        if key in enriched:
+            del enriched[key]
+
+    tag_set = {slug.strip().lower() for slug in (wifi_tag_slugs or []) if slug}
+    has_builtin_tag = "wifi-builtin" in tag_set
+    has_ready_tag = "wifi-ready" in tag_set
+
+    if has_builtin_tag:
+        enriched["wifi_ready"] = True
+        enriched["wifi-builtin"] = True
+        enriched["wifi-ready"] = False
+        enriched["__filter_wifi"] = True
+        enriched["__filter_wifi_builtin"] = True
+        return enriched
+
+    if has_ready_tag:
+        enriched["wifi_ready"] = "ready"
+        enriched["wifi-builtin"] = False
+        enriched["wifi-ready"] = True
+        enriched["__filter_wifi"] = True
+        enriched["__filter_wifi_builtin"] = False
+        return enriched
+
+    # No explicit Wi-Fi tags: optionally fallback to raw parser value.
+    if strict_wifi_from_tags:
+        enriched["wifi_ready"] = False
+        enriched["wifi-builtin"] = False
+        enriched["wifi-ready"] = False
+        enriched["__filter_wifi"] = False
+        enriched["__filter_wifi_builtin"] = False
+        return enriched
+
+    wifi_kind = _classify_wifi_value(raw_wifi_value)
+    if wifi_kind == "builtin":
+        enriched["wifi_ready"] = True
+        enriched["wifi-builtin"] = True
+        enriched["wifi-ready"] = False
+        enriched["__filter_wifi"] = True
+        enriched["__filter_wifi_builtin"] = True
+    elif wifi_kind == "ready":
+        enriched["wifi_ready"] = "ready"
+        enriched["wifi-builtin"] = False
+        enriched["wifi-ready"] = True
+        enriched["__filter_wifi"] = True
+        enriched["__filter_wifi_builtin"] = False
+    else:
+        enriched["wifi_ready"] = False
+        enriched["wifi-builtin"] = False
+        enriched["wifi-ready"] = False
+        enriched["__filter_wifi"] = False
+        enriched["__filter_wifi_builtin"] = False
+
+    return enriched
+
+
+def enrich_filter_keys(
+    specs: Dict[str, Any],
+    wifi_tag_slugs: Optional[Sequence[str]] = None,
+    strict_wifi_from_tags: bool = False,
+) -> Dict[str, Any]:
     enriched = dict(specs)
 
     # Always rebuild internal filter keys on each pass to avoid stale values.
@@ -224,18 +293,11 @@ def enrich_filter_keys(specs: Dict[str, Any]) -> Dict[str, Any]:
     if heat_numbers:
         enriched["__filter_min_heat"] = min(heat_numbers)
 
-    wifi_kind = _classify_wifi_value(enriched.get("wifi_ready"))
-    if wifi_kind == "builtin":
-        enriched["wifi-builtin"] = True
-        enriched["__filter_wifi"] = True
-        enriched["__filter_wifi_builtin"] = True
-    elif wifi_kind == "ready":
-        enriched["wifi-ready"] = True
-        enriched["__filter_wifi"] = True
-        enriched["__filter_wifi_builtin"] = False
-    elif wifi_kind == "none":
-        enriched["__filter_wifi"] = False
-        enriched["__filter_wifi_builtin"] = False
+    enriched = _apply_wifi_state(
+        enriched,
+        wifi_tag_slugs=wifi_tag_slugs,
+        strict_wifi_from_tags=strict_wifi_from_tags,
+    )
 
     noise_numbers = _parse_numbers(enriched.get("noise_indoor"))
     if noise_numbers:
@@ -243,7 +305,12 @@ def enrich_filter_keys(specs: Dict[str, Any]) -> Dict[str, Any]:
 
     return enriched
 
-def normalize_specs(specs: Dict[str, Any], keep_units: bool = True) -> Dict[str, Any]:
+def normalize_specs(
+    specs: Dict[str, Any],
+    keep_units: bool = True,
+    wifi_tag_slugs: Optional[Sequence[str]] = None,
+    strict_wifi_from_tags: bool = False,
+) -> Dict[str, Any]:
     """
     Normalizes a dictionary of specifications:
     1. Maps Russian keys to System keys (using KEY_MAP).
@@ -251,8 +318,14 @@ def normalize_specs(specs: Dict[str, Any], keep_units: bool = True) -> Dict[str,
     
     Returns a NEW dictionary with normalized specs.
     """
-    if not specs:
-        return {}
+    if specs is None:
+        return enrich_filter_keys(
+            {},
+            wifi_tag_slugs=wifi_tag_slugs,
+            strict_wifi_from_tags=strict_wifi_from_tags,
+        )
+    if not isinstance(specs, dict):
+        specs = {}
         
     old_specs = specs.copy()
     new_specs = old_specs.copy()
@@ -278,4 +351,8 @@ def normalize_specs(specs: Dict[str, Any], keep_units: bool = True) -> Dict[str,
         if sys_key in new_specs:
              new_specs[sys_key] = clean_value(sys_key, new_specs[sys_key], keep_units=keep_units)
             
-    return enrich_filter_keys(new_specs)
+    return enrich_filter_keys(
+        new_specs,
+        wifi_tag_slugs=wifi_tag_slugs,
+        strict_wifi_from_tags=strict_wifi_from_tags,
+    )

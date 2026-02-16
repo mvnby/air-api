@@ -30,6 +30,30 @@ const formatPrice = (price) => price ? price.toLocaleString() + " р." : "";
 const inGroup = (tag, ...slugs) => {
   return tag.group && slugs.includes(tag.group.slug);
 };
+const toBool = (value) => value === true || value === 'true' || value === 1 || value === '1';
+const parseMinHeat = (specs = {}) => {
+  const fromRange = specs.temp_range_heat;
+  if (typeof fromRange === 'string') {
+    const m = fromRange.replace(/−|—/g, '-').match(/-\d+/);
+    if (m) return Number.parseInt(m[0], 10);
+  }
+  const fromMin = specs.min_temp_heat;
+  if (typeof fromMin === 'string' || typeof fromMin === 'number') {
+    const m = String(fromMin).replace(/−|—/g, '-').match(/-\d+/);
+    if (m) return Number.parseInt(m[0], 10);
+  }
+  return null;
+};
+const formatAreaBadge = (rawAreaTag, rawArea) => {
+  if (rawAreaTag && typeof rawAreaTag.title === 'string' && rawAreaTag.title.trim()) {
+    const text = rawAreaTag.title.trim();
+    if (/до/i.test(text)) return text;
+    if (/м²|м2/i.test(text)) return `До ${text}`;
+    return text;
+  }
+  if (rawArea) return `До ${rawArea} м²`;
+  return '';
+};
 
 // 1. Filter usable tags (Public Tag + Public Group)
 const validTags = computed(() => (props.product.tags || []).filter(
@@ -41,6 +65,26 @@ const inverterTag = computed(() => validTags.value.find((t) => inGroup(t, "compr
 const areaTag = computed(() => validTags.value.find((t) => inGroup(t, "area")));
 const winterTag = computed(() => validTags.value.find((t) => inGroup(t, "winter")));
 const featureTags = computed(() => validTags.value.filter((t) => inGroup(t, "features", "design")));
+const wifiBadgeText = computed(() => {
+  const specs = props.product.specs || {};
+  if (toBool(specs['wifi-builtin']) || toBool(specs.wifi_ready)) return 'Wi-Fi встроенный';
+  if (toBool(specs['wifi-ready']) || specs.wifi_ready === 'ready') return 'Wi-Fi Ready';
+  return null;
+});
+const heatBadgeText = computed(() => {
+  const minHeat = parseMinHeat(props.product.specs || {});
+  if (typeof minHeat === 'number' && Number.isFinite(minHeat) && minHeat < 0) {
+    return `Обогрев до ${minHeat}°C`;
+  }
+  return winterTag.value?.title || null;
+});
+const displayFeatureTags = computed(() => {
+  const tags = [...featureTags.value];
+  if (wifiBadgeText.value && !tags.some((t) => String(t.title || '').toLowerCase().includes('wi-fi'))) {
+    tags.push({ id: '__wifi', title: wifiBadgeText.value, slug: 'wifi' });
+  }
+  return tags;
+});
 
 // Fallback for legacy props if no tags present
 const showLegacyInverter = computed(() => !inverterTag.value && props.product.is_inverter);
@@ -65,24 +109,21 @@ const showLegacyArea = computed(() => !areaTag.value && props.product.area);
 
         <!-- Top Right: Area -->
         <div v-if="areaTag || showLegacyArea" class="p-top-right-badge">
-          {{ areaTag ? areaTag.title : `${product.area} м²` }}
+          {{ formatAreaBadge(areaTag, product.area) }}
         </div>
 
         <!-- Bottom: Winter/Heat -->
-        <div v-if="winterTag" class="p-bottom-badge heat">
+        <div v-if="heatBadgeText" class="p-bottom-badge heat">
           <span class="material-icons-round" style="font-size: 14px; margin-right: 4px;">wb_sunny</span>
-          {{ winterTag.title }}
+          {{ heatBadgeText }}
         </div>
       </div>
       <div class="p-info">
-        <!-- Only show legacy area info if we DON'T have a top-right badge for it -->
-        <span v-if="!areaTag && showLegacyArea" class="p-area-info">{{ `${product.area} м²` }}</span>
-
         <h4>{{ product.title }}</h4>
 
         <!-- Feature Tags -->
-        <div v-if="featureTags.length > 0" class="p-features-list">
-          <span v-for="tag in featureTags" :key="tag.id" :class="['feature-tag', tag.slug]">{{ tag.title }}</span>
+        <div v-if="displayFeatureTags.length > 0" class="p-features-list">
+          <span v-for="tag in displayFeatureTags" :key="tag.id" :class="['feature-tag', tag.slug]">{{ tag.title }}</span>
         </div>
       </div>
     </a>

@@ -3,6 +3,7 @@ import re
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 import sys
 
@@ -25,19 +26,29 @@ async def run_normalize():
     print(f"🧹 Старт нормализации v2 (Keep Units: {KEEP_UNITS})...")
     
     async with async_session() as session:
-        result = await session.execute(select(Product))
+        result = await session.execute(
+            select(Product).options(selectinload(Product.tags))
+        )
         products = result.scalars().all()
         
         updated_count = 0
         
         for p in products:
-            if not p.specs: continue
-            
             # Важно: Работаем с копией
             old_specs = p.specs.copy() if isinstance(p.specs, dict) else {}
+            wifi_tag_slugs = [
+                tag.slug
+                for tag in (p.tags or [])
+                if tag.slug in {"wifi-builtin", "wifi-ready"}
+            ]
             
             # Use the new shared logic
-            new_specs = normalize_specs(old_specs, keep_units=KEEP_UNITS)
+            new_specs = normalize_specs(
+                old_specs,
+                keep_units=KEEP_UNITS,
+                wifi_tag_slugs=wifi_tag_slugs,
+                strict_wifi_from_tags=True,
+            )
             
             # Check if updated (simple dict comparison)
             if new_specs != old_specs:

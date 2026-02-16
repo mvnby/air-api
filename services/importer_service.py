@@ -115,7 +115,11 @@ class ImporterService:
                 main_image=local_main_image,  # Use local path
                 images=[],  # Explicitly empty legacy JSON
                 tags=tag_objects,
-                specs=normalize_specs(data.get('specs', {})),
+                specs=normalize_specs(
+                    data.get('specs', {}),
+                    wifi_tag_slugs=[tag.slug for tag in tag_objects if tag.slug in {"wifi-builtin", "wifi-ready"}],
+                    strict_wifi_from_tags=True,
+                ),
                 is_published=is_published,
                 source_url=url
             )

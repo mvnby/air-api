@@ -375,20 +375,26 @@ class ProductService:
         tag_ids: Optional[List[int]] = None,
     ) -> Optional[Dict[str, Any]]:
         payload = dict(update_data)
-        if "specs" in payload and payload["specs"] is not None:
-            payload["specs"] = normalize_specs(payload["specs"])
-
+        wifi_tag_slugs: Optional[List[str]] = None
         if tag_ids is not None:
             tag_rows = (
                 await session.execute(select(Tag).where(Tag.id.in_(tag_ids)))
             ).scalars().all()
-            if any(tag.slug == "wifi-builtin" for tag in tag_rows):
-                base_specs = payload.get("specs")
-                if base_specs is None:
-                    existing_product = await ProductDAO.get_by_id(session, product_id)
-                    base_specs = dict(existing_product.specs or {}) if existing_product else {}
-                base_specs["wifi-builtin"] = True
-                payload["specs"] = normalize_specs(base_specs)
+            wifi_tag_slugs = [tag.slug for tag in tag_rows if tag.slug in {"wifi-builtin", "wifi-ready"}]
+
+        if "specs" in payload and payload["specs"] is not None:
+            if wifi_tag_slugs is None:
+                existing_product = await ProductDAO.get_by_id(session, product_id)
+                wifi_tag_slugs = [
+                    tag.slug
+                    for tag in (existing_product.tags or [])
+                    if tag.slug in {"wifi-builtin", "wifi-ready"}
+                ] if existing_product else []
+            payload["specs"] = normalize_specs(
+                payload["specs"],
+                wifi_tag_slugs=wifi_tag_slugs,
+                strict_wifi_from_tags=True,
+            )
 
         product = await ProductDAO.update_full(session, product_id, payload, tag_ids)
         if not product:
