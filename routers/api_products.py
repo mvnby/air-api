@@ -14,92 +14,14 @@ from schemas import (
     CatalogResponse,
     FiltersConfigResponse,
     Meta,
-    ProductImageResponse,
     ProductResponse,
-    ProductSiblingResponse,
     SpecsKeysResponse,
-    TagGroupResponse,
-    TagResponse,
 )
 from services.description_generator import DescriptionGeneratorService
-from services.product_serialization import parse_legacy_images, sanitize_specs
+from services.product_response_mapper import map_product_to_response
 from services.product_service import ProductService
 
 router = APIRouter(tags=["api"])
-
-
-def _map_product_to_response(
-    product: Product,
-    series_siblings: Optional[List[Product]] = None,
-) -> ProductResponse:
-    p_tags = []
-    if product.tags:
-        for tag in product.tags:
-            group = None
-            if tag.group:
-                group = TagGroupResponse(
-                    title=tag.group.title,
-                    slug=tag.group.slug,
-                    is_public=tag.group.is_public,
-                )
-            p_tags.append(
-                TagResponse(
-                    id=tag.id,
-                    title=tag.title,
-                    slug=tag.slug,
-                    is_public=tag.is_public,
-                    sort_order=tag.sort_order,
-                    group=group,
-                    group_title=tag.group.title if tag.group else None,
-                )
-            )
-
-    specs = sanitize_specs(product.specs)
-    images = parse_legacy_images(product.images)
-
-    gallery = []
-    if product.gallery_images:
-        for img in product.gallery_images:
-            gallery.append(
-                ProductImageResponse(
-                    id=img.id,
-                    url=img.url,
-                    is_installation_photo=img.is_installation_photo,
-                )
-            )
-
-    siblings_payload = [
-        ProductSiblingResponse(
-            id=item.id,
-            title=item.title,
-            slug=item.slug,
-            price=item.price,
-            old_price=item.old_price,
-            area=item.area,
-            is_inverter=item.is_inverter,
-            main_image=item.main_image,
-        )
-        for item in (series_siblings or [])
-    ]
-
-    return ProductResponse(
-        id=product.id,
-        title=product.title,
-        slug=product.slug,
-        price=product.price,
-        old_price=product.old_price,
-        area=product.area,
-        is_inverter=product.is_inverter,
-        power_cooling=product.power_cooling,
-        main_image=product.main_image,
-        is_published=product.is_published,
-        created_at=product.created_at,
-        tags=p_tags,
-        specs=specs or {},
-        images=images or [],
-        gallery_images=gallery,
-        series_siblings=siblings_payload,
-    )
 
 
 def _validate_pagination(page: int, limit: int) -> None:
@@ -195,7 +117,7 @@ async def get_catalog(
 
     pages = (total + limit - 1) // limit if limit > 0 else 0
     return CatalogResponse(
-        items=[_map_product_to_response(product) for product in items],
+        items=[map_product_to_response(product) for product in items],
         meta=Meta(total=total, page=page, limit=limit, pages=pages),
     )
 
@@ -206,4 +128,4 @@ async def get_product_by_identifier(identifier: str, session: AsyncSession = Dep
     if not product:
         raise HTTPException(status_code=404, detail=f"Product with identifier '{identifier}' not found")
     siblings = await ProductService.get_series_siblings(session, product, limit=8)
-    return _map_product_to_response(product, series_siblings=siblings)
+    return map_product_to_response(product, series_siblings=siblings)
