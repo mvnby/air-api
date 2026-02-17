@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
+import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref } from 'vue';
 import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2 } from 'lucide-vue-next';
 import { api } from './api';
-import ProductsView from './views/ProductsView.vue';
-import CustomersView from './views/CustomersView.vue';
-import OrdersKanbanView from './views/OrdersKanbanView.vue';
-import LeadsView from './views/LeadsView.vue';
+
+const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
+const CustomersView = defineAsyncComponent(() => import('./views/CustomersView.vue'));
+const OrdersKanbanView = defineAsyncComponent(() => import('./views/OrdersKanbanView.vue'));
+const LeadsView = defineAsyncComponent(() => import('./views/LeadsView.vue'));
 
 const isAuthenticated = ref(false);
 const showLoginModal = ref(false);
