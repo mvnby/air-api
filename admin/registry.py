@@ -1,9 +1,11 @@
 from .calendar import CalendarAdmin
-from .catalog import BulkTagsView, InstallationRateAdmin, ProductAdmin, TagAdmin, TagGroupAdmin
+from .catalog import ProductAdmin, TagAdmin, TagGroupAdmin
+from .catalog_bulk import BulkTagsView
 from .config import GlobalConfigAdmin
 from .content import ArticleAdmin
 from .customers import CustomerAdmin
 from .google_auth import GoogleAuthView
+from .installation_rates import InstallationRateAdmin
 from .installers import InstallerAdmin
 from .kanban import KanbanView
 from .orders import OrderAdmin, OrderProductLinkAdmin, OrderServiceLinkAdmin, ServiceAdmin

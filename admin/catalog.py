@@ -1,14 +1,10 @@
-from sqladmin import ModelView, expose, BaseView
+from sqladmin import ModelView
 from markupsafe import Markup
 from wtforms import TextAreaField, FileField
 from wtforms.validators import DataRequired
 from sqlalchemy.orm import selectinload
-from sqlmodel import select
-import slugify
 
-from models import Product, Tag, TagGroup, ProductTagLink, InstallationRate
-from core.database import async_session_maker
-from starlette.responses import RedirectResponse
+from models import Product, Tag, TagGroup
 from .catalog_constants import (
     GALLERY_STATUS_EMPTY_BADGE,
     GALLERY_STATUS_PRESENT_TEMPLATE,
@@ -24,7 +20,14 @@ from .catalog_constants import (
     TAG_ADMIN_PAGE_SIZE,
 )
 from .formatters import format_tags_shared
-from services.product_service import ProductService
+from .product_admin_helpers import (
+    build_tag_filter_subquery,
+    ensure_slug,
+    extract_uploaded_main_image,
+    parse_tag_ids,
+    save_new_product_main_image,
+    set_existing_product_main_image,
+)
 
 
 class ProductAdmin(ModelView, model=Product):
@@ -82,24 +85,6 @@ class ProductAdmin(ModelView, model=Product):
     form_create_rules = form_edit_rules
     
     # --- Eager loading для M2M + tag filtering ---
-    @staticmethod
-    def _parse_tag_ids(request) -> list[int]:
-        raw_ids = request.query_params.getlist("tag_ids")
-        if not raw_ids:
-            return []
-        return [int(tag_id) for tag_id in raw_ids]
-
-    @staticmethod
-    def _build_tag_filter_subquery(tag_ids: list[int]):
-        from sqlalchemy import func
-
-        return (
-            select(ProductTagLink.product_id)
-            .where(ProductTagLink.tag_id.in_(tag_ids))
-            .group_by(ProductTagLink.product_id)
-            .having(func.count(ProductTagLink.tag_id) == len(tag_ids))
-        )
-
     def list_query(self, request):
         query = super().list_query(request)
         query = query.options(
@@ -107,10 +92,10 @@ class ProductAdmin(ModelView, model=Product):
             selectinload(Product.gallery_images)
         )
 
-        tag_ids = self._parse_tag_ids(request)
+        tag_ids = parse_tag_ids(request)
         if tag_ids:
             # AND logic: product must have ALL selected tags
-            tag_subquery = self._build_tag_filter_subquery(tag_ids)
+            tag_subquery = build_tag_filter_subquery(tag_ids)
             query = query.where(Product.id.in_(tag_subquery))
 
         return query
@@ -187,53 +172,12 @@ class ProductAdmin(ModelView, model=Product):
         },
     }
 
-    def _ensure_slug(self, data: dict) -> None:
-        if not data.get("slug") and data.get("title"):
-            data["slug"] = slugify.slugify(data["title"])
-
-    @staticmethod
-    def _extract_uploaded_main_image(form):
-        upload = form.get("main_image_file")
-        if upload and hasattr(upload, "filename") and upload.filename:
-            return upload
-        return None
-
-    async def _save_new_product_main_image(self, model, upload) -> None:
-        file_bytes = await upload.read()
-        async with async_session_maker() as session:
-            await ProductService.save_main_image(
-                session=session,
-                product_id=model.id,
-                file_bytes=file_bytes,
-                filename=upload.filename,
-            )
-
-    async def _set_existing_product_main_image(self, data: dict, model, upload) -> None:
-        from services.image_service import ImageService
-
-        file_bytes = await upload.read()
-        async with async_session_maker() as session:
-            stmt = select(Product).where(Product.id == model.id)
-            result = await session.execute(stmt)
-            product = result.scalar_one_or_none()
-
-            if not product:
-                return
-
-            db_path = await ImageService.save_image(
-                file_bytes=file_bytes,
-                entity_type="products",
-                slug=product.slug,
-                filename=upload.filename,
-            )
-            data["main_image"] = ImageService.get_web_path(db_path)
-
     # --- Сохранение: обработка файла через ProductService ---
     async def on_model_change(self, data, model, is_created, request):
         form = await request.form()
-        upload = self._extract_uploaded_main_image(form)
+        upload = extract_uploaded_main_image(form)
         data.pop("main_image_file", None)
-        self._ensure_slug(data)
+        ensure_slug(data)
 
         if not upload:
             await super().on_model_change(data, model, is_created, request)
@@ -241,10 +185,10 @@ class ProductAdmin(ModelView, model=Product):
 
         if is_created:
             await super().on_model_change(data, model, is_created, request)
-            await self._save_new_product_main_image(model, upload)
+            await save_new_product_main_image(model, upload)
             return
 
-        await self._set_existing_product_main_image(data, model, upload)
+        await set_existing_product_main_image(data, model, upload)
         await super().on_model_change(data, model, is_created, request)
 
 
@@ -288,93 +232,3 @@ class TagAdmin(ModelView, model=Tag):
     def list_query(self, request):
         query = super().list_query(request)
         return query.options(selectinload(self.model.group))
-
-
-class BulkTagsView(BaseView):
-    name = "Bulk Tags"
-    icon = "fa-solid fa-tags"
-
-    def is_visible(self, request):
-        return False
-
-    @staticmethod
-    def _parse_selected_product_ids(request) -> list[int]:
-        raw = request.query_params.get("pks", "")
-        return [int(pk) for pk in raw.split(",") if pk]
-
-    @staticmethod
-    async def _apply_bulk_tags(request, product_ids: list[int]) -> int:
-        form = await request.form()
-        action_type = form.get("action_type")
-        selected_tag_ids = [int(tag_id) for tag_id in form.getlist("tag_ids")]
-
-        async with async_session_maker() as session:
-            return await ProductService.bulk_update_tags(
-                session=session,
-                product_ids=product_ids,
-                tag_ids=selected_tag_ids,
-                action=action_type,
-            )
-
-    @staticmethod
-    async def _load_bulk_form_data(product_ids: list[int]) -> tuple[list[TagGroup], list[Product]]:
-        async with async_session_maker() as session:
-            groups_stmt = select(TagGroup).options(selectinload(TagGroup.tags))
-            groups = (await session.execute(groups_stmt)).scalars().all()
-
-            products_stmt = select(Product).where(Product.id.in_(product_ids))
-            products = (await session.execute(products_stmt)).scalars().all()
-
-        return groups, products
-
-    @expose("/bulk-tags", methods=["GET", "POST"])
-    async def list(self, request):
-        pks = self._parse_selected_product_ids(request)
-
-        if request.method == "POST":
-            num_updated = await self._apply_bulk_tags(request, pks)
-
-            return RedirectResponse(
-                url=f"{request.url_for('admin:list', identity='product')}?msg=Теги обновлены для {num_updated} товаров&type=success",
-                status_code=303
-            )
-
-        groups, products = await self._load_bulk_form_data(pks)
-
-        return await self.templates.TemplateResponse(
-            request,
-            "sqladmin/bulk_tags.html",
-            {
-                "model_view": self,
-                "groups": groups,
-                "products": products,
-                "pks": pks,
-            }
-        )
-
-class InstallationRateAdmin(ModelView, model=InstallationRate):
-    from models import InstallationRate # Local import to avoid circular dependency issues if any
-    
-    name = "Тариф на монтаж"
-    name_plural = "Тарифы на монтаж"
-    icon = "fa-solid fa-screwdriver-wrench"
-    
-    column_list = [
-        InstallationRate.category,
-        InstallationRate.power_range,
-        InstallationRate.base_price,
-        InstallationRate.extra_pipe_price,
-        InstallationRate.is_fixed
-    ]
-    
-    column_labels = {
-        "category": "Категория",
-        "power_range": "Мощность (BTU)",
-        "base_price": "Базовая цена",
-        "extra_pipe_price": "Доп. метр",
-        "included_pipe_meters": "Включено метров",
-        "is_fixed": "Фиксирована",
-        "comment": "Комментарий"
-    }
-    
-    form_columns = "__all__"
