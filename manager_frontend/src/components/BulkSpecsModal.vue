@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue';
 import { api } from '../api';
 import { X, Plus, Trash2, Save, AlertTriangle } from 'lucide-vue-next';
+import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
 
 const props = defineProps<{
     modelValue: boolean; // isOpen
@@ -16,6 +17,8 @@ const emit = defineEmits<{
 const specs = ref<{ key: string; value: string }[]>([{ key: '', value: '' }]);
 const operation = ref<'merge' | 'replace' | 'delete_keys'>('merge');
 const loading = ref(false);
+const formMessage = ref('');
+const formServerErrors = ref<Record<string, string>>({});
 const knownKeys = ref<string[]>([]);
 const keysLoading = ref(false);
 
@@ -34,6 +37,8 @@ const fetchKeys = async () => {
 
 watch(() => props.modelValue, (val) => {
     if (val) {
+        formMessage.value = '';
+        formServerErrors.value = {};
         if (knownKeys.value.length === 0) fetchKeys();
         // Reset form
         specs.value = [{ key: '', value: '' }];
@@ -55,6 +60,8 @@ const close = () => {
 
 const save = async () => {
     if (props.selectedProductIds.length === 0) return;
+    formMessage.value = '';
+    formServerErrors.value = {};
     
     // Validate
     const validSpecs: Record<string, string> = {};
@@ -67,15 +74,16 @@ const save = async () => {
     // Logic for validation
     if (Object.keys(validSpecs).length === 0) {
          if (operation.value === 'delete_keys') {
-              alert('Please specify at least one specification key');
+              formMessage.value = 'Укажите хотя бы один ключ характеристики';
               return;
          }
          // For merge/replace, empty might mean clear all or nothing
          if (operation.value === 'replace') {
              // If manual clear (no rows or empty rows)
-             if (!confirm('This will clear ALL specs for selected products. Continue?')) return;
+             if (!confirm('Будут очищены все характеристики у выбранных товаров. Продолжить?')) return;
          } else {
              // Merge with empty = do nothing
+             formMessage.value = 'Нет изменений для применения';
              return;
          }
     }
@@ -85,10 +93,11 @@ const save = async () => {
         await api.bulkUpdateSpecs(props.selectedProductIds, validSpecs, operation.value);
         emit('success');
         close();
-        alert('Specs updated successfully');
     } catch (e) {
         console.error(e);
-        alert('Failed to update specs');
+        const parsed = parseApiFieldErrors(e, ['product_ids', 'specs', 'operation']);
+        formServerErrors.value = parsed.fieldErrors;
+        formMessage.value = parsed.message || `Не удалось обновить характеристики: ${getApiErrorMessage(e)}`;
     } finally {
         loading.value = false;
     }
@@ -107,8 +116,14 @@ const save = async () => {
                     <X class="w-5 h-5" />
                 </button>
             </header>
+            <div v-if="formMessage" class="mx-6 mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {{ formMessage }}
+            </div>
             
             <div class="p-6 overflow-y-auto flex-1">
+                <div v-if="Object.keys(formServerErrors).length" class="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    <p v-for="(message, field) in formServerErrors" :key="`bulk-${field}`">{{ field }}: {{ message }}</p>
+                </div>
                 <!-- Operation Selector -->
                 <div class="mb-6">
                     <label class="block text-sm font-medium text-gray-700 mb-2">Operation</label>
