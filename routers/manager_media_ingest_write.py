@@ -6,13 +6,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_session
 from core.logger import logger
 from core.security import get_current_username
+from schemas import ManagerMediaImageLinkResponse, ManagerMediaUploadLocalImagesResponse
 from services.manager_media_orchestrator_service import ManagerMediaOrchestratorService
 
 
 router = APIRouter(prefix="/api/manager", tags=["manager"])
 
 
-@router.post("/upload-image", operation_id="upload_image")
+@router.post(
+    "/upload-image",
+    response_model=ManagerMediaImageLinkResponse,
+    operation_id="upload_image",
+)
 async def upload_image(
     url: str = Query(..., description="URL of the image to download"),
     product_id: int = Query(..., description="ID of the product to attach image to"),
@@ -40,7 +45,11 @@ async def upload_image(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.post("/upload-local-images", operation_id="upload_local_images")
+@router.post(
+    "/upload-local-images",
+    response_model=ManagerMediaUploadLocalImagesResponse,
+    operation_id="upload_local_images",
+)
 async def upload_local_images(
     product_id: int = Query(..., description="ID of the product"),
     files: List[UploadFile] = File(...),

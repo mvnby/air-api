@@ -5,14 +5,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.security import get_current_username
-from schemas import CommonGalleryImageResponse
+from schemas import CommonGalleryImageResponse, ManagerMediaReuseSearchItemResponse
 from services.manager_media_service import ManagerMediaService
 
 
 router = APIRouter(prefix="/api/manager", tags=["manager"])
 
 
-@router.get("/gallery/reuse-search", operation_id="reuse_search")
+@router.get(
+    "/gallery/reuse-search",
+    response_model=List[ManagerMediaReuseSearchItemResponse],
+    operation_id="reuse_search",
+)
 async def reuse_search(
     q: str = Query(..., min_length=2),
     session: AsyncSession = Depends(get_session),
