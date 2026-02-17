@@ -8,6 +8,18 @@
 
 - `docs/git-workflow.md`
 
+## Manager-first policy (active)
+
+1. Main product development target:
+   - `manager_frontend/` + `routers/manager_*`.
+2. Legacy SQLAdmin target:
+   - compatibility and maintenance only.
+   - allowed: bugfixes, regressions, required compat updates.
+   - disallowed by default: net-new product workflows/features.
+3. Any PR touching `admin/*` must include justification:
+   - why legacy change is required now,
+   - why this is not implemented in manager flow.
+
 ## API-роутеры после декомпозиции
 
 Основной входной модуль API: `routers/api.py` (компоновщик).

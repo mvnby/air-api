@@ -21,6 +21,11 @@
   - [ ] Main user flow verified
   - [ ] No visible regressions in touched areas
 
+## Legacy Admin Check
+
+- [ ] This PR changes `admin/*` (legacy SQLAdmin)
+- [ ] If yes, justification provided (why compat fix is needed and why not manager-first)
+
 ## Deployment Notes
 
 - [ ] No special deploy steps
@@ -40,4 +45,3 @@ If special steps required, describe exact commands:
 - Rollback plan:
 
 ## Screenshots / Logs (optional)
-
