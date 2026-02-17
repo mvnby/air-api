@@ -150,6 +150,27 @@ async def patch_customer_for_manager(
 
 
 @router.patch(
+    "/customers/{customer_id}",
+    response_model=ManagerCatalogCustomerItemResponse,
+    operation_id=PATCH_MANAGER_CUSTOMER,
+)
+async def patch_customer_for_manager(
+    customer_id: int,
+    payload: ManagerCustomerUpdatePayload,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    customer = await ManagerCatalogService.update_customer(
+        session=session,
+        customer_id=customer_id,
+        payload=payload,
+    )
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return customer
+
+
+@router.patch(
     "/products/{product_id}",
     response_model=ManagerActionMessageResponse,
     operation_id=UPDATE_PRODUCT,
