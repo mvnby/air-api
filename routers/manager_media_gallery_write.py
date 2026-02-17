@@ -6,6 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_session
 from core.logger import logger
 from core.security import get_current_username
+from routers.manager_operation_ids import (
+    BULK_ADD_GALLERY_IMAGES,
+    BULK_DELETE_COMMON_GALLERY_IMAGES,
+    BULK_UPLOAD_LOCAL_IMAGES,
+    CLEANUP_MEDIA,
+    DELETE_IMAGE,
+    LINK_SEARCH_RESULT,
+    REUSE_IMAGE,
+    SET_MAIN_IMAGE,
+)
 from schemas import (
     BulkGalleryAddRequest,
     BulkGalleryDeleteRequest,
@@ -28,7 +38,7 @@ router = APIRouter(prefix="/api/manager", tags=["manager"])
 @router.post(
     "/gallery/link-search-result",
     response_model=ManagerMediaImageLinkResponse,
-    operation_id="link_search_result",
+    operation_id=LINK_SEARCH_RESULT,
 )
 async def link_search_result(
     url: str = Query(..., description="URL of the image"),
@@ -54,7 +64,7 @@ async def link_search_result(
 @router.post(
     "/gallery/set-main",
     response_model=ManagerMediaSetMainImageResponse,
-    operation_id="set_main_image",
+    operation_id=SET_MAIN_IMAGE,
 )
 async def set_main_image(
     image_id: int = Query(..., description="ID of the ProductImage to set as main"),
@@ -71,7 +81,7 @@ async def set_main_image(
 @router.delete(
     "/gallery/{image_id}",
     response_model=ManagerMediaDeleteImageResponse,
-    operation_id="delete_image",
+    operation_id=DELETE_IMAGE,
 )
 async def delete_gallery_image(
     image_id: int,
@@ -88,7 +98,7 @@ async def delete_gallery_image(
 @router.post(
     "/gallery/reuse-image",
     response_model=ManagerMediaReuseImageResponse,
-    operation_id="reuse_image",
+    operation_id=REUSE_IMAGE,
 )
 async def reuse_image(
     product_id: int = Query(...),
@@ -106,7 +116,7 @@ async def reuse_image(
 @router.post(
     "/gallery/bulk-add",
     response_model=ManagerMediaBulkAddResponse,
-    operation_id="bulk_add_gallery_images",
+    operation_id=BULK_ADD_GALLERY_IMAGES,
 )
 async def bulk_add_gallery_images(
     payload: BulkGalleryAddRequest,
@@ -132,7 +142,7 @@ async def bulk_add_gallery_images(
 @router.post(
     "/gallery/bulk-upload-local",
     response_model=ManagerMediaBulkUploadResponse,
-    operation_id="bulk_upload_local_images",
+    operation_id=BULK_UPLOAD_LOCAL_IMAGES,
 )
 async def bulk_upload_local_images(
     product_ids_json: str = Form(..., description="JSON array of product ids"),
@@ -160,7 +170,7 @@ async def bulk_upload_local_images(
 @router.post(
     "/gallery/bulk-delete-common",
     response_model=ManagerMediaBulkDeleteResponse,
-    operation_id="bulk_delete_common_gallery_images",
+    operation_id=BULK_DELETE_COMMON_GALLERY_IMAGES,
 )
 async def bulk_delete_common_gallery_images(
     payload: BulkGalleryDeleteRequest,
@@ -182,7 +192,7 @@ async def bulk_delete_common_gallery_images(
 @router.post(
     "/cleanup-media",
     response_model=ManagerMediaCleanupResponse,
-    operation_id="cleanup_media",
+    operation_id=CLEANUP_MEDIA,
 )
 async def cleanup_media(
     dry_run: bool = Query(False),
