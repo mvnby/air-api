@@ -4,23 +4,40 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
+from core.app_constants import (
+    ADMIN_ROUTE_PREFIX,
+    INTERNAL_SERVER_ERROR_MESSAGE,
+    INTERNAL_SERVER_ERROR_TITLE,
+)
 from core.config import settings
 from core.logger import logger
+
+
+def _is_admin_path(path: str) -> bool:
+    return path.startswith(ADMIN_ROUTE_PREFIX)
+
+
+def _admin_error_response(detail: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=500,
+        content={"error": INTERNAL_SERVER_ERROR_TITLE, "detail": detail},
+    )
+
+
+def _public_error_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=500,
+        content={"message": INTERNAL_SERVER_ERROR_MESSAGE},
+    )
 
 
 async def global_exception_handler(request: Request, exc: Exception):
     logger.exception(f"Unhandled exception at {request.url}: {exc}")
 
-    if str(request.url.path).startswith("/admin"):
-        return JSONResponse(
-            status_code=500,
-            content={"error": "Internal Server Error", "detail": str(exc)},
-        )
+    if _is_admin_path(str(request.url.path)):
+        return _admin_error_response(str(exc))
 
-    return JSONResponse(
-        status_code=500,
-        content={"message": "Internal server error"},
-    )
+    return _public_error_response()
 
 
 def configure_http(app: FastAPI) -> None:
