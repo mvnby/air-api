@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_session
 from core.logger import logger
 from core.security import get_current_username
+from routers.manager_operation_ids import BULK_UPDATE_SPECS, NORMALIZE_LEGACY_SPECS
 from schemas import BulkSpecUpdate
 from services.manager_legacy_specs_service import ManagerLegacySpecsService
 from services.manager_specs_service import ManagerSpecsService
@@ -12,7 +13,7 @@ from services.manager_specs_service import ManagerSpecsService
 router = APIRouter(prefix="/api/manager", tags=["manager"])
 
 
-@router.post("/specs/bulk-update", operation_id="bulk_update_specs")
+@router.post("/specs/bulk-update", operation_id=BULK_UPDATE_SPECS)
 async def bulk_update_specs(
     payload: BulkSpecUpdate,
     session: AsyncSession = Depends(get_session),
@@ -26,7 +27,7 @@ async def bulk_update_specs(
     return await ManagerSpecsService.bulk_update_specs(session, payload)
 
 
-@router.post("/specs/normalize-legacy", operation_id="normalize_legacy_specs")
+@router.post("/specs/normalize-legacy", operation_id=NORMALIZE_LEGACY_SPECS)
 async def normalize_legacy_specs(
     dry_run: bool = Query(True, description="Если True - не сохраняет изменения в БД, только показывает пример"),
     session: AsyncSession = Depends(get_session),

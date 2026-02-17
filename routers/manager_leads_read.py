@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.security import get_current_username
+from routers.manager_operation_ids import GET_MANAGER_LEADS
 from schemas import LeadListResponse
 from services.lead_service import LeadService
 
@@ -12,7 +13,7 @@ from services.lead_service import LeadService
 router = APIRouter(prefix="/api/manager/leads", tags=["manager-leads"])
 
 
-@router.get("", response_model=LeadListResponse, operation_id="get_manager_leads")
+@router.get("", response_model=LeadListResponse, operation_id=GET_MANAGER_LEADS)
 async def get_manager_leads(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),

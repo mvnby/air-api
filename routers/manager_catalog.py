@@ -5,6 +5,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.security import get_current_username
+from routers.manager_operation_ids import (
+    BULK_ROUND_PRICE,
+    GET_ALL_TAGS,
+    GET_MANAGER_CUSTOMERS,
+    GET_MANAGER_PRODUCTS,
+    UPDATE_PRODUCT,
+)
 from schemas import BulkRoundRequest, ProductUpdate
 from services.manager_catalog_service import ManagerCatalogService
 
@@ -12,7 +19,7 @@ from services.manager_catalog_service import ManagerCatalogService
 router = APIRouter(prefix="/api/manager", tags=["manager"])
 
 
-@router.get("/products/list", operation_id="get_manager_products")
+@router.get("/products/list", operation_id=GET_MANAGER_PRODUCTS)
 async def list_products_for_manager(
     page: int = Query(1, ge=1),
     limit: int = Query(40, ge=1, le=100),
@@ -42,7 +49,7 @@ async def list_products_for_manager(
     )
 
 
-@router.get("/customers", operation_id="get_manager_customers")
+@router.get("/customers", operation_id=GET_MANAGER_CUSTOMERS)
 async def list_customers_for_manager(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
@@ -66,7 +73,7 @@ async def list_customers_for_manager(
     )
 
 
-@router.patch("/products/{product_id}", operation_id="update_product")
+@router.patch("/products/{product_id}", operation_id=UPDATE_PRODUCT)
 async def update_product(
     product_id: int,
     data: ProductUpdate,
@@ -88,7 +95,7 @@ async def update_product(
     return result
 
 
-@router.post("/products/bulk-round-price", operation_id="bulk_round_price")
+@router.post("/products/bulk-round-price", operation_id=BULK_ROUND_PRICE)
 async def bulk_round_price(
     request: BulkRoundRequest,
     session: AsyncSession = Depends(get_session),
@@ -100,7 +107,7 @@ async def bulk_round_price(
     return await ManagerCatalogService.bulk_round_prices(session=session, request=request)
 
 
-@router.get("/tags/all", operation_id="get_all_tags")
+@router.get("/tags/all", operation_id=GET_ALL_TAGS)
 async def get_all_tags(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),

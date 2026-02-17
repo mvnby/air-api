@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.security import get_current_username
+from routers.manager_operation_ids import GET_COMMON_GALLERY_IMAGES, REUSE_SEARCH
 from schemas import CommonGalleryImageResponse
 from services.manager_media_service import ManagerMediaService
 
@@ -12,7 +13,7 @@ from services.manager_media_service import ManagerMediaService
 router = APIRouter(prefix="/api/manager", tags=["manager"])
 
 
-@router.get("/gallery/reuse-search", operation_id="reuse_search")
+@router.get("/gallery/reuse-search", operation_id=REUSE_SEARCH)
 async def reuse_search(
     q: str = Query(..., min_length=2),
     session: AsyncSession = Depends(get_session),
@@ -25,7 +26,7 @@ async def reuse_search(
 @router.get(
     "/gallery/common-images",
     response_model=List[CommonGalleryImageResponse],
-    operation_id="get_common_gallery_images",
+    operation_id=GET_COMMON_GALLERY_IMAGES,
 )
 async def get_common_gallery_images(
     product_ids: List[int] = Query(..., description="Selected product IDs"),
