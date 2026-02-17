@@ -15,7 +15,7 @@ def create_manager_spa_router(manager_dist: Path) -> APIRouter:
             return FileResponse(str(index_path))
         return JSONResponse(status_code=404, content={"message": MANAGER_NOT_BUILT_MESSAGE})
 
-    @router.get("/manager/{full_path:path}")
+    @router.get("/manager/{full_path:path}", include_in_schema=False)
     async def serve_manager_app(full_path: str):
         return _render_index_or_404()
 
