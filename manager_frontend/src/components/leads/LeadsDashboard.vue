@@ -36,7 +36,14 @@ const selectedExistingCustomer = ref<ManagerCatalogCustomerItemResponse | null>(
 const createSuggestedCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const selectedQualifyCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const createSuggestionDismissedForId = ref<number | null>(null);
-const lastQualifyResult = ref<{ leadId: number; customerId: number; orderId: number } | null>(null);
+const lastQualifyResult = ref<{
+  leadId: number;
+  customerId: number;
+  orderId: number;
+  leadStatus: string;
+  segmentHint: string;
+  orderStatus: string;
+} | null>(null);
 const createPhoneError = ref('');
 const createRequestError = ref('');
 const qualifyPhoneError = ref('');
@@ -121,6 +128,15 @@ const segmentLabels: Record<string, string> = {
   b2b: 'B2B',
 };
 
+const customerTypeLabels: Record<string, string> = {
+  company: 'Юрлицо',
+  individual: 'Физлицо',
+};
+
+const orderStatusLabels: Record<string, string> = {
+  new_lead: 'Новый лид',
+};
+
 const tabItems = computed(() => [
   { key: '', label: 'Активные' },
   { key: 'new', label: 'Новые' },
@@ -135,9 +151,30 @@ const qualifyPreview = computed(() => {
   const normalizedInn = normalizeUnp(qualifyForm.value.inn || '');
   const normalizedPhone = normalizePhoneDigits(qualifyForm.value.phone || '');
   const normalizedEmail = (qualifyForm.value.email || '').trim().toLowerCase();
+  const hasCompanyAttrs = Boolean(normalizedInn || (qualifyForm.value.full_legal_name || '').trim());
+  const predictedCustomerType = hasCompanyAttrs ? 'company' : 'individual';
+  const predictedSegment = hasCompanyAttrs ? 'b2b' : 'b2c';
+  const matchedBy = normalizedInn ? 'inn' : normalizedPhone ? 'phone' : normalizedEmail ? 'email' : null;
+  const requisitesToWrite: Array<{ key: string; label: string; value: string }> = [];
+  const legalAddress = (qualifyForm.value.legal_address || '').trim();
+  const iban = normalizeIban(qualifyForm.value.iban || '');
+  const bic = (qualifyForm.value.bic || '').trim();
+  const bankName = (qualifyForm.value.bank_name || '').trim();
+  const deliveryAddress = (qualifyForm.value.delivery_address || '').trim();
+  if (legalAddress) requisitesToWrite.push({ key: 'legal_address', label: 'Юридический адрес', value: legalAddress });
+  if (iban) requisitesToWrite.push({ key: 'iban', label: 'IBAN', value: iban });
+  if (bic) requisitesToWrite.push({ key: 'bic', label: 'BIC', value: bic });
+  if (bankName) requisitesToWrite.push({ key: 'bank_name', label: 'Банк', value: bankName });
+  if (deliveryAddress) requisitesToWrite.push({ key: 'delivery_address', label: 'Адрес доставки', value: deliveryAddress });
+
   return {
     customerId: selectedCustomerId,
     customerMode: selectedCustomerId ? 'reuse' : 'create_or_match',
+    customerLabel: selectedCustomerId ? `используется #${selectedCustomerId}` : 'будет найден/создан автоматически',
+    predictedCustomerType,
+    predictedSegment,
+    matchedBy,
+    requisitesToWrite,
     inn: normalizedInn || null,
     phoneDigits: normalizedPhone || null,
     email: normalizedEmail || null,
@@ -435,6 +472,9 @@ const qualifyLead = async () => {
       leadId: selectedLead.value.id,
       customerId: response.customer_id,
       orderId: response.order_id,
+      leadStatus: response.lead.status,
+      segmentHint: response.lead.segment_hint,
+      orderStatus: 'new_lead',
     };
     showQualifyModal.value = false;
     setToast(`Лид квалифицирован. Сделка #${response.order_id}, клиент #${response.customer_id}`);
@@ -899,6 +939,11 @@ const onQualifyIbanBlur = async () => {
         <p class="font-semibold">
           Лид #{{ lastQualifyResult.leadId }} квалифицирован: клиент #{{ lastQualifyResult.customerId }}, сделка #{{ lastQualifyResult.orderId }}.
         </p>
+        <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-emerald-200/90">
+          <span>Статус лида: {{ statusLabels[lastQualifyResult.leadStatus] || lastQualifyResult.leadStatus }}</span>
+          <span>Сегмент: {{ segmentLabels[lastQualifyResult.segmentHint] || lastQualifyResult.segmentHint }}</span>
+          <span>Статус сделки: {{ orderStatusLabels[lastQualifyResult.orderStatus] || lastQualifyResult.orderStatus }}</span>
+        </div>
         <div class="mt-2 flex flex-wrap gap-2">
           <button class="btn-mini" @click="navigateToOrders(lastQualifyResult.orderId)">Открыть сделку</button>
           <button class="btn-mini-outline" @click="navigateToCustomerProfile({ id: lastQualifyResult.customerId })">Открыть клиента</button>
@@ -1160,13 +1205,30 @@ const onQualifyIbanBlur = async () => {
           <p class="font-semibold text-slate-100">Preview квалификации</p>
           <p>
             Клиент:
-            <span class="text-slate-100">
-              {{ qualifyPreview.customerId ? `используется #${qualifyPreview.customerId}` : 'будет найден/создан автоматически' }}
-            </span>
+            <span class="text-slate-100">{{ qualifyPreview.customerLabel }}</span>
+          </p>
+          <p>
+            Тип клиента:
+            <span class="text-slate-100">{{ customerTypeLabels[qualifyPreview.predictedCustomerType] || qualifyPreview.predictedCustomerType }}</span>
+          </p>
+          <p>
+            Сегмент:
+            <span class="text-slate-100">{{ segmentLabels[qualifyPreview.predictedSegment] || qualifyPreview.predictedSegment }}</span>
           </p>
           <p v-if="qualifyPreview.inn">Матч по УНП: <span class="text-slate-100">{{ qualifyPreview.inn }}</span></p>
           <p v-if="qualifyPreview.phoneDigits">Матч по телефону: <span class="text-slate-100">{{ qualifyPreview.phoneDigits }}</span></p>
           <p v-if="qualifyPreview.email">Матч по email: <span class="text-slate-100">{{ qualifyPreview.email }}</span></p>
+          <p v-if="qualifyPreview.matchedBy">
+            Приоритет матча:
+            <span class="text-slate-100">{{ qualifyPreview.matchedBy === 'inn' ? 'УНП' : qualifyPreview.matchedBy === 'phone' ? 'Телефон' : 'Email' }}</span>
+          </p>
+          <p>
+            Реквизиты для записи:
+            <span v-if="qualifyPreview.requisitesToWrite.length" class="text-slate-100">
+              {{ qualifyPreview.requisitesToWrite.map((item) => item.label).join(', ') }}
+            </span>
+            <span v-else class="text-slate-400">не указаны</span>
+          </p>
         </div>
         <div v-if="Object.keys(qualifyServerErrors).length" class="mb-3 rounded-lg border border-red-500/40 bg-red-900/20 px-3 py-2 text-xs text-red-200">
           <p v-for="(message, field) in qualifyServerErrors" :key="`qualify-${field}`">
