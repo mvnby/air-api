@@ -5,6 +5,7 @@ from sqladmin import Admin
 from sqlalchemy.engine import Engine
 
 from admin import admin_views
+from core.app_constants import ADMIN_TITLE
 from core.security import AdminAuthBackend
 
 
@@ -14,7 +15,7 @@ def configure_sqladmin(app: FastAPI, engine: Engine, base_dir: Path, secret_key:
     admin = Admin(
         app,
         engine,
-        title="AirCon Admin",
+        title=ADMIN_TITLE,
         templates_dir=str(templates_dir),
         authentication_backend=AdminAuthBackend(secret_key=secret_key),
     )
