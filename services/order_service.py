@@ -14,6 +14,14 @@ logger = logging.getLogger(__name__)
 
 class OrderService:
     @staticmethod
+    def _normalize_naive_datetime(value: Optional[datetime]) -> Optional[datetime]:
+        if value is None:
+            return None
+        if value.tzinfo is not None:
+            return value.replace(tzinfo=None)
+        return value
+
+    @staticmethod
     async def create_order(
         session: AsyncSession,
         user_id: int,
@@ -941,11 +949,11 @@ class OrderService:
             except ValueError as exc:
                 raise ValueError(f"Invalid status: {payload.status}") from exc
         if "next_followup_date" in fields_set:
-            order.next_followup_date = payload.next_followup_date
+            order.next_followup_date = OrderService._normalize_naive_datetime(payload.next_followup_date)
         if "assessment_date" in fields_set:
-            order.assessment_date = payload.assessment_date
+            order.assessment_date = OrderService._normalize_naive_datetime(payload.assessment_date)
         if "installation_date" in fields_set:
-            order.installation_date = payload.installation_date
+            order.installation_date = OrderService._normalize_naive_datetime(payload.installation_date)
         if "comment" in fields_set:
             order.comment = payload.comment
         if "is_paid" in fields_set and payload.is_paid is not None:
