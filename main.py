@@ -1,13 +1,10 @@
 import os
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from starlette.middleware.sessions import SessionMiddleware
-from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+from fastapi import FastAPI
 
 from admin.bootstrap import configure_sqladmin
+from core.app_http import configure_http
 from core.app_static import mount_manager_assets, mount_static_and_media
 from core.database import engine, init_db, async_session_maker
 from core.app_routing import register_app_routers
@@ -50,32 +47,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 # --- MIDDLEWARE & ERROR HANDLING ---
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger.exception(f"Unhandled exception at {request.url}: {exc}")
-    
-    # If the error happened in Admin Panel, try to return a user-friendly HTML
-    if str(request.url.path).startswith("/admin"):
-        # We can implement a simple HTML response here or redirect
-        return JSONResponse(
-            status_code=500,
-            content={"error": "Internal Server Error", "detail": str(exc)},
-        ) # SQLAdmin usually has its own handler, but this catches unhandled ones
-        
-    return JSONResponse(
-        status_code=500,
-        content={"message": "Internal server error"},
-    )
-app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
-app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+configure_http(app)
 
 # Include routers
 register_app_routers(app)
