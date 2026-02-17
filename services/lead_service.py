@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
+import re
+
 from sqlalchemy import String, cast, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -21,6 +23,55 @@ from schemas import Meta
 
 
 class LeadService:
+    @staticmethod
+    def _normalize_phone_digits(value: Optional[str]) -> str:
+        if not value:
+            return ""
+        return re.sub(r"\D", "", value)
+
+    @staticmethod
+    def _customer_data_completeness_score(customer: Customer) -> int:
+        score = 0
+        if customer.full_legal_name:
+            score += 3
+        if customer.legal_address:
+            score += 3
+        if customer.bank_name:
+            score += 2
+        if customer.bic:
+            score += 2
+        if customer.iban:
+            score += 3
+        if customer.email:
+            score += 1
+        if customer.phone:
+            score += 1
+        if customer.actual_address:
+            score += 1
+        return score
+
+    @staticmethod
+    def _customer_match_priority_score(
+        customer: Customer,
+        phone: Optional[str],
+        email: Optional[str],
+        inn: Optional[str],
+    ) -> int:
+        score = 0
+        normalized_email = (email or "").strip().lower()
+        normalized_phone = LeadService._normalize_phone_digits(phone)
+        customer_email = (customer.email or "").strip().lower()
+        customer_phone = LeadService._normalize_phone_digits(customer.phone)
+
+        if inn and customer.inn and customer.inn == inn:
+            score += 300
+        if normalized_phone and customer_phone and customer_phone == normalized_phone:
+            score += 200
+        if normalized_email and customer_email and customer_email == normalized_email:
+            score += 100
+        score += LeadService._customer_data_completeness_score(customer)
+        return score
+
     @staticmethod
     def _clean_optional(value: Optional[str]) -> Optional[str]:
         if value is None:
@@ -254,33 +305,33 @@ class LeadService:
         email: Optional[str],
         inn: Optional[str],
     ) -> Optional[Customer]:
+        normalized_email = (email or "").strip().lower()
+        normalized_phone = LeadService._normalize_phone_digits(phone)
+
         predicates = []
-        if phone:
-            predicates.append(Customer.phone == phone)
-        if email:
-            predicates.append(Customer.email == email)
+        if normalized_phone:
+            phone_digits_expr = func.regexp_replace(func.coalesce(Customer.phone, ""), r"\D", "", "g")
+            predicates.append(phone_digits_expr == normalized_phone)
+        if normalized_email:
+            predicates.append(func.lower(Customer.email) == normalized_email)
         if inn:
             predicates.append(Customer.inn == inn)
         if not predicates:
             return None
 
-        result = await session.execute(select(Customer).where(or_(*predicates)).order_by(Customer.created_at.asc()))
+        result = await session.execute(select(Customer).where(or_(*predicates)))
         customers = result.scalars().all()
         if not customers:
             return None
 
-        if inn:
-            for item in customers:
-                if item.inn == inn:
-                    return item
-        if phone:
-            for item in customers:
-                if item.phone == phone:
-                    return item
-        if email:
-            for item in customers:
-                if item.email == email:
-                    return item
+        customers.sort(
+            key=lambda item: (
+                LeadService._customer_match_priority_score(item, phone=phone, email=email, inn=inn),
+                item.created_at.timestamp() if item.created_at else 0,
+                int(item.id or 0),
+            ),
+            reverse=True,
+        )
         return customers[0]
 
     @staticmethod
