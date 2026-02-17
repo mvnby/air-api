@@ -368,10 +368,12 @@ const qualifyLead = async () => {
 };
 
 const navigateToOrders = (orderId?: number | null) => {
-  const path = '/manager/orders/kanban';
+  const path = orderId
+    ? `/manager/orders/kanban?orderId=${encodeURIComponent(String(orderId))}`
+    : '/manager/orders/kanban';
   window.history.pushState({}, '', path);
   window.dispatchEvent(new PopStateEvent('popstate'));
-  if (orderId) setToast(`Открыт раздел сделок. Найдите сделку #${orderId}`);
+  if (orderId) setToast(`Открыта сделка #${orderId}.`);
 };
 
 const navigateToCustomerProfile = (customer?: { id?: number | null } | null) => {
