@@ -9,23 +9,4 @@ from .calendar import CalendarAdmin
 from .google_auth import GoogleAuthView
 
 from .config import GlobalConfigAdmin
-
-# Export all views for easy registration in main.py
-admin_views = [
-    KanbanView,
-    CalendarAdmin,
-    OrderAdmin,
-    ProductAdmin,
-    ServiceAdmin,
-    CustomerAdmin,
-    ArticleAdmin,
-    TagAdmin,
-    TagGroupAdmin,
-    OrderProductLinkAdmin,
-    OrderServiceLinkAdmin,
-    BulkTagsView,
-    GoogleAuthView, # Settings (Bottom)
-    InstallerAdmin,
-    GlobalConfigAdmin,
-    InstallationRateAdmin
-]
+from .registry import admin_views
