@@ -246,3 +246,59 @@ async def test_manager_lead_qualify_handoff_smoke_open_order_and_customer(async_
     customer_detail = customer_detail_resp.json()
     assert customer_detail["id"] == customer_id
     assert customer_detail["order_count"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_manager_leads_reject_invalid_email_and_unp(async_client):
+    headers = await _auth_headers(async_client)
+
+    bad_email = await async_client.post(
+        "/api/manager/leads",
+        headers=headers,
+        json={
+            "source": "manager",
+            "name": "Bad Email",
+            "email": "bad-email",
+            "request_text": "test",
+        },
+    )
+    assert bad_email.status_code == 422
+
+    bad_unp = await async_client.post(
+        "/api/manager/leads",
+        headers=headers,
+        json={
+            "source": "manager",
+            "name": "Bad UNP",
+            "inn": "12345",
+            "request_text": "test",
+        },
+    )
+    assert bad_unp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_manager_qualify_rejects_invalid_iban(async_client):
+    headers = await _auth_headers(async_client)
+    create_resp = await async_client.post(
+        "/api/manager/leads",
+        headers=headers,
+        json={
+            "source": "manager",
+            "name": "IBAN Lead",
+            "phone": "+375291234567",
+            "request_text": "test",
+        },
+    )
+    assert create_resp.status_code == 200
+    lead_id = create_resp.json()["id"]
+
+    qualify_resp = await async_client.post(
+        f"/api/manager/leads/{lead_id}/qualify",
+        headers=headers,
+        json={
+            "name": "IBAN Lead",
+            "iban": "DE89370400440532013000",
+        },
+    )
+    assert qualify_resp.status_code == 422

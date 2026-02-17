@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { submitContactForm } from '../utils/api';
 import IMask from 'imask';
+import { validateRequiredBelarusPhone } from '../utils/validation';
 
 const props = defineProps({
   title: {
@@ -49,9 +50,9 @@ onMounted(() => {
 });
 
 const submitForm = async () => {
-  // Validate phone
-  if (!mask || !mask.masked.isComplete) {
-      alert('Пожалуйста, введите полный номер телефона');
+  const phoneError = validateRequiredBelarusPhone(form.value.phone, Boolean(mask && mask.masked.isComplete));
+  if (phoneError) {
+      alert(phoneError);
       return;
   }
 

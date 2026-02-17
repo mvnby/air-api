@@ -5,7 +5,7 @@ function extractNormalizedDigits(value: string): string {
   if (digits.startsWith('375') && digits.length >= 12) return digits.slice(0, 12);
   if (digits.startsWith('80') && digits.length >= 11) return `375${digits.slice(2, 11)}`;
   if (digits.startsWith('0') && digits.length >= 10) return `375${digits.slice(1, 10)}`;
-  if (digits.length >= 9 && !digits.startsWith('375')) return `375${digits.slice(-9)}`;
+  if (digits.length === 9) return `375${digits}`;
   return digits;
 }
 

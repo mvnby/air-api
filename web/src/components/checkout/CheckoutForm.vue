@@ -4,6 +4,7 @@ import { useStore } from '@nanostores/vue';
 import { cartItems, cartTotal, clearCart, refreshPrices } from '../../store/cart';
 import { createOrder, getProductBySlug, getCompanyByUnp, getBankBySearch } from '../../utils/api';
 import IMask from 'imask';
+import { validateOptionalByIban, validateOptionalByUnp, validateRequiredBelarusPhone } from '../../utils/validation';
 
 // State
 const form = ref({
@@ -35,16 +36,20 @@ const formatPrice = (p) => p.toLocaleString('ru-RU') + ' р.';
 const validate = () => {
     errors.value = {};
     if (!form.value.name) errors.value.name = 'Введите имя';
-    
-    // Phone validation with IMask
-    if (!mask || !mask.masked.isComplete) {
-        errors.value.phone = 'Введите полный номер телефона';
-    }
+
+    const phoneError = validateRequiredBelarusPhone(form.value.phone, Boolean(mask && mask.masked.isComplete));
+    if (phoneError) errors.value.phone = phoneError;
 
     if (isLegalEntity.value) {
         if (!form.value.inn) errors.value.inn = 'Введите УНП';
+        else {
+            const unpError = validateOptionalByUnp(form.value.inn);
+            if (unpError) errors.value.inn = unpError;
+        }
         if (!form.value.full_legal_name) errors.value.full_legal_name = 'Введите название организации';
         if (!form.value.legal_address) errors.value.legal_address = 'Введите юридический адрес';
+        const ibanError = validateOptionalByIban(form.value.iban);
+        if (ibanError) errors.value.iban = ibanError;
     }
 
     return Object.keys(errors.value).length === 0;
@@ -70,7 +75,15 @@ onMounted(() => {
 
 // Auto-fill UNP
 const onUnpBlur = async () => {
-    if (!form.value.inn || form.value.inn.length !== 9) return;
+    if (!form.value.inn) return;
+    const normalized = form.value.inn.replace(/\D/g, '').slice(0, 9);
+    form.value.inn = normalized;
+    const unpError = validateOptionalByUnp(normalized);
+    if (unpError) {
+        errors.value.inn = unpError;
+        return;
+    }
+    errors.value.inn = '';
     
     isLoadingData.value = true;
     try {
@@ -90,11 +103,18 @@ const onUnpBlur = async () => {
 
 // Auto-fill IBAN
 const onIbanBlur = async () => {
-     if (!form.value.iban || form.value.iban.length < 10) return;
+     if (!form.value.iban) return;
      
      // Basic cleanup
      const ibanClean = form.value.iban.replace(/\s/g, '').toUpperCase();
      form.value.iban = ibanClean;
+     const ibanError = validateOptionalByIban(ibanClean);
+     if (ibanError) {
+         errors.value.iban = ibanError;
+         return;
+     }
+     errors.value.iban = '';
+     if (ibanClean.length < 10) return;
      
      isLoadingData.value = true;
      try {
@@ -295,8 +315,10 @@ const submitOrderHandler = async () => {
                                 id="iban" 
                                 v-model="form.iban" 
                                 @blur="onIbanBlur"
+                                :class="{ invalid: errors.iban }"
                                 placeholder="BYxx ARBK ..."
                             />
+                            <span v-if="errors.iban" class="err-msg">{{ errors.iban }}</span>
                         </div>
 
                         <div class="form-row">
