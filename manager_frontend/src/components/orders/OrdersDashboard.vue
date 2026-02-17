@@ -303,6 +303,7 @@ watch(drawerOpen, (isOpen) => {
       :order="selectedOrder"
       :server-errors="orderServerErrors"
       :form-error="orderFormError"
+      :saving="saving"
       @save="saveOrder"
     />
 

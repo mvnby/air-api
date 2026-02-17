@@ -197,6 +197,27 @@ async def test_manager_order_patch_lines_preserves_installers(async_client, db):
 
 
 @pytest.mark.asyncio
+async def test_manager_order_patch_validation_errors(async_client, db):
+    customer = Customer(name="Validation", phone="+375299999999", type=CustomerType.individual)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+    payload = {
+        "products": [{"product_id": 1, "quantity": 0, "price": 100, "cost": 10}],
+    }
+    response = await async_client.patch(f"/api/manager/orders/{order.id}", json=payload, headers=headers)
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Product quantity must be > 0"
+
+
+@pytest.mark.asyncio
 async def test_manager_order_generate_document(async_client, db, monkeypatch):
     customer = Customer(name="Doc", phone="+375297777777", type=CustomerType.individual)
     db.add(customer)

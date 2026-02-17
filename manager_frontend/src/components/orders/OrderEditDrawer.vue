@@ -16,6 +16,7 @@ const props = defineProps<{
   order: ManagerOrderDetailResponse | null;
   serverErrors?: Record<string, string>;
   formError?: string;
+  saving?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -36,6 +37,8 @@ const isPaid = ref(false);
 
 const productLines = ref<Array<{ product_id: number; quantity: number; price: number; cost: number }>>([]);
 const serviceLines = ref<Array<{ service_id?: number | null; title: string; quantity: number; price: number; cost: number }>>([]);
+const localServerErrors = ref<Record<string, string>>({});
+const localFormError = ref('');
 
 const totalPreview = computed(() => {
   const pTotal = productLines.value.reduce((sum, line) => sum + line.price * line.quantity, 0);
@@ -60,6 +63,8 @@ const loadProductOptions = async (q = '') => {
 
 const initForm = async (order: ManagerOrderDetailResponse | null) => {
   if (!order) return;
+  localServerErrors.value = {};
+  localFormError.value = '';
   status.value = order.status;
   nextFollowupDate.value = toLocalDateTimeInput(order.next_followup_date);
   assessmentDate.value = toLocalDateTimeInput(order.assessment_date);
@@ -132,6 +137,38 @@ const removeServiceLine = (index: number) => {
 
 const handleSave = () => {
   if (!props.order) return;
+  localServerErrors.value = {};
+  localFormError.value = '';
+
+  const errors: Record<string, string> = {};
+  if (!status.value) {
+    errors.status = 'Укажите статус';
+  }
+
+  if (assessmentDate.value && installationDate.value && installationDate.value < assessmentDate.value) {
+    errors.installation_date = 'Дата монтажа не может быть раньше даты замера';
+  }
+
+  if (productLines.value.some((line) => line.quantity <= 0)) {
+    errors.products = 'Количество товара должно быть больше 0';
+  } else if (productLines.value.some((line) => line.price < 0)) {
+    errors.products = 'Цена товара не может быть отрицательной';
+  }
+
+  if (serviceLines.value.some((line) => line.quantity <= 0)) {
+    errors.services = 'Количество услуги должно быть больше 0';
+  } else if (serviceLines.value.some((line) => line.price < 0)) {
+    errors.services = 'Цена услуги не может быть отрицательной';
+  } else if (serviceLines.value.some((line) => !line.title?.trim())) {
+    errors.services = 'Для услуги укажите название';
+  }
+
+  if (Object.keys(errors).length) {
+    localServerErrors.value = errors;
+    localFormError.value = 'Исправьте ошибки в форме';
+    return;
+  }
+
   const payload: ManagerOrderUpdatePayload = {
     status: status.value,
     next_followup_date: fromLocalDateTimeInput(nextFollowupDate.value),
@@ -160,7 +197,8 @@ const handleSave = () => {
 
 const closeDrawer = () => emit('update:modelValue', false);
 
-const getFieldError = (field: string): string => props.serverErrors?.[field] || '';
+const getFieldError = (field: string): string => localServerErrors.value[field] || props.serverErrors?.[field] || '';
+const displayFormError = computed(() => localFormError.value || props.formError || '');
 </script>
 
 <template>
@@ -172,8 +210,8 @@ const getFieldError = (field: string): string => props.serverErrors?.[field] || 
         <button class="btn-mini-outline" @click="closeDrawer">Закрыть</button>
       </header>
 
-      <p v-if="formError" class="mb-4 rounded-xl border border-red-500/40 bg-red-900/30 px-3 py-2 text-sm text-red-200">
-        {{ formError }}
+      <p v-if="displayFormError" class="mb-4 rounded-xl border border-red-500/40 bg-red-900/30 px-3 py-2 text-sm text-red-200">
+        {{ displayFormError }}
       </p>
 
       <section class="grid gap-3 md:grid-cols-2">
@@ -260,8 +298,10 @@ const getFieldError = (field: string): string => props.serverErrors?.[field] || 
       </section>
 
       <footer class="mt-6 flex justify-end gap-2">
-        <button class="btn-mini-outline" @click="closeDrawer">Отмена</button>
-        <button class="btn-mini" @click="handleSave">Сохранить</button>
+        <button class="btn-mini-outline" :disabled="saving" @click="closeDrawer">Отмена</button>
+        <button class="btn-mini" :disabled="saving" @click="handleSave">
+          {{ saving ? 'Сохраняем...' : 'Сохранить' }}
+        </button>
       </footer>
     </aside>
   </div>
