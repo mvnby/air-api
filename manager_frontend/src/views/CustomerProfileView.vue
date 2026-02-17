@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { ArrowLeft, Building2, Mail, Phone, ReceiptText, UserRound } from 'lucide-vue-next';
 import { api } from '../api';
 import type { ManagerCatalogCustomerItemResponse } from '../client';
+import { getApiErrorMessage } from '../utils/api-errors';
 
 const customer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const loading = ref(false);
@@ -32,7 +33,7 @@ const loadCustomer = async () => {
     customer.value = await api.getManagerCustomerDetail(customerId.value);
   } catch (e) {
     console.error(e);
-    error.value = 'Не удалось загрузить карточку клиента';
+    error.value = `Не удалось загрузить карточку клиента: ${getApiErrorMessage(e)}`;
     customer.value = null;
   } finally {
     loading.value = false;

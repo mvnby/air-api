@@ -14,6 +14,8 @@ import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../../utils/dateti
 const props = defineProps<{
   modelValue: boolean;
   order: ManagerOrderDetailResponse | null;
+  serverErrors?: Record<string, string>;
+  formError?: string;
 }>();
 
 const emit = defineEmits<{
@@ -157,6 +159,8 @@ const handleSave = () => {
 };
 
 const closeDrawer = () => emit('update:modelValue', false);
+
+const getFieldError = (field: string): string => props.serverErrors?.[field] || '';
 </script>
 
 <template>
@@ -168,28 +172,44 @@ const closeDrawer = () => emit('update:modelValue', false);
         <button class="btn-mini-outline" @click="closeDrawer">Закрыть</button>
       </header>
 
+      <p v-if="formError" class="mb-4 rounded-xl border border-red-500/40 bg-red-900/30 px-3 py-2 text-sm text-red-200">
+        {{ formError }}
+      </p>
+
       <section class="grid gap-3 md:grid-cols-2">
         <label class="field-label">
           Статус
-          <select v-model="status" class="field-input">
+          <select v-model="status" class="field-input" :class="getFieldError('status') ? 'border-red-500 focus:outline-red-400' : ''">
             <option v-for="statusKey in STATUS_ORDER" :key="statusKey" :value="statusKey">
               {{ STATUS_LABELS[statusKey] || statusKey }}
             </option>
           </select>
+          <span v-if="getFieldError('status')" class="text-xs text-red-300">{{ getFieldError('status') }}</span>
         </label>
         <label class="field-label">
           Оплата
-          <select v-model="isPaid" class="field-input">
+          <select v-model="isPaid" class="field-input" :class="getFieldError('is_paid') ? 'border-red-500 focus:outline-red-400' : ''">
             <option :value="false">Ожидает оплаты</option>
             <option :value="true">Оплачен</option>
           </select>
+          <span v-if="getFieldError('is_paid')" class="text-xs text-red-300">{{ getFieldError('is_paid') }}</span>
         </label>
-        <DateTimeField v-model="nextFollowupDate" label="Следующее касание" />
-        <DateTimeField v-model="assessmentDate" label="Дата замера" />
-        <DateTimeField v-model="installationDate" class="md:col-span-2" label="Дата монтажа" />
+        <DateTimeField v-model="nextFollowupDate" label="Следующее касание" :error="getFieldError('next_followup_date')" />
+        <DateTimeField v-model="assessmentDate" label="Дата замера" :error="getFieldError('assessment_date')" />
+        <DateTimeField
+          v-model="installationDate"
+          class="md:col-span-2"
+          label="Дата монтажа"
+          :error="getFieldError('installation_date')"
+        />
         <label class="field-label md:col-span-2">
           Комментарий
-          <textarea v-model="comment" class="field-input min-h-[90px]" />
+          <textarea
+            v-model="comment"
+            class="field-input min-h-[90px]"
+            :class="getFieldError('comment') ? 'border-red-500 focus:outline-red-400' : ''"
+          />
+          <span v-if="getFieldError('comment')" class="text-xs text-red-300">{{ getFieldError('comment') }}</span>
         </label>
       </section>
 
@@ -198,6 +218,7 @@ const closeDrawer = () => emit('update:modelValue', false);
           <h3 class="text-lg font-semibold">Товары</h3>
           <button class="btn-mini" @click="addProductLine">Добавить товар</button>
         </div>
+        <p v-if="getFieldError('products')" class="mb-2 text-xs text-red-300">{{ getFieldError('products') }}</p>
         <label class="field-label mb-2">
           Поиск товара
           <input v-model="productSearch" class="field-input" placeholder="Введите название товара" />
@@ -221,6 +242,7 @@ const closeDrawer = () => emit('update:modelValue', false);
           <h3 class="text-lg font-semibold">Услуги</h3>
           <button class="btn-mini" @click="addServiceLine">Добавить услугу</button>
         </div>
+        <p v-if="getFieldError('services')" class="mb-2 text-xs text-red-300">{{ getFieldError('services') }}</p>
         <div class="space-y-2">
           <div v-for="(line, index) in serviceLines" :key="`service-${index}`" class="grid grid-cols-12 gap-2 rounded-xl bg-slate-800 p-2">
             <input v-model="line.title" class="field-input col-span-5" placeholder="Название услуги" />
