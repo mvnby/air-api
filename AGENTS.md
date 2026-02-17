@@ -108,7 +108,9 @@ Use this after large catalog imports or when unknown spec keys appear.
    - migrate broader admin entities and flows from legacy SQLAdmin UX to Vue-based reactive UX.
 4. When API contracts change:
    - update backend schemas/routes,
+   - regenerate OpenAPI (`python3 scripts/legacy/extract_openapi.py`),
    - refresh typed client with `npm run gen:api` in `manager_frontend/`,
+   - commit generated artifacts (`openapi.json`, `manager_frontend/src/client/*`) when changed,
    - verify photo/spec bulk-edit flows end-to-end.
 5. Legacy admin freeze:
    - keep SQLAdmin routes/views working for existing operations,

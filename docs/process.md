@@ -20,6 +20,22 @@
    - why legacy change is required now,
    - why this is not implemented in manager flow.
 
+## Manager API Client Sync Policy
+
+When changing manager API contracts (`routers/manager_*`, `schemas.py`, OpenAPI-affecting dependencies):
+
+1. Regenerate OpenAPI schema:
+   - `python3 scripts/legacy/extract_openapi.py`
+2. Regenerate typed manager client:
+   - `cd manager_frontend && npm run gen:api`
+3. Validate manager build:
+   - `cd manager_frontend && npm run build`
+4. Commit updated artifacts when changed:
+   - `openapi.json`
+   - `manager_frontend/src/client/*`
+
+CI enforces this sync and fails if generated artifacts differ from committed files.
+
 ## API-роутеры после декомпозиции
 
 Основной входной модуль API: `routers/api.py` (компоновщик).
