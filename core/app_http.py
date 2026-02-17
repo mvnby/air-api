@@ -12,6 +12,7 @@ from core.app_constants import (
 )
 from core.config import settings
 from core.logger import logger
+from core.manager_error_codes import INTERNAL_ERROR, VALIDATION_ERROR, resolve_manager_error_message
 from core.manager_telemetry import ManagerTelemetryService
 
 
@@ -66,13 +67,13 @@ async def manager_validation_exception_handler(request: Request, exc: RequestVal
     ManagerTelemetryService.record_error(
         endpoint=str(request.url.path),
         status_code=422,
-        error_code="validation_error",
+        error_code=VALIDATION_ERROR,
         field_errors=field_errors,
     )
     return _manager_error_response(
         status_code=422,
-        message="Проверьте заполнение полей формы",
-        error_code="validation_error",
+        message=resolve_manager_error_message(VALIDATION_ERROR),
+        error_code=VALIDATION_ERROR,
         field_errors=field_errors,
     )
 
@@ -87,12 +88,12 @@ async def global_exception_handler(request: Request, exc: Exception):
         ManagerTelemetryService.record_error(
             endpoint=str(request.url.path),
             status_code=500,
-            error_code="internal_error",
+            error_code=INTERNAL_ERROR,
         )
         return _manager_error_response(
             status_code=500,
-            message=INTERNAL_SERVER_ERROR_MESSAGE,
-            error_code="internal_error",
+            message=resolve_manager_error_message(INTERNAL_ERROR, INTERNAL_SERVER_ERROR_MESSAGE),
+            error_code=INTERNAL_ERROR,
         )
 
     return _public_error_response()

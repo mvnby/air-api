@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.manager_api_errors import manager_http_error
+from core.manager_error_codes import BAD_REQUEST, LEAD_NOT_FOUND
 from core.manager_telemetry import ManagerTelemetryService
 from core.security import get_current_username
 from routers.manager_operation_ids import (
@@ -37,7 +38,7 @@ async def create_manager_lead(
         raise manager_http_error(
             status_code=400,
             endpoint=CREATE_MANAGER_LEAD,
-            error_code="bad_request",
+            error_code=BAD_REQUEST,
             message=str(exc),
         ) from exc
 
@@ -55,15 +56,14 @@ async def patch_manager_lead(
         raise manager_http_error(
             status_code=400,
             endpoint=PATCH_MANAGER_LEAD,
-            error_code="bad_request",
+            error_code=BAD_REQUEST,
             message=str(exc),
         ) from exc
     if not lead:
         raise manager_http_error(
             status_code=404,
             endpoint=PATCH_MANAGER_LEAD,
-            error_code="lead_not_found",
-            message="Lead not found",
+            error_code=LEAD_NOT_FOUND,
         )
     return lead
 
@@ -82,15 +82,14 @@ async def qualify_manager_lead(
         raise manager_http_error(
             status_code=400,
             endpoint=QUALIFY_MANAGER_LEAD,
-            error_code="bad_request",
+            error_code=BAD_REQUEST,
             message=str(exc),
         ) from exc
     if not result:
         raise manager_http_error(
             status_code=404,
             endpoint=QUALIFY_MANAGER_LEAD,
-            error_code="lead_not_found",
-            message="Lead not found",
+            error_code=LEAD_NOT_FOUND,
         )
     ManagerTelemetryService.record_qualify_success(endpoint=QUALIFY_MANAGER_LEAD, payload=payload)
     return result
@@ -109,14 +108,13 @@ async def mark_manager_lead_lost(
         raise manager_http_error(
             status_code=400,
             endpoint=MARK_MANAGER_LEAD_LOST,
-            error_code="bad_request",
+            error_code=BAD_REQUEST,
             message=str(exc),
         ) from exc
     if not result:
         raise manager_http_error(
             status_code=404,
             endpoint=MARK_MANAGER_LEAD_LOST,
-            error_code="lead_not_found",
-            message="Lead not found",
+            error_code=LEAD_NOT_FOUND,
         )
     return result
