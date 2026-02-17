@@ -14,7 +14,15 @@ import { useBelarusPhoneMask } from '../../composables/useBelarusPhoneMask';
 import { fromLocalDateTimeInput } from '../../utils/datetime';
 import { mapCustomerToLeadCreatePrefill, mapCustomerToLeadQualifyPrefill } from '../../utils/customer-mappers';
 import { getBankFromLookup, getCompanyFromEgr, normalizeIban, normalizeUnp } from '../../utils/legal-requisites';
-import { isBelarusPhoneComplete, normalizePhoneDigits, normalizePhoneForApi } from '../../utils/phone';
+import { normalizePhoneDigits, normalizePhoneForApi } from '../../utils/phone';
+import { getApiErrorMessage, parseApiFieldErrors } from '../../utils/api-errors';
+import {
+  normalizeEmail,
+  validateOptionalBelarusPhone,
+  validateOptionalByIban,
+  validateOptionalByUnp,
+  validateOptionalEmail,
+} from '../../utils/validation';
 
 type LeadTab = '' | 'new' | 'contacted' | 'qualified' | 'lost' | 'spam';
 
@@ -45,8 +53,13 @@ const lastQualifyResult = ref<{
   orderStatus: string;
 } | null>(null);
 const createPhoneError = ref('');
+const createEmailError = ref('');
+const createInnError = ref('');
 const createRequestError = ref('');
 const qualifyPhoneError = ref('');
+const qualifyEmailError = ref('');
+const qualifyInnError = ref('');
+const qualifyIbanError = ref('');
 const createServerErrors = ref<Record<string, string>>({});
 const qualifyServerErrors = ref<Record<string, string>>({});
 const createCompanyLookupLoading = ref(false);
@@ -198,24 +211,6 @@ const isOverdue = (lead: LeadResponse) => {
   return new Date(lead.next_followup_date).getTime() < Date.now();
 };
 
-const getErrorMessage = (error: unknown): string => {
-  const maybe = error as { body?: { detail?: unknown }; status?: number; message?: string; statusText?: string };
-  const detail = maybe?.body?.detail;
-  if (typeof detail === 'string') return detail;
-  if (Array.isArray(detail)) {
-    const first = detail[0] as { msg?: string; loc?: unknown[] };
-    if (first?.msg) {
-      const loc = Array.isArray(first.loc) ? first.loc.join('.') : '';
-      return loc ? `${loc}: ${first.msg}` : first.msg;
-    }
-    return JSON.stringify(detail);
-  }
-  if (detail && typeof detail === 'object') return JSON.stringify(detail);
-  if (maybe?.message) return maybe.message;
-  if (maybe?.status) return `HTTP ${maybe.status}${maybe.statusText ? ` ${maybe.statusText}` : ''}`;
-  return 'Неизвестная ошибка';
-};
-
 const FIELD_LABELS: Record<string, string> = {
   source: 'Источник',
   name: 'Имя / Компания',
@@ -235,31 +230,6 @@ const FIELD_LABELS: Record<string, string> = {
 };
 
 const getFieldLabel = (field: string): string => FIELD_LABELS[field] || field;
-
-const parseApiFieldErrors = (
-  error: unknown,
-  allowedFields: readonly string[],
-): { message: string; fieldErrors: Record<string, string> } => {
-  const allowed = new Set(allowedFields);
-  const maybe = error as { body?: { detail?: unknown } };
-  const detail = maybe?.body?.detail;
-  const fieldErrors: Record<string, string> = {};
-  let message = getErrorMessage(error);
-
-  if (Array.isArray(detail)) {
-    for (const item of detail as Array<{ loc?: unknown[]; msg?: string }>) {
-      if (!item?.msg || !Array.isArray(item.loc) || !item.loc.length) continue;
-      const field = String(item.loc[item.loc.length - 1] || '');
-      if (!field || !allowed.has(field)) continue;
-      if (!fieldErrors[field]) fieldErrors[field] = item.msg;
-    }
-    if (Object.keys(fieldErrors).length) {
-      message = 'Проверьте заполнение полей формы';
-    }
-  }
-
-  return { message, fieldErrors };
-};
 
 const loadLeads = async () => {
   loading.value = true;
@@ -284,7 +254,7 @@ const loadLeads = async () => {
     }
   } catch (error) {
     console.error(error);
-    setToast(`Не удалось загрузить лиды: ${getErrorMessage(error)}`);
+    setToast(`Не удалось загрузить лиды: ${getApiErrorMessage(error)}`);
   } finally {
     loading.value = false;
   }
@@ -307,30 +277,28 @@ const resetCreateForm = () => {
   customerLookupQuery.value = '';
   customerLookupResults.value = [];
   createPhoneError.value = '';
+  createEmailError.value = '';
+  createInnError.value = '';
   createRequestError.value = '';
   createServerErrors.value = {};
-};
-
-const getPhoneValidationError = (
-  value: string | null | undefined,
-  isComplete: boolean,
-): string => {
-  const raw = (value || '').trim();
-  if (!raw) {
-    return '';
-  }
-  if (!isComplete || !isBelarusPhoneComplete(raw)) {
-    return 'Введите телефон полностью в формате +375 (XX) XXX-XX-XX';
-  }
-  return '';
 };
 
 const submitCreateLead = async () => {
   if (saving.value) return;
   createServerErrors.value = {};
-  createPhoneError.value = getPhoneValidationError(createForm.value.phone, createPhoneMask.isComplete.value);
+  createPhoneError.value = validateOptionalBelarusPhone(createForm.value.phone || '', createPhoneMask.isComplete.value);
+  createEmailError.value = validateOptionalEmail(createForm.value.email || '');
+  createInnError.value = validateOptionalByUnp(createForm.value.inn || '');
   if (createPhoneError.value) {
     setToast(createPhoneError.value);
+    return;
+  }
+  if (createEmailError.value) {
+    setToast(createEmailError.value);
+    return;
+  }
+  if (createInnError.value) {
+    setToast(createInnError.value);
     return;
   }
   const requestText = (createForm.value.request_text || '').trim();
@@ -347,7 +315,7 @@ const submitCreateLead = async () => {
       request_text: requestText,
       name: createForm.value.name || undefined,
       phone: normalizedPhone || undefined,
-      email: createForm.value.email || undefined,
+      email: normalizeEmail(createForm.value.email || '') || undefined,
       inn: normalizeUnp(createForm.value.inn || '') || undefined,
       company_name: createForm.value.company_name || undefined,
       next_followup_date: fromLocalDateTimeInput(createForm.value.next_followup_date || undefined) || undefined,
@@ -371,6 +339,8 @@ const submitCreateLead = async () => {
     ]);
     createServerErrors.value = parsed.fieldErrors;
     if (!createPhoneError.value && parsed.fieldErrors.phone) createPhoneError.value = parsed.fieldErrors.phone;
+    if (!createEmailError.value && parsed.fieldErrors.email) createEmailError.value = parsed.fieldErrors.email;
+    if (!createInnError.value && parsed.fieldErrors.inn) createInnError.value = parsed.fieldErrors.inn;
     if (!createRequestError.value && parsed.fieldErrors.request_text) createRequestError.value = parsed.fieldErrors.request_text;
     setToast(`Не удалось создать лид: ${parsed.message}`);
   } finally {
@@ -387,7 +357,7 @@ const updateLead = async (leadId: number, payload: LeadUpdatePayload, successToa
     await loadLeads();
   } catch (error) {
     console.error(error);
-    setToast(`Не удалось обновить лид: ${getErrorMessage(error)}`);
+    setToast(`Не удалось обновить лид: ${getApiErrorMessage(error)}`);
   } finally {
     saving.value = false;
   }
@@ -406,7 +376,7 @@ const markLost = async (lead: LeadResponse, status: 'lost' | 'spam') => {
     await loadLeads();
   } catch (error) {
     console.error(error);
-    setToast(`Не удалось обновить статус: ${getErrorMessage(error)}`);
+    setToast(`Не удалось обновить статус: ${getApiErrorMessage(error)}`);
   } finally {
     saving.value = false;
   }
@@ -431,6 +401,9 @@ const openQualifyModal = (lead: LeadResponse, updateUrl = true) => {
     order_comment: lead.request_text,
   };
   qualifyPhoneError.value = '';
+  qualifyEmailError.value = '';
+  qualifyInnError.value = '';
+  qualifyIbanError.value = '';
   qualifyServerErrors.value = {};
   if (updateUrl) {
     const url = new URL(window.location.href);
@@ -446,9 +419,24 @@ const openQualifyModal = (lead: LeadResponse, updateUrl = true) => {
 const qualifyLead = async () => {
   if (!selectedLead.value || saving.value) return;
   qualifyServerErrors.value = {};
-  qualifyPhoneError.value = getPhoneValidationError(qualifyForm.value.phone, qualifyPhoneMask.isComplete.value);
+  qualifyPhoneError.value = validateOptionalBelarusPhone(qualifyForm.value.phone || '', qualifyPhoneMask.isComplete.value);
+  qualifyEmailError.value = validateOptionalEmail(qualifyForm.value.email || '');
+  qualifyInnError.value = validateOptionalByUnp(qualifyForm.value.inn || '');
+  qualifyIbanError.value = validateOptionalByIban(qualifyForm.value.iban || '');
   if (qualifyPhoneError.value) {
     setToast(qualifyPhoneError.value);
+    return;
+  }
+  if (qualifyEmailError.value) {
+    setToast(qualifyEmailError.value);
+    return;
+  }
+  if (qualifyInnError.value) {
+    setToast(qualifyInnError.value);
+    return;
+  }
+  if (qualifyIbanError.value) {
+    setToast(qualifyIbanError.value);
     return;
   }
   saving.value = true;
@@ -458,7 +446,7 @@ const qualifyLead = async () => {
       ...qualifyForm.value,
       name: qualifyForm.value.name || undefined,
       phone: normalizedPhone || undefined,
-      email: qualifyForm.value.email || undefined,
+      email: normalizeEmail(qualifyForm.value.email || '') || undefined,
       inn: normalizeUnp(qualifyForm.value.inn || '') || undefined,
       full_legal_name: qualifyForm.value.full_legal_name || undefined,
       legal_address: qualifyForm.value.legal_address || undefined,
@@ -496,6 +484,9 @@ const qualifyLead = async () => {
     ]);
     qualifyServerErrors.value = parsed.fieldErrors;
     if (!qualifyPhoneError.value && parsed.fieldErrors.phone) qualifyPhoneError.value = parsed.fieldErrors.phone;
+    if (!qualifyEmailError.value && parsed.fieldErrors.email) qualifyEmailError.value = parsed.fieldErrors.email;
+    if (!qualifyInnError.value && parsed.fieldErrors.inn) qualifyInnError.value = parsed.fieldErrors.inn;
+    if (!qualifyIbanError.value && parsed.fieldErrors.iban) qualifyIbanError.value = parsed.fieldErrors.iban;
     setToast(`Не удалось квалифицировать лид: ${parsed.message}`);
   } finally {
     saving.value = false;
@@ -569,6 +560,9 @@ onMounted(async () => {
 watch(showQualifyModal, (isOpen) => {
   if (isOpen) {
     qualifyServerErrors.value = {};
+    qualifyEmailError.value = '';
+    qualifyInnError.value = '';
+    qualifyIbanError.value = '';
     return;
   }
   if (!isOpen) {
@@ -581,16 +575,18 @@ watch(showCreateModal, (isOpen) => {
   if (isOpen) {
     createServerErrors.value = {};
     createPhoneError.value = '';
+    createEmailError.value = '';
+    createInnError.value = '';
     createRequestError.value = '';
   }
 });
 
 const validateCreatePhoneOnBlur = () => {
-  createPhoneError.value = getPhoneValidationError(createForm.value.phone, createPhoneMask.isComplete.value);
+  createPhoneError.value = validateOptionalBelarusPhone(createForm.value.phone || '', createPhoneMask.isComplete.value);
 };
 
 const validateQualifyPhoneOnBlur = () => {
-  qualifyPhoneError.value = getPhoneValidationError(qualifyForm.value.phone, qualifyPhoneMask.isComplete.value);
+  qualifyPhoneError.value = validateOptionalBelarusPhone(qualifyForm.value.phone || '', qualifyPhoneMask.isComplete.value);
 };
 
 const applyCustomerRequisitesToQualifyForm = (customer: ManagerCatalogCustomerItemResponse) => {
@@ -705,7 +701,7 @@ const findExistingCustomers = async () => {
     customerLookupResults.value = data.items || [];
   } catch (error) {
     console.error(error);
-    setToast(`Не удалось найти клиентов: ${getErrorMessage(error)}`);
+    setToast(`Не удалось найти клиентов: ${getApiErrorMessage(error)}`);
   } finally {
     customerLookupLoading.value = false;
   }
@@ -739,7 +735,7 @@ const findCustomersForQualify = async () => {
     qualifyCustomerLookupResults.value = data.items || [];
   } catch (error) {
     console.error(error);
-    setToast(`Не удалось найти клиентов: ${getErrorMessage(error)}`);
+    setToast(`Не удалось найти клиентов: ${getApiErrorMessage(error)}`);
   } finally {
     qualifyCustomerLookupLoading.value = false;
   }
@@ -748,6 +744,8 @@ const findCustomersForQualify = async () => {
 const onCreateInnBlur = async () => {
   const normalizedUnp = normalizeUnp(createForm.value.inn || '');
   createForm.value.inn = normalizedUnp;
+  createInnError.value = validateOptionalByUnp(normalizedUnp);
+  if (createInnError.value) return;
   if (normalizedUnp.length !== 9) return;
 
   try {
@@ -770,7 +768,7 @@ const onCreateInnBlur = async () => {
     }
   } catch (error) {
     console.error(error);
-    setToast(`Не удалось получить данные ЕГР: ${getErrorMessage(error)}`);
+    setToast(`Не удалось получить данные ЕГР: ${getApiErrorMessage(error)}`);
   } finally {
     createCompanyLookupLoading.value = false;
   }
@@ -779,6 +777,8 @@ const onCreateInnBlur = async () => {
 const onQualifyInnBlur = async () => {
   const normalizedUnp = normalizeUnp(qualifyForm.value.inn || '');
   qualifyForm.value.inn = normalizedUnp;
+  qualifyInnError.value = validateOptionalByUnp(normalizedUnp);
+  if (qualifyInnError.value) return;
   if (normalizedUnp.length !== 9) return;
 
   try {
@@ -804,7 +804,7 @@ const onQualifyInnBlur = async () => {
     }
   } catch (error) {
     console.error(error);
-    setToast(`Не удалось получить данные ЕГР: ${getErrorMessage(error)}`);
+    setToast(`Не удалось получить данные ЕГР: ${getApiErrorMessage(error)}`);
   } finally {
     qualifyCompanyLookupLoading.value = false;
   }
@@ -828,7 +828,9 @@ const onCreatePhoneBlur = async () => {
 };
 
 const onCreateEmailBlur = async () => {
-  const email = (createForm.value.email || '').trim().toLowerCase();
+  createEmailError.value = validateOptionalEmail(createForm.value.email || '');
+  if (createEmailError.value) return;
+  const email = normalizeEmail(createForm.value.email || '');
   if (!email) return;
 
   try {
@@ -842,10 +844,27 @@ const onCreateEmailBlur = async () => {
   }
 };
 
+const onQualifyEmailBlur = async () => {
+  qualifyEmailError.value = validateOptionalEmail(qualifyForm.value.email || '');
+  if (qualifyEmailError.value) return;
+  const email = normalizeEmail(qualifyForm.value.email || '');
+  if (!email) return;
+
+  try {
+    const existing = await findCustomerByIdentity({ email });
+    if (existing) {
+      applyCustomerToQualifyForm(existing);
+      setToast(`Найден клиент #${existing.id}, реквизиты подставлены.`);
+    }
+  } catch (error) {
+    console.error(error);
+  }
+};
+
 const autoHydrateQualifyFormByLeadIdentity = async () => {
   const inn = normalizeUnp(qualifyForm.value.inn || '');
   const phoneDigits = normalizePhoneDigits(qualifyForm.value.phone || '');
-  const email = (qualifyForm.value.email || '').trim().toLowerCase();
+  const email = normalizeEmail(qualifyForm.value.email || '');
   if (!inn && !phoneDigits && !email) return;
 
   try {
@@ -861,6 +880,8 @@ const autoHydrateQualifyFormByLeadIdentity = async () => {
 const onQualifyIbanBlur = async () => {
   const normalized = normalizeIban(qualifyForm.value.iban || '');
   qualifyForm.value.iban = normalized;
+  qualifyIbanError.value = validateOptionalByIban(normalized);
+  if (qualifyIbanError.value) return;
   if (normalized.length < 10) return;
 
   qualifyBankLookupLoading.value = true;
@@ -875,7 +896,7 @@ const onQualifyIbanBlur = async () => {
     }
   } catch (error) {
     console.error(error);
-    setToast(`Не удалось получить данные банка: ${getErrorMessage(error)}`);
+    setToast(`Не удалось получить данные банка: ${getApiErrorMessage(error)}`);
   } finally {
     qualifyBankLookupLoading.value = false;
   }
@@ -1110,21 +1131,23 @@ const onQualifyIbanBlur = async () => {
           <input
             v-model="createForm.email"
             class="field-input"
-            :class="createServerErrors.email ? 'border-red-500 focus:outline-red-400' : ''"
+            :class="createEmailError || createServerErrors.email ? 'border-red-500 focus:outline-red-400' : ''"
             placeholder="Email"
             @blur="onCreateEmailBlur"
           />
+          <span v-if="createEmailError" class="text-xs text-red-300 md:-mt-2 md:col-span-2">{{ createEmailError }}</span>
           <label class="field-label">
             <span>УНП</span>
             <input
               v-model="createForm.inn"
               class="field-input"
-              :class="createServerErrors.inn ? 'border-red-500 focus:outline-red-400' : ''"
+              :class="createInnError || createServerErrors.inn ? 'border-red-500 focus:outline-red-400' : ''"
               placeholder="УНП"
               inputmode="numeric"
               @blur="onCreateInnBlur"
             />
             <span v-if="createCompanyLookupLoading" class="text-xs text-slate-400">Подтягиваем данные ЕГР...</span>
+            <span v-if="createInnError" class="text-xs text-red-300">{{ createInnError }}</span>
           </label>
           <input
             v-model="createForm.company_name"
@@ -1259,20 +1282,23 @@ const onQualifyIbanBlur = async () => {
           <input
             v-model="qualifyForm.email"
             class="field-input"
-            :class="qualifyServerErrors.email ? 'border-red-500 focus:outline-red-400' : ''"
+            :class="qualifyEmailError || qualifyServerErrors.email ? 'border-red-500 focus:outline-red-400' : ''"
             placeholder="Email"
+            @blur="onQualifyEmailBlur"
           />
+          <span v-if="qualifyEmailError" class="text-xs text-red-300 md:-mt-2 md:col-span-2">{{ qualifyEmailError }}</span>
           <label class="field-label">
             <span>УНП</span>
             <input
               v-model="qualifyForm.inn"
               class="field-input"
-              :class="qualifyServerErrors.inn ? 'border-red-500 focus:outline-red-400' : ''"
+              :class="qualifyInnError || qualifyServerErrors.inn ? 'border-red-500 focus:outline-red-400' : ''"
               placeholder="УНП"
               inputmode="numeric"
               @blur="onQualifyInnBlur"
             />
             <span v-if="qualifyCompanyLookupLoading" class="text-xs text-slate-400">Подтягиваем данные ЕГР...</span>
+            <span v-if="qualifyInnError" class="text-xs text-red-300">{{ qualifyInnError }}</span>
           </label>
           <input
             v-model="qualifyForm.full_legal_name"
@@ -1291,11 +1317,12 @@ const onQualifyIbanBlur = async () => {
             <input
               v-model="qualifyForm.iban"
               class="field-input"
-              :class="qualifyServerErrors.iban ? 'border-red-500 focus:outline-red-400' : ''"
+              :class="qualifyIbanError || qualifyServerErrors.iban ? 'border-red-500 focus:outline-red-400' : ''"
               placeholder="BY.."
               @blur="onQualifyIbanBlur"
             />
             <span v-if="qualifyBankLookupLoading" class="text-xs text-slate-400">Подтягиваем данные банка...</span>
+            <span v-if="qualifyIbanError" class="text-xs text-red-300">{{ qualifyIbanError }}</span>
           </label>
           <input
             v-model="qualifyForm.bic"

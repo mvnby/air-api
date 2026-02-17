@@ -1,8 +1,10 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useStore } from '@nanostores/vue';
 import { getInstallationRates, getGlobalConfig, createOrder } from '../utils/api';
 import { installationOptions, fetchInstallationOptions } from '../store/installation';
+import IMask from 'imask';
+import { validateRequiredBelarusPhone } from '../utils/validation';
 
 const rates = ref([]);
 const loading = ref(true);
@@ -39,6 +41,17 @@ const RANGE_MAP = {
 };
 
 onMounted(async () => {
+  if (phoneInputRef.value) {
+    phoneMask = IMask(phoneInputRef.value, {
+      mask: '+{375} (00) 000-00-00',
+      lazy: false,
+      placeholderChar: '_'
+    });
+    phoneMask.on('accept', () => {
+      form.value.phone = phoneMask.value;
+    });
+  }
+
   try {
     const [data, config] = await Promise.all([
         getInstallationRates(),
@@ -66,6 +79,13 @@ onMounted(async () => {
     error.value = err.message;
   } finally {
     loading.value = false;
+  }
+});
+
+onBeforeUnmount(() => {
+  if (phoneMask) {
+    phoneMask.destroy();
+    phoneMask = null;
   }
 });
 
@@ -157,6 +177,9 @@ const priceComment = computed(() => activeRate.value?.comment);
 const showModal = ref(false);
 const submitting = ref(false);
 const success = ref(false);
+const phoneError = ref('');
+const phoneInputRef = ref(null);
+let phoneMask = null;
 const form = ref({
     name: '',
     phone: ''
@@ -165,10 +188,16 @@ const form = ref({
 const openOrderModal = () => {
     showModal.value = true;
     success.value = false;
+    phoneError.value = '';
+};
+
+const validatePhoneField = () => {
+    phoneError.value = validateRequiredBelarusPhone(form.value.phone, Boolean(phoneMask && phoneMask.masked.isComplete));
 };
 
 const submitOrder = async () => {
-    if (!form.value.name || !form.value.phone) return;
+    validatePhoneField();
+    if (!form.value.name || phoneError.value) return;
     
     submitting.value = true;
     
@@ -202,6 +231,7 @@ const submitOrder = async () => {
     if (res) {
         success.value = true;
         form.value = { name: '', phone: '' };
+        if (phoneMask) phoneMask.value = '';
         setTimeout(() => {
             showModal.value = false;
         }, 3000);
@@ -369,7 +399,17 @@ const submitOrder = async () => {
                     </div>
                     <div class="form-group">
                         <label>Телефон</label>
-                        <input type="tel" v-model="form.phone" required placeholder="+375 29 000 00 00" class="form-input" />
+                        <input
+                          ref="phoneInputRef"
+                          type="tel"
+                          v-model="form.phone"
+                          required
+                          placeholder="+375 (XX) XXX-XX-XX"
+                          class="form-input"
+                          :class="{ invalid: phoneError }"
+                          @blur="validatePhoneField"
+                        />
+                        <span v-if="phoneError" class="err-msg">{{ phoneError }}</span>
                     </div>
                     
                     <button type="submit" class="submit-btn" :disabled="submitting">
@@ -764,6 +804,18 @@ const submitOrder = async () => {
     outline: none;
     border-color: var(--primary);
     box-shadow: 0 0 0 3px rgba(0, 127, 128, 0.1);
+}
+
+.form-input.invalid {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+.err-msg {
+    display: block;
+    margin-top: 0.35rem;
+    font-size: 0.78rem;
+    color: #dc2626;
 }
 
 .submit-btn {

@@ -1,7 +1,15 @@
 from typing import List, Optional, Any, Dict
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from datetime import datetime
 from enum import Enum
+from core.input_validation import (
+    validate_optional_bic,
+    validate_optional_email,
+    validate_optional_iban,
+    validate_optional_phone,
+    validate_optional_unp,
+    validate_required_phone,
+)
 
 # --- SHARED ---
 
@@ -160,6 +168,31 @@ class CustomerPayload(BaseModel):
     bic: Optional[str] = None
     bank_name: Optional[str] = None
 
+    @field_validator("phone")
+    @classmethod
+    def _validate_phone(cls, value: str) -> str:
+        return validate_required_phone(value)
+
+    @field_validator("email")
+    @classmethod
+    def _validate_email(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_email(value)
+
+    @field_validator("inn")
+    @classmethod
+    def _validate_inn(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_unp(value)
+
+    @field_validator("iban")
+    @classmethod
+    def _validate_iban(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_iban(value)
+
+    @field_validator("bic")
+    @classmethod
+    def _validate_bic(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_bic(value)
+
 class OrderPayload(BaseModel):
     customer: CustomerPayload
     items: List[CartItemPayload] = []
@@ -299,6 +332,21 @@ class LeadCreatePayload(BaseModel):
     request_text: str
     next_followup_date: Optional[datetime] = None
 
+    @field_validator("phone")
+    @classmethod
+    def _validate_phone(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_phone(value)
+
+    @field_validator("email")
+    @classmethod
+    def _validate_email(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_email(value)
+
+    @field_validator("inn")
+    @classmethod
+    def _validate_inn(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_unp(value)
+
 
 class LeadUpdatePayload(BaseModel):
     status: Optional[str] = None
@@ -314,6 +362,21 @@ class LeadUpdatePayload(BaseModel):
     next_followup_date: Optional[datetime] = None
     archived_at: Optional[datetime] = None
 
+    @field_validator("phone")
+    @classmethod
+    def _validate_phone(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_phone(value)
+
+    @field_validator("email")
+    @classmethod
+    def _validate_email(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_email(value)
+
+    @field_validator("inn")
+    @classmethod
+    def _validate_inn(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_unp(value)
+
 
 class LeadQualifyPayload(BaseModel):
     name: Optional[str] = None
@@ -328,6 +391,31 @@ class LeadQualifyPayload(BaseModel):
     delivery_address: Optional[str] = None
     customer_type: Optional[str] = None
     order_comment: Optional[str] = None
+
+    @field_validator("phone")
+    @classmethod
+    def _validate_phone(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_phone(value)
+
+    @field_validator("email")
+    @classmethod
+    def _validate_email(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_email(value)
+
+    @field_validator("inn")
+    @classmethod
+    def _validate_inn(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_unp(value)
+
+    @field_validator("iban")
+    @classmethod
+    def _validate_iban(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_iban(value)
+
+    @field_validator("bic")
+    @classmethod
+    def _validate_bic(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_bic(value)
 
 
 class LeadLossPayload(BaseModel):
