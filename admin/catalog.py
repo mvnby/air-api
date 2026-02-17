@@ -1,4 +1,4 @@
-from sqladmin import ModelView, expose, BaseView
+from sqladmin import ModelView
 from markupsafe import Markup
 from wtforms import TextAreaField, FileField
 from wtforms.validators import DataRequired
@@ -6,9 +6,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 import slugify
 
-from models import Product, Tag, TagGroup, ProductTagLink, InstallationRate
-from core.database import async_session_maker
-from starlette.responses import RedirectResponse
+from models import Product, Tag, TagGroup, ProductTagLink
 from .catalog_constants import (
     GALLERY_STATUS_EMPTY_BADGE,
     GALLERY_STATUS_PRESENT_TEMPLATE,
@@ -289,92 +287,3 @@ class TagAdmin(ModelView, model=Tag):
         query = super().list_query(request)
         return query.options(selectinload(self.model.group))
 
-
-class BulkTagsView(BaseView):
-    name = "Bulk Tags"
-    icon = "fa-solid fa-tags"
-
-    def is_visible(self, request):
-        return False
-
-    @staticmethod
-    def _parse_selected_product_ids(request) -> list[int]:
-        raw = request.query_params.get("pks", "")
-        return [int(pk) for pk in raw.split(",") if pk]
-
-    @staticmethod
-    async def _apply_bulk_tags(request, product_ids: list[int]) -> int:
-        form = await request.form()
-        action_type = form.get("action_type")
-        selected_tag_ids = [int(tag_id) for tag_id in form.getlist("tag_ids")]
-
-        async with async_session_maker() as session:
-            return await ProductService.bulk_update_tags(
-                session=session,
-                product_ids=product_ids,
-                tag_ids=selected_tag_ids,
-                action=action_type,
-            )
-
-    @staticmethod
-    async def _load_bulk_form_data(product_ids: list[int]) -> tuple[list[TagGroup], list[Product]]:
-        async with async_session_maker() as session:
-            groups_stmt = select(TagGroup).options(selectinload(TagGroup.tags))
-            groups = (await session.execute(groups_stmt)).scalars().all()
-
-            products_stmt = select(Product).where(Product.id.in_(product_ids))
-            products = (await session.execute(products_stmt)).scalars().all()
-
-        return groups, products
-
-    @expose("/bulk-tags", methods=["GET", "POST"])
-    async def list(self, request):
-        pks = self._parse_selected_product_ids(request)
-
-        if request.method == "POST":
-            num_updated = await self._apply_bulk_tags(request, pks)
-
-            return RedirectResponse(
-                url=f"{request.url_for('admin:list', identity='product')}?msg=Теги обновлены для {num_updated} товаров&type=success",
-                status_code=303
-            )
-
-        groups, products = await self._load_bulk_form_data(pks)
-
-        return await self.templates.TemplateResponse(
-            request,
-            "sqladmin/bulk_tags.html",
-            {
-                "model_view": self,
-                "groups": groups,
-                "products": products,
-                "pks": pks,
-            }
-        )
-
-class InstallationRateAdmin(ModelView, model=InstallationRate):
-    from models import InstallationRate # Local import to avoid circular dependency issues if any
-    
-    name = "Тариф на монтаж"
-    name_plural = "Тарифы на монтаж"
-    icon = "fa-solid fa-screwdriver-wrench"
-    
-    column_list = [
-        InstallationRate.category,
-        InstallationRate.power_range,
-        InstallationRate.base_price,
-        InstallationRate.extra_pipe_price,
-        InstallationRate.is_fixed
-    ]
-    
-    column_labels = {
-        "category": "Категория",
-        "power_range": "Мощность (BTU)",
-        "base_price": "Базовая цена",
-        "extra_pipe_price": "Доп. метр",
-        "included_pipe_meters": "Включено метров",
-        "is_fixed": "Фиксирована",
-        "comment": "Комментарий"
-    }
-    
-    form_columns = "__all__"

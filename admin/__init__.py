@@ -1,4 +1,6 @@
-from .catalog import ProductAdmin, TagAdmin, TagGroupAdmin, BulkTagsView, InstallationRateAdmin
+from .catalog import ProductAdmin, TagAdmin, TagGroupAdmin
+from .catalog_bulk import BulkTagsView
+from .installation_rates import InstallationRateAdmin
 from .orders import OrderAdmin, ServiceAdmin, OrderProductLinkAdmin, OrderServiceLinkAdmin
 from .customers import CustomerAdmin
 from .installers import InstallerAdmin
