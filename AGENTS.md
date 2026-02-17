@@ -19,6 +19,10 @@ This file defines practical workflows and commands for contributors and coding a
   - persistence access belongs in `crud/`.
 - Reuse existing normalization logic in `services/spec_normalizer.py` instead of duplicating key/value cleanup.
 - Prefer small, targeted changes and run relevant tests/scripts before handoff.
+- Manager-first policy:
+  - New product functionality must be implemented in `manager_frontend/` + `routers/manager_*`.
+  - Legacy SQLAdmin (`admin/`) is compatibility-only: bugfixes, regressions, and required maintenance.
+  - Do not introduce net-new business features in legacy admin unless explicitly approved.
 
 ## Commands
 
@@ -106,6 +110,10 @@ Use this after large catalog imports or when unknown spec keys appear.
    - update backend schemas/routes,
    - refresh typed client with `npm run gen:api` in `manager_frontend/`,
    - verify photo/spec bulk-edit flows end-to-end.
+5. Legacy admin freeze:
+   - keep SQLAdmin routes/views working for existing operations,
+   - avoid adding new user workflows there,
+   - route new UX requirements to manager views first.
 
 ### 5) Leads Funnel Workflow
 

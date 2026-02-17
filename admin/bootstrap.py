@@ -10,6 +10,9 @@ from admin.registry import admin_views
 from core.app_constants import ADMIN_TITLE
 from core.security import AdminAuthBackend
 
+# Legacy compatibility note:
+# SQLAdmin is retained for backward-compatible operations only.
+# New product workflows should be implemented in manager routes/UI first.
 
 def _create_admin(app: FastAPI, engine: Engine, templates_dir: Path, secret_key: str) -> Admin:
     return Admin(

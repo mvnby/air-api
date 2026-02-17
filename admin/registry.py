@@ -8,6 +8,10 @@ from .installers import InstallerAdmin
 from .kanban import KanbanView
 from .orders import OrderAdmin, OrderProductLinkAdmin, OrderServiceLinkAdmin, ServiceAdmin
 
+# Legacy compatibility note:
+# Keep this registry focused on existing SQLAdmin capabilities.
+# New feature development should target manager views/routes.
+
 admin_views = [
     KanbanView,
     CalendarAdmin,
