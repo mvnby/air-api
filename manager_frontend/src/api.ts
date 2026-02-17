@@ -230,6 +230,10 @@ export const api = {
         return await ManagerService.getManagerCustomers(page, limit, search ?? undefined, type ?? undefined, onlyWithOrders);
     },
 
+    async getManagerCustomerDetail(customerId: number) {
+        return await ManagerService.getManagerCustomerDetail(customerId);
+    },
+
     async updateProduct(id: number, data: ProductUpdate) {
         return await ManagerService.updateProduct(id, data);
     },

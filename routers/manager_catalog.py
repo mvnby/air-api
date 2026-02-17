@@ -9,12 +9,14 @@ from routers.manager_operation_ids import (
     BULK_ROUND_PRICE,
     GET_ALL_TAGS,
     GET_MANAGER_CUSTOMERS,
+    GET_MANAGER_CUSTOMER_DETAIL,
     GET_MANAGER_PRODUCTS,
     UPDATE_PRODUCT,
 )
 from schemas import (
     BulkRoundRequest,
     ManagerActionMessageResponse,
+    ManagerCatalogCustomerItemResponse,
     ManagerBulkRoundPriceResponse,
     ManagerCatalogCustomerListResponse,
     ManagerCatalogProductListResponse,
@@ -87,6 +89,22 @@ async def list_customers_for_manager(
         customer_type=customer_type,
         only_with_orders=only_with_orders,
     )
+
+
+@router.get(
+    "/customers/{customer_id}",
+    response_model=ManagerCatalogCustomerItemResponse,
+    operation_id=GET_MANAGER_CUSTOMER_DETAIL,
+)
+async def get_customer_for_manager(
+    customer_id: int,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    customer = await ManagerCatalogService.get_customer(session=session, customer_id=customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return customer
 
 
 @router.patch(

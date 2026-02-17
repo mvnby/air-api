@@ -403,6 +403,15 @@ const applyCustomerRequisitesToQualifyForm = (customer: ManagerCatalogCustomerIt
   qualifyForm.value.bank_name = customer.bank_name || qualifyForm.value.bank_name;
 };
 
+const hydrateQualifyRequisitesFromCustomer = async (customerId: number) => {
+  try {
+    const customer = await api.getManagerCustomerDetail(customerId);
+    applyCustomerRequisitesToQualifyForm(customer);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
 const applyCustomerToCreateForm = (customer: ManagerCatalogCustomerItemResponse) => {
   selectedExistingCustomer.value = customer;
   customerLookupQuery.value = customer.full_legal_name || customer.name || `Клиент #${customer.id}`;
@@ -467,6 +476,7 @@ const applyCustomerToQualifyForm = (customer: ManagerCatalogCustomerItemResponse
   qualifyForm.value.full_legal_name = customer.full_legal_name || qualifyForm.value.full_legal_name;
   applyCustomerRequisitesToQualifyForm(customer);
   qualifyCustomerLookupResults.value = [];
+  void hydrateQualifyRequisitesFromCustomer(customer.id);
 };
 
 const findCustomersForQualify = async () => {
@@ -595,6 +605,7 @@ const autoHydrateQualifyFormByLeadIdentity = async () => {
     const existing = await findCustomerByIdentity({ inn: inn || undefined, phoneDigits: phoneDigits || undefined, email: email || undefined });
     if (!existing) return;
     applyCustomerToQualifyForm(existing);
+    void hydrateQualifyRequisitesFromCustomer(existing.id);
   } catch (error) {
     console.error(error);
   }
@@ -751,8 +762,8 @@ const onQualifyIbanBlur = async () => {
       </div>
     </div>
 
-    <div v-if="showCreateModal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
-      <div class="w-full max-w-2xl rounded-[2rem] border border-slate-700 bg-slate-900 p-6">
+    <div v-if="showCreateModal" class="fixed inset-0 z-[60] overflow-y-auto bg-black/60 p-4">
+      <div class="mx-auto my-6 w-full max-w-2xl rounded-[2rem] border border-slate-700 bg-slate-900 p-6">
         <h2 class="mb-4 text-xl font-semibold">Новый лид</h2>
         <label class="field-label mb-3">
           <span>Найти существующего клиента</span>
@@ -849,8 +860,8 @@ const onQualifyIbanBlur = async () => {
       </div>
     </div>
 
-    <div v-if="showQualifyModal && selectedLead" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
-      <div class="w-full max-w-2xl rounded-[2rem] border border-slate-700 bg-slate-900 p-6">
+    <div v-if="showQualifyModal && selectedLead" class="fixed inset-0 z-[60] overflow-y-auto bg-black/60 p-4">
+      <div class="mx-auto my-6 w-full max-w-2xl rounded-[2rem] border border-slate-700 bg-slate-900 p-6">
         <h2 class="mb-4 text-xl font-semibold">Квалифицировать лид #{{ selectedLead.id }}</h2>
         <label class="field-label mb-3">
           <span>Найти существующего клиента</span>

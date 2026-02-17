@@ -13,6 +13,7 @@ import type { ManagerActionMessageResponse } from '../models/ManagerActionMessag
 import type { ManagerAuthStatusResponse } from '../models/ManagerAuthStatusResponse';
 import type { ManagerBulkRoundPriceResponse } from '../models/ManagerBulkRoundPriceResponse';
 import type { ManagerBulkSpecsResponse } from '../models/ManagerBulkSpecsResponse';
+import type { ManagerCatalogCustomerItemResponse } from '../models/ManagerCatalogCustomerItemResponse';
 import type { ManagerCatalogCustomerListResponse } from '../models/ManagerCatalogCustomerListResponse';
 import type { ManagerCatalogProductListResponse } from '../models/ManagerCatalogProductListResponse';
 import type { ManagerMediaBulkAddResponse } from '../models/ManagerMediaBulkAddResponse';
@@ -104,6 +105,26 @@ export class ManagerService {
                 'search': search,
                 'type': type,
                 'only_with_orders': onlyWithOrders,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Customer For Manager
+     * @param customerId
+     * @returns ManagerCatalogCustomerItemResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerCustomerDetail(
+        customerId: number,
+    ): CancelablePromise<ManagerCatalogCustomerItemResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/customers/{customer_id}',
+            path: {
+                'customer_id': customerId,
             },
             errors: {
                 422: `Validation Error`,

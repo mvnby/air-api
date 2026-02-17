@@ -9,6 +9,33 @@ from models import Customer, Order
 
 class CustomerService:
     @staticmethod
+    async def get_for_manager(session: AsyncSession, customer_id: int) -> Optional[Dict[str, Any]]:
+        customer = await session.get(Customer, customer_id)
+        if not customer:
+            return None
+
+        order_count_result = await session.execute(
+            select(func.count(Order.id)).where(Order.customer_id == customer_id)
+        )
+        order_count = int(order_count_result.scalar() or 0)
+
+        return {
+            "id": int(customer.id or 0),
+            "name": customer.name,
+            "phone": customer.phone,
+            "email": customer.email,
+            "type": customer.type.value if hasattr(customer.type, "value") else str(customer.type),
+            "inn": customer.inn,
+            "full_legal_name": customer.full_legal_name,
+            "legal_address": customer.legal_address,
+            "iban": customer.iban,
+            "bic": customer.bic,
+            "bank_name": customer.bank_name,
+            "created_at": customer.created_at.isoformat() if customer.created_at else None,
+            "order_count": order_count,
+        }
+
+    @staticmethod
     async def list_for_manager(
         session: AsyncSession,
         page: int,
