@@ -519,6 +519,20 @@ const isCustomerMatchByIdentity = (
   return false;
 };
 
+const getCustomerIdentityMatchPriority = (
+  customer: ManagerCatalogCustomerItemResponse,
+  identity: { inn?: string; email?: string; phoneDigits?: string },
+): number => {
+  const customerInn = normalizeUnp(customer.inn || '');
+  const customerPhoneDigits = normalizePhoneDigits(customer.phone || '');
+  const customerEmail = (customer.email || '').trim().toLowerCase();
+
+  if (identity.inn && customerInn && identity.inn === customerInn) return 3;
+  if (identity.phoneDigits && customerPhoneDigits && identity.phoneDigits === customerPhoneDigits) return 2;
+  if (identity.email && customerEmail && identity.email === customerEmail) return 1;
+  return 0;
+};
+
 const customerDataCompletenessScore = (customer: ManagerCatalogCustomerItemResponse): number => {
   let score = 0;
   if (customer.full_legal_name) score += 2;
@@ -538,7 +552,12 @@ const findCustomerByIdentity = async (identity: { inn?: string; email?: string; 
   const items = response.items || [];
   const exactMatches = items.filter((item) => isCustomerMatchByIdentity(item, identity));
   if (!exactMatches.length) return null;
-  exactMatches.sort((a, b) => customerDataCompletenessScore(b) - customerDataCompletenessScore(a));
+
+  exactMatches.sort((a, b) => {
+    const priorityDiff = getCustomerIdentityMatchPriority(b, identity) - getCustomerIdentityMatchPriority(a, identity);
+    if (priorityDiff !== 0) return priorityDiff;
+    return customerDataCompletenessScore(b) - customerDataCompletenessScore(a);
+  });
   return exactMatches[0];
 };
 
