@@ -202,3 +202,47 @@ async def test_manager_lead_qualify_reuses_customer_and_keeps_existing_requisite
     assert customer.bank_name == "ОАО «БПС-Сбербанк», г. Витебск"
     assert customer.bic == "BPSBBY2X"
     assert customer.iban == "BY88BPSB30121159280199330000"
+
+
+@pytest.mark.asyncio
+async def test_manager_lead_qualify_handoff_smoke_open_order_and_customer(async_client):
+    headers = await _auth_headers(async_client)
+
+    create_resp = await async_client.post(
+        "/api/manager/leads",
+        headers=headers,
+        json={
+            "source": "manager",
+            "name": "Handoff Smoke",
+            "email": "handoff-smoke@example.com",
+            "request_text": "Проверка handoff",
+        },
+    )
+    assert create_resp.status_code == 200
+    lead_id = create_resp.json()["id"]
+
+    qualify_resp = await async_client.post(
+        f"/api/manager/leads/{lead_id}/qualify",
+        headers=headers,
+        json={
+            "name": "Handoff Smoke",
+            "email": "handoff-smoke@example.com",
+            "order_comment": "Smoke handoff",
+        },
+    )
+    assert qualify_resp.status_code == 200
+    qualified = qualify_resp.json()
+    order_id = qualified["order_id"]
+    customer_id = qualified["customer_id"]
+
+    order_detail_resp = await async_client.get(f"/api/manager/orders/{order_id}", headers=headers)
+    assert order_detail_resp.status_code == 200
+    order_detail = order_detail_resp.json()
+    assert order_detail["id"] == order_id
+    assert order_detail["customer"]["id"] == customer_id
+
+    customer_detail_resp = await async_client.get(f"/api/manager/customers/{customer_id}", headers=headers)
+    assert customer_detail_resp.status_code == 200
+    customer_detail = customer_detail_resp.json()
+    assert customer_detail["id"] == customer_id
+    assert customer_detail["order_count"] >= 1
