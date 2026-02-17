@@ -41,6 +41,7 @@ export type { ManagerCatalogProductImageResponse } from './models/ManagerCatalog
 export type { ManagerCatalogProductItemResponse } from './models/ManagerCatalogProductItemResponse';
 export type { ManagerCatalogProductListResponse } from './models/ManagerCatalogProductListResponse';
 export type { ManagerCatalogProductTagResponse } from './models/ManagerCatalogProductTagResponse';
+export type { ManagerCrmHealthReportResponse } from './models/ManagerCrmHealthReportResponse';
 export type { ManagerCustomerUpdatePayload } from './models/ManagerCustomerUpdatePayload';
 export type { ManagerMediaBulkAddResponse } from './models/ManagerMediaBulkAddResponse';
 export type { ManagerMediaBulkDeleteResponse } from './models/ManagerMediaBulkDeleteResponse';
@@ -90,6 +91,7 @@ export { AdminScheduleService } from './services/AdminScheduleService';
 export { ApiService } from './services/ApiService';
 export { LoginService } from './services/LoginService';
 export { ManagerService } from './services/ManagerService';
+export { ManagerCrmService } from './services/ManagerCrmService';
 export { ManagerLeadsService } from './services/ManagerLeadsService';
 export { ManagerOrdersService } from './services/ManagerOrdersService';
 export { SystemService } from './services/SystemService';

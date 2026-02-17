@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
+from core.manager_api_errors import manager_http_error
 from core.security import get_current_username
 from routers.manager_operation_ids import GENERATE_MANAGER_ORDER_DOCUMENT, PATCH_MANAGER_ORDER
 from schemas import (
@@ -26,10 +27,20 @@ async def patch_manager_order(
     try:
         data = await OrderService.update_order_for_manager(session, order_id, payload)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise manager_http_error(
+            status_code=400,
+            endpoint=PATCH_MANAGER_ORDER,
+            error_code="bad_request",
+            message=str(exc),
+        ) from exc
 
     if not data:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise manager_http_error(
+            status_code=404,
+            endpoint=PATCH_MANAGER_ORDER,
+            error_code="order_not_found",
+            message="Order not found",
+        )
     return data
 
 
@@ -51,6 +62,16 @@ async def generate_manager_order_document(
             doc_type=doc_type,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise manager_http_error(
+            status_code=400,
+            endpoint=GENERATE_MANAGER_ORDER_DOCUMENT,
+            error_code="bad_request",
+            message=str(exc),
+        ) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise manager_http_error(
+            status_code=500,
+            endpoint=GENERATE_MANAGER_ORDER_DOCUMENT,
+            error_code="document_generation_failed",
+            message=str(exc),
+        ) from exc

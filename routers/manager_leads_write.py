@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
+from core.manager_api_errors import manager_http_error
+from core.manager_telemetry import ManagerTelemetryService
 from core.security import get_current_username
 from routers.manager_operation_ids import (
     CREATE_MANAGER_LEAD,
@@ -32,7 +34,12 @@ async def create_manager_lead(
     try:
         return await LeadService.create_lead(session=session, payload=payload)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise manager_http_error(
+            status_code=400,
+            endpoint=CREATE_MANAGER_LEAD,
+            error_code="bad_request",
+            message=str(exc),
+        ) from exc
 
 
 @router.patch("/{lead_id}", response_model=LeadResponse, operation_id=PATCH_MANAGER_LEAD)
@@ -45,9 +52,19 @@ async def patch_manager_lead(
     try:
         lead = await LeadService.update_lead(session=session, lead_id=lead_id, payload=payload)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise manager_http_error(
+            status_code=400,
+            endpoint=PATCH_MANAGER_LEAD,
+            error_code="bad_request",
+            message=str(exc),
+        ) from exc
     if not lead:
-        raise HTTPException(status_code=404, detail="Lead not found")
+        raise manager_http_error(
+            status_code=404,
+            endpoint=PATCH_MANAGER_LEAD,
+            error_code="lead_not_found",
+            message="Lead not found",
+        )
     return lead
 
 
@@ -58,12 +75,24 @@ async def qualify_manager_lead(
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
 ):
+    ManagerTelemetryService.record_qualify_attempt(endpoint=QUALIFY_MANAGER_LEAD, payload=payload)
     try:
         result = await LeadService.qualify_lead(session=session, lead_id=lead_id, payload=payload)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise manager_http_error(
+            status_code=400,
+            endpoint=QUALIFY_MANAGER_LEAD,
+            error_code="bad_request",
+            message=str(exc),
+        ) from exc
     if not result:
-        raise HTTPException(status_code=404, detail="Lead not found")
+        raise manager_http_error(
+            status_code=404,
+            endpoint=QUALIFY_MANAGER_LEAD,
+            error_code="lead_not_found",
+            message="Lead not found",
+        )
+    ManagerTelemetryService.record_qualify_success(endpoint=QUALIFY_MANAGER_LEAD, payload=payload)
     return result
 
 
@@ -77,7 +106,17 @@ async def mark_manager_lead_lost(
     try:
         result = await LeadService.mark_lead_lost(session=session, lead_id=lead_id, payload=payload)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise manager_http_error(
+            status_code=400,
+            endpoint=MARK_MANAGER_LEAD_LOST,
+            error_code="bad_request",
+            message=str(exc),
+        ) from exc
     if not result:
-        raise HTTPException(status_code=404, detail="Lead not found")
+        raise manager_http_error(
+            status_code=404,
+            endpoint=MARK_MANAGER_LEAD_LOST,
+            error_code="lead_not_found",
+            message="Lead not found",
+        )
     return result

@@ -419,6 +419,9 @@ async def test_manager_leads_reject_invalid_email_and_unp(async_client):
         },
     )
     assert bad_email.status_code == 422
+    bad_email_detail = bad_email.json()["detail"]
+    assert bad_email_detail["error_code"] == "validation_error"
+    assert "email" in bad_email_detail["field_errors"]
 
     bad_unp = await async_client.post(
         "/api/manager/leads",
@@ -431,6 +434,9 @@ async def test_manager_leads_reject_invalid_email_and_unp(async_client):
         },
     )
     assert bad_unp.status_code == 422
+    bad_unp_detail = bad_unp.json()["detail"]
+    assert bad_unp_detail["error_code"] == "validation_error"
+    assert "inn" in bad_unp_detail["field_errors"]
 
 
 @pytest.mark.asyncio
@@ -458,3 +464,6 @@ async def test_manager_qualify_rejects_invalid_iban(async_client):
         },
     )
     assert qualify_resp.status_code == 422
+    detail = qualify_resp.json()["detail"]
+    assert detail["error_code"] == "validation_error"
+    assert "iban" in detail["field_errors"]

@@ -139,3 +139,6 @@ async def test_manager_customer_patch_rejects_invalid_iban(async_client, db):
         json={"iban": "INVALID"},
     )
     assert patch_resp.status_code == 422
+    detail = patch_resp.json()["detail"]
+    assert detail["error_code"] == "validation_error"
+    assert "iban" in detail["field_errors"]

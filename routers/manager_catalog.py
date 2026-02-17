@@ -1,9 +1,10 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
+from core.manager_api_errors import manager_http_error
 from core.security import get_current_username
 from routers.manager_operation_ids import (
     BULK_ROUND_PRICE,
@@ -105,7 +106,12 @@ async def get_customer_for_manager(
 ):
     customer = await ManagerCatalogService.get_customer(session=session, customer_id=customer_id)
     if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
+        raise manager_http_error(
+            status_code=404,
+            endpoint=GET_MANAGER_CUSTOMER_DETAIL,
+            error_code="customer_not_found",
+            message="Customer not found",
+        )
     return customer
 
 
@@ -120,13 +126,26 @@ async def patch_customer_for_manager(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
-    customer = await ManagerCatalogService.update_customer(
-        session=session,
-        customer_id=customer_id,
-        payload=payload,
-    )
+    try:
+        customer = await ManagerCatalogService.update_customer(
+            session=session,
+            customer_id=customer_id,
+            payload=payload,
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=PATCH_MANAGER_CUSTOMER,
+            error_code="bad_request",
+            message=str(exc),
+        ) from exc
     if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
+        raise manager_http_error(
+            status_code=404,
+            endpoint=PATCH_MANAGER_CUSTOMER,
+            error_code="customer_not_found",
+            message="Customer not found",
+        )
     return customer
 
 
@@ -151,7 +170,12 @@ async def update_product(
     )
 
     if not result:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise manager_http_error(
+            status_code=404,
+            endpoint=UPDATE_PRODUCT,
+            error_code="product_not_found",
+            message="Product not found",
+        )
 
     return result
 

@@ -3643,6 +3643,56 @@
         }
       }
     },
+    "/api/manager/crm/health-report": {
+      "get": {
+        "tags": [
+          "manager-crm"
+        ],
+        "summary": "Get Manager Crm Health Report",
+        "operationId": "get_manager_crm_health_report",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "hours",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 336,
+              "minimum": 1,
+              "default": 24,
+              "title": "Hours"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerCrmHealthReportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/system/rebuild-web": {
       "post": {
         "tags": [
@@ -5370,6 +5420,54 @@
           "group_color"
         ],
         "title": "ManagerCatalogProductTagResponse"
+      },
+      "ManagerCrmHealthReportResponse": {
+        "properties": {
+          "window_hours": {
+            "type": "integer",
+            "title": "Window Hours"
+          },
+          "events_total": {
+            "type": "integer",
+            "title": "Events Total"
+          },
+          "errors_total": {
+            "type": "integer",
+            "title": "Errors Total"
+          },
+          "invalid_payload_errors": {
+            "type": "integer",
+            "title": "Invalid Payload Errors"
+          },
+          "requisite_conflict_attempts": {
+            "type": "integer",
+            "title": "Requisite Conflict Attempts"
+          },
+          "qualify_success_total": {
+            "type": "integer",
+            "title": "Qualify Success Total"
+          },
+          "qualify_success_without_manual_overwrite": {
+            "type": "integer",
+            "title": "Qualify Success Without Manual Overwrite"
+          },
+          "qualify_success_without_manual_overwrite_pct": {
+            "type": "number",
+            "title": "Qualify Success Without Manual Overwrite Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "window_hours",
+          "events_total",
+          "errors_total",
+          "invalid_payload_errors",
+          "requisite_conflict_attempts",
+          "qualify_success_total",
+          "qualify_success_without_manual_overwrite",
+          "qualify_success_without_manual_overwrite_pct"
+        ],
+        "title": "ManagerCrmHealthReportResponse"
       },
       "ManagerCustomerUpdatePayload": {
         "properties": {
