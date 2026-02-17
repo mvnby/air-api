@@ -82,27 +82,37 @@ class ProductAdmin(ModelView, model=Product):
     form_create_rules = form_edit_rules
     
     # --- Eager loading для M2M + tag filtering ---
-    def list_query(self, request):
+    @staticmethod
+    def _parse_tag_ids(request) -> list[int]:
+        raw_ids = request.query_params.getlist("tag_ids")
+        if not raw_ids:
+            return []
+        return [int(tag_id) for tag_id in raw_ids]
+
+    @staticmethod
+    def _build_tag_filter_subquery(tag_ids: list[int]):
         from sqlalchemy import func
+
+        return (
+            select(ProductTagLink.product_id)
+            .where(ProductTagLink.tag_id.in_(tag_ids))
+            .group_by(ProductTagLink.product_id)
+            .having(func.count(ProductTagLink.tag_id) == len(tag_ids))
+        )
+
+    def list_query(self, request):
         query = super().list_query(request)
         query = query.options(
             selectinload(Product.tags).selectinload(Tag.group),
             selectinload(Product.gallery_images)
         )
-        
-        # Handle tag_ids filtering from URL
-        tag_ids = request.query_params.getlist('tag_ids')
+
+        tag_ids = self._parse_tag_ids(request)
         if tag_ids:
-            tag_ids = [int(tid) for tid in tag_ids]
             # AND logic: product must have ALL selected tags
-            tag_subquery = (
-                select(ProductTagLink.product_id)
-                .where(ProductTagLink.tag_id.in_(tag_ids))
-                .group_by(ProductTagLink.product_id)
-                .having(func.count(ProductTagLink.tag_id) == len(tag_ids))
-            )
+            tag_subquery = self._build_tag_filter_subquery(tag_ids)
             query = query.where(Product.id.in_(tag_subquery))
-        
+
         return query
     
     def detail_query(self, request):
@@ -287,39 +297,49 @@ class BulkTagsView(BaseView):
     def is_visible(self, request):
         return False
 
+    @staticmethod
+    def _parse_selected_product_ids(request) -> list[int]:
+        raw = request.query_params.get("pks", "")
+        return [int(pk) for pk in raw.split(",") if pk]
+
+    @staticmethod
+    async def _apply_bulk_tags(request, product_ids: list[int]) -> int:
+        form = await request.form()
+        action_type = form.get("action_type")
+        selected_tag_ids = [int(tag_id) for tag_id in form.getlist("tag_ids")]
+
+        async with async_session_maker() as session:
+            return await ProductService.bulk_update_tags(
+                session=session,
+                product_ids=product_ids,
+                tag_ids=selected_tag_ids,
+                action=action_type,
+            )
+
+    @staticmethod
+    async def _load_bulk_form_data(product_ids: list[int]) -> tuple[list[TagGroup], list[Product]]:
+        async with async_session_maker() as session:
+            groups_stmt = select(TagGroup).options(selectinload(TagGroup.tags))
+            groups = (await session.execute(groups_stmt)).scalars().all()
+
+            products_stmt = select(Product).where(Product.id.in_(product_ids))
+            products = (await session.execute(products_stmt)).scalars().all()
+
+        return groups, products
+
     @expose("/bulk-tags", methods=["GET", "POST"])
     async def list(self, request):
-        pks = request.query_params.get("pks", "").split(",")
-        pks = [int(pk) for pk in pks if pk]
-        
+        pks = self._parse_selected_product_ids(request)
+
         if request.method == "POST":
-            form = await request.form()
-            action_type = form.get("action_type")
-            selected_tag_ids = [int(tid) for tid in form.getlist("tag_ids")]
-            
-            # Use ProductService for bulk tag operations
-            async with async_session_maker() as session:
-                num_updated = await ProductService.bulk_update_tags(
-                    session=session,
-                    product_ids=pks,
-                    tag_ids=selected_tag_ids,
-                    action=action_type
-                )
-            
+            num_updated = await self._apply_bulk_tags(request, pks)
+
             return RedirectResponse(
                 url=f"{request.url_for('admin:list', identity='product')}?msg=Теги обновлены для {num_updated} товаров&type=success",
                 status_code=303
             )
 
-        # Fetch data for form display
-        async with async_session_maker() as session:
-            g_stmt = select(TagGroup).options(selectinload(TagGroup.tags))
-            g_res = await session.execute(g_stmt)
-            groups = g_res.scalars().all()
-            
-            p_stmt = select(Product).where(Product.id.in_(pks))
-            p_res = await session.execute(p_stmt)
-            products = p_res.scalars().all()
+        groups, products = await self._load_bulk_form_data(pks)
 
         return await self.templates.TemplateResponse(
             request,
