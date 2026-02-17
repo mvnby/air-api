@@ -4,19 +4,13 @@ from fastapi import FastAPI
 from admin.bootstrap import configure_sqladmin
 from core.app_http import configure_http
 from core.app_lifespan import app_lifespan
+from core.app_observability import init_sentry
 from core.app_static import mount_manager_assets, mount_static_and_media
 from core.database import engine
 from core.app_routing import register_app_routers
 from core.config import settings
-import sentry_sdk
 
-if settings.SENTRY_DSN:
-    sentry_sdk.init(
-        dsn=settings.SENTRY_DSN,
-        traces_sample_rate=1.0,
-        profiles_sample_rate=1.0,
-        environment=settings.ENVIRONMENT
-    )
+init_sentry()
 
 from routers.manager_spa import create_manager_spa_router
 
