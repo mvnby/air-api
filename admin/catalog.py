@@ -10,7 +10,7 @@ import slugify
 from models import Product, Tag, TagGroup, ProductTagLink, InstallationRate
 from core.database import async_session_maker
 from starlette.responses import RedirectResponse
-from .base import format_tags_shared
+from .formatters import format_tags_shared
 from services.product_service import ProductService
 
 
@@ -138,12 +138,17 @@ class ProductAdmin(ModelView, model=Product):
             return f"{model.price:,}".replace(",", " ")
         return "—"
 
+    def format_gallery_status(model, context):
+        if model.gallery_images:
+            return Markup(f'<span class="badge bg-blue-lt">{len(model.gallery_images)} фото</span>')
+        return Markup('<span class="badge bg-secondary-lt">Нет</span>')
+
     column_formatters = {
         "main_image": format_image,
         "formatted_title": format_product_title,
         "formatted_area": format_area,
         "price": format_price,
-        "gallery_status": lambda m, c: Markup(f'<span class="badge bg-blue-lt">{len(m.gallery_images)} фото</span>') if m.gallery_images else Markup('<span class="badge bg-secondary-lt">Нет</span>')
+        "gallery_status": format_gallery_status,
     }
     
     column_labels = {
