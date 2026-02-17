@@ -43,6 +43,7 @@ export function useBelarusPhoneMask(
 
     if (modelRef.value) {
       mask.value = modelRef.value;
+      mask.updateValue();
     }
 
     mask.on('accept', () => {
@@ -67,6 +68,8 @@ export function useBelarusPhoneMask(
       if (value !== mask.value) {
         mask.value = value || '';
       }
+      // Keep IMask internals aligned when model changes programmatically.
+      mask.updateValue();
       syncState();
     },
     { flush: 'post' },

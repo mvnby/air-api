@@ -4,10 +4,39 @@ from sqlalchemy import exists, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import Customer, Order
+from models import Customer, CustomerType, Order
 
 
 class CustomerService:
+    @staticmethod
+    def _to_manager_item(
+        customer: Customer,
+        *,
+        order_count: int,
+        last_delivery_address: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        return {
+            "id": int(customer.id or 0),
+            "name": customer.name,
+            "phone": customer.phone,
+            "email": customer.email,
+            "type": customer.type.value if hasattr(customer.type, "value") else str(customer.type),
+            "inn": customer.inn,
+            "kpp": customer.kpp,
+            "full_legal_name": customer.full_legal_name,
+            "legal_address": customer.legal_address,
+            "actual_address": customer.actual_address,
+            "iban": customer.iban,
+            "bic": customer.bic,
+            "bank_name": customer.bank_name,
+            "signer_position": customer.signer_position,
+            "signer_name": customer.signer_name,
+            "acting_basis": customer.acting_basis,
+            "last_delivery_address": last_delivery_address,
+            "created_at": customer.created_at.isoformat() if customer.created_at else None,
+            "order_count": order_count,
+        }
+
     @staticmethod
     async def _get_last_delivery_address(session: AsyncSession, customer_id: int) -> Optional[str]:
         last_delivery_result = await session.execute(
@@ -30,27 +59,61 @@ class CustomerService:
         order_count = int(order_count_result.scalar() or 0)
         last_delivery_address = await CustomerService._get_last_delivery_address(session=session, customer_id=customer_id)
 
-        return {
-            "id": int(customer.id or 0),
-            "name": customer.name,
-            "phone": customer.phone,
-            "email": customer.email,
-            "type": customer.type.value if hasattr(customer.type, "value") else str(customer.type),
-            "inn": customer.inn,
-            "kpp": customer.kpp,
-            "full_legal_name": customer.full_legal_name,
-            "legal_address": customer.legal_address,
-            "actual_address": customer.actual_address,
-            "iban": customer.iban,
-            "bic": customer.bic,
-            "bank_name": customer.bank_name,
-            "signer_position": customer.signer_position,
-            "signer_name": customer.signer_name,
-            "acting_basis": customer.acting_basis,
-            "last_delivery_address": last_delivery_address,
-            "created_at": customer.created_at.isoformat() if customer.created_at else None,
-            "order_count": order_count,
-        }
+        return CustomerService._to_manager_item(
+            customer,
+            order_count=order_count,
+            last_delivery_address=last_delivery_address,
+        )
+
+    @staticmethod
+    async def update_for_manager(
+        session: AsyncSession,
+        *,
+        customer_id: int,
+        payload: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        customer = await session.get(Customer, customer_id)
+        if not customer:
+            return None
+
+        optional_text_fields = (
+            "email",
+            "inn",
+            "kpp",
+            "full_legal_name",
+            "legal_address",
+            "actual_address",
+            "bank_name",
+            "bic",
+            "iban",
+            "signer_position",
+            "signer_name",
+            "acting_basis",
+        )
+
+        if "name" in payload and payload["name"] is not None:
+            customer.name = str(payload["name"]).strip()
+
+        if "phone" in payload and payload["phone"] is not None:
+            customer.phone = str(payload["phone"]).strip()
+
+        if "type" in payload and payload["type"]:
+            customer.type = CustomerType(str(payload["type"]).strip().lower())
+
+        for field in optional_text_fields:
+            if field not in payload:
+                continue
+            value = payload[field]
+            if value is None:
+                setattr(customer, field, None)
+                continue
+            trimmed = str(value).strip()
+            setattr(customer, field, trimmed or None)
+
+        session.add(customer)
+        await session.commit()
+
+        return await CustomerService.get_for_manager(session=session, customer_id=customer_id)
 
     @staticmethod
     async def list_for_manager(
@@ -106,29 +169,7 @@ class CustomerService:
         items = []
         for customer in customers:
             cid = int(customer.id or 0)
-            items.append(
-                {
-                    "id": cid,
-                    "name": customer.name,
-                    "phone": customer.phone,
-                    "email": customer.email,
-                    "type": customer.type.value if hasattr(customer.type, "value") else str(customer.type),
-                    "inn": customer.inn,
-                    "kpp": customer.kpp,
-                    "full_legal_name": customer.full_legal_name,
-                    "legal_address": customer.legal_address,
-                    "actual_address": customer.actual_address,
-                    "iban": customer.iban,
-                    "bic": customer.bic,
-                    "bank_name": customer.bank_name,
-                    "signer_position": customer.signer_position,
-                    "signer_name": customer.signer_name,
-                    "acting_basis": customer.acting_basis,
-                    "last_delivery_address": None,
-                    "created_at": customer.created_at.isoformat() if customer.created_at else None,
-                    "order_count": order_counts.get(cid, 0),
-                }
-            )
+            items.append(CustomerService._to_manager_item(customer, order_count=order_counts.get(cid, 0)))
 
         return {
             "items": items,

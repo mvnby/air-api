@@ -41,6 +41,7 @@ export type { ManagerCatalogProductImageResponse } from './models/ManagerCatalog
 export type { ManagerCatalogProductItemResponse } from './models/ManagerCatalogProductItemResponse';
 export type { ManagerCatalogProductListResponse } from './models/ManagerCatalogProductListResponse';
 export type { ManagerCatalogProductTagResponse } from './models/ManagerCatalogProductTagResponse';
+export type { ManagerCustomerUpdatePayload } from './models/ManagerCustomerUpdatePayload';
 export type { ManagerMediaBulkAddResponse } from './models/ManagerMediaBulkAddResponse';
 export type { ManagerMediaBulkDeleteResponse } from './models/ManagerMediaBulkDeleteResponse';
 export type { ManagerMediaBulkUploadResponse } from './models/ManagerMediaBulkUploadResponse';

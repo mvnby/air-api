@@ -379,6 +379,7 @@ class LeadUpdatePayload(BaseModel):
 
 
 class LeadQualifyPayload(BaseModel):
+    customer_id: Optional[int] = None
     name: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
@@ -495,6 +496,69 @@ class ManagerCatalogCustomerItemResponse(BaseModel):
 class ManagerCatalogCustomerListResponse(BaseModel):
     items: List[ManagerCatalogCustomerItemResponse]
     meta: Meta
+
+
+class ManagerCustomerUpdatePayload(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    type: Optional[str] = None
+    inn: Optional[str] = None
+    kpp: Optional[str] = None
+    full_legal_name: Optional[str] = None
+    legal_address: Optional[str] = None
+    actual_address: Optional[str] = None
+    bank_name: Optional[str] = None
+    bic: Optional[str] = None
+    iban: Optional[str] = None
+    signer_position: Optional[str] = None
+    signer_name: Optional[str] = None
+    acting_basis: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("Имя клиента не может быть пустым")
+        return trimmed
+
+    @field_validator("type")
+    @classmethod
+    def _validate_type(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        if normalized not in {"individual", "company"}:
+            raise ValueError("Тип клиента должен быть individual или company")
+        return normalized
+
+    @field_validator("phone")
+    @classmethod
+    def _validate_phone(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_phone(value)
+
+    @field_validator("email")
+    @classmethod
+    def _validate_email(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_email(value)
+
+    @field_validator("inn")
+    @classmethod
+    def _validate_inn(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_unp(value)
+
+    @field_validator("iban")
+    @classmethod
+    def _validate_iban(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_iban(value)
+
+    @field_validator("bic")
+    @classmethod
+    def _validate_bic(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_bic(value)
 
 
 class ManagerTagOptionResponse(BaseModel):

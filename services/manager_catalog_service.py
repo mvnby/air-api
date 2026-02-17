@@ -1,6 +1,6 @@
 from typing import Any, Dict, Optional
 
-from schemas import BulkRoundRequest, ProductUpdate
+from schemas import BulkRoundRequest, ManagerCustomerUpdatePayload, ProductUpdate
 from services.customer_service import CustomerService
 from services.product_service import ProductService
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,6 +58,20 @@ class ManagerCatalogService:
         customer_id: int,
     ) -> Optional[Dict[str, Any]]:
         return await CustomerService.get_for_manager(session=session, customer_id=customer_id)
+
+    @staticmethod
+    async def update_customer(
+        session: AsyncSession,
+        *,
+        customer_id: int,
+        payload: ManagerCustomerUpdatePayload,
+    ) -> Optional[Dict[str, Any]]:
+        update_data = payload.model_dump(exclude_unset=True)
+        return await CustomerService.update_for_manager(
+            session=session,
+            customer_id=customer_id,
+            payload=update_data,
+        )
 
     @staticmethod
     async def update_product(
