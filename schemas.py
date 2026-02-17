@@ -429,6 +429,65 @@ class ManagerNormalizeLegacySpecsResponse(ManagerActionMessageResponse):
     sample_changes: List[Dict[str, Any]]
 
 
+class ManagerMediaImageSearchResultResponse(BaseModel):
+    image: str
+    width: Optional[int] = None
+    height: Optional[int] = None
+    thumbnail: Optional[str] = None
+
+
+class ManagerMediaReuseSearchItemResponse(BaseModel):
+    id: int
+    title: str
+    main_image: Optional[str] = None
+
+
+class ManagerMediaImageLinkResponse(BaseModel):
+    id: int
+    url: str
+
+
+class ManagerMediaSetMainImageResponse(ManagerActionMessageResponse):
+    url: str
+
+
+class ManagerMediaDeleteImageResponse(ManagerActionMessageResponse):
+    pass
+
+
+class ManagerMediaReuseImageResponse(ManagerActionMessageResponse):
+    id: int
+
+
+class ManagerMediaBulkAddResponse(ManagerActionMessageResponse):
+    products_count: int
+    added_links: int
+    skipped_existing: int
+
+
+class ManagerMediaBulkDeleteResponse(ManagerActionMessageResponse):
+    products_count: int
+    deleted_links: int
+
+
+class ManagerMediaBulkUploadResponse(ManagerActionMessageResponse):
+    products_count: int
+    files_count: int
+    uploaded_links: int
+
+
+class ManagerMediaUploadLocalImagesResponse(BaseModel):
+    uploaded: int
+    images: List[ManagerMediaImageLinkResponse]
+
+
+class ManagerMediaCleanupResponse(BaseModel):
+    dry_run: bool
+    deleted_count: int
+    reclaimed_bytes: int
+    files: List[str]
+
+
 class ProductUpdate(BaseModel):
     title: Optional[str] = None
     price: Optional[int] = None

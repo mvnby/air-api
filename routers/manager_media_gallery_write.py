@@ -16,7 +16,18 @@ from routers.manager_operation_ids import (
     REUSE_IMAGE,
     SET_MAIN_IMAGE,
 )
-from schemas import BulkGalleryAddRequest, BulkGalleryDeleteRequest
+from schemas import (
+    BulkGalleryAddRequest,
+    BulkGalleryDeleteRequest,
+    ManagerMediaBulkAddResponse,
+    ManagerMediaBulkDeleteResponse,
+    ManagerMediaBulkUploadResponse,
+    ManagerMediaCleanupResponse,
+    ManagerMediaDeleteImageResponse,
+    ManagerMediaImageLinkResponse,
+    ManagerMediaReuseImageResponse,
+    ManagerMediaSetMainImageResponse,
+)
 from services.manager_media_orchestrator_service import ManagerMediaOrchestratorService
 from services.manager_media_service import ManagerMediaService
 
@@ -24,7 +35,11 @@ from services.manager_media_service import ManagerMediaService
 router = APIRouter(prefix="/api/manager", tags=["manager"])
 
 
-@router.post("/gallery/link-search-result", operation_id=LINK_SEARCH_RESULT)
+@router.post(
+    "/gallery/link-search-result",
+    response_model=ManagerMediaImageLinkResponse,
+    operation_id=LINK_SEARCH_RESULT,
+)
 async def link_search_result(
     url: str = Query(..., description="URL of the image"),
     product_id: int = Query(..., description="ID of the product"),
@@ -46,7 +61,11 @@ async def link_search_result(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.post("/gallery/set-main", operation_id=SET_MAIN_IMAGE)
+@router.post(
+    "/gallery/set-main",
+    response_model=ManagerMediaSetMainImageResponse,
+    operation_id=SET_MAIN_IMAGE,
+)
 async def set_main_image(
     image_id: int = Query(..., description="ID of the ProductImage to set as main"),
     session: AsyncSession = Depends(get_session),
@@ -59,7 +78,11 @@ async def set_main_image(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.delete("/gallery/{image_id}", operation_id=DELETE_IMAGE)
+@router.delete(
+    "/gallery/{image_id}",
+    response_model=ManagerMediaDeleteImageResponse,
+    operation_id=DELETE_IMAGE,
+)
 async def delete_gallery_image(
     image_id: int,
     session: AsyncSession = Depends(get_session),
@@ -72,7 +95,11 @@ async def delete_gallery_image(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.post("/gallery/reuse-image", operation_id=REUSE_IMAGE)
+@router.post(
+    "/gallery/reuse-image",
+    response_model=ManagerMediaReuseImageResponse,
+    operation_id=REUSE_IMAGE,
+)
 async def reuse_image(
     product_id: int = Query(...),
     source_image_url: str = Query(...),
@@ -86,7 +113,11 @@ async def reuse_image(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.post("/gallery/bulk-add", operation_id=BULK_ADD_GALLERY_IMAGES)
+@router.post(
+    "/gallery/bulk-add",
+    response_model=ManagerMediaBulkAddResponse,
+    operation_id=BULK_ADD_GALLERY_IMAGES,
+)
 async def bulk_add_gallery_images(
     payload: BulkGalleryAddRequest,
     session: AsyncSession = Depends(get_session),
@@ -108,7 +139,11 @@ async def bulk_add_gallery_images(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.post("/gallery/bulk-upload-local", operation_id=BULK_UPLOAD_LOCAL_IMAGES)
+@router.post(
+    "/gallery/bulk-upload-local",
+    response_model=ManagerMediaBulkUploadResponse,
+    operation_id=BULK_UPLOAD_LOCAL_IMAGES,
+)
 async def bulk_upload_local_images(
     product_ids_json: str = Form(..., description="JSON array of product ids"),
     files: List[UploadFile] = File(...),
@@ -132,7 +167,11 @@ async def bulk_upload_local_images(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.post("/gallery/bulk-delete-common", operation_id=BULK_DELETE_COMMON_GALLERY_IMAGES)
+@router.post(
+    "/gallery/bulk-delete-common",
+    response_model=ManagerMediaBulkDeleteResponse,
+    operation_id=BULK_DELETE_COMMON_GALLERY_IMAGES,
+)
 async def bulk_delete_common_gallery_images(
     payload: BulkGalleryDeleteRequest,
     session: AsyncSession = Depends(get_session),
@@ -150,7 +189,11 @@ async def bulk_delete_common_gallery_images(
         raise HTTPException(status_code=400, detail=exc.args[0]) from exc
 
 
-@router.post("/cleanup-media", operation_id=CLEANUP_MEDIA)
+@router.post(
+    "/cleanup-media",
+    response_model=ManagerMediaCleanupResponse,
+    operation_id=CLEANUP_MEDIA,
+)
 async def cleanup_media(
     dry_run: bool = Query(False),
     session: AsyncSession = Depends(get_session),
