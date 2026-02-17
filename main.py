@@ -1,15 +1,13 @@
 import os
-import asyncio
-from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from admin.bootstrap import configure_sqladmin
 from core.app_http import configure_http
+from core.app_lifespan import app_lifespan
 from core.app_static import mount_manager_assets, mount_static_and_media
-from core.database import engine, init_db, async_session_maker
+from core.database import engine
 from core.app_routing import register_app_routers
 from core.config import settings
-from core.logger import logger
 import sentry_sdk
 
 if settings.SENTRY_DSN:
@@ -23,28 +21,8 @@ if settings.SENTRY_DSN:
 from routers.manager_spa import create_manager_spa_router
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Log startup
-    logger.info("Starting Application...")
-    
-    # Create tables on startup
-    await init_db()
-    
-    # Seed data
-    from services.installation_service import InstallationService
-    async with async_session_maker() as session:
-        await InstallationService.seed_defaults(session)
-    
-    # Start background price sync (every 6 hours)
-    from services.scheduler_service import scheduler_service
-    asyncio.create_task(scheduler_service.start_loop(interval_hours=settings.SCHEDULER_INTERVAL))
-    
-    yield
-    
-    logger.info("Stopping Application...")
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=app_lifespan)
 
 # --- MIDDLEWARE & ERROR HANDLING ---
 configure_http(app)
