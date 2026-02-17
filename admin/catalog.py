@@ -1,19 +1,13 @@
 from sqladmin import ModelView
-from markupsafe import Markup
 from wtforms import TextAreaField, FileField
 from wtforms.validators import DataRequired
 from sqlalchemy.orm import selectinload
 
 from models import Product, Tag, TagGroup
 from .catalog_constants import (
-    GALLERY_STATUS_EMPTY_BADGE,
-    GALLERY_STATUS_PRESENT_TEMPLATE,
     PAGE_SIZE_OPTIONS,
     PRODUCT_ADMIN_PAGE_SIZE,
-    PRODUCT_AREA_SUFFIX,
-    PRODUCT_EMPTY_PLACEHOLDER,
     PRODUCT_IMAGES_READONLY_DESCRIPTION,
-    PRODUCT_IMAGE_PREVIEW_STYLE,
     PRODUCT_MAIN_IMAGE_UPLOAD_LABEL,
     PRODUCT_SLUG_DESCRIPTION,
     PRODUCT_SLUG_LABEL,
@@ -27,6 +21,13 @@ from .product_admin_helpers import (
     parse_tag_ids,
     save_new_product_main_image,
     set_existing_product_main_image,
+)
+from .product_formatters import (
+    format_product_area,
+    format_product_gallery_status,
+    format_product_image,
+    format_product_price,
+    format_product_title,
 )
 
 
@@ -115,39 +116,12 @@ class ProductAdmin(ModelView, model=Product):
         return form_class
 
 
-    # --- Formatters ---
-    def format_image(model, context):
-        if model.main_image:
-            url = model.main_image if model.main_image.startswith("/") else f"/{model.main_image}"
-            return Markup(f'<img src="{url}" style="{PRODUCT_IMAGE_PREVIEW_STYLE}">')
-        return ""
-
-    def format_product_title(model, context):
-        title_html = f'<strong>{model.title}</strong>'
-        tags_html = format_tags_shared(model, context, hide_group=True)
-        return Markup(f'{title_html}<br><div class="tags__product_title">{tags_html}</div>')
-
-    def format_area(model, context):
-        if model.area:
-            return f"{model.area}{PRODUCT_AREA_SUFFIX}"
-        return PRODUCT_EMPTY_PLACEHOLDER
-
-    def format_price(model, context):
-        if model.price:
-            return f"{model.price:,}".replace(",", " ")
-        return PRODUCT_EMPTY_PLACEHOLDER
-
-    def format_gallery_status(model, context):
-        if model.gallery_images:
-            return Markup(GALLERY_STATUS_PRESENT_TEMPLATE.format(count=len(model.gallery_images)))
-        return Markup(GALLERY_STATUS_EMPTY_BADGE)
-
     column_formatters = {
-        "main_image": format_image,
+        "main_image": format_product_image,
         "formatted_title": format_product_title,
-        "formatted_area": format_area,
-        "price": format_price,
-        "gallery_status": format_gallery_status,
+        "formatted_area": format_product_area,
+        "price": format_product_price,
+        "gallery_status": format_product_gallery_status,
     }
     
     column_labels = {
