@@ -4,6 +4,7 @@ import { api, type Product } from '../api';
 import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images, Settings } from 'lucide-vue-next';
 import BulkSpecsModal from '../components/BulkSpecsModal.vue';
 import ProductEditModal from '../components/ProductEditModal.vue';
+import { getApiErrorMessage } from '../utils/api-errors';
 
 // Product state
 const products = ref<Product[]>([]);
@@ -24,6 +25,14 @@ const reuseResults = ref<any[]>([]);
 const activeTab = ref<'search' | 'reuse' | 'upload'>('search');
 const uploadDragActive = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
+const toast = ref('');
+
+const setToast = (message: string) => {
+    toast.value = message;
+    window.setTimeout(() => {
+        if (toast.value === message) toast.value = '';
+    }, 3000);
+};
 
 // Bulk Actions
 const selectedProductIds = ref<Set<number>>(new Set());
@@ -136,16 +145,16 @@ const uploadFiles = async (files: FileList) => {
     try {
         if (isBulkMode.value) {
             const res = await api.bulkUploadLocalImages(selectedIdsArray.value, files);
-            alert(`Uploaded ${res.uploaded_links} links`);
+            setToast(`Загружено ссылок: ${res.uploaded_links}`);
             await loadCommonGallery();
         } else {
             const res = await api.uploadLocalImages(selectedProduct.value!.id, files);
-            alert(`Uploaded ${res.uploaded} images`);
+            setToast(`Загружено изображений: ${res.uploaded}`);
             refreshSelectedProduct();
         }
         await loadProducts();
     } catch (e) {
-        alert('Upload failed');
+        setToast(`Ошибка загрузки: ${getApiErrorMessage(e)}`);
         console.error(e);
     } finally {
         searchLoading.value = false;
@@ -223,7 +232,7 @@ const cancelEditingPrice = () => {
 const savePrice = async (product: Product) => {
     const newPrice = parseInt(priceBuffer.value);
     if (isNaN(newPrice)) {
-        alert('Некорректная цена');
+        setToast('Некорректная цена');
         return;
     }
     if (newPrice === product.price) {
@@ -236,7 +245,7 @@ const savePrice = async (product: Product) => {
         product.price = newPrice;
         cancelEditingPrice();
     } catch (e) {
-        alert('Ошибка при сохранении цены');
+        setToast(`Ошибка при сохранении цены: ${getApiErrorMessage(e)}`);
         console.error(e);
     }
 };
@@ -259,8 +268,9 @@ const handleBulkRoundPrices = async () => {
         await api.bulkRoundPrices(selectedIdsArray.value);
         await loadProducts();
         selectedProductIds.value.clear();
+        setToast('Цены округлены');
     } catch (e) {
-        alert('Ошибка при округлении');
+        setToast(`Ошибка при округлении: ${getApiErrorMessage(e)}`);
         console.error(e);
     } finally {
         bulkRoundLoading.value = false;
@@ -301,7 +311,7 @@ const handleImageSearch = async () => {
         const results = await api.searchImages(imageQuery.value);
         imageSearchResults.value = results;
     } catch (e) {
-        alert('Search failed');
+        setToast(`Ошибка поиска: ${getApiErrorMessage(e)}`);
     } finally {
         searchLoading.value = false;
     }
@@ -329,15 +339,15 @@ const addToGallery = async (url: string) => {
     try {
         if (isBulkMode.value) {
             await bulkAddFromUrls([url], false);
-            alert('Added to selected products');
+            setToast('Изображение добавлено выбранным товарам');
         } else {
             await api.linkSearchResult(selectedProduct.value!.id, url);
             await loadProducts();
             refreshSelectedProduct();
-            alert('Added to gallery');
+            setToast('Изображение добавлено в галерею');
         }
     } catch (e) {
-        alert('Failed to add');
+        setToast(`Ошибка добавления: ${getApiErrorMessage(e)}`);
     } finally {
         uploadingImageId.value = null;
     }
@@ -348,8 +358,9 @@ const triggerCleanup = async () => {
     try {
         const res = await api.cleanupMedia(false);
         cleanupStats.value = res;
+        setToast('Очистка завершена');
     } catch (e) {
-        alert('Cleanup failed');
+        setToast(`Ошибка очистки: ${getApiErrorMessage(e)}`);
     } finally {
         cleanupLoading.value = false;
     }
@@ -369,23 +380,27 @@ const reuseImage = async (sourceUrl: string) => {
     try {
         if (isBulkMode.value) {
             await bulkAddFromUrls([sourceUrl], false);
-            alert('Image reused for selected products');
+            setToast('Изображение применено к выбранным товарам');
         } else {
             await api.reuseImage(selectedProduct.value!.id, sourceUrl);
-            alert('Image reused');
+            setToast('Изображение применено');
             await loadProducts();
             refreshSelectedProduct();
         }
-    } catch (e) { alert('Failed'); }
+    } catch (e) {
+        setToast(`Ошибка повторного использования: ${getApiErrorMessage(e)}`);
+    }
 };
 
 const setAsMain = async (id: number) => {
     try {
         await api.setMainImage(id);
-        alert('Updated');
+        setToast('Главное изображение обновлено');
         await loadProducts();
         refreshSelectedProduct();
-    } catch (e) { alert('Failed'); }
+    } catch (e) {
+        setToast(`Ошибка обновления: ${getApiErrorMessage(e)}`);
+    }
 };
 
 const confirmDeleteId = ref<number | null>(null);
@@ -403,7 +418,10 @@ const removeFromGallery = async (id: number) => {
         await api.deleteGalleryImage(id);
         await loadProducts();
         refreshSelectedProduct();
-    } catch (e) { alert('Failed'); }
+        setToast('Изображение удалено');
+    } catch (e) {
+        setToast(`Ошибка удаления: ${getApiErrorMessage(e)}`);
+    }
 };
 
 const removeCommonImage = async (url: string) => {
@@ -422,7 +440,7 @@ const removeCommonImage = async (url: string) => {
         await loadProducts();
         await loadCommonGallery();
     } catch (e) {
-        alert('Failed');
+        setToast(`Ошибка удаления: ${getApiErrorMessage(e)}`);
     }
 };
 
@@ -434,7 +452,7 @@ const selectImage = async (url: string) => {
     try {
         if (isBulkMode.value) {
             await bulkAddFromUrls([url], true);
-            alert('Set as main for selected products');
+            setToast('Главное изображение обновлено для выбранных товаров');
         } else {
             const response = await api.uploadImage(selectedProduct.value!.id, url);
             if (response && response.url) {
@@ -442,11 +460,11 @@ const selectImage = async (url: string) => {
                  refreshSelectedProduct();
                  showModal.value = false;
             } else {
-                 alert('Upload succeeded but no URL returned');
+                 setToast('Изображение загружено, но URL не вернулся');
             }
         }
     } catch (e) {
-        alert('Upload failed');
+        setToast(`Ошибка загрузки: ${getApiErrorMessage(e)}`);
     } finally {
         uploadingImageId.value = null;
     }
@@ -509,6 +527,9 @@ onMounted(() => {
           </button>
       </div>
     </header>
+    <p v-if="toast" class="mb-4 rounded-lg border border-teal-200 bg-teal-50 px-4 py-2 text-sm text-teal-800">
+      {{ toast }}
+    </p>
 
     <!-- Filters -->
     <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-wrap gap-4 items-end">

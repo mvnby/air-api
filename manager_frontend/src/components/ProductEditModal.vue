@@ -2,6 +2,7 @@
 import { ref, watch, computed } from 'vue';
 import { api, type Product } from '../api';
 import { X, Save, Plus, Trash2, Edit3, Globe, Hash, Tag } from 'lucide-vue-next';
+import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
 
 interface TagItem {
     id: number;
@@ -39,6 +40,8 @@ const form = ref<any>({
 const specs = ref<{ key: string; value: string }[]>([]);
 const selectedTagIds = ref<Set<number>>(new Set());
 const loading = ref(false);
+const formMessage = ref('');
+const formServerErrors = ref<Record<string, string>>({});
 const knownKeys = ref<string[]>([]);
 const tagGroups = ref<TagGroupItem[]>([]);
 const tagsLoading = ref(false);
@@ -103,6 +106,8 @@ const getSelectedColorClasses = (color: string) => selectedColorClasses[color] |
 
 watch(() => props.modelValue, (val) => {
     if (val && props.product) {
+        formMessage.value = '';
+        formServerErrors.value = {};
         form.value = {
             title: props.product.title,
             slug: props.product.slug,
@@ -145,6 +150,8 @@ const save = async () => {
     }
 
     loading.value = true;
+    formMessage.value = '';
+    formServerErrors.value = {};
     try {
         const updateData = {
             ...form.value,
@@ -155,7 +162,17 @@ const save = async () => {
         emit('success');
         close();
     } catch (e) {
-        alert('Ошибка при сохранении');
+        const parsed = parseApiFieldErrors(e, [
+            'title',
+            'slug',
+            'price',
+            'old_price',
+            'is_published',
+            'specs',
+            'tag_ids',
+        ]);
+        formServerErrors.value = parsed.fieldErrors;
+        formMessage.value = parsed.message || `Ошибка при сохранении: ${getApiErrorMessage(e)}`;
         console.error(e);
     } finally {
         loading.value = false;
@@ -181,6 +198,9 @@ const save = async () => {
                     <X class="w-5 h-5" />
                 </button>
             </header>
+            <div v-if="formMessage" class="mx-6 mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {{ formMessage }}
+            </div>
             
             <div class="flex-1 overflow-y-auto p-6">
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -193,9 +213,11 @@ const save = async () => {
                             <input 
                                 v-model="form.title" 
                                 type="text"
-                                class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-gray-900 font-medium text-sm"
+                                class="w-full px-3 py-2 bg-gray-50 border rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-gray-900 font-medium text-sm"
+                                :class="formServerErrors.title ? 'border-red-400 focus:border-red-500' : 'border-gray-200'"
                                 placeholder="Напр: LG ARTCOOL Gallery"
                             />
+                            <p v-if="formServerErrors.title" class="mt-1 text-xs text-red-600">{{ formServerErrors.title }}</p>
                         </div>
 
                         <div>
@@ -206,9 +228,11 @@ const save = async () => {
                             <input 
                                 v-model="form.slug" 
                                 type="text"
-                                class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-sm font-mono text-gray-600"
+                                class="w-full px-3 py-2 bg-gray-50 border rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-sm font-mono text-gray-600"
+                                :class="formServerErrors.slug ? 'border-red-400 focus:border-red-500' : 'border-gray-200'"
                                 placeholder="lg-artcool-gallery"
                             />
+                            <p v-if="formServerErrors.slug" class="mt-1 text-xs text-red-600">{{ formServerErrors.slug }}</p>
                         </div>
 
                         <div class="grid grid-cols-2 gap-3">
@@ -218,10 +242,12 @@ const save = async () => {
                                     <input 
                                         v-model.number="form.price" 
                                         type="number"
-                                        class="w-full pl-3 pr-10 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all font-bold text-teal-700 text-sm"
+                                        class="w-full pl-3 pr-10 py-2 bg-gray-50 border rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all font-bold text-teal-700 text-sm"
+                                        :class="formServerErrors.price ? 'border-red-400 focus:border-red-500' : 'border-gray-200'"
                                     />
                                     <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">руб.</span>
                                 </div>
+                                <p v-if="formServerErrors.price" class="mt-1 text-xs text-red-600">{{ formServerErrors.price }}</p>
                             </div>
                             <div>
                                 <label class="block text-sm font-semibold text-gray-700 mb-1 line-through decoration-gray-400">Старая цена</label>
@@ -229,10 +255,12 @@ const save = async () => {
                                     <input 
                                         v-model.number="form.old_price" 
                                         type="number"
-                                        class="w-full pl-3 pr-10 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-gray-500 text-sm"
+                                        class="w-full pl-3 pr-10 py-2 bg-gray-50 border rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-gray-500 text-sm"
+                                        :class="formServerErrors.old_price ? 'border-red-400 focus:border-red-500' : 'border-gray-200'"
                                     />
                                     <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">руб.</span>
                                 </div>
+                                <p v-if="formServerErrors.old_price" class="mt-1 text-xs text-red-600">{{ formServerErrors.old_price }}</p>
                             </div>
                         </div>
 
