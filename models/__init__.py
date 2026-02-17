@@ -9,6 +9,7 @@ from .common import (
 )
 from .customer import Customer, Lead
 from .cart import Cart, CartItem
+from .content import Article, GlobalConfig
 from .order import (
     Installer,
     Order,
@@ -19,9 +20,7 @@ from .order import (
     Service,
 )
 from .product import (
-    Article,
     Favorite,
-    GlobalConfig,
     InstallationRate,
     Product,
     ProductImage,
