@@ -27,9 +27,9 @@ from routers import admin as admin_router
 from routers import api as api_router
 from routers import auth as auth_router
 from routers import manager as manager_router
+from routers.manager_spa import create_manager_spa_router
 from routers import system as system_router
 from admin import admin_views
-from starlette.responses import FileResponse
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 @asynccontextmanager
@@ -108,21 +108,8 @@ if os.path.exists(manager_dist):
 else:
     logger.warning("Manager frontend dist directory not found!")
 
-    # 2. Catch-all for SPA routes to serve index.html
-@app.get("/manager/{full_path:path}")
-async def serve_manager_app(full_path: str):
-    index_path = os.path.join(manager_dist, "index.html")
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
-    return JSONResponse(status_code=404, content={"message": "Dashboard not built"})
-    
-# 3. Root redirect/serve for /manager
-@app.get("/manager", include_in_schema=False)
-async def serve_manager_root():
-    index_path = os.path.join(manager_dist, "index.html")
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
-    return JSONResponse(status_code=404, content={"message": "Dashboard not built"})
+# 2. Catch-all + root routes for manager SPA
+app.include_router(create_manager_spa_router(manager_dist))
 
 # Setup SQLAdmin with authentication
 admin = Admin(
