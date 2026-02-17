@@ -9,6 +9,20 @@ import slugify
 from models import Product, Tag, TagGroup, ProductTagLink, InstallationRate
 from core.database import async_session_maker
 from starlette.responses import RedirectResponse
+from .catalog_constants import (
+    GALLERY_STATUS_EMPTY_BADGE,
+    GALLERY_STATUS_PRESENT_TEMPLATE,
+    PAGE_SIZE_OPTIONS,
+    PRODUCT_ADMIN_PAGE_SIZE,
+    PRODUCT_AREA_SUFFIX,
+    PRODUCT_EMPTY_PLACEHOLDER,
+    PRODUCT_IMAGES_READONLY_DESCRIPTION,
+    PRODUCT_IMAGE_PREVIEW_STYLE,
+    PRODUCT_MAIN_IMAGE_UPLOAD_LABEL,
+    PRODUCT_SLUG_DESCRIPTION,
+    PRODUCT_SLUG_LABEL,
+    TAG_ADMIN_PAGE_SIZE,
+)
 from .formatters import format_tags_shared
 from services.product_service import ProductService
 
@@ -26,8 +40,8 @@ class ProductAdmin(ModelView, model=Product):
     column_searchable_list = ["title", "description"]
     column_default_sort = ("created_at", True)
     column_editable_list = ["is_published"]
-    page_size = 100
-    page_size_options = [25, 50, 100, 200]
+    page_size = PRODUCT_ADMIN_PAGE_SIZE
+    page_size_options = PAGE_SIZE_OPTIONS
     
     # --- ФОРМА: Порядок полей ---
     form_columns = [
@@ -57,7 +71,7 @@ class ProductAdmin(ModelView, model=Product):
     
     # --- Extra fields (только для файла!) ---
     form_extra_fields = {
-        "main_image_file": FileField("Загрузить фото (изменит путь выше)"),
+        "main_image_file": FileField(PRODUCT_MAIN_IMAGE_UPLOAD_LABEL),
     }
 
     form_edit_rules = [
@@ -110,7 +124,7 @@ class ProductAdmin(ModelView, model=Product):
     def format_image(model, context):
         if model.main_image:
             url = model.main_image if model.main_image.startswith("/") else f"/{model.main_image}"
-            return Markup(f'<img src="{url}" style="height: 50px; border-radius: 5px;">')
+            return Markup(f'<img src="{url}" style="{PRODUCT_IMAGE_PREVIEW_STYLE}">')
         return ""
 
     def format_product_title(model, context):
@@ -120,18 +134,18 @@ class ProductAdmin(ModelView, model=Product):
 
     def format_area(model, context):
         if model.area:
-            return f"{model.area} м²"
-        return "—"
+            return f"{model.area}{PRODUCT_AREA_SUFFIX}"
+        return PRODUCT_EMPTY_PLACEHOLDER
 
     def format_price(model, context):
         if model.price:
             return f"{model.price:,}".replace(",", " ")
-        return "—"
+        return PRODUCT_EMPTY_PLACEHOLDER
 
     def format_gallery_status(model, context):
         if model.gallery_images:
-            return Markup(f'<span class="badge bg-blue-lt">{len(model.gallery_images)} фото</span>')
-        return Markup('<span class="badge bg-secondary-lt">Нет</span>')
+            return Markup(GALLERY_STATUS_PRESENT_TEMPLATE.format(count=len(model.gallery_images)))
+        return Markup(GALLERY_STATUS_EMPTY_BADGE)
 
     column_formatters = {
         "main_image": format_image,
@@ -154,12 +168,12 @@ class ProductAdmin(ModelView, model=Product):
     form_args = {
         "slug": {
             "validators": [DataRequired()],
-            "label": "Slug Re-Attempt",
-            "description": "Уникальный URL",
+            "label": PRODUCT_SLUG_LABEL,
+            "description": PRODUCT_SLUG_DESCRIPTION,
         },
         "images": {
             "render_kw": {"readonly": True, "style": "background-color: #f8f9fa;"},
-            "description": "⚠️ Редактирование галереи перенесено в Manager App",
+            "description": PRODUCT_IMAGES_READONLY_DESCRIPTION,
         },
     }
 
@@ -251,8 +265,8 @@ class TagAdmin(ModelView, model=Tag):
         "is_public": "Публичный",
         "is_filter": "Фильтр"
     }
-    page_size = 50
-    page_size_options = [25, 50, 100, 200]
+    page_size = TAG_ADMIN_PAGE_SIZE
+    page_size_options = PAGE_SIZE_OPTIONS
     column_details_list = "__all__"
 
     form_columns = "__all__"
