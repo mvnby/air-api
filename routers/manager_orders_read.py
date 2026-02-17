@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.security import get_current_username
+from routers.manager_operation_ids import GET_MANAGER_ORDER_DETAIL, GET_MANAGER_ORDERS
 from schemas import ManagerOrderDetailResponse, ManagerOrderListResponse
 from services.order_service import OrderService
 
@@ -12,7 +13,7 @@ from services.order_service import OrderService
 router = APIRouter(prefix="/api/manager/orders", tags=["manager-orders"])
 
 
-@router.get("", response_model=ManagerOrderListResponse, operation_id="get_manager_orders")
+@router.get("", response_model=ManagerOrderListResponse, operation_id=GET_MANAGER_ORDERS)
 async def get_manager_orders(
     segment: str = Query("b2c", pattern="^(b2c|b2b)$"),
     page: int = Query(1, ge=1),
@@ -39,7 +40,7 @@ async def get_manager_orders(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.get("/{order_id}", response_model=ManagerOrderDetailResponse, operation_id="get_manager_order_detail")
+@router.get("/{order_id}", response_model=ManagerOrderDetailResponse, operation_id=GET_MANAGER_ORDER_DETAIL)
 async def get_manager_order_detail(
     order_id: int,
     _: str = Depends(get_current_username),

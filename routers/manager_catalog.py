@@ -5,6 +5,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.security import get_current_username
+from routers.manager_operation_ids import (
+    BULK_ROUND_PRICE,
+    GET_ALL_TAGS,
+    GET_MANAGER_CUSTOMERS,
+    GET_MANAGER_PRODUCTS,
+    UPDATE_PRODUCT,
+)
 from schemas import (
     BulkRoundRequest,
     ManagerActionMessageResponse,
@@ -23,7 +30,7 @@ router = APIRouter(prefix="/api/manager", tags=["manager"])
 @router.get(
     "/products/list",
     response_model=ManagerCatalogProductListResponse,
-    operation_id="get_manager_products",
+    operation_id=GET_MANAGER_PRODUCTS,
 )
 async def list_products_for_manager(
     page: int = Query(1, ge=1),
@@ -57,7 +64,7 @@ async def list_products_for_manager(
 @router.get(
     "/customers",
     response_model=ManagerCatalogCustomerListResponse,
-    operation_id="get_manager_customers",
+    operation_id=GET_MANAGER_CUSTOMERS,
 )
 async def list_customers_for_manager(
     page: int = Query(1, ge=1),
@@ -85,7 +92,7 @@ async def list_customers_for_manager(
 @router.patch(
     "/products/{product_id}",
     response_model=ManagerActionMessageResponse,
-    operation_id="update_product",
+    operation_id=UPDATE_PRODUCT,
 )
 async def update_product(
     product_id: int,
@@ -111,7 +118,7 @@ async def update_product(
 @router.post(
     "/products/bulk-round-price",
     response_model=ManagerBulkRoundPriceResponse,
-    operation_id="bulk_round_price",
+    operation_id=BULK_ROUND_PRICE,
 )
 async def bulk_round_price(
     request: BulkRoundRequest,
@@ -127,7 +134,7 @@ async def bulk_round_price(
 @router.get(
     "/tags/all",
     response_model=list[ManagerTagGroupResponse],
-    operation_id="get_all_tags",
+    operation_id=GET_ALL_TAGS,
 )
 async def get_all_tags(
     session: AsyncSession = Depends(get_session),
