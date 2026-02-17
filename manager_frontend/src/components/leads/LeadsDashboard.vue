@@ -40,6 +40,8 @@ const lastQualifyResult = ref<{ leadId: number; customerId: number; orderId: num
 const createPhoneError = ref('');
 const createRequestError = ref('');
 const qualifyPhoneError = ref('');
+const createServerErrors = ref<Record<string, string>>({});
+const qualifyServerErrors = ref<Record<string, string>>({});
 const createCompanyLookupLoading = ref(false);
 const qualifyCompanyLookupLoading = ref(false);
 const qualifyBankLookupLoading = ref(false);
@@ -177,6 +179,51 @@ const getErrorMessage = (error: unknown): string => {
   return 'Неизвестная ошибка';
 };
 
+const FIELD_LABELS: Record<string, string> = {
+  source: 'Источник',
+  name: 'Имя / Компания',
+  phone: 'Телефон',
+  email: 'Email',
+  inn: 'УНП',
+  company_name: 'Полное название компании',
+  next_followup_date: 'Следующее касание',
+  request_text: 'Запрос',
+  full_legal_name: 'Полное наименование',
+  legal_address: 'Юридический адрес',
+  iban: 'IBAN',
+  bic: 'BIC',
+  bank_name: 'Название банка',
+  delivery_address: 'Адрес доставки/монтажа',
+  order_comment: 'Комментарий сделки',
+};
+
+const getFieldLabel = (field: string): string => FIELD_LABELS[field] || field;
+
+const parseApiFieldErrors = (
+  error: unknown,
+  allowedFields: readonly string[],
+): { message: string; fieldErrors: Record<string, string> } => {
+  const allowed = new Set(allowedFields);
+  const maybe = error as { body?: { detail?: unknown } };
+  const detail = maybe?.body?.detail;
+  const fieldErrors: Record<string, string> = {};
+  let message = getErrorMessage(error);
+
+  if (Array.isArray(detail)) {
+    for (const item of detail as Array<{ loc?: unknown[]; msg?: string }>) {
+      if (!item?.msg || !Array.isArray(item.loc) || !item.loc.length) continue;
+      const field = String(item.loc[item.loc.length - 1] || '');
+      if (!field || !allowed.has(field)) continue;
+      if (!fieldErrors[field]) fieldErrors[field] = item.msg;
+    }
+    if (Object.keys(fieldErrors).length) {
+      message = 'Проверьте заполнение полей формы';
+    }
+  }
+
+  return { message, fieldErrors };
+};
+
 const loadLeads = async () => {
   loading.value = true;
   try {
@@ -224,6 +271,7 @@ const resetCreateForm = () => {
   customerLookupResults.value = [];
   createPhoneError.value = '';
   createRequestError.value = '';
+  createServerErrors.value = {};
 };
 
 const getPhoneValidationError = (
@@ -242,6 +290,7 @@ const getPhoneValidationError = (
 
 const submitCreateLead = async () => {
   if (saving.value) return;
+  createServerErrors.value = {};
   createPhoneError.value = getPhoneValidationError(createForm.value.phone, createPhoneMask.isComplete.value);
   if (createPhoneError.value) {
     setToast(createPhoneError.value);
@@ -273,7 +322,20 @@ const submitCreateLead = async () => {
     await loadLeads();
   } catch (error) {
     console.error(error);
-    setToast(`Не удалось создать лид: ${getErrorMessage(error)}`);
+    const parsed = parseApiFieldErrors(error, [
+      'source',
+      'name',
+      'phone',
+      'email',
+      'inn',
+      'company_name',
+      'next_followup_date',
+      'request_text',
+    ]);
+    createServerErrors.value = parsed.fieldErrors;
+    if (!createPhoneError.value && parsed.fieldErrors.phone) createPhoneError.value = parsed.fieldErrors.phone;
+    if (!createRequestError.value && parsed.fieldErrors.request_text) createRequestError.value = parsed.fieldErrors.request_text;
+    setToast(`Не удалось создать лид: ${parsed.message}`);
   } finally {
     saving.value = false;
   }
@@ -332,6 +394,7 @@ const openQualifyModal = (lead: LeadResponse, updateUrl = true) => {
     order_comment: lead.request_text,
   };
   qualifyPhoneError.value = '';
+  qualifyServerErrors.value = {};
   if (updateUrl) {
     const url = new URL(window.location.href);
     url.searchParams.set('leadId', String(lead.id));
@@ -345,6 +408,7 @@ const openQualifyModal = (lead: LeadResponse, updateUrl = true) => {
 
 const qualifyLead = async () => {
   if (!selectedLead.value || saving.value) return;
+  qualifyServerErrors.value = {};
   qualifyPhoneError.value = getPhoneValidationError(qualifyForm.value.phone, qualifyPhoneMask.isComplete.value);
   if (qualifyPhoneError.value) {
     setToast(qualifyPhoneError.value);
@@ -377,7 +441,22 @@ const qualifyLead = async () => {
     await loadLeads();
   } catch (error) {
     console.error(error);
-    setToast(`Не удалось квалифицировать лид: ${getErrorMessage(error)}`);
+    const parsed = parseApiFieldErrors(error, [
+      'name',
+      'phone',
+      'email',
+      'inn',
+      'full_legal_name',
+      'legal_address',
+      'iban',
+      'bic',
+      'bank_name',
+      'delivery_address',
+      'order_comment',
+    ]);
+    qualifyServerErrors.value = parsed.fieldErrors;
+    if (!qualifyPhoneError.value && parsed.fieldErrors.phone) qualifyPhoneError.value = parsed.fieldErrors.phone;
+    setToast(`Не удалось квалифицировать лид: ${parsed.message}`);
   } finally {
     saving.value = false;
   }
@@ -448,9 +527,21 @@ onMounted(async () => {
 });
 
 watch(showQualifyModal, (isOpen) => {
+  if (isOpen) {
+    qualifyServerErrors.value = {};
+    return;
+  }
   if (!isOpen) {
     clearLeadIdFromUrl();
     openedByUrlLeadId.value = null;
+  }
+});
+
+watch(showCreateModal, (isOpen) => {
+  if (isOpen) {
+    createServerErrors.value = {};
+    createPhoneError.value = '';
+    createRequestError.value = '';
   }
 });
 
@@ -945,8 +1036,18 @@ const onQualifyIbanBlur = async () => {
             </button>
           </div>
         </div>
+        <div v-if="Object.keys(createServerErrors).length" class="mb-3 rounded-lg border border-red-500/40 bg-red-900/20 px-3 py-2 text-xs text-red-200">
+          <p v-for="(message, field) in createServerErrors" :key="`create-${field}`">
+            {{ getFieldLabel(field) }}: {{ message }}
+          </p>
+        </div>
         <div class="grid gap-3 md:grid-cols-2">
-          <input v-model="createForm.name" class="field-input" placeholder="Имя / Компания" />
+          <input
+            v-model="createForm.name"
+            class="field-input"
+            :class="createServerErrors.name ? 'border-red-500 focus:outline-red-400' : ''"
+            placeholder="Имя / Компания"
+          />
           <label class="field-label">
             <span>Телефон</span>
             <input
@@ -961,20 +1062,32 @@ const onQualifyIbanBlur = async () => {
             />
             <span v-if="createPhoneError" class="text-xs text-red-300">{{ createPhoneError }}</span>
           </label>
-          <input v-model="createForm.email" class="field-input" placeholder="Email" @blur="onCreateEmailBlur" />
+          <input
+            v-model="createForm.email"
+            class="field-input"
+            :class="createServerErrors.email ? 'border-red-500 focus:outline-red-400' : ''"
+            placeholder="Email"
+            @blur="onCreateEmailBlur"
+          />
           <label class="field-label">
             <span>УНП</span>
             <input
               v-model="createForm.inn"
               class="field-input"
+              :class="createServerErrors.inn ? 'border-red-500 focus:outline-red-400' : ''"
               placeholder="УНП"
               inputmode="numeric"
               @blur="onCreateInnBlur"
             />
             <span v-if="createCompanyLookupLoading" class="text-xs text-slate-400">Подтягиваем данные ЕГР...</span>
           </label>
-          <input v-model="createForm.company_name" class="field-input" placeholder="Полное название компании" />
-          <select v-model="createForm.source" class="field-input">
+          <input
+            v-model="createForm.company_name"
+            class="field-input"
+            :class="createServerErrors.company_name ? 'border-red-500 focus:outline-red-400' : ''"
+            placeholder="Полное название компании"
+          />
+          <select v-model="createForm.source" class="field-input" :class="createServerErrors.source ? 'border-red-500 focus:outline-red-400' : ''">
             <option value="manager">Менеджер</option>
             <option value="phone">Телефон</option>
             <option value="site">Сайт</option>
@@ -987,13 +1100,14 @@ const onQualifyIbanBlur = async () => {
             class="md:col-span-2"
             label="Следующее касание"
             placeholder="дд.мм.гггг, --:--"
+            :error="createServerErrors.next_followup_date"
           />
           <label class="field-label md:col-span-2">
             <span>Запрос</span>
             <textarea
               v-model="createForm.request_text"
               class="field-input min-h-[100px]"
-              :class="createRequestError ? 'border-red-500 focus:outline-red-400' : ''"
+              :class="createRequestError || createServerErrors.request_text ? 'border-red-500 focus:outline-red-400' : ''"
               placeholder="Краткое описание запроса"
             />
             <span v-if="createRequestError" class="text-xs text-red-300">{{ createRequestError }}</span>
@@ -1054,8 +1168,18 @@ const onQualifyIbanBlur = async () => {
           <p v-if="qualifyPreview.phoneDigits">Матч по телефону: <span class="text-slate-100">{{ qualifyPreview.phoneDigits }}</span></p>
           <p v-if="qualifyPreview.email">Матч по email: <span class="text-slate-100">{{ qualifyPreview.email }}</span></p>
         </div>
+        <div v-if="Object.keys(qualifyServerErrors).length" class="mb-3 rounded-lg border border-red-500/40 bg-red-900/20 px-3 py-2 text-xs text-red-200">
+          <p v-for="(message, field) in qualifyServerErrors" :key="`qualify-${field}`">
+            {{ getFieldLabel(field) }}: {{ message }}
+          </p>
+        </div>
         <div class="grid gap-3 md:grid-cols-2">
-          <input v-model="qualifyForm.name" class="field-input" placeholder="Имя клиента" />
+          <input
+            v-model="qualifyForm.name"
+            class="field-input"
+            :class="qualifyServerErrors.name ? 'border-red-500 focus:outline-red-400' : ''"
+            placeholder="Имя клиента"
+          />
           <label class="field-label">
             <span>Телефон</span>
             <input
@@ -1070,36 +1194,72 @@ const onQualifyIbanBlur = async () => {
             />
             <span v-if="qualifyPhoneError" class="text-xs text-red-300">{{ qualifyPhoneError }}</span>
           </label>
-          <input v-model="qualifyForm.email" class="field-input" placeholder="Email" />
+          <input
+            v-model="qualifyForm.email"
+            class="field-input"
+            :class="qualifyServerErrors.email ? 'border-red-500 focus:outline-red-400' : ''"
+            placeholder="Email"
+          />
           <label class="field-label">
             <span>УНП</span>
             <input
               v-model="qualifyForm.inn"
               class="field-input"
+              :class="qualifyServerErrors.inn ? 'border-red-500 focus:outline-red-400' : ''"
               placeholder="УНП"
               inputmode="numeric"
               @blur="onQualifyInnBlur"
             />
             <span v-if="qualifyCompanyLookupLoading" class="text-xs text-slate-400">Подтягиваем данные ЕГР...</span>
           </label>
-          <input v-model="qualifyForm.full_legal_name" class="field-input md:col-span-2" placeholder="Полное наименование (для юрлица)" />
-          <input v-model="qualifyForm.legal_address" class="field-input md:col-span-2" placeholder="Юридический адрес" />
+          <input
+            v-model="qualifyForm.full_legal_name"
+            class="field-input md:col-span-2"
+            :class="qualifyServerErrors.full_legal_name ? 'border-red-500 focus:outline-red-400' : ''"
+            placeholder="Полное наименование (для юрлица)"
+          />
+          <input
+            v-model="qualifyForm.legal_address"
+            class="field-input md:col-span-2"
+            :class="qualifyServerErrors.legal_address ? 'border-red-500 focus:outline-red-400' : ''"
+            placeholder="Юридический адрес"
+          />
           <label class="field-label">
             <span>IBAN (расчетный счет)</span>
             <input
               v-model="qualifyForm.iban"
               class="field-input"
+              :class="qualifyServerErrors.iban ? 'border-red-500 focus:outline-red-400' : ''"
               placeholder="BY.."
               @blur="onQualifyIbanBlur"
             />
             <span v-if="qualifyBankLookupLoading" class="text-xs text-slate-400">Подтягиваем данные банка...</span>
           </label>
-          <input v-model="qualifyForm.bic" class="field-input" placeholder="BIC банка" />
-          <input v-model="qualifyForm.bank_name" class="field-input md:col-span-2" placeholder="Название банка" />
-          <input v-model="qualifyForm.delivery_address" class="field-input md:col-span-2" placeholder="Адрес доставки/монтажа" />
+          <input
+            v-model="qualifyForm.bic"
+            class="field-input"
+            :class="qualifyServerErrors.bic ? 'border-red-500 focus:outline-red-400' : ''"
+            placeholder="BIC банка"
+          />
+          <input
+            v-model="qualifyForm.bank_name"
+            class="field-input md:col-span-2"
+            :class="qualifyServerErrors.bank_name ? 'border-red-500 focus:outline-red-400' : ''"
+            placeholder="Название банка"
+          />
+          <input
+            v-model="qualifyForm.delivery_address"
+            class="field-input md:col-span-2"
+            :class="qualifyServerErrors.delivery_address ? 'border-red-500 focus:outline-red-400' : ''"
+            placeholder="Адрес доставки/монтажа"
+          />
           <label class="field-label md:col-span-2">
             <span>Комментарий сделки</span>
-            <textarea v-model="qualifyForm.order_comment" class="field-input min-h-[90px]" />
+            <textarea
+              v-model="qualifyForm.order_comment"
+              class="field-input min-h-[90px]"
+              :class="qualifyServerErrors.order_comment ? 'border-red-500 focus:outline-red-400' : ''"
+            />
           </label>
         </div>
         <div class="mt-5 flex justify-end gap-2">
