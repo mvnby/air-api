@@ -107,6 +107,14 @@ export const api = {
         return await ManagerLeadsService.markManagerLeadLost(leadId, payload);
     },
 
+    async getCompanyByUnp(unp: string) {
+        return await ApiService.publicProxyEgrApiV1ProxyEgrGet(unp);
+    },
+
+    async getBankBySearch(search: string) {
+        return await ApiService.publicFindBankApiV1ProxyBankGet(search);
+    },
+
     // Legacy Product Manager methods
     async getProducts(limit = 50, page = 1) {
         return await ApiService.getProducts(page, limit);
@@ -218,8 +226,12 @@ export const api = {
         );
     },
 
-    async getManagerCustomers(page = 1, limit = 20, search?: string, type?: string, onlyWithOrders = true) {
+    async getManagerCustomers(page = 1, limit = 20, search?: string, type?: string, onlyWithOrders = false) {
         return await ManagerService.getManagerCustomers(page, limit, search ?? undefined, type ?? undefined, onlyWithOrders);
+    },
+
+    async getManagerCustomerDetail(customerId: number) {
+        return await ManagerService.getManagerCustomerDetail(customerId);
     },
 
     async updateProduct(id: number, data: ProductUpdate) {

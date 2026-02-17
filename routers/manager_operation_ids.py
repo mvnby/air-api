@@ -4,6 +4,7 @@ READ_USER_ME = "read_user_me"
 
 GET_MANAGER_PRODUCTS = "get_manager_products"
 GET_MANAGER_CUSTOMERS = "get_manager_customers"
+GET_MANAGER_CUSTOMER_DETAIL = "get_manager_customer_detail"
 UPDATE_PRODUCT = "update_product"
 BULK_ROUND_PRICE = "bulk_round_price"
 GET_ALL_TAGS = "get_all_tags"
@@ -42,6 +43,7 @@ ALL_MANAGER_OPERATION_IDS = (
     READ_USER_ME,
     GET_MANAGER_PRODUCTS,
     GET_MANAGER_CUSTOMERS,
+    GET_MANAGER_CUSTOMER_DETAIL,
     UPDATE_PRODUCT,
     BULK_ROUND_PRICE,
     GET_ALL_TAGS,

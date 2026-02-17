@@ -9,6 +9,10 @@ function extractNormalizedDigits(value: string): string {
   return digits;
 }
 
+export function normalizePhoneDigits(value: string): string {
+  return extractNormalizedDigits(value);
+}
+
 export function isBelarusPhoneComplete(masked: string): boolean {
   const normalized = extractNormalizedDigits(masked);
   return normalized.length === 12 && normalized.startsWith('375');

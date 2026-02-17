@@ -288,6 +288,10 @@ class LeadService:
         email = LeadService._clean_optional(payload.email) or LeadService._clean_optional(lead.email)
         inn = LeadService._clean_optional(payload.inn) or LeadService._clean_optional(lead.inn)
         full_legal_name = LeadService._clean_optional(payload.full_legal_name) or LeadService._clean_optional(lead.company_name)
+        legal_address = LeadService._clean_optional(payload.legal_address)
+        iban = LeadService._clean_optional(payload.iban)
+        bic = LeadService._clean_optional(payload.bic)
+        bank_name = LeadService._clean_optional(payload.bank_name)
 
         customer = await LeadService._find_existing_customer(session, phone=phone, email=email, inn=inn)
 
@@ -309,6 +313,10 @@ class LeadService:
                 type=customer_type,
                 inn=inn,
                 full_legal_name=full_legal_name,
+                legal_address=legal_address,
+                iban=iban,
+                bic=bic,
+                bank_name=bank_name,
             )
             session.add(customer)
             await session.flush()
@@ -322,6 +330,14 @@ class LeadService:
                 customer.inn = inn
             if full_legal_name:
                 customer.full_legal_name = full_legal_name
+            if legal_address:
+                customer.legal_address = legal_address
+            if iban:
+                customer.iban = iban
+            if bic:
+                customer.bic = bic
+            if bank_name:
+                customer.bank_name = bank_name
             if customer_type == CustomerType.company:
                 customer.type = CustomerType.company
             session.add(customer)

@@ -197,6 +197,10 @@ const checkAuth = async () => {
 };
 
 onMounted(async () => {
+  const searchParam = new URLSearchParams(window.location.search).get('search');
+  if (searchParam) {
+    search.value = searchParam;
+  }
   await checkAuth();
 });
 </script>

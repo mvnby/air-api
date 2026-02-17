@@ -52,6 +52,14 @@ class ManagerCatalogService:
         )
 
     @staticmethod
+    async def get_customer(
+        session: AsyncSession,
+        *,
+        customer_id: int,
+    ) -> Optional[Dict[str, Any]]:
+        return await CustomerService.get_for_manager(session=session, customer_id=customer_id)
+
+    @staticmethod
     async def update_product(
         session: AsyncSession,
         *,

@@ -8,6 +8,10 @@ export type LeadQualifyPayload = {
     email?: (string | null);
     inn?: (string | null);
     full_legal_name?: (string | null);
+    legal_address?: (string | null);
+    iban?: (string | null);
+    bic?: (string | null);
+    bank_name?: (string | null);
     delivery_address?: (string | null);
     customer_type?: (string | null);
     order_comment?: (string | null);

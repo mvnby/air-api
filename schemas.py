@@ -321,6 +321,10 @@ class LeadQualifyPayload(BaseModel):
     email: Optional[str] = None
     inn: Optional[str] = None
     full_legal_name: Optional[str] = None
+    legal_address: Optional[str] = None
+    iban: Optional[str] = None
+    bic: Optional[str] = None
+    bank_name: Optional[str] = None
     delivery_address: Optional[str] = None
     customer_type: Optional[str] = None
     order_comment: Optional[str] = None
@@ -385,7 +389,17 @@ class ManagerCatalogCustomerItemResponse(BaseModel):
     email: Optional[str]
     type: str
     inn: Optional[str]
+    kpp: Optional[str] = None
     full_legal_name: Optional[str]
+    legal_address: Optional[str]
+    actual_address: Optional[str] = None
+    iban: Optional[str]
+    bic: Optional[str]
+    bank_name: Optional[str]
+    signer_position: Optional[str] = None
+    signer_name: Optional[str] = None
+    acting_basis: Optional[str] = None
+    last_delivery_address: Optional[str] = None
     created_at: Optional[datetime]
     order_count: int
 
