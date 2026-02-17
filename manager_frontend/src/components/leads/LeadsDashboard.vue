@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { api } from '../../api';
+import DateTimeField from '../ui/DateTimeField.vue';
 import type {
   LeadCreatePayload,
   LeadLossPayload,
@@ -8,6 +9,9 @@ import type {
   LeadResponse,
   LeadUpdatePayload,
 } from '../../client';
+import { useBelarusPhoneMask } from '../../composables/useBelarusPhoneMask';
+import { fromLocalDateTimeInput } from '../../utils/datetime';
+import { isBelarusPhoneComplete, normalizePhoneForApi } from '../../utils/phone';
 
 type LeadTab = '' | 'new' | 'contacted' | 'qualified' | 'lost' | 'spam';
 
@@ -25,6 +29,10 @@ const statusTab = ref<LeadTab>('');
 const showCreateModal = ref(false);
 const showQualifyModal = ref(false);
 const selectedLead = ref<LeadResponse | null>(null);
+const createPhoneError = ref('');
+const qualifyPhoneError = ref('');
+const createPhoneInputRef = ref<HTMLInputElement | null>(null);
+const qualifyPhoneInputRef = ref<HTMLInputElement | null>(null);
 
 const createForm = ref<LeadCreatePayload>({
   source: 'manager',
@@ -46,6 +54,23 @@ const qualifyForm = ref<LeadQualifyPayload>({
   delivery_address: '',
   order_comment: '',
 });
+
+const createPhoneModel = computed({
+  get: () => createForm.value.phone ?? '',
+  set: (value: string) => {
+    createForm.value.phone = value;
+  },
+});
+
+const qualifyPhoneModel = computed({
+  get: () => qualifyForm.value.phone ?? '',
+  set: (value: string) => {
+    qualifyForm.value.phone = value;
+  },
+});
+
+const createPhoneMask = useBelarusPhoneMask(createPhoneInputRef, createPhoneModel);
+const qualifyPhoneMask = useBelarusPhoneMask(qualifyPhoneInputRef, qualifyPhoneModel);
 
 const statusLabels: Record<string, string> = {
   new: 'Новый',
@@ -147,21 +172,42 @@ const resetCreateForm = () => {
     company_name: '',
     next_followup_date: undefined,
   };
+  createPhoneError.value = '';
+};
+
+const getPhoneValidationError = (
+  value: string | null | undefined,
+  isComplete: boolean,
+): string => {
+  const raw = (value || '').trim();
+  if (!raw) {
+    return '';
+  }
+  if (!isComplete || !isBelarusPhoneComplete(raw)) {
+    return 'Введите телефон полностью в формате +375 (XX) XXX-XX-XX';
+  }
+  return '';
 };
 
 const submitCreateLead = async () => {
   if (saving.value) return;
+  createPhoneError.value = getPhoneValidationError(createForm.value.phone, createPhoneMask.isComplete.value);
+  if (createPhoneError.value) {
+    setToast(createPhoneError.value);
+    return;
+  }
   saving.value = true;
   try {
+    const normalizedPhone = createForm.value.phone ? normalizePhoneForApi(createForm.value.phone) : undefined;
     const payload: LeadCreatePayload = {
       ...createForm.value,
       request_text: (createForm.value.request_text || '').trim(),
       name: createForm.value.name || undefined,
-      phone: createForm.value.phone || undefined,
+      phone: normalizedPhone || undefined,
       email: createForm.value.email || undefined,
       inn: createForm.value.inn || undefined,
       company_name: createForm.value.company_name || undefined,
-      next_followup_date: createForm.value.next_followup_date || undefined,
+      next_followup_date: fromLocalDateTimeInput(createForm.value.next_followup_date || undefined) || undefined,
     };
     await api.createManagerLead(payload);
     showCreateModal.value = false;
@@ -214,24 +260,31 @@ const openQualifyModal = (lead: LeadResponse) => {
   selectedLead.value = lead;
   qualifyForm.value = {
     name: lead.name || '',
-    phone: lead.phone || '',
+    phone: lead.phone ? normalizePhoneForApi(lead.phone) : '',
     email: lead.email || '',
     inn: lead.inn || '',
     full_legal_name: lead.company_name || '',
     delivery_address: '',
     order_comment: lead.request_text,
   };
+  qualifyPhoneError.value = '';
   showQualifyModal.value = true;
 };
 
 const qualifyLead = async () => {
   if (!selectedLead.value || saving.value) return;
+  qualifyPhoneError.value = getPhoneValidationError(qualifyForm.value.phone, qualifyPhoneMask.isComplete.value);
+  if (qualifyPhoneError.value) {
+    setToast(qualifyPhoneError.value);
+    return;
+  }
   saving.value = true;
   try {
+    const normalizedPhone = qualifyForm.value.phone ? normalizePhoneForApi(qualifyForm.value.phone) : undefined;
     const response = await api.qualifyManagerLead(selectedLead.value.id, {
       ...qualifyForm.value,
       name: qualifyForm.value.name || undefined,
-      phone: qualifyForm.value.phone || undefined,
+      phone: normalizedPhone || undefined,
       email: qualifyForm.value.email || undefined,
       inn: qualifyForm.value.inn || undefined,
       full_legal_name: qualifyForm.value.full_legal_name || undefined,
@@ -270,6 +323,14 @@ watch(search, () => {
 onMounted(async () => {
   await loadLeads();
 });
+
+const validateCreatePhoneOnBlur = () => {
+  createPhoneError.value = getPhoneValidationError(createForm.value.phone, createPhoneMask.isComplete.value);
+};
+
+const validateQualifyPhoneOnBlur = () => {
+  qualifyPhoneError.value = getPhoneValidationError(qualifyForm.value.phone, qualifyPhoneMask.isComplete.value);
+};
 </script>
 
 <template>
@@ -404,7 +465,20 @@ onMounted(async () => {
         <h2 class="mb-4 text-xl font-semibold">Новый лид</h2>
         <div class="grid gap-3 md:grid-cols-2">
           <input v-model="createForm.name" class="field-input" placeholder="Имя / Компания" />
-          <input v-model="createForm.phone" class="field-input" placeholder="Телефон" />
+          <label class="field-label">
+            <span>Телефон</span>
+            <input
+              ref="createPhoneInputRef"
+              v-model="createForm.phone"
+              class="field-input"
+              :class="createPhoneError ? 'border-red-500 focus:outline-red-400' : ''"
+              type="tel"
+              inputmode="tel"
+              placeholder="+375 (XX) XXX-XX-XX"
+              @blur="validateCreatePhoneOnBlur"
+            />
+            <span v-if="createPhoneError" class="text-xs text-red-300">{{ createPhoneError }}</span>
+          </label>
           <input v-model="createForm.email" class="field-input" placeholder="Email" />
           <input v-model="createForm.inn" class="field-input" placeholder="УНП" />
           <input v-model="createForm.company_name" class="field-input" placeholder="Полное название компании" />
@@ -416,10 +490,12 @@ onMounted(async () => {
             <option value="email">Email</option>
             <option value="other">Другое</option>
           </select>
-          <label class="field-label md:col-span-2">
-            <span>Следующее касание</span>
-            <input v-model="createForm.next_followup_date" type="datetime-local" class="field-input" />
-          </label>
+          <DateTimeField
+            v-model="createForm.next_followup_date"
+            class="md:col-span-2"
+            label="Следующее касание"
+            placeholder="дд.мм.гггг, --:--"
+          />
           <label class="field-label md:col-span-2">
             <span>Запрос</span>
             <textarea
@@ -441,7 +517,20 @@ onMounted(async () => {
         <h2 class="mb-4 text-xl font-semibold">Квалифицировать лид #{{ selectedLead.id }}</h2>
         <div class="grid gap-3 md:grid-cols-2">
           <input v-model="qualifyForm.name" class="field-input" placeholder="Имя клиента" />
-          <input v-model="qualifyForm.phone" class="field-input" placeholder="Телефон" />
+          <label class="field-label">
+            <span>Телефон</span>
+            <input
+              ref="qualifyPhoneInputRef"
+              v-model="qualifyForm.phone"
+              class="field-input"
+              :class="qualifyPhoneError ? 'border-red-500 focus:outline-red-400' : ''"
+              type="tel"
+              inputmode="tel"
+              placeholder="+375 (XX) XXX-XX-XX"
+              @blur="validateQualifyPhoneOnBlur"
+            />
+            <span v-if="qualifyPhoneError" class="text-xs text-red-300">{{ qualifyPhoneError }}</span>
+          </label>
           <input v-model="qualifyForm.email" class="field-input" placeholder="Email" />
           <input v-model="qualifyForm.inn" class="field-input" placeholder="УНП" />
           <input v-model="qualifyForm.full_legal_name" class="field-input md:col-span-2" placeholder="Полное наименование (для юрлица)" />
