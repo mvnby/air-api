@@ -24,6 +24,8 @@ const toast = ref('');
 
 const drawerOpen = ref(false);
 const selectedOrder = ref<ManagerOrderDetailResponse | null>(null);
+const pendingOpenOrderId = ref<number | null>(null);
+const openedByUrlOrderId = ref<number | null>(null);
 
 const showLoginModal = ref(false);
 const loginUsername = ref('');
@@ -83,6 +85,10 @@ const loadOrders = async () => {
     });
     if (requestId !== loadRequestId) return;
     orders.value = response.items;
+    if (pendingOpenOrderId.value && openedByUrlOrderId.value !== pendingOpenOrderId.value) {
+      await openOrder(pendingOpenOrderId.value, false);
+      openedByUrlOrderId.value = pendingOpenOrderId.value;
+    }
   } catch (error) {
     if (requestId !== loadRequestId) return;
     console.error(error);
@@ -146,10 +152,17 @@ const onGenerateDoc = async (payload: { orderId: number; docType: string }) => {
   }
 };
 
-const openOrder = async (orderId: number) => {
+const openOrder = async (orderId: number, updateUrl = true) => {
   try {
     selectedOrder.value = await api.getManagerOrderDetail(orderId);
     drawerOpen.value = true;
+    if (updateUrl) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('orderId', String(orderId));
+      window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+      pendingOpenOrderId.value = orderId;
+      openedByUrlOrderId.value = orderId;
+    }
   } catch (error) {
     console.error(error);
     setToast('Не удалось открыть сделку');
@@ -170,6 +183,13 @@ const saveOrder = async (payload: { orderId: number; data: ManagerOrderUpdatePay
   } finally {
     saving.value = false;
   }
+};
+
+const clearOrderIdFromUrl = () => {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has('orderId')) return;
+  url.searchParams.delete('orderId');
+  window.history.replaceState({}, '', `${url.pathname}${url.search}`);
 };
 
 const handleLogin = async () => {
@@ -197,11 +217,26 @@ const checkAuth = async () => {
 };
 
 onMounted(async () => {
-  const searchParam = new URLSearchParams(window.location.search).get('search');
+  const params = new URLSearchParams(window.location.search);
+  const searchParam = params.get('search');
   if (searchParam) {
     search.value = searchParam;
   }
+  const orderIdParam = params.get('orderId');
+  if (orderIdParam) {
+    const parsed = Number(orderIdParam);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      pendingOpenOrderId.value = parsed;
+    }
+  }
   await checkAuth();
+});
+
+watch(drawerOpen, (isOpen) => {
+  if (!isOpen) {
+    clearOrderIdFromUrl();
+    openedByUrlOrderId.value = null;
+  }
 });
 </script>
 

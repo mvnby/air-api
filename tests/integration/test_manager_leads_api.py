@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlmodel import select
@@ -29,6 +29,7 @@ async def test_manager_leads_crud_flow(async_client):
             "name": "Новый лид",
             "phone": "+375291111111",
             "request_text": "Нужна консультация по компрессору",
+            "next_followup_date": datetime.now(timezone.utc).isoformat(),
         },
     )
     assert create_resp.status_code == 200

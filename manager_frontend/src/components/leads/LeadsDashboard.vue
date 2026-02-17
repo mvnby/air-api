@@ -51,6 +51,8 @@ const customerLookupResults = ref<ManagerCatalogCustomerItemResponse[]>([]);
 const qualifyCustomerLookupQuery = ref('');
 const qualifyCustomerLookupLoading = ref(false);
 const qualifyCustomerLookupResults = ref<ManagerCatalogCustomerItemResponse[]>([]);
+const pendingOpenLeadId = ref<number | null>(null);
+const openedByUrlLeadId = ref<number | null>(null);
 
 const createForm = ref<LeadCreatePayload>({
   source: 'manager',
@@ -189,6 +191,13 @@ const loadLeads = async () => {
       sort: sort.value,
     });
     leads.value = response.items;
+    if (pendingOpenLeadId.value && openedByUrlLeadId.value !== pendingOpenLeadId.value) {
+      const leadToOpen = leads.value.find((item) => item.id === pendingOpenLeadId.value);
+      if (leadToOpen) {
+        openQualifyModal(leadToOpen, false);
+        openedByUrlLeadId.value = pendingOpenLeadId.value;
+      }
+    }
   } catch (error) {
     console.error(error);
     setToast(`Не удалось загрузить лиды: ${getErrorMessage(error)}`);
@@ -304,7 +313,7 @@ const markLost = async (lead: LeadResponse, status: 'lost' | 'spam') => {
   }
 };
 
-const openQualifyModal = (lead: LeadResponse) => {
+const openQualifyModal = (lead: LeadResponse, updateUrl = true) => {
   selectedLead.value = lead;
   selectedQualifyCustomer.value = null;
   qualifyCustomerLookupQuery.value = '';
@@ -323,6 +332,13 @@ const openQualifyModal = (lead: LeadResponse) => {
     order_comment: lead.request_text,
   };
   qualifyPhoneError.value = '';
+  if (updateUrl) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('leadId', String(lead.id));
+    window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+    pendingOpenLeadId.value = lead.id;
+    openedByUrlLeadId.value = lead.id;
+  }
   showQualifyModal.value = true;
   void autoHydrateQualifyFormByLeadIdentity();
 };
@@ -368,10 +384,12 @@ const qualifyLead = async () => {
 };
 
 const navigateToOrders = (orderId?: number | null) => {
-  const path = '/manager/orders/kanban';
+  const path = orderId
+    ? `/manager/orders/kanban?orderId=${encodeURIComponent(String(orderId))}`
+    : '/manager/orders/kanban';
   window.history.pushState({}, '', path);
   window.dispatchEvent(new PopStateEvent('popstate'));
-  if (orderId) setToast(`Открыт раздел сделок. Найдите сделку #${orderId}`);
+  if (orderId) setToast(`Открыта сделка #${orderId}.`);
 };
 
 const navigateToCustomerProfile = (customer?: { id?: number | null } | null) => {
@@ -384,6 +402,13 @@ const navigateToCustomerProfile = (customer?: { id?: number | null } | null) => 
   if (customer?.id) {
     setToast(`Открыта карточка клиента #${customer.id}.`);
   }
+};
+
+const clearLeadIdFromUrl = () => {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has('leadId')) return;
+  url.searchParams.delete('leadId');
+  window.history.replaceState({}, '', `${url.pathname}${url.search}`);
 };
 
 let searchTimer: number | undefined;
@@ -412,7 +437,21 @@ watch(qualifyCustomerLookupQuery, () => {
 });
 
 onMounted(async () => {
+  const leadIdParam = new URLSearchParams(window.location.search).get('leadId');
+  if (leadIdParam) {
+    const parsed = Number(leadIdParam);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      pendingOpenLeadId.value = parsed;
+    }
+  }
   await loadLeads();
+});
+
+watch(showQualifyModal, (isOpen) => {
+  if (!isOpen) {
+    clearLeadIdFromUrl();
+    openedByUrlLeadId.value = null;
+  }
 });
 
 const validateCreatePhoneOnBlur = () => {

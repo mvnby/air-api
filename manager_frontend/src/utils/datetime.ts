@@ -18,7 +18,16 @@ export function toLocalDateTimeInput(iso: string | null | undefined): string {
 
 export function fromLocalDateTimeInput(local: string | null | undefined): string | null {
   if (!local) return null;
-  const date = new Date(local);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString();
+  const normalized = local.trim();
+  if (!normalized) return null;
+
+  // Keep datetime timezone-naive for backend fields stored as TIMESTAMP WITHOUT TIME ZONE.
+  // Browser datetime-local value is already in `YYYY-MM-DDTHH:mm` local form.
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(normalized)) {
+    return `${normalized}:00`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(normalized)) {
+    return normalized;
+  }
+  return null;
 }

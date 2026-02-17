@@ -42,6 +42,14 @@ class LeadService:
         return LeadSegmentHint.unknown
 
     @staticmethod
+    def _normalize_naive_datetime(value: Optional[datetime]) -> Optional[datetime]:
+        if value is None:
+            return None
+        if value.tzinfo is not None:
+            return value.replace(tzinfo=None)
+        return value
+
+    @staticmethod
     def _map_lead(lead: Lead) -> Dict[str, Any]:
         return {
             "id": int(lead.id or 0),
@@ -82,7 +90,7 @@ class LeadService:
             inn=inn,
             company_name=LeadService._clean_optional(payload.company_name),
             request_text=request_text,
-            next_followup_date=payload.next_followup_date,
+            next_followup_date=LeadService._normalize_naive_datetime(payload.next_followup_date),
         )
         session.add(lead)
         await session.commit()
@@ -207,9 +215,9 @@ class LeadService:
         if "loss_reason" in fields_set:
             lead.loss_reason = LeadLossReason(payload.loss_reason) if payload.loss_reason else None
         if "next_followup_date" in fields_set:
-            lead.next_followup_date = payload.next_followup_date
+            lead.next_followup_date = LeadService._normalize_naive_datetime(payload.next_followup_date)
         if "archived_at" in fields_set:
-            lead.archived_at = payload.archived_at
+            lead.archived_at = LeadService._normalize_naive_datetime(payload.archived_at)
         if "segment_hint" in fields_set:
             explicit_segment_hint = payload.segment_hint
             should_recompute_segment = True
