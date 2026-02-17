@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 
 from fastapi import FastAPI
 from sqladmin import Admin
@@ -9,11 +9,13 @@ from core.security import AdminAuthBackend
 
 
 def configure_sqladmin(app: FastAPI, engine: Engine, base_dir: str, secret_key: str) -> Admin:
+    templates_dir = Path(base_dir) / "templates"
+
     admin = Admin(
         app,
         engine,
         title="AirCon Admin",
-        templates_dir=os.path.join(base_dir, "templates"),
+        templates_dir=str(templates_dir),
         authentication_backend=AdminAuthBackend(secret_key=secret_key),
     )
 
