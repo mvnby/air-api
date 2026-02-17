@@ -390,6 +390,10 @@ class ManagerCatalogCustomerItemResponse(BaseModel):
     type: str
     inn: Optional[str]
     full_legal_name: Optional[str]
+    legal_address: Optional[str]
+    iban: Optional[str]
+    bic: Optional[str]
+    bank_name: Optional[str]
     created_at: Optional[datetime]
     order_count: int
 

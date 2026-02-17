@@ -13,7 +13,7 @@ import type {
 import { useBelarusPhoneMask } from '../../composables/useBelarusPhoneMask';
 import { fromLocalDateTimeInput } from '../../utils/datetime';
 import { getBankFromLookup, getCompanyFromEgr, normalizeIban, normalizeUnp } from '../../utils/legal-requisites';
-import { isBelarusPhoneComplete, normalizePhoneForApi } from '../../utils/phone';
+import { isBelarusPhoneComplete, normalizePhoneDigits, normalizePhoneForApi } from '../../utils/phone';
 
 type LeadTab = '' | 'new' | 'contacted' | 'qualified' | 'lost' | 'spam';
 
@@ -296,6 +296,7 @@ const openQualifyModal = (lead: LeadResponse) => {
   };
   qualifyPhoneError.value = '';
   showQualifyModal.value = true;
+  void autoHydrateQualifyFormByLeadIdentity();
 };
 
 const qualifyLead = async () => {
@@ -387,6 +388,13 @@ const validateQualifyPhoneOnBlur = () => {
   qualifyPhoneError.value = getPhoneValidationError(qualifyForm.value.phone, qualifyPhoneMask.isComplete.value);
 };
 
+const applyCustomerRequisitesToQualifyForm = (customer: ManagerCatalogCustomerItemResponse) => {
+  qualifyForm.value.legal_address = customer.legal_address || qualifyForm.value.legal_address;
+  qualifyForm.value.iban = customer.iban || qualifyForm.value.iban;
+  qualifyForm.value.bic = customer.bic || qualifyForm.value.bic;
+  qualifyForm.value.bank_name = customer.bank_name || qualifyForm.value.bank_name;
+};
+
 const applyCustomerToCreateForm = (customer: ManagerCatalogCustomerItemResponse) => {
   selectedExistingCustomer.value = customer;
   customerLookupQuery.value = customer.full_legal_name || customer.name || `Клиент #${customer.id}`;
@@ -396,6 +404,30 @@ const applyCustomerToCreateForm = (customer: ManagerCatalogCustomerItemResponse)
   createForm.value.inn = customer.inn || createForm.value.inn;
   createForm.value.company_name = customer.full_legal_name || createForm.value.company_name;
   customerLookupResults.value = [];
+};
+
+const isCustomerMatchByIdentity = (
+  customer: ManagerCatalogCustomerItemResponse,
+  identity: { inn?: string; email?: string; phoneDigits?: string },
+): boolean => {
+  const customerInn = normalizeUnp(customer.inn || '');
+  const customerEmail = (customer.email || '').trim().toLowerCase();
+  const customerPhoneDigits = normalizePhoneDigits(customer.phone || '');
+
+  if (identity.inn && customerInn && identity.inn === customerInn) return true;
+  if (identity.email && customerEmail && identity.email === customerEmail) return true;
+  if (identity.phoneDigits && customerPhoneDigits && identity.phoneDigits === customerPhoneDigits) return true;
+  return false;
+};
+
+const findCustomerByIdentity = async (identity: { inn?: string; email?: string; phoneDigits?: string }) => {
+  const query = identity.inn || identity.phoneDigits || identity.email;
+  if (!query) return null;
+
+  const response = await api.getManagerCustomers(1, 30, query, undefined, false);
+  const items = response.items || [];
+  const exact = items.find((item) => isCustomerMatchByIdentity(item, identity));
+  return exact || null;
 };
 
 const findExistingCustomers = async () => {
@@ -425,6 +457,7 @@ const applyCustomerToQualifyForm = (customer: ManagerCatalogCustomerItemResponse
   qualifyForm.value.email = customer.email || qualifyForm.value.email;
   qualifyForm.value.inn = customer.inn || qualifyForm.value.inn;
   qualifyForm.value.full_legal_name = customer.full_legal_name || qualifyForm.value.full_legal_name;
+  applyCustomerRequisitesToQualifyForm(customer);
   qualifyCustomerLookupResults.value = [];
 };
 
@@ -452,6 +485,17 @@ const onCreateInnBlur = async () => {
   createForm.value.inn = normalizedUnp;
   if (normalizedUnp.length !== 9) return;
 
+  try {
+    const existing = await findCustomerByIdentity({ inn: normalizedUnp });
+    if (existing) {
+      applyCustomerToCreateForm(existing);
+      setToast(`Найден существующий клиент #${existing.id}, данные подставлены.`);
+      return;
+    }
+  } catch (error) {
+    console.error(error);
+  }
+
   createCompanyLookupLoading.value = true;
   try {
     const response = await api.getCompanyByUnp(normalizedUnp);
@@ -472,6 +516,17 @@ const onQualifyInnBlur = async () => {
   qualifyForm.value.inn = normalizedUnp;
   if (normalizedUnp.length !== 9) return;
 
+  try {
+    const existing = await findCustomerByIdentity({ inn: normalizedUnp });
+    if (existing) {
+      applyCustomerToQualifyForm(existing);
+      setToast(`Найден клиент #${existing.id}, реквизиты подставлены.`);
+      return;
+    }
+  } catch (error) {
+    console.error(error);
+  }
+
   qualifyCompanyLookupLoading.value = true;
   try {
     const response = await api.getCompanyByUnp(normalizedUnp);
@@ -487,6 +542,53 @@ const onQualifyInnBlur = async () => {
     setToast(`Не удалось получить данные ЕГР: ${getErrorMessage(error)}`);
   } finally {
     qualifyCompanyLookupLoading.value = false;
+  }
+};
+
+const onCreatePhoneBlur = async () => {
+  validateCreatePhoneOnBlur();
+  if (createPhoneError.value) return;
+  const phoneDigits = normalizePhoneDigits(createForm.value.phone || '');
+  if (!phoneDigits) return;
+
+  try {
+    const existing = await findCustomerByIdentity({ phoneDigits });
+    if (existing) {
+      applyCustomerToCreateForm(existing);
+      setToast(`Найден существующий клиент #${existing.id}, данные подставлены.`);
+    }
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+const onCreateEmailBlur = async () => {
+  const email = (createForm.value.email || '').trim().toLowerCase();
+  if (!email) return;
+
+  try {
+    const existing = await findCustomerByIdentity({ email });
+    if (existing) {
+      applyCustomerToCreateForm(existing);
+      setToast(`Найден существующий клиент #${existing.id}, данные подставлены.`);
+    }
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+const autoHydrateQualifyFormByLeadIdentity = async () => {
+  const inn = normalizeUnp(qualifyForm.value.inn || '');
+  const phoneDigits = normalizePhoneDigits(qualifyForm.value.phone || '');
+  const email = (qualifyForm.value.email || '').trim().toLowerCase();
+  if (!inn && !phoneDigits && !email) return;
+
+  try {
+    const existing = await findCustomerByIdentity({ inn: inn || undefined, phoneDigits: phoneDigits || undefined, email: email || undefined });
+    if (!existing) return;
+    applyCustomerToQualifyForm(existing);
+  } catch (error) {
+    console.error(error);
   }
 };
 
@@ -690,11 +792,11 @@ const onQualifyIbanBlur = async () => {
               type="tel"
               inputmode="tel"
               placeholder="+375 (XX) XXX-XX-XX"
-              @blur="validateCreatePhoneOnBlur"
+              @blur="onCreatePhoneBlur"
             />
             <span v-if="createPhoneError" class="text-xs text-red-300">{{ createPhoneError }}</span>
           </label>
-          <input v-model="createForm.email" class="field-input" placeholder="Email" />
+          <input v-model="createForm.email" class="field-input" placeholder="Email" @blur="onCreateEmailBlur" />
           <label class="field-label">
             <span>УНП</span>
             <input

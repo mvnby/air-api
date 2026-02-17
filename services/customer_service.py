@@ -71,6 +71,10 @@ class CustomerService:
                     "type": customer.type.value if hasattr(customer.type, "value") else str(customer.type),
                     "inn": customer.inn,
                     "full_legal_name": customer.full_legal_name,
+                    "legal_address": customer.legal_address,
+                    "iban": customer.iban,
+                    "bic": customer.bic,
+                    "bank_name": customer.bank_name,
                     "created_at": customer.created_at.isoformat() if customer.created_at else None,
                     "order_count": order_counts.get(cid, 0),
                 }

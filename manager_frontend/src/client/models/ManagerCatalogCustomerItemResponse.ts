@@ -10,6 +10,10 @@ export type ManagerCatalogCustomerItemResponse = {
     type: string;
     inn: (string | null);
     full_legal_name: (string | null);
+    legal_address: (string | null);
+    iban: (string | null);
+    bic: (string | null);
+    bank_name: (string | null);
     created_at: (string | null);
     order_count: number;
 };
