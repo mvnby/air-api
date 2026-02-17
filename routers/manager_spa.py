@@ -4,10 +4,9 @@ from fastapi import APIRouter
 from fastapi.responses import FileResponse, JSONResponse
 
 
-def create_manager_spa_router(manager_dist: str) -> APIRouter:
+def create_manager_spa_router(manager_dist: Path) -> APIRouter:
     router = APIRouter()
-    manager_dist_path = Path(manager_dist)
-    index_path = manager_dist_path / "index.html"
+    index_path = manager_dist / "index.html"
 
     def _render_index_or_404():
         if index_path.exists():
