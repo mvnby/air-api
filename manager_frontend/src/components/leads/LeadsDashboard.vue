@@ -25,6 +25,7 @@ import {
 } from '../../utils/validation';
 
 type LeadTab = '' | 'new' | 'contacted' | 'qualified' | 'lost' | 'spam';
+type RequisiteFieldKey = 'full_legal_name' | 'legal_address' | 'iban' | 'bic' | 'bank_name';
 
 const leads = ref<LeadResponse[]>([]);
 const loading = ref(false);
@@ -43,6 +44,14 @@ const selectedLead = ref<LeadResponse | null>(null);
 const selectedExistingCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const createSuggestedCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const selectedQualifyCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
+const selectedQualifyCustomerDetail = ref<ManagerCatalogCustomerItemResponse | null>(null);
+const qualifyOverwriteFields = ref<Record<RequisiteFieldKey, boolean>>({
+  full_legal_name: false,
+  legal_address: false,
+  iban: false,
+  bic: false,
+  bank_name: false,
+});
 const createSuggestionDismissedForId = ref<number | null>(null);
 const lastQualifyResult = ref<{
   leadId: number;
@@ -230,6 +239,66 @@ const FIELD_LABELS: Record<string, string> = {
 };
 
 const getFieldLabel = (field: string): string => FIELD_LABELS[field] || field;
+const REQUISITE_FIELDS: Array<{ key: RequisiteFieldKey; label: string }> = [
+  { key: 'full_legal_name', label: 'Полное наименование' },
+  { key: 'legal_address', label: 'Юридический адрес' },
+  { key: 'iban', label: 'IBAN' },
+  { key: 'bic', label: 'BIC' },
+  { key: 'bank_name', label: 'Банк' },
+];
+
+const normalizeRequisiteValue = (key: RequisiteFieldKey, value: string): string => {
+  if (key === 'iban') return normalizeIban(value);
+  return value.trim();
+};
+
+const getExistingRequisiteValue = (key: RequisiteFieldKey): string => {
+  const value = selectedQualifyCustomerDetail.value?.[key];
+  return typeof value === 'string' ? value : '';
+};
+
+const getIncomingRequisiteValue = (key: RequisiteFieldKey): string => {
+  const value = qualifyForm.value[key];
+  return typeof value === 'string' ? value : '';
+};
+
+const isRequisiteChanged = (key: RequisiteFieldKey): boolean => {
+  const existing = normalizeRequisiteValue(key, getExistingRequisiteValue(key));
+  const incoming = normalizeRequisiteValue(key, getIncomingRequisiteValue(key));
+  return Boolean(existing && incoming && existing !== incoming);
+};
+
+const canWriteRequisiteByDefault = (key: RequisiteFieldKey): boolean => {
+  const existing = normalizeRequisiteValue(key, getExistingRequisiteValue(key));
+  const incoming = normalizeRequisiteValue(key, getIncomingRequisiteValue(key));
+  if (!incoming) return false;
+  if (!existing) return true;
+  if (existing === incoming) return true;
+  return qualifyOverwriteFields.value[key];
+};
+
+const qualifyChangedRequisites = computed(() =>
+  REQUISITE_FIELDS
+    .filter(({ key }) => isRequisiteChanged(key))
+    .map(({ key, label }) => ({
+      key,
+      label,
+      existing: getExistingRequisiteValue(key).trim() || '—',
+      incoming: getIncomingRequisiteValue(key).trim() || '—',
+      overwrite: qualifyOverwriteFields.value[key],
+    })),
+);
+
+const qualifyWriteSummary = computed(() =>
+  REQUISITE_FIELDS
+    .filter(({ key }) => canWriteRequisiteByDefault(key))
+    .map(({ key, label }) => ({
+      key,
+      label,
+      value: getIncomingRequisiteValue(key).trim(),
+      mode: isRequisiteChanged(key) ? 'overwrite' : 'fill_or_keep',
+    })),
+);
 
 const loadLeads = async () => {
   loading.value = true;
@@ -385,6 +454,14 @@ const markLost = async (lead: LeadResponse, status: 'lost' | 'spam') => {
 const openQualifyModal = (lead: LeadResponse, updateUrl = true) => {
   selectedLead.value = lead;
   selectedQualifyCustomer.value = null;
+  selectedQualifyCustomerDetail.value = null;
+  qualifyOverwriteFields.value = {
+    full_legal_name: false,
+    legal_address: false,
+    iban: false,
+    bic: false,
+    bank_name: false,
+  };
   qualifyCustomerLookupQuery.value = '';
   qualifyCustomerLookupResults.value = [];
   qualifyForm.value = {
@@ -442,17 +519,24 @@ const qualifyLead = async () => {
   saving.value = true;
   try {
     const normalizedPhone = qualifyForm.value.phone ? normalizePhoneForApi(qualifyForm.value.phone) : undefined;
+    const resolveRequisite = (key: RequisiteFieldKey): string | undefined => {
+      const incoming = normalizeRequisiteValue(key, getIncomingRequisiteValue(key));
+      if (!incoming) return undefined;
+      if (!selectedQualifyCustomerDetail.value) return incoming;
+      if (canWriteRequisiteByDefault(key)) return incoming;
+      return undefined;
+    };
     const response = await api.qualifyManagerLead(selectedLead.value.id, {
       ...qualifyForm.value,
       name: qualifyForm.value.name || undefined,
       phone: normalizedPhone || undefined,
       email: normalizeEmail(qualifyForm.value.email || '') || undefined,
       inn: normalizeUnp(qualifyForm.value.inn || '') || undefined,
-      full_legal_name: qualifyForm.value.full_legal_name || undefined,
-      legal_address: qualifyForm.value.legal_address || undefined,
-      iban: normalizeIban(qualifyForm.value.iban || '') || undefined,
-      bic: qualifyForm.value.bic || undefined,
-      bank_name: qualifyForm.value.bank_name || undefined,
+      full_legal_name: resolveRequisite('full_legal_name'),
+      legal_address: resolveRequisite('legal_address'),
+      iban: resolveRequisite('iban'),
+      bic: resolveRequisite('bic'),
+      bank_name: resolveRequisite('bank_name'),
       delivery_address: qualifyForm.value.delivery_address || undefined,
       order_comment: qualifyForm.value.order_comment || undefined,
     });
@@ -566,6 +650,7 @@ watch(showQualifyModal, (isOpen) => {
     return;
   }
   if (!isOpen) {
+    selectedQualifyCustomerDetail.value = null;
     clearLeadIdFromUrl();
     openedByUrlLeadId.value = null;
   }
@@ -591,6 +676,7 @@ const validateQualifyPhoneOnBlur = () => {
 
 const applyCustomerRequisitesToQualifyForm = (customer: ManagerCatalogCustomerItemResponse) => {
   const mapped = mapCustomerToLeadQualifyPrefill(customer);
+  qualifyForm.value.full_legal_name = mapped.full_legal_name || qualifyForm.value.full_legal_name;
   qualifyForm.value.legal_address = mapped.legal_address || qualifyForm.value.legal_address;
   qualifyForm.value.iban = mapped.iban || qualifyForm.value.iban;
   qualifyForm.value.bic = mapped.bic || qualifyForm.value.bic;
@@ -601,6 +687,7 @@ const applyCustomerRequisitesToQualifyForm = (customer: ManagerCatalogCustomerIt
 const hydrateQualifyRequisitesFromCustomer = async (customerId: number) => {
   try {
     const customer = await api.getManagerCustomerDetail(customerId);
+    selectedQualifyCustomerDetail.value = customer;
     applyCustomerRequisitesToQualifyForm(customer);
   } catch (error) {
     console.error(error);
@@ -709,6 +796,14 @@ const findExistingCustomers = async () => {
 
 const applyCustomerToQualifyForm = (customer: ManagerCatalogCustomerItemResponse) => {
   selectedQualifyCustomer.value = customer;
+  selectedQualifyCustomerDetail.value = customer;
+  qualifyOverwriteFields.value = {
+    full_legal_name: false,
+    legal_address: false,
+    iban: false,
+    bic: false,
+    bank_name: false,
+  };
   qualifyCustomerLookupQuery.value = customer.full_legal_name || customer.name || `Клиент #${customer.id}`;
   const mapped = mapCustomerToLeadQualifyPrefill(customer);
   qualifyForm.value.name = mapped.name || qualifyForm.value.name;
@@ -1224,6 +1319,29 @@ const onQualifyIbanBlur = async () => {
             Открыть клиента
           </button>
         </div>
+        <div
+          v-if="selectedQualifyCustomerDetail && qualifyChangedRequisites.length"
+          class="mb-3 rounded-lg border border-amber-500/40 bg-amber-900/20 px-3 py-3 text-xs text-amber-100"
+        >
+          <p class="font-semibold text-amber-50">Обнаружены отличия в реквизитах клиента</p>
+          <p class="mt-1 text-amber-200/90">
+            По умолчанию непустые значения клиента не перезаписываются. Отметьте, что нужно обновить.
+          </p>
+          <div class="mt-2 space-y-2">
+            <label
+              v-for="row in qualifyChangedRequisites"
+              :key="`diff-${row.key}`"
+              class="flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-900/20 px-2 py-2"
+            >
+              <input v-model="qualifyOverwriteFields[row.key]" type="checkbox" class="mt-0.5" />
+              <span>
+                <strong>{{ row.label }}</strong><br />
+                <span class="text-amber-200/90">Было: {{ row.existing }}</span><br />
+                <span class="text-amber-100">Станет: {{ row.incoming }}</span>
+              </span>
+            </label>
+          </div>
+        </div>
         <div class="mb-3 rounded-lg border border-slate-700 bg-slate-800/70 px-3 py-2 text-xs text-slate-300">
           <p class="font-semibold text-slate-100">Preview квалификации</p>
           <p>
@@ -1251,6 +1369,17 @@ const onQualifyIbanBlur = async () => {
               {{ qualifyPreview.requisitesToWrite.map((item) => item.label).join(', ') }}
             </span>
             <span v-else class="text-slate-400">не указаны</span>
+          </p>
+          <p>
+            Фактически будут записаны:
+            <span v-if="qualifyWriteSummary.length" class="text-slate-100">
+              {{
+                qualifyWriteSummary
+                  .map((item) => item.mode === 'overwrite' ? `${item.label} (обновление)` : item.label)
+                  .join(', ')
+              }}
+            </span>
+            <span v-else class="text-slate-400">нет изменений в реквизитах клиента</span>
           </p>
         </div>
         <div v-if="Object.keys(qualifyServerErrors).length" class="mb-3 rounded-lg border border-red-500/40 bg-red-900/20 px-3 py-2 text-xs text-red-200">
