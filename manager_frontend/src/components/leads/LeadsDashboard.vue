@@ -437,14 +437,27 @@ const isCustomerMatchByIdentity = (
   return false;
 };
 
+const customerDataCompletenessScore = (customer: ManagerCatalogCustomerItemResponse): number => {
+  let score = 0;
+  if (customer.full_legal_name) score += 2;
+  if (customer.legal_address) score += 3;
+  if (customer.bank_name) score += 3;
+  if (customer.bic) score += 3;
+  if (customer.iban) score += 4;
+  if (customer.order_count > 0) score += 1;
+  return score;
+};
+
 const findCustomerByIdentity = async (identity: { inn?: string; email?: string; phoneDigits?: string }) => {
   const query = identity.inn || identity.phoneDigits || identity.email;
   if (!query) return null;
 
-  const response = await api.getManagerCustomers(1, 30, query, undefined, false);
+  const response = await api.getManagerCustomers(1, 100, query, undefined, false);
   const items = response.items || [];
-  const exact = items.find((item) => isCustomerMatchByIdentity(item, identity));
-  return exact || null;
+  const exactMatches = items.filter((item) => isCustomerMatchByIdentity(item, identity));
+  if (!exactMatches.length) return null;
+  exactMatches.sort((a, b) => customerDataCompletenessScore(b) - customerDataCompletenessScore(a));
+  return exactMatches[0];
 };
 
 const findExistingCustomers = async () => {

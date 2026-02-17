@@ -255,6 +255,22 @@ onMounted(loadCustomers);
             <span class="value">{{ selectedCustomer.full_legal_name || '—' }}</span>
           </div>
           <div class="drawer-row">
+            <span class="label">Юридический адрес</span>
+            <span class="value">{{ selectedCustomer.legal_address || '—' }}</span>
+          </div>
+          <div class="drawer-row">
+            <span class="label">Банк</span>
+            <span class="value">{{ selectedCustomer.bank_name || '—' }}</span>
+          </div>
+          <div class="drawer-row">
+            <span class="label">BIC</span>
+            <span class="value">{{ selectedCustomer.bic || '—' }}</span>
+          </div>
+          <div class="drawer-row">
+            <span class="label">Расчетный счет (IBAN)</span>
+            <span class="value">{{ selectedCustomer.iban || '—' }}</span>
+          </div>
+          <div class="drawer-row">
             <span class="label">Заказов</span>
             <span class="value">{{ selectedCustomer.order_count }}</span>
           </div>
