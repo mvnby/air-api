@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from core.app_constants import MANAGER_ASSETS_DIRNAME, MANAGER_ASSETS_ROUTE
 from core.config import settings
 from core.logger import logger
 
@@ -25,8 +26,8 @@ def mount_manager_assets(app: FastAPI, manager_dist: Path) -> None:
 
     if manager_dist.exists():
         app.mount(
-            "/manager/assets",
-            StaticFiles(directory=manager_dist / "assets"),
+            MANAGER_ASSETS_ROUTE,
+            StaticFiles(directory=manager_dist / MANAGER_ASSETS_DIRNAME),
             name="manager_assets",
         )
     else:

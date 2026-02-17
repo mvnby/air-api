@@ -3,6 +3,8 @@ from pathlib import Path
 from fastapi import APIRouter
 from fastapi.responses import FileResponse, JSONResponse
 
+from core.app_constants import MANAGER_NOT_BUILT_MESSAGE
+
 
 def create_manager_spa_router(manager_dist: Path) -> APIRouter:
     router = APIRouter()
@@ -11,7 +13,7 @@ def create_manager_spa_router(manager_dist: Path) -> APIRouter:
     def _render_index_or_404():
         if index_path.exists():
             return FileResponse(str(index_path))
-        return JSONResponse(status_code=404, content={"message": "Dashboard not built"})
+        return JSONResponse(status_code=404, content={"message": MANAGER_NOT_BUILT_MESSAGE})
 
     @router.get("/manager/{full_path:path}")
     async def serve_manager_app(full_path: str):
