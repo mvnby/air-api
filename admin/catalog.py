@@ -1,17 +1,25 @@
 from sqladmin import ModelView
-from wtforms import TextAreaField, FileField
-from wtforms.validators import DataRequired
 from sqlalchemy.orm import selectinload
 
 from models import Product, Tag, TagGroup
 from .catalog_constants import (
     PAGE_SIZE_OPTIONS,
-    PRODUCT_ADMIN_PAGE_SIZE,
-    PRODUCT_IMAGES_READONLY_DESCRIPTION,
-    PRODUCT_MAIN_IMAGE_UPLOAD_LABEL,
-    PRODUCT_SLUG_DESCRIPTION,
-    PRODUCT_SLUG_LABEL,
     TAG_ADMIN_PAGE_SIZE,
+)
+from .product_admin_config import (
+    PRODUCT_COLUMN_LABELS,
+    PRODUCT_COLUMN_LIST,
+    PRODUCT_DEFAULT_SORT,
+    PRODUCT_EDITABLE_COLUMNS,
+    PRODUCT_FORM_AJAX_REFS,
+    PRODUCT_FORM_ARGS,
+    PRODUCT_FORM_COLUMNS,
+    PRODUCT_FORM_EDIT_RULES,
+    PRODUCT_FORM_EXTRA_FIELDS,
+    PRODUCT_FORM_OVERRIDES,
+    PRODUCT_PAGE_SIZE,
+    PRODUCT_PAGE_SIZE_OPTIONS,
+    PRODUCT_SEARCHABLE_COLUMNS,
 )
 from .formatters import format_tags_shared
 from .product_admin_helpers import (
@@ -40,49 +48,26 @@ class ProductAdmin(ModelView, model=Product):
     edit_template = "sqladmin/product_edit.html"
     
     # --- КОЛОНКИ ---
-    column_list = ["id", "formatted_title", "price", "main_image", "gallery_status", "formatted_area", "is_published"]
-    column_searchable_list = ["title", "description"]
-    column_default_sort = ("created_at", True)
-    column_editable_list = ["is_published"]
-    page_size = PRODUCT_ADMIN_PAGE_SIZE
-    page_size_options = PAGE_SIZE_OPTIONS
+    column_list = PRODUCT_COLUMN_LIST
+    column_searchable_list = PRODUCT_SEARCHABLE_COLUMNS
+    column_default_sort = PRODUCT_DEFAULT_SORT
+    column_editable_list = PRODUCT_EDITABLE_COLUMNS
+    page_size = PRODUCT_PAGE_SIZE
+    page_size_options = PRODUCT_PAGE_SIZE_OPTIONS
     
     # --- ФОРМА: Порядок полей ---
-    form_columns = [
-        "title", "slug", "description", "price", "old_price", "area", "is_inverter", "power_cooling",
-        "main_image", 
-        "images", # Legacy field (Read-Only)
-        "tags",  # M2M handled by form_ajax_refs
-        "specs", "is_published", "source_url"
-    ]
+    form_columns = PRODUCT_FORM_COLUMNS
 
     # --- AJAX для M2M: SQLAdmin сам создаст Select2 виджет ---
-    form_ajax_refs = {
-        "tags": {
-            "fields": ["title", "slug"],
-            "order_by": "title",
-            "placeholder": "Начните вводить характеристику...",
-            "minimum_input_length": 0,
-        }
-    }
+    form_ajax_refs = PRODUCT_FORM_AJAX_REFS
     
     # --- Оверрайды для НЕ-relationship полей ---
-    form_overrides = {
-        "description": TextAreaField,
-        "images": TextAreaField,
-        # "slug" removed from overrides
-    }
+    form_overrides = PRODUCT_FORM_OVERRIDES
     
     # --- Extra fields (только для файла!) ---
-    form_extra_fields = {
-        "main_image_file": FileField(PRODUCT_MAIN_IMAGE_UPLOAD_LABEL),
-    }
+    form_extra_fields = PRODUCT_FORM_EXTRA_FIELDS
 
-    form_edit_rules = [
-        "title", "slug", "description", "area", "is_inverter", "power_cooling", "price", "old_price", "source_url",
-        "is_published", "main_image", "main_image_file", "images",
-        "tags", "specs"
-    ]
+    form_edit_rules = PRODUCT_FORM_EDIT_RULES
     form_create_rules = form_edit_rules
     
     # --- Eager loading для M2M + tag filtering ---
@@ -124,27 +109,10 @@ class ProductAdmin(ModelView, model=Product):
         "gallery_status": format_product_gallery_status,
     }
     
-    column_labels = {
-        "formatted_title": "Товар",
-        "formatted_area": "Площадь",
-        "price": "Цена",
-        "main_image": "Фото",
-        "gallery_status": "Галерея",
-        "is_published": "Включён"
-    }
+    column_labels = PRODUCT_COLUMN_LABELS
     
     # Make legacy images field read-only
-    form_args = {
-        "slug": {
-            "validators": [DataRequired()],
-            "label": PRODUCT_SLUG_LABEL,
-            "description": PRODUCT_SLUG_DESCRIPTION,
-        },
-        "images": {
-            "render_kw": {"readonly": True, "style": "background-color: #f8f9fa;"},
-            "description": PRODUCT_IMAGES_READONLY_DESCRIPTION,
-        },
-    }
+    form_args = PRODUCT_FORM_ARGS
 
     # --- Сохранение: обработка файла через ProductService ---
     async def on_model_change(self, data, model, is_created, request):
