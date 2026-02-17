@@ -10,6 +10,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from admin.bootstrap import configure_sqladmin
 from core.database import engine, init_db, async_session_maker
+from core.app_routing import register_app_routers
 from core.config import settings
 from core.logger import logger
 import sentry_sdk
@@ -22,12 +23,7 @@ if settings.SENTRY_DSN:
         environment=settings.ENVIRONMENT
     )
 
-from routers import admin as admin_router
-from routers import api as api_router
-from routers import auth as auth_router
-from routers import manager as manager_router
 from routers.manager_spa import create_manager_spa_router
-from routers import system as system_router
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 @asynccontextmanager
@@ -82,11 +78,7 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(admin_router.router)
-app.include_router(auth_router.router)
-app.include_router(api_router.router)
-app.include_router(manager_router.router)
-app.include_router(system_router.router)
+register_app_routers(app)
 
 # Static files
 app.mount(f"/{settings.STATIC_DIR}", StaticFiles(directory=os.path.join(BASE_DIR, settings.STATIC_DIR)), name="static")
