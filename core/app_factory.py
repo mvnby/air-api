@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from pathlib import Path
 
 from admin.bootstrap import configure_sqladmin
 from core.app_http import configure_http
@@ -15,8 +16,8 @@ from routers.manager_spa import create_manager_spa_router
 def create_app() -> FastAPI:
     init_sentry()
 
-    base_dir = get_base_dir()
-    manager_dist = get_manager_dist(base_dir)
+    base_dir: Path = get_base_dir()
+    manager_dist: Path = get_manager_dist(base_dir)
 
     app = FastAPI(lifespan=app_lifespan)
 
@@ -24,12 +25,12 @@ def create_app() -> FastAPI:
     register_app_routers(app)
     mount_static_and_media(app, base_dir)
     mount_manager_assets(app, manager_dist)
-    app.include_router(create_manager_spa_router(manager_dist))
+    app.include_router(create_manager_spa_router(str(manager_dist)))
 
     configure_sqladmin(
         app=app,
         engine=engine,
-        base_dir=base_dir,
+        base_dir=str(base_dir),
         secret_key=settings.SECRET_KEY,
     )
 
