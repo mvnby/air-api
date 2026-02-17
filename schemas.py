@@ -337,6 +337,98 @@ class LeadQualifyResponse(BaseModel):
     order_id: int
 
 
+class ManagerAuthStatusResponse(BaseModel):
+    username: str
+    status: str
+
+
+class ManagerCatalogProductImageResponse(BaseModel):
+    id: int
+    url: str
+    is_installation_photo: bool
+
+
+class ManagerCatalogProductTagResponse(BaseModel):
+    id: int
+    title: str
+    slug: str
+    group_title: Optional[str]
+    group_color: Optional[str]
+
+
+class ManagerCatalogProductItemResponse(BaseModel):
+    id: int
+    title: str
+    slug: Optional[str]
+    price: int
+    old_price: Optional[int]
+    area: int
+    is_inverter: bool
+    power_cooling: Optional[float]
+    main_image: Optional[str]
+    is_published: bool
+    created_at: datetime
+    specs: Dict[str, Any]
+    gallery_images: List[ManagerCatalogProductImageResponse]
+    tags: List[ManagerCatalogProductTagResponse]
+
+
+class ManagerCatalogProductListResponse(BaseModel):
+    items: List[ManagerCatalogProductItemResponse]
+    meta: Meta
+
+
+class ManagerCatalogCustomerItemResponse(BaseModel):
+    id: int
+    name: Optional[str]
+    phone: Optional[str]
+    email: Optional[str]
+    type: str
+    inn: Optional[str]
+    full_legal_name: Optional[str]
+    created_at: Optional[datetime]
+    order_count: int
+
+
+class ManagerCatalogCustomerListResponse(BaseModel):
+    items: List[ManagerCatalogCustomerItemResponse]
+    meta: Meta
+
+
+class ManagerTagOptionResponse(BaseModel):
+    id: int
+    title: str
+    slug: str
+
+
+class ManagerTagGroupResponse(BaseModel):
+    id: int
+    title: str
+    slug: str
+    color: str
+    allow_multiple: bool
+    tags: List[ManagerTagOptionResponse]
+
+
+class ManagerActionMessageResponse(BaseModel):
+    message: str
+
+
+class ManagerBulkRoundPriceResponse(ManagerActionMessageResponse):
+    updated_count: int
+
+
+class ManagerBulkSpecsResponse(ManagerActionMessageResponse):
+    operation: str
+
+
+class ManagerNormalizeLegacySpecsResponse(ManagerActionMessageResponse):
+    dry_run: bool
+    products_processed: int
+    products_updated: int
+    sample_changes: List[Dict[str, Any]]
+
+
 class ProductUpdate(BaseModel):
     title: Optional[str] = None
     price: Optional[int] = None
