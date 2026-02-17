@@ -5,6 +5,7 @@ import { api } from './api';
 
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
 const CustomersView = defineAsyncComponent(() => import('./views/CustomersView.vue'));
+const CustomerProfileView = defineAsyncComponent(() => import('./views/CustomerProfileView.vue'));
 const OrdersKanbanView = defineAsyncComponent(() => import('./views/OrdersKanbanView.vue'));
 const LeadsView = defineAsyncComponent(() => import('./views/LeadsView.vue'));
 
@@ -16,7 +17,7 @@ const loginLoading = ref(false);
 const loginError = ref('');
 const rebuildLoading = ref(false);
 
-const currentPath = ref(window.location.pathname);
+const currentLocation = ref(`${window.location.pathname}${window.location.search}`);
 
 const navItems = [
   { path: '/manager/leads', label: 'Лиды', icon: UserPlus },
@@ -26,20 +27,22 @@ const navItems = [
 ];
 
 const currentView = computed(() => {
-  if (currentPath.value.startsWith('/manager/leads')) return 'leads';
-  if (currentPath.value.startsWith('/manager/orders')) return 'orders';
-  if (currentPath.value.startsWith('/manager/customers')) return 'customers';
+  const path = currentLocation.value.split('?')[0] || '/manager';
+  if (path.startsWith('/manager/leads')) return 'leads';
+  if (path.startsWith('/manager/orders')) return 'orders';
+  if (path.startsWith('/manager/customers/profile')) return 'customer-profile';
+  if (path.startsWith('/manager/customers')) return 'customers';
   return 'products';
 });
 
 const onPopState = () => {
-  currentPath.value = window.location.pathname;
+  currentLocation.value = `${window.location.pathname}${window.location.search}`;
 };
 
 const navigate = (path: string) => {
   if (window.location.pathname !== path) {
     window.history.pushState({}, '', path);
-    currentPath.value = path;
+    currentLocation.value = `${window.location.pathname}${window.location.search}`;
   }
 };
 
@@ -154,7 +157,7 @@ onBeforeUnmount(() => {
           v-for="item in navItems"
           :key="item.path"
           class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left"
-          :class="currentPath === item.path
+          :class="currentLocation.split('?')[0] === item.path
             ? 'bg-teal-50 text-teal-700'
             : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
           @click="navigate(item.path)"
@@ -181,10 +184,11 @@ onBeforeUnmount(() => {
     </aside>
 
     <main class="flex-1 overflow-auto">
-      <LeadsView v-if="currentView === 'leads'" />
-      <OrdersKanbanView v-else-if="currentView === 'orders'" />
-      <CustomersView v-else-if="currentView === 'customers'" />
-      <ProductsView v-else />
+      <LeadsView v-if="currentView === 'leads'" :key="currentLocation" />
+      <OrdersKanbanView v-else-if="currentView === 'orders'" :key="currentLocation" />
+      <CustomerProfileView v-else-if="currentView === 'customer-profile'" :key="currentLocation" />
+      <CustomersView v-else-if="currentView === 'customers'" :key="currentLocation" />
+      <ProductsView v-else :key="currentLocation" />
     </main>
   </div>
 </template>

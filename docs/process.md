@@ -36,6 +36,13 @@ When changing manager API contracts (`routers/manager_*`, `schemas.py`, OpenAPI-
 
 CI enforces this sync and fails if generated artifacts differ from committed files.
 
+## Manager CRM Data Source Rules
+
+1. For lead qualification and customer-card hydration, use:
+   - `GET /api/manager/customers/{customer_id}` as source of truth for full requisites.
+2. `/api/manager/customers` list endpoint is for list/search UX and may contain partial snapshots.
+3. Any manager flow that edits/qualifies a customer must prefer detail DTO over list item DTO when both are available.
+
 ## API-роутеры после декомпозиции
 
 Основной входной модуль API: `routers/api.py` (компоновщик).

@@ -4,7 +4,7 @@ import pytest
 from sqlmodel import select
 
 from core.config import settings
-from models import Customer, Lead  # noqa: F401 - ensure SQLModel metadata includes lead table
+from models import Customer, CustomerType, Lead  # noqa: F401 - ensure SQLModel metadata includes lead table
 
 
 async def _auth_headers(async_client):
@@ -149,3 +149,55 @@ async def test_manager_lead_mark_lost_hidden_from_default_list(async_client):
     lost_list = await async_client.get("/api/manager/leads?status=lost", headers=headers)
     assert lost_list.status_code == 200
     assert any(item["id"] == lead_id for item in lost_list.json()["items"])
+
+
+@pytest.mark.asyncio
+async def test_manager_lead_qualify_reuses_customer_and_keeps_existing_requisites(async_client, db):
+    headers = await _auth_headers(async_client)
+
+    customer = Customer(
+        name="ООО Эвистор",
+        phone="+375331112233",
+        email="info@evistor.by",
+        type=CustomerType.company,
+        inn="300149331",
+        full_legal_name="ОАО «Завод «ЭВИСТОР»",
+        legal_address="210101, г. Витебск, проспект Фрунзе, 81",
+        bank_name="ОАО «БПС-Сбербанк», г. Витебск",
+        bic="BPSBBY2X",
+        iban="BY88BPSB30121159280199330000",
+    )
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    create_resp = await async_client.post(
+        "/api/manager/leads",
+        headers=headers,
+        json={
+            "source": "manager",
+            "name": "Повторный клиент",
+            "email": "info@evistor.by",
+            "inn": "300149331",
+            "request_text": "Новый запрос",
+        },
+    )
+    assert create_resp.status_code == 200
+    lead_id = create_resp.json()["id"]
+
+    qualify_resp = await async_client.post(
+        f"/api/manager/leads/{lead_id}/qualify",
+        headers=headers,
+        json={
+            "name": "ОАО «Завод «ЭВИСТОР»",
+            "full_legal_name": "ОАО «Завод «ЭВИСТОР»",
+        },
+    )
+    assert qualify_resp.status_code == 200
+    data = qualify_resp.json()
+    assert data["customer_id"] == customer.id
+
+    await db.refresh(customer)
+    assert customer.bank_name == "ОАО «БПС-Сбербанк», г. Витебск"
+    assert customer.bic == "BPSBBY2X"
+    assert customer.iban == "BY88BPSB30121159280199330000"

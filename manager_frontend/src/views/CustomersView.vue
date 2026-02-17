@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { Search, Users, ChevronLeft, ChevronRight, Phone, Mail, Building, X } from 'lucide-vue-next';
+import { Search, Users, ChevronLeft, ChevronRight, Phone, Mail, Building } from 'lucide-vue-next';
 import { api } from '../api';
 import type { ManagerCatalogCustomerItemResponse } from '../client';
 
@@ -12,7 +12,6 @@ const typeFilter = ref('');
 const onlyWithOrders = ref(false);
 const page = ref(1);
 const meta = ref({ total: 0, pages: 1, limit: 20 });
-const selectedCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 
 const TYPE_MAP: Record<string, { label: string; icon: string }> = {
   individual: { label: 'Физ. лицо', icon: '👤' },
@@ -32,7 +31,6 @@ async function loadCustomers() {
     );
     customers.value = data.items;
     meta.value = data.meta;
-    await ensureSelectedCustomerFromUrl();
   } catch (e) {
     console.error('Failed to load customers', e);
   } finally {
@@ -62,51 +60,22 @@ function formatDate(iso: string | null) {
   return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-function updateCustomerQueryParam(customerId?: number | null) {
-  const url = new URL(window.location.href);
-  if (customerId) {
-    url.searchParams.set('customerId', String(customerId));
-  } else {
-    url.searchParams.delete('customerId');
-  }
-  window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+function openCustomerProfile(customerId: number) {
+  window.history.pushState({}, '', `/manager/customers/profile?customerId=${customerId}`);
+  window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
-function openCustomerCard(customer: ManagerCatalogCustomerItemResponse) {
-  selectedCustomer.value = customer;
-  updateCustomerQueryParam(customer.id);
-}
-
-function closeCustomerCard() {
-  selectedCustomer.value = null;
-  updateCustomerQueryParam(null);
-}
-
-async function ensureSelectedCustomerFromUrl() {
+onMounted(() => {
   const customerIdRaw = new URLSearchParams(window.location.search).get('customerId');
-  if (!customerIdRaw) return;
-
-  const customerId = Number(customerIdRaw);
-  if (!Number.isFinite(customerId) || customerId <= 0) return;
-
-  const inCurrentPage = customers.value.find((item) => item.id === customerId);
-  if (inCurrentPage) {
-    selectedCustomer.value = inCurrentPage;
-    return;
-  }
-
-  try {
-    const data = await api.getManagerCustomers(1, 20, customerIdRaw, undefined, false);
-    const found = (data.items || []).find((item: ManagerCatalogCustomerItemResponse) => item.id === customerId);
-    if (found) {
-      selectedCustomer.value = found;
+  if (customerIdRaw) {
+    const customerId = Number(customerIdRaw);
+    if (Number.isFinite(customerId) && customerId > 0) {
+      openCustomerProfile(customerId);
+      return;
     }
-  } catch (e) {
-    console.error('Failed to open customer by URL', e);
   }
-}
-
-onMounted(loadCustomers);
+  void loadCustomers();
+});
 </script>
 
 <template>
@@ -203,7 +172,7 @@ onMounted(loadCustomers);
           </div>
           <div class="footer-actions">
             <div class="date-added">{{ formatDate(customer.created_at) }}</div>
-            <button class="open-btn" @click="openCustomerCard(customer)">Карточка</button>
+            <button class="open-btn" @click="openCustomerProfile(customer.id)">Карточка</button>
           </div>
         </div>
       </div>
@@ -220,67 +189,6 @@ onMounted(loadCustomers);
       </button>
     </div>
 
-    <div v-if="selectedCustomer" class="drawer-overlay" @click="closeCustomerCard">
-      <aside class="customer-drawer" @click.stop>
-        <header class="drawer-header">
-          <h3>Карточка клиента #{{ selectedCustomer.id }}</h3>
-          <button class="icon-btn" @click="closeCustomerCard">
-            <X :size="18" />
-          </button>
-        </header>
-
-        <div class="drawer-body">
-          <div class="drawer-row">
-            <span class="label">Тип</span>
-            <span class="value">{{ TYPE_MAP[selectedCustomer.type]?.label || selectedCustomer.type }}</span>
-          </div>
-          <div class="drawer-row">
-            <span class="label">Имя</span>
-            <span class="value">{{ selectedCustomer.name || '—' }}</span>
-          </div>
-          <div class="drawer-row">
-            <span class="label">Телефон</span>
-            <span class="value">{{ selectedCustomer.phone || '—' }}</span>
-          </div>
-          <div class="drawer-row">
-            <span class="label">Email</span>
-            <span class="value">{{ selectedCustomer.email || '—' }}</span>
-          </div>
-          <div class="drawer-row">
-            <span class="label">УНП</span>
-            <span class="value">{{ selectedCustomer.inn || '—' }}</span>
-          </div>
-          <div class="drawer-row">
-            <span class="label">Полное наименование</span>
-            <span class="value">{{ selectedCustomer.full_legal_name || '—' }}</span>
-          </div>
-          <div class="drawer-row">
-            <span class="label">Юридический адрес</span>
-            <span class="value">{{ selectedCustomer.legal_address || '—' }}</span>
-          </div>
-          <div class="drawer-row">
-            <span class="label">Банк</span>
-            <span class="value">{{ selectedCustomer.bank_name || '—' }}</span>
-          </div>
-          <div class="drawer-row">
-            <span class="label">BIC</span>
-            <span class="value">{{ selectedCustomer.bic || '—' }}</span>
-          </div>
-          <div class="drawer-row">
-            <span class="label">Расчетный счет (IBAN)</span>
-            <span class="value">{{ selectedCustomer.iban || '—' }}</span>
-          </div>
-          <div class="drawer-row">
-            <span class="label">Заказов</span>
-            <span class="value">{{ selectedCustomer.order_count }}</span>
-          </div>
-          <div class="drawer-row">
-            <span class="label">Создан</span>
-            <span class="value">{{ formatDate(selectedCustomer.created_at) }}</span>
-          </div>
-        </div>
-      </aside>
-    </div>
   </div>
 </template>
 

@@ -4925,6 +4925,17 @@
             ],
             "title": "Inn"
           },
+          "kpp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kpp"
+          },
           "full_legal_name": {
             "anyOf": [
               {
@@ -4946,6 +4957,17 @@
               }
             ],
             "title": "Legal Address"
+          },
+          "actual_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Address"
           },
           "iban": {
             "anyOf": [
@@ -4980,6 +5002,50 @@
             ],
             "title": "Bank Name"
           },
+          "signer_position": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signer Position"
+          },
+          "signer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signer Name"
+          },
+          "acting_basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acting Basis"
+          },
+          "last_delivery_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Delivery Address"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -5005,11 +5071,17 @@
           "email",
           "type",
           "inn",
+          "kpp",
           "full_legal_name",
           "legal_address",
+          "actual_address",
           "iban",
           "bic",
           "bank_name",
+          "signer_position",
+          "signer_name",
+          "acting_basis",
+          "last_delivery_address",
           "created_at",
           "order_count"
         ],

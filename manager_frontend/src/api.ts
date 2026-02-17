@@ -226,7 +226,7 @@ export const api = {
         );
     },
 
-    async getManagerCustomers(page = 1, limit = 20, search?: string, type?: string, onlyWithOrders = true) {
+    async getManagerCustomers(page = 1, limit = 20, search?: string, type?: string, onlyWithOrders = false) {
         return await ManagerService.getManagerCustomers(page, limit, search ?? undefined, type ?? undefined, onlyWithOrders);
     },
 

@@ -12,6 +12,7 @@ import type {
 } from '../../client';
 import { useBelarusPhoneMask } from '../../composables/useBelarusPhoneMask';
 import { fromLocalDateTimeInput } from '../../utils/datetime';
+import { mapCustomerToLeadCreatePrefill, mapCustomerToLeadQualifyPrefill } from '../../utils/customer-mappers';
 import { getBankFromLookup, getCompanyFromEgr, normalizeIban, normalizeUnp } from '../../utils/legal-requisites';
 import { isBelarusPhoneComplete, normalizePhoneDigits, normalizePhoneForApi } from '../../utils/phone';
 
@@ -32,7 +33,10 @@ const showCreateModal = ref(false);
 const showQualifyModal = ref(false);
 const selectedLead = ref<LeadResponse | null>(null);
 const selectedExistingCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
+const createSuggestedCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const selectedQualifyCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
+const createSuggestionDismissedForId = ref<number | null>(null);
+const lastQualifyResult = ref<{ leadId: number; customerId: number; orderId: number } | null>(null);
 const createPhoneError = ref('');
 const createRequestError = ref('');
 const qualifyPhoneError = ref('');
@@ -122,6 +126,20 @@ const tabItems = computed(() => [
   { key: 'spam', label: 'Спам' },
 ]);
 
+const qualifyPreview = computed(() => {
+  const selectedCustomerId = selectedQualifyCustomer.value?.id;
+  const normalizedInn = normalizeUnp(qualifyForm.value.inn || '');
+  const normalizedPhone = normalizePhoneDigits(qualifyForm.value.phone || '');
+  const normalizedEmail = (qualifyForm.value.email || '').trim().toLowerCase();
+  return {
+    customerId: selectedCustomerId,
+    customerMode: selectedCustomerId ? 'reuse' : 'create_or_match',
+    inn: normalizedInn || null,
+    phoneDigits: normalizedPhone || null,
+    email: normalizedEmail || null,
+  };
+});
+
 const setToast = (message: string) => {
   toast.value = message;
   window.setTimeout(() => {
@@ -191,6 +209,8 @@ const resetCreateForm = () => {
     next_followup_date: undefined,
   };
   selectedExistingCustomer.value = null;
+  createSuggestedCustomer.value = null;
+  createSuggestionDismissedForId.value = null;
   customerLookupQuery.value = '';
   customerLookupResults.value = [];
   createPhoneError.value = '';
@@ -331,8 +351,13 @@ const qualifyLead = async () => {
       delivery_address: qualifyForm.value.delivery_address || undefined,
       order_comment: qualifyForm.value.order_comment || undefined,
     });
+    lastQualifyResult.value = {
+      leadId: selectedLead.value.id,
+      customerId: response.customer_id,
+      orderId: response.order_id,
+    };
     showQualifyModal.value = false;
-    setToast(`Лид квалифицирован. Сделка #${response.order_id}`);
+    setToast(`Лид квалифицирован. Сделка #${response.order_id}, клиент #${response.customer_id}`);
     await loadLeads();
   } catch (error) {
     console.error(error);
@@ -349,9 +374,11 @@ const navigateToOrders = (orderId?: number | null) => {
   if (orderId) setToast(`Открыт раздел сделок. Найдите сделку #${orderId}`);
 };
 
-const navigateToCustomers = (customer?: ManagerCatalogCustomerItemResponse | null) => {
+const navigateToCustomerProfile = (customer?: { id?: number | null } | null) => {
   const customerId = customer?.id ? String(customer.id) : '';
-  const path = customerId ? `/manager/customers?customerId=${encodeURIComponent(customerId)}` : '/manager/customers';
+  const path = customerId
+    ? `/manager/customers/profile?customerId=${encodeURIComponent(customerId)}`
+    : '/manager/customers';
   window.history.pushState({}, '', path);
   window.dispatchEvent(new PopStateEvent('popstate'));
   if (customer?.id) {
@@ -397,10 +424,12 @@ const validateQualifyPhoneOnBlur = () => {
 };
 
 const applyCustomerRequisitesToQualifyForm = (customer: ManagerCatalogCustomerItemResponse) => {
-  qualifyForm.value.legal_address = customer.legal_address || qualifyForm.value.legal_address;
-  qualifyForm.value.iban = customer.iban || qualifyForm.value.iban;
-  qualifyForm.value.bic = customer.bic || qualifyForm.value.bic;
-  qualifyForm.value.bank_name = customer.bank_name || qualifyForm.value.bank_name;
+  const mapped = mapCustomerToLeadQualifyPrefill(customer);
+  qualifyForm.value.legal_address = mapped.legal_address || qualifyForm.value.legal_address;
+  qualifyForm.value.iban = mapped.iban || qualifyForm.value.iban;
+  qualifyForm.value.bic = mapped.bic || qualifyForm.value.bic;
+  qualifyForm.value.bank_name = mapped.bank_name || qualifyForm.value.bank_name;
+  qualifyForm.value.delivery_address = mapped.delivery_address || qualifyForm.value.delivery_address;
 };
 
 const hydrateQualifyRequisitesFromCustomer = async (customerId: number) => {
@@ -414,13 +443,27 @@ const hydrateQualifyRequisitesFromCustomer = async (customerId: number) => {
 
 const applyCustomerToCreateForm = (customer: ManagerCatalogCustomerItemResponse) => {
   selectedExistingCustomer.value = customer;
+  createSuggestedCustomer.value = null;
+  createSuggestionDismissedForId.value = null;
   customerLookupQuery.value = customer.full_legal_name || customer.name || `Клиент #${customer.id}`;
-  createForm.value.name = customer.name || createForm.value.name;
-  createForm.value.phone = customer.phone ? normalizePhoneForApi(customer.phone) : createForm.value.phone;
-  createForm.value.email = customer.email || createForm.value.email;
-  createForm.value.inn = customer.inn || createForm.value.inn;
-  createForm.value.company_name = customer.full_legal_name || createForm.value.company_name;
+  const mapped = mapCustomerToLeadCreatePrefill(customer);
+  createForm.value.name = mapped.name || createForm.value.name;
+  createForm.value.phone = mapped.phone || createForm.value.phone;
+  createForm.value.email = mapped.email || createForm.value.email;
+  createForm.value.inn = mapped.inn || createForm.value.inn;
+  createForm.value.company_name = mapped.company_name || createForm.value.company_name;
   customerLookupResults.value = [];
+};
+
+const suggestCustomerForCreate = (customer: ManagerCatalogCustomerItemResponse) => {
+  if (selectedExistingCustomer.value?.id === customer.id) return;
+  if (createSuggestionDismissedForId.value === customer.id) return;
+  createSuggestedCustomer.value = customer;
+};
+
+const dismissCreateCustomerSuggestion = () => {
+  createSuggestionDismissedForId.value = createSuggestedCustomer.value?.id || null;
+  createSuggestedCustomer.value = null;
 };
 
 const isCustomerMatchByIdentity = (
@@ -482,11 +525,13 @@ const findExistingCustomers = async () => {
 const applyCustomerToQualifyForm = (customer: ManagerCatalogCustomerItemResponse) => {
   selectedQualifyCustomer.value = customer;
   qualifyCustomerLookupQuery.value = customer.full_legal_name || customer.name || `Клиент #${customer.id}`;
-  qualifyForm.value.name = customer.name || qualifyForm.value.name;
-  qualifyForm.value.phone = customer.phone ? normalizePhoneForApi(customer.phone) : qualifyForm.value.phone;
-  qualifyForm.value.email = customer.email || qualifyForm.value.email;
-  qualifyForm.value.inn = customer.inn || qualifyForm.value.inn;
-  qualifyForm.value.full_legal_name = customer.full_legal_name || qualifyForm.value.full_legal_name;
+  const mapped = mapCustomerToLeadQualifyPrefill(customer);
+  qualifyForm.value.name = mapped.name || qualifyForm.value.name;
+  qualifyForm.value.phone = mapped.phone || qualifyForm.value.phone;
+  qualifyForm.value.email = mapped.email || qualifyForm.value.email;
+  qualifyForm.value.inn = mapped.inn || qualifyForm.value.inn;
+  qualifyForm.value.full_legal_name = mapped.full_legal_name || qualifyForm.value.full_legal_name;
+  qualifyForm.value.delivery_address = mapped.delivery_address || qualifyForm.value.delivery_address;
   applyCustomerRequisitesToQualifyForm(customer);
   qualifyCustomerLookupResults.value = [];
   void hydrateQualifyRequisitesFromCustomer(customer.id);
@@ -519,8 +564,8 @@ const onCreateInnBlur = async () => {
   try {
     const existing = await findCustomerByIdentity({ inn: normalizedUnp });
     if (existing) {
-      applyCustomerToCreateForm(existing);
-      setToast(`Найден существующий клиент #${existing.id}, данные подставлены.`);
+      suggestCustomerForCreate(existing);
+      setToast(`Найден существующий клиент #${existing.id}. Выберите действие в подсказке.`);
       return;
     }
   } catch (error) {
@@ -531,7 +576,7 @@ const onCreateInnBlur = async () => {
   try {
     const response = await api.getCompanyByUnp(normalizedUnp);
     const company = getCompanyFromEgr(response);
-    if (company.fullLegalName) {
+    if (company.fullLegalName && !(createForm.value.company_name || '').trim()) {
       createForm.value.company_name = company.fullLegalName;
     }
   } catch (error) {
@@ -562,10 +607,10 @@ const onQualifyInnBlur = async () => {
   try {
     const response = await api.getCompanyByUnp(normalizedUnp);
     const company = getCompanyFromEgr(response);
-    if (company.fullLegalName) {
+    if (company.fullLegalName && !(qualifyForm.value.full_legal_name || '').trim()) {
       qualifyForm.value.full_legal_name = company.fullLegalName;
     }
-    if (company.legalAddress) {
+    if (company.legalAddress && !(qualifyForm.value.legal_address || '').trim()) {
       qualifyForm.value.legal_address = company.legalAddress;
     }
   } catch (error) {
@@ -585,8 +630,8 @@ const onCreatePhoneBlur = async () => {
   try {
     const existing = await findCustomerByIdentity({ phoneDigits });
     if (existing) {
-      applyCustomerToCreateForm(existing);
-      setToast(`Найден существующий клиент #${existing.id}, данные подставлены.`);
+      suggestCustomerForCreate(existing);
+      setToast(`Найден существующий клиент #${existing.id}. Выберите действие в подсказке.`);
     }
   } catch (error) {
     console.error(error);
@@ -600,8 +645,8 @@ const onCreateEmailBlur = async () => {
   try {
     const existing = await findCustomerByIdentity({ email });
     if (existing) {
-      applyCustomerToCreateForm(existing);
-      setToast(`Найден существующий клиент #${existing.id}, данные подставлены.`);
+      suggestCustomerForCreate(existing);
+      setToast(`Найден существующий клиент #${existing.id}. Выберите действие в подсказке.`);
     }
   } catch (error) {
     console.error(error);
@@ -633,10 +678,10 @@ const onQualifyIbanBlur = async () => {
   try {
     const response = await api.getBankBySearch(normalized);
     const bank = getBankFromLookup(response);
-    if (bank.bankName) {
+    if (bank.bankName && !(qualifyForm.value.bank_name || '').trim()) {
       qualifyForm.value.bank_name = bank.bankName;
     }
-    if (bank.bic) {
+    if (bank.bic && !(qualifyForm.value.bic || '').trim()) {
       qualifyForm.value.bic = bank.bic;
     }
   } catch (error) {
@@ -698,6 +743,19 @@ const onQualifyIbanBlur = async () => {
       </header>
 
       <p v-if="toast" class="mb-4 rounded-[12px] bg-[#007f80] px-4 py-2 text-sm font-semibold text-white">{{ toast }}</p>
+      <div
+        v-if="lastQualifyResult"
+        class="mb-4 rounded-[14px] border border-emerald-500/50 bg-emerald-900/20 px-4 py-3 text-sm text-emerald-100"
+      >
+        <p class="font-semibold">
+          Лид #{{ lastQualifyResult.leadId }} квалифицирован: клиент #{{ lastQualifyResult.customerId }}, сделка #{{ lastQualifyResult.orderId }}.
+        </p>
+        <div class="mt-2 flex flex-wrap gap-2">
+          <button class="btn-mini" @click="navigateToOrders(lastQualifyResult.orderId)">Открыть сделку</button>
+          <button class="btn-mini-outline" @click="navigateToCustomerProfile({ id: lastQualifyResult.customerId })">Открыть клиента</button>
+          <button class="btn-mini-outline" @click="lastQualifyResult = null">Скрыть</button>
+        </div>
+      </div>
       <p v-if="loading" class="mb-4 text-sm text-slate-300">Загрузка лидов...</p>
 
       <div v-if="!loading && leads.length === 0" class="rounded-[2rem] border border-slate-700 bg-slate-900/60 p-8 text-center">
@@ -808,9 +866,26 @@ const onQualifyIbanBlur = async () => {
           <p class="text-xs text-emerald-300">
             Выбран клиент #{{ selectedExistingCustomer.id }}.
           </p>
-          <button type="button" class="btn-mini-outline text-xs" @click="navigateToCustomers(selectedExistingCustomer)">
+          <button type="button" class="btn-mini-outline text-xs" @click="navigateToCustomerProfile(selectedExistingCustomer)">
             Открыть клиента
           </button>
+        </div>
+        <div v-else-if="createSuggestedCustomer" class="mb-3 rounded-lg border border-amber-500/40 bg-amber-900/20 px-3 py-3">
+          <p class="text-xs text-amber-200">
+            Найден клиент #{{ createSuggestedCustomer.id }}:
+            {{ createSuggestedCustomer.full_legal_name || createSuggestedCustomer.name || `Клиент #${createSuggestedCustomer.id}` }}.
+          </p>
+          <div class="mt-2 flex flex-wrap gap-2">
+            <button type="button" class="btn-mini text-xs" @click="applyCustomerToCreateForm(createSuggestedCustomer)">
+              Использовать данные клиента
+            </button>
+            <button type="button" class="btn-mini-outline text-xs" @click="dismissCreateCustomerSuggestion">
+              Продолжить как новый лид
+            </button>
+            <button type="button" class="btn-mini-outline text-xs" @click="navigateToCustomerProfile(createSuggestedCustomer)">
+              Открыть клиента
+            </button>
+          </div>
         </div>
         <div class="grid gap-3 md:grid-cols-2">
           <input v-model="createForm.name" class="field-input" placeholder="Имя / Компания" />
@@ -905,9 +980,21 @@ const onQualifyIbanBlur = async () => {
           <p class="text-xs text-emerald-300">
             Выбран клиент #{{ selectedQualifyCustomer.id }}.
           </p>
-          <button type="button" class="btn-mini-outline text-xs" @click="navigateToCustomers(selectedQualifyCustomer)">
+          <button type="button" class="btn-mini-outline text-xs" @click="navigateToCustomerProfile(selectedQualifyCustomer)">
             Открыть клиента
           </button>
+        </div>
+        <div class="mb-3 rounded-lg border border-slate-700 bg-slate-800/70 px-3 py-2 text-xs text-slate-300">
+          <p class="font-semibold text-slate-100">Preview квалификации</p>
+          <p>
+            Клиент:
+            <span class="text-slate-100">
+              {{ qualifyPreview.customerId ? `используется #${qualifyPreview.customerId}` : 'будет найден/создан автоматически' }}
+            </span>
+          </p>
+          <p v-if="qualifyPreview.inn">Матч по УНП: <span class="text-slate-100">{{ qualifyPreview.inn }}</span></p>
+          <p v-if="qualifyPreview.phoneDigits">Матч по телефону: <span class="text-slate-100">{{ qualifyPreview.phoneDigits }}</span></p>
+          <p v-if="qualifyPreview.email">Матч по email: <span class="text-slate-100">{{ qualifyPreview.email }}</span></p>
         </div>
         <div class="grid gap-3 md:grid-cols-2">
           <input v-model="qualifyForm.name" class="field-input" placeholder="Имя клиента" />
