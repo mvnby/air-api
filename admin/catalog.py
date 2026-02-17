@@ -2,10 +2,6 @@ from sqladmin import ModelView
 from sqlalchemy.orm import selectinload
 
 from models import Product, Tag, TagGroup
-from .catalog_constants import (
-    PAGE_SIZE_OPTIONS,
-    TAG_ADMIN_PAGE_SIZE,
-)
 from .product_admin_config import (
     PRODUCT_COLUMN_LABELS,
     PRODUCT_COLUMN_LIST,
@@ -20,6 +16,14 @@ from .product_admin_config import (
     PRODUCT_PAGE_SIZE,
     PRODUCT_PAGE_SIZE_OPTIONS,
     PRODUCT_SEARCHABLE_COLUMNS,
+)
+from .tag_admin_config import (
+    TAG_COLUMN_LABELS,
+    TAG_COLUMN_LIST,
+    TAG_GROUP_COLUMN_LABELS,
+    TAG_GROUP_COLUMN_LIST,
+    TAG_PAGE_SIZE,
+    TAG_PAGE_SIZE_OPTIONS,
 )
 from .formatters import format_tags_shared
 from .product_admin_helpers import (
@@ -138,14 +142,8 @@ class TagGroupAdmin(ModelView, model=TagGroup):
     name = "Группа тегов"
     name_plural = "Группы тегов"
     icon = "fa-solid fa-layer-group"
-    column_list = [TagGroup.id, TagGroup.title, TagGroup.slug, TagGroup.is_public, TagGroup.color]
-    column_labels = {
-        "id": "ID",
-        "title": "Название",
-        "slug": "Slug",
-        "is_public": "Публичная",
-        "color": "Цвет"
-    }
+    column_list = TAG_GROUP_COLUMN_LIST
+    column_labels = TAG_GROUP_COLUMN_LABELS
     column_details_list = "__all__"
     form_columns = "__all__"
 
@@ -154,15 +152,10 @@ class TagAdmin(ModelView, model=Tag):
     name = "Тег"
     name_plural = "Теги"
     icon = "fa-solid fa-tag"
-    column_list = [Tag.id, Tag.title, Tag.is_public, Tag.is_filter]
-    column_labels = {
-        "id": "ID",
-        "title": "Название",
-        "is_public": "Публичный",
-        "is_filter": "Фильтр"
-    }
-    page_size = TAG_ADMIN_PAGE_SIZE
-    page_size_options = PAGE_SIZE_OPTIONS
+    column_list = TAG_COLUMN_LIST
+    column_labels = TAG_COLUMN_LABELS
+    page_size = TAG_PAGE_SIZE
+    page_size_options = TAG_PAGE_SIZE_OPTIONS
     column_details_list = "__all__"
 
     form_columns = "__all__"
