@@ -9,6 +9,7 @@ import OrderKanbanBoard from './OrderKanbanBoard.vue';
 import OrdersListTable from './OrdersListTable.vue';
 import OrderEditDrawer from './OrderEditDrawer.vue';
 import { STATUS_LABELS, STATUS_ORDER } from './order-utils';
+import { getApiErrorMessage, parseApiFieldErrors } from '../../utils/api-errors';
 
 const segment = ref<Segment>('b2c');
 const view = ref<DashboardView>('kanban');
@@ -26,6 +27,8 @@ const drawerOpen = ref(false);
 const selectedOrder = ref<ManagerOrderDetailResponse | null>(null);
 const pendingOpenOrderId = ref<number | null>(null);
 const openedByUrlOrderId = ref<number | null>(null);
+const orderServerErrors = ref<Record<string, string>>({});
+const orderFormError = ref('');
 
 const showLoginModal = ref(false);
 const loginUsername = ref('');
@@ -49,24 +52,6 @@ const setToast = (message: string) => {
   window.setTimeout(() => {
     if (toast.value === message) toast.value = '';
   }, 2500);
-};
-
-const getErrorMessage = (error: unknown): string => {
-  const maybe = error as { body?: { detail?: unknown }; status?: number; message?: string; statusText?: string };
-  const detail = maybe?.body?.detail;
-  if (typeof detail === 'string') return detail;
-  if (Array.isArray(detail)) {
-    const first = detail[0] as { msg?: string; loc?: unknown[] };
-    if (first?.msg) {
-      const loc = Array.isArray(first.loc) ? first.loc.join('.') : '';
-      return loc ? `${loc}: ${first.msg}` : first.msg;
-    }
-    return JSON.stringify(detail);
-  }
-  if (detail && typeof detail === 'object') return JSON.stringify(detail);
-  if (maybe?.message) return maybe.message;
-  if (maybe?.status) return `HTTP ${maybe.status}${maybe.statusText ? ` ${maybe.statusText}` : ''}`;
-  return 'Неизвестная ошибка';
 };
 
 let loadRequestId = 0;
@@ -98,7 +83,7 @@ const loadOrders = async () => {
       setToast('Требуется повторный вход');
       return;
     }
-    setToast(`Не удалось загрузить сделки: ${getErrorMessage(error)}`);
+    setToast(`Не удалось загрузить сделки: ${getApiErrorMessage(error)}`);
   } finally {
     if (requestId !== loadRequestId) return;
     loading.value = false;
@@ -154,6 +139,8 @@ const onGenerateDoc = async (payload: { orderId: number; docType: string }) => {
 
 const openOrder = async (orderId: number, updateUrl = true) => {
   try {
+    orderServerErrors.value = {};
+    orderFormError.value = '';
     selectedOrder.value = await api.getManagerOrderDetail(orderId);
     drawerOpen.value = true;
     if (updateUrl) {
@@ -172,6 +159,8 @@ const openOrder = async (orderId: number, updateUrl = true) => {
 const saveOrder = async (payload: { orderId: number; data: ManagerOrderUpdatePayload }) => {
   if (saving.value) return;
   saving.value = true;
+  orderServerErrors.value = {};
+  orderFormError.value = '';
   try {
     selectedOrder.value = await api.patchManagerOrder(payload.orderId, payload.data);
     drawerOpen.value = false;
@@ -179,7 +168,19 @@ const saveOrder = async (payload: { orderId: number; data: ManagerOrderUpdatePay
     await loadOrders();
   } catch (error) {
     console.error(error);
-    setToast('Ошибка сохранения');
+    const parsed = parseApiFieldErrors(error, [
+      'status',
+      'next_followup_date',
+      'assessment_date',
+      'installation_date',
+      'comment',
+      'is_paid',
+      'products',
+      'services',
+    ]);
+    orderServerErrors.value = parsed.fieldErrors;
+    orderFormError.value = parsed.message;
+    setToast(`Ошибка сохранения: ${parsed.message}`);
   } finally {
     saving.value = false;
   }
@@ -236,6 +237,8 @@ watch(drawerOpen, (isOpen) => {
   if (!isOpen) {
     clearOrderIdFromUrl();
     openedByUrlOrderId.value = null;
+    orderServerErrors.value = {};
+    orderFormError.value = '';
   }
 });
 </script>
@@ -295,7 +298,13 @@ watch(drawerOpen, (isOpen) => {
       />
     </div>
 
-    <OrderEditDrawer v-model="drawerOpen" :order="selectedOrder" @save="saveOrder" />
+    <OrderEditDrawer
+      v-model="drawerOpen"
+      :order="selectedOrder"
+      :server-errors="orderServerErrors"
+      :form-error="orderFormError"
+      @save="saveOrder"
+    />
 
     <div v-if="showLoginModal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
       <div class="w-full max-w-sm rounded-[2rem] border border-slate-700 bg-slate-900 p-6">
