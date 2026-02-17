@@ -6,7 +6,7 @@ from sqladmin import Admin
 from sqlalchemy.engine import Engine
 from sqladmin.models import ModelView
 
-from admin import admin_views
+from admin.registry import admin_views
 from core.app_constants import ADMIN_TITLE
 from core.security import AdminAuthBackend
 
