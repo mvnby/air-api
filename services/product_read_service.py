@@ -3,16 +3,14 @@
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-from sqlmodel import func, select
+from sqlmodel import select
 from thefuzz import process
 
 from crud.product import ProductDAO
-from models import Product, ProductTagLink, Tag, TagGroup
+from models import Product
 from services.product_dict_mapper import map_product_to_dict
-
-
-ALLOWED_FILTER_GROUP_SLUGS = {"brand", "series", "expert-badge"}
+from services.product_filter_service import ProductFilterService
+from services.product_series_service import ProductSeriesService
 
 TRANSLIT_MAP = {
     "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e",
@@ -27,7 +25,7 @@ def transliterate(text: str) -> str:
     return "".join(TRANSLIT_MAP.get(char, char) for char in text.lower())
 
 
-class ProductReadService:
+class ProductReadService(ProductFilterService, ProductSeriesService):
     @staticmethod
     def validate_public_pagination(page: int, limit: int) -> None:
         if page < 1:
@@ -206,112 +204,6 @@ class ProductReadService:
             is_published=True,
         )
         return [ProductReadService._to_dict(p) for p in products]
-
-    @staticmethod
-    async def resolve_slugs_to_grouped_ids(
-        session: AsyncSession,
-        slugs: List[str],
-    ) -> Dict[int, List[int]]:
-        if not slugs:
-            return {}
-
-        stmt = (
-            select(Tag)
-            .join(TagGroup, Tag.group_id == TagGroup.id)
-            .where(Tag.slug.in_(slugs))
-            .where(TagGroup.slug.in_(ALLOWED_FILTER_GROUP_SLUGS))
-        )
-        tags = (await session.execute(stmt)).scalars().all()
-
-        grouped: Dict[int, List[int]] = {}
-        for tag in tags:
-            if tag.group_id is None:
-                continue
-            grouped.setdefault(tag.group_id, []).append(tag.id)
-        return grouped
-
-    @staticmethod
-    async def get_series_siblings(
-        session: AsyncSession,
-        product: Product,
-        limit: int = 8,
-    ) -> List[Product]:
-        series_tag_ids = [
-            tag.id
-            for tag in (product.tags or [])
-            if tag.group and tag.group.slug == "series"
-        ]
-        if not series_tag_ids:
-            return []
-
-        brand_tag_ids = {
-            tag.id
-            for tag in (product.tags or [])
-            if tag.group and tag.group.slug == "brand"
-        }
-
-        series_product_ids = (
-            select(ProductTagLink.product_id)
-            .where(ProductTagLink.tag_id.in_(series_tag_ids))
-            .distinct()
-            .subquery()
-        )
-
-        stmt = (
-            select(Product)
-            .join(series_product_ids, Product.id == series_product_ids.c.product_id)
-            .where(Product.id != product.id)
-            .where(Product.is_published == True)
-            .options(selectinload(Product.tags).selectinload(Tag.group))
-        )
-        candidates = list((await session.execute(stmt)).scalars().all())
-
-        def score(item: Product) -> tuple[int, int]:
-            item_brand_ids = {
-                tag.id for tag in (item.tags or [])
-                if tag.group and tag.group.slug == "brand"
-            }
-            same_brand = 0 if (brand_tag_ids and item_brand_ids.intersection(brand_tag_ids)) else 1
-            return (same_brand, item.price or 0)
-
-        candidates.sort(key=score)
-        return candidates[:limit]
-
-    @staticmethod
-    async def get_filters_config(session: AsyncSession) -> Dict[str, Any]:
-        price_q = await session.execute(
-            select(func.min(Product.price), func.max(Product.price)).where(Product.is_published == True)
-        )
-        area_q = await session.execute(
-            select(func.min(Product.area), func.max(Product.area)).where(Product.is_published == True)
-        )
-        price_min, price_max = price_q.one()
-        area_min, area_max = area_q.one()
-
-        brands_stmt = (
-            select(Tag)
-            .join(TagGroup, Tag.group_id == TagGroup.id)
-            .where(Tag.is_public == True)
-            .where(TagGroup.slug == "brand")
-            .order_by(Tag.sort_order, Tag.title)
-        )
-        expert_stmt = (
-            select(Tag)
-            .join(TagGroup, Tag.group_id == TagGroup.id)
-            .where(Tag.is_public == True)
-            .where((TagGroup.slug == "expert-badge") | (TagGroup.is_expert_badge == True))
-            .order_by(Tag.sort_order, Tag.title)
-        )
-
-        brands = list((await session.execute(brands_stmt)).scalars().all())
-        expert_tags = list((await session.execute(expert_stmt)).scalars().all())
-
-        return {
-            "price": {"min": price_min, "max": price_max},
-            "area": {"min": area_min, "max": area_max},
-            "brands": [{"id": t.id, "title": t.title, "slug": t.slug} for t in brands],
-            "expert_tags": [{"id": t.id, "title": t.title, "slug": t.slug} for t in expert_tags],
-        }
 
     @staticmethod
     def _to_dict(product: Product) -> Dict[str, Any]:
