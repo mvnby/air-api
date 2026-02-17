@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { api } from '../../api';
+import DateTimeField from '../ui/DateTimeField.vue';
 import type {
   ManagerOrderDetailResponse,
   ManagerOrderUpdatePayload,
@@ -8,6 +9,7 @@ import type {
   OrderServiceLineResponse,
 } from '../../client';
 import { STATUS_LABELS, STATUS_ORDER, formatMoney } from './order-utils';
+import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../../utils/datetime';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -54,19 +56,12 @@ const loadProductOptions = async (q = '') => {
   }));
 };
 
-const toLocalDateValue = (dateValue?: string | null) => {
-  if (!dateValue) return '';
-  const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toISOString().slice(0, 16);
-};
-
 const initForm = async (order: ManagerOrderDetailResponse | null) => {
   if (!order) return;
   status.value = order.status;
-  nextFollowupDate.value = toLocalDateValue(order.next_followup_date);
-  assessmentDate.value = toLocalDateValue(order.assessment_date);
-  installationDate.value = toLocalDateValue(order.installation_date);
+  nextFollowupDate.value = toLocalDateTimeInput(order.next_followup_date);
+  assessmentDate.value = toLocalDateTimeInput(order.assessment_date);
+  installationDate.value = toLocalDateTimeInput(order.installation_date);
   comment.value = order.comment ?? '';
   isPaid.value = order.is_paid;
   productLines.value = (order.product_lines ?? []).map((line: OrderProductLineResponse) => ({
@@ -133,15 +128,13 @@ const removeServiceLine = (index: number) => {
   serviceLines.value.splice(index, 1);
 };
 
-const toIsoNullable = (value: string) => (value ? new Date(value).toISOString() : null);
-
 const handleSave = () => {
   if (!props.order) return;
   const payload: ManagerOrderUpdatePayload = {
     status: status.value,
-    next_followup_date: toIsoNullable(nextFollowupDate.value),
-    assessment_date: toIsoNullable(assessmentDate.value),
-    installation_date: toIsoNullable(installationDate.value),
+    next_followup_date: fromLocalDateTimeInput(nextFollowupDate.value),
+    assessment_date: fromLocalDateTimeInput(assessmentDate.value),
+    installation_date: fromLocalDateTimeInput(installationDate.value),
     comment: comment.value,
     is_paid: isPaid.value,
     products: productLines.value.map((line) => ({
@@ -191,18 +184,9 @@ const closeDrawer = () => emit('update:modelValue', false);
             <option :value="true">Оплачен</option>
           </select>
         </label>
-        <label class="field-label">
-          Следующее касание
-          <input v-model="nextFollowupDate" type="datetime-local" class="field-input" />
-        </label>
-        <label class="field-label">
-          Дата замера
-          <input v-model="assessmentDate" type="datetime-local" class="field-input" />
-        </label>
-        <label class="field-label md:col-span-2">
-          Дата монтажа
-          <input v-model="installationDate" type="datetime-local" class="field-input" />
-        </label>
+        <DateTimeField v-model="nextFollowupDate" label="Следующее касание" />
+        <DateTimeField v-model="assessmentDate" label="Дата замера" />
+        <DateTimeField v-model="installationDate" class="md:col-span-2" label="Дата монтажа" />
         <label class="field-label md:col-span-2">
           Комментарий
           <textarea v-model="comment" class="field-input min-h-[90px]" />
