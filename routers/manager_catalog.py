@@ -12,14 +12,26 @@ from routers.manager_operation_ids import (
     GET_MANAGER_PRODUCTS,
     UPDATE_PRODUCT,
 )
-from schemas import BulkRoundRequest, ProductUpdate
+from schemas import (
+    BulkRoundRequest,
+    ManagerActionMessageResponse,
+    ManagerBulkRoundPriceResponse,
+    ManagerCatalogCustomerListResponse,
+    ManagerCatalogProductListResponse,
+    ManagerTagGroupResponse,
+    ProductUpdate,
+)
 from services.manager_catalog_service import ManagerCatalogService
 
 
 router = APIRouter(prefix="/api/manager", tags=["manager"])
 
 
-@router.get("/products/list", operation_id=GET_MANAGER_PRODUCTS)
+@router.get(
+    "/products/list",
+    response_model=ManagerCatalogProductListResponse,
+    operation_id=GET_MANAGER_PRODUCTS,
+)
 async def list_products_for_manager(
     page: int = Query(1, ge=1),
     limit: int = Query(40, ge=1, le=100),
@@ -49,7 +61,11 @@ async def list_products_for_manager(
     )
 
 
-@router.get("/customers", operation_id=GET_MANAGER_CUSTOMERS)
+@router.get(
+    "/customers",
+    response_model=ManagerCatalogCustomerListResponse,
+    operation_id=GET_MANAGER_CUSTOMERS,
+)
 async def list_customers_for_manager(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
@@ -73,7 +89,11 @@ async def list_customers_for_manager(
     )
 
 
-@router.patch("/products/{product_id}", operation_id=UPDATE_PRODUCT)
+@router.patch(
+    "/products/{product_id}",
+    response_model=ManagerActionMessageResponse,
+    operation_id=UPDATE_PRODUCT,
+)
 async def update_product(
     product_id: int,
     data: ProductUpdate,
@@ -95,7 +115,11 @@ async def update_product(
     return result
 
 
-@router.post("/products/bulk-round-price", operation_id=BULK_ROUND_PRICE)
+@router.post(
+    "/products/bulk-round-price",
+    response_model=ManagerBulkRoundPriceResponse,
+    operation_id=BULK_ROUND_PRICE,
+)
 async def bulk_round_price(
     request: BulkRoundRequest,
     session: AsyncSession = Depends(get_session),
@@ -107,7 +131,11 @@ async def bulk_round_price(
     return await ManagerCatalogService.bulk_round_prices(session=session, request=request)
 
 
-@router.get("/tags/all", operation_id=GET_ALL_TAGS)
+@router.get(
+    "/tags/all",
+    response_model=list[ManagerTagGroupResponse],
+    operation_id=GET_ALL_TAGS,
+)
 async def get_all_tags(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
