@@ -21,28 +21,6 @@ export class AdminService {
         });
     }
     /**
-     * Import Process
-     * @returns any Successful Response
-     * @throws ApiError
-     */
-    public static importProcessAdminImportOnlinerPost(): CancelablePromise<any> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/admin/import_onliner',
-        });
-    }
-    /**
-     * Update Sync Mode
-     * @returns any Successful Response
-     * @throws ApiError
-     */
-    public static updateSyncModeAdminUpdateSyncModePost(): CancelablePromise<any> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/admin/update_sync_mode',
-        });
-    }
-    /**
      * Generate Document
      * Универсальный роут для генерации документов.
      * doc_type: contract | offer | invoice | act | tn2 | ttn1
@@ -111,6 +89,70 @@ export class AdminService {
         });
     }
     /**
+     * Import Process
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static importProcessAdminImportOnlinerPost(): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/admin/import_onliner',
+        });
+    }
+    /**
+     * Update Sync Mode
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static updateSyncModeAdminUpdateSyncModePost(): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/admin/update_sync_mode',
+        });
+    }
+    /**
+     * Upload Images
+     * Bulk upload images for articles/products.
+     * Returns list of web-accessible URLs.
+     * @param formData
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static uploadImagesAdminApiUploadImagesPost(
+        formData: Body_upload_images_admin_api_upload_images_post,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/admin/api/upload_images',
+            formData: formData,
+            mediaType: 'multipart/form-data',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Article Images
+     * List all images associated with an article slug.
+     * @param slug
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static listArticleImagesAdminApiArticleImagesSlugGet(
+        slug: string,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/admin/api/article_images/{slug}',
+            path: {
+                'slug': slug,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Move Order Status
      * API for Kanban drag-and-drop.
      * @param requestBody
@@ -169,48 +211,6 @@ export class AdminService {
             query: {
                 'start': start,
                 'end': end,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Upload Images
-     * Bulk upload images for articles/products.
-     * Returns list of web-accessible URLs.
-     * @param formData
-     * @returns any Successful Response
-     * @throws ApiError
-     */
-    public static uploadImagesAdminApiUploadImagesPost(
-        formData: Body_upload_images_admin_api_upload_images_post,
-    ): CancelablePromise<any> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/admin/api/upload_images',
-            formData: formData,
-            mediaType: 'multipart/form-data',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * List Article Images
-     * List all images associated with an article slug.
-     * @param slug
-     * @returns any Successful Response
-     * @throws ApiError
-     */
-    public static listArticleImagesAdminApiArticleImagesSlugGet(
-        slug: string,
-    ): CancelablePromise<any> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/admin/api/article_images/{slug}',
-            path: {
-                'slug': slug,
             },
             errors: {
                 422: `Validation Error`,
