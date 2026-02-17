@@ -205,6 +205,60 @@ async def test_manager_lead_qualify_reuses_customer_and_keeps_existing_requisite
 
 
 @pytest.mark.asyncio
+async def test_manager_lead_qualify_prefers_more_complete_customer_on_equal_match(async_client, db):
+    headers = await _auth_headers(async_client)
+
+    sparse = Customer(
+        name="Client Sparse",
+        phone="+375291234567",
+        email="duplicate@example.com",
+        type=CustomerType.company,
+        inn="391398328",
+        full_legal_name="ООО Спарс",
+    )
+    rich = Customer(
+        name="Client Rich",
+        phone="+375291234567",
+        email="duplicate@example.com",
+        type=CustomerType.company,
+        inn="391398328",
+        full_legal_name="ООО Рич",
+        legal_address="Минск, ул. Ленина, 1",
+        bank_name="ЗАО Альфа-Банк",
+        bic="ALFABY2X",
+        iban="BY13ALFA30122644440010270000",
+    )
+    db.add(sparse)
+    db.add(rich)
+    await db.commit()
+    await db.refresh(sparse)
+    await db.refresh(rich)
+
+    create_resp = await async_client.post(
+        "/api/manager/leads",
+        headers=headers,
+        json={
+            "source": "manager",
+            "name": "Match Priority",
+            "email": "duplicate@example.com",
+            "inn": "391398328",
+            "request_text": "Проверка приоритета дедупа",
+        },
+    )
+    assert create_resp.status_code == 200
+    lead_id = create_resp.json()["id"]
+
+    qualify_resp = await async_client.post(
+        f"/api/manager/leads/{lead_id}/qualify",
+        headers=headers,
+        json={"name": "Match Priority"},
+    )
+    assert qualify_resp.status_code == 200
+    payload = qualify_resp.json()
+    assert payload["customer_id"] == rich.id
+
+
+@pytest.mark.asyncio
 async def test_manager_lead_qualify_handoff_smoke_open_order_and_customer(async_client):
     headers = await _auth_headers(async_client)
 
