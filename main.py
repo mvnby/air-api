@@ -5,10 +5,10 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqladmin import Admin
 from starlette.middleware.sessions import SessionMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
+from admin.bootstrap import configure_sqladmin
 from core.database import engine, init_db, async_session_maker
 from core.config import settings
 from core.logger import logger
@@ -22,14 +22,12 @@ if settings.SENTRY_DSN:
         environment=settings.ENVIRONMENT
     )
 
-from core.security import AdminAuthBackend
 from routers import admin as admin_router
 from routers import api as api_router
 from routers import auth as auth_router
 from routers import manager as manager_router
 from routers.manager_spa import create_manager_spa_router
 from routers import system as system_router
-from admin import admin_views
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 @asynccontextmanager
@@ -112,14 +110,4 @@ else:
 app.include_router(create_manager_spa_router(manager_dist))
 
 # Setup SQLAdmin with authentication
-admin = Admin(
-    app, 
-    engine, 
-    title="AirCon Admin", 
-    templates_dir=os.path.join(BASE_DIR, "templates"),
-    authentication_backend=AdminAuthBackend(secret_key=settings.SECRET_KEY)
-)
-
-# Register views from the admin package
-for view in admin_views:
-    admin.add_view(view)
+configure_sqladmin(app=app, engine=engine, base_dir=BASE_DIR, secret_key=settings.SECRET_KEY)
