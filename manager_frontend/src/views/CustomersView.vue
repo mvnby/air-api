@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { Search, Users, ChevronLeft, ChevronRight, Phone, Mail, Building } from 'lucide-vue-next';
 import { api } from '../api';
 import type { ManagerCatalogCustomerItemResponse } from '../client';
+import { CUSTOMER_UPDATED_EVENT, type CustomerUpdatedEventPayload } from '../utils/customer-events';
 
 // --- State ---
 const customers = ref<ManagerCatalogCustomerItemResponse[]>([]);
@@ -12,6 +13,8 @@ const typeFilter = ref('');
 const onlyWithOrders = ref(false);
 const page = ref(1);
 const meta = ref({ total: 0, pages: 1, limit: 20 });
+const recentlyUpdated = ref<Record<number, number>>({});
+const cleanupTimers = new Map<number, number>();
 
 const TYPE_MAP: Record<string, { label: string; icon: string }> = {
   individual: { label: 'Физ. лицо', icon: '👤' },
@@ -75,6 +78,33 @@ onMounted(() => {
     }
   }
   void loadCustomers();
+});
+
+const handleCustomerUpdated = (event: Event) => {
+  const detail = (event as CustomEvent<CustomerUpdatedEventPayload>).detail;
+  const updated = detail?.customer;
+  if (!updated) return;
+  customers.value = customers.value.map((item) => (item.id === updated.id ? { ...item, ...updated } : item));
+  recentlyUpdated.value[updated.id] = Date.now();
+  const prevTimer = cleanupTimers.get(updated.id);
+  if (prevTimer) {
+    window.clearTimeout(prevTimer);
+  }
+  const timer = window.setTimeout(() => {
+    delete recentlyUpdated.value[updated.id];
+    cleanupTimers.delete(updated.id);
+  }, 12000);
+  cleanupTimers.set(updated.id, timer);
+};
+
+onMounted(() => {
+  window.addEventListener(CUSTOMER_UPDATED_EVENT, handleCustomerUpdated);
+});
+
+onUnmounted(() => {
+  window.removeEventListener(CUSTOMER_UPDATED_EVENT, handleCustomerUpdated);
+  cleanupTimers.forEach((timer) => window.clearTimeout(timer));
+  cleanupTimers.clear();
 });
 </script>
 
@@ -143,6 +173,7 @@ onMounted(() => {
             <span class="type-badge" :class="customer.type">
               {{ TYPE_MAP[customer.type]?.icon }} {{ TYPE_MAP[customer.type]?.label || customer.type }}
             </span>
+            <span v-if="recentlyUpdated[customer.id]" class="updated-badge">обновлено</span>
           </div>
         </div>
 
@@ -296,6 +327,20 @@ onMounted(() => {
   border-color: #007f80;
   box-shadow: 0 4px 20px rgba(0, 127, 128, 0.08);
   transform: translateY(-2px);
+}
+
+.updated-badge {
+  display: inline-flex;
+  margin-top: 6px;
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(16, 185, 129, 0.15);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.35);
 }
 
 .card-header {

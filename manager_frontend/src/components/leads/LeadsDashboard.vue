@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { api } from '../../api';
 import DateTimeField from '../ui/DateTimeField.vue';
 import type {
@@ -23,9 +23,10 @@ import {
   validateOptionalByUnp,
   validateOptionalEmail,
 } from '../../utils/validation';
+import { CUSTOMER_UPDATED_EVENT, type CustomerUpdatedEventPayload } from '../../utils/customer-events';
 
 type LeadTab = '' | 'new' | 'contacted' | 'qualified' | 'lost' | 'spam';
-type RequisiteFieldKey = 'full_legal_name' | 'legal_address' | 'iban' | 'bic' | 'bank_name';
+type RequisiteFieldKey = 'inn' | 'full_legal_name' | 'legal_address' | 'iban' | 'bic' | 'bank_name';
 
 const leads = ref<LeadResponse[]>([]);
 const loading = ref(false);
@@ -46,6 +47,7 @@ const createSuggestedCustomer = ref<ManagerCatalogCustomerItemResponse | null>(n
 const selectedQualifyCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const selectedQualifyCustomerDetail = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const qualifyOverwriteFields = ref<Record<RequisiteFieldKey, boolean>>({
+  inn: false,
   full_legal_name: false,
   legal_address: false,
   iban: false,
@@ -71,6 +73,8 @@ const qualifyInnError = ref('');
 const qualifyIbanError = ref('');
 const createServerErrors = ref<Record<string, string>>({});
 const qualifyServerErrors = ref<Record<string, string>>({});
+const qualifyCriticalOverwriteRows = ref<Array<{ key: RequisiteFieldKey; label: string; existing: string; incoming: string }>>([]);
+const qualifyCriticalOverwriteConfirmed = ref(false);
 const createCompanyLookupLoading = ref(false);
 const qualifyCompanyLookupLoading = ref(false);
 const qualifyBankLookupLoading = ref(false);
@@ -240,6 +244,7 @@ const FIELD_LABELS: Record<string, string> = {
 
 const getFieldLabel = (field: string): string => FIELD_LABELS[field] || field;
 const REQUISITE_FIELDS: Array<{ key: RequisiteFieldKey; label: string }> = [
+  { key: 'inn', label: 'УНП' },
   { key: 'full_legal_name', label: 'Полное наименование' },
   { key: 'legal_address', label: 'Юридический адрес' },
   { key: 'iban', label: 'IBAN' },
@@ -248,6 +253,7 @@ const REQUISITE_FIELDS: Array<{ key: RequisiteFieldKey; label: string }> = [
 ];
 
 const normalizeRequisiteValue = (key: RequisiteFieldKey, value: string): string => {
+  if (key === 'inn') return normalizeUnp(value);
   if (key === 'iban') return normalizeIban(value);
   return value.trim();
 };
@@ -456,6 +462,7 @@ const openQualifyModal = (lead: LeadResponse, updateUrl = true) => {
   selectedQualifyCustomer.value = null;
   selectedQualifyCustomerDetail.value = null;
   qualifyOverwriteFields.value = {
+    inn: false,
     full_legal_name: false,
     legal_address: false,
     iban: false,
@@ -482,6 +489,8 @@ const openQualifyModal = (lead: LeadResponse, updateUrl = true) => {
   qualifyInnError.value = '';
   qualifyIbanError.value = '';
   qualifyServerErrors.value = {};
+  qualifyCriticalOverwriteRows.value = [];
+  qualifyCriticalOverwriteConfirmed.value = false;
   if (updateUrl) {
     const url = new URL(window.location.href);
     url.searchParams.set('leadId', String(lead.id));
@@ -491,6 +500,11 @@ const openQualifyModal = (lead: LeadResponse, updateUrl = true) => {
   }
   showQualifyModal.value = true;
   void autoHydrateQualifyFormByLeadIdentity();
+};
+
+const clearQualifyCriticalOverwriteConfirm = () => {
+  qualifyCriticalOverwriteRows.value = [];
+  qualifyCriticalOverwriteConfirmed.value = false;
 };
 
 const qualifyLead = async () => {
@@ -519,6 +533,18 @@ const qualifyLead = async () => {
   saving.value = true;
   try {
     const normalizedPhone = qualifyForm.value.phone ? normalizePhoneForApi(qualifyForm.value.phone) : undefined;
+    const criticalOverwriteRows = qualifyChangedRequisites.value.filter(
+      (row) =>
+        ['inn', 'iban', 'bic', 'bank_name'].includes(row.key) &&
+        qualifyOverwriteFields.value[row.key],
+    );
+    if (criticalOverwriteRows.length && !qualifyCriticalOverwriteConfirmed.value) {
+      qualifyCriticalOverwriteRows.value = criticalOverwriteRows;
+      setToast('Подтвердите перезапись критичных реквизитов в блоке ниже');
+      saving.value = false;
+      return;
+    }
+    clearQualifyCriticalOverwriteConfirm();
     const resolveRequisite = (key: RequisiteFieldKey): string | undefined => {
       const incoming = normalizeRequisiteValue(key, getIncomingRequisiteValue(key));
       if (!incoming) return undefined;
@@ -528,10 +554,11 @@ const qualifyLead = async () => {
     };
     const response = await api.qualifyManagerLead(selectedLead.value.id, {
       ...qualifyForm.value,
+      customer_id: selectedQualifyCustomer.value?.id || undefined,
       name: qualifyForm.value.name || undefined,
       phone: normalizedPhone || undefined,
       email: normalizeEmail(qualifyForm.value.email || '') || undefined,
-      inn: normalizeUnp(qualifyForm.value.inn || '') || undefined,
+      inn: resolveRequisite('inn'),
       full_legal_name: resolveRequisite('full_legal_name'),
       legal_address: resolveRequisite('legal_address'),
       iban: resolveRequisite('iban'),
@@ -574,6 +601,7 @@ const qualifyLead = async () => {
     setToast(`Не удалось квалифицировать лид: ${parsed.message}`);
   } finally {
     saving.value = false;
+    qualifyCriticalOverwriteConfirmed.value = false;
   }
 };
 
@@ -639,6 +667,11 @@ onMounted(async () => {
     }
   }
   await loadLeads();
+  window.addEventListener(CUSTOMER_UPDATED_EVENT, handleCustomerUpdated);
+});
+
+onUnmounted(() => {
+  window.removeEventListener(CUSTOMER_UPDATED_EVENT, handleCustomerUpdated);
 });
 
 watch(showQualifyModal, (isOpen) => {
@@ -647,10 +680,12 @@ watch(showQualifyModal, (isOpen) => {
     qualifyEmailError.value = '';
     qualifyInnError.value = '';
     qualifyIbanError.value = '';
+    clearQualifyCriticalOverwriteConfirm();
     return;
   }
   if (!isOpen) {
     selectedQualifyCustomerDetail.value = null;
+    clearQualifyCriticalOverwriteConfirm();
     clearLeadIdFromUrl();
     openedByUrlLeadId.value = null;
   }
@@ -706,6 +741,58 @@ const applyCustomerToCreateForm = (customer: ManagerCatalogCustomerItemResponse)
   createForm.value.inn = mapped.inn || createForm.value.inn;
   createForm.value.company_name = mapped.company_name || createForm.value.company_name;
   customerLookupResults.value = [];
+};
+
+const syncQualifyFormWithUpdatedCustomer = (
+  previous: ManagerCatalogCustomerItemResponse | null,
+  updated: ManagerCatalogCustomerItemResponse,
+) => {
+  const prevMapped = previous ? mapCustomerToLeadQualifyPrefill(previous) : {};
+  const nextMapped = mapCustomerToLeadQualifyPrefill(updated);
+  const keys: (keyof LeadQualifyPayload)[] = [
+    'name',
+    'phone',
+    'email',
+    'inn',
+    'full_legal_name',
+    'legal_address',
+    'iban',
+    'bic',
+    'bank_name',
+    'delivery_address',
+  ];
+
+  for (const key of keys) {
+    const current = (qualifyForm.value[key] || '').toString().trim();
+    const before = ((prevMapped[key] as string | undefined) || '').toString().trim();
+    const after = ((nextMapped[key] as string | undefined) || '').toString().trim();
+    if (!current || current === before) {
+      // Keep user edits intact, but refresh unchanged values from latest profile.
+      (qualifyForm.value as Record<string, string | undefined>)[key] = after || undefined;
+    }
+  }
+};
+
+const handleCustomerUpdated = (event: Event) => {
+  const detail = (event as CustomEvent<CustomerUpdatedEventPayload>).detail;
+  const updated = detail?.customer;
+  if (!updated) return;
+
+  if (selectedExistingCustomer.value?.id === updated.id) {
+    selectedExistingCustomer.value = updated;
+    applyCustomerToCreateForm(updated);
+  }
+
+  if (createSuggestedCustomer.value?.id === updated.id) {
+    createSuggestedCustomer.value = updated;
+  }
+
+  if (selectedQualifyCustomer.value?.id === updated.id || selectedQualifyCustomerDetail.value?.id === updated.id) {
+    const previous = selectedQualifyCustomerDetail.value;
+    selectedQualifyCustomer.value = updated;
+    selectedQualifyCustomerDetail.value = updated;
+    syncQualifyFormWithUpdatedCustomer(previous, updated);
+  }
 };
 
 const suggestCustomerForCreate = (customer: ManagerCatalogCustomerItemResponse) => {
@@ -798,6 +885,7 @@ const applyCustomerToQualifyForm = (customer: ManagerCatalogCustomerItemResponse
   selectedQualifyCustomer.value = customer;
   selectedQualifyCustomerDetail.value = customer;
   qualifyOverwriteFields.value = {
+    inn: false,
     full_legal_name: false,
     legal_address: false,
     iban: false,
@@ -1340,6 +1428,33 @@ const onQualifyIbanBlur = async () => {
                 <span class="text-amber-100">Станет: {{ row.incoming }}</span>
               </span>
             </label>
+          </div>
+        </div>
+        <div
+          v-if="qualifyCriticalOverwriteRows.length"
+          class="mb-3 rounded-lg border border-red-500/40 bg-red-900/20 px-3 py-3 text-xs text-red-100"
+        >
+          <p class="font-semibold text-red-50">Подтверждение перезаписи критичных реквизитов</p>
+          <p class="mt-1 text-red-200/90">Эти значения будут обновлены у выбранного клиента:</p>
+          <ul class="mt-2 list-inside list-disc space-y-1 text-red-100">
+            <li v-for="row in qualifyCriticalOverwriteRows" :key="`critical-${row.key}`">
+              {{ row.label }}: {{ row.existing }} -> {{ row.incoming }}
+            </li>
+          </ul>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="btn-mini bg-red-600/80 hover:bg-red-500"
+              @click="
+                qualifyCriticalOverwriteConfirmed = true;
+                qualifyLead();
+              "
+            >
+              Подтвердить и продолжить
+            </button>
+            <button type="button" class="btn-mini-outline" @click="clearQualifyCriticalOverwriteConfirm">
+              Отмена
+            </button>
           </div>
         </div>
         <div class="mb-3 rounded-lg border border-slate-700 bg-slate-800/70 px-3 py-2 text-xs text-slate-300">

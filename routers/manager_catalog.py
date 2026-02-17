@@ -11,6 +11,7 @@ from routers.manager_operation_ids import (
     GET_MANAGER_CUSTOMERS,
     GET_MANAGER_CUSTOMER_DETAIL,
     GET_MANAGER_PRODUCTS,
+    PATCH_MANAGER_CUSTOMER,
     UPDATE_PRODUCT,
 )
 from schemas import (
@@ -20,6 +21,7 @@ from schemas import (
     ManagerBulkRoundPriceResponse,
     ManagerCatalogCustomerListResponse,
     ManagerCatalogProductListResponse,
+    ManagerCustomerUpdatePayload,
     ManagerTagGroupResponse,
     ProductUpdate,
 )
@@ -102,6 +104,27 @@ async def get_customer_for_manager(
     _user: str = Depends(get_current_username),
 ):
     customer = await ManagerCatalogService.get_customer(session=session, customer_id=customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return customer
+
+
+@router.patch(
+    "/customers/{customer_id}",
+    response_model=ManagerCatalogCustomerItemResponse,
+    operation_id=PATCH_MANAGER_CUSTOMER,
+)
+async def patch_customer_for_manager(
+    customer_id: int,
+    payload: ManagerCustomerUpdatePayload,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    customer = await ManagerCatalogService.update_customer(
+        session=session,
+        customer_id=customer_id,
+        payload=payload,
+    )
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     return customer

@@ -352,7 +352,14 @@ class LeadService:
         bic = LeadService._clean_optional(payload.bic)
         bank_name = LeadService._clean_optional(payload.bank_name)
 
-        customer = await LeadService._find_existing_customer(session, phone=phone, email=email, inn=inn)
+        customer = None
+        selected_customer_id = getattr(payload, "customer_id", None)
+        if selected_customer_id:
+            customer = await session.get(Customer, int(selected_customer_id))
+            if not customer:
+                raise ValueError("Selected customer not found")
+        else:
+            customer = await LeadService._find_existing_customer(session, phone=phone, email=email, inn=inn)
 
         if payload.customer_type:
             customer_type = CustomerType(payload.customer_type)

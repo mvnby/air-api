@@ -16,6 +16,7 @@ import type { ManagerBulkSpecsResponse } from '../models/ManagerBulkSpecsRespons
 import type { ManagerCatalogCustomerItemResponse } from '../models/ManagerCatalogCustomerItemResponse';
 import type { ManagerCatalogCustomerListResponse } from '../models/ManagerCatalogCustomerListResponse';
 import type { ManagerCatalogProductListResponse } from '../models/ManagerCatalogProductListResponse';
+import type { ManagerCustomerUpdatePayload } from '../models/ManagerCustomerUpdatePayload';
 import type { ManagerMediaBulkAddResponse } from '../models/ManagerMediaBulkAddResponse';
 import type { ManagerMediaBulkDeleteResponse } from '../models/ManagerMediaBulkDeleteResponse';
 import type { ManagerMediaBulkUploadResponse } from '../models/ManagerMediaBulkUploadResponse';
@@ -126,6 +127,30 @@ export class ManagerService {
             path: {
                 'customer_id': customerId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Patch Customer For Manager
+     * @param customerId
+     * @param requestBody
+     * @returns ManagerCatalogCustomerItemResponse Successful Response
+     * @throws ApiError
+     */
+    public static patchManagerCustomer(
+        customerId: number,
+        requestBody: ManagerCustomerUpdatePayload,
+    ): CancelablePromise<ManagerCatalogCustomerItemResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/customers/{customer_id}',
+            path: {
+                'customer_id': customerId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

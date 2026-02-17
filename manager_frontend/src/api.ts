@@ -7,6 +7,7 @@ import {
     AdminService,
     ApiService,
     type ProductUpdate,
+    type ManagerCustomerUpdatePayload,
     type ProductResponse as Product,
     type ManagerOrderUpdatePayload,
     type LeadCreatePayload,
@@ -232,6 +233,10 @@ export const api = {
 
     async getManagerCustomerDetail(customerId: number) {
         return await ManagerService.getManagerCustomerDetail(customerId);
+    },
+
+    async patchManagerCustomer(customerId: number, payload: ManagerCustomerUpdatePayload) {
+        return await ManagerService.patchManagerCustomer(customerId, payload);
     },
 
     async updateProduct(id: number, data: ProductUpdate) {

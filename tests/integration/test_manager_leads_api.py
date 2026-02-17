@@ -259,6 +259,66 @@ async def test_manager_lead_qualify_prefers_more_complete_customer_on_equal_matc
 
 
 @pytest.mark.asyncio
+async def test_manager_lead_qualify_with_selected_customer_id_reuses_exact_customer(async_client, db):
+    headers = await _auth_headers(async_client)
+
+    target = Customer(
+        name="Target Customer",
+        phone="+375291111111",
+        email="target@example.com",
+        type=CustomerType.company,
+        inn="123456789",
+        full_legal_name="ООО Таргет",
+        bank_name="Target Bank",
+        bic="AKBBBY2X",
+        iban="BY12AKBB30120000000000000000",
+    )
+    other = Customer(
+        name="Other Customer",
+        phone="+375292222222",
+        email="other@example.com",
+        type=CustomerType.company,
+        inn="987654321",
+        full_legal_name="ООО Другой",
+    )
+    db.add(target)
+    db.add(other)
+    await db.commit()
+    await db.refresh(target)
+    await db.refresh(other)
+
+    create_resp = await async_client.post(
+        "/api/manager/leads",
+        headers=headers,
+        json={
+            "source": "manager",
+            "name": "Selected customer flow",
+            "request_text": "Проверка выбранного клиента",
+        },
+    )
+    assert create_resp.status_code == 200
+    lead_id = create_resp.json()["id"]
+
+    qualify_resp = await async_client.post(
+        f"/api/manager/leads/{lead_id}/qualify",
+        headers=headers,
+        json={
+            "customer_id": target.id,
+            "name": "Target Customer",
+            "inn": "391398328",
+        },
+    )
+    assert qualify_resp.status_code == 200
+    payload = qualify_resp.json()
+    assert payload["customer_id"] == target.id
+
+    await db.refresh(target)
+    assert target.bank_name == "Target Bank"
+    assert target.bic == "AKBBBY2X"
+    assert target.iban == "BY12AKBB30120000000000000000"
+
+
+@pytest.mark.asyncio
 async def test_manager_lead_qualify_handoff_smoke_open_order_and_customer(async_client):
     headers = await _auth_headers(async_client)
 
@@ -300,6 +360,48 @@ async def test_manager_lead_qualify_handoff_smoke_open_order_and_customer(async_
     customer_detail = customer_detail_resp.json()
     assert customer_detail["id"] == customer_id
     assert customer_detail["order_count"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_manager_lead_to_order_patch_smoke(async_client):
+    headers = await _auth_headers(async_client)
+
+    create_resp = await async_client.post(
+        "/api/manager/leads",
+        headers=headers,
+        json={
+            "source": "manager",
+            "name": "Lead Order Patch Smoke",
+            "phone": "+375291234567",
+            "request_text": "Smoke chain",
+        },
+    )
+    assert create_resp.status_code == 200
+    lead_id = create_resp.json()["id"]
+
+    qualify_resp = await async_client.post(
+        f"/api/manager/leads/{lead_id}/qualify",
+        headers=headers,
+        json={
+            "name": "Lead Order Patch Smoke",
+            "order_comment": "Created from lead",
+        },
+    )
+    assert qualify_resp.status_code == 200
+    order_id = qualify_resp.json()["order_id"]
+
+    patch_resp = await async_client.patch(
+        f"/api/manager/orders/{order_id}",
+        headers=headers,
+        json={
+            "status": "negotiation",
+            "comment": "Updated in smoke",
+        },
+    )
+    assert patch_resp.status_code == 200
+    patched = patch_resp.json()
+    assert patched["id"] == order_id
+    assert patched["status"] == "negotiation"
 
 
 @pytest.mark.asyncio
