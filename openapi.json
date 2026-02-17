@@ -4362,6 +4362,50 @@
             ],
             "title": "Full Legal Name"
           },
+          "legal_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Address"
+          },
+          "iban": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iban"
+          },
+          "bic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bic"
+          },
+          "bank_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bank Name"
+          },
           "delivery_address": {
             "anyOf": [
               {

@@ -107,6 +107,14 @@ export const api = {
         return await ManagerLeadsService.markManagerLeadLost(leadId, payload);
     },
 
+    async getCompanyByUnp(unp: string) {
+        return await ApiService.publicProxyEgrApiV1ProxyEgrGet(unp);
+    },
+
+    async getBankBySearch(search: string) {
+        return await ApiService.publicFindBankApiV1ProxyBankGet(search);
+    },
+
     // Legacy Product Manager methods
     async getProducts(limit = 50, page = 1) {
         return await ApiService.getProducts(page, limit);

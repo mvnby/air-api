@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { Search, Users, ChevronLeft, ChevronRight, Phone, Mail, Building } from 'lucide-vue-next';
+import { Search, Users, ChevronLeft, ChevronRight, Phone, Mail, Building, X } from 'lucide-vue-next';
 import { api } from '../api';
+import type { ManagerCatalogCustomerItemResponse } from '../client';
 
 // --- State ---
-const customers = ref<any[]>([]);
+const customers = ref<ManagerCatalogCustomerItemResponse[]>([]);
 const loading = ref(false);
 const searchQuery = ref('');
 const typeFilter = ref('');
-const showAllCustomers = ref(false);
+const onlyWithOrders = ref(false);
 const page = ref(1);
 const meta = ref({ total: 0, pages: 1, limit: 20 });
+const selectedCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 
 const TYPE_MAP: Record<string, { label: string; icon: string }> = {
   individual: { label: 'Физ. лицо', icon: '👤' },
@@ -26,10 +28,11 @@ async function loadCustomers() {
       meta.value.limit,
       searchQuery.value || undefined,
       typeFilter.value || undefined,
-      !showAllCustomers.value,
+      onlyWithOrders.value,
     );
     customers.value = data.items;
     meta.value = data.meta;
+    await ensureSelectedCustomerFromUrl();
   } catch (e) {
     console.error('Failed to load customers', e);
   } finally {
@@ -57,6 +60,50 @@ function formatDate(iso: string | null) {
   if (!iso) return '—';
   const d = new Date(iso);
   return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function updateCustomerQueryParam(customerId?: number | null) {
+  const url = new URL(window.location.href);
+  if (customerId) {
+    url.searchParams.set('customerId', String(customerId));
+  } else {
+    url.searchParams.delete('customerId');
+  }
+  window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+}
+
+function openCustomerCard(customer: ManagerCatalogCustomerItemResponse) {
+  selectedCustomer.value = customer;
+  updateCustomerQueryParam(customer.id);
+}
+
+function closeCustomerCard() {
+  selectedCustomer.value = null;
+  updateCustomerQueryParam(null);
+}
+
+async function ensureSelectedCustomerFromUrl() {
+  const customerIdRaw = new URLSearchParams(window.location.search).get('customerId');
+  if (!customerIdRaw) return;
+
+  const customerId = Number(customerIdRaw);
+  if (!Number.isFinite(customerId) || customerId <= 0) return;
+
+  const inCurrentPage = customers.value.find((item) => item.id === customerId);
+  if (inCurrentPage) {
+    selectedCustomer.value = inCurrentPage;
+    return;
+  }
+
+  try {
+    const data = await api.getManagerCustomers(1, 20, customerIdRaw, undefined, false);
+    const found = (data.items || []).find((item: ManagerCatalogCustomerItemResponse) => item.id === customerId);
+    if (found) {
+      selectedCustomer.value = found;
+    }
+  } catch (e) {
+    console.error('Failed to open customer by URL', e);
+  }
 }
 
 onMounted(loadCustomers);
@@ -94,8 +141,8 @@ onMounted(loadCustomers);
           >Юр. лица</button>
         </div>
         <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700">
-          <input v-model="showAllCustomers" type="checkbox" @change="onTypeChange" />
-          Показать всех
+          <input v-model="onlyWithOrders" type="checkbox" @change="onTypeChange" />
+          Только с заказами
         </label>
       </div>
     </div>
@@ -111,7 +158,7 @@ onMounted(loadCustomers);
       <Users :size="64" color="#ccc" />
       <h2>Клиенты не найдены</h2>
       <p v-if="searchQuery || typeFilter">Попробуйте изменить фильтры или поисковый запрос</p>
-      <p v-else-if="!showAllCustomers">Пока нет клиентов со сделками. Включите “Показать всех”, чтобы увидеть весь справочник.</p>
+      <p v-if="onlyWithOrders">Нет клиентов с заказами по текущим фильтрам.</p>
       <p v-else>Клиенты появятся здесь при создании заказов</p>
     </div>
 
@@ -120,7 +167,7 @@ onMounted(loadCustomers);
       <div v-for="customer in customers" :key="customer.id" class="customer-card">
         <div class="card-header">
           <div class="avatar" :class="customer.type">
-            {{ customer.name.charAt(0).toUpperCase() }}
+            {{ (customer.name || 'К').charAt(0).toUpperCase() }}
           </div>
           <div class="card-info">
             <div class="customer-name">{{ customer.name }}</div>
@@ -154,7 +201,10 @@ onMounted(loadCustomers);
             <span class="count-number">{{ customer.order_count }}</span>
             <span class="count-label">{{ customer.order_count === 1 ? 'заказ' : (customer.order_count >= 2 && customer.order_count <= 4 ? 'заказа' : 'заказов') }}</span>
           </div>
-          <div class="date-added">{{ formatDate(customer.created_at) }}</div>
+          <div class="footer-actions">
+            <div class="date-added">{{ formatDate(customer.created_at) }}</div>
+            <button class="open-btn" @click="openCustomerCard(customer)">Карточка</button>
+          </div>
         </div>
       </div>
     </div>
@@ -168,6 +218,52 @@ onMounted(loadCustomers);
       <button @click="goToPage(page + 1)" :disabled="page >= meta.pages" class="page-btn">
         <ChevronRight :size="16" />
       </button>
+    </div>
+
+    <div v-if="selectedCustomer" class="drawer-overlay" @click="closeCustomerCard">
+      <aside class="customer-drawer" @click.stop>
+        <header class="drawer-header">
+          <h3>Карточка клиента #{{ selectedCustomer.id }}</h3>
+          <button class="icon-btn" @click="closeCustomerCard">
+            <X :size="18" />
+          </button>
+        </header>
+
+        <div class="drawer-body">
+          <div class="drawer-row">
+            <span class="label">Тип</span>
+            <span class="value">{{ TYPE_MAP[selectedCustomer.type]?.label || selectedCustomer.type }}</span>
+          </div>
+          <div class="drawer-row">
+            <span class="label">Имя</span>
+            <span class="value">{{ selectedCustomer.name || '—' }}</span>
+          </div>
+          <div class="drawer-row">
+            <span class="label">Телефон</span>
+            <span class="value">{{ selectedCustomer.phone || '—' }}</span>
+          </div>
+          <div class="drawer-row">
+            <span class="label">Email</span>
+            <span class="value">{{ selectedCustomer.email || '—' }}</span>
+          </div>
+          <div class="drawer-row">
+            <span class="label">УНП</span>
+            <span class="value">{{ selectedCustomer.inn || '—' }}</span>
+          </div>
+          <div class="drawer-row">
+            <span class="label">Полное наименование</span>
+            <span class="value">{{ selectedCustomer.full_legal_name || '—' }}</span>
+          </div>
+          <div class="drawer-row">
+            <span class="label">Заказов</span>
+            <span class="value">{{ selectedCustomer.order_count }}</span>
+          </div>
+          <div class="drawer-row">
+            <span class="label">Создан</span>
+            <span class="value">{{ formatDate(selectedCustomer.created_at) }}</span>
+          </div>
+        </div>
+      </aside>
     </div>
   </div>
 </template>
@@ -369,6 +465,12 @@ onMounted(loadCustomers);
   justify-content: space-between;
 }
 
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .order-count {
   display: flex;
   align-items: baseline;
@@ -387,6 +489,94 @@ onMounted(loadCustomers);
 .date-added {
   font-size: 12px;
   color: #aaa;
+}
+
+.open-btn {
+  border: 1px solid #dbe3ea;
+  background: #fff;
+  border-radius: 8px;
+  font-size: 12px;
+  padding: 6px 10px;
+  color: #007f80;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.open-btn:hover {
+  background: #e6f7f7;
+}
+
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 60;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.customer-drawer {
+  width: min(460px, 100%);
+  height: 100%;
+  background: #ffffff;
+  border-left: 1px solid #e5e9ef;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.drawer-header h3 {
+  margin: 0;
+  font-size: 20px;
+  color: #1a1a2e;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #e0e4ea;
+  background: #fff;
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  background: #f4f6f9;
+}
+
+.drawer-body {
+  display: grid;
+  gap: 10px;
+}
+
+.drawer-row {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #eef1f6;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.drawer-row .label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8b94a3;
+}
+
+.drawer-row .value {
+  color: #232a36;
+  font-weight: 600;
+  word-break: break-word;
 }
 
 /* Pagination */

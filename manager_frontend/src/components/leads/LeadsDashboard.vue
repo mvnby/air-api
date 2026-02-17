@@ -6,11 +6,13 @@ import type {
   LeadCreatePayload,
   LeadLossPayload,
   LeadQualifyPayload,
+  ManagerCatalogCustomerItemResponse,
   LeadResponse,
   LeadUpdatePayload,
 } from '../../client';
 import { useBelarusPhoneMask } from '../../composables/useBelarusPhoneMask';
 import { fromLocalDateTimeInput } from '../../utils/datetime';
+import { getBankFromLookup, getCompanyFromEgr, normalizeIban, normalizeUnp } from '../../utils/legal-requisites';
 import { isBelarusPhoneComplete, normalizePhoneForApi } from '../../utils/phone';
 
 type LeadTab = '' | 'new' | 'contacted' | 'qualified' | 'lost' | 'spam';
@@ -29,10 +31,21 @@ const statusTab = ref<LeadTab>('');
 const showCreateModal = ref(false);
 const showQualifyModal = ref(false);
 const selectedLead = ref<LeadResponse | null>(null);
+const selectedExistingCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
+const selectedQualifyCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const createPhoneError = ref('');
 const qualifyPhoneError = ref('');
+const createCompanyLookupLoading = ref(false);
+const qualifyCompanyLookupLoading = ref(false);
+const qualifyBankLookupLoading = ref(false);
 const createPhoneInputRef = ref<HTMLInputElement | null>(null);
 const qualifyPhoneInputRef = ref<HTMLInputElement | null>(null);
+const customerLookupQuery = ref('');
+const customerLookupLoading = ref(false);
+const customerLookupResults = ref<ManagerCatalogCustomerItemResponse[]>([]);
+const qualifyCustomerLookupQuery = ref('');
+const qualifyCustomerLookupLoading = ref(false);
+const qualifyCustomerLookupResults = ref<ManagerCatalogCustomerItemResponse[]>([]);
 
 const createForm = ref<LeadCreatePayload>({
   source: 'manager',
@@ -51,6 +64,10 @@ const qualifyForm = ref<LeadQualifyPayload>({
   email: '',
   inn: '',
   full_legal_name: '',
+  legal_address: '',
+  iban: '',
+  bic: '',
+  bank_name: '',
   delivery_address: '',
   order_comment: '',
 });
@@ -172,6 +189,9 @@ const resetCreateForm = () => {
     company_name: '',
     next_followup_date: undefined,
   };
+  selectedExistingCustomer.value = null;
+  customerLookupQuery.value = '';
+  customerLookupResults.value = [];
   createPhoneError.value = '';
 };
 
@@ -205,7 +225,7 @@ const submitCreateLead = async () => {
       name: createForm.value.name || undefined,
       phone: normalizedPhone || undefined,
       email: createForm.value.email || undefined,
-      inn: createForm.value.inn || undefined,
+      inn: normalizeUnp(createForm.value.inn || '') || undefined,
       company_name: createForm.value.company_name || undefined,
       next_followup_date: fromLocalDateTimeInput(createForm.value.next_followup_date || undefined) || undefined,
     };
@@ -258,12 +278,19 @@ const markLost = async (lead: LeadResponse, status: 'lost' | 'spam') => {
 
 const openQualifyModal = (lead: LeadResponse) => {
   selectedLead.value = lead;
+  selectedQualifyCustomer.value = null;
+  qualifyCustomerLookupQuery.value = '';
+  qualifyCustomerLookupResults.value = [];
   qualifyForm.value = {
     name: lead.name || '',
     phone: lead.phone ? normalizePhoneForApi(lead.phone) : '',
     email: lead.email || '',
     inn: lead.inn || '',
     full_legal_name: lead.company_name || '',
+    legal_address: '',
+    iban: '',
+    bic: '',
+    bank_name: '',
     delivery_address: '',
     order_comment: lead.request_text,
   };
@@ -286,8 +313,12 @@ const qualifyLead = async () => {
       name: qualifyForm.value.name || undefined,
       phone: normalizedPhone || undefined,
       email: qualifyForm.value.email || undefined,
-      inn: qualifyForm.value.inn || undefined,
+      inn: normalizeUnp(qualifyForm.value.inn || '') || undefined,
       full_legal_name: qualifyForm.value.full_legal_name || undefined,
+      legal_address: qualifyForm.value.legal_address || undefined,
+      iban: normalizeIban(qualifyForm.value.iban || '') || undefined,
+      bic: qualifyForm.value.bic || undefined,
+      bank_name: qualifyForm.value.bank_name || undefined,
       delivery_address: qualifyForm.value.delivery_address || undefined,
       order_comment: qualifyForm.value.order_comment || undefined,
     });
@@ -309,7 +340,19 @@ const navigateToOrders = (orderId?: number | null) => {
   if (orderId) setToast(`Открыт раздел сделок. Найдите сделку #${orderId}`);
 };
 
+const navigateToCustomers = (customer?: ManagerCatalogCustomerItemResponse | null) => {
+  const customerId = customer?.id ? String(customer.id) : '';
+  const path = customerId ? `/manager/customers?customerId=${encodeURIComponent(customerId)}` : '/manager/customers';
+  window.history.pushState({}, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+  if (customer?.id) {
+    setToast(`Открыта карточка клиента #${customer.id}.`);
+  }
+};
+
 let searchTimer: number | undefined;
+let customerLookupTimer: number | undefined;
+let qualifyCustomerLookupTimer: number | undefined;
 watch([statusTab, source, overdueOnly, includeArchived, sort], async () => {
   await loadLeads();
 });
@@ -318,6 +361,18 @@ watch(search, () => {
   searchTimer = window.setTimeout(async () => {
     await loadLeads();
   }, 300);
+});
+watch(customerLookupQuery, () => {
+  if (customerLookupTimer) window.clearTimeout(customerLookupTimer);
+  customerLookupTimer = window.setTimeout(async () => {
+    await findExistingCustomers();
+  }, 250);
+});
+watch(qualifyCustomerLookupQuery, () => {
+  if (qualifyCustomerLookupTimer) window.clearTimeout(qualifyCustomerLookupTimer);
+  qualifyCustomerLookupTimer = window.setTimeout(async () => {
+    await findCustomersForQualify();
+  }, 250);
 });
 
 onMounted(async () => {
@@ -330,6 +385,132 @@ const validateCreatePhoneOnBlur = () => {
 
 const validateQualifyPhoneOnBlur = () => {
   qualifyPhoneError.value = getPhoneValidationError(qualifyForm.value.phone, qualifyPhoneMask.isComplete.value);
+};
+
+const applyCustomerToCreateForm = (customer: ManagerCatalogCustomerItemResponse) => {
+  selectedExistingCustomer.value = customer;
+  customerLookupQuery.value = customer.full_legal_name || customer.name || `Клиент #${customer.id}`;
+  createForm.value.name = customer.name || createForm.value.name;
+  createForm.value.phone = customer.phone ? normalizePhoneForApi(customer.phone) : createForm.value.phone;
+  createForm.value.email = customer.email || createForm.value.email;
+  createForm.value.inn = customer.inn || createForm.value.inn;
+  createForm.value.company_name = customer.full_legal_name || createForm.value.company_name;
+  customerLookupResults.value = [];
+};
+
+const findExistingCustomers = async () => {
+  const query = customerLookupQuery.value.trim();
+  if (query.length < 2) {
+    customerLookupResults.value = [];
+    return;
+  }
+
+  customerLookupLoading.value = true;
+  try {
+    const data = await api.getManagerCustomers(1, 8, query, undefined, false);
+    customerLookupResults.value = data.items || [];
+  } catch (error) {
+    console.error(error);
+    setToast(`Не удалось найти клиентов: ${getErrorMessage(error)}`);
+  } finally {
+    customerLookupLoading.value = false;
+  }
+};
+
+const applyCustomerToQualifyForm = (customer: ManagerCatalogCustomerItemResponse) => {
+  selectedQualifyCustomer.value = customer;
+  qualifyCustomerLookupQuery.value = customer.full_legal_name || customer.name || `Клиент #${customer.id}`;
+  qualifyForm.value.name = customer.name || qualifyForm.value.name;
+  qualifyForm.value.phone = customer.phone ? normalizePhoneForApi(customer.phone) : qualifyForm.value.phone;
+  qualifyForm.value.email = customer.email || qualifyForm.value.email;
+  qualifyForm.value.inn = customer.inn || qualifyForm.value.inn;
+  qualifyForm.value.full_legal_name = customer.full_legal_name || qualifyForm.value.full_legal_name;
+  qualifyCustomerLookupResults.value = [];
+};
+
+const findCustomersForQualify = async () => {
+  const query = qualifyCustomerLookupQuery.value.trim();
+  if (query.length < 2) {
+    qualifyCustomerLookupResults.value = [];
+    return;
+  }
+
+  qualifyCustomerLookupLoading.value = true;
+  try {
+    const data = await api.getManagerCustomers(1, 8, query, undefined, false);
+    qualifyCustomerLookupResults.value = data.items || [];
+  } catch (error) {
+    console.error(error);
+    setToast(`Не удалось найти клиентов: ${getErrorMessage(error)}`);
+  } finally {
+    qualifyCustomerLookupLoading.value = false;
+  }
+};
+
+const onCreateInnBlur = async () => {
+  const normalizedUnp = normalizeUnp(createForm.value.inn || '');
+  createForm.value.inn = normalizedUnp;
+  if (normalizedUnp.length !== 9) return;
+
+  createCompanyLookupLoading.value = true;
+  try {
+    const response = await api.getCompanyByUnp(normalizedUnp);
+    const company = getCompanyFromEgr(response);
+    if (company.fullLegalName) {
+      createForm.value.company_name = company.fullLegalName;
+    }
+  } catch (error) {
+    console.error(error);
+    setToast(`Не удалось получить данные ЕГР: ${getErrorMessage(error)}`);
+  } finally {
+    createCompanyLookupLoading.value = false;
+  }
+};
+
+const onQualifyInnBlur = async () => {
+  const normalizedUnp = normalizeUnp(qualifyForm.value.inn || '');
+  qualifyForm.value.inn = normalizedUnp;
+  if (normalizedUnp.length !== 9) return;
+
+  qualifyCompanyLookupLoading.value = true;
+  try {
+    const response = await api.getCompanyByUnp(normalizedUnp);
+    const company = getCompanyFromEgr(response);
+    if (company.fullLegalName) {
+      qualifyForm.value.full_legal_name = company.fullLegalName;
+    }
+    if (company.legalAddress) {
+      qualifyForm.value.legal_address = company.legalAddress;
+    }
+  } catch (error) {
+    console.error(error);
+    setToast(`Не удалось получить данные ЕГР: ${getErrorMessage(error)}`);
+  } finally {
+    qualifyCompanyLookupLoading.value = false;
+  }
+};
+
+const onQualifyIbanBlur = async () => {
+  const normalized = normalizeIban(qualifyForm.value.iban || '');
+  qualifyForm.value.iban = normalized;
+  if (normalized.length < 10) return;
+
+  qualifyBankLookupLoading.value = true;
+  try {
+    const response = await api.getBankBySearch(normalized);
+    const bank = getBankFromLookup(response);
+    if (bank.bankName) {
+      qualifyForm.value.bank_name = bank.bankName;
+    }
+    if (bank.bic) {
+      qualifyForm.value.bic = bank.bic;
+    }
+  } catch (error) {
+    console.error(error);
+    setToast(`Не удалось получить данные банка: ${getErrorMessage(error)}`);
+  } finally {
+    qualifyBankLookupLoading.value = false;
+  }
 };
 </script>
 
@@ -463,6 +644,40 @@ const validateQualifyPhoneOnBlur = () => {
     <div v-if="showCreateModal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
       <div class="w-full max-w-2xl rounded-[2rem] border border-slate-700 bg-slate-900 p-6">
         <h2 class="mb-4 text-xl font-semibold">Новый лид</h2>
+        <label class="field-label mb-3">
+          <span>Найти существующего клиента</span>
+          <input
+            v-model="customerLookupQuery"
+            class="field-input"
+            placeholder="Имя, телефон, УНП, email"
+          />
+          <span class="text-xs text-slate-400">Если клиент уже есть в базе, выберите его и поля заполнятся автоматически.</span>
+        </label>
+        <div v-if="customerLookupLoading" class="mb-3 text-xs text-slate-400">Ищем клиентов...</div>
+        <div v-else-if="customerLookupResults.length" class="mb-3 max-h-44 space-y-2 overflow-auto rounded-xl border border-slate-700 p-2">
+          <button
+            v-for="customer in customerLookupResults"
+            :key="customer.id"
+            type="button"
+            class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-left text-sm hover:border-slate-500"
+            @click="applyCustomerToCreateForm(customer)"
+          >
+            <p class="font-semibold text-white">{{ customer.full_legal_name || customer.name || `Клиент #${customer.id}` }}</p>
+            <p class="text-xs text-slate-300">
+              {{ customer.phone || 'Без телефона' }}
+              <span v-if="customer.inn"> · УНП {{ customer.inn }}</span>
+              <span v-if="customer.email"> · {{ customer.email }}</span>
+            </p>
+          </button>
+        </div>
+        <div v-if="selectedExistingCustomer" class="mb-3 flex items-center justify-between gap-2 rounded-lg border border-emerald-500/40 bg-emerald-900/20 px-3 py-2">
+          <p class="text-xs text-emerald-300">
+            Выбран клиент #{{ selectedExistingCustomer.id }}.
+          </p>
+          <button type="button" class="btn-mini-outline text-xs" @click="navigateToCustomers(selectedExistingCustomer)">
+            Открыть клиента
+          </button>
+        </div>
         <div class="grid gap-3 md:grid-cols-2">
           <input v-model="createForm.name" class="field-input" placeholder="Имя / Компания" />
           <label class="field-label">
@@ -480,7 +695,17 @@ const validateQualifyPhoneOnBlur = () => {
             <span v-if="createPhoneError" class="text-xs text-red-300">{{ createPhoneError }}</span>
           </label>
           <input v-model="createForm.email" class="field-input" placeholder="Email" />
-          <input v-model="createForm.inn" class="field-input" placeholder="УНП" />
+          <label class="field-label">
+            <span>УНП</span>
+            <input
+              v-model="createForm.inn"
+              class="field-input"
+              placeholder="УНП"
+              inputmode="numeric"
+              @blur="onCreateInnBlur"
+            />
+            <span v-if="createCompanyLookupLoading" class="text-xs text-slate-400">Подтягиваем данные ЕГР...</span>
+          </label>
           <input v-model="createForm.company_name" class="field-input" placeholder="Полное название компании" />
           <select v-model="createForm.source" class="field-input">
             <option value="manager">Менеджер</option>
@@ -515,6 +740,39 @@ const validateQualifyPhoneOnBlur = () => {
     <div v-if="showQualifyModal && selectedLead" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
       <div class="w-full max-w-2xl rounded-[2rem] border border-slate-700 bg-slate-900 p-6">
         <h2 class="mb-4 text-xl font-semibold">Квалифицировать лид #{{ selectedLead.id }}</h2>
+        <label class="field-label mb-3">
+          <span>Найти существующего клиента</span>
+          <input
+            v-model="qualifyCustomerLookupQuery"
+            class="field-input"
+            placeholder="Имя, телефон, УНП, email"
+          />
+        </label>
+        <div v-if="qualifyCustomerLookupLoading" class="mb-3 text-xs text-slate-400">Ищем клиентов...</div>
+        <div v-else-if="qualifyCustomerLookupResults.length" class="mb-3 max-h-44 space-y-2 overflow-auto rounded-xl border border-slate-700 p-2">
+          <button
+            v-for="customer in qualifyCustomerLookupResults"
+            :key="`qualify-customer-${customer.id}`"
+            type="button"
+            class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-left text-sm hover:border-slate-500"
+            @click="applyCustomerToQualifyForm(customer)"
+          >
+            <p class="font-semibold text-white">{{ customer.full_legal_name || customer.name || `Клиент #${customer.id}` }}</p>
+            <p class="text-xs text-slate-300">
+              {{ customer.phone || 'Без телефона' }}
+              <span v-if="customer.inn"> · УНП {{ customer.inn }}</span>
+              <span v-if="customer.email"> · {{ customer.email }}</span>
+            </p>
+          </button>
+        </div>
+        <div v-if="selectedQualifyCustomer" class="mb-3 flex items-center justify-between gap-2 rounded-lg border border-emerald-500/40 bg-emerald-900/20 px-3 py-2">
+          <p class="text-xs text-emerald-300">
+            Выбран клиент #{{ selectedQualifyCustomer.id }}.
+          </p>
+          <button type="button" class="btn-mini-outline text-xs" @click="navigateToCustomers(selectedQualifyCustomer)">
+            Открыть клиента
+          </button>
+        </div>
         <div class="grid gap-3 md:grid-cols-2">
           <input v-model="qualifyForm.name" class="field-input" placeholder="Имя клиента" />
           <label class="field-label">
@@ -532,8 +790,31 @@ const validateQualifyPhoneOnBlur = () => {
             <span v-if="qualifyPhoneError" class="text-xs text-red-300">{{ qualifyPhoneError }}</span>
           </label>
           <input v-model="qualifyForm.email" class="field-input" placeholder="Email" />
-          <input v-model="qualifyForm.inn" class="field-input" placeholder="УНП" />
+          <label class="field-label">
+            <span>УНП</span>
+            <input
+              v-model="qualifyForm.inn"
+              class="field-input"
+              placeholder="УНП"
+              inputmode="numeric"
+              @blur="onQualifyInnBlur"
+            />
+            <span v-if="qualifyCompanyLookupLoading" class="text-xs text-slate-400">Подтягиваем данные ЕГР...</span>
+          </label>
           <input v-model="qualifyForm.full_legal_name" class="field-input md:col-span-2" placeholder="Полное наименование (для юрлица)" />
+          <input v-model="qualifyForm.legal_address" class="field-input md:col-span-2" placeholder="Юридический адрес" />
+          <label class="field-label">
+            <span>IBAN (расчетный счет)</span>
+            <input
+              v-model="qualifyForm.iban"
+              class="field-input"
+              placeholder="BY.."
+              @blur="onQualifyIbanBlur"
+            />
+            <span v-if="qualifyBankLookupLoading" class="text-xs text-slate-400">Подтягиваем данные банка...</span>
+          </label>
+          <input v-model="qualifyForm.bic" class="field-input" placeholder="BIC банка" />
+          <input v-model="qualifyForm.bank_name" class="field-input md:col-span-2" placeholder="Название банка" />
           <input v-model="qualifyForm.delivery_address" class="field-input md:col-span-2" placeholder="Адрес доставки/монтажа" />
           <label class="field-label md:col-span-2">
             <span>Комментарий сделки</span>

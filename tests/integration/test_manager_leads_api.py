@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta
 
 import pytest
+from sqlmodel import select
 
 from core.config import settings
-from models import Lead  # noqa: F401 - ensure SQLModel metadata includes lead table
+from models import Customer, Lead  # noqa: F401 - ensure SQLModel metadata includes lead table
 
 
 async def _auth_headers(async_client):
@@ -72,7 +73,7 @@ async def test_manager_leads_overdue_filter(async_client):
 
 
 @pytest.mark.asyncio
-async def test_manager_lead_qualify_creates_order(async_client):
+async def test_manager_lead_qualify_creates_order(async_client, db):
     headers = await _auth_headers(async_client)
 
     create_resp = await async_client.post(
@@ -94,6 +95,10 @@ async def test_manager_lead_qualify_creates_order(async_client):
         headers=headers,
         json={
             "full_legal_name": "ООО Клиент",
+            "legal_address": "Минск, ул. Ленина, 1",
+            "iban": "BY13ALFA30122644440010270000",
+            "bic": "ALFABY2X",
+            "bank_name": "ЗАО Альфа-Банк, Минск",
             "delivery_address": "Минск",
             "order_comment": "Сформирована сделка",
         },
@@ -103,6 +108,13 @@ async def test_manager_lead_qualify_creates_order(async_client):
     assert qualified["lead"]["status"] == "qualified"
     assert qualified["order_id"] > 0
     assert qualified["customer_id"] > 0
+
+    customer_result = await db.execute(select(Customer).where(Customer.id == qualified["customer_id"]))
+    customer = customer_result.scalar_one()
+    assert customer.legal_address == "Минск, ул. Ленина, 1"
+    assert customer.iban == "BY13ALFA30122644440010270000"
+    assert customer.bic == "ALFABY2X"
+    assert customer.bank_name == "ЗАО Альфа-Банк, Минск"
 
 
 @pytest.mark.asyncio
