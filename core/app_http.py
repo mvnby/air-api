@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
@@ -11,10 +12,15 @@ from core.app_constants import (
 )
 from core.config import settings
 from core.logger import logger
+from core.manager_telemetry import ManagerTelemetryService
 
 
 def _is_admin_path(path: str) -> bool:
     return path.startswith(ADMIN_ROUTE_PREFIX)
+
+
+def _is_manager_api_path(path: str) -> bool:
+    return path.startswith("/api/manager")
 
 
 def _admin_error_response(detail: str) -> JSONResponse:
@@ -31,16 +37,69 @@ def _public_error_response() -> JSONResponse:
     )
 
 
+def _manager_error_response(*, status_code: int, message: str, error_code: str, field_errors: dict[str, str] | None = None) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "detail": {
+                "message": message,
+                "error_code": error_code,
+                "field_errors": field_errors or {},
+            }
+        },
+    )
+
+
+async def manager_validation_exception_handler(request: Request, exc: RequestValidationError):
+    if not _is_manager_api_path(str(request.url.path)):
+        return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
+    field_errors: dict[str, str] = {}
+    for item in exc.errors():
+        loc = item.get("loc", [])
+        if not loc:
+            continue
+        field = str(loc[-1])
+        if field and field not in field_errors:
+            field_errors[field] = item.get("msg", "Некорректное значение")
+
+    ManagerTelemetryService.record_error(
+        endpoint=str(request.url.path),
+        status_code=422,
+        error_code="validation_error",
+        field_errors=field_errors,
+    )
+    return _manager_error_response(
+        status_code=422,
+        message="Проверьте заполнение полей формы",
+        error_code="validation_error",
+        field_errors=field_errors,
+    )
+
+
 async def global_exception_handler(request: Request, exc: Exception):
     logger.exception(f"Unhandled exception at {request.url}: {exc}")
 
     if _is_admin_path(str(request.url.path)):
         return _admin_error_response(str(exc))
 
+    if _is_manager_api_path(str(request.url.path)):
+        ManagerTelemetryService.record_error(
+            endpoint=str(request.url.path),
+            status_code=500,
+            error_code="internal_error",
+        )
+        return _manager_error_response(
+            status_code=500,
+            message=INTERNAL_SERVER_ERROR_MESSAGE,
+            error_code="internal_error",
+        )
+
     return _public_error_response()
 
 
 def configure_http(app: FastAPI) -> None:
+    app.exception_handler(RequestValidationError)(manager_validation_exception_handler)
     app.exception_handler(Exception)(global_exception_handler)
 
     app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])

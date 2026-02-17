@@ -580,6 +580,17 @@ class ManagerActionMessageResponse(BaseModel):
     message: str
 
 
+class ManagerCrmHealthReportResponse(BaseModel):
+    window_hours: int
+    events_total: int
+    errors_total: int
+    invalid_payload_errors: int
+    requisite_conflict_attempts: int
+    qualify_success_total: int
+    qualify_success_without_manual_overwrite: int
+    qualify_success_without_manual_overwrite_pct: float
+
+
 class ManagerBulkRoundPriceResponse(ManagerActionMessageResponse):
     updated_count: int
 

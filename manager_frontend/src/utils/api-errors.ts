@@ -25,7 +25,11 @@ export const getApiErrorMessage = (error: unknown): string => {
     return JSON.stringify(detail);
   }
 
-  if (detail && typeof detail === 'object') return JSON.stringify(detail);
+  if (detail && typeof detail === 'object') {
+    const payload = detail as { message?: string };
+    if (payload.message) return payload.message;
+    return JSON.stringify(detail);
+  }
   if (maybe?.message) return maybe.message;
   if (maybe?.status) return `HTTP ${maybe.status}${maybe.statusText ? ` ${maybe.statusText}` : ''}`;
   return 'Неизвестная ошибка';
@@ -50,6 +54,19 @@ export const parseApiFieldErrors = (
     }
     if (Object.keys(fieldErrors).length) {
       message = 'Проверьте заполнение полей формы';
+    }
+  }
+
+  if (detail && typeof detail === 'object') {
+    const payload = detail as { message?: string; field_errors?: Record<string, string> };
+    if (payload.field_errors && typeof payload.field_errors === 'object') {
+      for (const [field, msg] of Object.entries(payload.field_errors)) {
+        if (!allowed.has(field) || !msg) continue;
+        if (!fieldErrors[field]) fieldErrors[field] = msg;
+      }
+    }
+    if (payload.message && Object.keys(fieldErrors).length) {
+      message = payload.message;
     }
   }
 

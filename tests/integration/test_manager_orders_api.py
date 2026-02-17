@@ -214,7 +214,9 @@ async def test_manager_order_patch_validation_errors(async_client, db):
     }
     response = await async_client.patch(f"/api/manager/orders/{order.id}", json=payload, headers=headers)
     assert response.status_code == 400
-    assert response.json()["detail"] == "Product quantity must be > 0"
+    detail = response.json()["detail"]
+    assert detail["error_code"] == "bad_request"
+    assert detail["message"] == "Product quantity must be > 0"
 
 
 @pytest.mark.asyncio

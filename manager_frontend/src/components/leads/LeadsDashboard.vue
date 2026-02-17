@@ -252,9 +252,15 @@ const REQUISITE_FIELDS: Array<{ key: RequisiteFieldKey; label: string }> = [
   { key: 'bank_name', label: 'Банк' },
 ];
 
+const normalizeComparableText = (value: string): string => value.trim().replace(/\s+/g, ' ').toLowerCase();
+
 const normalizeRequisiteValue = (key: RequisiteFieldKey, value: string): string => {
   if (key === 'inn') return normalizeUnp(value);
   if (key === 'iban') return normalizeIban(value);
+  if (key === 'bic') return value.trim().toUpperCase().replace(/\s+/g, '');
+  if (key === 'full_legal_name' || key === 'legal_address' || key === 'bank_name') {
+    return normalizeComparableText(value);
+  }
   return value.trim();
 };
 
