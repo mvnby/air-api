@@ -4,11 +4,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from admin.bootstrap import configure_sqladmin
+from core.app_static import mount_manager_assets, mount_static_and_media
 from core.database import engine, init_db, async_session_maker
 from core.app_routing import register_app_routers
 from core.config import settings
@@ -81,22 +81,13 @@ app.add_middleware(
 register_app_routers(app)
 
 # Static files
-app.mount(f"/{settings.STATIC_DIR}", StaticFiles(directory=os.path.join(BASE_DIR, settings.STATIC_DIR)), name="static")
-# Mount media from root 'media' folder (shared volume)
-media_dir = os.path.join(BASE_DIR, "media")
-if not os.path.exists(media_dir):
-    os.makedirs(media_dir, exist_ok=True)
-app.mount("/media", StaticFiles(directory=media_dir), name="media")
+mount_static_and_media(app, BASE_DIR)
 
 # Manager Dashboard SPA
 # 1. Mount assets explicitly to bypass the catch-all
 manager_dist = os.path.join(BASE_DIR, "manager_frontend", "dist")
-logger.info(f"Manager Dist Path: {manager_dist}, Exists: {os.path.exists(manager_dist)}")
 
-if os.path.exists(manager_dist):
-    app.mount("/manager/assets", StaticFiles(directory=os.path.join(manager_dist, "assets")), name="manager_assets")
-else:
-    logger.warning("Manager frontend dist directory not found!")
+mount_manager_assets(app, manager_dist)
 
 # 2. Catch-all + root routes for manager SPA
 app.include_router(create_manager_spa_router(manager_dist))
