@@ -1,6 +1,8 @@
 from sqladmin import ModelView
 from models import Customer, CustomerType
 
+from .common_constants import PAGE_SIZE_SMALL
+
 
 class CustomerAdmin(ModelView, model=Customer):
     name = "Клиент"
@@ -15,7 +17,7 @@ class CustomerAdmin(ModelView, model=Customer):
     ]
     column_searchable_list = [Customer.name, Customer.phone, Customer.inn, Customer.email]
     column_default_sort = (Customer.created_at, True)
-    page_size = 50
+    page_size = PAGE_SIZE_SMALL
     
     # Labels
     column_labels = {
