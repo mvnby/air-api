@@ -5,25 +5,18 @@
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
-export class DefaultService {
+export class SystemService {
     /**
-     * Serve Manager App
-     * @param fullPath
+     * Trigger Rebuild Web
+     * Trigger a turbo-rebuild of the frontend Astro site.
+     * Accessible only by authenticated managers/admins.
      * @returns any Successful Response
      * @throws ApiError
      */
-    public static serveManagerAppManagerFullPathGet(
-        fullPath: string,
-    ): CancelablePromise<any> {
+    public static triggerRebuildWebApiSystemRebuildWebPost(): CancelablePromise<any> {
         return __request(OpenAPI, {
-            method: 'GET',
-            url: '/manager/{full_path}',
-            path: {
-                'full_path': fullPath,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
+            method: 'POST',
+            url: '/api/system/rebuild-web',
         });
     }
 }
