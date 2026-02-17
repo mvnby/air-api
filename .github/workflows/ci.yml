@@ -59,6 +59,18 @@ jobs:
             sleep 1
           done
 
+      - name: Verify Manager API Client Is Up To Date
+        run: |
+          docker compose exec -T app python3 scripts/legacy/extract_openapi.py
+          cd manager_frontend
+          npm run gen:api
+          cd ..
+          git diff --exit-code -- openapi.json manager_frontend/src/client || (
+            echo "Manager API client is out of sync."
+            echo "Run: python3 scripts/legacy/extract_openapi.py && cd manager_frontend && npm run gen:api"
+            exit 1
+          )
+
       - name: Run Pytest
         # using the 'app' service where the code lives
         run: docker compose exec -T app pytest -v
