@@ -389,17 +389,17 @@ class ManagerCatalogCustomerItemResponse(BaseModel):
     email: Optional[str]
     type: str
     inn: Optional[str]
-    kpp: Optional[str]
+    kpp: Optional[str] = None
     full_legal_name: Optional[str]
     legal_address: Optional[str]
-    actual_address: Optional[str]
+    actual_address: Optional[str] = None
     iban: Optional[str]
     bic: Optional[str]
     bank_name: Optional[str]
-    signer_position: Optional[str]
-    signer_name: Optional[str]
-    acting_basis: Optional[str]
-    last_delivery_address: Optional[str]
+    signer_position: Optional[str] = None
+    signer_name: Optional[str] = None
+    acting_basis: Optional[str] = None
+    last_delivery_address: Optional[str] = None
     created_at: Optional[datetime]
     order_count: int
 
