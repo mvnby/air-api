@@ -46,7 +46,7 @@ class LeadService:
             score += 1
         if customer.phone:
             score += 1
-        if customer.last_delivery_address:
+        if customer.actual_address:
             score += 1
         return score
 
