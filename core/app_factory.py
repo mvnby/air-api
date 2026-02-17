@@ -25,12 +25,12 @@ def create_app() -> FastAPI:
     register_app_routers(app)
     mount_static_and_media(app, base_dir)
     mount_manager_assets(app, manager_dist)
-    app.include_router(create_manager_spa_router(str(manager_dist)))
+    app.include_router(create_manager_spa_router(manager_dist))
 
     configure_sqladmin(
         app=app,
         engine=engine,
-        base_dir=str(base_dir),
+        base_dir=base_dir,
         secret_key=settings.SECRET_KEY,
     )
 

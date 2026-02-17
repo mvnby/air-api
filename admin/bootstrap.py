@@ -8,8 +8,8 @@ from admin import admin_views
 from core.security import AdminAuthBackend
 
 
-def configure_sqladmin(app: FastAPI, engine: Engine, base_dir: str, secret_key: str) -> Admin:
-    templates_dir = Path(base_dir) / "templates"
+def configure_sqladmin(app: FastAPI, engine: Engine, base_dir: Path, secret_key: str) -> Admin:
+    templates_dir = base_dir / "templates"
 
     admin = Admin(
         app,
