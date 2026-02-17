@@ -1,7 +1,6 @@
-from sqladmin import ModelView, action, expose, BaseView
-from sqladmin.fields import AjaxSelectMultipleField, QueryAjaxModelLoader
+from sqladmin import ModelView, expose, BaseView
 from markupsafe import Markup
-from wtforms import TextAreaField, FileField, StringField
+from wtforms import TextAreaField, FileField
 from wtforms.validators import DataRequired
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
@@ -54,15 +53,6 @@ class ProductAdmin(ModelView, model=Product):
         "description": TextAreaField,
         "images": TextAreaField,
         # "slug" removed from overrides
-    }
-    
-    # --- Form Args: Override validators and label ---
-    form_args = {
-        "slug": {
-            "validators": [DataRequired()],
-            "label": "Slug Re-Attempt",
-            "description": "Уникальный URL"
-        }
     }
     
     # --- Extra fields (только для файла!) ---
@@ -165,72 +155,73 @@ class ProductAdmin(ModelView, model=Product):
         "slug": {
             "validators": [DataRequired()],
             "label": "Slug Re-Attempt",
-            "description": "Уникальный URL"
+            "description": "Уникальный URL",
         },
         "images": {
             "render_kw": {"readonly": True, "style": "background-color: #f8f9fa;"},
-            "description": "⚠️ Редактирование галереи перенесено в Manager App"
-        }
+            "description": "⚠️ Редактирование галереи перенесено в Manager App",
+        },
     }
+
+    def _ensure_slug(self, data: dict) -> None:
+        if not data.get("slug") and data.get("title"):
+            data["slug"] = slugify.slugify(data["title"])
+
+    @staticmethod
+    def _extract_uploaded_main_image(form):
+        upload = form.get("main_image_file")
+        if upload and hasattr(upload, "filename") and upload.filename:
+            return upload
+        return None
+
+    async def _save_new_product_main_image(self, model, upload) -> None:
+        file_bytes = await upload.read()
+        async with async_session_maker() as session:
+            await ProductService.save_main_image(
+                session=session,
+                product_id=model.id,
+                file_bytes=file_bytes,
+                filename=upload.filename,
+            )
+
+    async def _set_existing_product_main_image(self, data: dict, model, upload) -> None:
+        from services.image_service import ImageService
+
+        file_bytes = await upload.read()
+        async with async_session_maker() as session:
+            stmt = select(Product).where(Product.id == model.id)
+            result = await session.execute(stmt)
+            product = result.scalar_one_or_none()
+
+            if not product:
+                return
+
+            db_path = await ImageService.save_image(
+                file_bytes=file_bytes,
+                entity_type="products",
+                slug=product.slug,
+                filename=upload.filename,
+            )
+            data["main_image"] = ImageService.get_web_path(db_path)
 
     # --- Сохранение: обработка файла через ProductService ---
     async def on_model_change(self, data, model, is_created, request):
         form = await request.form()
-        upload = form.get("main_image_file")
-        
-        # Remove file field from data
-        if "main_image_file" in data:
-            del data["main_image_file"]
+        upload = self._extract_uploaded_main_image(form)
+        data.pop("main_image_file", None)
+        self._ensure_slug(data)
 
-        # Ensure slug exists before saving
-        if not data.get("slug") and data.get("title"):
-            data["slug"] = slugify.slugify(data["title"])
-        
-        # Handle image upload BEFORE saving model
-        if upload and hasattr(upload, "filename") and upload.filename:
-            # For new products, we need to save first to get ID
-            if is_created:
-                # Save model first to get ID
-                await super().on_model_change(data, model, is_created, request)
-                
-                # Now upload image
-                file_bytes = await upload.read()
-                async with async_session_maker() as session:
-                    web_path = await ProductService.save_main_image(
-                        session=session,
-                        product_id=model.id,
-                        file_bytes=file_bytes,
-                        filename=upload.filename
-                    )
-                # Image is already saved to DB by ProductService
-            else:
-                # For existing products, we can update data before saving
-                file_bytes = await upload.read()
-                async with async_session_maker() as session:
-                    # Get product to get slug
-                    from sqlmodel import select
-                    from models import Product
-                    stmt = select(Product).where(Product.id == model.id)
-                    result = await session.execute(stmt)
-                    product = result.scalar_one_or_none()
-                    
-                    if product:
-                        # Save image
-                        from services.image_service import ImageService
-                        db_path = await ImageService.save_image(
-                            file_bytes=file_bytes,
-                            entity_type="products",
-                            slug=product.slug,
-                            filename=upload.filename
-                        )
-                        # Update data dict so it gets saved
-                        data["main_image"] = ImageService.get_web_path(db_path)
-                
-                # Now save with updated data
-                await super().on_model_change(data, model, is_created, request)
-        else:
-            # No image upload, just save normally
+        if not upload:
             await super().on_model_change(data, model, is_created, request)
+            return
+
+        if is_created:
+            await super().on_model_change(data, model, is_created, request)
+            await self._save_new_product_main_image(model, upload)
+            return
+
+        await self._set_existing_product_main_image(data, model, upload)
+        await super().on_model_change(data, model, is_created, request)
 
 
 class TagGroupAdmin(ModelView, model=TagGroup):
