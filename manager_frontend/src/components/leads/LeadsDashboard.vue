@@ -34,6 +34,7 @@ const selectedLead = ref<LeadResponse | null>(null);
 const selectedExistingCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const selectedQualifyCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const createPhoneError = ref('');
+const createRequestError = ref('');
 const qualifyPhoneError = ref('');
 const createCompanyLookupLoading = ref(false);
 const qualifyCompanyLookupLoading = ref(false);
@@ -193,6 +194,7 @@ const resetCreateForm = () => {
   customerLookupQuery.value = '';
   customerLookupResults.value = [];
   createPhoneError.value = '';
+  createRequestError.value = '';
 };
 
 const getPhoneValidationError = (
@@ -216,12 +218,18 @@ const submitCreateLead = async () => {
     setToast(createPhoneError.value);
     return;
   }
+  const requestText = (createForm.value.request_text || '').trim();
+  createRequestError.value = requestText ? '' : 'Заполните поле "Запрос"';
+  if (createRequestError.value) {
+    setToast(createRequestError.value);
+    return;
+  }
   saving.value = true;
   try {
     const normalizedPhone = createForm.value.phone ? normalizePhoneForApi(createForm.value.phone) : undefined;
     const payload: LeadCreatePayload = {
       ...createForm.value,
-      request_text: (createForm.value.request_text || '').trim(),
+      request_text: requestText,
       name: createForm.value.name || undefined,
       phone: normalizedPhone || undefined,
       email: createForm.value.email || undefined,
@@ -828,8 +836,10 @@ const onQualifyIbanBlur = async () => {
             <textarea
               v-model="createForm.request_text"
               class="field-input min-h-[100px]"
+              :class="createRequestError ? 'border-red-500 focus:outline-red-400' : ''"
               placeholder="Краткое описание запроса"
             />
+            <span v-if="createRequestError" class="text-xs text-red-300">{{ createRequestError }}</span>
           </label>
         </div>
         <div class="mt-5 flex justify-end gap-2">
