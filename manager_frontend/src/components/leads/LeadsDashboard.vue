@@ -1400,57 +1400,6 @@ const onQualifyIbanBlur = async () => {
             Открыть клиента
           </button>
         </div>
-        <div
-          v-if="selectedQualifyCustomerDetail && qualifyChangedRequisites.length"
-          class="mb-3 rounded-lg border border-amber-500/40 bg-amber-900/20 px-3 py-3 text-xs text-amber-100"
-        >
-          <p class="font-semibold text-amber-50">Обнаружены отличия в реквизитах клиента</p>
-          <p class="mt-1 text-amber-200/90">
-            Критичные поля требуют отдельного подтверждения перед сохранением.
-          </p>
-          <div class="mt-2 space-y-2">
-            <label
-              v-for="row in qualifyChangedRequisites"
-              :key="`diff-${row.key}`"
-              class="flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-900/20 px-2 py-2"
-            >
-              <span>
-                <strong>
-                  {{ row.label }}
-                  <span v-if="isCriticalRequisite(row.key)" class="ml-1 rounded bg-red-500/30 px-1 py-0.5 text-[10px] uppercase tracking-wide text-red-100">
-                    критично
-                  </span>
-                </strong><br />
-                <span class="text-amber-200/90">Было: {{ row.existing }}</span><br />
-                <span class="text-amber-100">Станет: {{ row.incoming }}</span>
-              </span>
-            </label>
-          </div>
-        </div>
-        <div
-          v-if="qualifyCriticalChangeRows.length"
-          class="mb-3 rounded-lg border border-red-500/40 bg-red-900/20 px-3 py-3 text-xs text-red-100"
-        >
-          <p class="font-semibold text-red-50">Подтверждение изменения критичных реквизитов</p>
-          <p class="mt-1 text-red-200/90">Эти значения будут обновлены у выбранного клиента:</p>
-          <ul class="mt-2 list-inside list-disc space-y-1 text-red-100">
-            <li v-for="row in qualifyCriticalChangeRows" :key="`critical-${row.key}`">
-              {{ row.label }}: {{ row.existing }} -> {{ row.incoming }}
-            </li>
-          </ul>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              class="btn-mini bg-red-600/80 hover:bg-red-500"
-              @click="requestCriticalChangesConfirm"
-            >
-              Подтвердить и продолжить
-            </button>
-            <button type="button" class="btn-mini-outline" @click="clearQualifyCriticalOverwriteConfirm">
-              Отмена
-            </button>
-          </div>
-        </div>
         <div class="mb-3 rounded-lg border border-slate-700 bg-slate-800/70 px-3 py-2 text-xs text-slate-300">
           <p class="font-semibold text-slate-100">Preview квалификации</p>
           <p>
@@ -1592,6 +1541,57 @@ const onQualifyIbanBlur = async () => {
               :class="qualifyServerErrors.order_comment ? 'border-red-500 focus:outline-red-400' : ''"
             />
           </label>
+        </div>
+        <div
+          v-if="selectedQualifyCustomerDetail && qualifyChangedRequisites.length"
+          class="mt-4 mb-3 rounded-lg border border-amber-500/40 bg-amber-900/20 px-3 py-3 text-xs text-amber-100"
+        >
+          <p class="font-semibold text-amber-50">Обнаружены отличия в реквизитах клиента</p>
+          <p class="mt-1 text-amber-200/90">
+            Критичные поля требуют отдельного подтверждения перед сохранением.
+          </p>
+          <div class="mt-2 space-y-2">
+            <label
+              v-for="row in qualifyChangedRequisites"
+              :key="`diff-${row.key}`"
+              class="flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-900/20 px-2 py-2"
+            >
+              <span>
+                <strong>
+                  {{ row.label }}
+                  <span v-if="isCriticalRequisite(row.key)" class="ml-1 rounded bg-red-500/30 px-1 py-0.5 text-[10px] uppercase tracking-wide text-red-100">
+                    критично
+                  </span>
+                </strong><br />
+                <span class="text-amber-200/90">Было: {{ row.existing }}</span><br />
+                <span class="text-amber-100">Станет: {{ row.incoming }}</span>
+              </span>
+            </label>
+          </div>
+        </div>
+        <div
+          v-if="qualifyCriticalChangeRows.length"
+          class="mb-3 rounded-lg border border-red-500/40 bg-red-900/20 px-3 py-3 text-xs text-red-100"
+        >
+          <p class="font-semibold text-red-50">Подтверждение изменения критичных реквизитов</p>
+          <p class="mt-1 text-red-200/90">Эти значения будут обновлены у выбранного клиента:</p>
+          <ul class="mt-2 list-inside list-disc space-y-1 text-red-100">
+            <li v-for="row in qualifyCriticalChangeRows" :key="`critical-${row.key}`">
+              {{ row.label }}: {{ row.existing }} -> {{ row.incoming }}
+            </li>
+          </ul>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="btn-mini bg-red-600/80 hover:bg-red-500"
+              @click="requestCriticalChangesConfirm"
+            >
+              Подтвердить и продолжить
+            </button>
+            <button type="button" class="btn-mini-outline" @click="clearQualifyCriticalOverwriteConfirm">
+              Отмена
+            </button>
+          </div>
         </div>
         <div class="mt-5 flex justify-end gap-2">
           <button class="btn-mini-outline" :disabled="saving" @click="showQualifyModal = false">Отмена</button>
