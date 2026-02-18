@@ -47,14 +47,6 @@ const selectedExistingCustomer = ref<ManagerCatalogCustomerItemResponse | null>(
 const createSuggestedCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const selectedQualifyCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const selectedQualifyCustomerDetail = ref<ManagerCatalogCustomerItemResponse | null>(null);
-const qualifyOverwriteFields = ref<Record<RequisiteFieldKey, boolean>>({
-  inn: false,
-  full_legal_name: false,
-  legal_address: false,
-  iban: false,
-  bic: false,
-  bank_name: false,
-});
 const createSuggestionDismissedForId = ref<number | null>(null);
 const lastQualifyResult = ref<{
   leadId: number;
@@ -74,10 +66,8 @@ const qualifyInnError = ref('');
 const qualifyIbanError = ref('');
 const createServerErrors = ref<Record<string, string>>({});
 const qualifyServerErrors = ref<Record<string, string>>({});
-const qualifyCriticalOverwriteRows = ref<Array<{ key: RequisiteFieldKey; label: string; existing: string; incoming: string }>>([]);
-const qualifyCriticalOverwriteConfirmed = ref(false);
-const qualifyCriticalMissingOverwriteRows = ref<Array<{ key: RequisiteFieldKey; label: string; existing: string; incoming: string }>>([]);
-const qualifyCriticalMissingConfirmed = ref(false);
+const qualifyCriticalChangeRows = ref<Array<{ key: RequisiteFieldKey; label: string; existing: string; incoming: string }>>([]);
+const qualifyCriticalChangesConfirmed = ref(false);
 const createCompanyLookupLoading = ref(false);
 const qualifyCompanyLookupLoading = ref(false);
 const qualifyBankLookupLoading = ref(false);
@@ -290,7 +280,8 @@ const canWriteRequisiteByDefault = (key: RequisiteFieldKey): boolean => {
   if (!incoming) return false;
   if (!existing) return true;
   if (existing === incoming) return true;
-  return qualifyOverwriteFields.value[key];
+  if (isCriticalRequisite(key)) return qualifyCriticalChangesConfirmed.value;
+  return true;
 };
 
 const qualifyChangedRequisites = computed(() =>
@@ -301,12 +292,11 @@ const qualifyChangedRequisites = computed(() =>
       label,
       existing: getExistingRequisiteValue(key).trim() || '—',
       incoming: getIncomingRequisiteValue(key).trim() || '—',
-      overwrite: qualifyOverwriteFields.value[key],
     })),
 );
 
-const qualifyNonCriticalChangedRequisites = computed(() =>
-  qualifyChangedRequisites.value.filter((row) => !isCriticalRequisite(row.key)),
+const qualifyCriticalChangedRequisites = computed(() =>
+  qualifyChangedRequisites.value.filter((row) => isCriticalRequisite(row.key)),
 );
 
 const qualifyWriteSummary = computed(() =>
@@ -316,21 +306,15 @@ const qualifyWriteSummary = computed(() =>
       key,
       label,
       value: getIncomingRequisiteValue(key).trim(),
-      mode: isRequisiteChanged(key) ? 'overwrite' : 'fill_or_keep',
+      mode: isRequisiteChanged(key)
+        ? (isCriticalRequisite(key) ? 'critical_overwrite' : 'overwrite')
+        : 'fill_or_keep',
     })),
 );
 
-const onQualifyOverwriteToggle = (key: RequisiteFieldKey, checked: boolean) => {
-  qualifyOverwriteFields.value[key] = checked;
-  if (isCriticalRequisite(key) && (qualifyCriticalOverwriteConfirmed.value || qualifyCriticalMissingConfirmed.value)) {
-    clearQualifyCriticalOverwriteConfirm();
-  }
-};
-
-const applyAllNonCriticalOverwrites = () => {
-  for (const row of qualifyNonCriticalChangedRequisites.value) {
-    qualifyOverwriteFields.value[row.key] = true;
-  }
+const requestCriticalChangesConfirm = () => {
+  qualifyCriticalChangesConfirmed.value = true;
+  qualifyLead();
 };
 
 const loadLeads = async () => {
@@ -488,14 +472,7 @@ const openQualifyModal = (lead: LeadResponse, updateUrl = true) => {
   selectedLead.value = lead;
   selectedQualifyCustomer.value = null;
   selectedQualifyCustomerDetail.value = null;
-  qualifyOverwriteFields.value = {
-    inn: false,
-    full_legal_name: false,
-    legal_address: false,
-    iban: false,
-    bic: false,
-    bank_name: false,
-  };
+  clearQualifyCriticalOverwriteConfirm();
   qualifyCustomerLookupQuery.value = '';
   qualifyCustomerLookupResults.value = [];
   qualifyForm.value = {
@@ -516,8 +493,8 @@ const openQualifyModal = (lead: LeadResponse, updateUrl = true) => {
   qualifyInnError.value = '';
   qualifyIbanError.value = '';
   qualifyServerErrors.value = {};
-  qualifyCriticalOverwriteRows.value = [];
-  qualifyCriticalOverwriteConfirmed.value = false;
+  qualifyCriticalChangeRows.value = [];
+  qualifyCriticalChangesConfirmed.value = false;
   if (updateUrl) {
     const url = new URL(window.location.href);
     url.searchParams.set('leadId', String(lead.id));
@@ -530,10 +507,8 @@ const openQualifyModal = (lead: LeadResponse, updateUrl = true) => {
 };
 
 const clearQualifyCriticalOverwriteConfirm = () => {
-  qualifyCriticalOverwriteRows.value = [];
-  qualifyCriticalOverwriteConfirmed.value = false;
-  qualifyCriticalMissingOverwriteRows.value = [];
-  qualifyCriticalMissingConfirmed.value = false;
+  qualifyCriticalChangeRows.value = [];
+  qualifyCriticalChangesConfirmed.value = false;
 };
 
 const qualifyLead = async () => {
@@ -562,22 +537,10 @@ const qualifyLead = async () => {
   saving.value = true;
   try {
     const normalizedPhone = qualifyForm.value.phone ? normalizePhoneForApi(qualifyForm.value.phone) : undefined;
-    const criticalChangedRows = qualifyChangedRequisites.value.filter((row) =>
-      ['inn', 'iban', 'bic', 'bank_name'].includes(row.key),
-    );
-    const criticalOverwriteRows = criticalChangedRows.filter(
-      (row) =>
-        qualifyOverwriteFields.value[row.key],
-    );
-    if (criticalChangedRows.length && !criticalOverwriteRows.length && !qualifyCriticalMissingConfirmed.value) {
-      qualifyCriticalMissingOverwriteRows.value = criticalChangedRows;
-      setToast('Есть критичные отличия. Подтвердите сохранение без перезаписи или отметьте нужные чекбоксы.');
-      saving.value = false;
-      return;
-    }
-    if (criticalOverwriteRows.length && !qualifyCriticalOverwriteConfirmed.value) {
-      qualifyCriticalOverwriteRows.value = criticalOverwriteRows;
-      setToast('Подтвердите перезапись критичных реквизитов в блоке ниже');
+    const criticalChangedRows = qualifyCriticalChangedRequisites.value;
+    if (criticalChangedRows.length && !qualifyCriticalChangesConfirmed.value) {
+      qualifyCriticalChangeRows.value = criticalChangedRows;
+      setToast('Подтвердите сохранение: будут изменены критичные реквизиты клиента.');
       saving.value = false;
       return;
     }
@@ -638,7 +601,7 @@ const qualifyLead = async () => {
     setToast(`Не удалось квалифицировать лид: ${parsed.message}`);
   } finally {
     saving.value = false;
-    qualifyCriticalOverwriteConfirmed.value = false;
+    qualifyCriticalChangesConfirmed.value = false;
   }
 };
 
@@ -921,14 +884,7 @@ const findExistingCustomers = async () => {
 const applyCustomerToQualifyForm = (customer: ManagerCatalogCustomerItemResponse) => {
   selectedQualifyCustomer.value = customer;
   selectedQualifyCustomerDetail.value = customer;
-  qualifyOverwriteFields.value = {
-    inn: false,
-    full_legal_name: false,
-    legal_address: false,
-    iban: false,
-    bic: false,
-    bank_name: false,
-  };
+  clearQualifyCriticalOverwriteConfirm();
   qualifyCustomerLookupQuery.value = customer.full_legal_name || customer.name || `Клиент #${customer.id}`;
   const mapped = mapCustomerToLeadQualifyPrefill(customer);
   qualifyForm.value.name = mapped.name || qualifyForm.value.name;
@@ -1450,25 +1406,14 @@ const onQualifyIbanBlur = async () => {
         >
           <p class="font-semibold text-amber-50">Обнаружены отличия в реквизитах клиента</p>
           <p class="mt-1 text-amber-200/90">
-            По умолчанию непустые значения клиента не перезаписываются. Отметьте, что нужно обновить.
+            Критичные поля требуют отдельного подтверждения перед сохранением.
           </p>
-          <div class="mt-2 flex flex-wrap gap-2">
-            <button type="button" class="btn-mini-outline text-xs" @click="applyAllNonCriticalOverwrites">
-              Применить все некритичные
-            </button>
-          </div>
           <div class="mt-2 space-y-2">
             <label
               v-for="row in qualifyChangedRequisites"
               :key="`diff-${row.key}`"
               class="flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-900/20 px-2 py-2"
             >
-              <input
-                :checked="qualifyOverwriteFields[row.key]"
-                type="checkbox"
-                class="mt-0.5"
-                @change="onQualifyOverwriteToggle(row.key, ($event.target as HTMLInputElement).checked)"
-              />
               <span>
                 <strong>
                   {{ row.label }}
@@ -1483,42 +1428,13 @@ const onQualifyIbanBlur = async () => {
           </div>
         </div>
         <div
-          v-if="qualifyCriticalMissingOverwriteRows.length"
-          class="mb-3 rounded-lg border border-amber-500/40 bg-amber-900/20 px-3 py-3 text-xs text-amber-100"
-        >
-          <p class="font-semibold text-amber-50">Критичные реквизиты не выбраны для перезаписи</p>
-          <p class="mt-1 text-amber-200/90">
-            Эти поля отличаются, но не будут обновлены у клиента:
-          </p>
-          <ul class="mt-2 list-inside list-disc space-y-1 text-amber-100">
-            <li v-for="row in qualifyCriticalMissingOverwriteRows" :key="`missing-critical-${row.key}`">
-              {{ row.label }}: {{ row.existing }} -> {{ row.incoming }}
-            </li>
-          </ul>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              class="btn-mini bg-amber-600/80 hover:bg-amber-500"
-              @click="
-                qualifyCriticalMissingConfirmed = true;
-                qualifyLead();
-              "
-            >
-              Продолжить без перезаписи
-            </button>
-            <button type="button" class="btn-mini-outline" @click="clearQualifyCriticalOverwriteConfirm">
-              Вернуться к настройке
-            </button>
-          </div>
-        </div>
-        <div
-          v-if="qualifyCriticalOverwriteRows.length"
+          v-if="qualifyCriticalChangeRows.length"
           class="mb-3 rounded-lg border border-red-500/40 bg-red-900/20 px-3 py-3 text-xs text-red-100"
         >
-          <p class="font-semibold text-red-50">Подтверждение перезаписи критичных реквизитов</p>
+          <p class="font-semibold text-red-50">Подтверждение изменения критичных реквизитов</p>
           <p class="mt-1 text-red-200/90">Эти значения будут обновлены у выбранного клиента:</p>
           <ul class="mt-2 list-inside list-disc space-y-1 text-red-100">
-            <li v-for="row in qualifyCriticalOverwriteRows" :key="`critical-${row.key}`">
+            <li v-for="row in qualifyCriticalChangeRows" :key="`critical-${row.key}`">
               {{ row.label }}: {{ row.existing }} -> {{ row.incoming }}
             </li>
           </ul>
@@ -1526,10 +1442,7 @@ const onQualifyIbanBlur = async () => {
             <button
               type="button"
               class="btn-mini bg-red-600/80 hover:bg-red-500"
-              @click="
-                qualifyCriticalOverwriteConfirmed = true;
-                qualifyLead();
-              "
+              @click="requestCriticalChangesConfirm"
             >
               Подтвердить и продолжить
             </button>
@@ -1571,7 +1484,11 @@ const onQualifyIbanBlur = async () => {
             <span v-if="qualifyWriteSummary.length" class="text-slate-100">
               {{
                 qualifyWriteSummary
-                  .map((item) => item.mode === 'overwrite' ? `${item.label} (обновление)` : item.label)
+                  .map((item) => item.mode === 'critical_overwrite'
+                    ? `${item.label} (критичное изменение)`
+                    : item.mode === 'overwrite'
+                      ? `${item.label} (обновление)`
+                      : item.label)
                   .join(', ')
               }}
             </span>
