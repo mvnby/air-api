@@ -8,8 +8,12 @@ import type {
   OrderProductLineResponse,
   OrderServiceLineResponse,
 } from '../../client';
+import { useBelarusPhoneMask } from '../../composables/useBelarusPhoneMask';
 import { STATUS_LABELS, STATUS_ORDER, formatMoney } from './order-utils';
 import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../../utils/datetime';
+import { normalizeIban, normalizeUnp } from '../../utils/legal-requisites';
+import { normalizePhoneForApi } from '../../utils/phone';
+import { normalizeEmail, validateOptionalBelarusPhone, validateOptionalByIban, validateOptionalByUnp, validateOptionalEmail } from '../../utils/validation';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -47,11 +51,23 @@ const customerDeliveryAddress = ref('');
 const showCriticalConfirmPanel = ref(false);
 const criticalChangesConfirmed = ref(false);
 const customerOriginalCritical = ref<{ inn: string; bic: string; iban: string; bank_name: string } | null>(null);
+const customerPhoneInputRef = ref<HTMLInputElement | null>(null);
+const customerPhoneError = ref('');
+const customerEmailError = ref('');
+const customerInnError = ref('');
+const customerIbanError = ref('');
 
 const productLines = ref<Array<{ product_id: number; quantity: number; price: number; cost: number }>>([]);
 const serviceLines = ref<Array<{ service_id?: number | null; title: string; quantity: number; price: number; cost: number }>>([]);
 const localServerErrors = ref<Record<string, string>>({});
 const localFormError = ref('');
+const customerPhoneModel = computed({
+  get: () => customerPhone.value,
+  set: (value: string) => {
+    customerPhone.value = value;
+  },
+});
+const customerPhoneMask = useBelarusPhoneMask(customerPhoneInputRef, customerPhoneModel);
 
 const normalizeComparable = (value: string) => value.trim().replace(/\s+/g, ' ');
 
@@ -105,6 +121,10 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   if (!order) return;
   localServerErrors.value = {};
   localFormError.value = '';
+  customerPhoneError.value = '';
+  customerEmailError.value = '';
+  customerInnError.value = '';
+  customerIbanError.value = '';
   showCriticalConfirmPanel.value = false;
   criticalChangesConfirmed.value = false;
   status.value = order.status;
@@ -197,6 +217,13 @@ const handleSave = () => {
   if (!props.order) return;
   localServerErrors.value = {};
   localFormError.value = '';
+  customerEmail.value = normalizeEmail(customerEmail.value || '');
+  customerInn.value = normalizeUnp(customerInn.value || '');
+  customerIban.value = normalizeIban(customerIban.value || '');
+  customerPhoneError.value = validateOptionalBelarusPhone(customerPhone.value || '', customerPhoneMask.isComplete.value);
+  customerEmailError.value = validateOptionalEmail(customerEmail.value || '');
+  customerInnError.value = validateOptionalByUnp(customerInn.value || '');
+  customerIbanError.value = validateOptionalByIban(customerIban.value || '');
 
   const errors: Record<string, string> = {};
   if (!status.value) {
@@ -220,6 +247,18 @@ const handleSave = () => {
   } else if (serviceLines.value.some((line) => !line.title?.trim())) {
     errors.services = 'Для услуги укажите название';
   }
+  if (customerPhoneError.value) {
+    errors.customer_phone = customerPhoneError.value;
+  }
+  if (customerEmailError.value) {
+    errors.customer_email = customerEmailError.value;
+  }
+  if (customerInnError.value) {
+    errors.customer_inn = customerInnError.value;
+  }
+  if (customerIbanError.value) {
+    errors.customer_iban = customerIbanError.value;
+  }
 
   if (Object.keys(errors).length) {
     localServerErrors.value = errors;
@@ -239,7 +278,7 @@ const handleSave = () => {
     comment: comment.value,
     is_paid: isPaid.value,
     customer_name: customerName.value || null,
-    customer_phone: customerPhone.value || null,
+    customer_phone: normalizePhoneForApi(customerPhone.value || '') || null,
     customer_email: customerEmail.value || null,
     customer_inn: customerInn.value || null,
     customer_full_legal_name: customerFullLegalName.value || null,
@@ -339,19 +378,45 @@ watch(
         <div class="grid gap-3 md:grid-cols-2">
           <label class="field-label">
             Имя / Компания
-            <input v-model="customerName" class="field-input" />
+            <input
+              v-model="customerName"
+              class="field-input"
+              :class="getFieldError('customer_name') ? 'border-red-500 focus:outline-red-400' : ''"
+            />
+            <span v-if="getFieldError('customer_name')" class="text-xs text-red-300">{{ getFieldError('customer_name') }}</span>
           </label>
           <label class="field-label">
             Телефон
-            <input v-model="customerPhone" class="field-input" />
+            <input
+              ref="customerPhoneInputRef"
+              v-model="customerPhone"
+              class="field-input"
+              type="tel"
+              inputmode="tel"
+              placeholder="+375 (XX) XXX-XX-XX"
+              :class="getFieldError('customer_phone') ? 'border-red-500 focus:outline-red-400' : ''"
+            />
+            <span v-if="getFieldError('customer_phone')" class="text-xs text-red-300">{{ getFieldError('customer_phone') }}</span>
           </label>
           <label class="field-label">
             Email
-            <input v-model="customerEmail" class="field-input" />
+            <input
+              v-model="customerEmail"
+              class="field-input"
+              type="email"
+              :class="getFieldError('customer_email') ? 'border-red-500 focus:outline-red-400' : ''"
+            />
+            <span v-if="getFieldError('customer_email')" class="text-xs text-red-300">{{ getFieldError('customer_email') }}</span>
           </label>
           <label class="field-label">
             УНП
-            <input v-model="customerInn" class="field-input" />
+            <input
+              v-model="customerInn"
+              class="field-input"
+              inputmode="numeric"
+              :class="getFieldError('customer_inn') ? 'border-red-500 focus:outline-red-400' : ''"
+            />
+            <span v-if="getFieldError('customer_inn')" class="text-xs text-red-300">{{ getFieldError('customer_inn') }}</span>
           </label>
           <label class="field-label md:col-span-2">
             Полное наименование
@@ -367,7 +432,12 @@ watch(
           </label>
           <label class="field-label">
             IBAN
-            <input v-model="customerIban" class="field-input" />
+            <input
+              v-model="customerIban"
+              class="field-input"
+              :class="getFieldError('customer_iban') ? 'border-red-500 focus:outline-red-400' : ''"
+            />
+            <span v-if="getFieldError('customer_iban')" class="text-xs text-red-300">{{ getFieldError('customer_iban') }}</span>
           </label>
           <label class="field-label md:col-span-2">
             Банк
