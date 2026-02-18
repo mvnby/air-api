@@ -54,9 +54,7 @@ export const getApiErrorMessage = (error: unknown): string => {
     const payload = detail as StructuredDetail;
     if (payload.message) return payload.message;
     const mappedMessage = payload.error_code ? ERROR_CODE_MESSAGES[payload.error_code] : undefined;
-    if (mappedMessage) {
-      return mappedMessage;
-    }
+    if (mappedMessage) return mappedMessage;
     return JSON.stringify(detail);
   }
   if (maybe?.message) return maybe.message;
