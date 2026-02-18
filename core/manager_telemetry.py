@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 from threading import Lock
 from typing import Any, Optional
 
+from core.manager_error_codes import BAD_REQUEST, VALIDATION_ERROR
+
 
 @dataclass
 class _TelemetryEvent:
@@ -93,7 +95,7 @@ class ManagerTelemetryService:
             if event.status_code in (400, 422)
             and (
                 event.error_code.startswith("validation_")
-                or event.error_code in {"bad_request", "validation_error"}
+                or event.error_code in {BAD_REQUEST, VALIDATION_ERROR}
             )
         ]
 
@@ -126,4 +128,3 @@ class ManagerTelemetryService:
             "qualify_success_without_manual_overwrite": len(qualify_without_manual_overwrite),
             "qualify_success_without_manual_overwrite_pct": success_wo_overwrite_pct,
         }
-
