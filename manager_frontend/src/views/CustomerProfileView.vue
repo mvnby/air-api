@@ -48,6 +48,8 @@ const emailError = ref('');
 const innError = ref('');
 const ibanError = ref('');
 const phoneInputRef = ref<HTMLInputElement | null>(null);
+const criticalChangesConfirmed = ref(false);
+const showCriticalConfirmPanel = ref(false);
 
 const form = ref<CustomerForm>({
   name: '',
@@ -122,6 +124,47 @@ const formDiff = computed<Record<keyof CustomerForm, boolean>>(() => {
 
 const hasChanges = computed(() => Object.values(formDiff.value).some(Boolean));
 const isCompany = computed(() => currentForm.value.type === 'company');
+const CRITICAL_FIELDS: Array<{ key: keyof CustomerForm; label: string }> = [
+  { key: 'inn', label: 'УНП' },
+  { key: 'full_legal_name', label: 'Полное наименование' },
+  { key: 'legal_address', label: 'Юридический адрес' },
+  { key: 'bank_name', label: 'Банк' },
+  { key: 'bic', label: 'BIC' },
+  { key: 'iban', label: 'IBAN' },
+];
+
+const normalizeCriticalValue = (key: keyof CustomerForm, value: string): string => {
+  const trimmed = value.trim();
+  if (key === 'inn') return normalizeUnp(trimmed);
+  if (key === 'iban') return normalizeIban(trimmed);
+  if (key === 'bic') return trimmed.toUpperCase().replace(/\s+/g, '');
+  return trimmed.replace(/\s+/g, ' ');
+};
+
+const criticalChangedRows = computed<Array<{ key: keyof CustomerForm; label: string; before: string; after: string }>>(() => {
+  const source = customer.value;
+  if (!source) return [];
+  const original = toForm(source);
+  return CRITICAL_FIELDS
+    .map(({ key, label }) => {
+      const beforeRaw = (original[key] || '').toString();
+      const afterRaw = (currentForm.value[key] || '').toString();
+      const before = normalizeCriticalValue(key, beforeRaw);
+      const after = normalizeCriticalValue(key, afterRaw);
+      if (!before || before === after) return null;
+      return {
+        key,
+        label,
+        before: beforeRaw.trim() || '—',
+        after: afterRaw.trim() || '—',
+      };
+    })
+    .filter((row): row is { key: keyof CustomerForm; label: string; before: string; after: string } => Boolean(row));
+});
+
+const criticalChangesSignature = computed(() =>
+  criticalChangedRows.value.map((row) => `${row.key}:${row.before}->${row.after}`).join('|'),
+);
 
 const fieldClass = (key: keyof CustomerForm) => ({
   'field-input': true,
@@ -190,11 +233,15 @@ const startEdit = () => {
   editMode.value = true;
   success.value = '';
   saveError.value = '';
+  criticalChangesConfirmed.value = false;
+  showCriticalConfirmPanel.value = false;
   resetFormFromCustomer();
 };
 
 const cancelEdit = () => {
   editMode.value = false;
+  criticalChangesConfirmed.value = false;
+  showCriticalConfirmPanel.value = false;
   resetFormFromCustomer();
 };
 
@@ -228,6 +275,12 @@ const validateForm = (): boolean => {
 
 const saveCustomer = async () => {
   if (!customer.value || !hasChanges.value || !validateForm()) return;
+  if (criticalChangedRows.value.length && !criticalChangesConfirmed.value) {
+    showCriticalConfirmPanel.value = true;
+    saveError.value = 'Подтвердите изменение критичных реквизитов перед сохранением';
+    return;
+  }
+  showCriticalConfirmPanel.value = false;
 
   const payload: Record<string, string> = {};
   (Object.keys(formDiff.value) as (keyof CustomerForm)[]).forEach((key) => {
@@ -266,6 +319,8 @@ const saveCustomer = async () => {
     const updated = await api.patchManagerCustomer(customer.value.id, payload);
     customer.value = updated;
     editMode.value = false;
+    criticalChangesConfirmed.value = false;
+    showCriticalConfirmPanel.value = false;
     resetFormFromCustomer();
     success.value = 'Карточка клиента обновлена';
     dispatchCustomerUpdated(updated);
@@ -299,6 +354,20 @@ const saveCustomer = async () => {
   }
 };
 
+const confirmCriticalAndSave = async () => {
+  criticalChangesConfirmed.value = true;
+  await saveCustomer();
+};
+
+watch(criticalChangesSignature, (next, prev) => {
+  if (prev !== undefined && next !== prev) {
+    criticalChangesConfirmed.value = false;
+  }
+  if (!next) {
+    showCriticalConfirmPanel.value = false;
+  }
+});
+
 watch(customerId, () => {
   void loadCustomer();
 });
@@ -330,6 +399,26 @@ onMounted(() => {
           <Save class="h-4 w-4" />
           {{ saving ? 'Сохраняем…' : 'Сохранить' }}
         </button>
+      </div>
+      <div
+        v-if="editMode && showCriticalConfirmPanel && criticalChangedRows.length"
+        class="mb-4 rounded-xl border border-red-500/40 bg-red-900/20 px-4 py-3 text-sm text-red-100"
+      >
+        <p class="font-semibold text-red-50">Подтверждение изменения критичных реквизитов</p>
+        <p class="mt-1 text-red-200/90">Будут обновлены следующие поля клиента:</p>
+        <ul class="mt-2 list-inside list-disc space-y-1">
+          <li v-for="row in criticalChangedRows" :key="`customer-critical-${row.key}`">
+            {{ row.label }}: {{ row.before }} -> {{ row.after }}
+          </li>
+        </ul>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button class="btn-mini bg-red-600/80 hover:bg-red-500" type="button" :disabled="saving" @click="confirmCriticalAndSave">
+            Подтвердить и сохранить
+          </button>
+          <button class="btn-mini-outline" type="button" :disabled="saving" @click="showCriticalConfirmPanel = false">
+            Отмена
+          </button>
+        </div>
       </div>
 
       <div v-if="loading" class="rounded-[2rem] border border-slate-700 bg-slate-900/70 p-8 text-sm text-slate-300">
