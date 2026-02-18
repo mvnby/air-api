@@ -7,7 +7,12 @@ export type OrderCustomerBrief = {
     type: string;
     name: string;
     phone: string;
+    email?: (string | null);
     full_legal_name?: (string | null);
     inn?: (string | null);
+    legal_address?: (string | null);
+    bank_name?: (string | null);
+    bic?: (string | null);
+    iban?: (string | null);
 };
 

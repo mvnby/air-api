@@ -34,11 +34,51 @@ const assessmentDate = ref('');
 const installationDate = ref('');
 const comment = ref('');
 const isPaid = ref(false);
+const customerName = ref('');
+const customerPhone = ref('');
+const customerEmail = ref('');
+const customerInn = ref('');
+const customerFullLegalName = ref('');
+const customerLegalAddress = ref('');
+const customerBankName = ref('');
+const customerBic = ref('');
+const customerIban = ref('');
+const customerDeliveryAddress = ref('');
+const showCriticalConfirmPanel = ref(false);
+const criticalChangesConfirmed = ref(false);
+const customerOriginalCritical = ref<{ inn: string; bic: string; iban: string; bank_name: string } | null>(null);
 
 const productLines = ref<Array<{ product_id: number; quantity: number; price: number; cost: number }>>([]);
 const serviceLines = ref<Array<{ service_id?: number | null; title: string; quantity: number; price: number; cost: number }>>([]);
 const localServerErrors = ref<Record<string, string>>({});
 const localFormError = ref('');
+
+const normalizeComparable = (value: string) => value.trim().replace(/\s+/g, ' ');
+
+const criticalChangedRows = computed<Array<{ key: 'inn' | 'iban' | 'bic' | 'bank_name'; label: string; before: string; after: string }>>(() => {
+  const original = customerOriginalCritical.value;
+  if (!original) return [];
+  const rows: Array<{ key: 'inn' | 'iban' | 'bic' | 'bank_name'; label: string; before: string; after: string }> = [];
+  const checks: Array<{ key: 'inn' | 'iban' | 'bic' | 'bank_name'; label: string; before: string; after: string }> = [
+    { key: 'inn', label: 'УНП', before: original.inn, after: customerInn.value },
+    { key: 'iban', label: 'IBAN', before: original.iban, after: customerIban.value },
+    { key: 'bic', label: 'BIC', before: original.bic, after: customerBic.value },
+    { key: 'bank_name', label: 'Банк', before: original.bank_name, after: customerBankName.value },
+  ];
+  for (const row of checks) {
+    const beforeNorm = normalizeComparable(row.before);
+    const afterNorm = normalizeComparable(row.after);
+    if (beforeNorm && afterNorm && beforeNorm !== afterNorm) {
+      rows.push({
+        key: row.key,
+        label: row.label,
+        before: row.before.trim() || '—',
+        after: row.after.trim() || '—',
+      });
+    }
+  }
+  return rows;
+});
 
 const totalPreview = computed(() => {
   const pTotal = productLines.value.reduce((sum, line) => sum + line.price * line.quantity, 0);
@@ -65,12 +105,30 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   if (!order) return;
   localServerErrors.value = {};
   localFormError.value = '';
+  showCriticalConfirmPanel.value = false;
+  criticalChangesConfirmed.value = false;
   status.value = order.status;
   nextFollowupDate.value = toLocalDateTimeInput(order.next_followup_date);
   assessmentDate.value = toLocalDateTimeInput(order.assessment_date);
   installationDate.value = toLocalDateTimeInput(order.installation_date);
   comment.value = order.comment ?? '';
   isPaid.value = order.is_paid;
+  customerName.value = order.customer?.name || '';
+  customerPhone.value = order.customer?.phone || '';
+  customerEmail.value = order.customer?.email || '';
+  customerInn.value = order.customer?.inn || '';
+  customerFullLegalName.value = order.customer?.full_legal_name || '';
+  customerLegalAddress.value = order.customer?.legal_address || '';
+  customerBankName.value = order.customer?.bank_name || '';
+  customerBic.value = order.customer?.bic || '';
+  customerIban.value = order.customer?.iban || '';
+  customerDeliveryAddress.value = order.delivery_address || '';
+  customerOriginalCritical.value = {
+    inn: order.customer?.inn || '',
+    bic: order.customer?.bic || '',
+    iban: order.customer?.iban || '',
+    bank_name: order.customer?.bank_name || '',
+  };
   productLines.value = (order.product_lines ?? []).map((line: OrderProductLineResponse) => ({
     product_id: line.product_id || 0,
     quantity: line.quantity,
@@ -168,7 +226,11 @@ const handleSave = () => {
     localFormError.value = 'Исправьте ошибки в форме';
     return;
   }
-
+  if (criticalChangedRows.value.length && !criticalChangesConfirmed.value) {
+    showCriticalConfirmPanel.value = true;
+    return;
+  }
+  showCriticalConfirmPanel.value = false;
   const payload: ManagerOrderUpdatePayload = {
     status: status.value,
     next_followup_date: fromLocalDateTimeInput(nextFollowupDate.value),
@@ -176,6 +238,17 @@ const handleSave = () => {
     installation_date: fromLocalDateTimeInput(installationDate.value),
     comment: comment.value,
     is_paid: isPaid.value,
+    customer_name: customerName.value || null,
+    customer_phone: customerPhone.value || null,
+    customer_email: customerEmail.value || null,
+    customer_inn: customerInn.value || null,
+    customer_full_legal_name: customerFullLegalName.value || null,
+    customer_legal_address: customerLegalAddress.value || null,
+    customer_bank_name: customerBankName.value || null,
+    customer_bic: customerBic.value || null,
+    customer_iban: customerIban.value || null,
+    customer_delivery_address: customerDeliveryAddress.value || null,
+    confirm_critical_customer_changes: criticalChangesConfirmed.value,
     products: productLines.value.map((line) => ({
       product_id: line.product_id,
       quantity: line.quantity,
@@ -196,9 +269,19 @@ const handleSave = () => {
 };
 
 const closeDrawer = () => emit('update:modelValue', false);
-
 const getFieldError = (field: string): string => localServerErrors.value[field] || props.serverErrors?.[field] || '';
 const displayFormError = computed(() => localFormError.value || props.formError || '');
+const confirmCriticalAndSave = () => {
+  criticalChangesConfirmed.value = true;
+  handleSave();
+};
+
+watch(
+  () => `${customerInn.value}|${customerBic.value}|${customerIban.value}|${customerBankName.value}`,
+  () => {
+    criticalChangesConfirmed.value = false;
+  },
+);
 </script>
 
 <template>
@@ -251,6 +334,52 @@ const displayFormError = computed(() => localFormError.value || props.formError 
         </label>
       </section>
 
+      <section class="mt-6 rounded-2xl bg-slate-800/80 p-4">
+        <h3 class="mb-3 text-lg font-semibold">Клиент</h3>
+        <div class="grid gap-3 md:grid-cols-2">
+          <label class="field-label">
+            Имя / Компания
+            <input v-model="customerName" class="field-input" />
+          </label>
+          <label class="field-label">
+            Телефон
+            <input v-model="customerPhone" class="field-input" />
+          </label>
+          <label class="field-label">
+            Email
+            <input v-model="customerEmail" class="field-input" />
+          </label>
+          <label class="field-label">
+            УНП
+            <input v-model="customerInn" class="field-input" />
+          </label>
+          <label class="field-label md:col-span-2">
+            Полное наименование
+            <input v-model="customerFullLegalName" class="field-input" />
+          </label>
+          <label class="field-label md:col-span-2">
+            Юридический адрес
+            <input v-model="customerLegalAddress" class="field-input" />
+          </label>
+          <label class="field-label">
+            BIC
+            <input v-model="customerBic" class="field-input" />
+          </label>
+          <label class="field-label">
+            IBAN
+            <input v-model="customerIban" class="field-input" />
+          </label>
+          <label class="field-label md:col-span-2">
+            Банк
+            <input v-model="customerBankName" class="field-input" />
+          </label>
+          <label class="field-label md:col-span-2">
+            Адрес доставки
+            <input v-model="customerDeliveryAddress" class="field-input" />
+          </label>
+        </div>
+      </section>
+
       <section class="mt-6">
         <div class="mb-2 flex items-center justify-between">
           <h3 class="text-lg font-semibold">Товары</h3>
@@ -295,6 +424,23 @@ const displayFormError = computed(() => localFormError.value || props.formError 
       <section class="mt-6 rounded-2xl bg-slate-800 p-4">
         <p class="text-sm text-slate-300">Итого: <span class="font-semibold text-white">{{ formatMoney(totalPreview) }}</span></p>
         <p class="text-sm text-slate-300">Маржа: <span class="font-semibold text-teal-300">{{ formatMoney(marginPreview) }}</span></p>
+      </section>
+
+      <section
+        v-if="showCriticalConfirmPanel && criticalChangedRows.length"
+        class="mt-6 rounded-xl border border-red-500/40 bg-red-900/20 px-4 py-3 text-sm text-red-100"
+      >
+        <p class="font-semibold text-red-50">Подтверждение изменения критичных реквизитов</p>
+        <p class="mt-1 text-red-200/90">Будут обновлены реквизиты клиента:</p>
+        <ul class="mt-2 list-inside list-disc space-y-1">
+          <li v-for="row in criticalChangedRows" :key="`order-critical-${row.key}`">
+            {{ row.label }}: {{ row.before }} -> {{ row.after }}
+          </li>
+        </ul>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button class="btn-mini bg-red-600/80 hover:bg-red-500" @click="confirmCriticalAndSave">Подтвердить и сохранить</button>
+          <button class="btn-mini-outline" @click="showCriticalConfirmPanel = false">Отмена</button>
+        </div>
       </section>
 
       <footer class="mt-6 flex justify-end gap-2">
