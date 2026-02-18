@@ -2,18 +2,15 @@
 import { computed, ref, watch } from 'vue';
 import { api } from '../../api';
 import DateTimeField from '../ui/DateTimeField.vue';
+import CustomerSummaryCard from '../customers/CustomerSummaryCard.vue';
 import type {
   ManagerOrderDetailResponse,
   ManagerOrderUpdatePayload,
   OrderProductLineResponse,
   OrderServiceLineResponse,
 } from '../../client';
-import { useBelarusPhoneMask } from '../../composables/useBelarusPhoneMask';
 import { STATUS_LABELS, STATUS_ORDER, formatMoney } from './order-utils';
 import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../../utils/datetime';
-import { normalizeIban, normalizeUnp } from '../../utils/legal-requisites';
-import { normalizePhoneForApi } from '../../utils/phone';
-import { normalizeEmail, validateOptionalBelarusPhone, validateOptionalByIban, validateOptionalByUnp, validateOptionalEmail } from '../../utils/validation';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -31,70 +28,25 @@ const emit = defineEmits<{
 type ProductOption = { id: number; text: string; price: number };
 
 const productOptions = ref<ProductOption[]>([]);
-const productSearch = ref('');
 const status = ref('new_lead');
 const nextFollowupDate = ref('');
 const assessmentDate = ref('');
 const installationDate = ref('');
 const comment = ref('');
 const isPaid = ref(false);
-const customerName = ref('');
-const customerPhone = ref('');
-const customerEmail = ref('');
-const customerInn = ref('');
-const customerFullLegalName = ref('');
-const customerLegalAddress = ref('');
-const customerBankName = ref('');
-const customerBic = ref('');
-const customerIban = ref('');
-const customerDeliveryAddress = ref('');
-const showCriticalConfirmPanel = ref(false);
-const criticalChangesConfirmed = ref(false);
-const customerOriginalCritical = ref<{ inn: string; bic: string; iban: string; bank_name: string } | null>(null);
-const customerPhoneInputRef = ref<HTMLInputElement | null>(null);
-const customerPhoneError = ref('');
-const customerEmailError = ref('');
-const customerInnError = ref('');
-const customerIbanError = ref('');
 
-const productLines = ref<Array<{ product_id: number; quantity: number; price: number; cost: number }>>([]);
+const productLines = ref<Array<{ product_id: number; product_query: string; quantity: number; price: number; cost: number }>>([]);
 const serviceLines = ref<Array<{ service_id?: number | null; title: string; quantity: number; price: number; cost: number }>>([]);
 const localServerErrors = ref<Record<string, string>>({});
 const localFormError = ref('');
-const customerPhoneModel = computed({
-  get: () => customerPhone.value,
-  set: (value: string) => {
-    customerPhone.value = value;
-  },
-});
-const customerPhoneMask = useBelarusPhoneMask(customerPhoneInputRef, customerPhoneModel);
+const showCustomerModal = ref(false);
 
-const normalizeComparable = (value: string) => value.trim().replace(/\s+/g, ' ');
+const customer = computed(() => props.order?.customer ?? null);
+const draftKey = computed(() => (props.order ? `manager_order_drawer_draft_${props.order.id}` : ''));
 
-const criticalChangedRows = computed<Array<{ key: 'inn' | 'iban' | 'bic' | 'bank_name'; label: string; before: string; after: string }>>(() => {
-  const original = customerOriginalCritical.value;
-  if (!original) return [];
-  const rows: Array<{ key: 'inn' | 'iban' | 'bic' | 'bank_name'; label: string; before: string; after: string }> = [];
-  const checks: Array<{ key: 'inn' | 'iban' | 'bic' | 'bank_name'; label: string; before: string; after: string }> = [
-    { key: 'inn', label: 'УНП', before: original.inn, after: customerInn.value },
-    { key: 'iban', label: 'IBAN', before: original.iban, after: customerIban.value },
-    { key: 'bic', label: 'BIC', before: original.bic, after: customerBic.value },
-    { key: 'bank_name', label: 'Банк', before: original.bank_name, after: customerBankName.value },
-  ];
-  for (const row of checks) {
-    const beforeNorm = normalizeComparable(row.before);
-    const afterNorm = normalizeComparable(row.after);
-    if (beforeNorm && afterNorm && beforeNorm !== afterNorm) {
-      rows.push({
-        key: row.key,
-        label: row.label,
-        before: row.before.trim() || '—',
-        after: row.after.trim() || '—',
-      });
-    }
-  }
-  return rows;
-});
+type OrderDrawerDraft = {
+  productLines: Array<{ product_id: number; product_query: string; quantity: number; price: number; cost: number }>;
+};
 
 const totalPreview = computed(() => {
   const pTotal = productLines.value.reduce((sum, line) => sum + line.price * line.quantity, 0);
@@ -117,40 +69,60 @@ const loadProductOptions = async (q = '') => {
   }));
 };
 
+const persistDraft = () => {
+  if (!draftKey.value) return;
+  try {
+    const payload: OrderDrawerDraft = {
+      productLines: productLines.value.map((line) => ({ ...line })),
+    };
+    window.sessionStorage.setItem(draftKey.value, JSON.stringify(payload));
+  } catch (error) {
+    console.warn('Failed to persist order drawer draft', error);
+  }
+};
+
+const restoreDraft = () => {
+  if (!draftKey.value) return;
+  try {
+    const raw = window.sessionStorage.getItem(draftKey.value);
+    if (!raw) return;
+    const payload = JSON.parse(raw) as Partial<OrderDrawerDraft>;
+    if (Array.isArray(payload.productLines) && payload.productLines.length) {
+      productLines.value = payload.productLines.map((line) => ({
+        product_id: Number(line.product_id || 0),
+        product_query: String(line.product_query || ''),
+        quantity: Number(line.quantity || 1),
+        price: Number(line.price || 0),
+        cost: Number(line.cost || 0),
+      }));
+    }
+  } catch (error) {
+    console.warn('Failed to restore order drawer draft', error);
+  }
+};
+
+const clearDraft = () => {
+  if (!draftKey.value) return;
+  try {
+    window.sessionStorage.removeItem(draftKey.value);
+  } catch (error) {
+    console.warn('Failed to clear order drawer draft', error);
+  }
+};
+
 const initForm = async (order: ManagerOrderDetailResponse | null) => {
   if (!order) return;
   localServerErrors.value = {};
   localFormError.value = '';
-  customerPhoneError.value = '';
-  customerEmailError.value = '';
-  customerInnError.value = '';
-  customerIbanError.value = '';
-  showCriticalConfirmPanel.value = false;
-  criticalChangesConfirmed.value = false;
   status.value = order.status;
   nextFollowupDate.value = toLocalDateTimeInput(order.next_followup_date);
   assessmentDate.value = toLocalDateTimeInput(order.assessment_date);
   installationDate.value = toLocalDateTimeInput(order.installation_date);
   comment.value = order.comment ?? '';
   isPaid.value = order.is_paid;
-  customerName.value = order.customer?.name || '';
-  customerPhone.value = order.customer?.phone || '';
-  customerEmail.value = order.customer?.email || '';
-  customerInn.value = order.customer?.inn || '';
-  customerFullLegalName.value = order.customer?.full_legal_name || '';
-  customerLegalAddress.value = order.customer?.legal_address || '';
-  customerBankName.value = order.customer?.bank_name || '';
-  customerBic.value = order.customer?.bic || '';
-  customerIban.value = order.customer?.iban || '';
-  customerDeliveryAddress.value = order.delivery_address || '';
-  customerOriginalCritical.value = {
-    inn: order.customer?.inn || '',
-    bic: order.customer?.bic || '',
-    iban: order.customer?.iban || '',
-    bank_name: order.customer?.bank_name || '',
-  };
   productLines.value = (order.product_lines ?? []).map((line: OrderProductLineResponse) => ({
     product_id: line.product_id || 0,
+    product_query: line.product_title || '',
     quantity: line.quantity,
     price: line.price,
     cost: line.cost,
@@ -164,6 +136,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   }));
 
   await loadProductOptions('');
+  restoreDraft();
 };
 
 watch(
@@ -180,25 +153,63 @@ watch(
   },
 );
 
-watch(productSearch, async (value) => {
-  await loadProductOptions(value);
-});
-
-const onProductChanged = (index: number) => {
+const onProductChanged = (index: number, applyCatalogPrice = false) => {
   const row = productLines.value[index];
   if (!row) return;
   const selected = productOptions.value.find((item) => item.id === row.product_id);
   if (!selected) return;
-  const shouldUseCatalog = window.confirm(
-    `Для товара \"${selected.text}\" использовать текущую цену каталога ${selected.price}?\nНажмите OK для каталожной цены или Отмена, чтобы оставить цену строки.`,
-  );
-  if (shouldUseCatalog) {
+  row.product_query = selected.text;
+  if (applyCatalogPrice) {
     row.price = selected.price;
   }
 };
 
+const getProductSuggestions = (query: string, currentProductId = 0) => {
+  const normalized = query.trim().toLowerCase();
+  const filtered = normalized
+    ? productOptions.value.filter((item) => item.text.toLowerCase().includes(normalized))
+    : productOptions.value;
+  if (currentProductId && !filtered.some((item) => item.id === currentProductId)) {
+    const current = productOptions.value.find((item) => item.id === currentProductId);
+    if (current) return [current, ...filtered].slice(0, 10);
+  }
+  return filtered.slice(0, 10);
+};
+
+const onProductQueryInput = async (index: number) => {
+  const row = productLines.value[index];
+  if (!row) return;
+  const query = row.product_query.trim();
+  row.product_id = 0;
+  if (query.length < 2) return;
+  await loadProductOptions(query);
+};
+
+const selectProductForLine = (index: number, option: ProductOption) => {
+  const row = productLines.value[index];
+  if (!row) return;
+  const isNewLine = !row.product_id && Number(row.price || 0) <= 0;
+  row.product_id = option.id;
+  row.product_query = option.text;
+  onProductChanged(index, isNewLine);
+};
+
+const openSelectedProduct = (index: number) => {
+  const row = productLines.value[index];
+  if (!row?.product_id) return;
+  persistDraft();
+  const returnTo = `${window.location.pathname}${window.location.search}`;
+  const query = new URLSearchParams({
+    editProductId: String(row.product_id),
+    editProductQuery: row.product_query || '',
+    returnTo,
+  });
+  window.history.pushState({}, '', `/manager/products?${query.toString()}`);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+};
+
 const addProductLine = () => {
-  productLines.value.push({ product_id: 0, quantity: 1, price: 0, cost: 0 });
+  productLines.value.push({ product_id: 0, product_query: '', quantity: 1, price: 0, cost: 0 });
 };
 
 const addServiceLine = () => {
@@ -213,17 +224,17 @@ const removeServiceLine = (index: number) => {
   serviceLines.value.splice(index, 1);
 };
 
+const currentCatalogPrice = (productId: number) => productOptions.value.find((item) => item.id === productId)?.price ?? null;
+const isPriceDifferentFromCatalog = (line: { product_id: number; price: number }) => {
+  const catalog = currentCatalogPrice(line.product_id);
+  return catalog !== null && Number(catalog) !== Number(line.price || 0);
+};
+const lineTotal = (line: { quantity: number; price: number }) => Number(line.quantity || 0) * Number(line.price || 0);
+
 const handleSave = () => {
   if (!props.order) return;
   localServerErrors.value = {};
   localFormError.value = '';
-  customerEmail.value = normalizeEmail(customerEmail.value || '');
-  customerInn.value = normalizeUnp(customerInn.value || '');
-  customerIban.value = normalizeIban(customerIban.value || '');
-  customerPhoneError.value = validateOptionalBelarusPhone(customerPhone.value || '', customerPhoneMask.isComplete.value);
-  customerEmailError.value = validateOptionalEmail(customerEmail.value || '');
-  customerInnError.value = validateOptionalByUnp(customerInn.value || '');
-  customerIbanError.value = validateOptionalByIban(customerIban.value || '');
 
   const errors: Record<string, string> = {};
   if (!status.value) {
@@ -247,29 +258,13 @@ const handleSave = () => {
   } else if (serviceLines.value.some((line) => !line.title?.trim())) {
     errors.services = 'Для услуги укажите название';
   }
-  if (customerPhoneError.value) {
-    errors.customer_phone = customerPhoneError.value;
-  }
-  if (customerEmailError.value) {
-    errors.customer_email = customerEmailError.value;
-  }
-  if (customerInnError.value) {
-    errors.customer_inn = customerInnError.value;
-  }
-  if (customerIbanError.value) {
-    errors.customer_iban = customerIbanError.value;
-  }
 
   if (Object.keys(errors).length) {
     localServerErrors.value = errors;
     localFormError.value = 'Исправьте ошибки в форме';
     return;
   }
-  if (criticalChangedRows.value.length && !criticalChangesConfirmed.value) {
-    showCriticalConfirmPanel.value = true;
-    return;
-  }
-  showCriticalConfirmPanel.value = false;
+  clearDraft();
   const payload: ManagerOrderUpdatePayload = {
     status: status.value,
     next_followup_date: fromLocalDateTimeInput(nextFollowupDate.value),
@@ -277,17 +272,6 @@ const handleSave = () => {
     installation_date: fromLocalDateTimeInput(installationDate.value),
     comment: comment.value,
     is_paid: isPaid.value,
-    customer_name: customerName.value || null,
-    customer_phone: normalizePhoneForApi(customerPhone.value || '') || null,
-    customer_email: customerEmail.value || null,
-    customer_inn: customerInn.value || null,
-    customer_full_legal_name: customerFullLegalName.value || null,
-    customer_legal_address: customerLegalAddress.value || null,
-    customer_bank_name: customerBankName.value || null,
-    customer_bic: customerBic.value || null,
-    customer_iban: customerIban.value || null,
-    customer_delivery_address: customerDeliveryAddress.value || null,
-    confirm_critical_customer_changes: criticalChangesConfirmed.value,
     products: productLines.value.map((line) => ({
       product_id: line.product_id,
       quantity: line.quantity,
@@ -307,19 +291,35 @@ const handleSave = () => {
   emit('save', { orderId: props.order.id, data: payload });
 };
 
-const closeDrawer = () => emit('update:modelValue', false);
+const closeDrawer = () => {
+  clearDraft();
+  emit('update:modelValue', false);
+};
 const getFieldError = (field: string): string => localServerErrors.value[field] || props.serverErrors?.[field] || '';
 const displayFormError = computed(() => localFormError.value || props.formError || '');
-const confirmCriticalAndSave = () => {
-  criticalChangesConfirmed.value = true;
-  handleSave();
+const closeCustomerModal = () => {
+  showCustomerModal.value = false;
+};
+
+const openCustomerProfile = () => {
+  const customerId = props.order?.customer?.id;
+  if (!customerId) return;
+  showCustomerModal.value = false;
+  const returnTo = `${window.location.pathname}${window.location.search}`;
+  const query = new URLSearchParams({
+    customerId: String(customerId),
+    returnTo,
+  });
+  window.history.pushState({}, '', `/manager/customers/profile?${query.toString()}`);
+  window.dispatchEvent(new PopStateEvent('popstate'));
 };
 
 watch(
-  () => `${customerInn.value}|${customerBic.value}|${customerIban.value}|${customerBankName.value}`,
+  () => productLines.value,
   () => {
-    criticalChangesConfirmed.value = false;
+    persistDraft();
   },
+  { deep: true },
 );
 </script>
 
@@ -374,80 +374,14 @@ watch(
       </section>
 
       <section class="mt-6 rounded-2xl bg-slate-800/80 p-4">
-        <h3 class="mb-3 text-lg font-semibold">Клиент</h3>
-        <div class="grid gap-3 md:grid-cols-2">
-          <label class="field-label">
-            Имя / Компания
-            <input
-              v-model="customerName"
-              class="field-input"
-              :class="getFieldError('customer_name') ? 'border-red-500 focus:outline-red-400' : ''"
-            />
-            <span v-if="getFieldError('customer_name')" class="text-xs text-red-300">{{ getFieldError('customer_name') }}</span>
-          </label>
-          <label class="field-label">
-            Телефон
-            <input
-              ref="customerPhoneInputRef"
-              v-model="customerPhone"
-              class="field-input"
-              type="tel"
-              inputmode="tel"
-              placeholder="+375 (XX) XXX-XX-XX"
-              :class="getFieldError('customer_phone') ? 'border-red-500 focus:outline-red-400' : ''"
-            />
-            <span v-if="getFieldError('customer_phone')" class="text-xs text-red-300">{{ getFieldError('customer_phone') }}</span>
-          </label>
-          <label class="field-label">
-            Email
-            <input
-              v-model="customerEmail"
-              class="field-input"
-              type="email"
-              :class="getFieldError('customer_email') ? 'border-red-500 focus:outline-red-400' : ''"
-            />
-            <span v-if="getFieldError('customer_email')" class="text-xs text-red-300">{{ getFieldError('customer_email') }}</span>
-          </label>
-          <label class="field-label">
-            УНП
-            <input
-              v-model="customerInn"
-              class="field-input"
-              inputmode="numeric"
-              :class="getFieldError('customer_inn') ? 'border-red-500 focus:outline-red-400' : ''"
-            />
-            <span v-if="getFieldError('customer_inn')" class="text-xs text-red-300">{{ getFieldError('customer_inn') }}</span>
-          </label>
-          <label class="field-label md:col-span-2">
-            Полное наименование
-            <input v-model="customerFullLegalName" class="field-input" />
-          </label>
-          <label class="field-label md:col-span-2">
-            Юридический адрес
-            <input v-model="customerLegalAddress" class="field-input" />
-          </label>
-          <label class="field-label">
-            BIC
-            <input v-model="customerBic" class="field-input" />
-          </label>
-          <label class="field-label">
-            IBAN
-            <input
-              v-model="customerIban"
-              class="field-input"
-              :class="getFieldError('customer_iban') ? 'border-red-500 focus:outline-red-400' : ''"
-            />
-            <span v-if="getFieldError('customer_iban')" class="text-xs text-red-300">{{ getFieldError('customer_iban') }}</span>
-          </label>
-          <label class="field-label md:col-span-2">
-            Банк
-            <input v-model="customerBankName" class="field-input" />
-          </label>
-          <label class="field-label md:col-span-2">
-            Адрес доставки
-            <input v-model="customerDeliveryAddress" class="field-input" />
-          </label>
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <h3 class="text-lg font-semibold">Клиент</h3>
+          <div class="flex flex-wrap gap-2">
+            <button class="btn-mini-outline" :disabled="!customer?.id" @click="showCustomerModal = true">Подробнее</button>
+            <button class="btn-mini-outline" :disabled="!customer?.id" @click="openCustomerProfile">Открыть карточку</button>
+          </div>
         </div>
+        <CustomerSummaryCard :customer="customer" mode="compact" :show-open-button="false" />
       </section>
 
       <section class="mt-6">
@@ -456,20 +390,53 @@ watch(
           <button class="btn-mini" @click="addProductLine">Добавить товар</button>
         </div>
         <p v-if="getFieldError('products')" class="mb-2 text-xs text-red-300">{{ getFieldError('products') }}</p>
-        <label class="field-label mb-2">
-          Поиск товара
-          <input v-model="productSearch" class="field-input" placeholder="Введите название товара" />
-        </label>
+        <div class="mb-2 grid grid-cols-12 gap-2 px-2 text-[11px] uppercase tracking-[0.08em] text-slate-400">
+          <div class="col-span-5">Товар</div>
+          <div class="col-span-2">Цена</div>
+          <div class="col-span-2">Себест.</div>
+          <div class="col-span-2">Кол-во / Сумма</div>
+          <div class="col-span-1">Действия</div>
+        </div>
         <div class="space-y-2">
           <div v-for="(line, index) in productLines" :key="`product-${index}`" class="grid grid-cols-12 gap-2 rounded-xl bg-slate-800 p-2">
-            <select v-model.number="line.product_id" class="field-input col-span-5" @change="onProductChanged(index)">
-              <option :value="0">Выберите товар</option>
-              <option v-for="item in productOptions" :key="item.id" :value="item.id">{{ item.text }}</option>
-            </select>
+            <div class="col-span-5">
+              <input
+                v-model="line.product_query"
+                class="field-input"
+                placeholder="Поиск и выбор товара"
+                @input="onProductQueryInput(index)"
+              />
+              <div
+                v-if="!line.product_id && line.product_query.trim().length >= 2 && getProductSuggestions(line.product_query).length"
+                class="mt-1 max-h-44 overflow-auto rounded-lg border border-slate-700 bg-slate-900/95 p-1"
+              >
+                <button
+                  v-for="item in getProductSuggestions(line.product_query)"
+                  :key="`product-suggest-${index}-${item.id}`"
+                  type="button"
+                  class="block w-full rounded px-2 py-1 text-left text-xs text-slate-100 hover:bg-slate-700"
+                  @click="selectProductForLine(index, item)"
+                >
+                  {{ item.text }}
+                </button>
+              </div>
+            </div>
             <input v-model.number="line.price" type="number" min="0" class="field-input col-span-2" placeholder="Цена" />
             <input v-model.number="line.cost" type="number" min="0" class="field-input col-span-2" placeholder="Себест." />
-            <input v-model.number="line.quantity" type="number" min="1" class="field-input col-span-2" placeholder="Кол-во" />
-            <button class="btn-mini-outline col-span-1" @click="removeProductLine(index)">×</button>
+            <div class="col-span-2 flex flex-col gap-1">
+              <input v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="Кол-во" />
+              <p class="px-1 text-xs text-slate-400">Σ {{ formatMoney(lineTotal(line)) }}</p>
+            </div>
+            <div class="col-span-1 flex flex-col gap-1">
+              <button class="btn-mini-outline px-0" type="button" :disabled="!line.product_id" @click="openSelectedProduct(index)">↗</button>
+              <button class="btn-mini-outline px-0" type="button" @click="removeProductLine(index)">×</button>
+            </div>
+            <p
+              v-if="isPriceDifferentFromCatalog(line)"
+              class="col-span-12 rounded-md border border-amber-500/40 bg-amber-900/20 px-2 py-1 text-xs text-amber-200"
+            >
+              Цена строки отличается от каталожной ({{ formatMoney(currentCatalogPrice(line.product_id) || 0) }}).
+            </p>
           </div>
         </div>
       </section>
@@ -496,23 +463,6 @@ watch(
         <p class="text-sm text-slate-300">Маржа: <span class="font-semibold text-teal-300">{{ formatMoney(marginPreview) }}</span></p>
       </section>
 
-      <section
-        v-if="showCriticalConfirmPanel && criticalChangedRows.length"
-        class="mt-6 rounded-xl border border-red-500/40 bg-red-900/20 px-4 py-3 text-sm text-red-100"
-      >
-        <p class="font-semibold text-red-50">Подтверждение изменения критичных реквизитов</p>
-        <p class="mt-1 text-red-200/90">Будут обновлены реквизиты клиента:</p>
-        <ul class="mt-2 list-inside list-disc space-y-1">
-          <li v-for="row in criticalChangedRows" :key="`order-critical-${row.key}`">
-            {{ row.label }}: {{ row.before }} -> {{ row.after }}
-          </li>
-        </ul>
-        <div class="mt-3 flex flex-wrap gap-2">
-          <button class="btn-mini bg-red-600/80 hover:bg-red-500" @click="confirmCriticalAndSave">Подтвердить и сохранить</button>
-          <button class="btn-mini-outline" @click="showCriticalConfirmPanel = false">Отмена</button>
-        </div>
-      </section>
-
       <footer class="mt-6 flex justify-end gap-2">
         <button class="btn-mini-outline" :disabled="saving" @click="closeDrawer">Отмена</button>
         <button class="btn-mini" :disabled="saving" @click="handleSave">
@@ -520,5 +470,22 @@ watch(
         </button>
       </footer>
     </aside>
+
+    <div
+      v-if="showCustomerModal"
+      class="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4"
+      @click.self="closeCustomerModal"
+    >
+      <div class="w-full max-w-3xl rounded-2xl border border-slate-700 bg-slate-900 p-5 text-slate-100 shadow-2xl">
+        <div class="mb-4 flex items-center justify-between gap-3">
+          <h3 class="text-lg font-semibold">Карточка клиента</h3>
+          <button class="btn-mini-outline" @click="closeCustomerModal">Закрыть</button>
+        </div>
+        <CustomerSummaryCard :customer="customer" mode="expanded" :show-open-button="false" />
+        <div class="mt-4 flex justify-end">
+          <button class="btn-mini" :disabled="!customer?.id" @click="openCustomerProfile">Редактировать в карточке клиента</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

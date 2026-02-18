@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue';
 import { api, type Product } from '../api';
-import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images, Settings } from 'lucide-vue-next';
+import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images, Settings, ArrowLeft } from 'lucide-vue-next';
 import BulkSpecsModal from '../components/BulkSpecsModal.vue';
 import ProductEditModal from '../components/ProductEditModal.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
@@ -33,6 +33,11 @@ const setToast = (message: string) => {
         if (toast.value === message) toast.value = '';
     }, 3000);
 };
+
+const pendingEditProductId = ref<number | null>(null);
+const pendingEditProductQuery = ref('');
+const pendingReturnTo = ref('');
+const pendingEditHandled = ref(false);
 
 // Bulk Actions
 const selectedProductIds = ref<Set<number>>(new Set());
@@ -186,6 +191,19 @@ const loadProducts = async () => {
     );
     products.value = data.items ? data.items : (Array.isArray(data) ? data : []);
     hasMore.value = products.value.length >= limit;
+    if (pendingEditProductId.value && !pendingEditHandled.value) {
+      const target = products.value.find((p) => p.id === pendingEditProductId.value)
+        || (pendingEditProductQuery.value
+          ? products.value.find((p) => p.title.toLowerCase().includes(pendingEditProductQuery.value.toLowerCase()))
+          : null);
+      if (target) {
+        pendingEditHandled.value = true;
+        openEditModal(target);
+      } else if (searchQuery.value.trim()) {
+        pendingEditHandled.value = true;
+        setToast(`Товар #${pendingEditProductId.value} не найден`);
+      }
+    }
   } catch (e) {
     console.error(e);
   } finally {
@@ -298,6 +316,12 @@ const openSearchModal = (product: Product) => {
 const openEditModal = (product: Product) => {
     editingProduct.value = product;
     showEditModal.value = true;
+};
+
+const navigateBackFromProducts = () => {
+    if (!pendingReturnTo.value) return;
+    window.history.pushState({}, '', pendingReturnTo.value);
+    window.dispatchEvent(new PopStateEvent('popstate'));
 };
 
 const handleEditSuccess = async () => {
@@ -472,6 +496,19 @@ const selectImage = async (url: string) => {
 
 // Intersection Observer for infinite scroll
 onMounted(() => {
+    const params = new URLSearchParams(window.location.search);
+    const editProductIdRaw = params.get('editProductId');
+    const parsedEditProductId = editProductIdRaw ? Number(editProductIdRaw) : NaN;
+    pendingEditProductId.value = Number.isFinite(parsedEditProductId) && parsedEditProductId > 0 ? parsedEditProductId : null;
+    pendingEditProductQuery.value = params.get('editProductQuery') || '';
+    pendingReturnTo.value = params.get('returnTo') || '';
+    if (!searchQuery.value) {
+        if (pendingEditProductQuery.value) {
+            searchQuery.value = pendingEditProductQuery.value;
+        } else if (pendingEditProductId.value) {
+            searchQuery.value = String(pendingEditProductId.value);
+        }
+    }
     loadProducts();
 
     const observer = new IntersectionObserver((entries) => {
@@ -492,6 +529,14 @@ onMounted(() => {
     <!-- Header -->
     <header class="mb-6 flex justify-between items-center">
       <div class="flex items-center gap-4">
+          <button
+            v-if="pendingReturnTo"
+            @click="navigateBackFromProducts"
+            class="px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center gap-2 text-gray-700 text-sm transition-colors"
+          >
+            <ArrowLeft class="w-4 h-4" />
+            Назад
+          </button>
           <h1 class="text-2xl font-bold text-gray-900">Товары</h1>
           <div v-if="selectedProductIds.size > 0" class="flex items-center gap-2 bg-teal-50 px-4 py-2 rounded-lg border border-teal-100">
               <span class="text-sm font-medium text-teal-800">{{ selectedProductIds.size }} выбрано</span>

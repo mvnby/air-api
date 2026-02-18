@@ -83,6 +83,9 @@ const customerId = computed(() => {
   return Number.isFinite(value) && value > 0 ? value : null;
 });
 
+const returnTo = computed(() => new URLSearchParams(window.location.search).get('returnTo') || '');
+const backLabel = computed(() => (returnTo.value ? 'Назад' : 'К списку клиентов'));
+
 const formatDate = (iso?: string | null) => {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('ru-RU');
@@ -171,7 +174,8 @@ const loadCustomer = async () => {
 };
 
 const navigateToCustomers = () => {
-  window.history.pushState({}, '', '/manager/customers');
+  const target = returnTo.value || '/manager/customers';
+  window.history.pushState({}, '', target);
   window.dispatchEvent(new PopStateEvent('popstate'));
 };
 
@@ -314,7 +318,7 @@ onMounted(() => {
       <div class="mb-4 flex items-center gap-2">
         <button class="btn-mini-outline" type="button" @click="navigateToCustomers">
           <ArrowLeft class="h-4 w-4" />
-          К списку клиентов
+          {{ backLabel }}
         </button>
         <button v-if="customer" class="btn-mini" type="button" @click="openOrders">
           Сделки клиента
