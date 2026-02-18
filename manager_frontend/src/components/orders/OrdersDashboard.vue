@@ -11,6 +11,9 @@ import OrderEditDrawer from './OrderEditDrawer.vue';
 import { STATUS_LABELS, STATUS_ORDER } from './order-utils';
 import { getApiErrorMessage, parseApiFieldErrors } from '../../utils/api-errors';
 
+const ORDERS_SEGMENT_STORAGE_KEY = 'manager_orders_segment';
+const ORDERS_VIEW_STORAGE_KEY = 'manager_orders_view';
+
 const segment = ref<Segment>('b2c');
 const view = ref<DashboardView>('kanban');
 const statusFilter = ref('');
@@ -55,6 +58,42 @@ const setToast = (message: string) => {
 };
 
 let loadRequestId = 0;
+const setQueryParam = (key: string, value: string) => {
+  const url = new URL(window.location.href);
+  if (value) {
+    url.searchParams.set(key, value);
+  } else {
+    url.searchParams.delete(key);
+  }
+  window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+};
+
+const restoreSegmentAndView = () => {
+  const params = new URLSearchParams(window.location.search);
+  const segmentFromUrl = params.get('segment');
+  const viewFromUrl = params.get('view');
+
+  const segmentFromStorage = window.localStorage.getItem(ORDERS_SEGMENT_STORAGE_KEY);
+  const viewFromStorage = window.localStorage.getItem(ORDERS_VIEW_STORAGE_KEY);
+
+  const resolvedSegment = segmentFromUrl || segmentFromStorage;
+  const resolvedView = viewFromUrl || viewFromStorage;
+
+  if (resolvedSegment === 'b2b' || resolvedSegment === 'b2c') {
+    segment.value = resolvedSegment;
+  }
+  if (resolvedView === 'kanban' || resolvedView === 'list') {
+    view.value = resolvedView as DashboardView;
+  }
+};
+
+const persistSegmentAndView = () => {
+  window.localStorage.setItem(ORDERS_SEGMENT_STORAGE_KEY, segment.value);
+  window.localStorage.setItem(ORDERS_VIEW_STORAGE_KEY, view.value);
+  setQueryParam('segment', segment.value);
+  setQueryParam('view', view.value);
+};
+
 const loadOrders = async () => {
   const requestId = ++loadRequestId;
   loading.value = true;
@@ -94,9 +133,13 @@ let searchTimer: number | undefined;
 watch(
   () => [segment.value, statusFilter.value, overdueOnly.value, sort.value],
   async () => {
+    persistSegmentAndView();
     await loadOrders();
   },
 );
+watch(view, () => {
+  persistSegmentAndView();
+});
 watch(search, () => {
   if (searchTimer) window.clearTimeout(searchTimer);
   searchTimer = window.setTimeout(async () => {
@@ -228,6 +271,7 @@ const checkAuth = async () => {
 };
 
 onMounted(async () => {
+  restoreSegmentAndView();
   const params = new URLSearchParams(window.location.search);
   const searchParam = params.get('search');
   if (searchParam) {
@@ -240,6 +284,7 @@ onMounted(async () => {
       pendingOpenOrderId.value = parsed;
     }
   }
+  persistSegmentAndView();
   await checkAuth();
 });
 
@@ -254,9 +299,9 @@ watch(drawerOpen, (isOpen) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[var(--mv-bg)] text-slate-100">
+  <div class="min-h-screen bg-gray-50 text-slate-900">
     <div class="mx-auto max-w-[1400px] px-4 py-6 md:px-8">
-      <header class="mb-5 rounded-[2rem] border border-slate-700/70 bg-gradient-to-r from-slate-900 to-slate-800 p-5">
+      <header class="mb-5 rounded-[2rem] border border-gray-200 bg-white shadow-sm p-5">
         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h1 class="text-2xl font-bold">CRM Orders Dashboard</h1>
           <OrdersViewToggle v-model="view" />
@@ -279,7 +324,7 @@ watch(drawerOpen, (isOpen) => {
             <option value="margin_desc">Макс. маржа</option>
             <option value="followup_asc">Ближайшее касание</option>
           </select>
-          <label class="inline-flex items-center gap-2 rounded-[12px] border border-slate-700 bg-slate-900 px-3 py-2">
+          <label class="inline-flex items-center gap-2 rounded-[12px] border border-gray-200 bg-white text-gray-700 px-3 py-2">
             <input v-model="overdueOnly" type="checkbox" />
             Только просроченные касания
           </label>
@@ -287,7 +332,7 @@ watch(drawerOpen, (isOpen) => {
       </header>
 
       <p v-if="toast" class="mb-4 rounded-[12px] bg-[#007f80] px-4 py-2 text-sm font-semibold text-white">{{ toast }}</p>
-      <p v-if="loading" class="mb-4 text-sm text-slate-300">Загрузка сделок...</p>
+      <p v-if="loading" class="mb-4 text-sm text-gray-500">Загрузка сделок...</p>
 
       <OrderKanbanBoard
         v-if="view === 'kanban'"
@@ -318,7 +363,7 @@ watch(drawerOpen, (isOpen) => {
     />
 
     <div v-if="showLoginModal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
-      <div class="w-full max-w-sm rounded-[2rem] border border-slate-700 bg-slate-900 p-6">
+      <div class="w-full max-w-sm rounded-[2rem] border border-gray-200 bg-white text-gray-700 p-6">
         <h2 class="mb-4 text-xl font-semibold">Вход в Manager</h2>
         <div class="space-y-3">
           <input v-model="loginUsername" class="field-input" placeholder="Логин" />

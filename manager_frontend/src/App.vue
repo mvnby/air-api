@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref } from 'vue';
-import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2 } from 'lucide-vue-next';
+import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon } from 'lucide-vue-next';
 import { api } from './api';
 
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
@@ -16,8 +16,11 @@ const loginPassword = ref('');
 const loginLoading = ref(false);
 const loginError = ref('');
 const rebuildLoading = ref(false);
+const isMobileNavOpen = ref(false);
+const theme = ref<'light' | 'dark'>('light');
 
 const currentLocation = ref(`${window.location.pathname}${window.location.search}`);
+const THEME_STORAGE_KEY = 'manager_theme';
 
 const navItems = [
   { path: '/manager/leads', label: 'Лиды', icon: UserPlus },
@@ -44,6 +47,25 @@ const navigate = (path: string) => {
     window.history.pushState({}, '', path);
     currentLocation.value = `${window.location.pathname}${window.location.search}`;
   }
+  isMobileNavOpen.value = false;
+};
+
+const toggleMobileNav = () => {
+  isMobileNavOpen.value = !isMobileNavOpen.value;
+};
+
+const closeMobileNav = () => {
+  isMobileNavOpen.value = false;
+};
+
+const applyTheme = (value: 'light' | 'dark') => {
+  theme.value = value;
+  document.documentElement.classList.toggle('dark', value === 'dark');
+  window.localStorage.setItem(THEME_STORAGE_KEY, value);
+};
+
+const toggleTheme = () => {
+  applyTheme(theme.value === 'light' ? 'dark' : 'light');
 };
 
 const handleLogin = async () => {
@@ -84,6 +106,12 @@ const checkAuth = async () => {
 };
 
 onMounted(() => {
+  const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (storedTheme === 'light' || storedTheme === 'dark') {
+    applyTheme(storedTheme);
+  } else {
+    applyTheme('light');
+  }
   if (window.location.pathname === '/manager') {
     navigate('/manager/leads');
   }
@@ -138,8 +166,25 @@ onBeforeUnmount(() => {
     </div>
   </div>
 
-  <div v-if="isAuthenticated" class="min-h-screen bg-gray-50 flex">
-    <aside class="w-60 bg-white border-r border-gray-200 flex flex-col shrink-0">
+  <div v-if="isAuthenticated" class="manager-root min-h-screen flex">
+    <button
+      class="fixed left-3 top-3 z-50 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 shadow md:hidden"
+      @click="toggleMobileNav"
+    >
+      <X v-if="isMobileNavOpen" class="h-5 w-5" />
+      <Menu v-else class="h-5 w-5" />
+    </button>
+
+    <div
+      v-if="isMobileNavOpen"
+      class="fixed inset-0 z-40 bg-black/40 md:hidden"
+      @click="closeMobileNav"
+    />
+
+    <aside
+      class="fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-gray-200 flex flex-col shrink-0 transition-transform duration-200 md:static md:z-auto md:w-60 md:translate-x-0"
+      :class="isMobileNavOpen ? 'translate-x-0' : '-translate-x-full'"
+    >
       <div class="p-5 border-b border-gray-100">
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 bg-teal-600 rounded-lg flex items-center justify-center">
@@ -150,6 +195,14 @@ onBeforeUnmount(() => {
             <div class="text-[11px] text-gray-400">Manager Panel</div>
           </div>
         </div>
+        <button
+          class="mt-3 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+          @click="toggleTheme"
+        >
+          <Moon v-if="theme === 'light'" class="h-3.5 w-3.5" />
+          <Sun v-else class="h-3.5 w-3.5" />
+          {{ theme === 'light' ? 'Тёмная тема' : 'Светлая тема' }}
+        </button>
       </div>
 
       <nav class="flex-1 p-3 space-y-1">
@@ -183,7 +236,7 @@ onBeforeUnmount(() => {
       </div>
     </aside>
 
-    <main class="flex-1 overflow-auto">
+    <main class="flex-1 overflow-auto md:ml-0">
       <LeadsView v-if="currentView === 'leads'" :key="currentLocation" />
       <OrdersKanbanView v-else-if="currentView === 'orders'" :key="currentLocation" />
       <CustomerProfileView v-else-if="currentView === 'customer-profile'" :key="currentLocation" />

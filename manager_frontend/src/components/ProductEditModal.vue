@@ -181,7 +181,7 @@ const save = async () => {
 </script>
 
 <template>
-    <div v-if="modelValue" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4" @click.self="close">
+    <div v-if="modelValue" class="product-edit-modal fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4" @click.self="close">
         <div class="bg-white rounded-2xl w-full max-w-5xl flex flex-col max-h-[90vh] shadow-2xl border border-gray-100 overflow-hidden">
             <!-- Header -->
             <header class="p-5 border-b flex justify-between items-center bg-gray-50/50">
@@ -376,3 +376,46 @@ const save = async () => {
         </div>
     </div>
 </template>
+
+<style scoped>
+:global(.dark) .product-edit-modal .text-gray-400 {
+  color: #94a3b8 !important;
+}
+
+:global(.dark) .product-edit-modal .text-gray-500 {
+  color: #94a3b8 !important;
+}
+
+:global(.dark) .product-edit-modal .text-gray-600 {
+  color: #cbd5e1 !important;
+}
+
+:global(.dark) .product-edit-modal .text-gray-700 {
+  color: #e2e8f0 !important;
+}
+
+:global(.dark) .product-edit-modal .bg-gray-50\/50,
+:global(.dark) .product-edit-modal .bg-gray-50 {
+  background-color: #0f172a !important;
+}
+
+:global(.dark) .product-edit-modal .border-gray-100,
+:global(.dark) .product-edit-modal .border-gray-200 {
+  border-color: #334155 !important;
+}
+
+:global(.dark) .product-edit-modal input,
+:global(.dark) .product-edit-modal select {
+  background-color: #0b1324;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+:global(.dark) .product-edit-modal input::placeholder {
+  color: #94a3b8;
+}
+
+:global(.dark) .product-edit-modal footer button:first-child {
+  color: #cbd5e1 !important;
+}
+</style>

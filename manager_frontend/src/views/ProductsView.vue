@@ -540,7 +540,7 @@ onMounted(() => {
           <h1 class="text-2xl font-bold text-gray-900">Товары</h1>
           <div v-if="selectedProductIds.size > 0" class="flex items-center gap-2 bg-teal-50 px-4 py-2 rounded-lg border border-teal-100">
               <span class="text-sm font-medium text-teal-800">{{ selectedProductIds.size }} выбрано</span>
-              <button @click="openBulkImageModal" class="flex items-center gap-1 bg-slate-700 text-white px-3 py-1.5 rounded-md text-sm hover:bg-slate-800 transition-colors">
+              <button @click="openBulkImageModal" class="flex items-center gap-1 bg-gray-700 text-white px-3 py-1.5 rounded-md text-sm hover:bg-gray-800 transition-colors">
                   <Images class="w-3.5 h-3.5" /> Изображения
               </button>
               <button @click="openBulkUpdate" class="flex items-center gap-1 bg-teal-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-teal-700 transition-colors">
@@ -771,7 +771,7 @@ onMounted(() => {
                                        <button @click="selectImage(r.image)" class="w-full bg-teal-600 text-white text-xs py-1.5 rounded-md hover:bg-teal-700 transition-colors">
                                            {{ isBulkMode ? 'Главное для всех' : 'Сделать главным' }}
                                        </button>
-                                       <button @click="addToGallery(r.image)" class="w-full bg-slate-600 text-white text-xs py-1.5 rounded-md hover:bg-slate-700 transition-colors">
+                                       <button @click="addToGallery(r.image)" class="w-full bg-gray-600 text-white text-xs py-1.5 rounded-md hover:bg-gray-700 transition-colors">
                                            {{ isBulkMode ? 'Добавить всем' : 'В галерею' }}
                                        </button>
                                    </div>

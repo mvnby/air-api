@@ -1113,9 +1113,9 @@ const onQualifyIbanBlur = async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[var(--mv-bg)] text-slate-100">
+  <div class="min-h-screen bg-gray-50 text-slate-900">
     <div class="mx-auto max-w-[1400px] px-4 py-6 md:px-8">
-      <header class="mb-5 rounded-[2rem] border border-slate-700/70 bg-gradient-to-r from-slate-900 to-slate-800 p-5">
+      <header class="mb-5 rounded-[2rem] border border-gray-200 bg-white shadow-sm p-5">
         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h1 class="text-2xl font-bold">Leads Dashboard</h1>
           <button class="btn-mini" @click="showCreateModal = true">Новый лид</button>
@@ -1126,7 +1126,7 @@ const onQualifyIbanBlur = async () => {
             v-for="item in tabItems"
             :key="item.key"
             class="rounded-[12px] px-3 py-1.5 text-sm font-semibold transition"
-            :class="statusTab === item.key ? 'bg-[var(--mv-teal)] text-white' : 'bg-slate-800 text-slate-300 hover:text-white'"
+            :class="statusTab === item.key ? 'bg-[var(--mv-teal)] text-white' : 'bg-gray-100 text-gray-600 hover:text-gray-900'"
             @click="statusTab = item.key as LeadTab"
           >
             {{ item.label }}
@@ -1150,11 +1150,11 @@ const onQualifyIbanBlur = async () => {
             <option value="updated_at_desc">Недавно обновленные</option>
             <option value="followup_asc">Ближайшее касание</option>
           </select>
-          <label class="inline-flex items-center gap-2 rounded-[12px] border border-slate-700 bg-slate-900 px-3 py-2">
+          <label class="inline-flex items-center gap-2 rounded-[12px] border border-gray-200 bg-white text-gray-700 px-3 py-2">
             <input v-model="overdueOnly" type="checkbox" />
             Только просроченные
           </label>
-          <label class="inline-flex items-center gap-2 rounded-[12px] border border-slate-700 bg-slate-900 px-3 py-2">
+          <label class="inline-flex items-center gap-2 rounded-[12px] border border-gray-200 bg-white text-gray-700 px-3 py-2">
             <input v-model="includeArchived" type="checkbox" />
             Показать архив
           </label>
@@ -1180,34 +1180,34 @@ const onQualifyIbanBlur = async () => {
           <button class="btn-mini-outline" @click="lastQualifyResult = null">Скрыть</button>
         </div>
       </div>
-      <p v-if="loading" class="mb-4 text-sm text-slate-300">Загрузка лидов...</p>
+      <p v-if="loading" class="mb-4 text-sm text-gray-500">Загрузка лидов...</p>
 
-      <div v-if="!loading && leads.length === 0" class="rounded-[2rem] border border-slate-700 bg-slate-900/60 p-8 text-center">
-        <p class="text-lg font-semibold text-white">Лиды не найдены</p>
-        <p class="mt-2 text-sm text-slate-400">Попробуйте изменить фильтры или создайте новый лид.</p>
+      <div v-if="!loading && leads.length === 0" class="rounded-[2rem] border border-gray-200 bg-white text-gray-700/60 p-8 text-center">
+        <p class="text-lg font-semibold text-gray-900">Лиды не найдены</p>
+        <p class="mt-2 text-sm text-gray-500">Попробуйте изменить фильтры или создайте новый лид.</p>
       </div>
 
       <div v-else class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <article
           v-for="lead in leads"
           :key="lead.id"
-          class="rounded-[2rem] border border-slate-700 bg-slate-800 p-5 shadow-lg"
+          class="rounded-[2rem] border border-gray-200 bg-white p-5 shadow-lg"
           :class="isOverdue(lead) ? 'ring-2 ring-red-500/70' : 'ring-1 ring-transparent'"
         >
           <header class="mb-3 flex items-start justify-between gap-2">
             <div>
-              <p class="text-lg font-semibold text-white">{{ lead.name || lead.company_name || `Лид #${lead.id}` }}</p>
-              <p class="text-sm text-slate-300">{{ lead.phone || lead.email || 'Контакт не указан' }}</p>
+              <p class="text-lg font-semibold text-gray-900">{{ lead.name || lead.company_name || `Лид #${lead.id}` }}</p>
+              <p class="text-sm text-gray-500">{{ lead.phone || lead.email || 'Контакт не указан' }}</p>
             </div>
-            <span class="rounded-full bg-slate-700 px-2 py-1 text-xs text-slate-200">{{ statusLabels[lead.status] || lead.status }}</span>
+            <span class="rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-700">{{ statusLabels[lead.status] || lead.status }}</span>
           </header>
 
-          <div class="space-y-1 text-sm text-slate-200">
-            <p>Источник: <span class="text-slate-300">{{ sourceLabels[lead.source] || lead.source }}</span></p>
-            <p>Сегмент: <span class="text-slate-300">{{ segmentLabels[lead.segment_hint] || lead.segment_hint }}</span></p>
+          <div class="space-y-1 text-sm text-gray-700">
+            <p>Источник: <span class="text-gray-500">{{ sourceLabels[lead.source] || lead.source }}</span></p>
+            <p>Сегмент: <span class="text-gray-500">{{ segmentLabels[lead.segment_hint] || lead.segment_hint }}</span></p>
             <p v-if="lead.inn">УНП: {{ lead.inn }}</p>
             <p class="line-clamp-3">{{ lead.request_text }}</p>
-            <p class="text-xs text-slate-400">След. касание: {{ formatDate(lead.next_followup_date) }}</p>
+            <p class="text-xs text-gray-500">След. касание: {{ formatDate(lead.next_followup_date) }}</p>
             <p v-if="lead.loss_reason" class="text-xs text-amber-300">Причина: {{ lead.loss_reason }}</p>
             <p v-if="lead.converted_order_id" class="text-xs text-emerald-300">Сделка: #{{ lead.converted_order_id }}</p>
           </div>
@@ -1258,7 +1258,7 @@ const onQualifyIbanBlur = async () => {
     </div>
 
     <div v-if="showCreateModal" class="fixed inset-0 z-[60] overflow-y-auto bg-black/60 p-4">
-      <div class="mx-auto my-6 w-full max-w-2xl rounded-[2rem] border border-slate-700 bg-slate-900 p-6">
+      <div class="mx-auto my-6 w-full max-w-2xl rounded-[2rem] border border-gray-200 bg-white text-gray-700 p-6">
         <h2 class="mb-4 text-xl font-semibold">Новый лид</h2>
         <label class="field-label mb-3">
           <span>Найти существующего клиента</span>
@@ -1267,19 +1267,19 @@ const onQualifyIbanBlur = async () => {
             class="field-input"
             placeholder="Имя, телефон, УНП, email"
           />
-          <span class="text-xs text-slate-400">Если клиент уже есть в базе, выберите его и поля заполнятся автоматически.</span>
+          <span class="text-xs text-gray-500">Если клиент уже есть в базе, выберите его и поля заполнятся автоматически.</span>
         </label>
-        <div v-if="customerLookupLoading" class="mb-3 text-xs text-slate-400">Ищем клиентов...</div>
-        <div v-else-if="customerLookupResults.length" class="mb-3 max-h-44 space-y-2 overflow-auto rounded-xl border border-slate-700 p-2">
+        <div v-if="customerLookupLoading" class="mb-3 text-xs text-gray-500">Ищем клиентов...</div>
+        <div v-else-if="customerLookupResults.length" class="mb-3 max-h-44 space-y-2 overflow-auto rounded-xl border border-gray-200 bg-gray-50 p-2">
           <button
             v-for="customer in customerLookupResults"
             :key="customer.id"
             type="button"
-            class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-left text-sm hover:border-slate-500"
+            class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-left text-sm hover:border-gray-300"
             @click="applyCustomerToCreateForm(customer)"
           >
-            <p class="font-semibold text-white">{{ customer.full_legal_name || customer.name || `Клиент #${customer.id}` }}</p>
-            <p class="text-xs text-slate-300">
+            <p class="font-semibold text-gray-900">{{ customer.full_legal_name || customer.name || `Клиент #${customer.id}` }}</p>
+            <p class="text-xs text-gray-500">
               {{ customer.phone || 'Без телефона' }}
               <span v-if="customer.inn"> · УНП {{ customer.inn }}</span>
               <span v-if="customer.email"> · {{ customer.email }}</span>
@@ -1355,7 +1355,7 @@ const onQualifyIbanBlur = async () => {
               inputmode="numeric"
               @blur="onCreateInnBlur"
             />
-            <span v-if="createCompanyLookupLoading" class="text-xs text-slate-400">Подтягиваем данные ЕГР...</span>
+            <span v-if="createCompanyLookupLoading" class="text-xs text-gray-500">Подтягиваем данные ЕГР...</span>
             <span v-if="createInnError" class="text-xs text-red-300">{{ createInnError }}</span>
           </label>
           <input
@@ -1398,7 +1398,7 @@ const onQualifyIbanBlur = async () => {
     </div>
 
     <div v-if="showQualifyModal && selectedLead" class="fixed inset-0 z-[60] overflow-y-auto bg-black/60 p-4">
-      <div class="mx-auto my-6 w-full max-w-2xl rounded-[2rem] border border-slate-700 bg-slate-900 p-6">
+      <div class="mx-auto my-6 w-full max-w-2xl rounded-[2rem] border border-gray-200 bg-white text-gray-700 p-6">
         <h2 class="mb-4 text-xl font-semibold">Квалифицировать лид #{{ selectedLead.id }}</h2>
         <label class="field-label mb-3">
           <span>Найти существующего клиента</span>
@@ -1408,17 +1408,17 @@ const onQualifyIbanBlur = async () => {
             placeholder="Имя, телефон, УНП, email"
           />
         </label>
-        <div v-if="qualifyCustomerLookupLoading" class="mb-3 text-xs text-slate-400">Ищем клиентов...</div>
-        <div v-else-if="qualifyCustomerLookupResults.length" class="mb-3 max-h-44 space-y-2 overflow-auto rounded-xl border border-slate-700 p-2">
+        <div v-if="qualifyCustomerLookupLoading" class="mb-3 text-xs text-gray-500">Ищем клиентов...</div>
+        <div v-else-if="qualifyCustomerLookupResults.length" class="mb-3 max-h-44 space-y-2 overflow-auto rounded-xl border border-gray-200 bg-gray-50 p-2">
           <button
             v-for="customer in qualifyCustomerLookupResults"
             :key="`qualify-customer-${customer.id}`"
             type="button"
-            class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-left text-sm hover:border-slate-500"
+            class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-left text-sm hover:border-gray-300"
             @click="applyCustomerToQualifyForm(customer)"
           >
-            <p class="font-semibold text-white">{{ customer.full_legal_name || customer.name || `Клиент #${customer.id}` }}</p>
-            <p class="text-xs text-slate-300">
+            <p class="font-semibold text-gray-900">{{ customer.full_legal_name || customer.name || `Клиент #${customer.id}` }}</p>
+            <p class="text-xs text-gray-500">
               {{ customer.phone || 'Без телефона' }}
               <span v-if="customer.inn"> · УНП {{ customer.inn }}</span>
               <span v-if="customer.email"> · {{ customer.email }}</span>
@@ -1433,37 +1433,37 @@ const onQualifyIbanBlur = async () => {
             Открыть клиента
           </button>
         </div>
-        <div class="mb-3 rounded-lg border border-slate-700 bg-slate-800/70 px-3 py-2 text-xs text-slate-300">
-          <p class="font-semibold text-slate-100">Preview квалификации</p>
+        <div class="mb-3 rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-xs text-gray-500">
+          <p class="font-semibold text-gray-900">Preview квалификации</p>
           <p>
             Клиент:
-            <span class="text-slate-100">{{ qualifyPreview.customerLabel }}</span>
+            <span class="text-gray-900">{{ qualifyPreview.customerLabel }}</span>
           </p>
           <p>
             Тип клиента:
-            <span class="text-slate-100">{{ customerTypeLabels[qualifyPreview.predictedCustomerType] || qualifyPreview.predictedCustomerType }}</span>
+            <span class="text-gray-900">{{ customerTypeLabels[qualifyPreview.predictedCustomerType] || qualifyPreview.predictedCustomerType }}</span>
           </p>
           <p>
             Сегмент:
-            <span class="text-slate-100">{{ segmentLabels[qualifyPreview.predictedSegment] || qualifyPreview.predictedSegment }}</span>
+            <span class="text-gray-900">{{ segmentLabels[qualifyPreview.predictedSegment] || qualifyPreview.predictedSegment }}</span>
           </p>
-          <p v-if="qualifyPreview.inn">Матч по УНП: <span class="text-slate-100">{{ qualifyPreview.inn }}</span></p>
-          <p v-if="qualifyPreview.phoneDigits">Матч по телефону: <span class="text-slate-100">{{ qualifyPreview.phoneDigits }}</span></p>
-          <p v-if="qualifyPreview.email">Матч по email: <span class="text-slate-100">{{ qualifyPreview.email }}</span></p>
+          <p v-if="qualifyPreview.inn">Матч по УНП: <span class="text-gray-900">{{ qualifyPreview.inn }}</span></p>
+          <p v-if="qualifyPreview.phoneDigits">Матч по телефону: <span class="text-gray-900">{{ qualifyPreview.phoneDigits }}</span></p>
+          <p v-if="qualifyPreview.email">Матч по email: <span class="text-gray-900">{{ qualifyPreview.email }}</span></p>
           <p v-if="qualifyPreview.matchedBy">
             Приоритет матча:
-            <span class="text-slate-100">{{ qualifyPreview.matchedBy === 'inn' ? 'УНП' : qualifyPreview.matchedBy === 'phone' ? 'Телефон' : 'Email' }}</span>
+            <span class="text-gray-900">{{ qualifyPreview.matchedBy === 'inn' ? 'УНП' : qualifyPreview.matchedBy === 'phone' ? 'Телефон' : 'Email' }}</span>
           </p>
           <p>
             Реквизиты для записи:
-            <span v-if="qualifyPreview.requisitesToWrite.length" class="text-slate-100">
+            <span v-if="qualifyPreview.requisitesToWrite.length" class="text-gray-900">
               {{ qualifyPreview.requisitesToWrite.map((item) => item.label).join(', ') }}
             </span>
-            <span v-else class="text-slate-400">не указаны</span>
+            <span v-else class="text-gray-500">не указаны</span>
           </p>
           <p>
             Фактически будут записаны:
-            <span v-if="qualifyWriteSummary.length" class="text-slate-100">
+            <span v-if="qualifyWriteSummary.length" class="text-gray-900">
               {{
                 qualifyWriteSummary
                   .map((item) => item.mode === 'critical_overwrite'
@@ -1474,7 +1474,7 @@ const onQualifyIbanBlur = async () => {
                   .join(', ')
               }}
             </span>
-            <span v-else class="text-slate-400">нет изменений в реквизитах клиента</span>
+            <span v-else class="text-gray-500">нет изменений в реквизитах клиента</span>
           </p>
         </div>
         <div v-if="Object.keys(qualifyServerErrors).length" class="mb-3 rounded-lg border border-red-500/40 bg-red-900/20 px-3 py-2 text-xs text-red-200">
@@ -1521,7 +1521,7 @@ const onQualifyIbanBlur = async () => {
               inputmode="numeric"
               @blur="onQualifyInnBlur"
             />
-            <span v-if="qualifyCompanyLookupLoading" class="text-xs text-slate-400">Подтягиваем данные ЕГР...</span>
+            <span v-if="qualifyCompanyLookupLoading" class="text-xs text-gray-500">Подтягиваем данные ЕГР...</span>
             <span v-if="qualifyInnError" class="text-xs text-red-300">{{ qualifyInnError }}</span>
           </label>
           <input
@@ -1545,7 +1545,7 @@ const onQualifyIbanBlur = async () => {
               placeholder="BY.."
               @blur="onQualifyIbanBlur"
             />
-            <span v-if="qualifyBankLookupLoading" class="text-xs text-slate-400">Подтягиваем данные банка...</span>
+            <span v-if="qualifyBankLookupLoading" class="text-xs text-gray-500">Подтягиваем данные банка...</span>
             <span v-if="qualifyIbanError" class="text-xs text-red-300">{{ qualifyIbanError }}</span>
           </label>
           <input
