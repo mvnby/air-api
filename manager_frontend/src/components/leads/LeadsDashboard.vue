@@ -76,6 +76,8 @@ const createServerErrors = ref<Record<string, string>>({});
 const qualifyServerErrors = ref<Record<string, string>>({});
 const qualifyCriticalOverwriteRows = ref<Array<{ key: RequisiteFieldKey; label: string; existing: string; incoming: string }>>([]);
 const qualifyCriticalOverwriteConfirmed = ref(false);
+const qualifyCriticalMissingOverwriteRows = ref<Array<{ key: RequisiteFieldKey; label: string; existing: string; incoming: string }>>([]);
+const qualifyCriticalMissingConfirmed = ref(false);
 const createCompanyLookupLoading = ref(false);
 const qualifyCompanyLookupLoading = ref(false);
 const qualifyBankLookupLoading = ref(false);
@@ -320,7 +322,7 @@ const qualifyWriteSummary = computed(() =>
 
 const onQualifyOverwriteToggle = (key: RequisiteFieldKey, checked: boolean) => {
   qualifyOverwriteFields.value[key] = checked;
-  if (isCriticalRequisite(key) && qualifyCriticalOverwriteConfirmed.value) {
+  if (isCriticalRequisite(key) && (qualifyCriticalOverwriteConfirmed.value || qualifyCriticalMissingConfirmed.value)) {
     clearQualifyCriticalOverwriteConfirm();
   }
 };
@@ -530,6 +532,8 @@ const openQualifyModal = (lead: LeadResponse, updateUrl = true) => {
 const clearQualifyCriticalOverwriteConfirm = () => {
   qualifyCriticalOverwriteRows.value = [];
   qualifyCriticalOverwriteConfirmed.value = false;
+  qualifyCriticalMissingOverwriteRows.value = [];
+  qualifyCriticalMissingConfirmed.value = false;
 };
 
 const qualifyLead = async () => {
@@ -558,11 +562,19 @@ const qualifyLead = async () => {
   saving.value = true;
   try {
     const normalizedPhone = qualifyForm.value.phone ? normalizePhoneForApi(qualifyForm.value.phone) : undefined;
-    const criticalOverwriteRows = qualifyChangedRequisites.value.filter(
+    const criticalChangedRows = qualifyChangedRequisites.value.filter((row) =>
+      ['inn', 'iban', 'bic', 'bank_name'].includes(row.key),
+    );
+    const criticalOverwriteRows = criticalChangedRows.filter(
       (row) =>
-        ['inn', 'iban', 'bic', 'bank_name'].includes(row.key) &&
         qualifyOverwriteFields.value[row.key],
     );
+    if (criticalChangedRows.length && !criticalOverwriteRows.length && !qualifyCriticalMissingConfirmed.value) {
+      qualifyCriticalMissingOverwriteRows.value = criticalChangedRows;
+      setToast('Есть критичные отличия. Подтвердите сохранение без перезаписи или отметьте нужные чекбоксы.');
+      saving.value = false;
+      return;
+    }
     if (criticalOverwriteRows.length && !qualifyCriticalOverwriteConfirmed.value) {
       qualifyCriticalOverwriteRows.value = criticalOverwriteRows;
       setToast('Подтвердите перезапись критичных реквизитов в блоке ниже');
@@ -1468,6 +1480,35 @@ const onQualifyIbanBlur = async () => {
                 <span class="text-amber-100">Станет: {{ row.incoming }}</span>
               </span>
             </label>
+          </div>
+        </div>
+        <div
+          v-if="qualifyCriticalMissingOverwriteRows.length"
+          class="mb-3 rounded-lg border border-amber-500/40 bg-amber-900/20 px-3 py-3 text-xs text-amber-100"
+        >
+          <p class="font-semibold text-amber-50">Критичные реквизиты не выбраны для перезаписи</p>
+          <p class="mt-1 text-amber-200/90">
+            Эти поля отличаются, но не будут обновлены у клиента:
+          </p>
+          <ul class="mt-2 list-inside list-disc space-y-1 text-amber-100">
+            <li v-for="row in qualifyCriticalMissingOverwriteRows" :key="`missing-critical-${row.key}`">
+              {{ row.label }}: {{ row.existing }} -> {{ row.incoming }}
+            </li>
+          </ul>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="btn-mini bg-amber-600/80 hover:bg-amber-500"
+              @click="
+                qualifyCriticalMissingConfirmed = true;
+                qualifyLead();
+              "
+            >
+              Продолжить без перезаписи
+            </button>
+            <button type="button" class="btn-mini-outline" @click="clearQualifyCriticalOverwriteConfirm">
+              Вернуться к настройке
+            </button>
           </div>
         </div>
         <div
