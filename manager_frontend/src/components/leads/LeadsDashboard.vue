@@ -536,6 +536,15 @@ const qualifyLead = async () => {
     setToast(qualifyIbanError.value);
     return;
   }
+
+  if (selectedQualifyCustomer.value?.id) {
+    const hydrated = await hydrateQualifyRequisitesFromCustomer(selectedQualifyCustomer.value.id);
+    if (!hydrated) {
+      setToast('Не удалось обновить реквизиты клиента перед сохранением. Попробуйте еще раз.');
+      return;
+    }
+  }
+
   saving.value = true;
   try {
     const normalizedPhone = qualifyForm.value.phone ? normalizePhoneForApi(qualifyForm.value.phone) : undefined;
@@ -725,13 +734,21 @@ const applyCustomerRequisitesToQualifyForm = (customer: ManagerCatalogCustomerIt
   qualifyForm.value.delivery_address = mapped.delivery_address || qualifyForm.value.delivery_address;
 };
 
-const hydrateQualifyRequisitesFromCustomer = async (customerId: number) => {
+const hydrateQualifyRequisitesFromCustomer = async (customerId: number): Promise<boolean> => {
   try {
     const customer = await api.getManagerCustomerDetail(customerId);
+    const previous = selectedQualifyCustomerDetail.value;
+    selectedQualifyCustomer.value = customer;
     selectedQualifyCustomerDetail.value = customer;
-    applyCustomerRequisitesToQualifyForm(customer);
+    if (previous) {
+      syncQualifyFormWithUpdatedCustomer(previous, customer);
+    } else {
+      applyCustomerRequisitesToQualifyForm(customer);
+    }
+    return true;
   } catch (error) {
     console.error(error);
+    return false;
   }
 };
 
@@ -889,7 +906,7 @@ const findExistingCustomers = async () => {
 
 const applyCustomerToQualifyForm = (customer: ManagerCatalogCustomerItemResponse) => {
   selectedQualifyCustomer.value = customer;
-  selectedQualifyCustomerDetail.value = customer;
+  selectedQualifyCustomerDetail.value = null;
   qualifyOverwriteFields.value = {
     inn: false,
     full_legal_name: false,
