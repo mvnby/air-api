@@ -210,8 +210,13 @@ class OrderCustomerBrief(BaseModel):
     type: str
     name: str
     phone: str
+    email: Optional[str] = None
     full_legal_name: Optional[str] = None
     inn: Optional[str] = None
+    legal_address: Optional[str] = None
+    bank_name: Optional[str] = None
+    bic: Optional[str] = None
+    iban: Optional[str] = None
 
 
 class OrderProductLineResponse(BaseModel):
@@ -287,6 +292,17 @@ class ManagerOrderUpdatePayload(BaseModel):
     installation_date: Optional[datetime] = None
     comment: Optional[str] = None
     is_paid: Optional[bool] = None
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
+    customer_email: Optional[str] = None
+    customer_inn: Optional[str] = None
+    customer_full_legal_name: Optional[str] = None
+    customer_legal_address: Optional[str] = None
+    customer_bank_name: Optional[str] = None
+    customer_bic: Optional[str] = None
+    customer_iban: Optional[str] = None
+    customer_delivery_address: Optional[str] = None
+    confirm_critical_customer_changes: Optional[bool] = None
     products: Optional[List[ManagerOrderProductLinePayload]] = None
     services: Optional[List[ManagerOrderServiceLinePayload]] = None
 

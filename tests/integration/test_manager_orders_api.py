@@ -250,3 +250,46 @@ async def test_manager_order_generate_document(async_client, db, monkeypatch):
     data = response.json()
     assert data["doc_type"] == "contract"
     assert data["edit_url"].startswith("https://docs.google.com")
+
+
+@pytest.mark.asyncio
+async def test_manager_order_patch_customer_critical_requisites_requires_confirmation(async_client, db):
+    customer = Customer(
+        name="Critical Requisites",
+        phone="+375299999999",
+        type=CustomerType.company,
+        inn="123456789",
+        iban="BY12ALFA30120000000000000000",
+        bic="ALFABY2X",
+        bank_name="Альфа-Банк",
+    )
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+    payload = {
+        "customer_iban": "BY88ALFA30120000000000000000",
+        "customer_bic": "ALFABY2Y",
+        "customer_bank_name": "Новый Банк",
+    }
+
+    without_confirm = await async_client.patch(f"/api/manager/orders/{order.id}", json=payload, headers=headers)
+    assert without_confirm.status_code == 400
+    assert "requires confirmation" in str(without_confirm.json()["detail"]).lower()
+
+    with_confirm = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={**payload, "confirm_critical_customer_changes": True},
+        headers=headers,
+    )
+    assert with_confirm.status_code == 200
+    data = with_confirm.json()
+    assert data["customer"]["iban"] == payload["customer_iban"]
+    assert data["customer"]["bic"] == payload["customer_bic"]
+    assert data["customer"]["bank_name"] == payload["customer_bank_name"]

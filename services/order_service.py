@@ -744,8 +744,13 @@ class OrderService:
             "type": customer.type.value if hasattr(customer.type, "value") else str(customer.type or CustomerType.individual.value),
             "name": customer.name or "Без имени",
             "phone": customer.phone or "",
+            "email": customer.email,
             "full_legal_name": customer.full_legal_name,
             "inn": customer.inn,
+            "legal_address": customer.legal_address,
+            "bank_name": customer.bank_name,
+            "bic": customer.bic,
+            "iban": customer.iban,
         }
 
     @staticmethod
@@ -958,6 +963,56 @@ class OrderService:
             order.comment = payload.comment
         if "is_paid" in fields_set and payload.is_paid is not None:
             order.is_paid = payload.is_paid
+        if "customer_delivery_address" in fields_set:
+            order.delivery_address = payload.customer_delivery_address
+
+        customer_field_map = {
+            "customer_name": "name",
+            "customer_phone": "phone",
+            "customer_email": "email",
+            "customer_inn": "inn",
+            "customer_full_legal_name": "full_legal_name",
+            "customer_legal_address": "legal_address",
+            "customer_bank_name": "bank_name",
+            "customer_bic": "bic",
+            "customer_iban": "iban",
+        }
+        requested_customer_fields = [field for field in customer_field_map if field in fields_set]
+        if requested_customer_fields and order.customer_id:
+            customer = await session.get(Customer, order.customer_id)
+            if customer:
+                def _clean_optional(value: Any) -> Optional[str]:
+                    if value is None:
+                        return None
+                    cleaned = str(value).strip()
+                    return cleaned or None
+
+                critical_field_map = {
+                    "customer_inn": "УНП",
+                    "customer_iban": "IBAN",
+                    "customer_bic": "BIC",
+                    "customer_bank_name": "Банк",
+                }
+                critical_changes: List[str] = []
+                for field_name, label in critical_field_map.items():
+                    if field_name not in requested_customer_fields:
+                        continue
+                    attr_name = customer_field_map[field_name]
+                    incoming = _clean_optional(getattr(payload, field_name, None))
+                    existing = _clean_optional(getattr(customer, attr_name, None))
+                    if existing and incoming and existing != incoming:
+                        critical_changes.append(label)
+
+                if critical_changes and not bool(getattr(payload, "confirm_critical_customer_changes", False)):
+                    raise ValueError(
+                        "Critical customer requisites change requires confirmation: "
+                        + ", ".join(critical_changes)
+                    )
+
+                for field_name in requested_customer_fields:
+                    attr_name = customer_field_map[field_name]
+                    setattr(customer, attr_name, _clean_optional(getattr(payload, field_name, None)))
+                session.add(customer)
 
         if "products" in fields_set or "services" in fields_set:
             if "products" in fields_set and payload.products is not None:
