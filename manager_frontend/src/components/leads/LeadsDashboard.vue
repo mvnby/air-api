@@ -27,6 +27,7 @@ import { CUSTOMER_UPDATED_EVENT, type CustomerUpdatedEventPayload } from '../../
 
 type LeadTab = '' | 'new' | 'contacted' | 'qualified' | 'lost' | 'spam';
 type RequisiteFieldKey = 'inn' | 'full_legal_name' | 'legal_address' | 'iban' | 'bic' | 'bank_name';
+const CRITICAL_REQUISITE_KEYS: ReadonlySet<RequisiteFieldKey> = new Set(['inn', 'iban', 'bic', 'bank_name']);
 
 const leads = ref<LeadResponse[]>([]);
 const loading = ref(false);
@@ -251,6 +252,7 @@ const REQUISITE_FIELDS: Array<{ key: RequisiteFieldKey; label: string }> = [
   { key: 'bic', label: 'BIC' },
   { key: 'bank_name', label: 'Банк' },
 ];
+const isCriticalRequisite = (key: RequisiteFieldKey): boolean => CRITICAL_REQUISITE_KEYS.has(key);
 
 const normalizeComparableText = (value: string): string => value.trim().replace(/\s+/g, ' ').toLowerCase();
 
@@ -301,6 +303,10 @@ const qualifyChangedRequisites = computed(() =>
     })),
 );
 
+const qualifyNonCriticalChangedRequisites = computed(() =>
+  qualifyChangedRequisites.value.filter((row) => !isCriticalRequisite(row.key)),
+);
+
 const qualifyWriteSummary = computed(() =>
   REQUISITE_FIELDS
     .filter(({ key }) => canWriteRequisiteByDefault(key))
@@ -311,6 +317,19 @@ const qualifyWriteSummary = computed(() =>
       mode: isRequisiteChanged(key) ? 'overwrite' : 'fill_or_keep',
     })),
 );
+
+const onQualifyOverwriteToggle = (key: RequisiteFieldKey, checked: boolean) => {
+  qualifyOverwriteFields.value[key] = checked;
+  if (isCriticalRequisite(key) && qualifyCriticalOverwriteConfirmed.value) {
+    clearQualifyCriticalOverwriteConfirm();
+  }
+};
+
+const applyAllNonCriticalOverwrites = () => {
+  for (const row of qualifyNonCriticalChangedRequisites.value) {
+    qualifyOverwriteFields.value[row.key] = true;
+  }
+};
 
 const loadLeads = async () => {
   loading.value = true;
@@ -1421,15 +1440,30 @@ const onQualifyIbanBlur = async () => {
           <p class="mt-1 text-amber-200/90">
             По умолчанию непустые значения клиента не перезаписываются. Отметьте, что нужно обновить.
           </p>
+          <div class="mt-2 flex flex-wrap gap-2">
+            <button type="button" class="btn-mini-outline text-xs" @click="applyAllNonCriticalOverwrites">
+              Применить все некритичные
+            </button>
+          </div>
           <div class="mt-2 space-y-2">
             <label
               v-for="row in qualifyChangedRequisites"
               :key="`diff-${row.key}`"
               class="flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-900/20 px-2 py-2"
             >
-              <input v-model="qualifyOverwriteFields[row.key]" type="checkbox" class="mt-0.5" />
+              <input
+                :checked="qualifyOverwriteFields[row.key]"
+                type="checkbox"
+                class="mt-0.5"
+                @change="onQualifyOverwriteToggle(row.key, ($event.target as HTMLInputElement).checked)"
+              />
               <span>
-                <strong>{{ row.label }}</strong><br />
+                <strong>
+                  {{ row.label }}
+                  <span v-if="isCriticalRequisite(row.key)" class="ml-1 rounded bg-red-500/30 px-1 py-0.5 text-[10px] uppercase tracking-wide text-red-100">
+                    критично
+                  </span>
+                </strong><br />
                 <span class="text-amber-200/90">Было: {{ row.existing }}</span><br />
                 <span class="text-amber-100">Станет: {{ row.incoming }}</span>
               </span>
