@@ -10,6 +10,31 @@ type ValidationItem = {
   msg?: string;
 };
 
+type StructuredDetail = {
+  message?: string;
+  error_code?: string;
+  field_errors?: Record<string, string>;
+};
+
+const ERROR_CODE_MESSAGES: Record<string, string> = {
+  validation_error: 'Проверьте заполнение полей формы',
+  bad_request: 'Проверьте введенные данные',
+  internal_error: 'Внутренняя ошибка сервера',
+  lead_not_found: 'Лид не найден',
+  order_not_found: 'Сделка не найдена',
+  customer_not_found: 'Клиент не найден',
+  product_not_found: 'Товар не найден',
+  document_generation_failed: 'Не удалось сформировать документ',
+};
+
+export const getApiErrorCode = (error: unknown): string | null => {
+  const maybe = error as ApiErrorLike;
+  const detail = maybe?.body?.detail;
+  if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return null;
+  const payload = detail as StructuredDetail;
+  return typeof payload.error_code === 'string' ? payload.error_code : null;
+};
+
 export const getApiErrorMessage = (error: unknown): string => {
   const maybe = error as ApiErrorLike;
   const detail = maybe?.body?.detail;
@@ -26,8 +51,10 @@ export const getApiErrorMessage = (error: unknown): string => {
   }
 
   if (detail && typeof detail === 'object') {
-    const payload = detail as { message?: string };
+    const payload = detail as StructuredDetail;
     if (payload.message) return payload.message;
+    const mappedMessage = payload.error_code ? ERROR_CODE_MESSAGES[payload.error_code] : undefined;
+    if (mappedMessage) return mappedMessage;
     return JSON.stringify(detail);
   }
   if (maybe?.message) return maybe.message;
@@ -58,7 +85,7 @@ export const parseApiFieldErrors = (
   }
 
   if (detail && typeof detail === 'object') {
-    const payload = detail as { message?: string; field_errors?: Record<string, string> };
+    const payload = detail as StructuredDetail;
     if (payload.field_errors && typeof payload.field_errors === 'object') {
       for (const [field, msg] of Object.entries(payload.field_errors)) {
         if (!allowed.has(field) || !msg) continue;
@@ -67,6 +94,11 @@ export const parseApiFieldErrors = (
     }
     if (payload.message && Object.keys(fieldErrors).length) {
       message = payload.message;
+    } else {
+      const mappedMessage = payload.error_code ? ERROR_CODE_MESSAGES[payload.error_code] : undefined;
+      if (mappedMessage) {
+        message = mappedMessage;
+      }
     }
   }
 

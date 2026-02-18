@@ -27,6 +27,7 @@ import { CUSTOMER_UPDATED_EVENT, type CustomerUpdatedEventPayload } from '../../
 
 type LeadTab = '' | 'new' | 'contacted' | 'qualified' | 'lost' | 'spam';
 type RequisiteFieldKey = 'inn' | 'full_legal_name' | 'legal_address' | 'iban' | 'bic' | 'bank_name';
+const CRITICAL_REQUISITE_KEYS: ReadonlySet<RequisiteFieldKey> = new Set(['inn', 'iban', 'bic', 'bank_name']);
 
 const leads = ref<LeadResponse[]>([]);
 const loading = ref(false);
@@ -46,14 +47,6 @@ const selectedExistingCustomer = ref<ManagerCatalogCustomerItemResponse | null>(
 const createSuggestedCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const selectedQualifyCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const selectedQualifyCustomerDetail = ref<ManagerCatalogCustomerItemResponse | null>(null);
-const qualifyOverwriteFields = ref<Record<RequisiteFieldKey, boolean>>({
-  inn: false,
-  full_legal_name: false,
-  legal_address: false,
-  iban: false,
-  bic: false,
-  bank_name: false,
-});
 const createSuggestionDismissedForId = ref<number | null>(null);
 const lastQualifyResult = ref<{
   leadId: number;
@@ -73,8 +66,8 @@ const qualifyInnError = ref('');
 const qualifyIbanError = ref('');
 const createServerErrors = ref<Record<string, string>>({});
 const qualifyServerErrors = ref<Record<string, string>>({});
-const qualifyCriticalOverwriteRows = ref<Array<{ key: RequisiteFieldKey; label: string; existing: string; incoming: string }>>([]);
-const qualifyCriticalOverwriteConfirmed = ref(false);
+const qualifyCriticalChangeRows = ref<Array<{ key: RequisiteFieldKey; label: string; existing: string; incoming: string }>>([]);
+const qualifyCriticalChangesConfirmed = ref(false);
 const createCompanyLookupLoading = ref(false);
 const qualifyCompanyLookupLoading = ref(false);
 const qualifyBankLookupLoading = ref(false);
@@ -251,6 +244,7 @@ const REQUISITE_FIELDS: Array<{ key: RequisiteFieldKey; label: string }> = [
   { key: 'bic', label: 'BIC' },
   { key: 'bank_name', label: 'Банк' },
 ];
+const isCriticalRequisite = (key: RequisiteFieldKey): boolean => CRITICAL_REQUISITE_KEYS.has(key);
 
 const normalizeComparableText = (value: string): string => value.trim().replace(/\s+/g, ' ').toLowerCase();
 
@@ -286,7 +280,8 @@ const canWriteRequisiteByDefault = (key: RequisiteFieldKey): boolean => {
   if (!incoming) return false;
   if (!existing) return true;
   if (existing === incoming) return true;
-  return qualifyOverwriteFields.value[key];
+  if (isCriticalRequisite(key)) return qualifyCriticalChangesConfirmed.value;
+  return true;
 };
 
 const qualifyChangedRequisites = computed(() =>
@@ -297,8 +292,11 @@ const qualifyChangedRequisites = computed(() =>
       label,
       existing: getExistingRequisiteValue(key).trim() || '—',
       incoming: getIncomingRequisiteValue(key).trim() || '—',
-      overwrite: qualifyOverwriteFields.value[key],
     })),
+);
+
+const qualifyCriticalChangedRequisites = computed(() =>
+  qualifyChangedRequisites.value.filter((row) => isCriticalRequisite(row.key)),
 );
 
 const qualifyWriteSummary = computed(() =>
@@ -308,9 +306,16 @@ const qualifyWriteSummary = computed(() =>
       key,
       label,
       value: getIncomingRequisiteValue(key).trim(),
-      mode: isRequisiteChanged(key) ? 'overwrite' : 'fill_or_keep',
+      mode: isRequisiteChanged(key)
+        ? (isCriticalRequisite(key) ? 'critical_overwrite' : 'overwrite')
+        : 'fill_or_keep',
     })),
 );
+
+const requestCriticalChangesConfirm = () => {
+  qualifyCriticalChangesConfirmed.value = true;
+  qualifyLead();
+};
 
 const loadLeads = async () => {
   loading.value = true;
@@ -467,14 +472,7 @@ const openQualifyModal = (lead: LeadResponse, updateUrl = true) => {
   selectedLead.value = lead;
   selectedQualifyCustomer.value = null;
   selectedQualifyCustomerDetail.value = null;
-  qualifyOverwriteFields.value = {
-    inn: false,
-    full_legal_name: false,
-    legal_address: false,
-    iban: false,
-    bic: false,
-    bank_name: false,
-  };
+  clearQualifyCriticalOverwriteConfirm();
   qualifyCustomerLookupQuery.value = '';
   qualifyCustomerLookupResults.value = [];
   qualifyForm.value = {
@@ -495,8 +493,8 @@ const openQualifyModal = (lead: LeadResponse, updateUrl = true) => {
   qualifyInnError.value = '';
   qualifyIbanError.value = '';
   qualifyServerErrors.value = {};
-  qualifyCriticalOverwriteRows.value = [];
-  qualifyCriticalOverwriteConfirmed.value = false;
+  qualifyCriticalChangeRows.value = [];
+  qualifyCriticalChangesConfirmed.value = false;
   if (updateUrl) {
     const url = new URL(window.location.href);
     url.searchParams.set('leadId', String(lead.id));
@@ -509,8 +507,8 @@ const openQualifyModal = (lead: LeadResponse, updateUrl = true) => {
 };
 
 const clearQualifyCriticalOverwriteConfirm = () => {
-  qualifyCriticalOverwriteRows.value = [];
-  qualifyCriticalOverwriteConfirmed.value = false;
+  qualifyCriticalChangeRows.value = [];
+  qualifyCriticalChangesConfirmed.value = false;
 };
 
 const qualifyLead = async () => {
@@ -539,14 +537,10 @@ const qualifyLead = async () => {
   saving.value = true;
   try {
     const normalizedPhone = qualifyForm.value.phone ? normalizePhoneForApi(qualifyForm.value.phone) : undefined;
-    const criticalOverwriteRows = qualifyChangedRequisites.value.filter(
-      (row) =>
-        ['inn', 'iban', 'bic', 'bank_name'].includes(row.key) &&
-        qualifyOverwriteFields.value[row.key],
-    );
-    if (criticalOverwriteRows.length && !qualifyCriticalOverwriteConfirmed.value) {
-      qualifyCriticalOverwriteRows.value = criticalOverwriteRows;
-      setToast('Подтвердите перезапись критичных реквизитов в блоке ниже');
+    const criticalChangedRows = qualifyCriticalChangedRequisites.value;
+    if (criticalChangedRows.length && !qualifyCriticalChangesConfirmed.value) {
+      qualifyCriticalChangeRows.value = criticalChangedRows;
+      setToast('Подтвердите сохранение: будут изменены критичные реквизиты клиента.');
       saving.value = false;
       return;
     }
@@ -607,7 +601,7 @@ const qualifyLead = async () => {
     setToast(`Не удалось квалифицировать лид: ${parsed.message}`);
   } finally {
     saving.value = false;
-    qualifyCriticalOverwriteConfirmed.value = false;
+    qualifyCriticalChangesConfirmed.value = false;
   }
 };
 
@@ -890,14 +884,7 @@ const findExistingCustomers = async () => {
 const applyCustomerToQualifyForm = (customer: ManagerCatalogCustomerItemResponse) => {
   selectedQualifyCustomer.value = customer;
   selectedQualifyCustomerDetail.value = customer;
-  qualifyOverwriteFields.value = {
-    inn: false,
-    full_legal_name: false,
-    legal_address: false,
-    iban: false,
-    bic: false,
-    bank_name: false,
-  };
+  clearQualifyCriticalOverwriteConfirm();
   qualifyCustomerLookupQuery.value = customer.full_legal_name || customer.name || `Клиент #${customer.id}`;
   const mapped = mapCustomerToLeadQualifyPrefill(customer);
   qualifyForm.value.name = mapped.name || qualifyForm.value.name;
@@ -1413,56 +1400,6 @@ const onQualifyIbanBlur = async () => {
             Открыть клиента
           </button>
         </div>
-        <div
-          v-if="selectedQualifyCustomerDetail && qualifyChangedRequisites.length"
-          class="mb-3 rounded-lg border border-amber-500/40 bg-amber-900/20 px-3 py-3 text-xs text-amber-100"
-        >
-          <p class="font-semibold text-amber-50">Обнаружены отличия в реквизитах клиента</p>
-          <p class="mt-1 text-amber-200/90">
-            По умолчанию непустые значения клиента не перезаписываются. Отметьте, что нужно обновить.
-          </p>
-          <div class="mt-2 space-y-2">
-            <label
-              v-for="row in qualifyChangedRequisites"
-              :key="`diff-${row.key}`"
-              class="flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-900/20 px-2 py-2"
-            >
-              <input v-model="qualifyOverwriteFields[row.key]" type="checkbox" class="mt-0.5" />
-              <span>
-                <strong>{{ row.label }}</strong><br />
-                <span class="text-amber-200/90">Было: {{ row.existing }}</span><br />
-                <span class="text-amber-100">Станет: {{ row.incoming }}</span>
-              </span>
-            </label>
-          </div>
-        </div>
-        <div
-          v-if="qualifyCriticalOverwriteRows.length"
-          class="mb-3 rounded-lg border border-red-500/40 bg-red-900/20 px-3 py-3 text-xs text-red-100"
-        >
-          <p class="font-semibold text-red-50">Подтверждение перезаписи критичных реквизитов</p>
-          <p class="mt-1 text-red-200/90">Эти значения будут обновлены у выбранного клиента:</p>
-          <ul class="mt-2 list-inside list-disc space-y-1 text-red-100">
-            <li v-for="row in qualifyCriticalOverwriteRows" :key="`critical-${row.key}`">
-              {{ row.label }}: {{ row.existing }} -> {{ row.incoming }}
-            </li>
-          </ul>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              class="btn-mini bg-red-600/80 hover:bg-red-500"
-              @click="
-                qualifyCriticalOverwriteConfirmed = true;
-                qualifyLead();
-              "
-            >
-              Подтвердить и продолжить
-            </button>
-            <button type="button" class="btn-mini-outline" @click="clearQualifyCriticalOverwriteConfirm">
-              Отмена
-            </button>
-          </div>
-        </div>
         <div class="mb-3 rounded-lg border border-slate-700 bg-slate-800/70 px-3 py-2 text-xs text-slate-300">
           <p class="font-semibold text-slate-100">Preview квалификации</p>
           <p>
@@ -1496,7 +1433,11 @@ const onQualifyIbanBlur = async () => {
             <span v-if="qualifyWriteSummary.length" class="text-slate-100">
               {{
                 qualifyWriteSummary
-                  .map((item) => item.mode === 'overwrite' ? `${item.label} (обновление)` : item.label)
+                  .map((item) => item.mode === 'critical_overwrite'
+                    ? `${item.label} (критичное изменение)`
+                    : item.mode === 'overwrite'
+                      ? `${item.label} (обновление)`
+                      : item.label)
                   .join(', ')
               }}
             </span>
@@ -1600,6 +1541,57 @@ const onQualifyIbanBlur = async () => {
               :class="qualifyServerErrors.order_comment ? 'border-red-500 focus:outline-red-400' : ''"
             />
           </label>
+        </div>
+        <div
+          v-if="selectedQualifyCustomerDetail && qualifyChangedRequisites.length"
+          class="mt-4 mb-3 rounded-lg border border-amber-500/40 bg-amber-900/20 px-3 py-3 text-xs text-amber-100"
+        >
+          <p class="font-semibold text-amber-50">Обнаружены отличия в реквизитах клиента</p>
+          <p class="mt-1 text-amber-200/90">
+            Критичные поля требуют отдельного подтверждения перед сохранением.
+          </p>
+          <div class="mt-2 space-y-2">
+            <label
+              v-for="row in qualifyChangedRequisites"
+              :key="`diff-${row.key}`"
+              class="flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-900/20 px-2 py-2"
+            >
+              <span>
+                <strong>
+                  {{ row.label }}
+                  <span v-if="isCriticalRequisite(row.key)" class="ml-1 rounded bg-red-500/30 px-1 py-0.5 text-[10px] uppercase tracking-wide text-red-100">
+                    критично
+                  </span>
+                </strong><br />
+                <span class="text-amber-200/90">Было: {{ row.existing }}</span><br />
+                <span class="text-amber-100">Станет: {{ row.incoming }}</span>
+              </span>
+            </label>
+          </div>
+        </div>
+        <div
+          v-if="qualifyCriticalChangeRows.length"
+          class="mb-3 rounded-lg border border-red-500/40 bg-red-900/20 px-3 py-3 text-xs text-red-100"
+        >
+          <p class="font-semibold text-red-50">Подтверждение изменения критичных реквизитов</p>
+          <p class="mt-1 text-red-200/90">Эти значения будут обновлены у выбранного клиента:</p>
+          <ul class="mt-2 list-inside list-disc space-y-1 text-red-100">
+            <li v-for="row in qualifyCriticalChangeRows" :key="`critical-${row.key}`">
+              {{ row.label }}: {{ row.existing }} -> {{ row.incoming }}
+            </li>
+          </ul>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="btn-mini bg-red-600/80 hover:bg-red-500"
+              @click="requestCriticalChangesConfirm"
+            >
+              Подтвердить и продолжить
+            </button>
+            <button type="button" class="btn-mini-outline" @click="clearQualifyCriticalOverwriteConfirm">
+              Отмена
+            </button>
+          </div>
         </div>
         <div class="mt-5 flex justify-end gap-2">
           <button class="btn-mini-outline" :disabled="saving" @click="showQualifyModal = false">Отмена</button>
