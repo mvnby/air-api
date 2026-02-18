@@ -26,6 +26,12 @@ const emit = defineEmits<{
 }>();
 
 type ProductOption = { id: number; text: string; price: number };
+type ProductLine = { product_id: number; product_query: string; quantity: number; price: number; cost: number };
+type ServiceLine = { service_id?: number | null; title: string; quantity: number; price: number; cost: number };
+
+type OrderDrawerDraft = {
+  productLines: ProductLine[];
+};
 
 const productOptions = ref<ProductOption[]>([]);
 const status = ref('new_lead');
@@ -35,18 +41,14 @@ const installationDate = ref('');
 const comment = ref('');
 const isPaid = ref(false);
 
-const productLines = ref<Array<{ product_id: number; product_query: string; quantity: number; price: number; cost: number }>>([]);
-const serviceLines = ref<Array<{ service_id?: number | null; title: string; quantity: number; price: number; cost: number }>>([]);
+const productLines = ref<ProductLine[]>([]);
+const serviceLines = ref<ServiceLine[]>([]);
 const localServerErrors = ref<Record<string, string>>({});
 const localFormError = ref('');
 const showCustomerModal = ref(false);
 
 const customer = computed(() => props.order?.customer ?? null);
 const draftKey = computed(() => (props.order ? `manager_order_drawer_draft_${props.order.id}` : ''));
-
-type OrderDrawerDraft = {
-  productLines: Array<{ product_id: number; product_query: string; quantity: number; price: number; cost: number }>;
-};
 
 const totalPreview = computed(() => {
   const pTotal = productLines.value.reduce((sum, line) => sum + line.price * line.quantity, 0);
@@ -264,6 +266,7 @@ const handleSave = () => {
     localFormError.value = 'Исправьте ошибки в форме';
     return;
   }
+
   clearDraft();
   const payload: ManagerOrderUpdatePayload = {
     status: status.value,
