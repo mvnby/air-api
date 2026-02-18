@@ -329,13 +329,13 @@ watch(
 <template>
   <div v-if="modelValue" class="fixed inset-0 z-50 flex">
     <div class="flex-1 bg-black/60" @click="closeDrawer" />
-    <aside class="h-full w-full max-w-3xl overflow-y-auto bg-slate-900 p-6 text-slate-100 shadow-2xl">
+    <aside class="h-full w-full max-w-3xl overflow-y-auto bg-white p-6 text-gray-900 border-l border-gray-200 shadow-2xl">
       <header class="mb-4 flex items-center justify-between">
         <h2 class="text-xl font-semibold">Редактирование заказа #{{ order?.id }}</h2>
         <button class="btn-mini-outline" @click="closeDrawer">Закрыть</button>
       </header>
 
-      <p v-if="displayFormError" class="mb-4 rounded-xl border border-red-500/40 bg-red-900/30 px-3 py-2 text-sm text-red-200">
+      <p v-if="displayFormError" class="mb-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
         {{ displayFormError }}
       </p>
 
@@ -376,7 +376,7 @@ watch(
         </label>
       </section>
 
-      <section class="mt-6 rounded-2xl bg-slate-800/80 p-4">
+      <section class="mt-6 rounded-2xl bg-gray-100 p-4">
         <div class="mb-3 flex items-center justify-between gap-3">
           <h3 class="text-lg font-semibold">Клиент</h3>
           <div class="flex flex-wrap gap-2">
@@ -393,7 +393,7 @@ watch(
           <button class="btn-mini" @click="addProductLine">Добавить товар</button>
         </div>
         <p v-if="getFieldError('products')" class="mb-2 text-xs text-red-300">{{ getFieldError('products') }}</p>
-        <div class="mb-2 grid grid-cols-12 gap-2 px-2 text-[11px] uppercase tracking-[0.08em] text-slate-400">
+        <div class="mb-2 grid grid-cols-12 gap-2 px-2 text-[11px] uppercase tracking-[0.08em] text-gray-500">
           <div class="col-span-5">Товар</div>
           <div class="col-span-2">Цена</div>
           <div class="col-span-2">Себест.</div>
@@ -401,7 +401,7 @@ watch(
           <div class="col-span-1">Действия</div>
         </div>
         <div class="space-y-2">
-          <div v-for="(line, index) in productLines" :key="`product-${index}`" class="grid grid-cols-12 gap-2 rounded-xl bg-slate-800 p-2">
+          <div v-for="(line, index) in productLines" :key="`product-${index}`" class="grid grid-cols-12 gap-2 rounded-xl border border-gray-200 bg-white p-2">
             <div class="col-span-5">
               <input
                 v-model="line.product_query"
@@ -411,13 +411,13 @@ watch(
               />
               <div
                 v-if="!line.product_id && line.product_query.trim().length >= 2 && getProductSuggestions(line.product_query).length"
-                class="mt-1 max-h-44 overflow-auto rounded-lg border border-slate-700 bg-slate-900/95 p-1"
+                class="mt-1 max-h-44 overflow-auto rounded-lg border border-gray-200 bg-white p-1"
               >
                 <button
                   v-for="item in getProductSuggestions(line.product_query)"
                   :key="`product-suggest-${index}-${item.id}`"
                   type="button"
-                  class="block w-full rounded px-2 py-1 text-left text-xs text-slate-100 hover:bg-slate-700"
+                  class="block w-full rounded px-2 py-1 text-left text-xs text-gray-700 hover:bg-gray-100"
                   @click="selectProductForLine(index, item)"
                 >
                   {{ item.text }}
@@ -428,7 +428,7 @@ watch(
             <input v-model.number="line.cost" type="number" min="0" class="field-input col-span-2" placeholder="Себест." />
             <div class="col-span-2 flex flex-col gap-1">
               <input v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="Кол-во" />
-              <p class="px-1 text-xs text-slate-400">Σ {{ formatMoney(lineTotal(line)) }}</p>
+              <p class="px-1 text-xs text-gray-500">Σ {{ formatMoney(lineTotal(line)) }}</p>
             </div>
             <div class="col-span-1 flex flex-col gap-1">
               <button class="btn-mini-outline px-0" type="button" :disabled="!line.product_id" @click="openSelectedProduct(index)">↗</button>
@@ -436,7 +436,7 @@ watch(
             </div>
             <p
               v-if="isPriceDifferentFromCatalog(line)"
-              class="col-span-12 rounded-md border border-amber-500/40 bg-amber-900/20 px-2 py-1 text-xs text-amber-200"
+              class="col-span-12 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-700"
             >
               Цена строки отличается от каталожной ({{ formatMoney(currentCatalogPrice(line.product_id) || 0) }}).
             </p>
@@ -451,7 +451,7 @@ watch(
         </div>
         <p v-if="getFieldError('services')" class="mb-2 text-xs text-red-300">{{ getFieldError('services') }}</p>
         <div class="space-y-2">
-          <div v-for="(line, index) in serviceLines" :key="`service-${index}`" class="grid grid-cols-12 gap-2 rounded-xl bg-slate-800 p-2">
+          <div v-for="(line, index) in serviceLines" :key="`service-${index}`" class="grid grid-cols-12 gap-2 rounded-xl border border-gray-200 bg-white p-2">
             <input v-model="line.title" class="field-input col-span-5" placeholder="Название услуги" />
             <input v-model.number="line.price" type="number" min="0" class="field-input col-span-2" placeholder="Цена" />
             <input v-model.number="line.cost" type="number" min="0" class="field-input col-span-2" placeholder="Себест." />
@@ -461,9 +461,9 @@ watch(
         </div>
       </section>
 
-      <section class="mt-6 rounded-2xl bg-slate-800 p-4">
-        <p class="text-sm text-slate-300">Итого: <span class="font-semibold text-white">{{ formatMoney(totalPreview) }}</span></p>
-        <p class="text-sm text-slate-300">Маржа: <span class="font-semibold text-teal-300">{{ formatMoney(marginPreview) }}</span></p>
+      <section class="mt-6 rounded-2xl bg-gray-100 p-4">
+        <p class="text-sm text-gray-600">Итого: <span class="font-semibold text-gray-900">{{ formatMoney(totalPreview) }}</span></p>
+        <p class="text-sm text-gray-600">Маржа: <span class="font-semibold text-teal-700">{{ formatMoney(marginPreview) }}</span></p>
       </section>
 
       <footer class="mt-6 flex justify-end gap-2">
@@ -479,7 +479,7 @@ watch(
       class="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4"
       @click.self="closeCustomerModal"
     >
-      <div class="w-full max-w-3xl rounded-2xl border border-slate-700 bg-slate-900 p-5 text-slate-100 shadow-2xl">
+      <div class="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white p-5 text-gray-900 shadow-2xl">
         <div class="mb-4 flex items-center justify-between gap-3">
           <h3 class="text-lg font-semibold">Карточка клиента</h3>
           <button class="btn-mini-outline" @click="closeCustomerModal">Закрыть</button>

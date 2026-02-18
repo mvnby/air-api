@@ -15,10 +15,10 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="overflow-x-auto rounded-[2rem] border border-slate-700 bg-slate-900/60 p-3">
-    <table class="w-full min-w-[980px] text-sm text-slate-200">
+  <div class="overflow-x-auto rounded-[2rem] border border-gray-200 bg-white p-3">
+    <table class="w-full min-w-[980px] text-sm text-gray-700">
       <thead>
-        <tr class="text-left text-xs uppercase text-slate-400">
+        <tr class="text-left text-xs uppercase text-gray-500">
           <th class="px-3 py-2">Сделка</th>
           <th class="px-3 py-2">Клиент</th>
           <th class="px-3 py-2">Статус</th>
@@ -32,24 +32,24 @@ const emit = defineEmits<{
         <tr
           v-for="order in orders"
           :key="order.id"
-          class="border-t border-slate-800"
-          :class="isOverdue(order) ? 'bg-red-950/20' : ''"
+          class="border-t border-gray-100"
+          :class="isOverdue(order) ? 'bg-red-50' : ''"
         >
           <td class="px-3 py-3 font-semibold">#{{ order.id }}</td>
           <td class="px-3 py-3">
             <template v-if="segment === 'b2b'">
               <p>{{ order.customer?.full_legal_name || order.customer?.name || '—' }}</p>
-              <p class="text-xs text-slate-400">УНП: {{ order.customer?.inn || '—' }}</p>
+              <p class="text-xs text-gray-500">УНП: {{ order.customer?.inn || '—' }}</p>
             </template>
             <template v-else>
               <p>{{ order.customer?.name || '—' }}</p>
-              <p class="text-xs text-slate-400">{{ formatPhone(order.customer?.phone) }}</p>
+              <p class="text-xs text-gray-500">{{ formatPhone(order.customer?.phone) }}</p>
             </template>
           </td>
           <td class="px-3 py-3">{{ STATUS_LABELS[order.status] || order.status }}</td>
           <td class="px-3 py-3">{{ formatDate(order.next_followup_date) }}</td>
           <td class="px-3 py-3">{{ formatMoney(order.total_amount) }}</td>
-          <td class="px-3 py-3 font-semibold text-teal-300">{{ formatMoney(order.margin) }}</td>
+          <td class="px-3 py-3 font-semibold text-teal-700">{{ formatMoney(order.margin) }}</td>
           <td class="px-3 py-3">
             <div class="flex flex-wrap gap-2">
               <button

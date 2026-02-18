@@ -20,25 +20,25 @@ const onDragStart = () => {
 
 <template>
   <article
-    class="rounded-[2rem] border border-slate-700 bg-slate-800 p-5 shadow-lg"
+    class="rounded-[2rem] border border-gray-200 bg-white p-5 shadow-lg"
     :class="isOverdue(order) ? 'ring-2 ring-red-500/70' : 'ring-1 ring-transparent'"
     :draggable="!draggableDisabled"
     @dragstart="onDragStart"
   >
     <header class="mb-3 flex items-start justify-between gap-3">
       <div>
-        <p class="text-lg font-semibold text-white">{{ order.customer?.full_legal_name || order.customer?.name || `Заказ #${order.id}` }}</p>
-        <p class="text-sm text-slate-300">УНП: {{ order.customer?.inn || '—' }}</p>
+        <p class="text-lg font-semibold text-gray-900">{{ order.customer?.full_legal_name || order.customer?.name || `Заказ #${order.id}` }}</p>
+        <p class="text-sm text-gray-500">УНП: {{ order.customer?.inn || '—' }}</p>
       </div>
-      <span class="rounded-full bg-slate-700 px-2 py-1 text-xs text-slate-200">{{ STATUS_LABELS[order.status] || order.status }}</span>
+      <span class="rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-700">{{ STATUS_LABELS[order.status] || order.status }}</span>
     </header>
 
-    <div class="space-y-1 text-sm text-slate-200">
+    <div class="space-y-1 text-sm text-gray-700">
       <p>
         Счет:
         <span :class="order.is_paid ? 'text-emerald-300' : 'text-amber-300'">{{ order.is_paid ? 'Оплачен' : 'Ожидает оплаты' }}</span>
       </p>
-      <p class="font-semibold text-teal-300">Маржа: {{ formatMoney(order.margin) }}</p>
+      <p class="font-semibold text-teal-700">Маржа: {{ formatMoney(order.margin) }}</p>
       <p v-if="isOverdue(order)" class="font-semibold text-red-400">Просрочено касание</p>
     </div>
 

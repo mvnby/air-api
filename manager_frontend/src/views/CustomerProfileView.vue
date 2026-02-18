@@ -313,7 +313,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[var(--mv-bg)] text-slate-100">
+  <div class="min-h-screen bg-[var(--mv-bg)] text-gray-900">
     <div class="mx-auto max-w-[1200px] px-4 py-6 md:px-8">
       <div class="mb-4 flex items-center gap-2">
         <button class="btn-mini-outline" type="button" @click="navigateToCustomers">
@@ -336,7 +336,7 @@ onMounted(() => {
         </button>
       </div>
 
-      <div v-if="loading" class="rounded-[2rem] border border-slate-700 bg-slate-900/70 p-8 text-sm text-slate-300">
+      <div v-if="loading" class="rounded-[2rem] border border-gray-200 bg-white p-8 text-sm text-gray-500">
         Загрузка карточки клиента...
       </div>
       <div v-else-if="error" class="rounded-[2rem] border border-red-500/40 bg-red-900/20 p-6 text-sm text-red-200">
@@ -350,15 +350,15 @@ onMounted(() => {
           {{ saveError }}
         </div>
 
-        <header class="rounded-[2rem] border border-slate-700 bg-gradient-to-r from-slate-900 to-slate-800 p-6">
-          <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Customer profile</p>
+        <header class="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-sm">
+          <p class="text-xs uppercase tracking-[0.2em] text-gray-500">Customer profile</p>
           <h1 class="mt-2 text-2xl font-bold">{{ customer.full_legal_name || customer.name || `Клиент #${customer.id}` }}</h1>
-          <p class="mt-1 text-sm text-slate-300">ID: #{{ customer.id }} · {{ customer.type === 'company' ? 'Юр. лицо' : 'Физ. лицо' }}</p>
+          <p class="mt-1 text-sm text-gray-600">ID: #{{ customer.id }} · {{ customer.type === 'company' ? 'Юр. лицо' : 'Физ. лицо' }}</p>
         </header>
 
         <section class="grid gap-4 md:grid-cols-2">
-          <article class="rounded-[1.5rem] border border-slate-700 bg-slate-900/70 p-5">
-            <h2 class="mb-3 text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">Контакты</h2>
+          <article class="rounded-[1.5rem] border border-gray-200 bg-white p-5 shadow-sm">
+            <h2 class="mb-3 text-sm font-semibold uppercase tracking-[0.16em] text-gray-500">Контакты</h2>
 
             <template v-if="!editMode">
               <div class="space-y-2 text-sm">
@@ -390,8 +390,8 @@ onMounted(() => {
             </template>
           </article>
 
-          <article class="rounded-[1.5rem] border border-slate-700 bg-slate-900/70 p-5">
-            <h2 class="mb-3 text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">Юр. реквизиты</h2>
+          <article class="rounded-[1.5rem] border border-gray-200 bg-white p-5 shadow-sm">
+            <h2 class="mb-3 text-sm font-semibold uppercase tracking-[0.16em] text-gray-500">Юр. реквизиты</h2>
 
             <template v-if="!editMode">
               <div class="space-y-2 text-sm">
@@ -422,7 +422,7 @@ onMounted(() => {
                   <input v-model="form.signer_position" type="text" placeholder="Должность подписанта" :class="fieldClass('signer_position')" />
                   <input v-model="form.acting_basis" type="text" placeholder="Основание действий" :class="fieldClass('acting_basis')" />
                 </div>
-                <p v-else class="text-xs text-slate-400">Для физлица реквизиты юрлица не обязательны.</p>
+                <p v-else class="text-xs text-gray-500">Для физлица реквизиты юрлица не обязательны.</p>
               </div>
             </template>
           </article>
@@ -437,7 +437,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: rgb(203 213 225);
+  color: var(--mv-text-muted);
 }
 
 .detail-value {
@@ -450,11 +450,11 @@ onMounted(() => {
   font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgb(148 163 184);
+  color: var(--mv-text-muted);
 }
 
 .detail-value strong {
-  color: rgb(241 245 249);
+  color: var(--mv-text);
   font-weight: 600;
   word-break: break-word;
 }
@@ -462,14 +462,14 @@ onMounted(() => {
 .field-input {
   width: 100%;
   border-radius: 0.8rem;
-  border: 1px solid rgb(71 85 105);
-  background: rgb(15 23 42 / 0.75);
-  color: rgb(241 245 249);
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface);
+  color: var(--mv-text);
   padding: 0.55rem 0.75rem;
 }
 
 .field-input.changed {
-  border-color: rgb(20 184 166 / 0.85);
+  border-color: rgb(20 184 166);
   box-shadow: inset 0 0 0 1px rgb(20 184 166 / 0.3);
 }
 

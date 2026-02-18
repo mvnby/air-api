@@ -4,16 +4,36 @@
 
 :root {
   --mv-teal: #007f80;
-  --mv-bg: #0f172a;
+  --mv-teal-dark: #0f6978;
+  --mv-bg: #f5f8f8;
+  --mv-surface: #ffffff;
+  --mv-text: #111827;
+  --mv-text-muted: #6b7280;
+  --mv-border: #e5e7eb;
+  --mv-gradient-start: #007f80;
+  --mv-gradient-end: #2dd4bf;
   --mv-card-radius: 2rem;
   --mv-btn-radius: 12px;
+}
+
+.dark {
+  --mv-bg: #0f172a;
+  --mv-surface: #1e293b;
+  --mv-text: #f9fafb;
+  --mv-text-muted: rgba(255, 255, 255, 0.6);
+  --mv-border: #334155;
 }
 
 body {
   margin: 0;
   font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif;
   background: var(--mv-bg);
-  color: #e2e8f0;
+  color: var(--mv-text);
+}
+
+.manager-root {
+  background: var(--mv-bg);
+  color: var(--mv-text);
 }
 
 .btn-mini {
@@ -28,6 +48,13 @@ body {
   font-weight: 600;
   color: #fff;
   cursor: pointer;
+  box-shadow: 0 10px 15px -3px rgba(0, 127, 128, 0.25);
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-mini:hover {
+  background: var(--mv-teal-dark);
+  box-shadow: 0 20px 25px -5px rgba(0, 127, 128, 0.3);
 }
 
 .btn-mini:disabled {
@@ -39,23 +66,27 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  border: 1px solid #475569;
+  border: 1px solid var(--mv-border);
   border-radius: var(--mv-btn-radius);
-  background: transparent;
+  background: var(--mv-surface);
   padding: 0.45rem 0.8rem;
   font-size: 0.82rem;
   font-weight: 600;
-  color: #e2e8f0;
+  color: var(--mv-text);
   cursor: pointer;
+}
+
+.btn-mini-outline:hover {
+  background: var(--mv-bg);
 }
 
 .field-input {
   width: 100%;
-  border: 1px solid #334155;
+  border: 1px solid var(--mv-border);
   border-radius: var(--mv-btn-radius);
-  background: #0b1223;
+  background: var(--mv-surface);
   padding: 0.6rem 0.75rem;
-  color: #e2e8f0;
+  color: var(--mv-text);
 }
 
 .field-input:focus {
@@ -68,5 +99,58 @@ body {
   flex-direction: column;
   gap: 0.35rem;
   font-size: 0.85rem;
-  color: #cbd5e1;
+  color: var(--mv-text-muted);
+}
+
+/* Dark mode compatibility layer for existing utility-heavy templates. */
+.dark .manager-root .bg-white {
+  background-color: #1e293b !important;
+}
+
+.dark .manager-root .bg-gray-50 {
+  background-color: #0f172a !important;
+}
+
+.dark .manager-root .bg-gray-100 {
+  background-color: #253246 !important;
+}
+
+.dark .manager-root .text-gray-900 {
+  color: #f9fafb !important;
+}
+
+.dark .manager-root .text-gray-700 {
+  color: #e2e8f0 !important;
+}
+
+.dark .manager-root .text-gray-600,
+.dark .manager-root .text-gray-500,
+.dark .manager-root .text-gray-400 {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+.dark .manager-root .border-gray-200,
+.dark .manager-root .border-gray-100,
+.dark .manager-root .border-gray-300 {
+  border-color: #334155 !important;
+}
+
+.dark .manager-root .hover\:bg-gray-50:hover {
+  background-color: #253246 !important;
+}
+
+.dark .manager-root .hover\:bg-gray-100:hover {
+  background-color: #2e3e56 !important;
+}
+
+.dark .manager-root .hover\:text-gray-900:hover {
+  color: #f9fafb !important;
+}
+
+.dark .manager-root .bg-red-50 {
+  background-color: rgba(127, 29, 29, 0.3) !important;
+}
+
+.dark .manager-root .bg-amber-50 {
+  background-color: rgba(146, 64, 14, 0.28) !important;
 }
