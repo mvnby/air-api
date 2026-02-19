@@ -107,24 +107,51 @@ jobs:
           
           echo "✅ Connectivity tests completed"
 
+      - name: Validate API SSH Reachability (Required)
+        run: |
+          set -euo pipefail
+          if [ -z "${{ secrets.SSH_HOST_API }}" ] || [ -z "${{ secrets.SSH_USER_API }}" ] || [ -z "${{ secrets.SSH_KEY }}" ]; then
+            echo "::error::Missing one of required secrets: SSH_HOST_API, SSH_USER_API, SSH_KEY"
+            exit 1
+          fi
+
+          echo "🔐 Validating SSH port reachability for ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}..."
+          if ! nc -z -w 10 ${{ secrets.SSH_HOST_API }} 22; then
+            echo "::error::SSH port 22 is unreachable for API host. Check host/network/firewall before deploy."
+            exit 1
+          fi
+          echo "✅ SSH port is reachable"
+
       - name: Copy Compose Files and Scripts to Server
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.SSH_HOST_API }} >> ~/.ssh/known_hosts
+          ssh-keyscan -T 10 -H ${{ secrets.SSH_HOST_API }} >> ~/.ssh/known_hosts
           
           # Copy compose files to project dir (requires write access)
-          scp -i ~/.ssh/deploy_key -v docker-compose.prod.yml ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}:/opt/air-api/
+          scp \
+            -i ~/.ssh/deploy_key \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=3 \
+            -v docker-compose.prod.yml \
+            ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}:/opt/air-api/
           
       - name: Execute Deployment Script
         id: deploy_backend
         run: |
+          set -euo pipefail
+          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v"
+
           # Transfer script via pipe to avoid SCP issues
-          cat scripts/deploy.sh | ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/deploy.sh"
+          cat scripts/deploy.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/deploy.sh"
           
           # Execute script
-          ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "chmod +x /tmp/deploy.sh && GHCR_PAT='${{ secrets.GHCR_PAT }}' GITHUB_ACTOR='${{ github.actor }}' bash /tmp/deploy.sh"
+          ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "chmod +x /tmp/deploy.sh && GHCR_PAT='${{ secrets.GHCR_PAT }}' GITHUB_ACTOR='${{ github.actor }}' bash /tmp/deploy.sh"
 
       - name: Optional Post-Deploy Backend Ops
         id: post_deploy_ops
@@ -138,6 +165,7 @@ jobs:
           DRY_RUN: ${{ secrets.DRY_RUN }}
         run: |
           set -euo pipefail
+          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v"
           : "${RUN_POST_DEPLOY_OPS:=true}"
           : "${OPS_MODE:=report_only}"
           : "${RUN_NORMALIZE_LEGACY:=false}"
@@ -145,9 +173,9 @@ jobs:
           : "${RUN_CLEANUP_LEGACY_LINKS:=false}"
           : "${DRY_RUN:=true}"
 
-          cat scripts/ops_post_deploy.sh | ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/ops_post_deploy.sh"
+          cat scripts/ops_post_deploy.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/ops_post_deploy.sh"
 
-          ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
+          ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
             chmod +x /tmp/ops_post_deploy.sh && \
             RUN_POST_DEPLOY_OPS='${RUN_POST_DEPLOY_OPS}' \
             OPS_MODE='${OPS_MODE}' \
@@ -163,8 +191,9 @@ jobs:
         id: post_deploy_smoke
         run: |
           set -euo pipefail
-          cat scripts/post_deploy_smoke_check.sh | ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/post_deploy_smoke_check.sh"
-          ssh -i ~/.ssh/deploy_key -v ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
+          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v"
+          cat scripts/post_deploy_smoke_check.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/post_deploy_smoke_check.sh"
+          ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
             chmod +x /tmp/post_deploy_smoke_check.sh && \
             BASE_URL='http://localhost:8000' \
             SMOKE_SUMMARY_FILE='/tmp/smoke_summary.txt' \
