@@ -10,6 +10,7 @@ interface Props {
         area_max?: number;
         is_inverter?: boolean;
         has_wifi?: boolean;
+        has_fresh_air?: boolean;
         heating_min?: number;
     };
     limit?: number;
@@ -25,6 +26,7 @@ const data = await getCatalog({
     area_max: filters.area_max,
     is_inverter: filters.is_inverter,
     has_wifi: filters.has_wifi,
+    has_fresh_air: filters.has_fresh_air,
     heating_min: filters.heating_min,
     limit: limit,
     sort: "area_asc", // Default sort by area for these groups usually makes sense? Or let it be default.
@@ -39,6 +41,7 @@ if (filters.area_min != null) viewAllParams.set("area_min", String(filters.area_
 if (filters.area_max != null) viewAllParams.set("area_max", String(filters.area_max));
 if (filters.is_inverter != null) viewAllParams.set("is_inverter", String(filters.is_inverter));
 if (filters.has_wifi != null) viewAllParams.set("has_wifi", String(filters.has_wifi));
+if (filters.has_fresh_air != null) viewAllParams.set("has_fresh_air", String(filters.has_fresh_air));
 if (filters.heating_min != null) viewAllParams.set("heating_min", String(filters.heating_min));
 ---
 

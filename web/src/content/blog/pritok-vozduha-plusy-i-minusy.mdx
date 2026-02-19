@@ -6,6 +6,7 @@ date: 2026-02-19
 ---
 import WarningBlock from '../../components/mdx/WarningBlock.vue';
 import CallToAction from '../../components/mdx/CallToAction.vue';
+import ProductGroup from '../../components/ProductGroup.astro';
 
 Эта функция сейчас на пике моды. «Кондиционер, который не только охлаждает, но и дает дышать!» — звучит заманчиво, особенно если не хочется дырявить стену под отдельный прибор (бризер).
 
@@ -45,6 +46,12 @@ import CallToAction from '../../components/mdx/CallToAction.vue';
     Например, на фасаде нет места под еще одну «дырку» или сделан чистовой ремонт, который жалко портить.
 
 ---
+
+<ProductGroup 
+  title="Модели с притоком свежего воздуха" 
+  filters={{ has_fresh_air: true }} 
+  limit={4} 
+/>
 
 ## Итог: брать или не брать?
 *   **Если вы ждете замены полноценной вентиляции** — разочаруетесь. Дышать «полной грудью» в компании гостей не выйдет.

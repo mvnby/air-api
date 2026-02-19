@@ -33,6 +33,7 @@ const loading = ref(false);
 const activeTags = ref([]);
 const currentIsInverter = ref(null);
 const currentHasWifi = ref(null);
+const currentHasFreshAir = ref(null);
 const currentHeatingMin = ref(null);
 const searchQuery = ref('');
 let searchDebounceTimeout = null;
@@ -62,6 +63,11 @@ const getParamsFromUrl = () => {
       : sp.get('has_wifi') === 'false'
         ? false
         : null;
+    params.has_fresh_air = sp.get('has_fresh_air') === 'true'
+      ? true
+      : sp.get('has_fresh_air') === 'false'
+        ? false
+        : null;
     params.heating_min = sp.get('heating_min') || null;
     params.is_inverter = sp.get('is_inverter') === 'true'
       ? true
@@ -87,6 +93,7 @@ const applyLockedState = () => {
     currentAreaMax.value = lockedFilters.value.area_max != null ? String(lockedFilters.value.area_max) : null;
     currentIsInverter.value = typeof lockedFilters.value.is_inverter === 'boolean' ? lockedFilters.value.is_inverter : null;
     currentHasWifi.value = typeof lockedFilters.value.has_wifi === 'boolean' ? lockedFilters.value.has_wifi : null;
+    currentHasFreshAir.value = typeof lockedFilters.value.has_fresh_air === 'boolean' ? lockedFilters.value.has_fresh_air : null;
     currentHeatingMin.value = lockedFilters.value.heating_min != null ? String(lockedFilters.value.heating_min) : null;
     return true;
 };
@@ -97,6 +104,7 @@ const syncStateFromUrl = () => {
     activeTags.value = params.tag_slugs || [];
     currentIsInverter.value = params.is_inverter;
     currentHasWifi.value = params.has_wifi;
+    currentHasFreshAir.value = params.has_fresh_air;
     currentHeatingMin.value = params.heating_min;
     searchQuery.value = params.q || '';
     
@@ -108,6 +116,7 @@ const syncStateFromUrl = () => {
         params.tag_slugs.length === 0 &&
         params.is_inverter === null &&
         params.has_wifi === null &&
+        params.has_fresh_air === null &&
         params.heating_min === null &&
         !params.q
     ) {
@@ -133,6 +142,7 @@ const fetchProducts = async () => {
             area_max: params.area_max,
             is_inverter: params.is_inverter,
             has_wifi: params.has_wifi,
+            has_fresh_air: params.has_fresh_air,
             heating_min: params.heating_min,
             q: params.q,
         };
@@ -165,9 +175,11 @@ const updateUrlAndFetch = () => {
     // Update JSONB/column filters
     sp.delete('is_inverter');
     sp.delete('has_wifi');
+    sp.delete('has_fresh_air');
     sp.delete('heating_min');
     if (currentIsInverter.value !== null) sp.set('is_inverter', String(currentIsInverter.value));
     if (currentHasWifi.value !== null) sp.set('has_wifi', String(currentHasWifi.value));
+    if (currentHasFreshAir.value !== null) sp.set('has_fresh_air', String(currentHasFreshAir.value));
     if (currentHeatingMin.value !== null) sp.set('heating_min', String(currentHeatingMin.value));
     
     sp.delete('q');
@@ -186,6 +198,7 @@ const onSearchInput = () => {
         activeTags.value = [];
         currentIsInverter.value = null;
         currentHasWifi.value = null;
+        currentHasFreshAir.value = null;
         currentHeatingMin.value = null;
     }
 
@@ -224,6 +237,8 @@ const toggleBooleanFilter = (key) => {
         currentIsInverter.value = currentIsInverter.value === true ? null : true;
     } else if (key === 'has_wifi') {
         currentHasWifi.value = currentHasWifi.value === true ? null : true;
+    } else if (key === 'has_fresh_air') {
+        currentHasFreshAir.value = currentHasFreshAir.value === true ? null : true;
     }
 
     const sp = new URLSearchParams(window.location.search);
@@ -265,7 +280,7 @@ const setAreaFilter = (min, max) => {
 
 onMounted(() => {
     const sp = new URLSearchParams(window.location.search);
-    const hasFilters = sp.has('tag_slugs') || sp.has('area_min') || sp.has('area_max') || sp.has('is_inverter') || sp.has('has_wifi') || sp.has('heating_min');
+    const hasFilters = sp.has('tag_slugs') || sp.has('area_min') || sp.has('area_max') || sp.has('is_inverter') || sp.has('has_wifi') || sp.has('has_fresh_air') || sp.has('heating_min');
     
     syncStateFromUrl();
     
@@ -287,6 +302,7 @@ const isHeatingActive = computed(() => {
 
 const isInverterActive = computed(() => currentIsInverter.value === true);
 const isWifiActive = computed(() => currentHasWifi.value === true);
+const isFreshAirActive = computed(() => currentHasFreshAir.value === true);
 
 const isAreaActive = (min, max) => {
     return currentAreaMin.value == min && currentAreaMax.value == max;
@@ -465,6 +481,16 @@ const groupedProducts = computed(() => {
         >
             <span class="material-icons-round icon">wifi</span>
             Wi-Fi модуль
+        </button>
+
+        <!-- Fresh Air -->
+        <button 
+            class="filter-btn" 
+            :class="{ active: isFreshAirActive }"
+            @click="toggleBooleanFilter('has_fresh_air')"
+        >
+            <span class="material-icons-round icon">air</span>
+            Приток свежего воздуха
         </button>
 
     </div>
