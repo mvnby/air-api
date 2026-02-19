@@ -8,14 +8,15 @@
 - **IP:** `178.159.240.174`
 - **Production path:** `/var/www/user2154318/data/www/mvn.by`
 - **Dev path:** `/var/www/user2154318/data/www/dev.mvn.by`
-- **SSH Key:** `~/.ssh/id_rsa`
+- **SSH Key:** `~/.ssh/id_ed25519`
 
 ### API Server
 - **Host alias:** `mvn-api`
 - **User:** `root`
 - **IP:** `89.39.120.97`
+- **SSH Key:** `~/.ssh/id_ed25519`
 
-## Local Deployment (Recommended)
+## Local Deployment (Legacy)
 
 Use the deployment script for local builds:
 
@@ -60,7 +61,7 @@ The workflow requires these env vars in the build step:
 ```
 
 **Without `INTERNAL_API_URL`:** Build generates only 16 pages (all API calls fail during SSR)  
-**With `INTERNAL_API_URL`:** Build generates 102 pages (all products pre-rendered)
+**With `INTERNAL_API_URL`:** Build generates 102+ pages (all products pre-rendered)
 
 ### Deployment Steps
 
