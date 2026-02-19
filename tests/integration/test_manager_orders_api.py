@@ -369,12 +369,12 @@ async def test_manager_doc_delete_success(async_client, db, monkeypatch):
     doc_id = doc.id
     
     # Mock google service delete
-    from services import google_service
+    from services.google_service import get_google_service
     deleted_ids = []
     def _fake_delete_file(file_id):
         deleted_ids.append(file_id)
         
-    monkeypatch.setattr(google_service.google_service, "delete_file", _fake_delete_file)
+    monkeypatch.setattr(get_google_service(), "delete_file", _fake_delete_file)
     
     headers = await _auth_headers(async_client)
     resp = await async_client.delete(f"/api/manager/docs/{doc_id}", headers=headers)
