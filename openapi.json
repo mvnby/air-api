@@ -3742,6 +3742,145 @@
         }
       }
     },
+    "/api/manager/orders/{order_id}/documents": {
+      "get": {
+        "tags": [
+          "manager-docs"
+        ],
+        "summary": "Get Manager Order Documents",
+        "operationId": "get_manager_order_documents",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderDocumentListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/docs/{doc_id}/download": {
+      "get": {
+        "tags": [
+          "manager-docs"
+        ],
+        "summary": "Get Manager Doc Download",
+        "operationId": "get_manager_doc_download",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "doc_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Doc Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/docs/{doc_id}": {
+      "delete": {
+        "tags": [
+          "manager-docs"
+        ],
+        "summary": "Delete Manager Doc",
+        "operationId": "delete_manager_doc",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "doc_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Doc Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerActionMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/crm/health-report": {
       "get": {
         "tags": [
@@ -6326,6 +6465,14 @@
             "type": "array",
             "title": "Service Lines",
             "default": []
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderDocumentItem"
+            },
+            "type": "array",
+            "title": "Documents",
+            "default": []
           }
         },
         "type": "object",
@@ -6339,6 +6486,56 @@
           "is_paid"
         ],
         "title": "ManagerOrderDetailResponse"
+      },
+      "ManagerOrderDocumentItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "doc_type": {
+            "type": "string",
+            "title": "Doc Type"
+          },
+          "number": {
+            "type": "string",
+            "title": "Number"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Date"
+          },
+          "edit_url": {
+            "type": "string",
+            "title": "Edit Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "doc_type",
+          "number",
+          "date",
+          "edit_url"
+        ],
+        "title": "ManagerOrderDocumentItem"
+      },
+      "ManagerOrderDocumentListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderDocumentItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ManagerOrderDocumentListResponse"
       },
       "ManagerOrderDocumentResponse": {
         "properties": {

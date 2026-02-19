@@ -9,9 +9,12 @@ import type {
   ManagerOrderUpdatePayload,
   OrderProductLineResponse,
   OrderServiceLineResponse,
+  ManagerOrderDocumentItem,
 } from '../../client';
+import { ManagerDocsService, ManagerOrdersService } from '../../client';
 import { STATUS_LABELS, STATUS_ORDER, formatMoney } from './order-utils';
 import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../../utils/datetime';
+
 import { getApiErrorMessage } from '../../utils/api-errors';
 
 const props = defineProps<{
@@ -57,7 +60,9 @@ const isPaid = ref(false);
 
 const productLines = ref<ProductLine[]>([]);
 const serviceLines = ref<ServiceLine[]>([]);
+const documents = ref<ManagerOrderDocumentItem[]>([]);
 const localServerErrors = ref<Record<string, string>>({});
+
 const localFormError = ref('');
 const showCustomerModal = ref(false);
 
@@ -70,6 +75,91 @@ const setToast = (message: string) => {
     if (toast.value === message) toast.value = '';
   }, 3000);
 };
+
+const isGeneratingDoc = ref(false);
+const processingDocId = ref<number | null>(null);
+
+const DOCUMENT_TYPES = [
+  { type: 'contract', label: 'Договор' },
+  { type: 'invoice', label: 'Счет' },
+  { type: 'act', label: 'Акт' },
+  { type: 'offer', label: 'КП' },
+  { type: 'tn2', label: 'ТН-2' },
+  { type: 'ttn1', label: 'ТТН-1' },
+];
+
+const loadDocuments = async (orderId: number) => {
+  try {
+    const res = await ManagerDocsService.getManagerOrderDocuments(orderId);
+    documents.value = res.items;
+  } catch (error) {
+    console.error('Failed to load documents', error);
+  }
+};
+
+const generateDocument = async (type: string) => {
+  if (!props.order?.id) return;
+  isGeneratingDoc.value = true;
+  try {
+    const res = await ManagerOrdersService.generateManagerOrderDocument(props.order.id, type);
+    window.open(res.edit_url, '_blank');
+    await loadDocuments(props.order.id);
+    setToast('Документ создан');
+  } catch (error) {
+    setToast(`Ошибка генерации: ${getApiErrorMessage(error)}`);
+  } finally {
+    isGeneratingDoc.value = false;
+  }
+};
+
+const downloadDocument = async (doc: ManagerOrderDocumentItem) => {
+  processingDocId.value = doc.id;
+  try {
+    const response = await ManagerDocsService.getManagerDocDownload(doc.id);
+    
+    // Create blob link to download
+    
+    // If we look at ManagerDocsService.ts: returns CancelablePromise<any>.
+    // Let's assume it returns the blob because the browser implementation of fetch/request handles it?
+    // Actually, generated code usually parses JSON.
+    // If I need Blob, I might need to access raw response or ensure generation config handles binary.
+    // Let's implement a fallback or assume naive approach first.
+    
+    // Actually, easier way for now: open direct URL in new tab which triggers download?
+    // But we need auth token. Browser simply opening link won't attach header unless cookie.
+    // We use Bearer token.
+    
+    // We can use the ApiService.getDownloadLink presumably if we had one, but we have a method returning stream.
+    // Let's try to handle Blob.
+    
+    const url = window.URL.createObjectURL(new Blob([response]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${doc.number}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (error) {
+    setToast('Ошибка скачивания');
+  } finally {
+    processingDocId.value = null;
+  }
+};
+
+const deleteDocument = async (docId: number) => {
+  if (!confirm('Удалить документ?')) return;
+  processingDocId.value = docId;
+  try {
+    await ManagerDocsService.deleteManagerDoc(docId);
+    if (props.order?.id) await loadDocuments(props.order.id);
+    setToast('Документ удален');
+  } catch (error) {
+    setToast('Ошибка удаления');
+  } finally {
+    processingDocId.value = null;
+  }
+};
+
 
 const totalPreview = computed(() => {
   const pTotal = productLines.value.reduce((sum, line) => sum + line.price * line.quantity, 0);
@@ -203,8 +293,20 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
     price: line.price,
     cost: line.cost,
   }));
+  
+  // Documents
+  documents.value = (order.documents || []).map((d: any) => ({
+      id: d.id,
+      doc_type: d.doc_type,
+      number: d.number,
+      date: d.date,
+      edit_url: d.edit_url
+  }));
+  // Also refresh list to be sure
+  loadDocuments(order.id);
 
   productLookupById.value = {};
+
   syncProductLookupFromLines();
   productOptions.value = [];
   activeSuggestionIndex.value = null;
@@ -559,6 +661,52 @@ watch(
           </div>
         </div>
       </section>
+
+      <section class="mt-6">
+        <div class="mb-2 flex items-center justify-between">
+          <h3 class="text-lg font-semibold font-['Space_Grotesk']">Документы</h3>
+          <div class="flex gap-2">
+             <button
+                v-for="dtype in DOCUMENT_TYPES"
+                :key="dtype.type"
+                class="btn-mini-outline text-xs px-2 py-1"
+                :disabled="isGeneratingDoc || !!processingDocId"
+                @click="generateDocument(dtype.type)"
+             >
+                + {{ dtype.label }}
+             </button>
+          </div>
+        </div>
+        
+        <div v-if="documents.length" class="space-y-2">
+            <div v-for="doc in documents" :key="doc.id" class="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-3">
+                <div class="flex items-center gap-3">
+                    <div class="h-8 w-8 flex items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                        📄
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium">{{ doc.number }}</p>
+                        <p class="text-xs text-gray-500">{{ new Date(doc.date).toLocaleDateString() }} · {{ doc.doc_type }}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <a :href="doc.edit_url" target="_blank" class="btn-mini-outline px-2" title="Редактировать в Google Docs">
+                        ✏️
+                    </a>
+                    <button class="btn-mini-outline px-2" :disabled="processingDocId === doc.id" @click="downloadDocument(doc)" title="Скачать PDF">
+                        ⬇️
+                    </button>
+                    <button class="btn-mini-outline px-2 text-red-500 hover:text-red-700 hover:border-red-200" :disabled="processingDocId === doc.id" @click="deleteDocument(doc.id)" title="Удалить">
+                        ✕
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div v-else class="text-sm text-gray-400 italic py-2">
+            Нет сформированных документов
+        </div>
+      </section>
+
 
       <section class="mt-6 rounded-2xl bg-gray-100 p-4">
         <p class="text-sm text-gray-600">Итого: <span class="font-semibold text-gray-900">{{ formatMoney(totalPreview) }}</span></p>

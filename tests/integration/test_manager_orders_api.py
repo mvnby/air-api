@@ -293,3 +293,98 @@ async def test_manager_order_patch_customer_critical_requisites_requires_confirm
     assert data["customer"]["iban"] == payload["customer_iban"]
     assert data["customer"]["bic"] == payload["customer_bic"]
     assert data["customer"]["bank_name"] == payload["customer_bank_name"]
+
+
+@pytest.mark.asyncio
+async def test_manager_order_list_documents(async_client, db):
+    customer = Customer(name="DocList", phone="+375298888888", type=CustomerType.individual)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+    
+    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+    
+    from models import OrderDocument
+    doc1 = OrderDocument(
+        order_id=order.id, 
+        doc_type="contract", 
+        number="D-001", 
+        google_file_id="fid1", 
+        google_edit_url="http://edit1"
+    )
+    doc2 = OrderDocument(
+        order_id=order.id, 
+        doc_type="invoice", 
+        number="I-001", 
+        google_file_id="fid2", 
+        google_edit_url="http://edit2"
+    )
+    db.add(doc1)
+    db.add(doc2)
+    await db.commit()
+    
+    headers = await _auth_headers(async_client)
+    resp = await async_client.get(f"/api/manager/orders/{order.id}/documents", headers=headers)
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert len(items) == 2
+    assert {i["doc_type"] for i in items} == {"contract", "invoice"}
+
+
+@pytest.mark.asyncio
+async def test_manager_doc_download_404(async_client, db):
+    headers = await _auth_headers(async_client)
+    resp = await async_client.get("/api/manager/docs/999999/download", headers=headers)
+    assert resp.status_code == 404
+    data = resp.json()
+    assert data["detail"]["error_code"] == "document_not_found"
+
+
+@pytest.mark.asyncio
+async def test_manager_doc_delete_success(async_client, db, monkeypatch):
+    customer = Customer(name="DocDel", phone="+375290000000", type=CustomerType.individual)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+    
+    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+    
+    from models import OrderDocument
+    doc = OrderDocument(
+        order_id=order.id, 
+        doc_type="act", 
+        number="A-001", 
+        google_file_id="fid_del", 
+        google_edit_url="http://edit_del"
+    )
+    db.add(doc)
+    await db.commit()
+    await db.refresh(doc)
+    doc_id = doc.id
+    
+    # Mock google service delete
+    from services.google_service import get_google_service
+    deleted_ids = []
+    def _fake_delete_file(file_id):
+        deleted_ids.append(file_id)
+        
+    monkeypatch.setattr(get_google_service(), "delete_file", _fake_delete_file)
+    
+    headers = await _auth_headers(async_client)
+    resp = await async_client.delete(f"/api/manager/docs/{doc_id}", headers=headers)
+    assert resp.status_code == 200
+    
+    # Verify DB
+    from sqlmodel import select
+    res = await db.execute(select(OrderDocument).where(OrderDocument.id == doc_id))
+    assert res.scalar_one_or_none() is None
+    
+    # Verify Google Call
+    assert "fid_del" in deleted_ids
+

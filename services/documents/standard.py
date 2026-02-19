@@ -1,5 +1,5 @@
 from typing import Any, List
-from services.google_service import google_service
+from services.google_service import get_google_service
 from services.documents.base import BaseDocumentStrategy, TEMPLATES, DOC_NAMES
 
 class GoogleDocStrategy(BaseDocumentStrategy):
@@ -24,7 +24,7 @@ class GoogleDocStrategy(BaseDocumentStrategy):
         
         has_footer = (doc_type != "work_order")
         
-        return google_service.generate_doc(
+        return get_google_service().generate_doc(
             template_id, 
             doc_title, 
             replacements, 

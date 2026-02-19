@@ -40,7 +40,11 @@ GET_MANAGER_ORDERS = "get_manager_orders"
 GET_MANAGER_ORDER_DETAIL = "get_manager_order_detail"
 PATCH_MANAGER_ORDER = "patch_manager_order"
 GENERATE_MANAGER_ORDER_DOCUMENT = "generate_manager_order_document"
+GET_MANAGER_ORDER_DOCUMENTS = "get_manager_order_documents"
+GET_MANAGER_DOC_DOWNLOAD = "get_manager_doc_download"
+DELETE_MANAGER_DOC = "delete_manager_doc"
 GET_MANAGER_CRM_HEALTH_REPORT = "get_manager_crm_health_report"
+
 
 
 ALL_MANAGER_OPERATION_IDS = (
@@ -78,5 +82,9 @@ ALL_MANAGER_OPERATION_IDS = (
     GET_MANAGER_ORDER_DETAIL,
     PATCH_MANAGER_ORDER,
     GENERATE_MANAGER_ORDER_DOCUMENT,
+    GET_MANAGER_ORDER_DOCUMENTS,
+    GET_MANAGER_DOC_DOWNLOAD,
+    DELETE_MANAGER_DOC,
     GET_MANAGER_CRM_HEALTH_REPORT,
+
 )

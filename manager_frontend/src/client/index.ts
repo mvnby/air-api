@@ -58,6 +58,8 @@ export type { ManagerMediaSetMainImageResponse } from './models/ManagerMediaSetM
 export type { ManagerMediaUploadLocalImagesResponse } from './models/ManagerMediaUploadLocalImagesResponse';
 export type { ManagerNormalizeLegacySpecsResponse } from './models/ManagerNormalizeLegacySpecsResponse';
 export type { ManagerOrderDetailResponse } from './models/ManagerOrderDetailResponse';
+export type { ManagerOrderDocumentItem } from './models/ManagerOrderDocumentItem';
+export type { ManagerOrderDocumentListResponse } from './models/ManagerOrderDocumentListResponse';
 export type { ManagerOrderDocumentResponse } from './models/ManagerOrderDocumentResponse';
 export type { ManagerOrderListItemResponse } from './models/ManagerOrderListItemResponse';
 export type { ManagerOrderListResponse } from './models/ManagerOrderListResponse';
@@ -95,6 +97,7 @@ export { LoginService } from './services/LoginService';
 export { ManagerService } from './services/ManagerService';
 export { ManagerCalendarService } from './services/ManagerCalendarService';
 export { ManagerCrmService } from './services/ManagerCrmService';
+export { ManagerDocsService } from './services/ManagerDocsService';
 export { ManagerLeadsService } from './services/ManagerLeadsService';
 export { ManagerOrdersService } from './services/ManagerOrdersService';
 export { SystemService } from './services/SystemService';

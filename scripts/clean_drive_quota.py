@@ -5,16 +5,16 @@ import sys
 # Добавляем путь к корню проекта, чтобы импорты работали
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from services.google_service import google_service, SCOPES
+from services.google_service import get_google_service, SCOPES
 from googleapiclient.discovery import build
 
 def clean_drive():
-    if not google_service:
+    if not get_google_service():
         print("❌ Ошибка: Google Service не инициализирован. Проверьте credentials.json")
         return
 
-    # Подключаемся к API напрямую, так как google_service - это обертка
-    creds = google_service.creds
+    # Подключаемся к API напрямую, так как get_google_service() - это обертка
+    creds = get_google_service().creds
     service = build('drive', 'v3', credentials=creds)
 
     print("🔍 Проверка квоты сервисного аккаунта...")

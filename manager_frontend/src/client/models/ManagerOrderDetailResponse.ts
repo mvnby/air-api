@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ManagerOrderDocumentItem } from './ManagerOrderDocumentItem';
 import type { OrderCustomerBrief } from './OrderCustomerBrief';
 import type { OrderProductLineResponse } from './OrderProductLineResponse';
 import type { OrderServiceLineResponse } from './OrderServiceLineResponse';
@@ -22,5 +23,6 @@ export type ManagerOrderDetailResponse = {
     customer?: (OrderCustomerBrief | null);
     product_lines?: Array<OrderProductLineResponse>;
     service_lines?: Array<OrderServiceLineResponse>;
+    documents?: Array<ManagerOrderDocumentItem>;
 };
 
