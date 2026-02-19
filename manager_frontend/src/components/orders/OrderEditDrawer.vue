@@ -118,13 +118,6 @@ const downloadDocument = async (doc: ManagerOrderDocumentItem) => {
     const response = await ManagerDocsService.getManagerDocDownload(doc.id);
     
     // Create blob link to download
-    const blob = await response; // response is likely a Blob if client generated correctly, checking client...
-    // The generated client usually returns extracted body for JSON, but specifically for binary...
-    // openapi-typescript-codegen handles binary default? Need to check. 
-    // Usually it returns the payload. If response content-type is application/pdf.
-    
-    // Assuming response is Blob or we might need to adjust gen script.
-    // For now assuming it returns the content.
     
     // If we look at ManagerDocsService.ts: returns CancelablePromise<any>.
     // Let's assume it returns the blob because the browser implementation of fetch/request handles it?
