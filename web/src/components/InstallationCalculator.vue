@@ -30,6 +30,15 @@ const CATEGORY_MAP = {
   'Multisplit': 'Мульти-сплит'
 };
 
+const CATEGORY_ICONS = {
+  'Wall': `<rect x="3" y="6" width="18" height="8" rx="2" /><path d="M3 11h18 M7 9h3 M7 17l2-3 M12 18l2-4 M17 17l-2-3" />`,
+  'Cassette/Ceiling': `<rect x="3" y="3" width="18" height="18" rx="2" /><rect x="7" y="7" width="10" height="10" rx="1" /><path d="M3 3l4 4 M21 3l-4 4 M3 21l4-4 M21 21l-4-4 M12 7V5 M12 19v-2 M7 12H5 M19 12h-2" />`,
+  'Cassette': `<rect x="3" y="3" width="18" height="18" rx="2" /><rect x="7" y="7" width="10" height="10" rx="1" /><path d="M3 3l4 4 M21 3l-4 4 M3 21l4-4 M21 21l-4-4 M12 7V5 M12 19v-2 M7 12H5 M19 12h-2" />`,
+  'Ceiling': `<rect x="5" y="3" width="14" height="18" rx="2" /><path d="M5 16h14 M5 6h14 M9 10h6 M9 12h6" />`,
+  'Duct': `<rect x="2" y="8" width="20" height="8" rx="1" /><path d="M6 8V5h12v3 M6 16v3h3v-3 M15 16v3h3v-3 M4 12h16" />`,
+  'Multisplit': `<rect x="2" y="9" width="9" height="12" rx="1" /><circle cx="6.5" cy="15" r="3" /><rect x="16" y="3" width="6" height="4" rx="1" /><rect x="16" y="10" width="6" height="4" rx="1" /><rect x="16" y="17" width="6" height="4" rx="1" /><path d="M2 12h9 M11 15h2V5h3 M11 15h5 M11 15h2v4h3" />`
+};
+
 const RANGE_MAP = {
   '07-12': '07-12 (до 35 м²)',
   '18-24': '18-24 (до 70 м²)',
@@ -257,7 +266,19 @@ const submitOrder = async () => {
           class="cat-btn"
           :class="{ active: selectedCategory === cat }"
         >
-          {{ tCategory(cat) }}
+          <svg 
+            v-if="CATEGORY_ICONS[cat]"
+            xmlns="http://www.w3.org/2000/svg" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            stroke-width="2" 
+            stroke-linecap="round" 
+            stroke-linejoin="round" 
+            class="cat-icon"
+            v-html="CATEGORY_ICONS[cat]"
+          ></svg>
+          <span class="cat-label">{{ tCategory(cat) }}</span>
         </button>
       </div>
     </div>
@@ -468,32 +489,54 @@ const submitOrder = async () => {
 
 /* Category Buttons */
 .category-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 0.75rem;
 }
 
 .cat-btn {
-    padding: 0.5rem 1rem;
-    border-radius: 9999px;
-    border: 1px solid transparent;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem 0.5rem;
+    border-radius: 1rem;
+    border: 1px solid var(--border, #e5e7eb);
     background: rgba(255, 255, 255, 0.5);
     color: var(--text-muted);
-    font-size: 0.9rem;
-    font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s ease;
+    text-align: center;
 }
 
 .cat-btn:hover {
-    background: rgba(255, 255, 255, 0.8);
-    color: var(--text);
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--primary);
+    border-color: var(--primary);
 }
 
 .cat-btn.active {
     background: var(--primary);
     color: white;
+    border-color: var(--primary);
     box-shadow: 0 4px 12px rgba(0, 127, 128, 0.3);
+}
+
+.cat-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    margin-bottom: 0.5rem;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.cat-btn:hover .cat-icon {
+    transform: translateY(-2px) scale(1.05);
+}
+
+.cat-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1.2;
 }
 
 /* Custom Select */
