@@ -976,6 +976,7 @@ class OrderService:
                 selectinload(Order.customer),
                 selectinload(Order.product_links).selectinload(OrderProductLink.product),
                 selectinload(Order.service_links).selectinload(OrderServiceLink.service),
+                selectinload(Order.documents),
             )
         )
         result = await session.execute(stmt)
@@ -986,7 +987,18 @@ class OrderService:
         data = OrderService._map_order_list_item(order)
         data["product_lines"] = [OrderService._map_product_line(link) for link in order.product_links]
         data["service_lines"] = [OrderService._map_service_line(link) for link in order.service_links]
+        data["documents"] = [
+            {
+                "id": doc.id,
+                "doc_type": doc.doc_type,
+                "number": doc.number,
+                "date": doc.date,
+                "edit_url": doc.google_edit_url,
+            }
+            for doc in sorted(order.documents, key=lambda d: d.created_at, reverse=True)
+        ]
         return data
+
 
     @staticmethod
     async def build_manager_order_line_defaults(

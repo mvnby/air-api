@@ -39,34 +39,19 @@ async def download_document_pdf(
     """
     Скачивает документ в формате PDF из Google Drive.
     """
-    from models import OrderDocument
-    from services.google_service import google_service
-
     async with async_session_maker() as session:
-        result = await session.execute(
-            select(OrderDocument).where(OrderDocument.id == doc_id)
-        )
-        document = result.scalar_one_or_none()
+        pdf_content, filename_encoded = await DocumentService.get_download_stream(session, doc_id)
 
-        if not document:
+        if not pdf_content:
             raise HTTPException(status_code=404, detail="Document not found")
 
-        try:
-            pdf_content = google_service.export_file(document.google_file_id, mime_type='application/pdf')
-
-            from urllib.parse import quote
-            filename = f"{document.number}.pdf"
-            filename_encoded = quote(filename)
-
-            return StreamingResponse(
-                pdf_content,
-                media_type="application/pdf",
-                headers={
-                    "Content-Disposition": f"attachment; filename*=UTF-8''{filename_encoded}"
-                }
-            )
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"Error exporting PDF: {str(exc)}")
+        return StreamingResponse(
+            pdf_content,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{filename_encoded}"
+            }
+        )
 
 
 @router.get("/docs/delete/{doc_id}")
@@ -77,28 +62,11 @@ async def delete_document(
     """
     Удаляет документ из БД и перемещает файл в корзину Google Drive.
     """
-    from models import OrderDocument
-    from services.google_service import google_service
-
     async with async_session_maker() as session:
-        result = await session.execute(
-            select(OrderDocument).where(OrderDocument.id == doc_id)
-        )
-        document = result.scalar_one_or_none()
+        order_id = await DocumentService.delete_document(session, doc_id)
 
-        if not document:
+        if not order_id:
             raise HTTPException(status_code=404, detail="Document not found")
-
-        order_id = document.order_id
-
-        if document.google_file_id:
-            try:
-                google_service.delete_file(document.google_file_id)
-            except Exception as exc:
-                print(f"Error deleting file from Drive: {exc}")
-
-        await session.delete(document)
-        await session.commit()
 
         return RedirectResponse(
             url=f"/admin/order/edit/{order_id}",

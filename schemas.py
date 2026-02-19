@@ -286,6 +286,8 @@ class ManagerOrderListItemResponse(BaseModel):
 class ManagerOrderDetailResponse(ManagerOrderListItemResponse):
     product_lines: List[OrderProductLineResponse] = []
     service_lines: List[OrderServiceLineResponse] = []
+    documents: List[ManagerOrderDocumentItem] = []
+
 
 
 class ManagerOrderListResponse(BaseModel):
@@ -336,6 +338,19 @@ class ManagerOrderDocumentResponse(BaseModel):
     doc_id: int
     doc_type: str
     edit_url: str
+
+
+class ManagerOrderDocumentItem(BaseModel):
+    id: int
+    doc_type: str
+    number: str
+    date: datetime
+    edit_url: str
+
+
+class ManagerOrderDocumentListResponse(BaseModel):
+    items: List[ManagerOrderDocumentItem]
+
 
 
 class LeadResponse(BaseModel):

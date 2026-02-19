@@ -10,8 +10,9 @@ from sqlmodel import SQLModel
 _pg_user = os.environ.get("POSTGRES_USER", "mvnadmin")
 _pg_pass = os.environ.get("POSTGRES_PASSWORD", "securepass")
 _test_db_host = os.environ.get("TEST_DB_HOST", "db_test")  # Docker service name
+_test_db_port = os.environ.get("TEST_DB_PORT", "5432")
 _test_db_name = "air_conditioners_test"
-TEST_DATABASE_URL = f"postgresql+asyncpg://{_pg_user}:{_pg_pass}@{_test_db_host}:5432/{_test_db_name}"
+TEST_DATABASE_URL = f"postgresql+asyncpg://{_pg_user}:{_pg_pass}@{_test_db_host}:{_test_db_port}/{_test_db_name}"
 
 # Safety net: abort if the URL doesn't contain 'test'
 assert "test" in TEST_DATABASE_URL.lower(), (

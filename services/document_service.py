@@ -65,6 +65,75 @@ class DocumentService:
             "doc_type": doc.doc_type,
             "edit_url": doc.google_edit_url,
         }
+
+    @staticmethod
+    async def get_download_stream(
+        session: AsyncSession,
+        doc_id: int
+    ) -> tuple:
+        """
+        Возвращает поток данных PDF и имя файла.
+        """
+        query = select(OrderDocument).where(OrderDocument.id == doc_id)
+        result = await session.execute(query)
+        document = result.scalar_one_or_none()
+
+        if not document:
+            return None, None
+
+        try:
+            pdf_content = google_service.export_file(document.google_file_id, mime_type='application/pdf')
+            
+            from urllib.parse import quote
+            filename = f"{document.number}.pdf"
+            filename_encoded = quote(filename)
+            
+            return pdf_content, filename_encoded
+        except Exception as exc:
+            raise ValueError(f"Error exporting PDF: {str(exc)}")
+
+    @staticmethod
+    async def delete_document(
+        session: AsyncSession,
+        doc_id: int
+    ) -> Optional[int]:
+        """
+        Удаляет документ из БД и Google Drive.
+        Возвращает order_id удаленного документа.
+        """
+        query = select(OrderDocument).where(OrderDocument.id == doc_id)
+        result = await session.execute(query)
+        document = result.scalar_one_or_none()
+
+        if not document:
+            return None
+
+        order_id = document.order_id
+
+        if document.google_file_id:
+            try:
+                google_service.delete_file(document.google_file_id)
+            except Exception as exc:
+                print(f"Error deleting file from Drive: {exc}")
+
+        await session.delete(document)
+        await session.commit()
+        
+        return order_id
+
+    @staticmethod
+    async def list_order_documents(
+        session: AsyncSession,
+        order_id: int
+    ) -> list[OrderDocument]:
+        """Возвращает список документов заказа"""
+        query = select(OrderDocument).where(
+            OrderDocument.order_id == order_id
+        ).order_by(OrderDocument.created_at.desc())
+        
+        result = await session.execute(query)
+        return result.scalars().all()
+
     
     @staticmethod
     async def _create_new_document(

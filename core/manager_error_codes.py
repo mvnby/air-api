@@ -6,6 +6,8 @@ ORDER_NOT_FOUND = "order_not_found"
 CUSTOMER_NOT_FOUND = "customer_not_found"
 PRODUCT_NOT_FOUND = "product_not_found"
 DOCUMENT_GENERATION_FAILED = "document_generation_failed"
+DOCUMENT_NOT_FOUND = "document_not_found"
+
 
 # Shared message map for manager API responses and frontend fallback mapping.
 DEFAULT_MANAGER_ERROR_MESSAGES = {
@@ -17,6 +19,8 @@ DEFAULT_MANAGER_ERROR_MESSAGES = {
     CUSTOMER_NOT_FOUND: "Клиент не найден",
     PRODUCT_NOT_FOUND: "Товар не найден",
     DOCUMENT_GENERATION_FAILED: "Не удалось сформировать документ",
+    DOCUMENT_NOT_FOUND: "Документ не найден",
+
 }
 
 
