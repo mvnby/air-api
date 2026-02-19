@@ -45,8 +45,7 @@ GET_MANAGER_ORDER_DOCUMENTS = "get_manager_order_documents"
 GET_MANAGER_DOC_DOWNLOAD = "get_manager_doc_download"
 DELETE_MANAGER_DOC = "delete_manager_doc"
 GET_MANAGER_CRM_HEALTH_REPORT = "get_manager_crm_health_report"
-
-
+GET_DASHBOARD_STATS = "get_dashboard_stats"
 
 ALL_MANAGER_OPERATION_IDS = (
     READ_USER_ME,
@@ -88,5 +87,6 @@ ALL_MANAGER_OPERATION_IDS = (
     GET_MANAGER_DOC_DOWNLOAD,
     DELETE_MANAGER_DOC,
     GET_MANAGER_CRM_HEALTH_REPORT,
+    GET_DASHBOARD_STATS,
 
 )
