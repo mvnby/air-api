@@ -1186,6 +1186,22 @@
             }
           },
           {
+            "name": "has_fresh_air",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Fresh Air"
+            }
+          },
+          {
             "name": "tag_slugs",
             "in": "query",
             "required": false,
@@ -1396,6 +1412,22 @@
                 }
               ],
               "title": "Has Wifi"
+            }
+          },
+          {
+            "name": "has_fresh_air",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Fresh Air"
             }
           },
           {

@@ -269,6 +269,7 @@ export class ApiService {
      * @param areaMax
      * @param heatingMin
      * @param hasWifi
+     * @param hasFreshAir
      * @param tagSlugs
      * @param isInverter
      * @param q Smart search query
@@ -285,6 +286,7 @@ export class ApiService {
         areaMax?: (number | null),
         heatingMin?: (number | null),
         hasWifi?: (boolean | null),
+        hasFreshAir?: (boolean | null),
         tagSlugs?: (Array<string> | null),
         isInverter?: (boolean | null),
         q?: (string | null),
@@ -302,6 +304,7 @@ export class ApiService {
                 'area_max': areaMax,
                 'heating_min': heatingMin,
                 'has_wifi': hasWifi,
+                'has_fresh_air': hasFreshAir,
                 'tag_slugs': tagSlugs,
                 'is_inverter': isInverter,
                 'q': q,
@@ -322,6 +325,7 @@ export class ApiService {
      * @param areaMax
      * @param heatingMin
      * @param hasWifi
+     * @param hasFreshAir
      * @param tagSlugs
      * @param isInverter
      * @param q Smart search query
@@ -338,6 +342,7 @@ export class ApiService {
         areaMax?: (number | null),
         heatingMin?: (number | null),
         hasWifi?: (boolean | null),
+        hasFreshAir?: (boolean | null),
         tagSlugs?: (Array<string> | null),
         isInverter?: (boolean | null),
         q?: (string | null),
@@ -355,6 +360,7 @@ export class ApiService {
                 'area_max': areaMax,
                 'heating_min': heatingMin,
                 'has_wifi': hasWifi,
+                'has_fresh_air': hasFreshAir,
                 'tag_slugs': tagSlugs,
                 'is_inverter': isInverter,
                 'q': q,
