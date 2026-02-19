@@ -1,6 +1,7 @@
 """Stable operationId constants for manager API routes."""
 
 READ_USER_ME = "read_user_me"
+GET_MANAGER_CALENDAR_EVENTS = "get_manager_calendar_events"
 
 GET_MANAGER_PRODUCTS = "get_manager_products"
 GET_MANAGER_CUSTOMERS = "get_manager_customers"
@@ -44,6 +45,7 @@ GET_MANAGER_CRM_HEALTH_REPORT = "get_manager_crm_health_report"
 
 ALL_MANAGER_OPERATION_IDS = (
     READ_USER_ME,
+    GET_MANAGER_CALENDAR_EVENTS,
     GET_MANAGER_PRODUCTS,
     GET_MANAGER_CUSTOMERS,
     GET_MANAGER_CUSTOMER_DETAIL,

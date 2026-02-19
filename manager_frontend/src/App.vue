@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref } from 'vue';
-import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon } from 'lucide-vue-next';
+import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar } from 'lucide-vue-next';
 import { api } from './api';
 
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
@@ -8,6 +8,7 @@ const CustomersView = defineAsyncComponent(() => import('./views/CustomersView.v
 const CustomerProfileView = defineAsyncComponent(() => import('./views/CustomerProfileView.vue'));
 const OrdersKanbanView = defineAsyncComponent(() => import('./views/OrdersKanbanView.vue'));
 const LeadsView = defineAsyncComponent(() => import('./views/LeadsView.vue'));
+const CalendarDashboard = defineAsyncComponent(() => import('./views/CalendarDashboard.vue'));
 
 const isAuthenticated = ref(false);
 const showLoginModal = ref(false);
@@ -25,6 +26,7 @@ const THEME_STORAGE_KEY = 'manager_theme';
 const navItems = [
   { path: '/manager/leads', label: 'Лиды', icon: UserPlus },
   { path: '/manager/orders/kanban', label: 'Заказы', icon: ShoppingCart },
+  { path: '/manager/calendar', label: 'Календарь', icon: Calendar },
   { path: '/manager/products', label: 'Кондиционеры', icon: Package },
   { path: '/manager/customers', label: 'Клиенты', icon: Users },
 ];
@@ -33,6 +35,7 @@ const currentView = computed(() => {
   const path = currentLocation.value.split('?')[0] || '/manager';
   if (path.startsWith('/manager/leads')) return 'leads';
   if (path.startsWith('/manager/orders')) return 'orders';
+  if (path.startsWith('/manager/calendar')) return 'calendar';
   if (path.startsWith('/manager/customers/profile')) return 'customer-profile';
   if (path.startsWith('/manager/customers')) return 'customers';
   return 'products';
@@ -239,6 +242,7 @@ onBeforeUnmount(() => {
     <main class="flex-1 overflow-auto md:ml-0">
       <LeadsView v-if="currentView === 'leads'" :key="currentLocation" />
       <OrdersKanbanView v-else-if="currentView === 'orders'" :key="currentLocation" />
+      <CalendarDashboard v-else-if="currentView === 'calendar'" :key="currentLocation" />
       <CustomerProfileView v-else-if="currentView === 'customer-profile'" :key="currentLocation" />
       <CustomersView v-else-if="currentView === 'customers'" :key="currentLocation" />
       <ProductsView v-else :key="currentLocation" />

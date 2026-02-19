@@ -14,12 +14,80 @@ logger = logging.getLogger(__name__)
 
 class OrderService:
     @staticmethod
-    def _normalize_naive_datetime(value: Optional[datetime]) -> Optional[datetime]:
-        if value is None:
-            return None
-        if value.tzinfo is not None:
-            return value.replace(tzinfo=None)
-        return value
+    def _normalize_naive_datetime(dt: Optional[datetime]) -> Optional[datetime]:
+        """Convert timezone-aware datetime to naive (for DB compatibility)."""
+        if dt is not None and dt.tzinfo is not None:
+            return dt.replace(tzinfo=None)
+        return dt
+
+    @staticmethod
+    async def get_calendar_events(
+        session: AsyncSession, 
+        start_date: datetime, 
+        end_date: datetime
+    ) -> List["CalendarEventResponse"]:
+        """
+        Get calendar events for orders (assessments and installations).
+        """
+        from schemas import CalendarEventResponse, CalendarEventType
+        
+        # Adjust end_date to include the full day if needed, or rely on caller
+        
+        # Ensure dates are offset-naive for PostgreSQL comparison if DB stores naive timestamps
+        if start_date.tzinfo is not None:
+            start_date = start_date.replace(tzinfo=None)
+        if end_date.tzinfo is not None:
+            end_date = end_date.replace(tzinfo=None)
+
+        # Query orders where EITHER assessment_date OR installation_date is in range
+        stmt = (
+            select(Order)
+            .where(
+                or_(
+                    and_(Order.assessment_date >= start_date, Order.assessment_date <= end_date),
+                    and_(Order.installation_date >= start_date, Order.installation_date <= end_date)
+                )
+            )
+            .options(selectinload(Order.customer))
+        )
+        
+        result = await session.execute(stmt)
+        orders = result.scalars().all()
+        
+        events = []
+        
+        for order in orders:
+            # Assessment Event
+            if order.assessment_date and start_date <= order.assessment_date <= end_date:
+                events.append(CalendarEventResponse(
+                    id=f"{order.id}-assessment",
+                    order_id=order.id,
+                    type=CalendarEventType.ASSESSMENT,
+                    date=order.assessment_date,
+                    status=order.status.value if hasattr(order.status, "value") else str(order.status),
+                    customer_name=order.customer.name if order.customer else "Неизвестный",
+                    address=order.delivery_address,
+                    title=f"Замер: {order.customer.name if order.customer else 'Клиент'}",
+                    start=order.assessment_date,
+                    color="#64748b" # Slate
+                ))
+            
+            # Installation Event
+            if order.installation_date and start_date <= order.installation_date <= end_date:
+                 events.append(CalendarEventResponse(
+                    id=f"{order.id}-installation",
+                    order_id=order.id,
+                    type=CalendarEventType.INSTALLATION,
+                    date=order.installation_date,
+                    status=order.status.value if hasattr(order.status, "value") else str(order.status),
+                    customer_name=order.customer.name if order.customer else "Неизвестный",
+                    address=order.delivery_address,
+                    title=f"Монтаж: {order.customer.name if order.customer else 'Клиент'}",
+                    start=order.installation_date,
+                    color="#007f80" # Teal
+                ))
+                
+        return events
 
     @staticmethod
     async def create_order(

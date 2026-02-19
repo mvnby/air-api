@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from routers import manager_auth
+from routers import manager_calendar
 from routers import manager_catalog
 from routers import manager_crm
 from routers import manager_leads
@@ -17,3 +18,4 @@ router.include_router(manager_auth.router)
 router.include_router(manager_orders.router)
 router.include_router(manager_leads.router)
 router.include_router(manager_crm.router)
+router.include_router(manager_calendar.router)

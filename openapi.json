@@ -3792,6 +3792,73 @@
         }
       }
     },
+    "/api/manager/calendar/events": {
+      "get": {
+        "tags": [
+          "manager-calendar"
+        ],
+        "summary": "Get Manager Calendar Events",
+        "description": "Get calendar events (assessments and installations) within a date range.",
+        "operationId": "get_manager_calendar_events",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "start",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Start date (ISO format)",
+              "title": "Start"
+            },
+            "description": "Start date (ISO format)"
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "End date (ISO format)",
+              "title": "End"
+            },
+            "description": "End date (ISO format)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CalendarEventResponse"
+                  },
+                  "title": "Response Get Manager Calendar Events"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/system/rebuild-web": {
       "post": {
         "tags": [
@@ -4113,6 +4180,90 @@
           "specs"
         ],
         "title": "BulkSpecUpdate"
+      },
+      "CalendarEventResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "type": {
+            "$ref": "#/components/schemas/CalendarEventType"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Date"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start"
+          },
+          "allDay": {
+            "type": "boolean",
+            "title": "Allday",
+            "default": true
+          },
+          "color": {
+            "type": "string",
+            "title": "Color"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "order_id",
+          "type",
+          "date",
+          "status",
+          "title",
+          "start",
+          "color"
+        ],
+        "title": "CalendarEventResponse"
+      },
+      "CalendarEventType": {
+        "type": "string",
+        "enum": [
+          "assessment",
+          "installation"
+        ],
+        "title": "CalendarEventType"
       },
       "CartItemPayload": {
         "properties": {
