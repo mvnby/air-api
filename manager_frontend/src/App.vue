@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref } from 'vue';
-import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar } from 'lucide-vue-next';
+import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home } from 'lucide-vue-next';
 import { api } from './api';
 
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
@@ -9,6 +9,7 @@ const CustomerProfileView = defineAsyncComponent(() => import('./views/CustomerP
 const OrdersKanbanView = defineAsyncComponent(() => import('./views/OrdersKanbanView.vue'));
 const LeadsView = defineAsyncComponent(() => import('./views/LeadsView.vue'));
 const CalendarDashboard = defineAsyncComponent(() => import('./views/CalendarDashboard.vue'));
+const ManagerHomeView = defineAsyncComponent(() => import('./views/ManagerHome.vue'));
 
 const isAuthenticated = ref(false);
 const showLoginModal = ref(false);
@@ -24,6 +25,7 @@ const currentLocation = ref(`${window.location.pathname}${window.location.search
 const THEME_STORAGE_KEY = 'manager_theme';
 
 const navItems = [
+  { path: '/manager', label: 'Главная', icon: Home },
   { path: '/manager/leads', label: 'Лиды', icon: UserPlus },
   { path: '/manager/orders/kanban', label: 'Заказы', icon: ShoppingCart },
   { path: '/manager/calendar', label: 'Календарь', icon: Calendar },
@@ -33,6 +35,7 @@ const navItems = [
 
 const currentView = computed(() => {
   const path = currentLocation.value.split('?')[0] || '/manager';
+  if (path === '/manager' || path === '/manager/') return 'home';
   if (path.startsWith('/manager/leads')) return 'leads';
   if (path.startsWith('/manager/orders')) return 'orders';
   if (path.startsWith('/manager/calendar')) return 'calendar';
@@ -116,7 +119,7 @@ onMounted(() => {
     applyTheme('light');
   }
   if (window.location.pathname === '/manager') {
-    navigate('/manager/leads');
+    navigate('/manager');
   }
   window.addEventListener('popstate', onPopState);
   checkAuth();
@@ -240,7 +243,8 @@ onBeforeUnmount(() => {
     </aside>
 
     <main class="flex-1 overflow-auto md:ml-0">
-      <LeadsView v-if="currentView === 'leads'" :key="currentLocation" />
+      <ManagerHomeView v-if="currentView === 'home'" :key="currentLocation" />
+      <LeadsView v-else-if="currentView === 'leads'" :key="currentLocation" />
       <OrdersKanbanView v-else-if="currentView === 'orders'" :key="currentLocation" />
       <CalendarDashboard v-else-if="currentView === 'calendar'" :key="currentLocation" />
       <CustomerProfileView v-else-if="currentView === 'customer-profile'" :key="currentLocation" />

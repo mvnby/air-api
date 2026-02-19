@@ -4,12 +4,15 @@ import {
     ManagerService,
     ManagerOrdersService,
     ManagerLeadsService,
+    ManagerDashboardService,
     AdminService,
     ApiService,
     type ProductUpdate,
     type ManagerCustomerUpdatePayload,
     type ManagerCatalogProductItemResponse as Product,
     type ManagerOrderUpdatePayload,
+    type DashboardStatsResponse,
+    type DashboardTouchpoint,
     type LeadCreatePayload,
     type LeadUpdatePayload,
     type LeadQualifyPayload,
@@ -20,7 +23,7 @@ OpenAPI.WITH_CREDENTIALS = true;
 
 export type Segment = 'b2c' | 'b2b';
 export type DashboardView = 'kanban' | 'list';
-export { type Product };
+export { type Product, type DashboardStatsResponse, type DashboardTouchpoint };
 
 export const api = {
     async login(username: string, password: string) {
@@ -29,6 +32,10 @@ export const api = {
 
     async checkAuth() {
         return await ManagerService.readUserMe();
+    },
+
+    async getDashboardStats() {
+        return await ManagerDashboardService.getDashboardStats();
     },
 
     async getManagerOrders(params: {
