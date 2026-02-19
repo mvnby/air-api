@@ -71,6 +71,11 @@ const wifiBadgeText = computed(() => {
   if (toBool(specs['wifi-ready']) || specs.wifi_ready === 'ready') return 'Wi-Fi Ready';
   return null;
 });
+const freshAirBadgeText = computed(() => {
+  const specs = props.product.specs || {};
+  if (toBool(specs.fresh_air)) return 'Приток свежего воздуха';
+  return null;
+});
 const heatBadgeText = computed(() => {
   const minHeat = parseMinHeat(props.product.specs || {});
   if (typeof minHeat === 'number' && Number.isFinite(minHeat) && minHeat < 0) {
@@ -82,6 +87,9 @@ const displayFeatureTags = computed(() => {
   const tags = [...featureTags.value];
   if (wifiBadgeText.value && !tags.some((t) => String(t.title || '').toLowerCase().includes('wi-fi'))) {
     tags.push({ id: '__wifi', title: wifiBadgeText.value, slug: 'wifi' });
+  }
+  if (freshAirBadgeText.value) {
+    tags.push({ id: '__fresh_air', title: freshAirBadgeText.value, slug: 'fresh-air' });
   }
   return tags;
 });

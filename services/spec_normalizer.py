@@ -62,6 +62,7 @@ KEY_MAP = {
     "Максимальный расход воздуха внутреннего блока": "airflow_max",
 
     # --- ФИЛЬТРЫ И ДОП. ФУНКЦИИ ---
+    "Приток свежего воздуха": "fresh_air",
     'Интеграция в "умный дом"': "smart_home_integration",
     "Голосовое управление": "voice_control",
     "Биофильтр": "bio_filter",
@@ -87,7 +88,8 @@ def clean_value(key: str, val: Any, keep_units: bool = True) -> Any:
         "airflow_direction", "fan_speed",
         "smart_home_integration", "voice_control",
         "bio_filter", "plasma_filter", "ionizer", "carbon_filter",
-        "photocatalytic_filter", "electrostatic_filter", "uv_sterilization"
+        "photocatalytic_filter", "electrostatic_filter", "uv_sterilization",
+        "fresh_air"
     ]
     
     if key == "wifi_ready":

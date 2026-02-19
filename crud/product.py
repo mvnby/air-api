@@ -81,6 +81,7 @@ class ProductDAO:
         is_inverter: Optional[bool] = None,
         heating_min: Optional[int] = None,
         has_wifi: Optional[bool] = None,
+        has_fresh_air: Optional[bool] = None,
         tag_slugs: Optional[List[str]] = None,
         is_published: Optional[bool] = True,
     ):
@@ -140,6 +141,19 @@ class ProductDAO:
                             ~Product.id.in_(legacy_wifi_tag_subq),
                         )
                     )
+
+        if has_fresh_air is not None:
+            fresh_air_expr = ProductDAO._json_bool_expr(session, "fresh_air")
+            if has_fresh_air:
+                if session.bind is not None and session.bind.dialect.name == "sqlite":
+                    stmt = stmt.where(fresh_air_expr == 1)
+                else:
+                    stmt = stmt.where(fresh_air_expr == True)
+            else:
+                if session.bind is not None and session.bind.dialect.name == "sqlite":
+                    stmt = stmt.where(or_(fresh_air_expr == 0, fresh_air_expr.is_(None)))
+                else:
+                    stmt = stmt.where(or_(fresh_air_expr == False, fresh_air_expr.is_(None)))
 
         if tag_slugs:
             for slug in tag_slugs:
@@ -211,6 +225,7 @@ class ProductDAO:
         is_inverter: Optional[bool] = None,
         heating_min: Optional[int] = None,
         has_wifi: Optional[bool] = None,
+        has_fresh_air: Optional[bool] = None,
         tag_slugs: Optional[List[str]] = None,
         is_published: Optional[bool] = True,
         sort: str = "newest",
@@ -234,6 +249,7 @@ class ProductDAO:
             is_inverter=is_inverter,
             heating_min=heating_min,
             has_wifi=has_wifi,
+            has_fresh_air=has_fresh_air,
             tag_slugs=tag_slugs,
             is_published=is_published,
         )
@@ -268,6 +284,7 @@ class ProductDAO:
         is_inverter: Optional[bool] = None,
         heating_min: Optional[int] = None,
         has_wifi: Optional[bool] = None,
+        has_fresh_air: Optional[bool] = None,
         tag_slugs: Optional[List[str]] = None,
         is_published: Optional[bool] = True,
         faceted_tag_ids: Optional[dict[int, list[int]]] = None,
@@ -284,6 +301,7 @@ class ProductDAO:
             is_inverter=is_inverter,
             heating_min=heating_min,
             has_wifi=has_wifi,
+            has_fresh_air=has_fresh_air,
             tag_slugs=tag_slugs,
             is_published=is_published,
         )
