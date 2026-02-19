@@ -9,6 +9,7 @@ PATCH_MANAGER_CUSTOMER = "patch_manager_customer"
 UPDATE_PRODUCT = "update_product"
 BULK_ROUND_PRICE = "bulk_round_price"
 GET_ALL_TAGS = "get_all_tags"
+SMART_SEARCH_PRODUCTS = "smart_search_products"
 
 BULK_UPDATE_SPECS = "bulk_update_specs"
 NORMALIZE_LEGACY_SPECS = "normalize_legacy_specs"
@@ -50,6 +51,7 @@ ALL_MANAGER_OPERATION_IDS = (
     UPDATE_PRODUCT,
     BULK_ROUND_PRICE,
     GET_ALL_TAGS,
+    SMART_SEARCH_PRODUCTS,
     BULK_UPDATE_SPECS,
     NORMALIZE_LEGACY_SPECS,
     SEARCH_IMAGES,
