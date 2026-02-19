@@ -72,6 +72,11 @@ class ProductResponse(ProductBase):
     gallery_images: List[ProductImageResponse] = [] # New
     series_siblings: List[ProductSiblingResponse] = []
 
+
+class ProductListResponse(ProductBase):
+    """Lightweight product payload for list/search views."""
+    pass
+
 class ProductPriceResponse(BaseModel):
     id: int
     price: int
@@ -483,7 +488,7 @@ class ManagerCatalogProductItemResponse(BaseModel):
 
 
 class ManagerCatalogProductListResponse(BaseModel):
-    items: List[ManagerCatalogProductItemResponse]
+    items: List[ProductListResponse]
     meta: Meta
 
 

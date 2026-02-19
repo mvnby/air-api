@@ -37,10 +37,7 @@ export type { ManagerBulkRoundPriceResponse } from './models/ManagerBulkRoundPri
 export type { ManagerBulkSpecsResponse } from './models/ManagerBulkSpecsResponse';
 export type { ManagerCatalogCustomerItemResponse } from './models/ManagerCatalogCustomerItemResponse';
 export type { ManagerCatalogCustomerListResponse } from './models/ManagerCatalogCustomerListResponse';
-export type { ManagerCatalogProductImageResponse } from './models/ManagerCatalogProductImageResponse';
-export type { ManagerCatalogProductItemResponse } from './models/ManagerCatalogProductItemResponse';
 export type { ManagerCatalogProductListResponse } from './models/ManagerCatalogProductListResponse';
-export type { ManagerCatalogProductTagResponse } from './models/ManagerCatalogProductTagResponse';
 export type { ManagerCrmHealthReportResponse } from './models/ManagerCrmHealthReportResponse';
 export type { ManagerCustomerUpdatePayload } from './models/ManagerCustomerUpdatePayload';
 export type { ManagerMediaBulkAddResponse } from './models/ManagerMediaBulkAddResponse';
@@ -72,6 +69,7 @@ export type { OrderResponse } from './models/OrderResponse';
 export type { OrderServiceLineResponse } from './models/OrderServiceLineResponse';
 export type { OrderStatusUpdate } from './models/OrderStatusUpdate';
 export type { ProductImageResponse } from './models/ProductImageResponse';
+export type { ProductListResponse } from './models/ProductListResponse';
 export type { ProductResponse } from './models/ProductResponse';
 export type { ProductSiblingResponse } from './models/ProductSiblingResponse';
 export type { ProductUpdate } from './models/ProductUpdate';
