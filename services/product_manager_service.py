@@ -57,7 +57,10 @@ class ProductManagerService:
 
         stmt = (
             select(Product)
-            .options(selectinload(Product.tags))
+            .options(
+                selectinload(Product.tags).selectinload(Tag.group),
+                selectinload(Product.gallery_images)
+            )
             .where(Product.is_published.is_(True))
         )
 
@@ -97,11 +100,23 @@ class ProductManagerService:
                 "power_cooling": p.power_cooling,
                 "main_image": p.main_image,
                 "is_published": p.is_published,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+                "specs": sanitize_specs(p.specs),
+                "gallery_images": [
+                    {
+                        "id": img.id,
+                        "url": img.url,
+                        "is_installation_photo": img.is_installation_photo,
+                    }
+                    for img in (p.gallery_images or [])
+                ],
                 "tags": [
                     {
                         "id": t.id,
                         "title": t.title,
                         "slug": t.slug,
+                        "group_title": t.group.title if t.group else None,
+                        "group_color": t.group.color if t.group else "secondary",
                     }
                     for t in (p.tags or [])
                 ],
