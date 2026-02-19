@@ -2,10 +2,9 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-/**
- * Lightweight product payload for list/search views.
- */
-export type ProductListResponse = {
+import type { ManagerCatalogProductImageResponse } from './ManagerCatalogProductImageResponse';
+import type { ManagerCatalogProductTagResponse } from './ManagerCatalogProductTagResponse';
+export type ManagerCatalogProductItemResponse = {
     id: number;
     title: string;
     slug: (string | null);
@@ -17,5 +16,8 @@ export type ProductListResponse = {
     main_image: (string | null);
     is_published: boolean;
     created_at: string;
+    specs: Record<string, any>;
+    gallery_images: Array<ManagerCatalogProductImageResponse>;
+    tags: Array<ManagerCatalogProductTagResponse>;
 };
 

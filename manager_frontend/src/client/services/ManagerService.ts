@@ -222,13 +222,13 @@ export class ManagerService {
      * power_cooling.  Returns matched products with their tags pre-loaded.
      * @param q Free-text search query, e.g. 'mdv loft 18'
      * @param limit
-     * @returns any Successful Response
+     * @returns ManagerCatalogProductListResponse Successful Response
      * @throws ApiError
      */
     public static smartSearchProducts(
         q: string,
         limit: number = 40,
-    ): CancelablePromise<any> {
+    ): CancelablePromise<ManagerCatalogProductListResponse> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/products/smart-search',
