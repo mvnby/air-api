@@ -134,6 +134,19 @@ class DocumentService:
         result = await session.execute(query)
         return result.scalars().all()
 
+    @staticmethod
+    async def get_customer_documents(
+        session: AsyncSession,
+        customer_id: int
+    ) -> list[OrderDocument]:
+        """Возвращает список всех документов клиента."""
+        query = select(OrderDocument).join(Order).where(
+            Order.customer_id == customer_id
+        ).order_by(OrderDocument.created_at.desc())
+        
+        result = await session.execute(query)
+        return result.scalars().all()
+
     
     @staticmethod
     async def _create_new_document(
@@ -143,6 +156,15 @@ class DocumentService:
     ) -> OrderDocument:
         """Создает новый документ в Google Drive и сохраняет в БД"""
         
+        if doc_type in ["act", "tn2", "ttn1"]:
+            contract_query = select(OrderDocument).where(
+                OrderDocument.order_id == order_id,
+                OrderDocument.doc_type == "contract"
+            )
+            result = await session.execute(contract_query)
+            if not result.scalars().first():
+                raise ValueError("Невозможно создать акт/накладную: отсутствует договор")
+
         # 1. Получаем template_id
         template_id = TEMPLATES.get(doc_type)
         if not template_id:
@@ -220,6 +242,14 @@ class DocumentService:
         )
         
         session.add(new_doc)
+        
+        if doc_type in ["invoice", "offer"]:
+            order = await session.get(Order, order_id)
+            if order and order.status in ["new_lead", "assessment"]:
+                from models.common import OrderStatus
+                order.status = OrderStatus.PROPOSAL
+                session.add(order)
+
         await session.commit()
         await session.refresh(new_doc)
         

@@ -295,6 +295,19 @@ class ManagerOrderDocumentListResponse(BaseModel):
     items: List[ManagerOrderDocumentItem]
 
 
+class ManagerCustomerDocumentItem(BaseModel):
+    id: int
+    order_id: int
+    doc_type: str
+    number: str
+    date: datetime
+    edit_url: str
+
+
+class ManagerCustomerDocumentListResponse(BaseModel):
+    items: List[ManagerCustomerDocumentItem]
+
+
 class ManagerOrderDetailResponse(ManagerOrderListItemResponse):
     product_lines: List[OrderProductLineResponse] = []
     service_lines: List[OrderServiceLineResponse] = []

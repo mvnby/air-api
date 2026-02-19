@@ -6,6 +6,7 @@ GET_MANAGER_CALENDAR_EVENTS = "get_manager_calendar_events"
 GET_MANAGER_PRODUCTS = "get_manager_products"
 GET_MANAGER_CUSTOMERS = "get_manager_customers"
 GET_MANAGER_CUSTOMER_DETAIL = "get_manager_customer_detail"
+GET_MANAGER_CUSTOMER_DOCS = "get_manager_customer_docs"
 PATCH_MANAGER_CUSTOMER = "patch_manager_customer"
 UPDATE_PRODUCT = "update_product"
 BULK_ROUND_PRICE = "bulk_round_price"
@@ -53,6 +54,7 @@ ALL_MANAGER_OPERATION_IDS = (
     GET_MANAGER_PRODUCTS,
     GET_MANAGER_CUSTOMERS,
     GET_MANAGER_CUSTOMER_DETAIL,
+    GET_MANAGER_CUSTOMER_DOCS,
     PATCH_MANAGER_CUSTOMER,
     UPDATE_PRODUCT,
     BULK_ROUND_PRICE,
