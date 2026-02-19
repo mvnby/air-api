@@ -14,6 +14,7 @@ from routers.manager_operation_ids import (
     GET_MANAGER_CUSTOMER_DETAIL,
     GET_MANAGER_PRODUCTS,
     PATCH_MANAGER_CUSTOMER,
+    SMART_SEARCH_PRODUCTS,
     UPDATE_PRODUCT,
 )
 from schemas import (
@@ -207,3 +208,27 @@ async def get_all_tags(
     Return all tags grouped by TagGroup for the product editor.
     """
     return await ManagerCatalogService.get_all_tags(session)
+
+
+@router.get(
+    "/products/smart-search",
+    operation_id=SMART_SEARCH_PRODUCTS,
+)
+async def smart_search_products(
+    q: str = Query(..., min_length=1, description="Free-text search query, e.g. 'mdv loft 18'"),
+    limit: int = Query(40, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    """
+    Smart search for manager product picker.
+
+    Parses the query string into text tokens and BTU-index number tokens,
+    then applies AND-chained ORM filters against title, tags, area, and
+    power_cooling.  Returns matched products with their tags pre-loaded.
+    """
+    return await ManagerCatalogService.smart_search(
+        session=session,
+        q=q,
+        limit=limit,
+    )

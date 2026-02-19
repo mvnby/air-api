@@ -97,3 +97,13 @@ class ManagerCatalogService:
     @staticmethod
     async def get_all_tags(session: AsyncSession):
         return await ProductService.get_all_tags(session)
+
+    @staticmethod
+    async def smart_search(
+        session: AsyncSession,
+        *,
+        q: str,
+        limit: int = 40,
+    ):
+        return await ProductService.smart_search(session=session, q=q, limit=limit)
+

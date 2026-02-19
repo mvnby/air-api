@@ -2159,6 +2159,67 @@
         ]
       }
     },
+    "/api/manager/products/smart-search": {
+      "get": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Smart Search Products",
+        "description": "Smart search for manager product picker.\n\nParses the query string into text tokens and BTU-index number tokens,\nthen applies AND-chained ORM filters against title, tags, area, and\npower_cooling.  Returns matched products with their tags pre-loaded.",
+        "operationId": "smart_search_products",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Free-text search query, e.g. 'mdv loft 18'",
+              "title": "Q"
+            },
+            "description": "Free-text search query, e.g. 'mdv loft 18'"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 40,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/search-images": {
       "post": {
         "tags": [

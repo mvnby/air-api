@@ -4,25 +4,12 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-from thefuzz import process
 
 from crud.product import ProductDAO
 from models import Product
 from services.product_dict_mapper import map_product_to_dict
 from services.product_filter_service import ProductFilterService
 from services.product_series_service import ProductSeriesService
-
-TRANSLIT_MAP = {
-    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e",
-    "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m",
-    "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
-    "ф": "f", "х": "h", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "sch",
-    "ы": "y", "э": "e", "ю": "yu", "я": "ya", "ь": "", "ъ": "",
-}
-
-
-def transliterate(text: str) -> str:
-    return "".join(TRANSLIT_MAP.get(char, char) for char in text.lower())
 
 
 class ProductReadService(ProductFilterService, ProductSeriesService):
@@ -118,31 +105,16 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
         is_inverter: Optional[bool] = None,
         limit: int = 10,
     ) -> List[Dict[str, Any]]:
-        products = await ProductDAO.get_filtered(
-            session,
-            is_inverter=is_inverter,
-            is_published=True,
+        from services.product_manager_service import ProductManagerService
+
+        smart_results = await ProductManagerService.smart_search(
+            session=session,
+            q=(query or "").strip(),
             limit=max(limit, 1),
         )
-
-        if query:
-            query_lower = query.lower()
-            choices = {p.id: p.title.lower() for p in products}
-            matches = process.extract(query_lower, choices, limit=limit)
-            matched_ids = [m[2] for m in matches if m[1] >= 60]
-
-            if len(matched_ids) < 2:
-                translit_query = transliterate(query)
-                if translit_query != query_lower:
-                    translit_matches = process.extract(translit_query, choices, limit=limit)
-                    for match in translit_matches:
-                        if match[1] >= 60 and match[2] not in matched_ids:
-                            matched_ids.append(match[2])
-
-            id_map = {p.id: p for p in products}
-            products = [id_map[pid] for pid in matched_ids if pid in id_map]
-
-        return [ProductReadService._to_dict(p) for p in products[:limit]]
+        if is_inverter is not None:
+            smart_results = [item for item in smart_results if bool(item.get("is_inverter")) is is_inverter]
+        return smart_results[:limit]
 
     @staticmethod
     async def get_curated(

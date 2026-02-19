@@ -60,3 +60,14 @@ def get_product_keyboard(product_id, is_admin=False, in_favorites=False):
         ]
         buttons.append(admin_row)
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_search_result_keyboard(product_id: int):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="Подробнее", callback_data=f"search_details_{product_id}"),
+                InlineKeyboardButton(text="В корзину", callback_data=f"buy_{product_id}"),
+            ]
+        ]
+    )
