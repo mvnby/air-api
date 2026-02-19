@@ -88,7 +88,7 @@ class ProductManagerService:
         result = await session.execute(stmt)
         products = result.scalars().all()
 
-        return [
+        formatted_items = [
             {
                 "id": p.id,
                 "title": p.title,
@@ -123,6 +123,16 @@ class ProductManagerService:
             }
             for p in products
         ]
+
+        return {
+            "items": formatted_items,
+            "meta": {
+                "page": 1,
+                "limit": limit,
+                "total": len(products),
+                "pages": 1,
+            },
+        }
 
     @staticmethod
     async def get_manager_list(
