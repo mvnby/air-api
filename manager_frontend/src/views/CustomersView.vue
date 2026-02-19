@@ -622,4 +622,74 @@ onUnmounted(() => {
   background: rgba(99, 102, 241, 0.2);
   color: #a5b4fc;
 }
+
+:global(.dark) .customers-view .view-header h1 {
+  color: #e2e8f0;
+}
+
+:global(.dark) .customers-view .search-box {
+  background: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+:global(.dark) .customers-view .search-box input {
+  color: #e2e8f0;
+}
+
+:global(.dark) .customers-view .search-box input::placeholder {
+  color: #94a3b8;
+}
+
+:global(.dark) .customers-view .empty-state {
+  background: #1e293b;
+}
+
+:global(.dark) .customers-view .empty-state h2 {
+  color: #e2e8f0;
+}
+
+:global(.dark) .customers-view .empty-state p {
+  color: #94a3b8;
+}
+
+:global(.dark) .customers-view .customer-card {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+:global(.dark) .customers-view .customer-name {
+  color: #f8fafc;
+}
+
+:global(.dark) .customers-view .detail-row {
+  color: #cbd5e1;
+}
+
+:global(.dark) .customers-view .detail-row svg {
+  color: #94a3b8;
+}
+
+:global(.dark) .customers-view .card-details {
+  border-bottom-color: #334155;
+}
+
+:global(.dark) .customers-view .count-label,
+:global(.dark) .customers-view .date-added,
+:global(.dark) .customers-view .page-info {
+  color: #94a3b8;
+}
+
+:global(.dark) .customers-view .open-btn,
+:global(.dark) .customers-view .icon-btn,
+:global(.dark) .customers-view .page-btn {
+  background: #0f172a;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+:global(.dark) .customers-view .open-btn:hover,
+:global(.dark) .customers-view .icon-btn:hover {
+  background: #253246;
+}
 </style>
