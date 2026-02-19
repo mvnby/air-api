@@ -15,16 +15,7 @@ from services.product_serialization import sanitize_specs
 # Ranges include a small "dictionary gap" so partial catalogue data still
 # matches (e.g. some units use area=0, relying on the title ILIKE fallback).
 # ---------------------------------------------------------------------------
-BTU_MAPPING: Dict[str, Dict[str, tuple]] = {
-    "7":  {"area": (15, 24),   "power": (2.0, 2.4)},
-    "07": {"area": (15, 24),   "power": (2.0, 2.4)},
-    "9":  {"area": (25, 32),   "power": (2.5, 3.0)},
-    "09": {"area": (25, 32),   "power": (2.5, 3.0)},
-    "12": {"area": (33, 42),   "power": (3.2, 4.0)},
-    "18": {"area": (45, 60),   "power": (5.0, 5.8)},
-    "24": {"area": (65, 80),   "power": (6.5, 8.0)},
-    "36": {"area": (90, 110),  "power": (9.5, 11.0)},
-}
+from models.product_constants import BTU_MAPPING
 
 
 class ProductManagerService:
@@ -49,12 +40,6 @@ class ProductManagerService:
             (covers products where area=0 but BTU is embedded in the name).
           - on miss → plain title ILIKE fallback.
         """
-        from sqlalchemy import or_
-
-        tokens = q.strip().split()
-        text_tokens = [t for t in tokens if not t.isdigit()]
-        number_tokens = [t for t in tokens if t.isdigit()]
-
         stmt = (
             select(Product)
             .options(
@@ -64,25 +49,7 @@ class ProductManagerService:
             .where(Product.is_published.is_(True))
         )
 
-        for word in text_tokens:
-            word_filter = or_(
-                Product.title.ilike(f"%{word}%"),
-                Product.tags.any(Tag.title.ilike(f"%{word}%")),
-            )
-            stmt = stmt.where(word_filter)
-
-        for num in number_tokens:
-            if num in BTU_MAPPING:
-                ranges = BTU_MAPPING[num]
-                num_filter = or_(
-                    Product.area.between(ranges["area"][0], ranges["area"][1]),
-                    Product.power_cooling.between(ranges["power"][0], ranges["power"][1]),
-                    Product.title.ilike(f"%{num}%"),
-                )
-            else:
-                # Non-standard number (e.g. "2024") → plain text search
-                num_filter = Product.title.ilike(f"%{num}%")
-            stmt = stmt.where(num_filter)
+        stmt = ProductDAO._apply_smart_search_filter(stmt, q)
 
         stmt = stmt.limit(limit)
         result = await session.execute(stmt)

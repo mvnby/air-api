@@ -52,6 +52,7 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
         has_wifi: Optional[bool] = None,
         tag_slugs: Optional[List[str]] = None,
         is_inverter: Optional[bool] = None,
+        search: Optional[str] = None,
     ) -> Dict[str, Any]:
         faceted_tag_ids = None
         if tag_slugs:
@@ -72,6 +73,7 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
             page=page,
             limit=limit,
             is_published=True,
+            search_query=search,
         )
         total = await ProductDAO.count_filtered(
             session,
@@ -85,6 +87,7 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
             tag_slugs=None,
             faceted_tag_ids=faceted_tag_ids,
             is_published=True,
+            search_query=search,
         )
 
         pages = (total + limit - 1) // limit if limit > 0 else 0

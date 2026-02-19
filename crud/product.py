@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from models import Product, Tag, TagGroup, ProductTagLink
+from models.product_constants import BTU_MAPPING
 
 
 ALLOWED_FILTER_GROUP_SLUGS = {"brand", "series", "expert-badge"}
@@ -169,6 +170,37 @@ class ProductDAO:
         return stmt
 
     @staticmethod
+    def _apply_smart_search_filter(stmt, query: str):
+        if not query:
+            return stmt
+
+        tokens = query.strip().split()
+        text_tokens = [t for t in tokens if not t.isdigit()]
+        number_tokens = [t for t in tokens if t.isdigit()]
+
+        for word in text_tokens:
+            word_filter = or_(
+                Product.title.ilike(f"%{word}%"),
+                Product.tags.any(Tag.title.ilike(f"%{word}%")),
+            )
+            stmt = stmt.where(word_filter)
+
+        for num in number_tokens:
+            if num in BTU_MAPPING:
+                ranges = BTU_MAPPING[num]
+                num_filter = or_(
+                    Product.area.between(ranges["area"][0], ranges["area"][1]),
+                    Product.power_cooling.between(ranges["power"][0], ranges["power"][1]),
+                    Product.title.ilike(f"%{num}%"),
+                )
+            else:
+                # Non-standard number (e.g. "2024") → plain text search
+                num_filter = Product.title.ilike(f"%{num}%")
+            stmt = stmt.where(num_filter)
+        
+        return stmt
+
+    @staticmethod
     async def get_filtered(
         session: AsyncSession,
         *,
@@ -185,6 +217,7 @@ class ProductDAO:
         page: int = 1,
         limit: int = 20,
         faceted_tag_ids: Optional[dict[int, list[int]]] = None,
+        search_query: Optional[str] = None,
     ) -> List[Product]:
         stmt = select(Product).options(
             selectinload(Product.tags).selectinload(Tag.group),
@@ -204,6 +237,8 @@ class ProductDAO:
             tag_slugs=tag_slugs,
             is_published=is_published,
         )
+        if search_query:
+            stmt = ProductDAO._apply_smart_search_filter(stmt, search_query)
         stmt = ProductDAO._apply_faceted_filters(stmt, faceted_tag_ids)
 
         if sort == "price_asc":
@@ -236,6 +271,7 @@ class ProductDAO:
         tag_slugs: Optional[List[str]] = None,
         is_published: Optional[bool] = True,
         faceted_tag_ids: Optional[dict[int, list[int]]] = None,
+        search_query: Optional[str] = None,
     ) -> int:
         stmt = select(func.count(Product.id))
         stmt = ProductDAO._apply_common_filters(
