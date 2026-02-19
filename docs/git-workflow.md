@@ -25,30 +25,43 @@
 ## Ежедневный цикл работы
 
 1. Обновить `main`:
+
    ```bash
    git checkout main
    git pull origin main
    ```
+
 2. Создать ветку под задачу:
+
    ```bash
    git checkout -b fix/short-task-name
    ```
+
 3. Сделать изменения и локальную проверку:
+
    ```bash
+   # Если менялись API схемы или роуты:
+   python3 scripts/legacy/extract_openapi.py && cd manager_frontend && npm run gen:api && cd ..
+   
    pytest -q
    cd web && npm run build
    cd ../manager_frontend && npm run build
    ```
+
    Запускайте только релевантные проверки, но перед merge в `main` CI должен быть зеленым.
 4. Закоммитить:
+
    ```bash
    git add .
    git commit -m "Fix: short clear message"
    ```
+
 5. Запушить ветку:
+
    ```bash
    git push -u origin fix/short-task-name
    ```
+
 6. Открыть PR в `main`.
 7. После green CI сделать `Squash and merge`.
 
@@ -64,10 +77,12 @@
 ## Горячий фикс (prod)
 
 1. Создать ветку от актуального `main`:
+
    ```bash
    git checkout main && git pull origin main
    git checkout -b hotfix/short-name
    ```
+
 2. Минимальный фикс + быстрая проверка.
 3. PR в `main` с пометкой `hotfix`.
 4. После merge проверить deploy и smoke-check.
