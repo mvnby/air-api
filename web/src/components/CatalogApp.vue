@@ -108,7 +108,8 @@ const syncStateFromUrl = () => {
         params.tag_slugs.length === 0 &&
         params.is_inverter === null &&
         params.has_wifi === null &&
-        params.heating_min === null
+        params.heating_min === null &&
+        !params.q
     ) {
         // If NO filters in URL, try preset state for virtual pages before fallback default.
         if (!applyLockedState()) {
@@ -178,34 +179,18 @@ const updateUrlAndFetch = () => {
 };
 
 const onSearchInput = () => {
+    // If user is typing, clear other filters
+    if (searchQuery.value && searchQuery.value.trim().length > 0) {
+        currentAreaMin.value = null;
+        currentAreaMax.value = null;
+        activeTags.value = [];
+        currentIsInverter.value = null;
+        currentHasWifi.value = null;
+        currentHeatingMin.value = null;
+    }
+
     if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout);
     searchDebounceTimeout = setTimeout(() => {
-        const sp = new URLSearchParams(window.location.search);
-        sp.set('page', '1');
-        // We only update the URL state here, actual fetch is triggered by updateUrlAndFetch
-        // But updateUrlAndFetch reads from state refs, so we rely on searchQuery ref being up to date.
-        // We probably don't need to touch window.location here if updateUrlAndFetch does it?
-        // updateUrlAndFetch updates URL based on refs.
-        // So we just need to call it.
-        // BUT, we want to reset page to 1.
-        
-        // updateUrlAndFetch reads URL for other params? No, it reads from refs.
-        // But it pushes state.
-        
-        // Let's keep it simple: just reset page in URL logic?
-        // Actually updateUrlAndFetch doesn't reset page.
-        // Let's force page reset in URL search params object inside updateUrlAndFetch?
-        // Or just update the URL here?
-        
-        // The implementation in previous steps was:
-        // const sp = new URLSearchParams(window.location.search);
-        // sp.set('page', '1');
-        // const newUrl = ...
-        // window.history.replaceState({}, '', newUrl);
-        // updateUrlAndFetch();
-        
-        // This seems correct to reset page in URL before fetching.
-        
         const currentSp = new URLSearchParams(window.location.search);
         currentSp.set('page', '1');
         const newUrl = `${window.location.pathname}?${currentSp.toString()}`;
