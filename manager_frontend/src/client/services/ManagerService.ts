@@ -16,6 +16,7 @@ import type { ManagerBulkSpecsResponse } from '../models/ManagerBulkSpecsRespons
 import type { ManagerCatalogCustomerItemResponse } from '../models/ManagerCatalogCustomerItemResponse';
 import type { ManagerCatalogCustomerListResponse } from '../models/ManagerCatalogCustomerListResponse';
 import type { ManagerCatalogProductListResponse } from '../models/ManagerCatalogProductListResponse';
+import type { ManagerCustomerDocumentListResponse } from '../models/ManagerCustomerDocumentListResponse';
 import type { ManagerCustomerUpdatePayload } from '../models/ManagerCustomerUpdatePayload';
 import type { ManagerMediaBulkAddResponse } from '../models/ManagerMediaBulkAddResponse';
 import type { ManagerMediaBulkDeleteResponse } from '../models/ManagerMediaBulkDeleteResponse';
@@ -151,6 +152,26 @@ export class ManagerService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Customer Docs For Manager
+     * @param customerId
+     * @returns ManagerCustomerDocumentListResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerCustomerDocs(
+        customerId: number,
+    ): CancelablePromise<ManagerCustomerDocumentListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/customers/{customer_id}/docs',
+            path: {
+                'customer_id': customerId,
+            },
             errors: {
                 422: `Validation Error`,
             },
