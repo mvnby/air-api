@@ -255,6 +255,10 @@ export const api = {
         return await ApiService.adminSearchProductsApiAdminProductsSearchGet(q);
     },
 
+    async smartSearchProducts(q: string, limit = 40): Promise<Product[]> {
+        return await ManagerService.smartSearchProducts(q, limit);
+    },
+
     async searchServices(q: string) {
         return await ApiService.adminSearchServicesApiAdminServicesSearchGet(q);
     },

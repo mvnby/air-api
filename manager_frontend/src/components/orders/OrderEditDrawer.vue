@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useDebounceFn } from '@vueuse/core';
 import { api } from '../../api';
 import DateTimeField from '../ui/DateTimeField.vue';
 import CustomerSummaryCard from '../customers/CustomerSummaryCard.vue';
@@ -11,6 +12,7 @@ import type {
 } from '../../client';
 import { STATUS_LABELS, STATUS_ORDER, formatMoney } from './order-utils';
 import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../../utils/datetime';
+import { getApiErrorMessage } from '../../utils/api-errors';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -25,7 +27,13 @@ const emit = defineEmits<{
   save: [payload: { orderId: number; data: ManagerOrderUpdatePayload }];
 }>();
 
-type ProductOption = { id: number; text: string; price: number };
+type ProductOption = {
+  id: number;
+  title: string;
+  price: number;
+  is_inverter: boolean;
+  power_cooling: number | null;
+};
 type ProductLine = { product_id: number; product_query: string; quantity: number; price: number; cost: number };
 type ServiceLine = { service_id?: number | null; title: string; quantity: number; price: number; cost: number };
 
@@ -34,6 +42,12 @@ type OrderDrawerDraft = {
 };
 
 const productOptions = ref<ProductOption[]>([]);
+const productLookupById = ref<Record<number, ProductOption>>({});
+const activeSuggestionIndex = ref<number | null>(null);
+const productLookupLoading = ref(false);
+const toast = ref('');
+let productSearchRequestId = 0;
+
 const status = ref('new_lead');
 const nextFollowupDate = ref('');
 const assessmentDate = ref('');
@@ -50,6 +64,13 @@ const showCustomerModal = ref(false);
 const customer = computed(() => props.order?.customer ?? null);
 const draftKey = computed(() => (props.order ? `manager_order_drawer_draft_${props.order.id}` : ''));
 
+const setToast = (message: string) => {
+  toast.value = message;
+  window.setTimeout(() => {
+    if (toast.value === message) toast.value = '';
+  }, 3000);
+};
+
 const totalPreview = computed(() => {
   const pTotal = productLines.value.reduce((sum, line) => sum + line.price * line.quantity, 0);
   const sTotal = serviceLines.value.reduce((sum, line) => sum + line.price * line.quantity, 0);
@@ -62,14 +83,60 @@ const marginPreview = computed(() => {
   return totalPreview.value - (pCost + sCost);
 });
 
-const loadProductOptions = async (q = '') => {
-  const response = await api.searchProducts(q);
-  productOptions.value = (response || []).map((item: { id: number; text: string; price: number }) => ({
-    id: item.id,
-    text: item.text,
-    price: item.price,
-  }));
+const rememberProductOption = (option: ProductOption) => {
+  productLookupById.value = {
+    ...productLookupById.value,
+    [option.id]: option,
+  };
 };
+
+const rememberProductOptions = (options: ProductOption[]) => {
+  if (!options.length) return;
+  const merged = { ...productLookupById.value };
+  for (const option of options) merged[option.id] = option;
+  productLookupById.value = merged;
+};
+
+const mapSmartSearchItemToOption = (item: any): ProductOption => ({
+  id: Number(item.id),
+  title: String(item.title ?? ''),
+  price: Number(item.price ?? 0),
+  is_inverter: Boolean(item.is_inverter),
+  power_cooling: item.power_cooling == null ? null : Number(item.power_cooling),
+});
+
+const syncProductLookupFromLines = () => {
+  for (const line of productLines.value) {
+    if (!line.product_id || productLookupById.value[line.product_id]) continue;
+    rememberProductOption({
+      id: line.product_id,
+      title: line.product_query,
+      price: line.price,
+      is_inverter: false,
+      power_cooling: null,
+    });
+  }
+};
+
+const debouncedLoadProductOptions = useDebounceFn(async (index: number, q: string, requestId: number) => {
+  try {
+    productLookupLoading.value = true;
+    const response = await api.smartSearchProducts(q, 20);
+    if (requestId !== productSearchRequestId || activeSuggestionIndex.value !== index) return;
+    const options = Array.isArray(response) ? response.map(mapSmartSearchItemToOption) : [];
+    productOptions.value = options;
+    rememberProductOptions(options);
+  } catch (error) {
+    setToast(`Ошибка поиска товаров: ${getApiErrorMessage(error)}`);
+    if (requestId === productSearchRequestId) {
+      productOptions.value = [];
+    }
+  } finally {
+    if (requestId === productSearchRequestId) {
+      productLookupLoading.value = false;
+    }
+  }
+}, 400);
 
 const persistDraft = () => {
   if (!draftKey.value) return;
@@ -137,8 +204,13 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
     cost: line.cost,
   }));
 
-  await loadProductOptions('');
+  productLookupById.value = {};
+  syncProductLookupFromLines();
+  productOptions.value = [];
+  activeSuggestionIndex.value = null;
+  productLookupLoading.value = false;
   restoreDraft();
+  syncProductLookupFromLines();
 };
 
 watch(
@@ -158,33 +230,44 @@ watch(
 const onProductChanged = (index: number, applyCatalogPrice = false) => {
   const row = productLines.value[index];
   if (!row) return;
-  const selected = productOptions.value.find((item) => item.id === row.product_id);
+  const selected = productLookupById.value[row.product_id];
   if (!selected) return;
-  row.product_query = selected.text;
+  row.product_query = selected.title;
   if (applyCatalogPrice) {
     row.price = selected.price;
   }
 };
 
-const getProductSuggestions = (query: string, currentProductId = 0) => {
-  const normalized = query.trim().toLowerCase();
-  const filtered = normalized
-    ? productOptions.value.filter((item) => item.text.toLowerCase().includes(normalized))
-    : productOptions.value;
-  if (currentProductId && !filtered.some((item) => item.id === currentProductId)) {
-    const current = productOptions.value.find((item) => item.id === currentProductId);
-    if (current) return [current, ...filtered].slice(0, 10);
-  }
-  return filtered.slice(0, 10);
+const getProductSuggestions = (index: number) => {
+  if (activeSuggestionIndex.value !== index) return [];
+  return productOptions.value.slice(0, 10);
 };
 
-const onProductQueryInput = async (index: number) => {
+const onProductQueryInput = (index: number) => {
   const row = productLines.value[index];
   if (!row) return;
+  activeSuggestionIndex.value = index;
   const query = row.product_query.trim();
   row.product_id = 0;
-  if (query.length < 2) return;
-  await loadProductOptions(query);
+  productSearchRequestId += 1;
+  if (query.length < 2) {
+    productOptions.value = [];
+    productLookupLoading.value = false;
+    return;
+  }
+  debouncedLoadProductOptions(index, query, productSearchRequestId);
+};
+
+const onProductInputBlur = (index: number) => {
+  window.setTimeout(() => {
+    if (activeSuggestionIndex.value === index) {
+      activeSuggestionIndex.value = null;
+    }
+  }, 120);
+};
+
+const onProductInputFocus = (index: number) => {
+  activeSuggestionIndex.value = index;
 };
 
 const selectProductForLine = (index: number, option: ProductOption) => {
@@ -192,7 +275,10 @@ const selectProductForLine = (index: number, option: ProductOption) => {
   if (!row) return;
   const isNewLine = !row.product_id && Number(row.price || 0) <= 0;
   row.product_id = option.id;
-  row.product_query = option.text;
+  row.product_query = option.title;
+  rememberProductOption(option);
+  activeSuggestionIndex.value = null;
+  productOptions.value = [];
   onProductChanged(index, isNewLine);
 };
 
@@ -226,7 +312,7 @@ const removeServiceLine = (index: number) => {
   serviceLines.value.splice(index, 1);
 };
 
-const currentCatalogPrice = (productId: number) => productOptions.value.find((item) => item.id === productId)?.price ?? null;
+const currentCatalogPrice = (productId: number) => productLookupById.value[productId]?.price ?? null;
 const isPriceDifferentFromCatalog = (line: { product_id: number; price: number }) => {
   const catalog = currentCatalogPrice(line.product_id);
   return catalog !== null && Number(catalog) !== Number(line.price || 0);
@@ -328,10 +414,15 @@ watch(
 
 <template>
   <div v-if="modelValue" class="fixed inset-0 z-50 flex">
+    <Transition name="fade">
+      <div v-if="toast" class="fixed top-6 right-6 z-[100] bg-teal-600 text-white px-6 py-3 rounded-xl shadow-2xl font-medium">
+        {{ toast }}
+      </div>
+    </Transition>
     <div class="flex-1 bg-black/60" @click="closeDrawer" />
     <aside class="h-full w-full max-w-3xl overflow-y-auto bg-white p-6 text-gray-900 border-l border-gray-200 shadow-2xl">
       <header class="mb-4 flex items-center justify-between">
-        <h2 class="text-xl font-semibold">Редактирование заказа #{{ order?.id }}</h2>
+        <h2 class="text-xl font-semibold font-['Space_Grotesk']">Редактирование заказа #{{ order?.id }}</h2>
         <button class="btn-mini-outline" @click="closeDrawer">Закрыть</button>
       </header>
 
@@ -378,7 +469,7 @@ watch(
 
       <section class="mt-6 rounded-2xl bg-gray-100 p-4">
         <div class="mb-3 flex items-center justify-between gap-3">
-          <h3 class="text-lg font-semibold">Клиент</h3>
+          <h3 class="text-lg font-semibold font-['Space_Grotesk']">Клиент</h3>
           <div class="flex flex-wrap gap-2">
             <button class="btn-mini-outline" :disabled="!customer?.id" @click="showCustomerModal = true">Подробнее</button>
             <button class="btn-mini-outline" :disabled="!customer?.id" @click="openCustomerProfile">Открыть карточку</button>
@@ -389,7 +480,7 @@ watch(
 
       <section class="mt-6">
         <div class="mb-2 flex items-center justify-between">
-          <h3 class="text-lg font-semibold">Товары</h3>
+          <h3 class="text-lg font-semibold font-['Space_Grotesk']">Товары</h3>
           <button class="btn-mini" @click="addProductLine">Добавить товар</button>
         </div>
         <p v-if="getFieldError('products')" class="mb-2 text-xs text-red-300">{{ getFieldError('products') }}</p>
@@ -407,20 +498,28 @@ watch(
                 v-model="line.product_query"
                 class="field-input"
                 placeholder="Поиск и выбор товара"
+                @focus="onProductInputFocus(index)"
                 @input="onProductQueryInput(index)"
+                @blur="onProductInputBlur(index)"
               />
               <div
-                v-if="!line.product_id && line.product_query.trim().length >= 2 && getProductSuggestions(line.product_query).length"
-                class="mt-1 max-h-44 overflow-auto rounded-lg border border-gray-200 bg-white p-1"
+                v-if="!line.product_id && line.product_query.trim().length >= 2 && (productLookupLoading || getProductSuggestions(index).length)"
+                class="mt-1 max-h-56 overflow-auto rounded-[12px] border border-gray-200 bg-white p-1"
               >
+                <div v-if="productLookupLoading" class="px-3 py-2 text-xs text-gray-500">Поиск товаров...</div>
                 <button
-                  v-for="item in getProductSuggestions(line.product_query)"
+                  v-for="item in getProductSuggestions(index)"
                   :key="`product-suggest-${index}-${item.id}`"
                   type="button"
-                  class="block w-full rounded px-2 py-1 text-left text-xs text-gray-700 hover:bg-gray-100"
+                  class="mb-1 block w-full rounded-[12px] px-3 py-2 text-left text-xs text-gray-700 hover:bg-slate-100 dark:hover:bg-slate-800 last:mb-0"
                   @click="selectProductForLine(index, item)"
                 >
-                  {{ item.text }}
+                  <p class="truncate font-medium text-gray-900 dark:text-slate-100">{{ item.title }}</p>
+                  <p class="mt-1 text-[11px] text-gray-500 dark:text-slate-300">
+                    {{ formatMoney(item.price) }}
+                    · {{ item.is_inverter ? 'Инвертор' : 'On/Off' }}
+                    · {{ item.power_cooling ? `${item.power_cooling.toFixed(1)} кВт` : 'мощность н/д' }}
+                  </p>
                 </button>
               </div>
             </div>
@@ -446,7 +545,7 @@ watch(
 
       <section class="mt-6">
         <div class="mb-2 flex items-center justify-between">
-          <h3 class="text-lg font-semibold">Услуги</h3>
+          <h3 class="text-lg font-semibold font-['Space_Grotesk']">Услуги</h3>
           <button class="btn-mini" @click="addServiceLine">Добавить услугу</button>
         </div>
         <p v-if="getFieldError('services')" class="mb-2 text-xs text-red-300">{{ getFieldError('services') }}</p>
@@ -481,7 +580,7 @@ watch(
     >
       <div class="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white p-5 text-gray-900 shadow-2xl">
         <div class="mb-4 flex items-center justify-between gap-3">
-          <h3 class="text-lg font-semibold">Карточка клиента</h3>
+          <h3 class="text-lg font-semibold font-['Space_Grotesk']">Карточка клиента</h3>
           <button class="btn-mini-outline" @click="closeCustomerModal">Закрыть</button>
         </div>
         <CustomerSummaryCard :customer="customer" mode="expanded" :show-open-button="false" />

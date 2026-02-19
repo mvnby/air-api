@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue';
+import { watchDebounced } from '@vueuse/core';
 import { api, type Product } from '../api';
 import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images, Settings, ArrowLeft, LayoutGrid, List, Package } from 'lucide-vue-next';
 import BulkSpecsModal from '../components/BulkSpecsModal.vue';
@@ -63,6 +64,8 @@ const areaMin = ref<number | undefined>();
 const areaMax = ref<number | undefined>();
 const isInverter = ref<boolean | undefined>();
 const viewType = ref<'grid' | 'table'>('grid');
+const SMART_SEARCH_LIMIT = 100;
+const hasSearchQuery = computed(() => searchQuery.value.trim().length > 0);
 
 const applyFilters = () => {
     page.value = 1;
@@ -181,17 +184,29 @@ const loadProducts = async () => {
   loading.value = true;
   page.value = 1;
   try {
-    const data = await api.getManagerProducts(
-        1, 
-        limit, 
-        searchQuery.value || undefined, 
-        undefined, // isPublished (not exposed yet)
-        areaMin.value,
-        areaMax.value,
-        isInverter.value
-    );
-    products.value = data.items ? data.items : (Array.isArray(data) ? data : []);
-    hasMore.value = products.value.length >= limit;
+    if (hasSearchQuery.value) {
+      const smartResults = await api.smartSearchProducts(searchQuery.value.trim(), SMART_SEARCH_LIMIT);
+      const filtered = smartResults.filter((product) => {
+        if (areaMin.value !== undefined && product.area < areaMin.value) return false;
+        if (areaMax.value !== undefined && product.area > areaMax.value) return false;
+        if (isInverter.value !== undefined && product.is_inverter !== isInverter.value) return false;
+        return true;
+      });
+      products.value = filtered;
+      hasMore.value = false;
+    } else {
+      const data = await api.getManagerProducts(
+          1,
+          limit,
+          undefined,
+          undefined, // isPublished (not exposed yet)
+          areaMin.value,
+          areaMax.value,
+          isInverter.value
+      );
+      products.value = data.items ? data.items : (Array.isArray(data) ? data : []);
+      hasMore.value = products.value.length >= limit;
+    }
     if (pendingEditProductId.value && !pendingEditHandled.value) {
       const target = products.value.find((p) => p.id === pendingEditProductId.value)
         || (pendingEditProductQuery.value
@@ -206,6 +221,7 @@ const loadProducts = async () => {
       }
     }
   } catch (e) {
+    setToast(`Ошибка загрузки товаров: ${getApiErrorMessage(e)}`);
     console.error(e);
   } finally {
     loading.value = false;
@@ -213,7 +229,7 @@ const loadProducts = async () => {
 };
 
 const loadMore = async () => {
-    if (loadingMore.value || !hasMore.value) return;
+    if (loadingMore.value || !hasMore.value || hasSearchQuery.value) return;
     loadingMore.value = true;
     page.value++;
     try {
@@ -232,6 +248,7 @@ const loadMore = async () => {
         }
         products.value.push(...newItems);
     } catch (e) {
+        setToast(`Ошибка догрузки товаров: ${getApiErrorMessage(e)}`);
         console.error(e);
     } finally {
         loadingMore.value = false;
@@ -523,6 +540,15 @@ onMounted(() => {
         if (el) observer.observe(el);
     });
 });
+
+watchDebounced(
+    searchQuery,
+    () => {
+        page.value = 1;
+        loadProducts();
+    },
+    { debounce: 400, maxWait: 1200 },
+);
 </script>
 
 <template>
@@ -538,7 +564,7 @@ onMounted(() => {
             <ArrowLeft class="w-4 h-4" />
             Назад
           </button>
-          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Товары</h1>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white font-['Space_Grotesk']">Товары</h1>
           
           <div class="flex bg-gray-100 dark:bg-slate-800 p-1 rounded-lg ml-2">
             <button 
@@ -650,7 +676,12 @@ onMounted(() => {
     </div>
     
     <!-- Product Grid -->
-    <div v-if="loading" class="text-center py-20 text-gray-500">Загрузка...</div>
+    <div v-if="loading" class="py-20">
+      <div class="flex items-center justify-center gap-3 text-gray-500">
+        <div class="h-6 w-6 rounded-full border-2 border-[#007f80] border-t-transparent animate-spin"></div>
+        <span>Загрузка товаров...</span>
+      </div>
+    </div>
     
     <div v-else>
       <!-- Grid View -->
