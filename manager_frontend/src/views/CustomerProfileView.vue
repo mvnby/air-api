@@ -313,7 +313,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[var(--mv-bg)] text-gray-900">
+  <div class="min-h-screen bg-[var(--mv-bg)] text-[var(--mv-text)]">
     <div class="mx-auto max-w-[1200px] px-4 py-6 md:px-8">
       <div class="mb-4 flex items-center gap-2">
         <button class="btn-mini-outline" type="button" @click="navigateToCustomers">
@@ -336,7 +336,7 @@ onMounted(() => {
         </button>
       </div>
 
-      <div v-if="loading" class="rounded-[2rem] border border-gray-200 bg-white p-8 text-sm text-gray-500">
+      <div v-if="loading" class="rounded-[2rem] border border-[var(--mv-border)] bg-[var(--mv-surface)] p-8 text-sm text-[var(--mv-text-muted)]">
         Загрузка карточки клиента...
       </div>
       <div v-else-if="error" class="rounded-[2rem] border border-red-500/40 bg-red-900/20 p-6 text-sm text-red-200">
@@ -350,15 +350,15 @@ onMounted(() => {
           {{ saveError }}
         </div>
 
-        <header class="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-sm">
-          <p class="text-xs uppercase tracking-[0.2em] text-gray-500">Customer profile</p>
+        <header class="rounded-[2rem] border border-[var(--mv-border)] bg-[var(--mv-surface)] p-6 shadow-sm">
+          <p class="text-xs uppercase tracking-[0.2em] text-[var(--mv-text-muted)]">Customer profile</p>
           <h1 class="mt-2 text-2xl font-bold">{{ customer.full_legal_name || customer.name || `Клиент #${customer.id}` }}</h1>
-          <p class="mt-1 text-sm text-gray-600">ID: #{{ customer.id }} · {{ customer.type === 'company' ? 'Юр. лицо' : 'Физ. лицо' }}</p>
+          <p class="mt-1 text-sm text-[var(--mv-text-muted)]">ID: #{{ customer.id }} · {{ customer.type === 'company' ? 'Юр. лицо' : 'Физ. лицо' }}</p>
         </header>
 
         <section class="grid gap-4 md:grid-cols-2">
-          <article class="rounded-[1.5rem] border border-gray-200 bg-white p-5 shadow-sm">
-            <h2 class="mb-3 text-sm font-semibold uppercase tracking-[0.16em] text-gray-500">Контакты</h2>
+          <article class="rounded-[1.5rem] border border-[var(--mv-border)] bg-[var(--mv-surface)] p-5 shadow-sm">
+            <h2 class="mb-3 text-sm font-semibold uppercase tracking-[0.16em] text-[var(--mv-text-muted)]">Контакты</h2>
 
             <template v-if="!editMode">
               <div class="space-y-2 text-sm">
@@ -390,8 +390,8 @@ onMounted(() => {
             </template>
           </article>
 
-          <article class="rounded-[1.5rem] border border-gray-200 bg-white p-5 shadow-sm">
-            <h2 class="mb-3 text-sm font-semibold uppercase tracking-[0.16em] text-gray-500">Юр. реквизиты</h2>
+          <article class="rounded-[1.5rem] border border-[var(--mv-border)] bg-[var(--mv-surface)] p-5 shadow-sm">
+            <h2 class="mb-3 text-sm font-semibold uppercase tracking-[0.16em] text-[var(--mv-text-muted)]">Юр. реквизиты</h2>
 
             <template v-if="!editMode">
               <div class="space-y-2 text-sm">
@@ -422,7 +422,7 @@ onMounted(() => {
                   <input v-model="form.signer_position" type="text" placeholder="Должность подписанта" :class="fieldClass('signer_position')" />
                   <input v-model="form.acting_basis" type="text" placeholder="Основание действий" :class="fieldClass('acting_basis')" />
                 </div>
-                <p v-else class="text-xs text-gray-500">Для физлица реквизиты юрлица не обязательны.</p>
+                <p v-else class="text-xs text-[var(--mv-text-muted)]">Для физлица реквизиты юрлица не обязательны.</p>
               </div>
             </template>
           </article>

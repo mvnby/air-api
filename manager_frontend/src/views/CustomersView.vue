@@ -15,6 +15,14 @@ const page = ref(1);
 const meta = ref({ total: 0, pages: 1, limit: 20 });
 const recentlyUpdated = ref<Record<number, number>>({});
 const cleanupTimers = new Map<number, number>();
+const toast = ref('');
+
+function setToast(msg: string) {
+  toast.value = msg;
+  setTimeout(() => {
+    if (toast.value === msg) toast.value = '';
+  }, 3000);
+}
 
 const TYPE_MAP: Record<string, { label: string; icon: string }> = {
   individual: { label: 'Физ. лицо', icon: '👤' },
@@ -36,6 +44,7 @@ async function loadCustomers() {
     meta.value = data.meta;
   } catch (e) {
     console.error('Failed to load customers', e);
+    setToast('Не удалось загрузить список клиентов');
   } finally {
     loading.value = false;
   }
@@ -112,7 +121,7 @@ onUnmounted(() => {
   <div class="customers-view">
     <!-- Header -->
     <div class="view-header">
-      <h1>Клиенты</h1>
+      <h1 class="text-gray-900 dark:text-slate-100">Клиенты</h1>
       <div class="header-controls">
         <div class="search-box">
           <Search :size="16" />
@@ -122,29 +131,36 @@ onUnmounted(() => {
             @keyup.enter="onSearch"
           />
         </div>
-        <div class="flex bg-gray-100 p-1 rounded-lg">
+        <div class="flex bg-gray-100 dark:bg-slate-700 p-1 rounded-lg">
           <button 
               @click="typeFilter = ''; onTypeChange()"
               class="px-3 py-1.5 text-sm rounded-md transition-all"
-              :class="!typeFilter ? 'bg-white text-teal-700 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700'"
+              :class="!typeFilter ? 'bg-white dark:bg-slate-600 text-teal-700 dark:text-teal-400 shadow-sm font-medium' : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'"
           >Все</button>
           <button 
               @click="typeFilter = 'individual'; onTypeChange()"
               class="px-3 py-1.5 text-sm rounded-md transition-all"
-              :class="typeFilter === 'individual' ? 'bg-white text-teal-700 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700'"
+              :class="typeFilter === 'individual' ? 'bg-white dark:bg-slate-600 text-teal-700 dark:text-teal-400 shadow-sm font-medium' : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'"
           >Физ. лица</button>
           <button 
               @click="typeFilter = 'company'; onTypeChange()"
               class="px-3 py-1.5 text-sm rounded-md transition-all"
-              :class="typeFilter === 'company' ? 'bg-white text-teal-700 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700'"
+              :class="typeFilter === 'company' ? 'bg-white dark:bg-slate-600 text-teal-700 dark:text-teal-400 shadow-sm font-medium' : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'"
           >Юр. лица</button>
         </div>
-        <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700">
+        <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-700 dark:text-slate-300">
           <input v-model="onlyWithOrders" type="checkbox" @change="onTypeChange" />
           Только с заказами
         </label>
       </div>
     </div>
+
+    <!-- Toast -->
+    <Transition name="fade">
+      <div v-if="toast" class="fixed top-6 right-6 z-[100] bg-teal-600 text-white px-6 py-3 rounded-xl shadow-2xl font-medium animate-in slide-in-from-top-4 duration-300">
+        {{ toast }}
+      </div>
+    </Transition>
 
     <!-- Loading -->
     <div v-if="loading" class="loading-state">
@@ -153,12 +169,17 @@ onUnmounted(() => {
     </div>
 
     <!-- Empty -->
-    <div v-else-if="customers.length === 0" class="empty-state">
-      <Users :size="64" color="#ccc" />
-      <h2>Клиенты не найдены</h2>
-      <p v-if="searchQuery || typeFilter">Попробуйте изменить фильтры или поисковый запрос</p>
-      <p v-if="onlyWithOrders">Нет клиентов с заказами по текущим фильтрам.</p>
-      <p v-else>Клиенты появятся здесь при создании заказов</p>
+    <div v-else-if="customers.length === 0" class="empty-state border border-dashed border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800">
+      <div class="flex justify-center mb-4">
+        <Users :size="64" class="text-gray-300 dark:text-slate-600" />
+      </div>
+      <h2 class="text-xl font-bold mb-2 text-gray-900 dark:text-white">Клиенты не найдены</h2>
+      <p v-if="searchQuery || typeFilter" class="text-gray-500 dark:text-slate-400">Попробуйте изменить поисковый запрос "{{ searchQuery }}" или фильтры</p>
+      <p v-else-if="onlyWithOrders" class="text-gray-500 dark:text-slate-400">Нет клиентов с заказами по текущим фильтрам.</p>
+      <div v-else class="text-gray-500 dark:text-slate-400">
+        <p>Клиентская база пуста.</p>
+        <p class="text-xs mt-1">Клиенты появятся здесь при создании заказов или лидов.</p>
+      </div>
     </div>
 
     <!-- Cards Grid -->
@@ -254,11 +275,16 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #f4f6f9;
+  background: var(--mv-bg);
   border-radius: 10px;
   padding: 8px 14px;
-  border: 1px solid #e0e4ea;
+  border: 1px solid var(--mv-border);
   transition: border-color 0.2s;
+}
+:global(.dark) .search-box {
+  background: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
 }
 .search-box:focus-within {
   border-color: #007f80;
@@ -269,7 +295,7 @@ onUnmounted(() => {
   outline: none;
   font-size: 14px;
   width: 200px;
-  color: #333;
+  color: var(--mv-text);
 }
 
 
@@ -285,8 +311,8 @@ onUnmounted(() => {
 .spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #e0e4ea;
-  border-top-color: #007f80;
+  border: 3px solid var(--mv-border);
+  border-top-color: var(--mv-teal);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -296,7 +322,7 @@ onUnmounted(() => {
 .empty-state {
   text-align: center;
   padding: 80px 20px;
-  background: #f8f9fc;
+  background: var(--mv-surface);
   border-radius: 16px;
 }
 .empty-state h2 {
@@ -317,8 +343,8 @@ onUnmounted(() => {
 
 /* Card */
 .customer-card {
-  background: #fff;
-  border: 1px solid #e8eaef;
+  background: var(--mv-surface);
+  border: 1px solid var(--mv-border);
   border-radius: 14px;
   padding: 20px;
   transition: all 0.2s;
@@ -377,7 +403,7 @@ onUnmounted(() => {
 .customer-name {
   font-weight: 600;
   font-size: 16px;
-  color: #1a1a2e;
+  color: var(--mv-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -406,7 +432,7 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 8px;
   padding-bottom: 14px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--mv-border);
   margin-bottom: 14px;
 }
 
@@ -415,10 +441,11 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: #555;
+  color: var(--mv-text-muted);
 }
 .detail-row svg {
-  color: #999;
+  color: var(--mv-text-muted);
+  opacity: 0.7;
   flex-shrink: 0;
 }
 .legal-name {
@@ -452,27 +479,28 @@ onUnmounted(() => {
 }
 .count-label {
   font-size: 13px;
-  color: #888;
+  color: var(--mv-text-muted);
 }
 
 .date-added {
   font-size: 12px;
-  color: #aaa;
+  color: var(--mv-text-muted);
+  opacity: 0.6;
 }
 
 .open-btn {
-  border: 1px solid #dbe3ea;
-  background: #fff;
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface);
   border-radius: 8px;
   font-size: 12px;
   padding: 6px 10px;
-  color: #007f80;
+  color: var(--mv-teal);
   font-weight: 600;
   cursor: pointer;
 }
 
 .open-btn:hover {
-  background: #e6f7f7;
+  background: var(--mv-bg);
 }
 
 .drawer-overlay {
@@ -487,8 +515,8 @@ onUnmounted(() => {
 .customer-drawer {
   width: min(460px, 100%);
   height: 100%;
-  background: #ffffff;
-  border-left: 1px solid #e5e9ef;
+  background: var(--mv-surface);
+  border-left: 1px solid var(--mv-border);
   padding: 20px;
   overflow-y: auto;
 }
@@ -513,9 +541,10 @@ onUnmounted(() => {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  border: 1px solid #e0e4ea;
-  background: #fff;
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface);
   cursor: pointer;
+  color: var(--mv-text);
 }
 
 .icon-btn:hover {
@@ -530,7 +559,7 @@ onUnmounted(() => {
 .drawer-row {
   display: grid;
   gap: 4px;
-  border: 1px solid #eef1f6;
+  border: 1px solid var(--mv-border);
   border-radius: 10px;
   padding: 10px 12px;
 }
@@ -539,11 +568,11 @@ onUnmounted(() => {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #8b94a3;
+  color: var(--mv-text-muted);
 }
 
 .drawer-row .value {
-  color: #232a36;
+  color: var(--mv-text);
   font-weight: 600;
   word-break: break-word;
 }
@@ -563,11 +592,11 @@ onUnmounted(() => {
   justify-content: center;
   width: 36px;
   height: 36px;
-  border: 1px solid #e0e4ea;
+  border: 1px solid var(--mv-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--mv-surface);
   cursor: pointer;
-  color: #333;
+  color: var(--mv-text);
   transition: all 0.2s;
 }
 .page-btn:hover:not(:disabled) {
@@ -582,7 +611,86 @@ onUnmounted(() => {
 
 .page-info {
   font-size: 14px;
-  color: #666;
+  color: var(--mv-text-muted);
+}
+
+:global(.dark) .customers-view .type-badge.individual {
+  background: rgba(0, 127, 128, 0.2);
+  color: #2dd4bf;
+}
+:global(.dark) .customers-view .type-badge.company {
+  background: rgba(99, 102, 241, 0.2);
+  color: #a5b4fc;
+}
+
+:global(.dark) .customers-view .view-header h1 {
+  color: #e2e8f0;
+}
+
+:global(.dark) .customers-view .search-box {
+  background: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+:global(.dark) .customers-view .search-box input {
+  color: #e2e8f0;
+}
+
+:global(.dark) .customers-view .search-box input::placeholder {
+  color: #94a3b8;
+}
+
+:global(.dark) .customers-view .empty-state {
+  background: #1e293b;
+}
+
+:global(.dark) .customers-view .empty-state h2 {
+  color: #e2e8f0;
+}
+
+:global(.dark) .customers-view .empty-state p {
+  color: #94a3b8;
+}
+
+:global(.dark) .customers-view .customer-card {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+:global(.dark) .customers-view .customer-name {
+  color: #f8fafc;
+}
+
+:global(.dark) .customers-view .detail-row {
+  color: #cbd5e1;
+}
+
+:global(.dark) .customers-view .detail-row svg {
+  color: #94a3b8;
+}
+
+:global(.dark) .customers-view .card-details {
+  border-bottom-color: #334155;
+}
+
+:global(.dark) .customers-view .count-label,
+:global(.dark) .customers-view .date-added,
+:global(.dark) .customers-view .page-info {
+  color: #94a3b8;
+}
+
+:global(.dark) .customers-view .open-btn,
+:global(.dark) .customers-view .icon-btn,
+:global(.dark) .customers-view .page-btn {
+  background: #0f172a;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+:global(.dark) .customers-view .open-btn:hover,
+:global(.dark) .customers-view .icon-btn:hover {
+  background: #253246;
 }
 
 :global(.dark) .customers-view .view-header h1 {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue';
 import { api, type Product } from '../api';
-import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images, Settings, ArrowLeft } from 'lucide-vue-next';
+import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images, Settings, ArrowLeft, LayoutGrid, List, Package } from 'lucide-vue-next';
 import BulkSpecsModal from '../components/BulkSpecsModal.vue';
 import ProductEditModal from '../components/ProductEditModal.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
@@ -62,6 +62,7 @@ const searchQuery = ref('');
 const areaMin = ref<number | undefined>();
 const areaMax = ref<number | undefined>();
 const isInverter = ref<boolean | undefined>();
+const viewType = ref<'grid' | 'table'>('grid');
 
 const applyFilters = () => {
     page.value = 1;
@@ -532,14 +533,34 @@ onMounted(() => {
           <button
             v-if="pendingReturnTo"
             @click="navigateBackFromProducts"
-            class="px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center gap-2 text-gray-700 text-sm transition-colors"
+            class="px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center gap-2 text-gray-700 dark:text-slate-200 text-sm transition-colors"
           >
             <ArrowLeft class="w-4 h-4" />
             Назад
           </button>
-          <h1 class="text-2xl font-bold text-gray-900">Товары</h1>
-          <div v-if="selectedProductIds.size > 0" class="flex items-center gap-2 bg-teal-50 px-4 py-2 rounded-lg border border-teal-100">
-              <span class="text-sm font-medium text-teal-800">{{ selectedProductIds.size }} выбрано</span>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Товары</h1>
+          
+          <div class="flex bg-gray-100 dark:bg-slate-800 p-1 rounded-lg ml-2">
+            <button 
+                @click="viewType = 'grid'"
+                class="p-1.5 rounded-md transition-all"
+                :class="viewType === 'grid' ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-400 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-slate-300'"
+                title="Сетка"
+            >
+              <LayoutGrid class="w-4 h-4" />
+            </button>
+            <button 
+                @click="viewType = 'table'"
+                class="p-1.5 rounded-md transition-all"
+                :class="viewType === 'table' ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-400 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-slate-300'"
+                title="Таблица"
+            >
+              <List class="w-4 h-4" />
+            </button>
+          </div>
+
+          <div v-if="selectedProductIds.size > 0" class="flex items-center gap-2 bg-teal-50 dark:bg-teal-900/20 px-4 py-2 rounded-lg border border-teal-100 dark:border-teal-900/30">
+              <span class="text-sm font-medium text-teal-800 dark:text-teal-300">{{ selectedProductIds.size }} выбрано</span>
               <button @click="openBulkImageModal" class="flex items-center gap-1 bg-gray-700 text-white px-3 py-1.5 rounded-md text-sm hover:bg-gray-800 transition-colors">
                   <Images class="w-3.5 h-3.5" /> Изображения
               </button>
@@ -559,7 +580,7 @@ onMounted(() => {
           </div>
       </div>
       <div class="flex gap-2">
-          <button @click="toggleSelectAll" class="px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center gap-2 text-gray-700 text-sm transition-colors">
+          <button @click="toggleSelectAll" class="px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center gap-2 text-gray-700 dark:text-slate-200 text-sm transition-colors">
               <CheckSquare v-if="allSelected" class="w-4 h-4 text-teal-600" />
               <Square v-else class="w-4 h-4 text-gray-400" />
               Выбрать все
@@ -567,26 +588,29 @@ onMounted(() => {
           <button @click="showCleanupModal = true" class="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 text-sm transition-colors">
               Очистка медиа
           </button>
-          <button @click="loadProducts" class="p-2 bg-white rounded-lg border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors">
-              <RefreshCw class="w-4 h-4 text-gray-600" />
+          <button @click="loadProducts" class="p-2 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 shadow-sm hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors" title="Обновить">
+              <RefreshCw class="w-4 h-4 text-gray-600 dark:text-slate-400" />
           </button>
       </div>
     </header>
-    <p v-if="toast" class="mb-4 rounded-lg border border-teal-200 bg-teal-50 px-4 py-2 text-sm text-teal-800">
-      {{ toast }}
-    </p>
+      <!-- Toast -->
+      <Transition name="fade">
+        <div v-if="toast" class="fixed top-6 right-6 z-[100] bg-teal-600 text-white px-6 py-3 rounded-xl shadow-2xl font-medium animate-in slide-in-from-top-4 duration-300">
+          {{ toast }}
+        </div>
+      </Transition>
 
     <!-- Filters -->
-    <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-wrap gap-4 items-end">
+    <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 mb-6 flex flex-wrap gap-4 items-end">
         <div class="flex-1 min-w-[200px]">
             <label class="block text-xs font-medium text-gray-500 mb-1">Поиск по модели</label>
             <div class="relative">
-                <Search class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Search class="w-4 h-4 text-gray-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input 
                     v-model="searchQuery" 
                     @keyup.enter="applyFilters"
                     placeholder="Например: ARTCOOL..." 
-                    class="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none"
+                    class="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none shadow-inner"
                 />
             </div>
         </div>
@@ -598,28 +622,28 @@ onMounted(() => {
                     v-model.number="areaMin"
                     type="number" 
                     placeholder="От" 
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none"
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none shadow-inner"
                  />
                  <span class="text-gray-400">-</span>
                  <input 
                     v-model.number="areaMax"
                     type="number" 
                     placeholder="До" 
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none"
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none shadow-inner"
                  />
              </div>
         </div>
 
         <div class="flex items-center gap-2 pb-2">
-            <label class="flex items-center gap-2 cursor-pointer bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors select-none">
-                <input type="checkbox" v-model="isInverter" class="w-4 h-4 text-teal-600 rounded focus:ring-teal-500" />
-                <span class="text-sm text-gray-700">Только инвертор</span>
+            <label class="flex items-center gap-2 cursor-pointer bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors select-none">
+                <input type="checkbox" v-model="isInverter" class="w-4 h-4 text-teal-600 dark:text-teal-500 bg-white dark:bg-slate-900 border-gray-300 dark:border-slate-700 rounded focus:ring-teal-500" />
+                <span class="text-sm text-gray-700 dark:text-slate-300">Только инвертор</span>
             </label>
         </div>
 
         <button 
             @click="applyFilters"
-            class="px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium text-sm transition-colors shadow-sm"
+            class="px-6 py-2 bg-teal-600 dark:bg-teal-600 text-white rounded-lg hover:bg-teal-700 dark:hover:bg-teal-700 font-medium text-sm transition-colors shadow-sm"
         >
             Применить
         </button>
@@ -629,19 +653,20 @@ onMounted(() => {
     <div v-if="loading" class="text-center py-20 text-gray-500">Загрузка...</div>
     
     <div v-else>
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
+      <!-- Grid View -->
+      <div v-if="viewType === 'grid'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
         <div v-for="product in products" :key="product.id" 
-             class="bg-white rounded-xl shadow-sm overflow-hidden group border-2 transition-all hover:shadow-md relative"
-             :class="selectedProductIds.has(product.id) ? 'border-teal-500 ring-2 ring-teal-100' : 'border-transparent'"
+             class="bg-white dark:bg-slate-800 rounded-xl shadow-sm overflow-hidden group border-2 transition-all hover:shadow-md relative"
+             :class="selectedProductIds.has(product.id) ? 'border-teal-500 ring-2 ring-teal-100 dark:ring-teal-900/50' : 'border-transparent'"
         >
              <!-- Selection Checkbox Overlay -->
              <div class="absolute top-2.5 left-2.5 z-10">
-                 <button @click.stop="toggleSelection(product.id)" class="bg-white/90 backdrop-blur-sm rounded-md shadow-sm hover:bg-white p-1 transition-colors">
+                 <button @click.stop="toggleSelection(product.id)" class="bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-md shadow-sm hover:bg-white dark:hover:bg-slate-700 p-1 transition-colors">
                      <CheckSquare v-if="selectedProductIds.has(product.id)" class="w-5 h-5 text-teal-600" />
                      <Square v-else class="w-5 h-5 text-gray-400" />
                  </button>
              </div>
-            <div class="aspect-video bg-gray-100 relative">
+            <div class="aspect-video bg-gray-100 dark:bg-slate-700 relative">
                 <img v-if="product.main_image" :src="getImageUrl(product.main_image)" class="w-full h-full object-cover" />
                 <div v-else class="w-full h-full flex items-center justify-center text-gray-300">
                     <Package class="w-10 h-10" />
@@ -658,7 +683,7 @@ onMounted(() => {
                 </div>
             </div>
             <div class="p-3.5">
-                <h3 class="font-medium text-gray-900 text-sm truncate" :title="product.title">{{ product.title }}</h3>
+                <h3 class="font-medium text-gray-900 dark:text-slate-200 text-sm truncate" :title="product.title">{{ product.title }}</h3>
                 <div class="mt-0.5 h-6 flex items-center">
                     <template v-if="editingPriceId === product.id">
                         <input 
@@ -667,15 +692,15 @@ onMounted(() => {
                             @blur="savePrice(product)"
                             @keyup.enter="savePrice(product)"
                             @keyup.esc="cancelEditingPrice"
-                            class="w-24 px-1 py-0.5 border border-teal-500 rounded text-sm outline-none bg-teal-50"
+                            class="w-24 px-1 py-0.5 border border-teal-500 dark:border-teal-400 rounded text-sm outline-none bg-teal-50 dark:bg-teal-900/30 text-gray-900 dark:text-slate-200"
                             auto-focus
                         />
-                        <span class="text-xs text-teal-600 ml-1">руб.</span>
+                        <span class="text-xs text-teal-600 dark:text-teal-400 ml-1">руб.</span>
                     </template>
                     <p 
                         v-else 
                         @click.stop="startEditingPrice(product)"
-                        class="text-teal-700 font-semibold text-sm cursor-pointer hover:bg-teal-50 rounded px-1 -ml-1 transition-colors"
+                        class="text-teal-700 dark:text-teal-400 font-semibold text-sm cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-900/40 rounded px-1 -ml-1 transition-colors"
                         title="Нажмите, чтобы изменить цену"
                     >
                         {{ product.price }} руб.
@@ -688,6 +713,67 @@ onMounted(() => {
                 </div>
             </div>
         </div>
+      </div>
+
+      <!-- Table View -->
+      <div v-else-if="viewType === 'table'" class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
+        <table class="w-full text-left border-collapse text-gray-900 dark:text-slate-200">
+          <thead class="bg-gray-50 dark:bg-slate-900/50 text-gray-500 dark:text-slate-400">
+            <tr>
+              <th class="p-4 w-12">
+                <button @click="toggleSelectAll" class="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300">
+                  <CheckSquare v-if="allSelected" class="w-5 h-5 text-teal-600" />
+                  <Square v-else class="w-5 h-5" />
+                </button>
+              </th>
+              <th class="p-4 text-xs font-semibold uppercase tracking-wider">Фото</th>
+              <th class="p-4 text-xs font-semibold uppercase tracking-wider">Название</th>
+              <th class="p-4 text-xs font-semibold uppercase tracking-wider">Цена</th>
+              <th class="p-4 text-xs font-semibold uppercase tracking-wider text-right">Действия</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 dark:divide-slate-700">
+            <tr v-for="product in products" :key="product.id" 
+                class="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
+                :class="{ 'bg-teal-50/50 dark:bg-teal-900/20': selectedProductIds.has(product.id) }"
+            >
+              <td class="p-4">
+                <button @click="toggleSelection(product.id)" class="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300">
+                  <CheckSquare v-if="selectedProductIds.has(product.id)" class="w-5 h-5 text-teal-600" />
+                  <Square v-else class="w-5 h-5" />
+                </button>
+              </td>
+              <td class="p-4">
+                <div class="w-16 h-10 bg-gray-100 dark:bg-slate-700 rounded overflow-hidden shadow-sm relative group/thumb cursor-pointer" @click="openEditModal(product)">
+                    <img v-if="product.main_image" :src="getImageUrl(product.main_image)" class="w-full h-full object-cover" />
+                    <div v-else class="w-full h-full flex items-center justify-center text-gray-300">
+                      <Package class="w-5 h-5" />
+                    </div>
+                </div>
+              </td>
+              <td class="p-4">
+                <div class="text-sm font-medium max-w-xl truncate" :title="product.title">
+                  {{ product.title }}
+                </div>
+              </td>
+              <td class="p-4">
+                <div class="text-sm font-semibold text-teal-700 dark:text-teal-400">
+                   {{ product.price }} руб.
+                </div>
+              </td>
+              <td class="p-4 text-right">
+                <div class="flex justify-end gap-2">
+                  <button @click="openSearchModal(product)" class="p-2 text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" title="Фото">
+                    <Images class="w-4 h-4" />
+                  </button>
+                  <button @click="openEditModal(product)" class="p-2 text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" title="Изменить">
+                    <Settings class="w-4 h-4" />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- Lazy Load Sentinel -->

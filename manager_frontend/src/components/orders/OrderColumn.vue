@@ -27,13 +27,13 @@ const onDrop = (event: DragEvent, status: string) => {
 
 <template>
   <section
-    class="min-h-[220px] w-[360px] shrink-0 rounded-[2rem] border border-gray-200 bg-white p-4"
+    class="min-h-[220px] w-[320px] md:w-[350px] lg:w-[380px] shrink-0 rounded-[2rem] border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4"
     @dragover.prevent
     @drop="(event) => onDrop(event, status)"
   >
     <header class="mb-3 flex items-center justify-between">
-      <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-600">{{ label }}</h3>
-      <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">{{ orders.length }}</span>
+      <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">{{ label }}</h3>
+      <span class="rounded-full bg-gray-100 dark:bg-slate-700 px-2 py-0.5 text-xs text-gray-700 dark:text-slate-300">{{ orders.length }}</span>
     </header>
 
     <div class="space-y-3">
