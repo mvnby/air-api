@@ -748,3 +748,17 @@ class ProductUpdate(BaseModel):
 
 class BulkRoundRequest(BaseModel):
     product_ids: List[int]
+
+# --- DASHBOARD STATS ---
+
+class DashboardTouchpoint(BaseModel):
+    order_id: int
+    customer_name: str
+    phone: Optional[str] = None
+    next_followup_date: datetime
+    title: Optional[str] = None
+
+class DashboardStatsResponse(BaseModel):
+    total_amount: float
+    new_leads_count: int
+    upcoming_touchpoints: List[DashboardTouchpoint]

@@ -4077,6 +4077,32 @@
         }
       }
     },
+    "/api/manager/dashboard/stats": {
+      "get": {
+        "tags": [
+          "manager_dashboard"
+        ],
+        "summary": "Get Dashboard Stats",
+        "operationId": "get_dashboard_stats",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardStatsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/system/rebuild-web": {
       "post": {
         "tags": [
@@ -4690,6 +4716,78 @@
           "phone"
         ],
         "title": "CustomerPayload"
+      },
+      "DashboardStatsResponse": {
+        "properties": {
+          "total_amount": {
+            "type": "number",
+            "title": "Total Amount"
+          },
+          "new_leads_count": {
+            "type": "integer",
+            "title": "New Leads Count"
+          },
+          "upcoming_touchpoints": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardTouchpoint"
+            },
+            "type": "array",
+            "title": "Upcoming Touchpoints"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_amount",
+          "new_leads_count",
+          "upcoming_touchpoints"
+        ],
+        "title": "DashboardStatsResponse"
+      },
+      "DashboardTouchpoint": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "customer_name": {
+            "type": "string",
+            "title": "Customer Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "next_followup_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Next Followup Date"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "customer_name",
+          "next_followup_date"
+        ],
+        "title": "DashboardTouchpoint"
       },
       "FilterRange": {
         "properties": {
