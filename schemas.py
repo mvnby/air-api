@@ -151,6 +151,26 @@ class ServiceResponse(BaseModel):
 
 # --- ORDERS ---
 
+class CalendarEventType(str, Enum):
+    ASSESSMENT = "assessment"
+    INSTALLATION = "installation"
+
+class CalendarEventResponse(BaseModel):
+    id: str  # Unique ID for the event (e.g. "123-assessment")
+    order_id: int
+    type: CalendarEventType
+    date: datetime
+    status: str
+    customer_name: Optional[str] = None
+    address: Optional[str] = None
+    
+    # FullCalendar fields
+    title: str
+    start: datetime
+    allDay: bool = True
+    color: str
+
+
 class CartItemPayload(BaseModel):
     product_id: Optional[int] = None
     quantity: int = 1

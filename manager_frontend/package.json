@@ -10,6 +10,10 @@
     "gen:api": "openapi --input ../openapi.json --output ./src/client --client fetch --useUnionTypes"
   },
   "dependencies": {
+    "@fullcalendar/core": "^6.1.20",
+    "@fullcalendar/daygrid": "^6.1.20",
+    "@fullcalendar/interaction": "^6.1.20",
+    "@fullcalendar/vue3": "^6.1.20",
     "@vueuse/core": "^14.2.0",
     "imask": "^7.6.1",
     "lucide-vue-next": "^0.563.0",
