@@ -212,6 +212,7 @@ async def get_all_tags(
 
 @router.get(
     "/products/smart-search",
+    response_model=ManagerCatalogProductListResponse,
     operation_id=SMART_SEARCH_PRODUCTS,
 )
 async def smart_search_products(

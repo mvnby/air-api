@@ -488,7 +488,7 @@ class ManagerCatalogProductItemResponse(BaseModel):
 
 
 class ManagerCatalogProductListResponse(BaseModel):
-    items: List[ProductListResponse]
+    items: List[ManagerCatalogProductItemResponse]
     meta: Meta
 
 
