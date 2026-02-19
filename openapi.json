@@ -1219,6 +1219,24 @@
               ],
               "title": "Is Inverter"
             }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Smart search query",
+              "title": "Q"
+            },
+            "description": "Smart search query"
           }
         ],
         "responses": {
@@ -1414,6 +1432,24 @@
               ],
               "title": "Is Inverter"
             }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Smart search query",
+              "title": "Q"
+            },
+            "description": "Smart search query"
           }
         ],
         "responses": {
