@@ -69,8 +69,10 @@ const showCustomerModal = ref(false);
 const customer = computed(() => props.order?.customer ?? null);
 const draftKey = computed(() => (props.order ? `manager_order_drawer_draft_${props.order.id}` : ''));
 
-const setToast = (message: string) => {
+const toastType = ref<'success' | 'error'>('success');
+const setToast = (message: string, type: 'success' | 'error' = 'success') => {
   toast.value = message;
+  toastType.value = type;
   window.setTimeout(() => {
     if (toast.value === message) toast.value = '';
   }, 3000);
@@ -78,6 +80,9 @@ const setToast = (message: string) => {
 
 const isGeneratingDoc = ref(false);
 const processingDocId = ref<number | null>(null);
+const docDropdownOpen = ref(false);
+
+const hasContract = computed(() => documents.value.some(d => d.doc_type === 'contract'));
 
 const DOCUMENT_TYPES = [
   { type: 'contract', label: 'Договор' },
@@ -104,9 +109,9 @@ const generateDocument = async (type: string) => {
     const res = await ManagerOrdersService.generateManagerOrderDocument(props.order.id, type);
     window.open(res.edit_url, '_blank');
     await loadDocuments(props.order.id);
-    setToast('Документ создан');
+    setToast('Документ создан', 'success');
   } catch (error) {
-    setToast(`Ошибка генерации: ${getApiErrorMessage(error)}`);
+    setToast(`Ошибка генерации: ${getApiErrorMessage(error)}`, 'error');
   } finally {
     isGeneratingDoc.value = false;
   }
@@ -140,7 +145,7 @@ const downloadDocument = async (doc: ManagerOrderDocumentItem) => {
     link.click();
     link.remove();
   } catch (error) {
-    setToast('Ошибка скачивания');
+    setToast('Ошибка скачивания', 'error');
   } finally {
     processingDocId.value = null;
   }
@@ -152,9 +157,9 @@ const deleteDocument = async (docId: number) => {
   try {
     await ManagerDocsService.deleteManagerDoc(docId);
     if (props.order?.id) await loadDocuments(props.order.id);
-    setToast('Документ удален');
+    setToast('Документ удален', 'success');
   } catch (error) {
-    setToast('Ошибка удаления');
+    setToast('Ошибка удаления', 'error');
   } finally {
     processingDocId.value = null;
   }
@@ -664,45 +669,60 @@ watch(
 
       <section class="mt-6">
         <div class="mb-2 flex items-center justify-between">
-          <h3 class="text-lg font-semibold font-['Space_Grotesk']">Документы</h3>
-          <div class="flex gap-2">
-             <button
+          <h3 class="text-lg font-semibold font-['Space_Grotesk'] text-slate-800">Документы</h3>
+          
+          <div class="relative">
+            <button
+               class="flex items-center gap-1 rounded-xl bg-[#007f80] px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/50 disabled:opacity-50"
+               :disabled="isGeneratingDoc || !!processingDocId"
+               @click="docDropdownOpen = !docDropdownOpen"
+            >
+              <span class="material-icons-round text-[18px]">add_circle</span> Создать
+            </button>
+            <div
+               v-if="docDropdownOpen"
+               class="absolute right-0 top-full z-10 mt-2 w-48 rounded-xl border border-slate-700 bg-slate-800 p-1 shadow-lg"
+            >
+              <button
                 v-for="dtype in DOCUMENT_TYPES"
                 :key="dtype.type"
-                class="btn-mini-outline text-xs px-2 py-1"
-                :disabled="isGeneratingDoc || !!processingDocId"
-                @click="generateDocument(dtype.type)"
-             >
-                + {{ dtype.label }}
-             </button>
+                class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-700 disabled:opacity-50 disabled:hover:bg-transparent"
+                :disabled="(dtype.type === 'act' || dtype.type === 'ttn1' || dtype.type === 'tn2') && !hasContract"
+                :title="(dtype.type === 'act' || dtype.type === 'ttn1' || dtype.type === 'tn2') && !hasContract ? 'Сначала создайте договор' : ''"
+                @click="generateDocument(dtype.type); docDropdownOpen = false"
+              >
+                {{ dtype.label }}
+                <span v-if="(dtype.type === 'act' || dtype.type === 'ttn1' || dtype.type === 'tn2') && !hasContract" class="material-icons-round text-[16px] text-amber-500">lock</span>
+              </button>
+            </div>
           </div>
         </div>
         
-        <div v-if="documents.length" class="space-y-2">
-            <div v-for="doc in documents" :key="doc.id" class="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-3">
+        <div v-if="documents.length" class="space-y-3 mt-3">
+            <div v-for="doc in documents" :key="doc.id" class="flex items-center justify-between rounded-xl border border-slate-700/50 bg-[#1e293b] p-3 text-slate-300">
                 <div class="flex items-center gap-3">
-                    <div class="h-8 w-8 flex items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                        📄
+                    <div class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 text-teal-400">
+                      <span class="material-icons-round text-xl">description</span>
                     </div>
                     <div>
-                        <p class="text-sm font-medium">{{ doc.number }}</p>
-                        <p class="text-xs text-gray-500">{{ new Date(doc.date).toLocaleDateString() }} · {{ doc.doc_type }}</p>
+                        <p class="text-sm font-medium text-white">{{ doc.number || doc.doc_type }}</p>
+                        <p class="text-xs text-slate-400">{{ new Date(doc.date).toLocaleDateString() }} · <span class="uppercase">{{ doc.doc_type }}</span></p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    <a :href="doc.edit_url" target="_blank" class="btn-mini-outline px-2" title="Редактировать в Google Docs">
-                        ✏️
+                    <a :href="doc.edit_url" target="_blank" class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white" title="Редактировать">
+                        <span class="material-icons-round text-[18px]">edit</span>
                     </a>
-                    <button class="btn-mini-outline px-2" :disabled="processingDocId === doc.id" @click="downloadDocument(doc)" title="Скачать PDF">
-                        ⬇️
+                    <button class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white disabled:opacity-50" :disabled="processingDocId === doc.id" @click="downloadDocument(doc)" title="Скачать PDF">
+                        <span class="material-icons-round text-[18px]">download</span>
                     </button>
-                    <button class="btn-mini-outline px-2 text-red-500 hover:text-red-700 hover:border-red-200" :disabled="processingDocId === doc.id" @click="deleteDocument(doc.id)" title="Удалить">
-                        ✕
+                    <button class="flex h-8 w-8 items-center justify-center rounded-lg text-red-400 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50" :disabled="processingDocId === doc.id" @click="deleteDocument(doc.id)" title="Удалить">
+                        <span class="material-icons-round text-[18px]">delete</span>
                     </button>
                 </div>
             </div>
         </div>
-        <div v-else class="text-sm text-gray-400 italic py-2">
+        <div v-else class="text-sm text-slate-500 italic py-3 text-center rounded-xl border border-dashed border-slate-700">
             Нет сформированных документов
         </div>
       </section>

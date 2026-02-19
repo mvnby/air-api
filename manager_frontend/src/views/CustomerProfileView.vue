@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { ArrowLeft, Building2, Mail, Phone, ReceiptText, Save, UserRound, X } from 'lucide-vue-next';
 import { api } from '../api';
-import type { ManagerCatalogCustomerItemResponse } from '../client';
+import { ManagerService, type ManagerCatalogCustomerItemResponse, type ManagerCustomerDocumentItem } from '../client';
 import { useBelarusPhoneMask } from '../composables/useBelarusPhoneMask';
 import { dispatchCustomerUpdated } from '../utils/customer-events';
 import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
@@ -42,6 +42,9 @@ const saveError = ref('');
 const success = ref('');
 const editMode = ref(false);
 const serverErrors = ref<Record<string, string>>({});
+
+const documents = ref<ManagerCustomerDocumentItem[]>([]);
+const docsLoading = ref(false);
 
 const phoneError = ref('');
 const emailError = ref('');
@@ -170,6 +173,19 @@ const loadCustomer = async () => {
     customer.value = null;
   } finally {
     loading.value = false;
+  }
+};
+
+const loadCustomerDocs = async () => {
+  if (!customerId.value) return;
+  docsLoading.value = true;
+  try {
+    const res = await ManagerService.getManagerCustomerDocs(customerId.value);
+    documents.value = res.items;
+  } catch (e) {
+    console.error('Failed to load customer docs', e);
+  } finally {
+    docsLoading.value = false;
   }
 };
 
@@ -305,10 +321,12 @@ const saveCustomer = async () => {
 
 watch(customerId, () => {
   void loadCustomer();
+  void loadCustomerDocs();
 });
 
 onMounted(() => {
   void loadCustomer();
+  void loadCustomerDocs();
 });
 </script>
 
@@ -427,6 +445,43 @@ onMounted(() => {
             </template>
           </article>
         </section>
+
+        <section v-if="!editMode" class="mt-8 mb-6">
+          <h2 class="mb-4 flex items-center gap-2 text-lg font-bold">
+            <span class="material-icons-round text-teal-500">folder</span>
+            Связанные документы 
+            <span v-if="documents.length" class="flex h-6 w-6 items-center justify-center rounded-full bg-teal-500/20 text-xs text-teal-400">{{ documents.length }}</span>
+          </h2>
+
+          <div v-if="docsLoading" class="text-sm text-[var(--mv-text-muted)] p-5 border border-dashed border-[var(--mv-border)] rounded-2xl">
+            Загрузка документов...
+          </div>
+          <div v-else-if="documents.length" class="space-y-3">
+             <div v-for="doc in documents" :key="doc.id" class="flex items-center justify-between rounded-xl border border-slate-700/50 bg-[#1e293b] p-4 text-slate-300 shadow-sm">
+                <div class="flex items-center gap-4">
+                    <div class="flex h-12 w-12 items-center justify-center rounded-full bg-slate-800 text-teal-400">
+                      <span class="material-icons-round text-2xl">description</span>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2 mb-1">
+                          <p class="text-[15px] font-semibold text-white leading-none">{{ doc.number || doc.doc_type }}</p>
+                          <a :href="`/manager/orders/edit/${doc.order_id}`" target="_blank" class="rounded bg-teal-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-teal-400 border border-teal-500/20 hover:bg-teal-500/20 hover:text-white transition-colors">Заказ #{{ doc.order_id }}</a>
+                        </div>
+                        <p class="text-[13px] text-slate-400 leading-none mt-1">{{ new Date(doc.date).toLocaleDateString('ru-RU', { year: 'numeric', month: 'long', day: 'numeric' }) }} · <span class="uppercase font-medium text-slate-300">{{ doc.doc_type }}</span></p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-4">
+                    <a :href="doc.edit_url" target="_blank" class="flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors" title="Открыть документ">
+                        <span class="material-icons-round text-[20px]">open_in_new</span>
+                    </a>
+                </div>
+            </div>
+          </div>
+          <div v-else class="text-sm text-[var(--mv-text-muted)] italic py-5 text-center rounded-2xl border border-dashed border-[var(--mv-border)]">
+              Документы пока не найдены
+          </div>
+        </section>
+
       </div>
     </div>
   </div>
