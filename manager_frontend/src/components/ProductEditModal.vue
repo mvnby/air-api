@@ -182,23 +182,23 @@ const save = async () => {
 
 <template>
     <div v-if="modelValue" class="product-edit-modal fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4" @click.self="close">
-        <div class="bg-white rounded-2xl w-full max-w-5xl flex flex-col max-h-[90vh] shadow-2xl border border-gray-100 overflow-hidden">
+        <div class="bg-slate-50 dark:bg-slate-900 rounded-2xl w-full max-w-5xl flex flex-col max-h-[90vh] shadow-2xl border border-gray-100 dark:border-slate-800 overflow-hidden">
             <!-- Header -->
-            <header class="p-5 border-b flex justify-between items-center bg-gray-50/50">
+            <header class="p-5 border-b dark:border-slate-800 flex justify-between items-center bg-slate-100/50 dark:bg-slate-800/50">
                 <div class="flex items-center gap-3">
                     <div class="p-2 bg-teal-100 rounded-lg text-teal-700">
                         <Edit3 class="w-5 h-5" />
                     </div>
                     <div>
-                        <h2 class="text-lg font-bold text-gray-900">Редактирование товара</h2>
-                        <p class="text-xs text-gray-500 font-medium uppercase tracking-wider">ID: {{ product?.id }}</p>
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white">Редактирование товара</h2>
+                        <p class="text-xs text-gray-500 dark:text-slate-400 font-medium uppercase tracking-wider">ID: {{ product?.id }}</p>
                     </div>
                 </div>
                 <button @click="close" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all">
                     <X class="w-5 h-5" />
                 </button>
             </header>
-            <div v-if="formMessage" class="mx-6 mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <div v-if="formMessage" class="mx-6 mt-4 rounded-xl border border-red-200 dark:border-red-900/30 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-700 dark:text-red-400">
                 {{ formMessage }}
             </div>
             
@@ -206,69 +206,69 @@ const save = async () => {
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <!-- Column 1: Basic Info -->
                     <section class="space-y-5">
-                        <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest">Основные данные</h3>
+                        <h3 class="text-xs font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest">Основные данные</h3>
                         
                         <div>
-                            <label class="block text-sm font-semibold text-gray-700 mb-1">Название модели</label>
+                            <label class="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">Название модели</label>
                             <input 
                                 v-model="form.title" 
                                 type="text"
-                                class="w-full px-3 py-2 bg-gray-50 border rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-gray-900 font-medium text-sm"
-                                :class="formServerErrors.title ? 'border-red-400 focus:border-red-500' : 'border-gray-200'"
+                                class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-gray-900 dark:text-slate-100 font-medium text-sm"
+                                :class="formServerErrors.title ? 'border-red-400 dark:border-red-800 focus:border-red-500' : 'border-gray-200 dark:border-slate-700'"
                                 placeholder="Напр: LG ARTCOOL Gallery"
                             />
                             <p v-if="formServerErrors.title" class="mt-1 text-xs text-red-600">{{ formServerErrors.title }}</p>
                         </div>
 
                         <div>
-                            <label class="block text-sm font-semibold text-gray-700 mb-1 flex justify-between items-center">
+                            <label class="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1 flex justify-between items-center">
                                 <span>Slug (URL путь)</span>
-                                <Globe class="w-3.5 h-3.5 text-gray-400" />
+                                <Globe class="w-3.5 h-3.5 text-gray-400 dark:text-slate-500" />
                             </label>
                             <input 
                                 v-model="form.slug" 
                                 type="text"
-                                class="w-full px-3 py-2 bg-gray-50 border rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-sm font-mono text-gray-600"
-                                :class="formServerErrors.slug ? 'border-red-400 focus:border-red-500' : 'border-gray-200'"
+                                class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-sm font-mono text-gray-600 dark:text-slate-300"
+                                :class="formServerErrors.slug ? 'border-red-400 dark:border-red-800 focus:border-red-500' : 'border-gray-200 dark:border-slate-700'"
                                 placeholder="lg-artcool-gallery"
                             />
-                            <p v-if="formServerErrors.slug" class="mt-1 text-xs text-red-600">{{ formServerErrors.slug }}</p>
+                            <p v-if="formServerErrors.slug" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ formServerErrors.slug }}</p>
                         </div>
 
                         <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <label class="block text-sm font-semibold text-gray-700 mb-1">Цена (BYN)</label>
+                                <label class="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">Цена (BYN)</label>
                                 <div class="relative">
                                     <input 
                                         v-model.number="form.price" 
                                         type="number"
-                                        class="w-full pl-3 pr-10 py-2 bg-gray-50 border rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all font-bold text-teal-700 text-sm"
-                                        :class="formServerErrors.price ? 'border-red-400 focus:border-red-500' : 'border-gray-200'"
+                                        class="w-full pl-3 pr-10 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all font-bold text-teal-700 dark:text-teal-400 text-sm"
+                                        :class="formServerErrors.price ? 'border-red-400 dark:border-red-800 focus:border-red-500' : 'border-gray-200 dark:border-slate-700'"
                                     />
-                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">руб.</span>
+                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 text-xs">руб.</span>
                                 </div>
-                                <p v-if="formServerErrors.price" class="mt-1 text-xs text-red-600">{{ formServerErrors.price }}</p>
+                                <p v-if="formServerErrors.price" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ formServerErrors.price }}</p>
                             </div>
                             <div>
-                                <label class="block text-sm font-semibold text-gray-700 mb-1 line-through decoration-gray-400">Старая цена</label>
+                                <label class="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1 line-through decoration-gray-400 dark:decoration-slate-600">Старая цена</label>
                                 <div class="relative">
                                     <input 
                                         v-model.number="form.old_price" 
                                         type="number"
-                                        class="w-full pl-3 pr-10 py-2 bg-gray-50 border rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-gray-500 text-sm"
-                                        :class="formServerErrors.old_price ? 'border-red-400 focus:border-red-500' : 'border-gray-200'"
+                                        class="w-full pl-3 pr-10 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-gray-500 dark:text-slate-400 text-sm"
+                                        :class="formServerErrors.old_price ? 'border-red-400 dark:border-red-800 focus:border-red-500' : 'border-gray-200 dark:border-slate-700'"
                                     />
-                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">руб.</span>
+                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 text-xs">руб.</span>
                                 </div>
-                                <p v-if="formServerErrors.old_price" class="mt-1 text-xs text-red-600">{{ formServerErrors.old_price }}</p>
+                                <p v-if="formServerErrors.old_price" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ formServerErrors.old_price }}</p>
                             </div>
                         </div>
 
                         <div class="flex items-center gap-2 pt-1">
                              <label class="relative inline-flex items-center cursor-pointer">
                                 <input type="checkbox" v-model="form.is_published" class="sr-only peer">
-                                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
-                                <span class="ms-3 text-sm font-semibold text-gray-700">Опубликовано</span>
+                                <div class="w-11 h-6 bg-gray-200 dark:bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 dark:peer-focus:ring-teal-900 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 dark:after:border-slate-600 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+                                <span class="ms-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Опубликовано</span>
                             </label>
                         </div>
                     </section>
@@ -276,25 +276,25 @@ const save = async () => {
                     <!-- Column 2: Tags -->
                     <section class="space-y-5">
                         <div class="flex justify-between items-center">
-                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                            <h3 class="text-xs font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
                                 <Tag class="w-3.5 h-3.5" /> Теги
                             </h3>
-                            <span class="text-xs text-gray-400">{{ selectedTagIds.size }} выбрано</span>
+                            <span class="text-xs text-gray-400 dark:text-slate-500">{{ selectedTagIds.size }} выбрано</span>
                         </div>
 
                         <input 
                             v-model="tagSearchQuery"
                             type="text"
                             placeholder="Поиск тега..."
-                            class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-sm"
+                            class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-sm dark:text-slate-200 dark:placeholder-slate-500"
                         />
 
-                        <div class="bg-gray-50/50 rounded-2xl border border-gray-100 max-h-[400px] overflow-y-auto">
+                        <div class="bg-gray-50/50 dark:bg-slate-800/50 rounded-2xl border border-gray-100 dark:border-slate-800 max-h-[400px] overflow-y-auto">
                             <div v-if="tagsLoading" class="p-6 text-center text-gray-400 text-sm">Загрузка...</div>
                             <div v-else-if="filteredTagGroups.length === 0" class="p-6 text-center text-gray-400 text-sm">Нет тегов</div>
                             <div v-else>
-                                <div v-for="group in filteredTagGroups" :key="group.id" class="p-3 border-b border-gray-100 last:border-b-0">
-                                    <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">{{ group.title }}</p>
+                                <div v-for="group in filteredTagGroups" :key="group.id" class="p-3 border-b border-gray-100 dark:border-slate-800 last:border-b-0">
+                                    <p class="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-2">{{ group.title }}</p>
                                     <div class="flex flex-wrap gap-1.5">
                                         <button 
                                             v-for="tag in group.tags" 
@@ -314,21 +314,21 @@ const save = async () => {
                     <!-- Column 3: Specs -->
                     <section class="space-y-5">
                         <div class="flex justify-between items-center">
-                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                            <h3 class="text-xs font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
                                  Характеристики
                             </h3>
-                            <button @click="addRow" class="text-xs bg-white border border-gray-200 px-2.5 py-1 rounded-lg hover:bg-gray-50 text-teal-600 font-bold flex items-center gap-1 transition-colors shadow-sm">
+                            <button @click="addRow" class="text-xs bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 px-2.5 py-1 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 text-teal-600 dark:text-teal-400 font-bold flex items-center gap-1 transition-colors shadow-sm">
                                 <Plus class="w-3 h-3" /> Добавить
                             </button>
                         </div>
 
-                        <div class="space-y-2 bg-gray-50/50 p-3 rounded-2xl border border-gray-100 max-h-[400px] overflow-y-auto">
+                        <div class="space-y-2 bg-slate-100/50 dark:bg-slate-800/50 p-3 rounded-2xl border border-gray-100 dark:border-slate-800 max-h-[400px] overflow-y-auto">
                             <div v-for="(row, idx) in specs" :key="idx" class="flex gap-1.5 items-start group">
                                 <div class="relative flex-1">
                                     <input 
                                         v-model="row.key" 
                                         placeholder="Ключ" 
-                                        class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all font-medium"
+                                        class="w-full border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all font-medium text-gray-900 dark:text-slate-200 dark:placeholder-slate-500 shadow-inner"
                                         list="keys-datalist"
                                     />
                                     <datalist id="keys-datalist">
@@ -340,7 +340,7 @@ const save = async () => {
                                     <input 
                                         v-model="row.value" 
                                         placeholder="Значение" 
-                                        class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                                        class="w-full border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all text-gray-900 dark:text-slate-200 dark:placeholder-slate-500 shadow-inner"
                                     />
                                 </div>
                                 
@@ -349,7 +349,7 @@ const save = async () => {
                                 </button>
                             </div>
                             
-                            <div v-if="specs.length === 0" class="text-center py-6 text-gray-400">
+                            <div v-if="specs.length === 0" class="text-center py-6 text-gray-400 dark:text-slate-500">
                                  <Hash class="w-6 h-6 mx-auto mb-1.5 opacity-20" />
                                  <p class="text-xs">Нет характеристик</p>
                             </div>
@@ -359,8 +359,8 @@ const save = async () => {
             </div>
             
             <!-- Footer -->
-            <footer class="p-5 border-t bg-gray-50/50 flex justify-end gap-3">
-                <button @click="close" class="px-5 py-2 text-sm font-bold text-gray-500 hover:text-gray-700 hover:bg-white rounded-xl transition-all">
+            <footer class="p-5 border-t dark:border-slate-800 bg-slate-100/50 dark:bg-slate-800/50 flex justify-end gap-3">
+                <button @click="close" class="px-5 py-2 text-sm font-bold text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl transition-all">
                     Отмена
                 </button>
                 <button 
@@ -404,18 +404,11 @@ const save = async () => {
   border-color: #334155 !important;
 }
 
-:global(.dark) .product-edit-modal input,
-:global(.dark) .product-edit-modal select {
-  background-color: #0b1324;
-  border-color: #334155;
-  color: #f8fafc;
+:global(.dark) .product-edit-modal footer button:first-child {
+  color: #cbd5e1 !important;
 }
 
 :global(.dark) .product-edit-modal input::placeholder {
-  color: #94a3b8;
-}
-
-:global(.dark) .product-edit-modal footer button:first-child {
-  color: #cbd5e1 !important;
+  color: #64748b !important;
 }
 </style>

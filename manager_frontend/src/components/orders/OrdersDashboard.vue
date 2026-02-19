@@ -301,9 +301,9 @@ watch(drawerOpen, (isOpen) => {
 <template>
   <div class="min-h-screen bg-gray-50 text-slate-900">
     <div class="mx-auto max-w-[1400px] px-4 py-6 md:px-8">
-      <header class="mb-5 rounded-[2rem] border border-gray-200 bg-white shadow-sm p-5">
+      <header class="mb-5 rounded-[2rem] border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm p-5">
         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h1 class="text-2xl font-bold">CRM Orders Dashboard</h1>
+          <h1 class="text-2xl font-bold dark:text-white">CRM Orders Dashboard</h1>
           <OrdersViewToggle v-model="view" />
         </div>
         <div class="mb-4">
@@ -324,14 +324,19 @@ watch(drawerOpen, (isOpen) => {
             <option value="margin_desc">Макс. маржа</option>
             <option value="followup_asc">Ближайшее касание</option>
           </select>
-          <label class="inline-flex items-center gap-2 rounded-[12px] border border-gray-200 bg-white text-gray-700 px-3 py-2">
+          <label class="inline-flex items-center gap-2 rounded-[12px] border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 px-3 py-2">
             <input v-model="overdueOnly" type="checkbox" />
             Только просроченные касания
           </label>
         </div>
       </header>
 
-      <p v-if="toast" class="mb-4 rounded-[12px] bg-[#007f80] px-4 py-2 text-sm font-semibold text-white">{{ toast }}</p>
+      <!-- Toast -->
+      <Transition name="fade">
+        <div v-if="toast" class="fixed top-6 right-6 z-[100] bg-teal-600 text-white px-6 py-3 rounded-xl shadow-2xl font-medium animate-in slide-in-from-top-4 duration-300">
+          {{ toast }}
+        </div>
+      </Transition>
       <p v-if="loading" class="mb-4 text-sm text-gray-500">Загрузка сделок...</p>
 
       <OrderKanbanBoard

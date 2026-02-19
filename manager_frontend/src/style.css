@@ -154,3 +154,16 @@ body {
 .dark .manager-root .bg-amber-50 {
   background-color: rgba(146, 64, 14, 0.28) !important;
 }
+
+/* Global Dark Mode Failsafe for Inputs */
+.dark input:not([type="checkbox"]):not([type="radio"]),
+.dark select,
+.dark textarea {
+  background-color: #0f172a !important;
+  color: #f1f5f9 !important;
+  border-color: #334155 !important;
+}
+
+.dark input::placeholder {
+  color: #64748b !important;
+}
