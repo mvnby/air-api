@@ -142,7 +142,7 @@ class DocumentService:
         """Возвращает список всех документов клиента."""
         query = select(OrderDocument).join(Order).where(
             Order.customer_id == customer_id
-        ).order_by(OrderDocument.created_at.desc())
+        ).order_by(OrderDocument.date.desc())
         
         result = await session.execute(query)
         return result.scalars().all()
