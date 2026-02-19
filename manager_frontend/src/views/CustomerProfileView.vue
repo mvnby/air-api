@@ -465,7 +465,7 @@ onMounted(() => {
                     <div>
                         <div class="flex items-center gap-2 mb-1">
                           <p class="text-[15px] font-semibold text-white leading-none">{{ doc.number || doc.doc_type }}</p>
-                          <a :href="`/manager/orders/edit/${doc.order_id}`" target="_blank" class="rounded bg-teal-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-teal-400 border border-teal-500/20 hover:bg-teal-500/20 hover:text-white transition-colors">Заказ #{{ doc.order_id }}</a>
+                          <a :href="`/manager/orders/kanban?orderId=${doc.order_id}`" target="_blank" class="rounded bg-teal-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-teal-400 border border-teal-500/20 hover:bg-teal-500/20 hover:text-white transition-colors">Заказ #{{ doc.order_id }}</a>
                         </div>
                         <p class="text-[13px] text-slate-400 leading-none mt-1">{{ new Date(doc.date).toLocaleDateString('ru-RU', { year: 'numeric', month: 'long', day: 'numeric' }) }} · <span class="uppercase font-medium text-slate-300">{{ doc.doc_type }}</span></p>
                     </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { Search, Users, ChevronLeft, ChevronRight, Phone, Mail, Building } from 'lucide-vue-next';
 import { api } from '../api';
 import type { ManagerCatalogCustomerItemResponse } from '../client';
@@ -86,7 +86,27 @@ onMounted(() => {
       return;
     }
   }
+
+  const sQuery = sessionStorage.getItem('customers_search');
+  if (sQuery) searchQuery.value = sQuery;
+  
+  const sType = sessionStorage.getItem('customers_type');
+  if (sType !== null) typeFilter.value = sType;
+  
+  const sOrders = sessionStorage.getItem('customers_orders');
+  if (sOrders) onlyWithOrders.value = sOrders === 'true';
+  
+  const sPage = sessionStorage.getItem('customers_page');
+  if (sPage) page.value = Number(sPage) || 1;
+
   void loadCustomers();
+});
+
+watch([searchQuery, typeFilter, onlyWithOrders, page], () => {
+  sessionStorage.setItem('customers_search', searchQuery.value);
+  sessionStorage.setItem('customers_type', typeFilter.value);
+  sessionStorage.setItem('customers_orders', String(onlyWithOrders.value));
+  sessionStorage.setItem('customers_page', String(page.value));
 });
 
 const handleCustomerUpdated = (event: Event) => {
