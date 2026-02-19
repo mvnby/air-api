@@ -2,10 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { ManagerCatalogProductItemResponse } from './ManagerCatalogProductItemResponse';
 import type { Meta } from './Meta';
+import type { ProductListResponse } from './ProductListResponse';
 export type ManagerCatalogProductListResponse = {
-    items: Array<ManagerCatalogProductItemResponse>;
+    items: Array<ProductListResponse>;
     meta: Meta;
 };
 

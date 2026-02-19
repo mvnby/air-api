@@ -25,6 +25,7 @@ const saving = ref(false);
 const orders = ref<ManagerOrderListItemResponse[]>([]);
 const movingOrderIds = ref<number[]>([]);
 const toast = ref('');
+const isHydrated = ref(false);
 
 const drawerOpen = ref(false);
 const selectedOrder = ref<ManagerOrderDetailResponse | null>(null);
@@ -133,6 +134,7 @@ let searchTimer: number | undefined;
 watch(
   () => [segment.value, statusFilter.value, overdueOnly.value, sort.value],
   async () => {
+    if (!isHydrated.value) return;
     persistSegmentAndView();
     await loadOrders();
   },
@@ -141,6 +143,7 @@ watch(view, () => {
   persistSegmentAndView();
 });
 watch(search, () => {
+  if (!isHydrated.value) return;
   if (searchTimer) window.clearTimeout(searchTimer);
   searchTimer = window.setTimeout(async () => {
     await loadOrders();
@@ -260,16 +263,6 @@ const handleLogin = async () => {
   }
 };
 
-const checkAuth = async () => {
-  try {
-    await api.checkAuth();
-    showLoginModal.value = false;
-    await loadOrders();
-  } catch {
-    showLoginModal.value = true;
-  }
-};
-
 onMounted(async () => {
   restoreSegmentAndView();
   const params = new URLSearchParams(window.location.search);
@@ -285,7 +278,11 @@ onMounted(async () => {
     }
   }
   persistSegmentAndView();
-  await checkAuth();
+  try {
+    await loadOrders();
+  } finally {
+    isHydrated.value = true;
+  }
 });
 
 watch(drawerOpen, (isOpen) => {

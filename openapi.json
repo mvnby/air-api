@@ -5217,148 +5217,11 @@
         ],
         "title": "ManagerCatalogCustomerListResponse"
       },
-      "ManagerCatalogProductImageResponse": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "url": {
-            "type": "string",
-            "title": "Url"
-          },
-          "is_installation_photo": {
-            "type": "boolean",
-            "title": "Is Installation Photo"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "url",
-          "is_installation_photo"
-        ],
-        "title": "ManagerCatalogProductImageResponse"
-      },
-      "ManagerCatalogProductItemResponse": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title"
-          },
-          "slug": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Slug"
-          },
-          "price": {
-            "type": "integer",
-            "title": "Price"
-          },
-          "old_price": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Old Price"
-          },
-          "area": {
-            "type": "integer",
-            "title": "Area"
-          },
-          "is_inverter": {
-            "type": "boolean",
-            "title": "Is Inverter"
-          },
-          "power_cooling": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Power Cooling"
-          },
-          "main_image": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Main Image"
-          },
-          "is_published": {
-            "type": "boolean",
-            "title": "Is Published"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "specs": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Specs"
-          },
-          "gallery_images": {
-            "items": {
-              "$ref": "#/components/schemas/ManagerCatalogProductImageResponse"
-            },
-            "type": "array",
-            "title": "Gallery Images"
-          },
-          "tags": {
-            "items": {
-              "$ref": "#/components/schemas/ManagerCatalogProductTagResponse"
-            },
-            "type": "array",
-            "title": "Tags"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "title",
-          "slug",
-          "price",
-          "old_price",
-          "area",
-          "is_inverter",
-          "power_cooling",
-          "main_image",
-          "is_published",
-          "created_at",
-          "specs",
-          "gallery_images",
-          "tags"
-        ],
-        "title": "ManagerCatalogProductItemResponse"
-      },
       "ManagerCatalogProductListResponse": {
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/ManagerCatalogProductItemResponse"
+              "$ref": "#/components/schemas/ProductListResponse"
             },
             "type": "array",
             "title": "Items"
@@ -5373,53 +5236,6 @@
           "meta"
         ],
         "title": "ManagerCatalogProductListResponse"
-      },
-      "ManagerCatalogProductTagResponse": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title"
-          },
-          "slug": {
-            "type": "string",
-            "title": "Slug"
-          },
-          "group_title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Group Title"
-          },
-          "group_color": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Group Color"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "title",
-          "slug",
-          "group_title",
-          "group_color"
-        ],
-        "title": "ManagerCatalogProductTagResponse"
       },
       "ManagerCrmHealthReportResponse": {
         "properties": {
@@ -6987,6 +6803,99 @@
           "is_installation_photo"
         ],
         "title": "ProductImageResponse"
+      },
+      "ProductListResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "price": {
+            "type": "integer",
+            "title": "Price"
+          },
+          "old_price": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old Price"
+          },
+          "area": {
+            "type": "integer",
+            "title": "Area"
+          },
+          "is_inverter": {
+            "type": "boolean",
+            "title": "Is Inverter"
+          },
+          "power_cooling": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Power Cooling"
+          },
+          "main_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Image"
+          },
+          "is_published": {
+            "type": "boolean",
+            "title": "Is Published"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "slug",
+          "price",
+          "old_price",
+          "area",
+          "is_inverter",
+          "power_cooling",
+          "main_image",
+          "is_published",
+          "created_at"
+        ],
+        "title": "ProductListResponse",
+        "description": "Lightweight product payload for list/search views."
       },
       "ProductResponse": {
         "properties": {
