@@ -34,6 +34,8 @@ const activeTags = ref([]);
 const currentIsInverter = ref(null);
 const currentHasWifi = ref(null);
 const currentHeatingMin = ref(null);
+const searchQuery = ref('');
+let searchDebounceTimeout = null;
 
 // --- URL & State Management ---
 
@@ -66,6 +68,7 @@ const getParamsFromUrl = () => {
       : sp.get('is_inverter') === 'false'
         ? false
         : null;
+    params.q = sp.get('q') || '';
     return params;
 };
 
@@ -95,6 +98,7 @@ const syncStateFromUrl = () => {
     currentIsInverter.value = params.is_inverter;
     currentHasWifi.value = params.has_wifi;
     currentHeatingMin.value = params.heating_min;
+    searchQuery.value = params.q || '';
     
     // Only update area if they are present in URL, otherwise keep current (to support defaults)
     if (params.area_min || params.area_max) {
@@ -104,7 +108,8 @@ const syncStateFromUrl = () => {
         params.tag_slugs.length === 0 &&
         params.is_inverter === null &&
         params.has_wifi === null &&
-        params.heating_min === null
+        params.heating_min === null &&
+        !params.q
     ) {
         // If NO filters in URL, try preset state for virtual pages before fallback default.
         if (!applyLockedState()) {
@@ -129,6 +134,7 @@ const fetchProducts = async () => {
             is_inverter: params.is_inverter,
             has_wifi: params.has_wifi,
             heating_min: params.heating_min,
+            q: params.q,
         };
 
         const data = await getCatalog(apiParams);
@@ -164,9 +170,34 @@ const updateUrlAndFetch = () => {
     if (currentHasWifi.value !== null) sp.set('has_wifi', String(currentHasWifi.value));
     if (currentHeatingMin.value !== null) sp.set('heating_min', String(currentHeatingMin.value));
     
+    sp.delete('q');
+    if (searchQuery.value.trim()) sp.set('q', searchQuery.value.trim());
+    
     const newUrl = `${window.location.pathname}?${sp.toString()}`;
     window.history.pushState({}, '', newUrl);
     fetchProducts();
+};
+
+const onSearchInput = () => {
+    // If user is typing, clear other filters
+    if (searchQuery.value && searchQuery.value.trim().length > 0) {
+        currentAreaMin.value = null;
+        currentAreaMax.value = null;
+        activeTags.value = [];
+        currentIsInverter.value = null;
+        currentHasWifi.value = null;
+        currentHeatingMin.value = null;
+    }
+
+    if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout);
+    searchDebounceTimeout = setTimeout(() => {
+        const currentSp = new URLSearchParams(window.location.search);
+        currentSp.set('page', '1');
+        const newUrl = `${window.location.pathname}?${currentSp.toString()}`;
+        window.history.replaceState({}, '', newUrl);
+        
+        updateUrlAndFetch();
+    }, 500);
 };
 
 // --- Filter Actions ---
@@ -332,6 +363,23 @@ const groupedProducts = computed(() => {
             {{ pageDescription }}
         </p>
     </header>
+
+    <!-- Search Bar -->
+    <div class="search-container">
+        <div class="search-input-wrapper">
+             <span class="material-icons-round search-icon">search</span>
+             <input 
+                type="text" 
+                v-model="searchQuery" 
+                @input="onSearchInput"
+                placeholder="Поиск (например: LG, инвертор, 25 м²)"
+                class="search-input"
+             />
+             <button v-if="searchQuery" @click="searchQuery = ''; onSearchInput()" class="clear-search">
+                <span class="material-icons-round">close</span>
+             </button>
+        </div>
+    </div>
 
     <!-- Area Selection (Primary Filter Row) -->
     <div class="area-filters">
@@ -694,5 +742,53 @@ const groupedProducts = computed(() => {
         .filters-bar {
             padding-bottom: 1rem;
         }
+    }
+
+    /* Search Bar Styles */
+    .search-container {
+        margin-bottom: 2rem;
+        max-width: 600px;
+    }
+    .search-input-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+    .search-input {
+        width: 100%;
+        padding: 0.8rem 1rem 0.8rem 2.8rem;
+        border: 2px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface);
+        font-size: 1rem;
+        transition: all 0.2s;
+        font-family: inherit;
+    }
+    .search-input:focus {
+        border-color: var(--primary);
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(0, 127, 128, 0.1);
+    }
+    .search-icon {
+        position: absolute;
+        left: 0.8rem;
+        color: var(--text-muted);
+        pointer-events: none;
+    }
+    .clear-search {
+        position: absolute;
+        right: 0.5rem;
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 0.2rem;
+        display: flex;
+        align-items: center;
+        border-radius: 50%;
+    }
+    .clear-search:hover {
+        background: rgba(0,0,0,0.05);
+        color: var(--text);
     }
 </style>

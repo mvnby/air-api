@@ -271,6 +271,7 @@ export class ApiService {
      * @param hasWifi
      * @param tagSlugs
      * @param isInverter
+     * @param q Smart search query
      * @returns CatalogResponse Successful Response
      * @throws ApiError
      */
@@ -286,6 +287,7 @@ export class ApiService {
         hasWifi?: (boolean | null),
         tagSlugs?: (Array<string> | null),
         isInverter?: (boolean | null),
+        q?: (string | null),
     ): CancelablePromise<CatalogResponse> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -302,6 +304,7 @@ export class ApiService {
                 'has_wifi': hasWifi,
                 'tag_slugs': tagSlugs,
                 'is_inverter': isInverter,
+                'q': q,
             },
             errors: {
                 422: `Validation Error`,
@@ -321,6 +324,7 @@ export class ApiService {
      * @param hasWifi
      * @param tagSlugs
      * @param isInverter
+     * @param q Smart search query
      * @returns CatalogResponse Successful Response
      * @throws ApiError
      */
@@ -336,6 +340,7 @@ export class ApiService {
         hasWifi?: (boolean | null),
         tagSlugs?: (Array<string> | null),
         isInverter?: (boolean | null),
+        q?: (string | null),
     ): CancelablePromise<CatalogResponse> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -352,6 +357,7 @@ export class ApiService {
                 'has_wifi': hasWifi,
                 'tag_slugs': tagSlugs,
                 'is_inverter': isInverter,
+                'q': q,
             },
             errors: {
                 422: `Validation Error`,

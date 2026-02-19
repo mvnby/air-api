@@ -56,6 +56,7 @@ async def get_catalog(
     has_wifi: Optional[bool] = None,
     tag_slugs: Optional[List[str]] = Query(None),
     is_inverter: Optional[bool] = None,
+    q: Optional[str] = Query(None, description="Smart search query"),
     session: AsyncSession = Depends(get_session),
 ):
     try:
@@ -76,6 +77,7 @@ async def get_catalog(
         has_wifi=has_wifi,
         tag_slugs=tag_slugs,
         is_inverter=is_inverter,
+        search=q,
     )
 
     return CatalogResponse(
