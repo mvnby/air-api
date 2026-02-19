@@ -12,6 +12,7 @@ from routers.manager_operation_ids import (
     GET_ALL_TAGS,
     GET_MANAGER_CUSTOMERS,
     GET_MANAGER_CUSTOMER_DETAIL,
+    GET_MANAGER_CUSTOMER_DOCS,
     GET_MANAGER_PRODUCTS,
     PATCH_MANAGER_CUSTOMER,
     SMART_SEARCH_PRODUCTS,
@@ -23,12 +24,14 @@ from schemas import (
     ManagerCatalogCustomerItemResponse,
     ManagerBulkRoundPriceResponse,
     ManagerCatalogCustomerListResponse,
+    ManagerCustomerDocumentListResponse,
     ManagerCatalogProductListResponse,
     ManagerCustomerUpdatePayload,
     ManagerTagGroupResponse,
     ProductUpdate,
 )
 from services.manager_catalog_service import ManagerCatalogService
+from services.document_service import DocumentService
 
 
 router = APIRouter(prefix="/api/manager", tags=["manager"])
@@ -114,6 +117,32 @@ async def get_customer_for_manager(
             error_code=CUSTOMER_NOT_FOUND,
         )
     return customer
+
+
+@router.get(
+    "/customers/{customer_id}/docs",
+    response_model=ManagerCustomerDocumentListResponse,
+    operation_id=GET_MANAGER_CUSTOMER_DOCS,
+)
+async def get_customer_docs_for_manager(
+    customer_id: int,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    docs = await DocumentService.get_customer_documents(session, customer_id)
+    return {
+        "items": [
+            {
+                "id": doc.id,
+                "order_id": doc.order_id,
+                "doc_type": doc.doc_type,
+                "number": doc.number,
+                "date": doc.date,
+                "edit_url": doc.google_edit_url,
+            }
+            for doc in docs
+        ]
+    }
 
 
 @router.patch(
