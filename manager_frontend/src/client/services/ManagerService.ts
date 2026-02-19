@@ -214,6 +214,34 @@ export class ManagerService {
         });
     }
     /**
+     * Smart Search Products
+     * Smart search for manager product picker.
+     *
+     * Parses the query string into text tokens and BTU-index number tokens,
+     * then applies AND-chained ORM filters against title, tags, area, and
+     * power_cooling.  Returns matched products with their tags pre-loaded.
+     * @param q Free-text search query, e.g. 'mdv loft 18'
+     * @param limit
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static smartSearchProducts(
+        q: string,
+        limit: number = 40,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/products/smart-search',
+            query: {
+                'q': q,
+                'limit': limit,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Search Images
      * Search for images using DuckDuckGo.
      * Returns a list of image objects: {image, width, height, ...}
