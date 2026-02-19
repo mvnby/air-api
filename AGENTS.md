@@ -88,11 +88,13 @@ Use this after large catalog imports or when unknown spec keys appear.
 ### 3) Safe Change Verification Workflow
 
 1. Run scoped tests for touched area (`pytest ...`).
-2. If specs/import were changed, run:
+2. If API routes, operation IDs, or schemas in `schemas.py` were changed, run:
+   - `python3 scripts/legacy/extract_openapi.py && cd manager_frontend && npm run gen:api`
+3. If specs/import were changed, run:
    - `python3 scripts/analyze_spec_keys.py`
    - `python3 scripts/normalize_legacy.py` (or Docker equivalent)
-3. For frontend changes in `web/`, run `npm run build` in `web/`.
-4. Confirm no obvious regressions in:
+4. For frontend changes in `web/`, run `npm run build` in `web/`.
+5. Confirm no obvious regressions in:
    - product list and product page spec rendering,
    - import path behavior (no duplicate/product corruption).
 
