@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import OrderDocument, Order
-from services.google_service import google_service
+from services.google_service import get_google_service
 from services.documents.base import TEMPLATES, DOC_NAMES, BaseDocumentStrategy
 from services.documents.factory import DocumentFactory
 
@@ -82,7 +82,7 @@ class DocumentService:
             return None, None
 
         try:
-            pdf_content = google_service.export_file(document.google_file_id, mime_type='application/pdf')
+            pdf_content = get_google_service().export_file(document.google_file_id, mime_type='application/pdf')
             
             from urllib.parse import quote
             filename = f"{document.number}.pdf"
@@ -112,7 +112,7 @@ class DocumentService:
 
         if document.google_file_id:
             try:
-                google_service.delete_file(document.google_file_id)
+                get_google_service().delete_file(document.google_file_id)
             except Exception as exc:
                 print(f"Error deleting file from Drive: {exc}")
 
@@ -191,12 +191,12 @@ class DocumentService:
         else:
             # Google Docs документ
             # 4. Копируем шаблон в Google Drive
-            file_info = google_service.copy_template(template_id, title)
+            file_info = get_google_service().copy_template(template_id, title)
             file_id = file_info['file_id']
             edit_url = file_info['edit_url']
             
             # 6. Заменяем плейсхолдеры в документе
-            google_service.replace_placeholders(file_id, replacements)
+            get_google_service().replace_placeholders(file_id, replacements)
             
             # 7. Заполняем таблицу (если есть данные)
             table_data = strategy._prepare_table_data() if hasattr(strategy, '_prepare_table_data') else []
@@ -204,10 +204,10 @@ class DocumentService:
                 # Определяем, нужен ли footer (строка "Всего")
                 has_footer = (doc_type not in ["work_order"])
                 
-                # Используем внутренний метод google_service для заполнения таблицы
+                # Используем внутренний метод get_google_service() для заполнения таблицы
                 from googleapiclient.discovery import build
-                docs_service = build('docs', 'v1', credentials=google_service.creds)
-                google_service._fill_table(docs_service, file_id, table_data, has_footer)
+                docs_service = build('docs', 'v1', credentials=get_google_service().creds)
+                get_google_service()._fill_table(docs_service, file_id, table_data, has_footer)
         
         # 8. Создаем запись в БД
         new_doc = OrderDocument(

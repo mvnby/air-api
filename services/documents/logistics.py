@@ -1,7 +1,7 @@
 from typing import List, Dict, Tuple
 from num2words import num2words
 
-from services.google_service import google_service
+from services.google_service import get_google_service
 from services.documents.base import BaseDocumentStrategy, TEMPLATES, DOC_NAMES
 
 class LogisticsSheetStrategy(BaseDocumentStrategy):
@@ -34,7 +34,7 @@ class LogisticsSheetStrategy(BaseDocumentStrategy):
         # Config Map
         config = self._get_sheet_config(doc_type)
         
-        return google_service.generate_sheet(
+        return get_google_service().generate_sheet(
             template_id, 
             doc_title, 
             replacements, 

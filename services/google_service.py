@@ -720,4 +720,10 @@ class GoogleDocsService:
             logger.error(f"Google Drive List Files Error: {e}")
             return []
 
-google_service = GoogleDocsService()
+_google_service_instance = None
+
+def get_google_service() -> GoogleDocsService:
+    global _google_service_instance
+    if _google_service_instance is None:
+        _google_service_instance = GoogleDocsService()
+    return _google_service_instance

@@ -2,7 +2,7 @@ import os
 import subprocess
 import logging
 from datetime import datetime
-from services.google_service import google_service
+from services.google_service import get_google_service
 from core.logger import logger
 
 BACKUP_DIR = "backups"
@@ -88,7 +88,7 @@ class BackupService:
             return
 
         try:
-            files = google_service.list_files(self.backup_folder_id, limit=50)
+            files = get_google_service().list_files(self.backup_folder_id, limit=50)
             
             # Filter files to likely be ours (optional, but good safety)
             # For now, we assume this folder is dedicated to backups
@@ -106,7 +106,7 @@ class BackupService:
                 
                 for f in files_to_delete:
                     logger.info(f"Deleting older backup: {f['name']} (created {f['createdTime']})")
-                    google_service.delete_file(f['id'])
+                    get_google_service().delete_file(f['id'])
             else:
                 logger.info(f"Rotation check passed: {len(files)} files (Limit: {input_limit})")
 
@@ -139,7 +139,7 @@ class BackupService:
                 mime = "application/sql" if fpath.endswith(".sql") else "application/gzip"
                 
                 logger.info(f"Uploading {filename} to Google Drive...")
-                google_service.upload_file(
+                get_google_service().upload_file(
                     file_path=fpath,
                     filename=filename,
                     mime_type=mime,
@@ -190,7 +190,7 @@ class BackupService:
         
         try:
             # 1. Download
-            file_io = google_service.download_file(file_id)
+            file_io = get_google_service().download_file(file_id)
             with open(local_path, "wb") as f:
                 f.write(file_io.getvalue())
             
