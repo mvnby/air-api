@@ -8,7 +8,7 @@ import {
     ApiService,
     type ProductUpdate,
     type ManagerCustomerUpdatePayload,
-    type ProductResponse as Product,
+    type ManagerCatalogProductItemResponse as Product,
     type ManagerOrderUpdatePayload,
     type LeadCreatePayload,
     type LeadUpdatePayload,
@@ -256,7 +256,8 @@ export const api = {
     },
 
     async smartSearchProducts(q: string, limit = 40): Promise<Product[]> {
-        return await ManagerService.smartSearchProducts(q, limit);
+        const res = await ManagerService.smartSearchProducts(q, limit);
+        return res.items;
     },
 
     async searchServices(q: string) {

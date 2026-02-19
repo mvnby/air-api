@@ -173,7 +173,7 @@ const checkAuth = async () => {
 const loadProducts = async () => {
   loading.value = true;
   try {
-    const data = await api.getProducts(100);
+    const data = await api.getProducts(100) as any;
     // Handle { items: [...], meta: ... } response
     products.value = data.items ? data.items : (Array.isArray(data) ? data : []);
   } catch (e) {
