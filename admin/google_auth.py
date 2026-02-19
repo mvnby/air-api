@@ -1,6 +1,6 @@
 from sqladmin import BaseView, expose
 from starlette.responses import RedirectResponse
-from services.google_service import google_service
+from services.google_service import get_google_service
 
 class GoogleAuthView(BaseView):
     name = "Google Integration"
@@ -8,7 +8,7 @@ class GoogleAuthView(BaseView):
 
     @expose("/google_auth", methods=["GET"])
     async def index(self, request):
-        status = google_service.get_token_status()
+        status = get_google_service().get_token_status()
         return await self.templates.TemplateResponse(
             request, 
             "sqladmin/google_auth.html", 
@@ -18,14 +18,14 @@ class GoogleAuthView(BaseView):
     @expose("/google_auth/url", methods=["GET", "POST"])
     async def auth_url(self, request):
         try:
-            url = google_service.get_auth_url()
+            url = get_google_service().get_auth_url()
             return RedirectResponse(url=url, status_code=303)
         except Exception as e:
             return await self.templates.TemplateResponse(
                 request,
                 "sqladmin/google_auth.html",
                 {
-                    "status": google_service.get_token_status(),
+                    "status": get_google_service().get_token_status(),
                     "model_view": self,
                     "error": f"Error generating URL: {str(e)}"
                 }
@@ -43,7 +43,7 @@ class GoogleAuthView(BaseView):
             )
 
         try:
-            google_service.finish_auth(code)
+            get_google_service().finish_auth(code)
             # Redirect back to index with success? 
             # SQLAdmin doesn't have built-in flash messages easily accessible in custom views without setup,
             # but we can just redirect and the status will show green.
@@ -52,7 +52,7 @@ class GoogleAuthView(BaseView):
                 status_code=303
             )
         except Exception as e:
-             status = google_service.get_token_status()
+             status = get_google_service().get_token_status()
              return await self.templates.TemplateResponse(
                 request,
                 "sqladmin/google_auth.html",
