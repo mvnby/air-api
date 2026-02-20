@@ -17,6 +17,7 @@ from routers.manager_operation_ids import (
     PATCH_MANAGER_CUSTOMER,
     SMART_SEARCH_PRODUCTS,
     UPDATE_PRODUCT,
+    IMPORT_ONLINER,
 )
 from schemas import (
     BulkRoundRequest,
@@ -28,10 +29,15 @@ from schemas import (
     ManagerCatalogProductListResponse,
     ManagerCustomerUpdatePayload,
     ManagerTagGroupResponse,
+    OnlinerImportPayload,
+    OnlinerImportResultResponse,
     ProductUpdate,
 )
 from services.manager_catalog_service import ManagerCatalogService
 from services.document_service import DocumentService
+from services.importer_service import ImporterService
+
+_importer = ImporterService()
 
 
 router = APIRouter(prefix="/api/manager", tags=["manager"])
@@ -261,4 +267,29 @@ async def smart_search_products(
         session=session,
         q=q,
         limit=limit,
+    )
+
+
+@router.post(
+    "/catalog/import-onliner",
+    response_model=OnlinerImportResultResponse,
+    operation_id=IMPORT_ONLINER,
+)
+async def import_from_onliner(
+    payload: OnlinerImportPayload,
+    _user: str = Depends(get_current_username),
+):
+    """
+    Import products from Onliner.by URLs.
+    Accepts a list of product page URLs and an optional flag to also import
+    related models (sibling AC units linked on the same page).
+    Returns the count of successfully imported and failed products.
+    """
+    urls = [u.strip() for u in payload.urls if u.strip()]
+    results = await _importer.import_products_bulk(urls, with_related=payload.with_related)
+    return OnlinerImportResultResponse(
+        success_count=len(results["success"]),
+        error_count=len(results["errors"]),
+        successes=results["success"],
+        errors=results["errors"],
     )
