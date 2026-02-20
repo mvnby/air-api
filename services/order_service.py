@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from crud.order import OrderDAO
 from crud.product import ProductDAO
-from models import Order, OrderProductLink, OrderServiceLink, Customer, CustomerType, OrderStatus, Product, LeadSource, Service
+from models import Order, OrderProductLink, OrderServiceLink, Customer, CustomerType, OrderStatus, Product, LeadSource, Service, OrderInstaller
 
 logger = logging.getLogger(__name__)
 
@@ -908,7 +908,7 @@ class OrderService:
                 selectinload(Order.customer),
                 selectinload(Order.product_links).selectinload(OrderProductLink.product),
                 selectinload(Order.service_links).selectinload(OrderServiceLink.service),
-                selectinload(Order.installers).selectinload("installer"),
+                selectinload(Order.installers).selectinload(OrderInstaller.installer),
             )
             .where(segment_clause)
         )
@@ -985,7 +985,7 @@ class OrderService:
                 selectinload(Order.customer),
                 selectinload(Order.product_links).selectinload(OrderProductLink.product),
                 selectinload(Order.service_links).selectinload(OrderServiceLink.service),
-                selectinload(Order.installers).selectinload("installer"),
+                selectinload(Order.installers).selectinload(OrderInstaller.installer),
                 selectinload(Order.documents),
             )
         )
