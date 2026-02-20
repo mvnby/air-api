@@ -31,6 +31,8 @@ import type { ManagerMediaSetMainImageResponse } from '../models/ManagerMediaSet
 import type { ManagerMediaUploadLocalImagesResponse } from '../models/ManagerMediaUploadLocalImagesResponse';
 import type { ManagerNormalizeLegacySpecsResponse } from '../models/ManagerNormalizeLegacySpecsResponse';
 import type { ManagerTagGroupResponse } from '../models/ManagerTagGroupResponse';
+import type { OnlinerImportPayload } from '../models/OnlinerImportPayload';
+import type { OnlinerImportResultResponse } from '../models/OnlinerImportResultResponse';
 import type { ProductUpdate } from '../models/ProductUpdate';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
@@ -257,6 +259,29 @@ export class ManagerService {
                 'q': q,
                 'limit': limit,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Import From Onliner
+     * Import products from Onliner.by URLs.
+     * Accepts a list of product page URLs and an optional flag to also import
+     * related models (sibling AC units linked on the same page).
+     * Returns the count of successfully imported and failed products.
+     * @param requestBody
+     * @returns OnlinerImportResultResponse Successful Response
+     * @throws ApiError
+     */
+    public static importOnliner(
+        requestBody: OnlinerImportPayload,
+    ): CancelablePromise<OnlinerImportResultResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/catalog/import-onliner',
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

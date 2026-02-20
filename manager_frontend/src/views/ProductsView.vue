@@ -5,6 +5,7 @@ import { api, type Product } from '../api';
 import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images, Settings, ArrowLeft, LayoutGrid, List, Package } from 'lucide-vue-next';
 import BulkSpecsModal from '../components/BulkSpecsModal.vue';
 import ProductEditModal from '../components/ProductEditModal.vue';
+import OnlinerImportModal from '../components/OnlinerImportModal.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
 
 // Product state
@@ -27,12 +28,18 @@ const activeTab = ref<'search' | 'reuse' | 'upload'>('search');
 const uploadDragActive = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
 const toast = ref('');
+const showOnlinerImportModal = ref(false);
 
 const setToast = (message: string) => {
     toast.value = message;
     window.setTimeout(() => {
         if (toast.value === message) toast.value = '';
-    }, 3000);
+    }, 4000);
+};
+
+const handleOnlinerImported = async (successCount: number) => {
+    setToast(`Импортировано: ${successCount}`);
+    await loadProducts();
 };
 
 const pendingEditProductId = ref<number | null>(null);
@@ -614,6 +621,14 @@ watchDebounced(
           <button @click="showCleanupModal = true" class="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 text-sm transition-colors">
               Очистка медиа
           </button>
+          <button
+            @click="showOnlinerImportModal = true"
+            class="flex items-center gap-1.5 px-3 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+            title="Импорт из Onliner"
+          >
+            <span class="material-icons-round text-base leading-none">cloud_download</span>
+            Onliner
+          </button>
           <button @click="loadProducts" class="p-2 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 shadow-sm hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors" title="Обновить">
               <RefreshCw class="w-4 h-4 text-gray-600 dark:text-slate-400" />
           </button>
@@ -1016,5 +1031,12 @@ watchDebounced(
         v-model="showEditModal"
         :product="editingProduct"
         @success="handleEditSuccess"
+    />
+
+    <!-- Onliner Import Modal -->
+    <OnlinerImportModal
+        v-if="showOnlinerImportModal"
+        @close="showOnlinerImportModal = false"
+        @imported="handleOnlinerImported"
     />
 </template>

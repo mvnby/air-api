@@ -2337,6 +2337,53 @@
         }
       }
     },
+    "/api/manager/catalog/import-onliner": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Import From Onliner",
+        "description": "Import products from Onliner.by URLs.\nAccepts a list of product page URLs and an optional flag to also import\nrelated models (sibling AC units linked on the same page).\nReturns the count of successfully imported and failed products.",
+        "operationId": "import_onliner",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnlinerImportPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinerImportResultResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/search-images": {
       "post": {
         "tags": [
@@ -7352,6 +7399,61 @@
           "pages"
         ],
         "title": "Meta"
+      },
+      "OnlinerImportPayload": {
+        "properties": {
+          "urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Urls"
+          },
+          "with_related": {
+            "type": "boolean",
+            "title": "With Related",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "urls"
+        ],
+        "title": "OnlinerImportPayload"
+      },
+      "OnlinerImportResultResponse": {
+        "properties": {
+          "success_count": {
+            "type": "integer",
+            "title": "Success Count"
+          },
+          "error_count": {
+            "type": "integer",
+            "title": "Error Count"
+          },
+          "successes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Successes"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success_count",
+          "error_count",
+          "successes",
+          "errors"
+        ],
+        "title": "OnlinerImportResultResponse"
       },
       "OrderCustomerBrief": {
         "properties": {

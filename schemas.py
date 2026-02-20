@@ -762,3 +762,17 @@ class DashboardStatsResponse(BaseModel):
     total_amount: float
     new_leads_count: int
     upcoming_touchpoints: List[DashboardTouchpoint]
+
+
+# --- ONLINER IMPORT ---
+
+class OnlinerImportPayload(BaseModel):
+    urls: List[str]
+    with_related: bool = False
+
+
+class OnlinerImportResultResponse(BaseModel):
+    success_count: int
+    error_count: int
+    successes: List[str]
+    errors: List[str]

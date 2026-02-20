@@ -73,6 +73,8 @@ export type { ManagerOrderUpdatePayload } from './models/ManagerOrderUpdatePaylo
 export type { ManagerTagGroupResponse } from './models/ManagerTagGroupResponse';
 export type { ManagerTagOptionResponse } from './models/ManagerTagOptionResponse';
 export type { Meta } from './models/Meta';
+export type { OnlinerImportPayload } from './models/OnlinerImportPayload';
+export type { OnlinerImportResultResponse } from './models/OnlinerImportResultResponse';
 export type { OrderCustomerBrief } from './models/OrderCustomerBrief';
 export type { OrderPayload } from './models/OrderPayload';
 export type { OrderProductLineResponse } from './models/OrderProductLineResponse';
