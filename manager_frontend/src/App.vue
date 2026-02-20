@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref } from 'vue';
-import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home } from 'lucide-vue-next';
+import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Wrench } from 'lucide-vue-next';
 import { api } from './api';
 
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
@@ -10,6 +10,7 @@ const OrdersKanbanView = defineAsyncComponent(() => import('./views/OrdersKanban
 const LeadsView = defineAsyncComponent(() => import('./views/LeadsView.vue'));
 const CalendarDashboard = defineAsyncComponent(() => import('./views/CalendarDashboard.vue'));
 const ManagerHomeView = defineAsyncComponent(() => import('./views/ManagerHome.vue'));
+const InstallersView = defineAsyncComponent(() => import('./views/InstallersView.vue'));
 
 const isAuthenticated = ref(false);
 const showLoginModal = ref(false);
@@ -31,6 +32,7 @@ const navItems = [
   { path: '/manager/calendar', label: 'Календарь', icon: Calendar },
   { path: '/manager/products', label: 'Кондиционеры', icon: Package },
   { path: '/manager/customers', label: 'Клиенты', icon: Users },
+  { path: '/manager/installers', label: 'Монтажники', icon: Wrench },
 ];
 
 const currentView = computed(() => {
@@ -41,6 +43,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/calendar')) return 'calendar';
   if (path.startsWith('/manager/customers/profile')) return 'customer-profile';
   if (path.startsWith('/manager/customers')) return 'customers';
+  if (path.startsWith('/manager/installers')) return 'installers';
   return 'products';
 });
 
@@ -249,6 +252,7 @@ onBeforeUnmount(() => {
       <CalendarDashboard v-else-if="currentView === 'calendar'" :key="currentLocation" />
       <CustomerProfileView v-else-if="currentView === 'customer-profile'" :key="currentLocation" />
       <CustomersView v-else-if="currentView === 'customers'" :key="currentLocation" />
+      <InstallersView v-else-if="currentView === 'installers'" :key="currentLocation" />
       <ProductsView v-else :key="currentLocation" />
     </main>
   </div>

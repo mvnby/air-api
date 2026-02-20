@@ -22,6 +22,7 @@ export type ManagerOrderUpdatePayload = {
     customer_iban?: (string | null);
     customer_delivery_address?: (string | null);
     confirm_critical_customer_changes?: (boolean | null);
+    installer_id?: (number | null);
     products?: (Array<ManagerOrderProductLinePayload> | null);
     services?: (Array<ManagerOrderServiceLinePayload> | null);
 };

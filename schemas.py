@@ -230,6 +230,32 @@ class OrderResponse(BaseModel):
     created_at: datetime
 
 
+# --- INSTALLERS ---
+
+class ManagerInstallerBase(BaseModel):
+    name: str
+    is_active: bool = True
+    default_rate: Optional[float] = None
+    telegram_id: Optional[int] = None
+
+class ManagerInstallerCreatePayload(ManagerInstallerBase):
+    pass
+
+class ManagerInstallerUpdatePayload(BaseModel):
+    name: Optional[str] = None
+    is_active: Optional[bool] = None
+    default_rate: Optional[float] = None
+    telegram_id: Optional[int] = None
+
+class ManagerInstallerResponse(ManagerInstallerBase):
+    id: int
+
+class ManagerInstallerListResponse(BaseModel):
+    items: List[ManagerInstallerResponse]
+    meta: Meta
+
+# --- ORDERS ---
+
 class OrderCustomerBrief(BaseModel):
     id: int
     type: str
@@ -281,6 +307,8 @@ class ManagerOrderListItemResponse(BaseModel):
     comment: Optional[str] = None
     delivery_address: Optional[str] = None
     customer: Optional[OrderCustomerBrief] = None
+    installer_id: Optional[int] = None
+    installer: Optional[ManagerInstallerResponse] = None
 
 
 class ManagerOrderDocumentItem(BaseModel):
@@ -354,6 +382,7 @@ class ManagerOrderUpdatePayload(BaseModel):
     customer_iban: Optional[str] = None
     customer_delivery_address: Optional[str] = None
     confirm_critical_customer_changes: Optional[bool] = None
+    installer_id: Optional[int] = None
     products: Optional[List[ManagerOrderProductLinePayload]] = None
     services: Optional[List[ManagerOrderServiceLinePayload]] = None
 

@@ -10,6 +10,7 @@ from routers import manager_leads
 from routers import manager_media
 from routers import manager_orders
 from routers import manager_specs
+from routers import manager_installers
 
 
 router = APIRouter()
@@ -23,4 +24,5 @@ router.include_router(manager_docs.router)
 router.include_router(manager_crm.router)
 router.include_router(manager_calendar.router)
 router.include_router(manager_dashboard.router)
+router.include_router(manager_installers.router)
 

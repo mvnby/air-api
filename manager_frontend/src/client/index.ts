@@ -49,6 +49,10 @@ export type { ManagerCrmHealthReportResponse } from './models/ManagerCrmHealthRe
 export type { ManagerCustomerDocumentItem } from './models/ManagerCustomerDocumentItem';
 export type { ManagerCustomerDocumentListResponse } from './models/ManagerCustomerDocumentListResponse';
 export type { ManagerCustomerUpdatePayload } from './models/ManagerCustomerUpdatePayload';
+export type { ManagerInstallerCreatePayload } from './models/ManagerInstallerCreatePayload';
+export type { ManagerInstallerListResponse } from './models/ManagerInstallerListResponse';
+export type { ManagerInstallerResponse } from './models/ManagerInstallerResponse';
+export type { ManagerInstallerUpdatePayload } from './models/ManagerInstallerUpdatePayload';
 export type { ManagerMediaBulkAddResponse } from './models/ManagerMediaBulkAddResponse';
 export type { ManagerMediaBulkDeleteResponse } from './models/ManagerMediaBulkDeleteResponse';
 export type { ManagerMediaBulkUploadResponse } from './models/ManagerMediaBulkUploadResponse';
@@ -105,6 +109,7 @@ export { ManagerCalendarService } from './services/ManagerCalendarService';
 export { ManagerCrmService } from './services/ManagerCrmService';
 export { ManagerDashboardService } from './services/ManagerDashboardService';
 export { ManagerDocsService } from './services/ManagerDocsService';
+export { ManagerInstallersService } from './services/ManagerInstallersService';
 export { ManagerLeadsService } from './services/ManagerLeadsService';
 export { ManagerOrdersService } from './services/ManagerOrdersService';
 export { SystemService } from './services/SystemService';
