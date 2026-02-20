@@ -22,6 +22,8 @@ import {
     type LeadUpdatePayload,
     type LeadQualifyPayload,
     type LeadLossPayload,
+    type ManagerInstallerCreatePayload,
+    type ManagerInstallerUpdatePayload,
     type ManagerSettingUpdatePayload,
     type ManagerTariffCreatePayload,
     type ManagerTariffUpdatePayload,
@@ -165,7 +167,6 @@ export const api = {
     async deleteManagerTariff(id: number) {
         return await ManagerTariffsService.deleteManagerTariff(id);
     },
-
     // External integrations
     async getCompanyByUnp(unp: string) {
         return await ApiService.publicProxyEgrApiV1ProxyEgrGet(unp);
