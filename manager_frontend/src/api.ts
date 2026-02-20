@@ -6,6 +6,8 @@ import {
     ManagerLeadsService,
     ManagerDashboardService,
     ManagerInstallersService,
+    ManagerSettingsService,
+    ManagerTariffsService,
     AdminService,
     ApiService,
     type ProductUpdate,
@@ -20,6 +22,9 @@ import {
     type LeadUpdatePayload,
     type LeadQualifyPayload,
     type LeadLossPayload,
+    type ManagerSettingUpdatePayload,
+    type ManagerTariffCreatePayload,
+    type ManagerTariffUpdatePayload,
 } from './client';
 
 OpenAPI.WITH_CREDENTIALS = true;
@@ -133,6 +138,32 @@ export const api = {
 
     async searchManagerInstallers(q: string, limit = 50) {
         return await ManagerInstallersService.searchManagerInstallers(q, limit);
+    },
+
+    // Settings
+    async listManagerSettings() {
+        return await ManagerSettingsService.listManagerSettings();
+    },
+
+    async updateManagerSetting(key: string, payload: ManagerSettingUpdatePayload) {
+        return await ManagerSettingsService.updateManagerSetting(key, payload);
+    },
+
+    // Tariffs
+    async listManagerTariffs() {
+        return await ManagerTariffsService.listManagerTariffs();
+    },
+
+    async createManagerTariff(payload: ManagerTariffCreatePayload) {
+        return await ManagerTariffsService.createManagerTariff(payload);
+    },
+
+    async updateManagerTariff(id: number, payload: ManagerTariffUpdatePayload) {
+        return await ManagerTariffsService.updateManagerTariff(id, payload);
+    },
+
+    async deleteManagerTariff(id: number) {
+        return await ManagerTariffsService.deleteManagerTariff(id);
     },
 
     // External integrations

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref } from 'vue';
-import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Wrench } from 'lucide-vue-next';
+import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Wrench, Settings, Wallet } from 'lucide-vue-next';
 import { api } from './api';
 
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
@@ -11,6 +11,8 @@ const LeadsView = defineAsyncComponent(() => import('./views/LeadsView.vue'));
 const CalendarDashboard = defineAsyncComponent(() => import('./views/CalendarDashboard.vue'));
 const ManagerHomeView = defineAsyncComponent(() => import('./views/ManagerHome.vue'));
 const InstallersView = defineAsyncComponent(() => import('./views/InstallersView.vue'));
+const SettingsView = defineAsyncComponent(() => import('./views/SettingsView.vue'));
+const TariffsView = defineAsyncComponent(() => import('./views/TariffsView.vue'));
 
 const isAuthenticated = ref(false);
 const showLoginModal = ref(false);
@@ -33,6 +35,8 @@ const navItems = [
   { path: '/manager/products', label: 'Кондиционеры', icon: Package },
   { path: '/manager/customers', label: 'Клиенты', icon: Users },
   { path: '/manager/installers', label: 'Монтажники', icon: Wrench },
+  { path: '/manager/tariffs', label: 'Тарифы на монтаж', icon: Wallet },
+  { path: '/manager/settings', label: 'Настройки сайта', icon: Settings },
 ];
 
 const currentView = computed(() => {
@@ -44,6 +48,8 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/customers/profile')) return 'customer-profile';
   if (path.startsWith('/manager/customers')) return 'customers';
   if (path.startsWith('/manager/installers')) return 'installers';
+  if (path.startsWith('/manager/settings')) return 'settings';
+  if (path.startsWith('/manager/tariffs')) return 'tariffs';
   return 'products';
 });
 
@@ -253,6 +259,8 @@ onBeforeUnmount(() => {
       <CustomerProfileView v-else-if="currentView === 'customer-profile'" :key="currentLocation" />
       <CustomersView v-else-if="currentView === 'customers'" :key="currentLocation" />
       <InstallersView v-else-if="currentView === 'installers'" :key="currentLocation" />
+      <SettingsView v-else-if="currentView === 'settings'" :key="currentLocation" />
+      <TariffsView v-else-if="currentView === 'tariffs'" :key="currentLocation" />
       <ProductsView v-else :key="currentLocation" />
     </main>
   </div>
