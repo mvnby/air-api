@@ -10,6 +10,7 @@ import type {
   OrderProductLineResponse,
   OrderServiceLineResponse,
   ManagerOrderDocumentItem,
+  ManagerInstallerResponse,
 } from '../../client';
 import { ManagerDocsService, ManagerOrdersService } from '../../client';
 import { STATUS_LABELS, STATUS_ORDER, formatMoney } from './order-utils';
@@ -57,6 +58,9 @@ const assessmentDate = ref('');
 const installationDate = ref('');
 const comment = ref('');
 const isPaid = ref(false);
+const installerId = ref<number | null>(null);
+
+const installersList = ref<ManagerInstallerResponse[]>([]);
 
 const productLines = ref<ProductLine[]>([]);
 const serviceLines = ref<ServiceLine[]>([]);
@@ -284,6 +288,14 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   installationDate.value = toLocalDateTimeInput(order.installation_date);
   comment.value = order.comment ?? '';
   isPaid.value = order.is_paid;
+  installerId.value = order.installer_id ?? null;
+
+  if (installersList.value.length === 0) {
+    api.getManagerInstallers(1, 100).then(res => {
+      installersList.value = res.items.filter(i => i.is_active || i.id === installerId.value);
+    }).catch(e => console.error("Failed to load installers", e));
+  }
+
   productLines.value = (order.product_lines ?? []).map((line: OrderProductLineResponse) => ({
     product_id: line.product_id || 0,
     product_query: line.product_title || '',
@@ -468,6 +480,7 @@ const handleSave = () => {
     installation_date: fromLocalDateTimeInput(installationDate.value),
     comment: comment.value,
     is_paid: isPaid.value,
+    installer_id: installerId.value,
     products: productLines.value.map((line) => ({
       product_id: line.product_id,
       quantity: line.quantity,
@@ -554,6 +567,15 @@ watch(
             <option :value="true">Оплачен</option>
           </select>
           <span v-if="getFieldError('is_paid')" class="text-xs text-red-300">{{ getFieldError('is_paid') }}</span>
+        </label>
+        <label class="field-label md:col-span-2">
+          Монтажник
+          <select v-model="installerId" class="field-input">
+            <option :value="null">Не назначен</option>
+            <option v-for="inst in installersList" :key="inst.id" :value="inst.id">
+              {{ inst.name }} {{ !inst.is_active ? '(в архиве)' : '' }}
+            </option>
+          </select>
         </label>
         <DateTimeField v-model="nextFollowupDate" label="Следующее касание" :error="getFieldError('next_followup_date')" />
         <DateTimeField v-model="assessmentDate" label="Дата замера" :error="getFieldError('assessment_date')" />

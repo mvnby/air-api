@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ManagerInstallerResponse } from './ManagerInstallerResponse';
 import type { OrderCustomerBrief } from './OrderCustomerBrief';
 export type ManagerOrderListItemResponse = {
     id: number;
@@ -18,5 +19,7 @@ export type ManagerOrderListItemResponse = {
     comment?: (string | null);
     delivery_address?: (string | null);
     customer?: (OrderCustomerBrief | null);
+    installer_id?: (number | null);
+    installer?: (ManagerInstallerResponse | null);
 };
 

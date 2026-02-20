@@ -838,6 +838,14 @@ class OrderService:
             "comment": order.comment,
             "delivery_address": order.delivery_address,
             "customer": OrderService._map_customer_brief(order.customer),
+            "installer_id": order.installers[0].installer_id if getattr(order, "installers", None) else None,
+            "installer": {
+                "id": order.installers[0].installer.id,
+                "name": order.installers[0].installer.name,
+                "is_active": order.installers[0].installer.is_active,
+                "default_rate": order.installers[0].installer.default_rate,
+                "telegram_id": order.installers[0].installer.telegram_id,
+            } if getattr(order, "installers", None) and getattr(order.installers[0], "installer", None) else None,
         }
 
     @staticmethod
@@ -900,6 +908,7 @@ class OrderService:
                 selectinload(Order.customer),
                 selectinload(Order.product_links).selectinload(OrderProductLink.product),
                 selectinload(Order.service_links).selectinload(OrderServiceLink.service),
+                selectinload(Order.installers).selectinload("installer"),
             )
             .where(segment_clause)
         )
@@ -976,6 +985,7 @@ class OrderService:
                 selectinload(Order.customer),
                 selectinload(Order.product_links).selectinload(OrderProductLink.product),
                 selectinload(Order.service_links).selectinload(OrderServiceLink.service),
+                selectinload(Order.installers).selectinload("installer"),
                 selectinload(Order.documents),
             )
         )
@@ -1045,6 +1055,16 @@ class OrderService:
             order.is_paid = payload.is_paid
         if "customer_delivery_address" in fields_set:
             order.delivery_address = payload.customer_delivery_address
+
+        if "installer_id" in fields_set:
+            from models import OrderInstaller
+            await session.execute(delete(OrderInstaller).where(OrderInstaller.order_id == order_id))
+            if getattr(payload, "installer_id", None) is not None:
+                new_installer_link = OrderInstaller(
+                    order_id=order_id,
+                    installer_id=payload.installer_id,
+                )
+                session.add(new_installer_link)
 
         customer_field_map = {
             "customer_name": "name",

@@ -5,6 +5,7 @@ import {
     ManagerOrdersService,
     ManagerLeadsService,
     ManagerDashboardService,
+    ManagerInstallersService,
     AdminService,
     ApiService,
     type ProductUpdate,
@@ -13,6 +14,8 @@ import {
     type ManagerOrderUpdatePayload,
     type DashboardStatsResponse,
     type DashboardTouchpoint,
+    type ManagerInstallerCreatePayload,
+    type ManagerInstallerUpdatePayload,
     type LeadCreatePayload,
     type LeadUpdatePayload,
     type LeadQualifyPayload,
@@ -115,6 +118,24 @@ export const api = {
         return await ManagerLeadsService.markManagerLeadLost(leadId, payload);
     },
 
+    // Installers
+    async getManagerInstallers(page = 1, limit = 100, search?: string) {
+        return await ManagerInstallersService.getManagerInstallers(page, limit, search);
+    },
+
+    async createManagerInstaller(payload: ManagerInstallerCreatePayload) {
+        return await ManagerInstallersService.createManagerInstaller(payload);
+    },
+
+    async updateManagerInstaller(id: number, payload: ManagerInstallerUpdatePayload) {
+        return await ManagerInstallersService.updateManagerInstaller(id, payload);
+    },
+
+    async searchManagerInstallers(q: string, limit = 50) {
+        return await ManagerInstallersService.searchManagerInstallers(q, limit);
+    },
+
+    // External integrations
     async getCompanyByUnp(unp: string) {
         return await ApiService.publicProxyEgrApiV1ProxyEgrGet(unp);
     },
