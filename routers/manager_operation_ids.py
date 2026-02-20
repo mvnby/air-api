@@ -48,6 +48,7 @@ GET_MANAGER_CRM_HEALTH_REPORT = "get_manager_crm_health_report"
 GET_DASHBOARD_STATS = "get_dashboard_stats"
 IMPORT_ONLINER = "import_onliner"
 
+
 ALL_MANAGER_OPERATION_IDS = (
     READ_USER_ME,
     GET_MANAGER_CALENDAR_EVENTS,
