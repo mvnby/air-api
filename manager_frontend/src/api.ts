@@ -22,8 +22,7 @@ import {
     type LeadUpdatePayload,
     type LeadQualifyPayload,
     type LeadLossPayload,
-    type ManagerInstallerCreatePayload,
-    type ManagerInstallerUpdatePayload,
+
     type ManagerSettingUpdatePayload,
     type ManagerTariffCreatePayload,
     type ManagerTariffUpdatePayload,
