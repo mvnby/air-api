@@ -3,6 +3,8 @@ import { ref, watch } from 'vue';
 import { api } from '../api';
 import { X, Plus, Trash2, Save, AlertTriangle } from 'lucide-vue-next';
 import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
+import SpecKeyCombobox from './SpecKeyCombobox.vue';
+import { specsTranslations } from '../utils/specsTranslations';
 
 const props = defineProps<{
     modelValue: boolean; // isOpen
@@ -27,7 +29,9 @@ const fetchKeys = async () => {
     keysLoading.value = true;
     try {
         const res = await api.getPublicSpecKeys();
-        knownKeys.value = res.keys;
+        // Merge API keys with basic keys from translations to ensure they are always present
+        const combined = new Set([...Object.keys(specsTranslations), ...res.keys]);
+        knownKeys.value = Array.from(combined);
     } catch (e) {
         console.error('Failed to fetch spec keys', e);
     } finally {
@@ -105,8 +109,14 @@ const save = async () => {
 </script>
 
 <template>
-    <div v-if="modelValue" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" @click.self="close">
-        <div class="bg-white dark:bg-slate-800 rounded-xl w-full max-w-2xl flex flex-col max-h-[90vh] border dark:border-slate-700">
+    <div v-if="modelValue" class="relative z-50">
+        <!-- Backdrop -->
+        <div class="fixed inset-0 bg-black/50 transition-opacity" @click="close"></div>
+        
+        <!-- Modal Container -->
+        <div class="fixed inset-0 z-10 w-screen overflow-y-auto" @click.self="close">
+            <div class="flex min-h-full items-center justify-center p-4 text-center sm:p-0" @click.self="close">
+                <div class="relative transform rounded-xl bg-white dark:bg-slate-800 text-left shadow-xl transition-all w-full max-w-2xl border dark:border-slate-700 my-8 flex flex-col min-h-[500px]" @click.stop>
             <header class="p-4 border-b dark:border-slate-700 flex justify-between items-center bg-gray-50 dark:bg-slate-900/50 rounded-t-xl">
                 <h2 class="text-lg font-bold text-gray-900 dark:text-white">
                     Массовое редактирование
@@ -122,7 +132,7 @@ const save = async () => {
                 {{ formMessage }}
             </div>
             
-            <div class="p-6 overflow-y-auto flex-1">
+            <div class="p-4 sm:p-6 overflow-visible">
                 <div v-if="Object.keys(formServerErrors).length" class="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                     <p v-for="(message, field) in formServerErrors" :key="`bulk-${field}`">{{ field }}: {{ message }}</p>
                 </div>
@@ -156,16 +166,10 @@ const save = async () => {
                     <div v-for="(row, idx) in specs" :key="idx" class="flex gap-2 items-start group">
                         <!-- Key Input with rudimentary autocomplete -->
                         <div class="relative flex-1">
-                            <input 
+                            <SpecKeyCombobox 
                                 v-model="row.key" 
-                                placeholder="Ключ (например: Цвет)" 
-                                class="w-full border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                                list="keys-datalist"
+                                :known-keys="knownKeys" 
                             />
-                            <!-- Native datalist for simplicity -->
-                            <datalist id="keys-datalist">
-                                <option v-for="k in knownKeys" :key="k" :value="k" />
-                            </datalist>
                         </div>
                         
                         <!-- Value Input (Disabled if deleting keys) -->
@@ -201,6 +205,8 @@ const save = async () => {
                     Применить
                 </button>
             </footer>
+                </div>
+            </div>
         </div>
     </div>
 </template>

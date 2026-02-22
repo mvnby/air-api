@@ -254,25 +254,18 @@ def _apply_wifi_state(
 
     if has_builtin_tag:
         enriched["wifi_ready"] = True
-        enriched["wifi-builtin"] = True
-        enriched["wifi-ready"] = False
         enriched["__filter_wifi"] = True
         enriched["__filter_wifi_builtin"] = True
         return enriched
 
     if has_ready_tag:
         enriched["wifi_ready"] = "ready"
-        enriched["wifi-builtin"] = False
-        enriched["wifi-ready"] = True
         enriched["__filter_wifi"] = True
         enriched["__filter_wifi_builtin"] = False
         return enriched
 
-    # No explicit Wi-Fi tags: optionally fallback to raw parser value.
     if strict_wifi_from_tags:
         enriched["wifi_ready"] = False
-        enriched["wifi-builtin"] = False
-        enriched["wifi-ready"] = False
         enriched["__filter_wifi"] = False
         enriched["__filter_wifi_builtin"] = False
         return enriched
@@ -280,20 +273,14 @@ def _apply_wifi_state(
     wifi_kind = _classify_wifi_value(raw_wifi_value)
     if wifi_kind == "builtin":
         enriched["wifi_ready"] = True
-        enriched["wifi-builtin"] = True
-        enriched["wifi-ready"] = False
         enriched["__filter_wifi"] = True
         enriched["__filter_wifi_builtin"] = True
     elif wifi_kind == "ready":
         enriched["wifi_ready"] = "ready"
-        enriched["wifi-builtin"] = False
-        enriched["wifi-ready"] = True
         enriched["__filter_wifi"] = True
         enriched["__filter_wifi_builtin"] = False
     else:
         enriched["wifi_ready"] = False
-        enriched["wifi-builtin"] = False
-        enriched["wifi-ready"] = False
         enriched["__filter_wifi"] = False
         enriched["__filter_wifi_builtin"] = False
 
