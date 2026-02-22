@@ -71,7 +71,16 @@ const save = async () => {
     const validSpecs: Record<string, string> = {};
     for (const row of specs.value) {
         if (row.key.trim()) {
-            validSpecs[row.key.trim()] = row.value.trim();
+            let finalValue = row.value;
+            const config = specsTranslations[row.key.trim()];
+            if (config?.type === 'number' && config.unit && finalValue.toString().trim() !== '') {
+                finalValue = `${finalValue} ${config.unit}`.trim();
+            } else if (config?.type === 'boolean') {
+                // Keep boolean strings or convert properly based on existing convention (e.g. "true"/"false")
+                // Standardizing to string "true"/"false" as the modal values are tracked as strings initially
+                finalValue = (row.value === 'true') ? 'true' : 'false';
+            }
+            validSpecs[row.key.trim()] = finalValue.toString().trim();
         }
     }
     
@@ -174,12 +183,65 @@ const save = async () => {
                         
                         <!-- Value Input (Disabled if deleting keys) -->
                         <div class="flex-1">
-                            <input 
-                                v-model="row.value" 
-                                :disabled="operation === 'delete_keys'"
-                                :placeholder="operation === 'delete_keys' ? 'Пропускается' : 'Значение (например: Белый)'" 
-                                class="w-full border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-gray-100 dark:disabled:bg-slate-800 disabled:text-gray-400 dark:disabled:text-slate-500"
-                            />
+                            <template v-if="specsTranslations[row.key]?.type === 'boolean'">
+                                <div class="flex items-center h-[38px]">
+                                    <button 
+                                        type="button"
+                                        @click="row.value = (row.value === 'true') ? 'false' : 'true'"
+                                        :disabled="operation === 'delete_keys'"
+                                        class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        :class="(row.value === 'true') ? 'bg-teal-600' : 'bg-gray-200 dark:bg-slate-700'"
+                                        role="switch"
+                                        :aria-checked="row.value === 'true'"
+                                    >
+                                        <span class="sr-only">Toggle boolean</span>
+                                        <span 
+                                            aria-hidden="true" 
+                                            class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                                            :class="(row.value === 'true') ? 'translate-x-5' : 'translate-x-0'"
+                                        />
+                                    </button>
+                                    <span class="ml-3 text-sm font-medium text-gray-900 dark:text-slate-200">
+                                        {{ (row.value === 'true') ? 'Да' : 'Нет' }}
+                                    </span>
+                                </div>
+                            </template>
+                            
+                            <template v-else-if="specsTranslations[row.key]?.type === 'select'">
+                                <select 
+                                    v-model="row.value"
+                                    :disabled="operation === 'delete_keys'"
+                                    class="w-full h-[38px] border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-gray-100 dark:disabled:bg-slate-800 disabled:text-gray-400 dark:disabled:text-slate-500"
+                                >
+                                    <option value="" disabled>{{ operation === 'delete_keys' ? 'Пропускается' : 'Выберите значение' }}</option>
+                                    <option v-for="opt in specsTranslations[row.key]?.options || []" :key="opt" :value="opt">{{ opt }}</option>
+                                </select>
+                            </template>
+                            
+                            <template v-else-if="specsTranslations[row.key]?.type === 'number'">
+                                <div class="flex h-[38px] rounded shadow-sm">
+                                    <input 
+                                        type="number"
+                                        v-model="row.value" 
+                                        :disabled="operation === 'delete_keys'"
+                                        :placeholder="operation === 'delete_keys' ? 'Пропускается' : 'Значение'" 
+                                        class="flex-1 min-w-0 block w-full border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-slate-200 rounded-none rounded-l px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-gray-100 dark:disabled:bg-slate-800 disabled:text-gray-400 dark:disabled:text-slate-500"
+                                    />
+                                    <span v-if="specsTranslations[row.key]?.unit" class="inline-flex items-center px-3 rounded-r border border-l-0 border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-700 text-gray-500 dark:text-slate-300 text-sm">
+                                        {{ specsTranslations[row.key]?.unit }}
+                                    </span>
+                                </div>
+                            </template>
+                            
+                            <template v-else>
+                                <input 
+                                    type="text"
+                                    v-model="row.value" 
+                                    :disabled="operation === 'delete_keys'"
+                                    :placeholder="operation === 'delete_keys' ? 'Пропускается' : 'Значение (например: Белый)'" 
+                                    class="w-full h-[38px] border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-gray-100 dark:disabled:bg-slate-800 disabled:text-gray-400 dark:disabled:text-slate-500"
+                                />
+                            </template>
                         </div>
                         
                         <button @click="removeRow(idx)" class="p-2 text-gray-400 hover:text-red-500 transition-colors">
