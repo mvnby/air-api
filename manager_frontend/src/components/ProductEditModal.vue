@@ -3,6 +3,8 @@ import { ref, watch, computed } from 'vue';
 import { api, type Product } from '../api';
 import { X, Save, Plus, Trash2, Edit3, Globe, Hash, Tag } from 'lucide-vue-next';
 import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
+import SpecKeyCombobox from './SpecKeyCombobox.vue';
+import { specsTranslations } from '../utils/specsTranslations';
 
 interface TagItem {
     id: number;
@@ -50,7 +52,8 @@ const tagSearchQuery = ref('');
 const fetchKeys = async () => {
     try {
         const res = await api.getPublicSpecKeys();
-        knownKeys.value = res.keys;
+        const combined = new Set([...Object.keys(specsTranslations), ...res.keys]);
+        knownKeys.value = Array.from(combined);
     } catch (e) { console.error(e); }
 };
 
@@ -118,10 +121,17 @@ watch(() => props.modelValue, (val) => {
         
         // Convert specs object to array
         const s = props.product.specs || {};
-        specs.value = Object.entries(s).map(([key, value]) => ({ 
-            key, 
-            value: String(value) 
-        }));
+        specs.value = Object.entries(s).map(([key, value]) => {
+            let sVal = String(value);
+            const config = specsTranslations[key];
+            if (config?.type === 'number' && config.unit) {
+                // remove unit, handle case and spaces
+                sVal = sVal.replace(new RegExp(config.unit + '$', 'i'), '').trim();
+                const match = sVal.match(/^-?\d*[.,]?\d*/);
+                sVal = match && match[0] ? match[0].replace(',', '.') : '';
+            }
+            return { key, value: sVal };
+        });
         
         // Load tags
         const productTags = (props.product as any).tags || [];
@@ -145,7 +155,14 @@ const save = async () => {
     const validSpecs: Record<string, string> = {};
     for (const row of specs.value) {
         if (row.key.trim()) {
-            validSpecs[row.key.trim()] = row.value.trim();
+            let finalValue = row.value;
+            const config = specsTranslations[row.key.trim()];
+            if (config?.type === 'number' && config.unit && finalValue.toString().trim() !== '') {
+                finalValue = `${finalValue} ${config.unit}`.trim();
+            } else if (config?.type === 'boolean') {
+                finalValue = (row.value === 'true') ? 'true' : 'false';
+            }
+            validSpecs[row.key.trim()] = finalValue.toString().trim();
         }
     }
 
@@ -203,7 +220,7 @@ const save = async () => {
             </div>
             
             <div class="flex-1 overflow-y-auto p-6">
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <!-- Column 1: Basic Info -->
                     <section class="space-y-5">
                         <h3 class="text-xs font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest">Основные данные</h3>
@@ -273,23 +290,110 @@ const save = async () => {
                         </div>
                     </section>
 
-                    <!-- Column 2: Tags -->
+                    <!-- Column 2: Specs -->
                     <section class="space-y-5">
                         <div class="flex justify-between items-center">
                             <h3 class="text-xs font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
-                                <Tag class="w-3.5 h-3.5" /> Теги
+                                 Характеристики
                             </h3>
-                            <span class="text-xs text-gray-400 dark:text-slate-500">{{ selectedTagIds.size }} выбрано</span>
+                            <button @click="addRow" class="text-xs bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 px-2.5 py-1 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 text-teal-600 dark:text-teal-400 font-bold flex items-center gap-1 transition-colors shadow-sm">
+                                <Plus class="w-3 h-3" /> Добавить
+                            </button>
                         </div>
 
+                        <div class="space-y-2 bg-slate-100/50 dark:bg-slate-800/50 p-3 rounded-2xl border border-gray-100 dark:border-slate-800 max-h-[400px] overflow-y-auto">
+                            <div v-for="(row, idx) in specs" :key="idx" class="flex gap-1.5 items-start group">
+                                <div class="relative flex-1">
+                                    <SpecKeyCombobox 
+                                        v-model="row.key" 
+                                        :known-keys="knownKeys" 
+                                    />
+                                </div>
+                                
+                                <div class="flex-1">
+                                    <template v-if="specsTranslations[row.key]?.type === 'boolean'">
+                                        <div class="flex items-center h-[38px]">
+                                            <button 
+                                                type="button"
+                                                @click="row.value = (row.value === 'true') ? 'false' : 'true'"
+                                                class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
+                                                :class="(row.value === 'true') ? 'bg-teal-600' : 'bg-gray-200 dark:bg-slate-700'"
+                                                role="switch"
+                                                :aria-checked="row.value === 'true'"
+                                            >
+                                                <span class="sr-only">Toggle boolean</span>
+                                                <span 
+                                                    aria-hidden="true" 
+                                                    class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                                                    :class="(row.value === 'true') ? 'translate-x-5' : 'translate-x-0'"
+                                                />
+                                            </button>
+                                            <span class="ml-3 text-sm font-medium text-gray-900 dark:text-slate-200">
+                                                {{ (row.value === 'true') ? 'Да' : 'Нет' }}
+                                            </span>
+                                        </div>
+                                    </template>
+                                    
+                                    <template v-else-if="specsTranslations[row.key]?.type === 'select'">
+                                        <select 
+                                            v-model="row.value"
+                                            class="w-full h-[38px] border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all text-gray-900 dark:text-slate-200 shadow-inner"
+                                        >
+                                            <option value="" disabled>Выберите значение</option>
+                                            <option v-for="opt in specsTranslations[row.key]?.options || []" :key="opt" :value="opt">{{ opt }}</option>
+                                        </select>
+                                    </template>
+                                    
+                                    <template v-else-if="specsTranslations[row.key]?.type === 'number'">
+                                        <div class="flex h-[38px] rounded-lg shadow-inner">
+                                            <input 
+                                                type="number"
+                                                v-model="row.value" 
+                                                placeholder="Значение" 
+                                                class="flex-1 min-w-0 block w-full border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-gray-900 dark:text-slate-200 rounded-none rounded-l-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                                            />
+                                            <span v-if="specsTranslations[row.key]?.unit" class="inline-flex items-center px-2.5 rounded-r-lg border border-l-0 border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-700 text-gray-500 dark:text-slate-300 text-xs">
+                                                {{ specsTranslations[row.key]?.unit }}
+                                            </span>
+                                        </div>
+                                    </template>
+                                    
+                                    <template v-else>
+                                        <input 
+                                            type="text"
+                                            v-model="row.value" 
+                                            placeholder="Значение" 
+                                            class="w-full h-[38px] border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all text-gray-900 dark:text-slate-200 dark:placeholder-slate-500 shadow-inner"
+                                        />
+                                    </template>
+                                </div>
+                                
+                                <button @click="removeRow(idx)" class="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
+                                    <Trash2 class="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                            
+                            <div v-if="specs.length === 0" class="text-center py-6 text-gray-400 dark:text-slate-500">
+                                 <Hash class="w-6 h-6 mx-auto mb-1.5 opacity-20" />
+                                 <p class="text-xs">Нет характеристик</p>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <details class="mt-6 border border-gray-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50 group">
+                    <summary class="cursor-pointer p-4 font-bold text-gray-700 dark:text-slate-300 flex justify-between items-center outline-none">
+                        <span class="flex items-center gap-2"><Tag class="w-4 h-4 text-gray-400 dark:text-slate-500"/> Теги ({{ selectedTagIds.size }} выбрано)</span>
+                    </summary>
+                    <div class="p-4 border-t border-gray-200 dark:border-slate-700">
                         <input 
                             v-model="tagSearchQuery"
                             type="text"
                             placeholder="Поиск тега..."
-                            class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-sm dark:text-slate-200 dark:placeholder-slate-500"
+                            class="w-full mb-4 px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-sm dark:text-slate-200 dark:placeholder-slate-500"
                         />
 
-                        <div class="bg-gray-50/50 dark:bg-slate-800/50 rounded-2xl border border-gray-100 dark:border-slate-800 max-h-[400px] overflow-y-auto">
+                        <div class="bg-gray-50/50 dark:bg-slate-800/50 rounded-xl border border-gray-100 dark:border-slate-800 max-h-[300px] overflow-y-auto">
                             <div v-if="tagsLoading" class="p-6 text-center text-gray-400 text-sm">Загрузка...</div>
                             <div v-else-if="filteredTagGroups.length === 0" class="p-6 text-center text-gray-400 text-sm">Нет тегов</div>
                             <div v-else>
@@ -309,53 +413,8 @@ const save = async () => {
                                 </div>
                             </div>
                         </div>
-                    </section>
-
-                    <!-- Column 3: Specs -->
-                    <section class="space-y-5">
-                        <div class="flex justify-between items-center">
-                            <h3 class="text-xs font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
-                                 Характеристики
-                            </h3>
-                            <button @click="addRow" class="text-xs bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 px-2.5 py-1 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 text-teal-600 dark:text-teal-400 font-bold flex items-center gap-1 transition-colors shadow-sm">
-                                <Plus class="w-3 h-3" /> Добавить
-                            </button>
-                        </div>
-
-                        <div class="space-y-2 bg-slate-100/50 dark:bg-slate-800/50 p-3 rounded-2xl border border-gray-100 dark:border-slate-800 max-h-[400px] overflow-y-auto">
-                            <div v-for="(row, idx) in specs" :key="idx" class="flex gap-1.5 items-start group">
-                                <div class="relative flex-1">
-                                    <input 
-                                        v-model="row.key" 
-                                        placeholder="Ключ" 
-                                        class="w-full border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all font-medium text-gray-900 dark:text-slate-200 dark:placeholder-slate-500 shadow-inner"
-                                        list="keys-datalist"
-                                    />
-                                    <datalist id="keys-datalist">
-                                        <option v-for="k in knownKeys" :key="k" :value="k" />
-                                    </datalist>
-                                </div>
-                                
-                                <div class="flex-1">
-                                    <input 
-                                        v-model="row.value" 
-                                        placeholder="Значение" 
-                                        class="w-full border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all text-gray-900 dark:text-slate-200 dark:placeholder-slate-500 shadow-inner"
-                                    />
-                                </div>
-                                
-                                <button @click="removeRow(idx)" class="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
-                                    <Trash2 class="w-3.5 h-3.5" />
-                                </button>
-                            </div>
-                            
-                            <div v-if="specs.length === 0" class="text-center py-6 text-gray-400 dark:text-slate-500">
-                                 <Hash class="w-6 h-6 mx-auto mb-1.5 opacity-20" />
-                                 <p class="text-xs">Нет характеристик</p>
-                            </div>
-                        </div>
-                    </section>
-                </div>
+                    </div>
+                </details>
             </div>
             
             <!-- Footer -->

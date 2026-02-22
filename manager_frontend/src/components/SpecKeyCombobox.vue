@@ -20,7 +20,8 @@ const containerRef = ref<HTMLDivElement | null>(null);
 // Formatted dictionary for display and searching
 const enrichedKeys = computed(() => {
   return props.knownKeys.map(key => {
-    const translation = specsTranslations[key];
+    const config = specsTranslations[key];
+    const translation = config?.label;
     return {
       raw: key,
       translation: translation,
@@ -53,8 +54,8 @@ onBeforeUnmount(() => {
 // Sync local search query with model value if it's set from outside
 watch(() => props.modelValue, (newVal) => {
   if (newVal !== searchQuery.value && !isOpen.value) {
-    const matched = enrichedKeys.value.find(k => k.raw === newVal);
-    searchQuery.value = matched ? matched.display : newVal;
+    const config = specsTranslations[newVal];
+    searchQuery.value = config?.label || newVal;
   }
 }, { immediate: true });
 
@@ -67,8 +68,8 @@ const onInput = (e: Event) => {
   emit('update:modelValue', val);
 };
 
-const selectOption = (rawKey: string, display: string) => {
-  searchQuery.value = display;
+const selectOption = (rawKey: string, translation?: string) => {
+  searchQuery.value = translation || rawKey;
   emit('update:modelValue', rawKey);
   isOpen.value = false;
 };
@@ -114,11 +115,11 @@ const openDropdown = () => {
         <li 
           v-for="opt in filteredOptions" 
           :key="opt.raw"
-          @click="selectOption(opt.raw, opt.display)"
+          @click="selectOption(opt.raw, opt.translation)"
           class="px-3 py-2 text-sm text-gray-700 dark:text-slate-300 hover:bg-teal-50 dark:hover:bg-teal-900/40 cursor-pointer flex flex-col"
         >
-          <span v-if="opt.translation" class="font-medium">{{ opt.translation }}</span>
-          <span :class="opt.translation ? 'text-xs text-gray-500' : 'font-medium'">{{ opt.raw }}</span>
+          <span class="font-medium">{{ opt.translation || opt.raw }}</span>
+          <span v-if="opt.translation" class="text-xs text-gray-400">{{ opt.raw }}</span>
         </li>
       </ul>
     </div>
