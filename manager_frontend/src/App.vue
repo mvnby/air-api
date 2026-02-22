@@ -13,6 +13,7 @@ const ManagerHomeView = defineAsyncComponent(() => import('./views/ManagerHome.v
 const InstallersView = defineAsyncComponent(() => import('./views/InstallersView.vue'));
 const SettingsView = defineAsyncComponent(() => import('./views/SettingsView.vue'));
 const TariffsView = defineAsyncComponent(() => import('./views/TariffsView.vue'));
+const TagsView = defineAsyncComponent(() => import('./views/TagsView.vue'));
 
 const isAuthenticated = ref(false);
 const showLoginModal = ref(false);
@@ -37,6 +38,7 @@ const navItems = [
   { path: '/manager/installers', label: 'Монтажники', icon: Wrench },
   { path: '/manager/tariffs', label: 'Тарифы на монтаж', icon: Wallet },
   { path: '/manager/settings', label: 'Настройки сайта', icon: Settings },
+  { path: '/manager/tags', label: 'Теги', icon: Package },
 ];
 
 const currentView = computed(() => {
@@ -50,6 +52,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/installers')) return 'installers';
   if (path.startsWith('/manager/settings')) return 'settings';
   if (path.startsWith('/manager/tariffs')) return 'tariffs';
+  if (path.startsWith('/manager/tags')) return 'tags';
   return 'products';
 });
 
@@ -261,6 +264,7 @@ onBeforeUnmount(() => {
       <InstallersView v-else-if="currentView === 'installers'" :key="currentLocation" />
       <SettingsView v-else-if="currentView === 'settings'" :key="currentLocation" />
       <TariffsView v-else-if="currentView === 'tariffs'" :key="currentLocation" />
+      <TagsView v-else-if="currentView === 'tags'" :key="currentLocation" />
       <ProductsView v-else :key="currentLocation" />
     </main>
   </div>

@@ -8,6 +8,7 @@ export type ManagerTagGroupResponse = {
     title: string;
     slug: string;
     color: string;
+    is_public: boolean;
     allow_multiple: boolean;
     tags: Array<ManagerTagOptionResponse>;
 };

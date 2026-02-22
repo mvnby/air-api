@@ -27,6 +27,7 @@ import {
     type ManagerTariffCreatePayload,
     type ManagerTariffUpdatePayload,
 } from './client';
+import { ManagerTagsService } from './client/services/ManagerTagsService';
 
 OpenAPI.WITH_CREDENTIALS = true;
 
@@ -371,5 +372,33 @@ export const api = {
             throw new Error(error.detail || 'Failed to import from Onliner');
         }
         return await response.json();
+    },
+
+    async getManagerTagGroups() {
+        return await ManagerTagsService.getManagerTagGroups();
+    },
+
+    async createManagerTagGroup(payload: any) {
+        return await ManagerTagsService.createManagerTagGroup(payload);
+    },
+
+    async updateManagerTagGroup(groupId: number, payload: any) {
+        return await ManagerTagsService.updateManagerTagGroup(groupId, payload);
+    },
+
+    async deleteManagerTagGroup(groupId: number) {
+        return await ManagerTagsService.deleteManagerTagGroup(groupId);
+    },
+
+    async createManagerTag(payload: any) {
+        return await ManagerTagsService.createManagerTag(payload);
+    },
+
+    async updateManagerTag(tagId: number, payload: any) {
+        return await ManagerTagsService.updateManagerTag(tagId, payload);
+    },
+
+    async deleteManagerTag(tagId: number) {
+        return await ManagerTagsService.deleteManagerTag(tagId);
     },
 };
