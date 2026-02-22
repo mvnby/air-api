@@ -1,5 +1,5 @@
 from typing import List, Optional, Any, Dict
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 from datetime import datetime
 from enum import Enum
 from core.input_validation import (
@@ -805,3 +805,61 @@ class OnlinerImportResultResponse(BaseModel):
     error_count: int
     successes: List[str]
     errors: List[str]
+
+
+# --- SETTINGS ---
+
+class ManagerSettingResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    key: str
+    value: str
+    description: Optional[str] = None
+    updated_at: datetime
+
+
+class ManagerSettingUpdatePayload(BaseModel):
+    value: str
+    description: Optional[str] = None
+
+
+class ManagerSettingListResponse(BaseModel):
+    items: List[ManagerSettingResponse]
+
+
+# --- TARIFFS ---
+
+class ManagerTariffResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    category: str
+    power_range: str
+    base_price: int
+    extra_pipe_price: int
+    included_pipe_meters: int
+    is_fixed: bool
+    comment: Optional[str]
+
+
+class ManagerTariffCreatePayload(BaseModel):
+    category: str
+    power_range: str = ""
+    base_price: int = 0
+    extra_pipe_price: int = 0
+    included_pipe_meters: int = 3
+    is_fixed: bool = True
+    comment: Optional[str] = None
+
+
+class ManagerTariffUpdatePayload(BaseModel):
+    category: Optional[str] = None
+    power_range: Optional[str] = None
+    base_price: Optional[int] = None
+    extra_pipe_price: Optional[int] = None
+    included_pipe_meters: Optional[int] = None
+    is_fixed: Optional[bool] = None
+    comment: Optional[str] = None
+
+
+class ManagerTariffListResponse(BaseModel):
+    items: List[ManagerTariffResponse]
+
