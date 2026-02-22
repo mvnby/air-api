@@ -571,7 +571,10 @@ watchDebounced(
             <ArrowLeft class="w-4 h-4" />
             Назад
           </button>
-          <h1 class="text-2xl font-bold text-gray-900 dark:text-white font-['Space_Grotesk']">Товары</h1>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
+            <span class="material-icons-round text-teal-600 dark:text-teal-400">inventory_2</span>
+            Товары
+          </h1>
           
           <div class="flex bg-gray-100 dark:bg-slate-800 p-1 rounded-lg ml-2">
             <button 

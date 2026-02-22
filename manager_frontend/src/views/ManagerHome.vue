@@ -47,7 +47,10 @@ const formatDate = (dateStr: string) => {
 
 <template>
   <div class="p-6 bg-slate-50 dark:bg-[#0f172a] min-h-full text-slate-900 dark:text-white transition-colors duration-200">
-    <h1 class="text-3xl font-bold mb-8">Главная</h1>
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3 mb-8">
+      <span class="material-icons-round text-teal-600 dark:text-teal-400">space_dashboard</span>
+      Главная
+    </h1>
 
     <!-- Section 1: Quick Actions -->
     <section class="mb-10">

@@ -160,7 +160,10 @@ const calendarOptions = ref<CalendarOptions>({
     </Transition>
 
     <div class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-bold text-gray-900">Календарь монтажей и замеров</h1>
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
+        <span class="material-icons-round text-teal-600 dark:text-teal-400">calendar_month</span>
+        Календарь монтажей и замеров
+      </h1>
       <div v-if="isLoading" class="text-teal-600 flex items-center gap-2">
         <Loader2 class="w-5 h-5 animate-spin" />
         Loading...

@@ -86,7 +86,10 @@ onMounted(loadOrders);
   <div class="orders-view">
     <!-- Header -->
     <div class="view-header">
-      <h1>Заказы</h1>
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
+        <span class="material-icons-round text-teal-600 dark:text-teal-400">shopping_cart</span>
+        Заказы
+      </h1>
       <div class="header-controls">
         <div class="search-box">
           <Search :size="16" />
@@ -205,12 +208,12 @@ onMounted(loadOrders);
   gap: 12px;
 }
 
-.view-header h1 {
+/* .view-header h1 {
   font-size: 28px;
   font-weight: 700;
   color: #1a1a2e;
   margin: 0;
-}
+} */
 
 .header-controls {
   display: flex;
