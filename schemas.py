@@ -661,10 +661,41 @@ class ManagerCustomerUpdatePayload(BaseModel):
         return validate_optional_bic(value)
 
 
+class ManagerTagGroupCreatePayload(BaseModel):
+    title: str
+    slug: Optional[str] = None
+    is_public: bool = True
+    color: str = "secondary"
+    allow_multiple: bool = False
+
+class ManagerTagGroupUpdatePayload(BaseModel):
+    title: Optional[str] = None
+    slug: Optional[str] = None
+    is_public: Optional[bool] = None
+    color: Optional[str] = None
+    allow_multiple: Optional[bool] = None
+    sort_order: Optional[int] = None
+
+class ManagerTagCreatePayload(BaseModel):
+    group_id: int
+    title: str
+    slug: Optional[str] = None
+    is_public: bool = True
+    is_filter: bool = False
+
+class ManagerTagUpdatePayload(BaseModel):
+    title: Optional[str] = None
+    slug: Optional[str] = None
+    is_public: Optional[bool] = None
+    is_filter: Optional[bool] = None
+    sort_order: Optional[int] = None
+
 class ManagerTagOptionResponse(BaseModel):
     id: int
     title: str
     slug: str
+    is_public: bool
+    is_filter: bool
 
 
 class ManagerTagGroupResponse(BaseModel):
@@ -672,6 +703,7 @@ class ManagerTagGroupResponse(BaseModel):
     title: str
     slug: str
     color: str
+    is_public: bool
     allow_multiple: bool
     tags: List[ManagerTagOptionResponse]
 

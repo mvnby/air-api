@@ -2,11 +2,11 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type ManagerTagOptionResponse = {
-    id: number;
+export type ManagerTagGroupCreatePayload = {
     title: string;
-    slug: string;
-    is_public: boolean;
-    is_filter: boolean;
+    slug?: (string | null);
+    is_public?: boolean;
+    color?: string;
+    allow_multiple?: boolean;
 };
 
