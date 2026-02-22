@@ -67,8 +67,8 @@ const featureTags = computed(() => validTags.value.filter((t) => inGroup(t, "fea
 const compressorBadge = computed(() => resolveCompressorLabel(props.product));
 const wifiBadgeText = computed(() => {
   const specs = props.product.specs || {};
-  if (toBool(specs['wifi-builtin']) || toBool(specs.wifi_ready)) return 'Wi-Fi встроенный';
-  if (toBool(specs['wifi-ready']) || specs.wifi_ready === 'ready') return 'Wi-Fi Ready';
+  if (toBool(specs.wifi_ready) || specs.wifi_ready === 'builtin') return 'Wi-Fi встроенный';
+  if (specs.wifi_ready === 'ready') return 'Wi-Fi Ready';
   return null;
 });
 const freshAirBadgeText = computed(() => {

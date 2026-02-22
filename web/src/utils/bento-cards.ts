@@ -169,11 +169,8 @@ export function generateBentoCards(product: any): BentoCard[] {
     const isWifi =
         specs.wifi_ready === true ||
         specs.wifi_ready === 'true' ||
-        specs.wifi_ready === 'Да' ||
-        specs['wifi-ready'] === true ||
-        specs['wifi-ready'] === 'true' ||
-        specs['wifi-builtin'] === true ||
-        specs['wifi-builtin'] === 'true';
+        specs.wifi_ready === 'ready' ||
+        specs.wifi_ready === 'Да';
     if (isWifi) {
         cards.push({
             id: 'wifi',
