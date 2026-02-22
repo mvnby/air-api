@@ -4,6 +4,7 @@ import { api } from '../api';
 import { X, Plus, Trash2, Save, AlertTriangle } from 'lucide-vue-next';
 import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
 import SpecKeyCombobox from './SpecKeyCombobox.vue';
+import { specsTranslations } from '../utils/specsTranslations';
 
 const props = defineProps<{
     modelValue: boolean; // isOpen
@@ -28,7 +29,9 @@ const fetchKeys = async () => {
     keysLoading.value = true;
     try {
         const res = await api.getPublicSpecKeys();
-        knownKeys.value = res.keys;
+        // Merge API keys with basic keys from translations to ensure they are always present
+        const combined = new Set([...Object.keys(specsTranslations), ...res.keys]);
+        knownKeys.value = Array.from(combined);
     } catch (e) {
         console.error('Failed to fetch spec keys', e);
     } finally {
