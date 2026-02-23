@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref } from 'vue';
-import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Wrench, Settings, Wallet } from 'lucide-vue-next';
+import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Wrench, Settings, Wallet, ChevronLeft, ChevronRight } from 'lucide-vue-next';
 import { api } from './api';
 
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
@@ -23,7 +23,9 @@ const loginLoading = ref(false);
 const loginError = ref('');
 const rebuildLoading = ref(false);
 const isMobileNavOpen = ref(false);
+const isDesktopNavCollapsed = ref(false);
 const theme = ref<'light' | 'dark'>('light');
+const leadsCount = ref(0);
 
 const currentLocation = ref(`${window.location.pathname}${window.location.search}`);
 const THEME_STORAGE_KEY = 'manager_theme';
@@ -113,10 +115,21 @@ const handleRebuild = async () => {
   }
 };
 
+const fetchLeadsCount = async () => {
+  try {
+    const counter = await api.getLeadsCounter();
+    leadsCount.value = counter.count;
+  } catch {
+    // Badge is non-critical — silence errors
+  }
+};
+
 const checkAuth = async () => {
   try {
     await api.checkAuth();
     isAuthenticated.value = true;
+    // Fetch the badge count once authenticated
+    void fetchLeadsCount();
   } catch {
     isAuthenticated.value = false;
     showLoginModal.value = true;
@@ -200,21 +213,35 @@ onBeforeUnmount(() => {
     />
 
     <aside
-      class="fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-gray-200 flex flex-col shrink-0 transition-transform duration-200 md:static md:z-auto md:w-60 md:translate-x-0"
-      :class="isMobileNavOpen ? 'translate-x-0' : '-translate-x-full'"
+      class="fixed inset-y-0 left-0 z-50 bg-white border-r border-gray-200 flex flex-col shrink-0 transition-all duration-300 md:static md:z-auto md:translate-x-0"
+      :class="[
+        isMobileNavOpen ? 'translate-x-0 w-72' : '-translate-x-full w-72',
+        isDesktopNavCollapsed ? 'md:w-20' : 'md:w-60'
+      ]"
     >
-      <div class="p-5 border-b border-gray-100">
-        <div class="flex items-center gap-3">
-          <div class="w-9 h-9 bg-teal-600 rounded-lg flex items-center justify-center">
+      <div class="p-5 border-b border-gray-100 relative min-h-[76px] flex flex-col justify-center">
+        <div class="flex items-center gap-3" :class="isDesktopNavCollapsed ? 'md:justify-center' : ''">
+          <div class="w-9 h-9 shrink-0 bg-teal-600 rounded-lg flex items-center justify-center cursor-pointer" @click="navigate('/manager')">
             <Package class="w-5 h-5 text-white" />
           </div>
-          <div>
+          <div :class="isDesktopNavCollapsed ? 'md:hidden' : ''">
             <div class="font-bold text-gray-900 text-sm leading-tight">Мастер Воздуха</div>
             <div class="text-[11px] text-gray-400">Manager Panel</div>
           </div>
         </div>
+
+        <!-- Desktop Toggle -->
         <button
-          class="mt-3 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+          class="hidden md:flex absolute -right-3 top-6 w-6 h-6 bg-white border border-gray-200 rounded-full items-center justify-center text-gray-400 hover:text-teal-600 transition-colors shadow-sm z-10"
+          @click="isDesktopNavCollapsed = !isDesktopNavCollapsed"
+        >
+          <ChevronRight v-if="isDesktopNavCollapsed" class="w-4 h-4" />
+          <ChevronLeft v-else class="w-4 h-4" />
+        </button>
+
+        <button
+          v-if="!isDesktopNavCollapsed"
+          class="mt-3 inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
           @click="toggleTheme"
         >
           <Moon v-if="theme === 'light'" class="h-3.5 w-3.5" />
@@ -227,29 +254,45 @@ onBeforeUnmount(() => {
         <button
           v-for="item in navItems"
           :key="item.path"
-          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left"
-          :class="currentLocation.split('?')[0] === item.path
-            ? 'bg-teal-50 text-teal-700'
-            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left relative"
+          :class="[
+            currentLocation.split('?')[0] === item.path
+              ? 'bg-teal-50 text-teal-700'
+              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+            isDesktopNavCollapsed ? 'md:justify-center px-0' : ''
+          ]"
           @click="navigate(item.path)"
+          :title="isDesktopNavCollapsed ? item.label : ''"
         >
-          <component :is="item.icon" class="w-5 h-5" />
-          {{ item.label }}
+          <component :is="item.icon" class="w-5 h-5 shrink-0" />
+          <span class="flex-1 truncate" :class="isDesktopNavCollapsed ? 'md:hidden' : ''">{{ item.label }}</span>
+          <!-- Leads counter badge -->
+          <span
+            v-if="item.path === '/manager/leads' && leadsCount > 0"
+            class="inline-flex items-center justify-center font-bold bg-red-500 text-white shrink-0"
+            :class="isDesktopNavCollapsed ? 'md:absolute md:top-1 md:right-1 h-3 w-3 rounded-full text-[0px]' : 'min-w-[20px] h-5 px-1 rounded-full text-[11px]'"
+          >
+            {{ isDesktopNavCollapsed ? '' : leadsCount }}
+          </span>
         </button>
       </nav>
 
       <div class="p-3 border-t border-gray-100 mt-auto">
         <button
           class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all"
-          :class="rebuildLoading
-            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-            : 'bg-teal-600 text-white hover:bg-teal-700 shadow-sm hover:shadow-md'"
+          :class="[
+            rebuildLoading
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : 'bg-teal-600 text-white hover:bg-teal-700 shadow-sm hover:shadow-md',
+            isDesktopNavCollapsed ? 'justify-center' : ''
+          ]"
           :disabled="rebuildLoading"
           @click="handleRebuild"
+          :title="isDesktopNavCollapsed ? 'Обновить сайт (Deploy)' : ''"
         >
-          <Loader2 v-if="rebuildLoading" class="w-5 h-5 animate-spin" />
-          <Zap v-else class="w-5 h-5" />
-          {{ rebuildLoading ? 'Сборка...' : 'Обновить сайт' }}
+          <Loader2 v-if="rebuildLoading" class="w-5 h-5 animate-spin shrink-0" />
+          <Zap v-else class="w-5 h-5 shrink-0" />
+          <span v-if="!isDesktopNavCollapsed">{{ rebuildLoading ? 'Сборка...' : 'Обновить сайт' }}</span>
         </button>
       </div>
     </aside>

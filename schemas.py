@@ -825,6 +825,29 @@ class DashboardStatsResponse(BaseModel):
     upcoming_touchpoints: List[DashboardTouchpoint]
 
 
+# --- LEADS INBOX ---
+
+class LeadsCounterResponse(BaseModel):
+    count: int
+    has_new: bool
+
+
+class LeadsInboxItemResponse(BaseModel):
+    id: int
+    status: str
+    is_new: bool
+    customer_name: Optional[str] = None
+    phone: Optional[str] = None
+    source: Optional[str] = None
+    comment: Optional[str] = None
+    created_at: datetime
+
+
+class LeadsInboxListResponse(BaseModel):
+    items: List[LeadsInboxItemResponse]
+    total: int
+
+
 # --- ONLINER IMPORT ---
 
 class OnlinerImportPayload(BaseModel):

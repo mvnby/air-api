@@ -28,12 +28,15 @@ import {
     type ManagerTariffUpdatePayload,
 } from './client';
 import { ManagerTagsService } from './client/services/ManagerTagsService';
+import { ManagerLeadsInboxService } from './client/services/ManagerLeadsInboxService';
+import type { LeadsInboxItemResponse } from './client/models/LeadsInboxItemResponse';
 
 OpenAPI.WITH_CREDENTIALS = true;
 
 export type Segment = 'b2c' | 'b2b';
 export type DashboardView = 'kanban' | 'list';
 export { type Product, type DashboardStatsResponse, type DashboardTouchpoint };
+export type { LeadsInboxItemResponse };
 
 export const api = {
     async login(username: string, password: string) {
@@ -400,5 +403,13 @@ export const api = {
 
     async deleteManagerTag(tagId: number) {
         return await ManagerTagsService.deleteManagerTag(tagId);
+    },
+    // Leads Inbox (Order-based triage)
+    async getLeadsCounter() {
+        return await ManagerLeadsInboxService.getManagerLeadsCounter();
+    },
+
+    async getLeadsInbox(scope: 'active' | 'archive' = 'active') {
+        return await ManagerLeadsInboxService.getManagerLeadsInbox(scope);
     },
 };

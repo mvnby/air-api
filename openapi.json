@@ -3514,6 +3514,83 @@
         }
       }
     },
+    "/api/manager/leads/counter": {
+      "get": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "Get Leads Counter",
+        "description": "Fast counter for the Dashboard / Sidebar badge.\nCounts only orders with status 'new_lead'.",
+        "operationId": "get_manager_leads_counter",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadsCounterResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/leads/inbox": {
+      "get": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "Get Leads Inbox",
+        "description": "Unified inbox feed.\n\nscope=active  \u2192 new_lead + assessment, sorted by is_new DESC then created_at DESC.\nscope=archive \u2192 canceled.",
+        "operationId": "get_manager_leads_inbox",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(active|archive)$",
+              "default": "active",
+              "title": "Scope"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadsInboxListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/leads": {
       "get": {
         "tags": [
@@ -6358,6 +6435,118 @@
         },
         "type": "object",
         "title": "LeadUpdatePayload"
+      },
+      "LeadsCounterResponse": {
+        "properties": {
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "has_new": {
+            "type": "boolean",
+            "title": "Has New"
+          }
+        },
+        "type": "object",
+        "required": [
+          "count",
+          "has_new"
+        ],
+        "title": "LeadsCounterResponse"
+      },
+      "LeadsInboxItemResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "is_new": {
+            "type": "boolean",
+            "title": "Is New"
+          },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "is_new",
+          "created_at"
+        ],
+        "title": "LeadsInboxItemResponse"
+      },
+      "LeadsInboxListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LeadsInboxItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "LeadsInboxListResponse"
       },
       "ManagerActionMessageResponse": {
         "properties": {

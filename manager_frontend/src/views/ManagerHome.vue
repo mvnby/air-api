@@ -4,6 +4,7 @@ import { api, type DashboardStatsResponse } from '../api';
 
 const loading = ref(true);
 const stats = ref<DashboardStatsResponse | null>(null);
+const leadsCount = ref(0);
 
 const fetchStats = async () => {
   try {
@@ -16,12 +17,22 @@ const fetchStats = async () => {
   }
 };
 
+const fetchLeadsCounter = async () => {
+  try {
+    const counter = await api.getLeadsCounter();
+    leadsCount.value = counter.count;
+  } catch (error) {
+    console.error('Error fetching leads counter:', error);
+  }
+};
+
 onMounted(() => {
   fetchStats();
+  fetchLeadsCounter();
 });
 
 const quickActions = [
-  { label: 'Канбан Лидов', icon: 'view_kanban', path: '/manager/leads' },
+  { label: 'Входящие', icon: 'move_to_inbox', path: '/manager/leads' },
   { label: 'Заказы', icon: 'shopping_cart', path: '/manager/orders/kanban' },
   { label: 'Календарь', icon: 'calendar_today', path: '/manager/calendar' },
   { label: 'Каталог', icon: 'inventory_2', path: '/manager/products' },
@@ -45,6 +56,7 @@ const formatDate = (dateStr: string) => {
 };
 </script>
 
+
 <template>
   <div class="p-6 bg-slate-50 dark:bg-[#0f172a] min-h-full text-slate-900 dark:text-white transition-colors duration-200">
     <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3 mb-8">
@@ -60,12 +72,20 @@ const formatDate = (dateStr: string) => {
           v-for="action in quickActions" 
           :key="action.path"
           @click="navigate(action.path)"
-          class="bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-700/50 p-6 rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:bg-slate-50 dark:hover:bg-slate-700 hover:shadow-lg hover:shadow-teal-900/10 dark:hover:shadow-teal-900/20"
+          class="relative bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-700/50 p-6 rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:bg-slate-50 dark:hover:bg-slate-700 hover:shadow-lg hover:shadow-teal-900/10 dark:hover:shadow-teal-900/20"
+          :class="action.path === '/manager/leads' && leadsCount > 0 ? 'ring-2 ring-red-400 dark:ring-red-500' : ''"
         >
+          <!-- Counter badge for "Входящие" card -->
+          <span
+            v-if="action.path === '/manager/leads' && leadsCount > 0"
+            class="absolute -top-2 -right-2 inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-full text-xs font-bold bg-red-500 text-white shadow-lg shadow-red-500/30 animate-pulse"
+          >{{ leadsCount }}</span>
+
           <span class="material-icons-round text-4xl mb-3 text-teal-600 dark:text-[#007f80]">{{ action.icon }}</span>
           <span class="font-medium text-slate-700 dark:text-gray-200">{{ action.label }}</span>
         </div>
       </div>
+
     </section>
 
     <!-- Section 2: KPI & Analytics -->
