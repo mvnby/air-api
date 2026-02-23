@@ -404,7 +404,6 @@ export const api = {
     async deleteManagerTag(tagId: number) {
         return await ManagerTagsService.deleteManagerTag(tagId);
     },
-
     // Leads Inbox (Order-based triage)
     async getLeadsCounter() {
         return await ManagerLeadsInboxService.getManagerLeadsCounter();
