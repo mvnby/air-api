@@ -106,18 +106,43 @@ const openInKanban = () => {
   qualifyTarget.value = null;
 };
 
+// ── No Answer (Недозвон) ──────────────────────────────────────────────────────
+const markNoAnswer = async (item: LeadsInboxItemResponse) => {
+  try {
+    const newComment = item.comment ? `${item.comment}\n[Недозвон]` : '[Недозвон]';
+    await api.patchManagerOrder(item.id, { status: 'assessment', comment: newComment });
+    setToast(`Заявка #${item.id} переведена в работу (Недозвон)`);
+    await load();
+  } catch (e) {
+    console.error(e);
+    setToast('Ошибка при обновлении статуса');
+  }
+};
+
 // ── Rejection ─────────────────────────────────────────────────────────────────
+const rejectReason = ref('');
+
 const confirmReject = async () => {
   if (!rejectTarget.value) return;
   try {
-    await api.patchManagerOrder(rejectTarget.value.id, { status: 'canceled' });
+    const newComment = rejectReason.value
+      ? (rejectTarget.value.comment ? `${rejectTarget.value.comment}\n[Отказ: ${rejectReason.value}]` : `[Отказ: ${rejectReason.value}]`)
+      : rejectTarget.value.comment;
+
+    await api.patchManagerOrder(rejectTarget.value.id, { status: 'canceled', comment: newComment || undefined });
     setToast(`Заявка #${rejectTarget.value.id} перемещена в архив`);
     rejectTarget.value = null;
+    rejectReason.value = '';
     await load();
   } catch (e) {
     console.error(e);
     setToast('Ошибка при отклонении');
   }
+};
+
+const openRejectModal = (item: LeadsInboxItemResponse) => {
+  rejectTarget.value = item;
+  rejectReason.value = '';
 };
 
 const scopeOptions: { value: Scope; label: string }[] = [
@@ -185,13 +210,15 @@ const scopeOptions: { value: Scope; label: string }[] = [
     </div>
 
     <!-- Feed -->
-    <div v-else class="flex flex-col gap-3 max-w-2xl mx-auto">
+    <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
       <LeadInboxCard
         v-for="item in items"
         :key="item.id"
         :item="item"
+        :is-archive="scope === 'archive'"
         @qualify="qualifyTarget = $event"
-        @reject="rejectTarget = $event"
+        @reject="openRejectModal($event)"
+        @no-answer="markNoAnswer($event)"
       />
     </div>
 
@@ -250,11 +277,22 @@ const scopeOptions: { value: Scope; label: string }[] = [
         <p class="text-sm text-slate-600 dark:text-slate-300">
           Заявка будет перемещена в архив со статусом <strong>«Отменена»</strong>.
         </p>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Причина отказа (опционально)</label>
+          <input
+            v-model="rejectReason"
+            type="text"
+            placeholder="Например: Дорого, Нецелевой, Спам"
+            class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+          />
+        </div>
+
         <div class="flex gap-3 pt-1">
           <button
             class="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 transition-colors text-sm"
             @click="confirmReject"
-          >⛔ Подтвердить отказ</button>
+          >⛔ Подтвердить</button>
           <button
             class="flex-1 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors text-sm"
             @click="rejectTarget = null"
