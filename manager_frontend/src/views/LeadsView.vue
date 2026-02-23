@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import LeadsDashboard from '../components/leads/LeadsDashboard.vue';
+import LeadInbox from './LeadInbox.vue';
 </script>
 
 <template>
-  <LeadsDashboard />
+  <LeadInbox />
 </template>

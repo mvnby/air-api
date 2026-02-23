@@ -24,6 +24,7 @@ const loginError = ref('');
 const rebuildLoading = ref(false);
 const isMobileNavOpen = ref(false);
 const theme = ref<'light' | 'dark'>('light');
+const leadsCount = ref(0);
 
 const currentLocation = ref(`${window.location.pathname}${window.location.search}`);
 const THEME_STORAGE_KEY = 'manager_theme';
@@ -113,10 +114,21 @@ const handleRebuild = async () => {
   }
 };
 
+const fetchLeadsCount = async () => {
+  try {
+    const counter = await api.getLeadsCounter();
+    leadsCount.value = counter.count;
+  } catch {
+    // Badge is non-critical — silence errors
+  }
+};
+
 const checkAuth = async () => {
   try {
     await api.checkAuth();
     isAuthenticated.value = true;
+    // Fetch the badge count once authenticated
+    void fetchLeadsCount();
   } catch {
     isAuthenticated.value = false;
     showLoginModal.value = true;
@@ -233,8 +245,13 @@ onBeforeUnmount(() => {
             : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
           @click="navigate(item.path)"
         >
-          <component :is="item.icon" class="w-5 h-5" />
-          {{ item.label }}
+          <component :is="item.icon" class="w-5 h-5 shrink-0" />
+          <span class="flex-1">{{ item.label }}</span>
+          <!-- Leads counter badge -->
+          <span
+            v-if="item.path === '/manager/leads' && leadsCount > 0"
+            class="inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full text-[11px] font-bold bg-red-500 text-white"
+          >{{ leadsCount }}</span>
         </button>
       </nav>
 

@@ -1165,3 +1165,78 @@ class OrderService:
         session.add(order)
         await session.commit()
         return await OrderService.get_order_detail_for_manager(session, order_id)
+
+    # -----------------------------------------------------------------
+    # Leads Inbox (Order-based triage)
+    # -----------------------------------------------------------------
+
+    @staticmethod
+    async def get_new_lead_counter(session: AsyncSession) -> tuple[int, bool]:
+        """Fast count of orders with status 'new_lead'.
+
+        Intended for the Dashboard/Sidebar badge — runs a single
+        indexed COUNT query with no joins.
+        """
+        stmt = select(func.count()).where(Order.status == OrderStatus.NEW_LEAD)
+        result = await session.execute(stmt)
+        count: int = result.scalar() or 0
+        return count, count > 0
+
+    @staticmethod
+    async def get_leads_inbox(session: AsyncSession, scope: str = "active"):
+        """Return triage inbox items based on scope.
+
+        scope="active"  → new_lead + assessment
+                          sorted: new_lead first, then by created_at DESC.
+        scope="archive" → canceled only, created_at DESC.
+        """
+        from schemas import LeadsInboxItemResponse, LeadsInboxListResponse
+        from sqlalchemy import case as sa_case
+
+        if scope == "archive":
+            active_statuses = [OrderStatus.CANCELED]
+        else:
+            active_statuses = [OrderStatus.NEW_LEAD, OrderStatus.ASSESSMENT]
+
+        stmt = (
+            select(Order)
+            .options(selectinload(Order.customer))
+            .where(Order.status.in_(active_statuses))
+        )
+
+        if scope == "active":
+            # new_lead orders float to top, then newest first
+            priority_expr = sa_case(
+                (Order.status == OrderStatus.NEW_LEAD, 0),
+                else_=1,
+            )
+            stmt = stmt.order_by(priority_expr, Order.created_at.desc())
+        else:
+            stmt = stmt.order_by(Order.created_at.desc())
+
+        result = await session.execute(stmt)
+        orders: list[Order] = list(result.scalars().all())
+
+        items = [
+            LeadsInboxItemResponse(
+                id=order.id,
+                status=order.status.value if hasattr(order.status, "value") else str(order.status),
+                is_new=(
+                    (order.status.value if hasattr(order.status, "value") else str(order.status))
+                    == "new_lead"
+                ),
+                customer_name=order.customer.name if order.customer else None,
+                phone=order.customer.phone if order.customer else None,
+                source=(
+                    order.lead_source.value
+                    if order.lead_source and hasattr(order.lead_source, "value")
+                    else (str(order.lead_source) if order.lead_source else None)
+                ),
+                comment=order.comment,
+                created_at=order.created_at,
+            )
+            for order in orders
+        ]
+
+        return LeadsInboxListResponse(items=items, total=len(items))
+
