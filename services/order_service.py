@@ -1269,16 +1269,17 @@ class OrderService:
         from schemas import LeadsInboxItemResponse, LeadsInboxListResponse
         from sqlalchemy import case as sa_case
 
+        stmt = select(Order).options(selectinload(Order.customer))
+
         if scope == "archive":
-            active_statuses = [OrderStatus.CANCELED]
+            # Archived leads are just closed/lost leads
+            stmt = stmt.where(
+                Order.status == OrderStatus.CLOSED,
+                Order.closing_result == "lost"
+            )
         else:
             active_statuses = [OrderStatus.NEW_LEAD]
-
-        stmt = (
-            select(Order)
-            .options(selectinload(Order.customer))
-            .where(Order.status.in_(active_statuses))
-        )
+            stmt = stmt.where(Order.status.in_(active_statuses))
 
         if scope == "active":
             # new_lead orders float to top, then newest first
