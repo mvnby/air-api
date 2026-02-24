@@ -10,6 +10,7 @@ export type LeadsInboxItemResponse = {
     phone?: (string | null);
     source?: (string | null);
     comment?: (string | null);
+    no_answer_at?: (string | null);
     created_at: string;
 };
 

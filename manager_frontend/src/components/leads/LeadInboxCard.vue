@@ -49,6 +49,45 @@ const formatDate = (dt: string) => {
   const d = new Date(dt);
   return d.toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 };
+
+const formatPhone = (phone: string | null | undefined): string => {
+  if (!phone) return '';
+  // Normalize to digits only
+  const digits = phone.replace(/\D/g, '');
+  // Expect 375XXXXXXXXX (12 digits)
+  if (digits.length === 12 && digits.startsWith('375')) {
+    const cc = digits.slice(0, 3);   // 375
+    const op = digits.slice(3, 5);   // operator code (2 digits)
+    const p1 = digits.slice(5, 8);   // 3 digits
+    const p2 = digits.slice(8, 10);  // 2 digits
+    const p3 = digits.slice(10, 12); // 2 digits
+    return `+${cc} (${op}) ${p1}-${p2}-${p3}`;
+  }
+  return phone;
+};
+
+const getRelativeTime = (dt: string | null | undefined) => {
+  if (!dt) return '';
+  const date = new Date(dt);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  
+  const rtf = new Intl.RelativeTimeFormat('ru', { numeric: 'auto' });
+
+  if (diffInSeconds < 60) {
+    return rtf.format(-diffInSeconds, 'second');
+  }
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) {
+    return rtf.format(-diffInMinutes, 'minute');
+  }
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) {
+    return rtf.format(-diffInHours, 'hour');
+  }
+  const diffInDays = Math.floor(diffInHours / 24);
+  return rtf.format(-diffInDays, 'day');
+};
 </script>
 
 <template>
@@ -95,7 +134,7 @@ const formatDate = (dt: string) => {
         class="flex items-center gap-1 text-sm text-teal-600 dark:text-teal-400 hover:underline font-medium"
       >
         <span class="material-icons-round text-[15px]">call</span>
-        {{ item.phone }}
+        {{ formatPhone(item.phone) }}
       </a>
       <span class="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1">
         <span class="material-icons-round text-[13px]">{{ getSourceIcon(item.source) }}</span>
@@ -120,6 +159,12 @@ const formatDate = (dt: string) => {
       class="mx-4 mb-3 px-3 py-2 text-sm text-slate-400 dark:text-slate-500 italic"
     >
       Комментарий отсутствует
+    </div>
+
+    <!-- No Answer Badge -->
+    <div v-if="item.no_answer_at" class="mx-4 mb-4 flex items-center gap-1.5 w-fit rounded-full px-3 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 text-[11px] font-bold tracking-wide">
+      <span class="material-icons-round text-[14px]">phone_missed</span>
+      Недозвон: {{ getRelativeTime(item.no_answer_at) }}
     </div>
 
     <!-- Actions footer -->

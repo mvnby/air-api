@@ -68,6 +68,7 @@ export type { ManagerMediaReuseSearchItemResponse } from './models/ManagerMediaR
 export type { ManagerMediaSetMainImageResponse } from './models/ManagerMediaSetMainImageResponse';
 export type { ManagerMediaUploadLocalImagesResponse } from './models/ManagerMediaUploadLocalImagesResponse';
 export type { ManagerNormalizeLegacySpecsResponse } from './models/ManagerNormalizeLegacySpecsResponse';
+export type { ManagerOrderCreatePayload } from './models/ManagerOrderCreatePayload';
 export type { ManagerOrderDetailResponse } from './models/ManagerOrderDetailResponse';
 export type { ManagerOrderDocumentItem } from './models/ManagerOrderDocumentItem';
 export type { ManagerOrderDocumentListResponse } from './models/ManagerOrderDocumentListResponse';

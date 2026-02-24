@@ -30,6 +30,7 @@ class Customer(SQLModel, table=True):
     acting_basis: str = Field(default="Устава")
 
     created_at: datetime = Field(default_factory=datetime.now)
+    is_archived: bool = Field(default=False, index=True)
 
     orders: List["Order"] = Relationship(back_populates="customer")
 

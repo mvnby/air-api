@@ -5,8 +5,9 @@ from core.database import get_session
 from core.manager_api_errors import manager_http_error
 from core.manager_error_codes import BAD_REQUEST, DOCUMENT_GENERATION_FAILED, ORDER_NOT_FOUND
 from core.security import get_current_username
-from routers.manager_operation_ids import GENERATE_MANAGER_ORDER_DOCUMENT, PATCH_MANAGER_ORDER
+from routers.manager_operation_ids import CREATE_MANAGER_ORDER, GENERATE_MANAGER_ORDER_DOCUMENT, PATCH_MANAGER_ORDER
 from schemas import (
+    ManagerOrderCreatePayload,
     ManagerOrderDetailResponse,
     ManagerOrderDocumentResponse,
     ManagerOrderUpdatePayload,
@@ -16,6 +17,49 @@ from services.order_service import OrderService
 
 
 router = APIRouter(prefix="/api/manager/orders", tags=["manager-orders"])
+
+
+@router.post("", response_model=ManagerOrderDetailResponse, operation_id=CREATE_MANAGER_ORDER)
+async def create_manager_order(
+    payload: ManagerOrderCreatePayload,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        from models import LeadSource
+        source_enum = LeadSource(payload.source) if payload.source else LeadSource.MANAGER
+        order = await OrderService.create_from_website(
+            session=session,
+            customer_name=payload.name or "Новый клиент",
+            customer_phone=payload.phone or "",
+            customer_email=None,
+            customer_address=None,
+            items=[],
+            lead_source=source_enum,
+            comment=payload.request_text,
+        )
+        # Save optional service_type into technical_meta
+        if payload.service_type:
+            from sqlalchemy.orm import Session
+            from sqlalchemy.orm.attributes import flag_modified
+            raw_order = await session.get(type(order), order.id)
+            if raw_order is not None:
+                raw_order.technical_meta = dict(raw_order.technical_meta or {})
+                raw_order.technical_meta["service_type"] = payload.service_type
+                flag_modified(raw_order, "technical_meta")
+                session.add(raw_order)
+                await session.commit()
+                await session.refresh(raw_order)
+                order = raw_order
+        data = await OrderService.get_order_detail_for_manager(session, order.id)
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=CREATE_MANAGER_ORDER,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+    return data
 
 
 @router.patch("/{order_id}", response_model=ManagerOrderDetailResponse, operation_id=PATCH_MANAGER_ORDER)

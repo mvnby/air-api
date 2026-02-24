@@ -1033,6 +1033,7 @@ class OrderService:
         order = await session.get(Order, order_id)
         if not order:
             return None
+        from models import Customer  # noqa: avoid UnboundLocalError from conditional import below
 
         fields_set = getattr(payload, "model_fields_set", None)
         if fields_set is None:
@@ -1066,10 +1067,19 @@ class OrderService:
                 )
                 session.add(new_installer_link)
 
+        # 1. Handle explicit customer linkage (if manager finds existing customer)
+        if "customer_id" in fields_set and payload.customer_id is not None:
+            if order.customer_id != payload.customer_id:
+                # Link to new existing customer
+                new_customer = await session.get(Customer, payload.customer_id)
+                if new_customer:
+                    order.customer_id = payload.customer_id
+
         customer_field_map = {
             "customer_name": "name",
             "customer_phone": "phone",
             "customer_email": "email",
+            "customer_type": "type",
             "customer_inn": "inn",
             "customer_full_legal_name": "full_legal_name",
             "customer_legal_address": "legal_address",
@@ -1077,6 +1087,8 @@ class OrderService:
             "customer_bic": "bic",
             "customer_iban": "iban",
         }
+        
+        # 2. Update customer fields
         requested_customer_fields = [field for field in customer_field_map if field in fields_set]
         if requested_customer_fields and order.customer_id:
             customer = await session.get(Customer, order.customer_id)
@@ -1113,6 +1125,28 @@ class OrderService:
                     attr_name = customer_field_map[field_name]
                     setattr(customer, attr_name, _clean_optional(getattr(payload, field_name, None)))
                 session.add(customer)
+
+        # 3. Handle specific Order technical meta qualification updates
+        meta_fields_map = {
+            "object_type": "object_type",
+            "service_type": "service_type",
+            "equipment_class": "equipment_class",
+            "marketing_source": "marketing_source",
+            "no_answer_at": "no_answer_at",
+        }
+        requested_meta_fields = [field for field in meta_fields_map if field in fields_set]
+        if requested_meta_fields:
+            if order.technical_meta is None:
+                order.technical_meta = {}
+            new_meta = dict(order.technical_meta)
+            for field in requested_meta_fields:
+                meta_key = meta_fields_map[field]
+                val = getattr(payload, field, None)
+                if val is not None:
+                    new_meta[meta_key] = val
+            order.technical_meta = new_meta
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(order, "technical_meta")
 
         if "products" in fields_set or "services" in fields_set:
             if "products" in fields_set and payload.products is not None:
@@ -1164,6 +1198,30 @@ class OrderService:
 
         session.add(order)
         await session.commit()
+
+        # Auto-archive customer if this order was just cancelled and they
+        # have no other real (non-lead, non-cancelled) orders.
+        if order.status == OrderStatus.CANCELED and order.customer_id:
+            active_order_statuses = [
+                OrderStatus.NEW_LEAD, OrderStatus.CANCELED
+            ]
+            other_real_orders_stmt = (
+                select(func.count(Order.id))
+                .where(
+                    Order.customer_id == order.customer_id,
+                    Order.id != order.id,
+                    Order.status.not_in(active_order_statuses),
+                )
+            )
+            other_real_result = await session.execute(other_real_orders_stmt)
+            other_real_count = int(other_real_result.scalar() or 0)
+            if other_real_count == 0:
+                customer = await session.get(Customer, order.customer_id)
+                if customer and not customer.is_archived:
+                    customer.is_archived = True
+                    session.add(customer)
+                    await session.commit()
+
         return await OrderService.get_order_detail_for_manager(session, order_id)
 
     # -----------------------------------------------------------------
@@ -1196,7 +1254,7 @@ class OrderService:
         if scope == "archive":
             active_statuses = [OrderStatus.CANCELED]
         else:
-            active_statuses = [OrderStatus.NEW_LEAD, OrderStatus.ASSESSMENT]
+            active_statuses = [OrderStatus.NEW_LEAD]
 
         stmt = (
             select(Order)
@@ -1233,6 +1291,11 @@ class OrderService:
                     else (str(order.lead_source) if order.lead_source else None)
                 ),
                 comment=order.comment,
+                no_answer_at=(
+                    datetime.fromisoformat(order.technical_meta.get("no_answer_at").replace('Z', '+00:00'))
+                    if order.technical_meta and order.technical_meta.get("no_answer_at")
+                    else None
+                ),
                 created_at=order.created_at,
             )
             for order in orders

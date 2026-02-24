@@ -10,7 +10,10 @@ export type ManagerOrderUpdatePayload = {
     assessment_date?: (string | null);
     installation_date?: (string | null);
     comment?: (string | null);
+    no_answer_at?: (string | null);
     is_paid?: (boolean | null);
+    customer_id?: (number | null);
+    customer_type?: (string | null);
     customer_name?: (string | null);
     customer_phone?: (string | null);
     customer_email?: (string | null);
@@ -22,6 +25,10 @@ export type ManagerOrderUpdatePayload = {
     customer_iban?: (string | null);
     customer_delivery_address?: (string | null);
     confirm_critical_customer_changes?: (boolean | null);
+    object_type?: (string | null);
+    service_type?: (string | null);
+    equipment_class?: (string | null);
+    marketing_source?: (string | null);
     installer_id?: (number | null);
     products?: (Array<ManagerOrderProductLinePayload> | null);
     services?: (Array<ManagerOrderServiceLinePayload> | null);
