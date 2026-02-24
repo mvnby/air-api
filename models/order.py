@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import BigInteger, Column, JSON, String
 from sqlmodel import Field, Relationship, SQLModel
 
-from .common import ClosingResult, LeadSource, OrderStatus
+from .common import ClosingResult, LeadSource, OrderStatus, PaymentType
 
 
 class Installer(SQLModel, table=True):
@@ -108,7 +108,11 @@ class Order(SQLModel, table=True):
     total_amount: float = Field(default=0.0)
     total_cost: float = Field(default=0.0)
     margin: float = Field(default=0.0)
-    is_paid: bool = Field(default=False)
+    
+    # Financials
+    total_payments: float = Field(default=0.0)
+    balance_due: float = Field(default=0.0)
+    is_paid: bool = Field(default=False) # Will be deprecated but left for now
 
     # --- Closing ---
     closing_result: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True, index=True))
@@ -164,6 +168,13 @@ class Order(SQLModel, table=True):
             "lazy": "selectin",
         },
     )
+    payments: List["Payment"] = Relationship(
+        back_populates="order",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin",
+        },
+    )
 
     def calculate_totals(self):
         p_sum = sum([item.price * item.quantity for item in self.product_links])
@@ -177,6 +188,13 @@ class Order(SQLModel, table=True):
         self.total_amount = p_sum + s_sum
         self.total_cost = p_cost + s_cost + i_cost
         self.margin = self.total_amount - self.total_cost
+        
+        # Calculate payments 
+        amounts = []
+        for payment in self.payments:
+            amounts.append(payment.amount)
+        self.total_payments = sum(amounts)
+        self.balance_due = max(0.0, self.total_amount - self.total_payments)
 
     def __str__(self):
         customer_name = self.customer.name if self.customer else "N/A"
@@ -201,3 +219,24 @@ class OrderDocument(SQLModel, table=True):
 
     def __str__(self):
         return f"{self.doc_type.upper()} {self.number} от {self.date.strftime('%d.%m.%Y')}"
+
+
+class Payment(SQLModel, table=True):
+    __tablename__ = "payment"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    order_id: int = Field(foreign_key="order.id", index=True)
+    
+    amount: float = Field(default=0.0)
+    date: datetime = Field(default_factory=datetime.now)
+    type: PaymentType = Field(default=PaymentType.PREPAYMENT, sa_column=Column(String, index=True))
+    
+    comment: Optional[str] = Field(default=None)
+
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
+
+    order: "Order" = Relationship(back_populates="payments")
+
+    def __str__(self):
+        return f"Платеж {self.amount} BYN от {self.date.strftime('%d.%m.%Y')} ({self.type})"

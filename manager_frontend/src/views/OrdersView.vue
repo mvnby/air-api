@@ -144,8 +144,20 @@ onMounted(loadOrders);
             </div>
 
             <!-- Amount -->
-            <div class="card-amount" :class="{ paid: order.is_paid }">
-              {{ formatMoney(order.total_amount) }}
+            <div class="card-amount">
+              <div>Общая сумма: {{ formatMoney(order.total_amount) }}</div>
+              <div
+                v-if="order.balance_due > 0"
+                class="text-red-500 font-medium text-[11px] mt-1"
+              >
+                Остаток: {{ formatMoney(order.balance_due) }}
+              </div>
+              <div
+                v-else-if="order.total_amount > 0 && order.balance_due === 0"
+                class="text-green-600 font-medium text-[11px] mt-1"
+              >
+                Оплачено
+              </div>
             </div>
 
             <!-- Closing result (for closed column) -->

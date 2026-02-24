@@ -60,3 +60,8 @@ class LeadSource(str, Enum):
     MANAGER = "manager"
     REFERRAL = "referral"
     OTHER = "other"
+
+
+class PaymentType(str, Enum):
+    PREPAYMENT = "prepayment"
+    POSTPAYMENT = "postpayment"

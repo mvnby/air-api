@@ -11,6 +11,7 @@ import type {
   OrderServiceLineResponse,
   ManagerOrderDocumentItem,
   ManagerInstallerResponse,
+  PaymentResponse,
 } from '../../client';
 import { ManagerDocsService, ManagerOrdersService } from '../../client';
 import { STATUS_LABELS, STATUS_ORDER, formatMoney } from './order-utils';
@@ -65,6 +66,7 @@ const installersList = ref<ManagerInstallerResponse[]>([]);
 const productLines = ref<ProductLine[]>([]);
 const serviceLines = ref<ServiceLine[]>([]);
 const documents = ref<ManagerOrderDocumentItem[]>([]);
+const payments = ref<PaymentResponse[]>([]);
 const localServerErrors = ref<Record<string, string>>({});
 
 const localFormError = ref('');
@@ -169,11 +171,53 @@ const deleteDocument = async (docId: number) => {
   }
 };
 
+const newPaymentAmount = ref<number | null>(null);
+const newPaymentType = ref<string>('prepayment');
+const isAddingPayment = ref(false);
+
+const addPayment = async () => {
+  if (!props.order?.id || !newPaymentAmount.value) return;
+  isAddingPayment.value = true;
+  try {
+    const res = await ManagerOrdersService.addManagerOrderPayment(props.order.id, {
+        amount: newPaymentAmount.value,
+        type: newPaymentType.value,
+    });
+    payments.value = res;
+    newPaymentAmount.value = null;
+    setToast('Платеж добавлен', 'success');
+  } catch (error) {
+    setToast(`Ошибка: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    isAddingPayment.value = false;
+  }
+};
+
+const deletePayment = async (paymentId: number) => {
+  if (!props.order?.id) return;
+  if (!confirm('Удалить платеж?')) return;
+  try {
+    const res = await ManagerOrdersService.deleteManagerOrderPayment(props.order.id, paymentId);
+    payments.value = res;
+    setToast('Платеж удален', 'success');
+  } catch (error) {
+    setToast(`Ошибка: ${getApiErrorMessage(error)}`, 'error');
+  }
+};
+
 
 const totalPreview = computed(() => {
   const pTotal = productLines.value.reduce((sum, line) => sum + line.price * line.quantity, 0);
   const sTotal = serviceLines.value.reduce((sum, line) => sum + line.price * line.quantity, 0);
   return pTotal + sTotal;
+});
+
+const totalPaymentsPreview = computed(() => {
+  return payments.value.reduce((sum, p) => sum + p.amount, 0);
+});
+
+const balanceDuePreview = computed(() => {
+  return Math.max(0, totalPreview.value - totalPaymentsPreview.value);
 });
 
 const marginPreview = computed(() => {
@@ -319,6 +363,9 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
       date: d.date,
       edit_url: d.edit_url
   }));
+  // Payments
+  payments.value = [...(order.payments || [])];
+  
   // Also refresh list to be sure
   loadDocuments(order.id);
 
@@ -456,6 +503,8 @@ const handleSave = () => {
     errors.products = 'Количество товара должно быть больше 0';
   } else if (productLines.value.some((line) => line.price < 0)) {
     errors.products = 'Цена товара не может быть отрицательной';
+  } else if (productLines.value.some((line) => !line.product_id)) {
+    errors.products = 'Выберите товар из выпадающего списка';
   }
 
   if (serviceLines.value.some((line) => line.quantity <= 0)) {
@@ -750,8 +799,53 @@ watch(
       </section>
 
 
+      <section v-if="order" class="mt-6">
+        <div class="mb-2 flex items-center justify-between">
+          <h3 class="text-lg flex gap-2 items-center font-semibold font-['Space_Grotesk'] text-slate-800">
+             <span class="material-icons-round text-teal-600">account_balance_wallet</span> Оплаты
+          </h3>
+        </div>
+        
+        <!-- List of Payments -->
+        <div v-if="payments.length" class="space-y-2 mb-4">
+          <div v-for="payment in payments" :key="payment.id" class="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-3">
+             <div>
+                <div class="font-medium text-gray-900">{{ formatMoney(payment.amount) }}</div>
+                <div class="text-xs text-gray-500">{{ new Date(payment.date).toLocaleDateString() }} · {{ payment.type === 'prepayment' ? 'Предоплата' : 'Постоплата' }}</div>
+             </div>
+             <button class="flex h-8 w-8 items-center justify-center rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors" @click="deletePayment(payment.id)" title="Удалить платеж">
+                <span class="material-icons-round text-[18px]">delete</span>
+             </button>
+          </div>
+        </div>
+        <div v-else class="text-sm text-gray-500 italic py-3 text-center rounded-xl border border-dashed border-gray-200 mb-4">
+            Нет оплат
+        </div>
+        
+        <!-- Add Payment Form -->
+        <div class="flex items-end gap-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
+           <label class="flex-1 field-label !mb-0">
+              Сумма
+              <input v-model.number="newPaymentAmount" type="number" min="0" class="field-input mt-1" placeholder="0.00" />
+           </label>
+           <label class="flex-1 field-label !mb-0">
+              Тип
+              <select v-model="newPaymentType" class="field-input mt-1">
+                 <option value="prepayment">Предоплата</option>
+                 <option value="postpayment">Постоплата</option>
+              </select>
+           </label>
+           <button class="btn-mini h-[38px]" :disabled="!newPaymentAmount || isAddingPayment" @click="addPayment">
+              Добавить
+           </button>
+        </div>
+      </section>
+
       <section class="mt-6 rounded-2xl bg-gray-100 p-4">
-        <p class="text-sm text-gray-600">Итого: <span class="font-semibold text-gray-900">{{ formatMoney(totalPreview) }}</span></p>
+        <p class="text-sm text-gray-600">Оплачено: <span class="font-semibold text-teal-600">{{ formatMoney(totalPaymentsPreview) }}</span></p>
+        <p class="text-sm text-gray-600">Остаток: <span class="font-semibold" :class="balanceDuePreview > 0 ? 'text-red-500' : 'text-gray-900'">{{ formatMoney(balanceDuePreview) }}</span></p>
+        <hr class="my-2 border-gray-200" />
+        <p class="text-sm text-gray-600">Итого сумма: <span class="font-semibold text-gray-900">{{ formatMoney(totalPreview) }}</span></p>
         <p class="text-sm text-gray-600">Маржа: <span class="font-semibold text-teal-700">{{ formatMoney(marginPreview) }}</span></p>
       </section>
 

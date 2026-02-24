@@ -7,6 +7,8 @@ import type { ManagerOrderDetailResponse } from '../models/ManagerOrderDetailRes
 import type { ManagerOrderDocumentResponse } from '../models/ManagerOrderDocumentResponse';
 import type { ManagerOrderListResponse } from '../models/ManagerOrderListResponse';
 import type { ManagerOrderUpdatePayload } from '../models/ManagerOrderUpdatePayload';
+import type { PaymentCreatePayload } from '../models/PaymentCreatePayload';
+import type { PaymentResponse } from '../models/PaymentResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -129,6 +131,53 @@ export class ManagerOrdersService {
             path: {
                 'order_id': orderId,
                 'doc_type': docType,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Add Manager Order Payment
+     * @param orderId
+     * @param requestBody
+     * @returns PaymentResponse Successful Response
+     * @throws ApiError
+     */
+    public static addManagerOrderPayment(
+        orderId: number,
+        requestBody: PaymentCreatePayload,
+    ): CancelablePromise<Array<PaymentResponse>> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/payments',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Delete Manager Order Payment
+     * @param orderId
+     * @param paymentId
+     * @returns PaymentResponse Successful Response
+     * @throws ApiError
+     */
+    public static deleteManagerOrderPayment(
+        orderId: number,
+        paymentId: number,
+    ): CancelablePromise<Array<PaymentResponse>> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/orders/{order_id}/payments/{payment_id}',
+            path: {
+                'order_id': orderId,
+                'payment_id': paymentId,
             },
             errors: {
                 422: `Validation Error`,

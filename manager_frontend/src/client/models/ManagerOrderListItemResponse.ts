@@ -27,5 +27,7 @@ export type ManagerOrderListItemResponse = {
     on_hold_reason?: (string | null);
     measurement_required?: boolean;
     proposal_sent_at?: (string | null);
+    total_payments?: number;
+    balance_due?: number;
 };
 

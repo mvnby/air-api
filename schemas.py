@@ -316,6 +316,10 @@ class ManagerOrderListItemResponse(BaseModel):
     on_hold_reason: Optional[str] = None
     measurement_required: bool = False
     proposal_sent_at: Optional[datetime] = None
+    
+    # Financials
+    total_payments: float = 0.0
+    balance_due: float = 0.0
 
 
 class ManagerOrderDocumentItem(BaseModel):
@@ -343,10 +347,26 @@ class ManagerCustomerDocumentListResponse(BaseModel):
     items: List[ManagerCustomerDocumentItem]
 
 
+class PaymentCreatePayload(BaseModel):
+    amount: float
+    type: str # prepayment or postpayment
+    comment: Optional[str] = None
+
+
+class PaymentResponse(BaseModel):
+    id: int
+    amount: float
+    date: datetime
+    type: str
+    comment: Optional[str] = None
+    created_at: datetime
+
+
 class ManagerOrderDetailResponse(ManagerOrderListItemResponse):
     product_lines: List[OrderProductLineResponse] = []
     service_lines: List[OrderServiceLineResponse] = []
     documents: List[ManagerOrderDocumentItem] = []
+    payments: List[PaymentResponse] = []
 
 
 class ManagerOrderListResponse(BaseModel):
