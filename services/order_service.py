@@ -1217,16 +1217,18 @@ class OrderService:
 
         # Auto-archive customer if this order was just cancelled and they
         # have no other real (non-lead, non-cancelled) orders.
-        if order.status == OrderStatus.CANCELED and order.customer_id:
-            active_order_statuses = [
-                OrderStatus.NEW_LEAD, OrderStatus.CANCELED
-            ]
+        if order.status == OrderStatus.CLOSED and order.closing_result == "lost" and order.customer_id:
             other_real_orders_stmt = (
                 select(func.count(Order.id))
                 .where(
                     Order.customer_id == order.customer_id,
                     Order.id != order.id,
-                    Order.status.not_in(active_order_statuses),
+                    not_(
+                        or_(
+                            Order.status == OrderStatus.NEW_LEAD,
+                            and_(Order.status == OrderStatus.CLOSED, Order.closing_result == "lost")
+                        )
+                    )
                 )
             )
             other_real_result = await session.execute(other_real_orders_stmt)

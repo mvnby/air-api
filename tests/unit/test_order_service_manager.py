@@ -76,14 +76,14 @@ async def test_service_update_order_for_manager_line_sync(db):
     await db.refresh(order)
 
     payload = ManagerOrderUpdatePayload(
-        status="proposal",
+        status="negotiation",
         products=[{"product_id": product.id, "quantity": 2, "price": 1300, "cost": 700}],
         services=[{"service_id": service.id, "title": "Srv", "quantity": 1, "price": 200, "cost": 50}],
     )
 
     data = await OrderService.update_order_for_manager(db, order.id, payload)
     assert data is not None
-    assert data["status"] == "proposal"
+    assert data["status"] == "negotiation"
     assert len(data["product_lines"]) == 1
     assert data["total_amount"] == 2800
 
