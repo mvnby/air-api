@@ -370,7 +370,12 @@ class ManagerOrderUpdatePayload(BaseModel):
     assessment_date: Optional[datetime] = None
     installation_date: Optional[datetime] = None
     comment: Optional[str] = None
+    no_answer_at: Optional[str] = None
     is_paid: Optional[bool] = None
+    
+    # Customer Details
+    customer_id: Optional[int] = None
+    customer_type: Optional[str] = None
     customer_name: Optional[str] = None
     customer_phone: Optional[str] = None
     customer_email: Optional[str] = None
@@ -382,9 +387,24 @@ class ManagerOrderUpdatePayload(BaseModel):
     customer_iban: Optional[str] = None
     customer_delivery_address: Optional[str] = None
     confirm_critical_customer_changes: Optional[bool] = None
+    
+    # Qualification Meta fields
+    object_type: Optional[str] = None
+    service_type: Optional[str] = None
+    equipment_class: Optional[str] = None
+    marketing_source: Optional[str] = None
+    
     installer_id: Optional[int] = None
     products: Optional[List[ManagerOrderProductLinePayload]] = None
     services: Optional[List[ManagerOrderServiceLinePayload]] = None
+
+
+class ManagerOrderCreatePayload(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    source: str
+    request_text: str
+    service_type: Optional[str] = None
 
 
 class ManagerOrderDocumentResponse(BaseModel):
@@ -840,6 +860,7 @@ class LeadsInboxItemResponse(BaseModel):
     phone: Optional[str] = None
     source: Optional[str] = None
     comment: Optional[str] = None
+    no_answer_at: Optional[datetime] = None
     created_at: datetime
 
 

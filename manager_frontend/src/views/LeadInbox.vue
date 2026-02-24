@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { api, type LeadsInboxItemResponse } from '../api';
-import type { LeadCreatePayload } from '../client';
 import LeadInboxCard from '../components/leads/LeadInboxCard.vue';
+import LeadQualifyModal from '../components/leads/LeadQualifyModal.vue';
+import { useBelarusPhoneMask } from '../composables/useBelarusPhoneMask';
 
 type Scope = 'active' | 'archive';
 
@@ -19,11 +20,27 @@ const rejectTarget = ref<LeadsInboxItemResponse | null>(null);
 // Create Lead modal
 const showCreateModal = ref(false);
 const createSaving = ref(false);
-const createForm = ref<LeadCreatePayload>({
+const createForm = ref<{ source: string; request_text: string; name: string; phone: string; service_type: string }>({
   source: 'manager',
   request_text: '',
   name: '',
   phone: '',
+  service_type: '',
+})
+
+const createPhoneInputRef = ref<HTMLInputElement | null>(null);
+const phoneModelRef = ref('');
+
+const { unmaskedValue: createPhoneUnmasked } = useBelarusPhoneMask(createPhoneInputRef, phoneModelRef);
+
+watch(phoneModelRef, (val) => {
+  createForm.value.phone = val;
+});
+
+watch(() => createForm.value.phone, (val) => {
+  if (phoneModelRef.value !== val) {
+    phoneModelRef.value = val;
+  }
 });
 
 const setToast = (msg: string) => {
@@ -50,7 +67,8 @@ watch(scope, load);
 
 // ── Create Lead ───────────────────────────────────────────────────────────────
 const openCreateModal = () => {
-  createForm.value = { source: 'manager', request_text: '', name: '', phone: '' };
+  Object.assign(createForm.value, { source: 'manager', request_text: '', name: '', phone: '', service_type: '' });
+  phoneModelRef.value = '';
   showCreateModal.value = true;
 };
 
@@ -61,15 +79,15 @@ const submitCreateLead = async () => {
   }
   createSaving.value = true;
   try {
-    await api.createManagerLead({
-      ...createForm.value,
+    await api.createManagerOrder({
+      source: createForm.value.source,
+      request_text: createForm.value.request_text,
       name: createForm.value.name || undefined,
-      phone: createForm.value.phone || undefined,
+      phone: createPhoneUnmasked.value || undefined,
+      service_type: createForm.value.service_type || undefined,
     });
     showCreateModal.value = false;
     setToast('Лид создан');
-    // Reload inbox — the new lead appears as new_lead in the Orders system
-    // (qualification via existing LeadsDashboard flow turns it into an Order)
     await load();
   } catch (e: any) {
     console.error(e);
@@ -79,38 +97,21 @@ const submitCreateLead = async () => {
   }
 };
 
-// ── Qualification ─────────────────────────────────────────────────────────────
-const navigateToOrders = (orderId: number) => {
-  const path = `/manager/orders/kanban?orderId=${orderId}`;
-  window.history.pushState({}, '', path);
-  window.dispatchEvent(new PopStateEvent('popstate'));
-};
-
-const confirmQualify = async () => {
-  if (!qualifyTarget.value) return;
-  // Move status new_lead → assessment via existing patch endpoint
-  try {
-    await api.patchManagerOrder(qualifyTarget.value.id, { status: 'assessment' });
-    setToast(`Заявка #${qualifyTarget.value.id} переведена в работу`);
-    qualifyTarget.value = null;
-    await load();
-  } catch (e) {
-    console.error(e);
-    setToast('Ошибка при квалификации');
-  }
-};
-
-const openInKanban = () => {
-  if (!qualifyTarget.value) return;
-  navigateToOrders(qualifyTarget.value.id);
+// ── Qualify ───────────────────────────────────────────────────────────────────
+const handleQualifySuccess = async (orderId: number) => {
+  setToast(`Заявка #${orderId} переведена в Замер`);
   qualifyTarget.value = null;
+  await load();
 };
 
 // ── No Answer (Недозвон) ──────────────────────────────────────────────────────
 const markNoAnswer = async (item: LeadsInboxItemResponse) => {
   try {
-    const newComment = item.comment ? `${item.comment}\n[Недозвон]` : '[Недозвон]';
-    await api.patchManagerOrder(item.id, { status: 'assessment', comment: newComment });
+    const noAnswerPayload = { 
+      status: 'new_lead', 
+      no_answer_at: new Date().toISOString() 
+    };
+    await api.patchManagerOrder(item.id, noAnswerPayload);
     setToast(`Заявка #${item.id} переведена в работу (Недозвон)`);
     await load();
   } catch (e) {
@@ -233,35 +234,12 @@ const scopeOptions: { value: Scope; label: string }[] = [
     </transition>
 
     <!-- ── Qualify Modal ──────────────────────────────── -->
-    <div
+    <LeadQualifyModal
       v-if="qualifyTarget"
-      class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      @click.self="qualifyTarget = null"
-    >
-      <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
-        <h2 class="text-lg font-bold flex items-center gap-2">
-          <span class="material-icons-round text-teal-500">check_circle</span>
-          Квалифицировать заявку #{{ qualifyTarget.id }}
-        </h2>
-        <p class="text-sm text-slate-600 dark:text-slate-300">
-          Статус изменится на <strong>«Замер»</strong>. Для детального оформления сделки откройте её в Канбане.
-        </p>
-        <div v-if="qualifyTarget.comment" class="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg text-sm text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
-          {{ qualifyTarget.comment }}
-        </div>
-        <div class="flex gap-3 pt-1">
-          <button
-            class="flex-1 py-2.5 rounded-xl bg-teal-600 text-white font-semibold hover:bg-teal-700 transition-colors text-sm"
-            @click="confirmQualify"
-          >✅ Квалифицировать</button>
-          <button
-            class="flex-1 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors text-sm"
-            @click="openInKanban"
-          >📋 Открыть в Канбане</button>
-        </div>
-        <button class="w-full text-center text-xs text-slate-400 hover:text-slate-600 transition-colors" @click="qualifyTarget = null">Отмена</button>
-      </div>
-    </div>
+      :lead="qualifyTarget"
+      @close="qualifyTarget = null"
+      @success="handleQualifySuccess"
+    />
 
     <!-- ── Reject Modal ───────────────────────────────── -->
     <div
@@ -326,7 +304,8 @@ const scopeOptions: { value: Scope; label: string }[] = [
           <div>
             <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Телефон</label>
             <input
-              v-model="createForm.phone"
+              ref="createPhoneInputRef"
+              v-model="phoneModelRef"
               type="tel"
               placeholder="+375 (29) 000-00-00"
               class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
@@ -342,6 +321,20 @@ const scopeOptions: { value: Scope; label: string }[] = [
               <option value="phone">Входящий звонок</option>
               <option value="site">Сайт</option>
               <option value="other">Другое</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Суть задачи</label>
+            <select
+              v-model="createForm.service_type"
+              class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+            >
+              <option value="">— Не указано —</option>
+              <option value="turnkey">📦 Покупка + Монтаж</option>
+              <option value="install_only">🔧 Только монтаж</option>
+              <option value="pre_install">🧱 Закладка трассы (Ремонт)</option>
+              <option value="maintenance">❄️ Сервис / ТО</option>
+              <option value="repair">🛠 Ремонт</option>
             </select>
           </div>
           <div>

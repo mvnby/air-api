@@ -75,6 +75,10 @@ export const api = {
         return await ManagerOrdersService.getManagerOrderDetail(orderId);
     },
 
+    async createManagerOrder(payload: any) {
+        return await ManagerOrdersService.createManagerOrder(payload);
+    },
+
     async patchManagerOrder(orderId: number, payload: ManagerOrderUpdatePayload) {
         return await ManagerOrdersService.patchManagerOrder(orderId, payload);
     },

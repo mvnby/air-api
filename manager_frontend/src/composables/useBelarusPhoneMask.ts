@@ -31,6 +31,20 @@ export function useBelarusPhoneMask(
     syncState();
   };
 
+  // Helper: raw phone from DB looks like '375XXXXXXXXX' (12 digits)
+  // IMask `unmaskedValue` only needs digits after the fixed '+375 ' prefix (9 digits)
+  const applyValueToMask = (value: string) => {
+    if (!mask) return;
+    if (/^375\d{9}$/.test(value)) {
+      // Raw format: strip the 375 country code
+      mask.unmaskedValue = value.slice(3);
+    } else {
+      // Already formatted or partial
+      mask.value = value;
+    }
+    mask.updateValue();
+  };
+
   const initMask = (input: HTMLInputElement | null) => {
     destroyMask();
     if (!input) return;
@@ -42,8 +56,12 @@ export function useBelarusPhoneMask(
     });
 
     if (modelRef.value) {
-      mask.value = modelRef.value;
-      mask.updateValue();
+      applyValueToMask(modelRef.value);
+      syncState();
+      // Sync model to what the mask actually shows
+      if (modelRef.value !== mask.value) {
+        modelRef.value = mask.value;
+      }
     }
 
     mask.on('accept', () => {
@@ -67,10 +85,10 @@ export function useBelarusPhoneMask(
       if (!mask) return;
       if (value !== mask.value) {
         mask.value = value || '';
+        // Keep IMask internals aligned when model changes programmatically.
+        mask.updateValue();
+        syncState();
       }
-      // Keep IMask internals aligned when model changes programmatically.
-      mask.updateValue();
-      syncState();
     },
     { flush: 'post' },
   );

@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ManagerOrderCreatePayload } from '../models/ManagerOrderCreatePayload';
 import type { ManagerOrderDetailResponse } from '../models/ManagerOrderDetailResponse';
 import type { ManagerOrderDocumentResponse } from '../models/ManagerOrderDocumentResponse';
 import type { ManagerOrderListResponse } from '../models/ManagerOrderListResponse';
@@ -43,6 +44,25 @@ export class ManagerOrdersService {
                 'overdue_only': overdueOnly,
                 'sort': sort,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Manager Order
+     * @param requestBody
+     * @returns ManagerOrderDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static createManagerOrder(
+        requestBody: ManagerOrderCreatePayload,
+    ): CancelablePromise<ManagerOrderDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders',
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

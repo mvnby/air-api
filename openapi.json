@@ -3354,6 +3354,50 @@
             }
           }
         }
+      },
+      "post": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Create Manager Order",
+        "operationId": "create_manager_order",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerOrderCreatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/manager/orders/{order_id}": {
@@ -6512,6 +6556,18 @@
             ],
             "title": "Comment"
           },
+          "no_answer_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "No Answer At"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -7788,6 +7844,46 @@
         ],
         "title": "ManagerNormalizeLegacySpecsResponse"
       },
+      "ManagerOrderCreatePayload": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "request_text": {
+            "type": "string",
+            "title": "Request Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "request_text"
+        ],
+        "title": "ManagerOrderCreatePayload"
+      },
       "ManagerOrderDetailResponse": {
         "properties": {
           "id": {
@@ -8356,6 +8452,17 @@
             ],
             "title": "Comment"
           },
+          "no_answer_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "No Answer At"
+          },
           "is_paid": {
             "anyOf": [
               {
@@ -8366,6 +8473,28 @@
               }
             ],
             "title": "Is Paid"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
+          "customer_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Type"
           },
           "customer_name": {
             "anyOf": [
@@ -8487,6 +8616,50 @@
               }
             ],
             "title": "Confirm Critical Customer Changes"
+          },
+          "object_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Type"
+          },
+          "service_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Type"
+          },
+          "equipment_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Class"
+          },
+          "marketing_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marketing Source"
           },
           "installer_id": {
             "anyOf": [

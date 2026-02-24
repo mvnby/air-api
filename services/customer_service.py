@@ -35,6 +35,7 @@ class CustomerService:
             "last_delivery_address": last_delivery_address,
             "created_at": customer.created_at.isoformat() if customer.created_at else None,
             "order_count": order_count,
+            "is_archived": customer.is_archived,
         }
 
     @staticmethod
@@ -123,9 +124,15 @@ class CustomerService:
         search: Optional[str] = None,
         customer_type: Optional[str] = None,
         only_with_orders: bool = True,
+        include_archived: bool = False,
     ) -> Dict[str, Any]:
         stmt = select(Customer)
         count_stmt = select(func.count(Customer.id))
+
+        # Hide archived customers unless explicitly requested
+        if not include_archived:
+            stmt = stmt.where(Customer.is_archived == False)
+            count_stmt = count_stmt.where(Customer.is_archived == False)
 
         if only_with_orders:
             has_orders_clause = exists(select(Order.id).where(Order.customer_id == Customer.id))
