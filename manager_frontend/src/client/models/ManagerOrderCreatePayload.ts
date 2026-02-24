@@ -7,5 +7,6 @@ export type ManagerOrderCreatePayload = {
     phone?: (string | null);
     source: string;
     request_text: string;
+    service_type?: (string | null);
 };
 
