@@ -2,26 +2,16 @@ import type { ManagerOrderListItemResponse } from '../../client';
 
 export const STATUS_ORDER = [
     'new_lead',
-    'assessment',
-    'proposal',
     'negotiation',
-    'deferred',
-    'won_deposit',
-    'installation',
-    'completed',
-    'canceled',
+    'execution',
+    'closed',
 ] as const;
 
 export const STATUS_LABELS: Record<string, string> = {
     new_lead: 'Новый лид',
-    assessment: 'Замер',
-    proposal: 'КП отправлено',
     negotiation: 'Переговоры',
-    deferred: 'Отложено',
-    won_deposit: 'Предоплата',
-    installation: 'Монтаж',
-    completed: 'Завершено',
-    canceled: 'Отмена',
+    execution: 'Монтаж',
+    closed: 'Закрыто',
 };
 
 export function formatMoney(value: number): string {
