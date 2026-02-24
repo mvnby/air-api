@@ -139,15 +139,10 @@ class OrderInstallerAdmin(ModelView, model=OrderInstaller):
 # --- ORDER ADMIN ---
 # --- ORDER ADMIN ---
 STATUS_LABELS = {
-    "new_lead": "Новый лид",
-    "assessment": "Замер/Осмотр",
-    "proposal": "КП отправлено",
-    "negotiation": "Переговоры",
-    "won_deposit": "Сделка (Предоплата)",
-    "installation": "Монтаж",
-    "completed": "Закрыто (Успех)",
-    "canceled": "Отмена",
-    "deferred": "Отложено"
+    "new_lead":    "📬 Новый лид",
+    "negotiation": "🤝 Переговоры",
+    "execution":   "🔧 Монтаж",
+    "closed":      "✅ Закрыто",
 }
 
 LEAD_SOURCE_LABELS = {
@@ -187,7 +182,7 @@ class OrderAdmin(ModelView, model=Order):
         "delivery_address": "Адрес доставки",
         "user_id": "Telegram ID",
         "installation_date": "Дата установки",
-        "assessment_date": "Дата замера",
+        "measurement_date": "Дата замера",
         "contract_date": "Дата договора",
         "comment": "Заметка"
     }
@@ -207,7 +202,7 @@ class OrderAdmin(ModelView, model=Order):
         "lead_source",
         "comment",
         "installation_date",
-        "assessment_date",
+        "measurement_date",
         "next_followup_date",
         "contract_date",
         "user_id"
@@ -291,27 +286,7 @@ class OrderAdmin(ModelView, model=Order):
                 logger.error(f"Error updating order items: {e}")
                 raise e
         
-        # --- Phase 6: Inventory Safety Check ---
-        # Prevent moving to PROPOSAL if stock < 3
-        if model.status == OrderStatus.PROPOSAL:
-            product_ids = []
-            
-            if items_json:
-                items = json.loads(items_json)
-                product_ids = [int(item['product_id']) for item in items.get('products', [])]
-            else:
-                product_ids = [link.product_id for link in model.product_links]
-            
-            if product_ids:
-                async with async_session_maker() as session:
-                    low_stock_items = await OrderService.check_stock_for_proposal(
-                        session=session,
-                        product_ids=product_ids
-                    )
-                    
-                    if low_stock_items:
-                        items_str = ", ".join(low_stock_items)
-                        raise ValueError(f"⛔ STOP: Low Stock Alert! The following items have < 3 units: {items_str}. Cannot send Proposal.")
+        # Phase 6: Legacy stock check removed (PROPOSAL status deleted)
 
         return model
 
@@ -353,7 +328,7 @@ class OrderAdmin(ModelView, model=Order):
         from services.bot_service import BotService
         
         # Check if status is actionable (Don't enable check for model.installers here as it might be stale)
-        if model.status in [OrderStatus.INSTALLATION, OrderStatus.WON_DEPOSIT]:
+        if model.status in [OrderStatus.EXECUTION]:
             async with async_session_maker() as session:
                  # Re-fetch data to be sure
                  order = await session.get(Order, model.id)

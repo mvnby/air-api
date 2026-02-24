@@ -7,11 +7,17 @@ import type { ManagerOrderServiceLinePayload } from './ManagerOrderServiceLinePa
 export type ManagerOrderUpdatePayload = {
     status?: (string | null);
     next_followup_date?: (string | null);
-    assessment_date?: (string | null);
+    measurement_date?: (string | null);
     installation_date?: (string | null);
     comment?: (string | null);
     no_answer_at?: (string | null);
     is_paid?: (boolean | null);
+    closing_result?: (string | null);
+    reject_reason?: (string | null);
+    is_on_hold?: (boolean | null);
+    on_hold_reason?: (string | null);
+    measurement_required?: (boolean | null);
+    proposal_sent_at?: (string | null);
     customer_id?: (number | null);
     customer_type?: (string | null);
     customer_name?: (string | null);

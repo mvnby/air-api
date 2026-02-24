@@ -57,7 +57,7 @@ async def get_calendar_events(
         ).where(
             or_(
                 Order.installation_date.is_not(None),
-                Order.assessment_date.is_not(None)
+                Order.measurement_date.is_not(None)
             )
         )
 
@@ -70,11 +70,11 @@ async def get_calendar_events(
 
         events = []
         for order in orders:
-            if order.assessment_date:
+            if order.measurement_date:
                 events.append({
                     "id": f"assess_{order.id}",
                     "title": f"🔍 Замер: {order.delivery_address or 'Без адреса'}",
-                    "start": order.assessment_date.isoformat(),
+                    "start": order.measurement_date.isoformat(),
                     "color": "#3b82f6",
                     "extendedProps": {"order_id": order.id}
                 })

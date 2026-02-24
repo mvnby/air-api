@@ -152,7 +152,7 @@ class ServiceResponse(BaseModel):
 # --- ORDERS ---
 
 class CalendarEventType(str, Enum):
-    ASSESSMENT = "assessment"
+    MEASUREMENT = "measurement"
     INSTALLATION = "installation"
 
 class CalendarEventResponse(BaseModel):
@@ -298,7 +298,7 @@ class ManagerOrderListItemResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     next_followup_date: Optional[datetime] = None
-    assessment_date: Optional[datetime] = None
+    measurement_date: Optional[datetime] = None
     installation_date: Optional[datetime] = None
     total_amount: float
     total_cost: float
@@ -309,6 +309,13 @@ class ManagerOrderListItemResponse(BaseModel):
     customer: Optional[OrderCustomerBrief] = None
     installer_id: Optional[int] = None
     installer: Optional[ManagerInstallerResponse] = None
+    # New fields
+    closing_result: Optional[str] = None
+    reject_reason: Optional[str] = None
+    is_on_hold: bool = False
+    on_hold_reason: Optional[str] = None
+    measurement_required: bool = False
+    proposal_sent_at: Optional[datetime] = None
 
 
 class ManagerOrderDocumentItem(BaseModel):
@@ -367,11 +374,20 @@ class ManagerOrderServiceLinePayload(BaseModel):
 class ManagerOrderUpdatePayload(BaseModel):
     status: Optional[str] = None
     next_followup_date: Optional[datetime] = None
-    assessment_date: Optional[datetime] = None
+    measurement_date: Optional[datetime] = None
     installation_date: Optional[datetime] = None
     comment: Optional[str] = None
     no_answer_at: Optional[str] = None
     is_paid: Optional[bool] = None
+    # Closing
+    closing_result: Optional[str] = None
+    reject_reason: Optional[str] = None
+    # On Hold
+    is_on_hold: Optional[bool] = None
+    on_hold_reason: Optional[str] = None
+    # Negotiation internals
+    measurement_required: Optional[bool] = None
+    proposal_sent_at: Optional[datetime] = None
     
     # Customer Details
     customer_id: Optional[int] = None
