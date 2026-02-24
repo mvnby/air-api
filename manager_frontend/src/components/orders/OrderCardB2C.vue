@@ -43,7 +43,7 @@ const onDragStart = () => {
     <div class="space-y-1 text-sm text-gray-700 dark:text-slate-300">
       <p>Замер: {{ formatDate(order.measurement_date) }}</p>
       <p>Монтаж: {{ formatDate(order.installation_date) }}</p>
-      <p class="font-semibold text-teal-700 dark:text-teal-400">Маржа: {{ formatMoney(order.margin) }}</p>
+      <p class="font-semibold" :class="order.margin > 0 ? 'text-teal-700 dark:text-teal-400' : 'text-gray-400 dark:text-slate-500'">Маржа: {{ formatMoney(order.margin) }}</p>
       <p v-if="isOverdue(order)" class="font-semibold text-red-400">Просрочено касание</p>
     </div>
 

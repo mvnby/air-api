@@ -48,6 +48,9 @@ GENERATE_MANAGER_ORDER_DOCUMENT = "generate_manager_order_document"
 GET_MANAGER_ORDER_DOCUMENTS = "get_manager_order_documents"
 ADD_MANAGER_ORDER_PAYMENT = "add_manager_order_payment"
 DELETE_MANAGER_ORDER_PAYMENT = "delete_manager_order_payment"
+CREATE_MANAGER_ORDER_STAGE = "create_manager_order_stage"
+UPDATE_MANAGER_ORDER_STAGE = "update_manager_order_stage"
+DELETE_MANAGER_ORDER_STAGE = "delete_manager_order_stage"
 GET_MANAGER_DOC_DOWNLOAD = "get_manager_doc_download"
 DELETE_MANAGER_DOC = "delete_manager_doc"
 GET_MANAGER_CRM_HEALTH_REPORT = "get_manager_crm_health_report"
@@ -117,6 +120,9 @@ ALL_MANAGER_OPERATION_IDS = (
     GET_MANAGER_ORDER_DOCUMENTS,
     ADD_MANAGER_ORDER_PAYMENT,
     DELETE_MANAGER_ORDER_PAYMENT,
+    CREATE_MANAGER_ORDER_STAGE,
+    UPDATE_MANAGER_ORDER_STAGE,
+    DELETE_MANAGER_ORDER_STAGE,
     GET_MANAGER_DOC_DOWNLOAD,
     DELETE_MANAGER_DOC,
     GET_MANAGER_CRM_HEALTH_REPORT,

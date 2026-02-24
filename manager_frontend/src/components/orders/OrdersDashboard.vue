@@ -40,10 +40,13 @@ const loginPassword = ref('');
 const loginLoading = ref(false);
 const loginError = ref('');
 
+const hideOnHold = ref(true);
+
 const groupedOrders = computed(() => {
   const groups: Record<string, ManagerOrderListItemResponse[]> = {};
   for (const statusKey of STATUS_ORDER) groups[statusKey] = [];
   for (const order of orders.value) {
+    if (hideOnHold.value && order.is_on_hold) continue;
     const key = order.status;
     if (!groups[key]) groups[key] = [];
     groups[key].push(order);
@@ -298,32 +301,36 @@ watch(drawerOpen, (isOpen) => {
 <template>
   <div class="min-h-screen bg-gray-50 text-slate-900">
     <div class="mx-auto max-w-[1400px] px-4 py-6 md:px-8">
-      <header class="mb-5 rounded-[2rem] border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm p-5">
-        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h1 class="text-2xl font-bold dark:text-white">CRM Orders Dashboard</h1>
-          <OrdersViewToggle v-model="view" />
+      <header class="mb-5 rounded-[2rem] border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm p-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center gap-3 md:gap-4">
+            <h1 class="text-xl md:text-2xl font-bold dark:text-white">Заказы</h1>
+            <OrdersTabSwitcher v-model="segment" />
+          </div>
+          <div class="flex items-center gap-3 ml-auto">
+            <label v-if="view === 'kanban'" class="hidden sm:inline-flex items-center gap-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-gray-700 dark:text-slate-300 px-3 py-1.5 cursor-pointer text-sm font-medium">
+              <input v-model="hideOnHold" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+              Скрывать отложенные
+            </label>
+            <OrdersViewToggle v-model="view" />
+          </div>
         </div>
-        <div class="mb-4">
-          <OrdersTabSwitcher v-model="segment" />
-        </div>
-        <div class="grid gap-3 md:grid-cols-4">
-          <input v-model="search" class="field-input" placeholder="Поиск: клиент, телефон, УНП, ID" />
+        
+        <div v-if="view === 'list'" class="mt-4 grid gap-3 md:grid-cols-3 lg:grid-cols-4 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-[1rem] border border-gray-100 dark:border-slate-700">
+          <input v-model="search" class="field-input" placeholder="Поиск (клиент, УНП, ID)..." />
           <select v-model="statusFilter" class="field-input">
             <option value="">Все статусы</option>
             <option v-for="statusKey in STATUS_ORDER" :key="statusKey" :value="statusKey">
               {{ STATUS_LABELS[statusKey] || statusKey }}
             </option>
           </select>
-          <select v-model="sort" class="field-input">
-            <option value="created_at_desc">Новые сверху</option>
-            <option value="created_at_asc">Старые сверху</option>
-            <option value="updated_at_desc">Недавно обновленные</option>
-            <option value="margin_desc">Макс. маржа</option>
-            <option value="followup_asc">Ближайшее касание</option>
-          </select>
-          <label class="inline-flex items-center gap-2 rounded-[12px] border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 px-3 py-2">
-            <input v-model="overdueOnly" type="checkbox" />
-            Только просроченные касания
+          <label class="inline-flex items-center gap-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 px-3 py-2 cursor-pointer transition hover:bg-gray-50 dark:hover:bg-slate-700">
+            <input v-model="overdueOnly" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+            <span class="font-medium text-sm">Только просроченные</span>
+          </label>
+          <label class="inline-flex items-center gap-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 px-3 py-2 cursor-pointer transition hover:bg-gray-50 dark:hover:bg-slate-700">
+            <input v-model="hideOnHold" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+            <span class="font-medium text-sm">Скрывать отложенные</span>
           </label>
         </div>
       </header>
@@ -350,6 +357,8 @@ watch(drawerOpen, (isOpen) => {
         v-else
         :orders="orders"
         :segment="segment"
+        :sort="sort"
+        @update:sort="sort = $event"
         @open="openOrder"
         @generate="onGenerateDoc"
       />

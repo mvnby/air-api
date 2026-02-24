@@ -21,6 +21,8 @@ export type ManagerOrderListItemResponse = {
     customer?: (OrderCustomerBrief | null);
     installer_id?: (number | null);
     installer?: (ManagerInstallerResponse | null);
+    equipment_status?: string;
+    standard_install_kit_issued?: boolean;
     closing_result?: (string | null);
     reject_reason?: (string | null);
     is_on_hold?: boolean;

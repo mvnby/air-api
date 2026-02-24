@@ -65,3 +65,16 @@ class LeadSource(str, Enum):
 class PaymentType(str, Enum):
     PREPAYMENT = "prepayment"
     POSTPAYMENT = "postpayment"
+
+
+class OrderStageStatus(str, Enum):
+    PLANNED = "planned"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELED = "canceled"
+
+
+class EquipmentStatus(str, Enum):
+    PENDING = "pending"
+    RESERVED = "reserved"
+    ISSUED = "issued"

@@ -100,6 +100,9 @@ export type { OrderProductLineResponse } from './models/OrderProductLineResponse
 export type { OrderResponse } from './models/OrderResponse';
 export type { OrderServiceLineResponse } from './models/OrderServiceLineResponse';
 export type { OrderStatusUpdate } from './models/OrderStatusUpdate';
+export type { OrderWorkStageCreatePayload } from './models/OrderWorkStageCreatePayload';
+export type { OrderWorkStageResponse } from './models/OrderWorkStageResponse';
+export type { OrderWorkStageUpdatePayload } from './models/OrderWorkStageUpdatePayload';
 export type { PaymentCreatePayload } from './models/PaymentCreatePayload';
 export type { PaymentResponse } from './models/PaymentResponse';
 export type { ProductImageResponse } from './models/ProductImageResponse';

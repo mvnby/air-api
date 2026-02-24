@@ -3,28 +3,46 @@ import type { ManagerOrderListItemResponse } from '../../client';
 import type { Segment } from '../../api';
 import { STATUS_LABELS, formatDate, formatMoney, formatPhone, isOverdue } from './order-utils';
 
-defineProps<{
+const props = defineProps<{
   orders: ManagerOrderListItemResponse[];
   segment: Segment;
+  sort?: string;
 }>();
 
 const emit = defineEmits<{
   open: [orderId: number];
   generate: [payload: { orderId: number; docType: string }];
+  'update:sort': [value: string];
 }>();
+
+const toggleSort = (key: string) => {
+  if (props.sort === `${key}_desc`) emit('update:sort', `${key}_asc`);
+  else emit('update:sort', `${key}_desc`);
+};
 </script>
 
 <template>
   <div class="overflow-x-auto rounded-[2rem] border border-gray-200 bg-white p-3">
     <table class="w-full min-w-[980px] text-sm text-gray-700">
       <thead>
-        <tr class="text-left text-xs uppercase text-gray-500">
-          <th class="px-3 py-2">Сделка</th>
+        <tr class="text-left text-xs uppercase text-slate-500">
+          <th class="px-3 py-2 cursor-pointer hover:bg-slate-100 rounded select-none group" @click="toggleSort('created_at')">
+            Сделка
+            <span class="inline-block ml-1 opacity-50 group-hover:opacity-100" :class="sort?.startsWith('created_at') ? 'text-teal-600 opacity-100' : ''">
+              {{ sort === 'created_at_desc' ? '↓' : '↑' }}
+            </span>
+          </th>
           <th class="px-3 py-2">Клиент</th>
           <th class="px-3 py-2">Статус</th>
-          <th class="px-3 py-2">След. касание</th>
+          <th class="px-3 py-2 cursor-pointer hover:bg-slate-100 rounded select-none group" @click="emit('update:sort', sort === 'followup_asc' ? 'created_at_desc' : 'followup_asc')">
+            След. касание
+            <span class="inline-block ml-1 opacity-50 text-teal-600 transition-opacity" :class="sort === 'followup_asc' ? 'opacity-100 font-bold' : 'opacity-0 group-hover:opacity-50'">↑</span>
+          </th>
           <th class="px-3 py-2">Сумма</th>
-          <th class="px-3 py-2">Маржа</th>
+          <th class="px-3 py-2 cursor-pointer hover:bg-slate-100 rounded select-none group" @click="emit('update:sort', sort === 'margin_desc' ? 'created_at_desc' : 'margin_desc')">
+            Маржа
+            <span class="inline-block ml-1 opacity-50 text-teal-600 transition-opacity" :class="sort === 'margin_desc' ? 'opacity-100 font-bold' : 'opacity-0 group-hover:opacity-50'">↓</span>
+          </th>
           <th class="px-3 py-2">Действия</th>
         </tr>
       </thead>

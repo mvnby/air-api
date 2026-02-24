@@ -7,6 +7,7 @@ import type { ManagerOrderDocumentItem } from './ManagerOrderDocumentItem';
 import type { OrderCustomerBrief } from './OrderCustomerBrief';
 import type { OrderProductLineResponse } from './OrderProductLineResponse';
 import type { OrderServiceLineResponse } from './OrderServiceLineResponse';
+import type { OrderWorkStageResponse } from './OrderWorkStageResponse';
 import type { PaymentResponse } from './PaymentResponse';
 export type ManagerOrderDetailResponse = {
     id: number;
@@ -25,6 +26,8 @@ export type ManagerOrderDetailResponse = {
     customer?: (OrderCustomerBrief | null);
     installer_id?: (number | null);
     installer?: (ManagerInstallerResponse | null);
+    equipment_status?: string;
+    standard_install_kit_issued?: boolean;
     closing_result?: (string | null);
     reject_reason?: (string | null);
     is_on_hold?: boolean;
@@ -40,6 +43,7 @@ export type ManagerOrderDetailResponse = {
     service_lines?: Array<OrderServiceLineResponse>;
     documents?: Array<ManagerOrderDocumentItem>;
     payments?: Array<PaymentResponse>;
+    work_stages?: Array<OrderWorkStageResponse>;
     readonly needs_attention: boolean;
     readonly awaiting_measurement: boolean;
     readonly client_thinking: boolean;

@@ -35,6 +35,7 @@ Run from repo root unless noted.
 - API logs: `docker compose logs -f app`
 - Open API locally: [http://localhost:8000/docs](http://localhost:8000/docs)
 - Open web locally: [http://localhost:4321](http://localhost:4321)
+- **Dev server is on port 8000.**
 
 ### Backend Tests
 

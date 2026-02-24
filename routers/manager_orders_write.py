@@ -12,6 +12,9 @@ from routers.manager_operation_ids import (
     PATCH_MANAGER_ORDER,
     ADD_MANAGER_ORDER_PAYMENT,
     DELETE_MANAGER_ORDER_PAYMENT,
+    CREATE_MANAGER_ORDER_STAGE,
+    UPDATE_MANAGER_ORDER_STAGE,
+    DELETE_MANAGER_ORDER_STAGE,
 )
 from schemas import (
     ManagerOrderCreatePayload,
@@ -20,6 +23,8 @@ from schemas import (
     ManagerOrderUpdatePayload,
     PaymentCreatePayload,
     PaymentResponse,
+    OrderWorkStageCreatePayload,
+    OrderWorkStageUpdatePayload,
 )
 from services.document_service import DocumentService
 from services.order_service import OrderService
@@ -172,4 +177,56 @@ async def delete_manager_order_payment(
             error_code=BAD_REQUEST,
             message=str(exc),
         ) from exc
+
+
+@router.post(
+    "/{order_id}/stages",
+    response_model=ManagerOrderDetailResponse,
+    operation_id=CREATE_MANAGER_ORDER_STAGE,
+)
+async def create_manager_order_stage(
+    order_id: int,
+    payload: OrderWorkStageCreatePayload,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await OrderService.add_order_stage(session, order_id, payload)
+    except ValueError as exc:
+        raise manager_http_error(status_code=400, endpoint=CREATE_MANAGER_ORDER_STAGE, error_code=BAD_REQUEST, message=str(exc)) from exc
+
+
+@router.patch(
+    "/{order_id}/stages/{stage_id}",
+    response_model=ManagerOrderDetailResponse,
+    operation_id=UPDATE_MANAGER_ORDER_STAGE,
+)
+async def update_manager_order_stage(
+    order_id: int,
+    stage_id: int,
+    payload: OrderWorkStageUpdatePayload,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await OrderService.update_order_stage(session, order_id, stage_id, payload)
+    except ValueError as exc:
+        raise manager_http_error(status_code=400, endpoint=UPDATE_MANAGER_ORDER_STAGE, error_code=BAD_REQUEST, message=str(exc)) from exc
+
+
+@router.delete(
+    "/{order_id}/stages/{stage_id}",
+    response_model=ManagerOrderDetailResponse,
+    operation_id=DELETE_MANAGER_ORDER_STAGE,
+)
+async def delete_manager_order_stage(
+    order_id: int,
+    stage_id: int,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await OrderService.delete_order_stage(session, order_id, stage_id)
+    except ValueError as exc:
+        raise manager_http_error(status_code=400, endpoint=DELETE_MANAGER_ORDER_STAGE, error_code=BAD_REQUEST, message=str(exc)) from exc
 
