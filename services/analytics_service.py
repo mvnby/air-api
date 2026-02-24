@@ -52,9 +52,9 @@ class AnalyticsService:
         res = await session.execute(
             select(Order)
             .where(Order.status == OrderStatus.ASSESSMENT.value)
-            .where(Order.assessment_date < datetime.combine(today, time.min))
+            .where(Order.measurement_date < datetime.combine(today, time.min))
             .options(selectinload(Order.customer))
-            .order_by(Order.assessment_date)
+            .order_by(Order.measurement_date)
         )
         overdue_assessments = res.scalars().all()
         
@@ -143,7 +143,7 @@ class AnalyticsService:
                  {
                     "id": o.id,
                     "customer": o.customer.name if o.customer else "—",
-                    "date": o.assessment_date.strftime("%d.%m %H:%M") if o.assessment_date else "—",
+                    "date": o.measurement_date.strftime("%d.%m %H:%M") if o.measurement_date else "—",
                     "phone": o.customer.phone if o.customer else ""
                 } for o in overdue_assessments
             ],

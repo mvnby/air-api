@@ -88,7 +88,7 @@ const submitQualify = async () => {
   isLoading.value = true;
   try {
     const payload: ManagerOrderUpdatePayload = {
-      status: 'assessment',
+      status: 'negotiation',
       customer_id: existingCustomerId.value || undefined,
       customer_type: customerType.value,
       customer_name: customerName.value || undefined,

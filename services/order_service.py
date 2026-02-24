@@ -39,12 +39,12 @@ class OrderService:
         if end_date.tzinfo is not None:
             end_date = end_date.replace(tzinfo=None)
 
-        # Query orders where EITHER assessment_date OR installation_date is in range
+        # Query orders where EITHER measurement_date OR installation_date is in range
         stmt = (
             select(Order)
             .where(
                 or_(
-                    and_(Order.assessment_date >= start_date, Order.assessment_date <= end_date),
+                    and_(Order.measurement_date >= start_date, Order.measurement_date <= end_date),
                     and_(Order.installation_date >= start_date, Order.installation_date <= end_date)
                 )
             )
@@ -57,18 +57,18 @@ class OrderService:
         events = []
         
         for order in orders:
-            # Assessment Event
-            if order.assessment_date and start_date <= order.assessment_date <= end_date:
+            # Measurement Event
+            if order.measurement_date and start_date <= order.measurement_date <= end_date:
                 events.append(CalendarEventResponse(
-                    id=f"{order.id}-assessment",
+                    id=f"{order.id}-measurement",
                     order_id=order.id,
-                    type=CalendarEventType.ASSESSMENT,
-                    date=order.assessment_date,
+                    type=CalendarEventType.MEASUREMENT,
+                    date=order.measurement_date,
                     status=order.status.value if hasattr(order.status, "value") else str(order.status),
                     customer_name=order.customer.name if order.customer else "Неизвестный",
                     address=order.delivery_address,
                     title=f"Замер: {order.customer.name if order.customer else 'Клиент'}",
-                    start=order.assessment_date,
+                    start=order.measurement_date,
                     color="#64748b" # Slate
                 ))
             
@@ -829,7 +829,7 @@ class OrderService:
             "created_at": order.created_at,
             "updated_at": order.updated_at,
             "next_followup_date": order.next_followup_date,
-            "assessment_date": order.assessment_date,
+            "measurement_date": order.measurement_date,
             "installation_date": order.installation_date,
             "total_amount": float(order.total_amount or 0),
             "total_cost": float(order.total_cost or 0),
@@ -1046,8 +1046,8 @@ class OrderService:
                 raise ValueError(f"Invalid status: {payload.status}") from exc
         if "next_followup_date" in fields_set:
             order.next_followup_date = OrderService._normalize_naive_datetime(payload.next_followup_date)
-        if "assessment_date" in fields_set:
-            order.assessment_date = OrderService._normalize_naive_datetime(payload.assessment_date)
+        if "measurement_date" in fields_set:
+            order.measurement_date = OrderService._normalize_naive_datetime(payload.measurement_date)
         if "installation_date" in fields_set:
             order.installation_date = OrderService._normalize_naive_datetime(payload.installation_date)
         if "comment" in fields_set:
@@ -1056,6 +1056,22 @@ class OrderService:
             order.is_paid = payload.is_paid
         if "customer_delivery_address" in fields_set:
             order.delivery_address = payload.customer_delivery_address
+        # New fields
+        if "closing_result" in fields_set:
+            order.closing_result = payload.closing_result
+        if "reject_reason" in fields_set:
+            order.reject_reason = payload.reject_reason
+        if "is_on_hold" in fields_set and payload.is_on_hold is not None:
+            order.is_on_hold = payload.is_on_hold
+        if "on_hold_reason" in fields_set:
+            order.on_hold_reason = payload.on_hold_reason
+        if "measurement_required" in fields_set and payload.measurement_required is not None:
+            order.measurement_required = payload.measurement_required
+        if "proposal_sent_at" in fields_set:
+            order.proposal_sent_at = OrderService._normalize_naive_datetime(payload.proposal_sent_at)
+        # Auto-set closed_at when transitioning to CLOSED
+        if "status" in fields_set and order.status == OrderStatus.CLOSED and not order.closed_at:
+            order.closed_at = datetime.now()
 
         if "installer_id" in fields_set:
             from models import OrderInstaller
@@ -1201,16 +1217,18 @@ class OrderService:
 
         # Auto-archive customer if this order was just cancelled and they
         # have no other real (non-lead, non-cancelled) orders.
-        if order.status == OrderStatus.CANCELED and order.customer_id:
-            active_order_statuses = [
-                OrderStatus.NEW_LEAD, OrderStatus.CANCELED
-            ]
+        if order.status == OrderStatus.CLOSED and order.closing_result == "lost" and order.customer_id:
             other_real_orders_stmt = (
                 select(func.count(Order.id))
                 .where(
                     Order.customer_id == order.customer_id,
                     Order.id != order.id,
-                    Order.status.not_in(active_order_statuses),
+                    not_(
+                        or_(
+                            Order.status == OrderStatus.NEW_LEAD,
+                            and_(Order.status == OrderStatus.CLOSED, Order.closing_result == "lost")
+                        )
+                    )
                 )
             )
             other_real_result = await session.execute(other_real_orders_stmt)

@@ -74,7 +74,7 @@ const saveOrder = async (payload: { orderId: number; data: ManagerOrderUpdatePay
     const parsed = parseApiFieldErrors(error, [
       'status',
       'next_followup_date',
-      'assessment_date',
+      'measurement_date',
       'installation_date',
       'comment',
       'is_paid',

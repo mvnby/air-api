@@ -39,15 +39,15 @@ class LeadLossReason(str, Enum):
 
 
 class OrderStatus(str, Enum):
-    NEW_LEAD = "new_lead"
-    ASSESSMENT = "assessment"
-    PROPOSAL = "proposal"
-    NEGOTIATION = "negotiation"
-    DEFERRED = "deferred"
-    WON_DEPOSIT = "won_deposit"
-    INSTALLATION = "installation"
-    COMPLETED = "completed"
-    CANCELED = "canceled"
+    NEW_LEAD    = "new_lead"      # Входящий лид (Inbox)
+    NEGOTIATION = "negotiation"   # Переговоры
+    EXECUTION   = "execution"     # Монтаж
+    CLOSED      = "closed"        # Архив (завершено)
+
+
+class ClosingResult(str, Enum):
+    WON  = "won"   # Успех
+    LOST = "lost"  # Отказ
 
 
 class LeadSource(str, Enum):

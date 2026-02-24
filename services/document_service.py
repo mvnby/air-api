@@ -245,7 +245,7 @@ class DocumentService:
         
         if doc_type in ["invoice", "offer"]:
             order = await session.get(Order, order_id)
-            if order and order.status in ["new_lead", "assessment"]:
+            if order and order.status in ["new_lead", "measurement"]:
                 from models.common import OrderStatus
                 order.status = OrderStatus.PROPOSAL
                 session.add(order)

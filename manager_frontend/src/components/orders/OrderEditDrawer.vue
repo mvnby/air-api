@@ -284,7 +284,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   localFormError.value = '';
   status.value = order.status;
   nextFollowupDate.value = toLocalDateTimeInput(order.next_followup_date);
-  assessmentDate.value = toLocalDateTimeInput(order.assessment_date);
+  assessmentDate.value = toLocalDateTimeInput(order.measurement_date);
   installationDate.value = toLocalDateTimeInput(order.installation_date);
   comment.value = order.comment ?? '';
   isPaid.value = order.is_paid;
@@ -476,7 +476,7 @@ const handleSave = () => {
   const payload: ManagerOrderUpdatePayload = {
     status: status.value,
     next_followup_date: fromLocalDateTimeInput(nextFollowupDate.value),
-    assessment_date: fromLocalDateTimeInput(assessmentDate.value),
+    measurement_date: fromLocalDateTimeInput(assessmentDate.value),
     installation_date: fromLocalDateTimeInput(installationDate.value),
     comment: comment.value,
     is_paid: isPaid.value,
@@ -578,7 +578,7 @@ watch(
           </select>
         </label>
         <DateTimeField v-model="nextFollowupDate" label="Следующее касание" :error="getFieldError('next_followup_date')" />
-        <DateTimeField v-model="assessmentDate" label="Дата замера" :error="getFieldError('assessment_date')" />
+        <DateTimeField v-model="assessmentDate" label="Дата замера" :error="getFieldError('measurement_date')" />
         <DateTimeField
           v-model="installationDate"
           class="md:col-span-2"

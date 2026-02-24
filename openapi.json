@@ -5498,7 +5498,7 @@
       "CalendarEventType": {
         "type": "string",
         "enum": [
-          "assessment",
+          "measurement",
           "installation"
         ],
         "title": "CalendarEventType"
@@ -7934,7 +7934,7 @@
             ],
             "title": "Next Followup Date"
           },
-          "assessment_date": {
+          "measurement_date": {
             "anyOf": [
               {
                 "type": "string",
@@ -7944,7 +7944,7 @@
                 "type": "null"
               }
             ],
-            "title": "Assessment Date"
+            "title": "Measurement Date"
           },
           "installation_date": {
             "anyOf": [
@@ -8026,6 +8026,61 @@
                 "type": "null"
               }
             ]
+          },
+          "closing_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closing Result"
+          },
+          "reject_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reject Reason"
+          },
+          "is_on_hold": {
+            "type": "boolean",
+            "title": "Is On Hold",
+            "default": false
+          },
+          "on_hold_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Hold Reason"
+          },
+          "measurement_required": {
+            "type": "boolean",
+            "title": "Measurement Required",
+            "default": false
+          },
+          "proposal_sent_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Sent At"
           },
           "product_lines": {
             "items": {
@@ -8176,7 +8231,7 @@
             ],
             "title": "Next Followup Date"
           },
-          "assessment_date": {
+          "measurement_date": {
             "anyOf": [
               {
                 "type": "string",
@@ -8186,7 +8241,7 @@
                 "type": "null"
               }
             ],
-            "title": "Assessment Date"
+            "title": "Measurement Date"
           },
           "installation_date": {
             "anyOf": [
@@ -8268,6 +8323,61 @@
                 "type": "null"
               }
             ]
+          },
+          "closing_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closing Result"
+          },
+          "reject_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reject Reason"
+          },
+          "is_on_hold": {
+            "type": "boolean",
+            "title": "Is On Hold",
+            "default": false
+          },
+          "on_hold_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Hold Reason"
+          },
+          "measurement_required": {
+            "type": "boolean",
+            "title": "Measurement Required",
+            "default": false
+          },
+          "proposal_sent_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Sent At"
           }
         },
         "type": "object",
@@ -8428,7 +8538,7 @@
             ],
             "title": "Next Followup Date"
           },
-          "assessment_date": {
+          "measurement_date": {
             "anyOf": [
               {
                 "type": "string",
@@ -8438,7 +8548,7 @@
                 "type": "null"
               }
             ],
-            "title": "Assessment Date"
+            "title": "Measurement Date"
           },
           "installation_date": {
             "anyOf": [
@@ -8484,6 +8594,73 @@
               }
             ],
             "title": "Is Paid"
+          },
+          "closing_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closing Result"
+          },
+          "reject_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reject Reason"
+          },
+          "is_on_hold": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is On Hold"
+          },
+          "on_hold_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Hold Reason"
+          },
+          "measurement_required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measurement Required"
+          },
+          "proposal_sent_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Sent At"
           },
           "customer_id": {
             "anyOf": [

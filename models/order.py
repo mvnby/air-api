@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import BigInteger, Column, JSON, String
 from sqlmodel import Field, Relationship, SQLModel
 
-from .common import LeadSource, OrderStatus
+from .common import ClosingResult, LeadSource, OrderStatus
 
 
 class Installer(SQLModel, table=True):
@@ -110,9 +110,24 @@ class Order(SQLModel, table=True):
     margin: float = Field(default=0.0)
     is_paid: bool = Field(default=False)
 
+    # --- Closing ---
+    closing_result: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True, index=True))
+    reject_reason: Optional[str] = Field(default=None)
+
+    # --- Pause / On Hold ---
+    is_on_hold: bool = Field(default=False, index=True)
+    on_hold_reason: Optional[str] = Field(default=None)
+
+    # --- Internal: Negotiation stage ---
+    measurement_required: bool = Field(default=False)
+    measurement_date: Optional[datetime] = None   # renamed from assessment_date
+    proposal_sent_at: Optional[datetime] = None
+
+    # --- Internal: Execution stage ---
+    works_plan: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
-    assessment_date: Optional[datetime] = None
     installation_date: Optional[datetime] = None
     next_followup_date: Optional[datetime] = Field(default=None, description="Дата следующего касания")
     closed_at: Optional[datetime] = None

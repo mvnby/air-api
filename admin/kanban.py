@@ -17,17 +17,12 @@ class KanbanView(BaseView):
         
         # Group orders by status
         orders_by_status = {status.value: [] for status in OrderStatus}
-        # Custom Mapping for UI Labels (English Enum -> Russian Display)
+        # Custom Mapping for UI Labels
         statuses = {
-            "new_lead": "Новый лид",
-            "assessment": "Замер/Осмотр",
-            "proposal": "КП отправлено",
-            "negotiation": "Переговоры",
-            "won_deposit": "Сделка (Предоплата)",
-            "installation": "Монтаж",
-            "completed": "Закрыто (Успех)",
-            "canceled": "Отмена",
-            "deferred": "Отложено"
+            "new_lead":    "📥 Входящие",
+            "negotiation": "🤝 Переговоры",
+            "execution":   "🔧 Монтаж",
+            "closed":      "✅ Закрыто",
         }
         
         for order in orders:

@@ -30,10 +30,11 @@ const sourceIcon: Record<string, string> = {
   other: 'help_outline',
 };
 
-const statusLabel: Record<string, string> = {
-  new_lead: 'Новый',
-  assessment: 'Замер',
-  canceled: 'Отменён',
+const ORDER_STATUS_MAP: Record<string, string> = {
+  new_lead: 'Лид',
+  negotiation: 'Переговоры',
+  execution: 'Монтаж',
+  closed: 'Закрыт',
 };
 
 const getSourceIcon = (source: string | null | undefined) =>
@@ -43,7 +44,7 @@ const getSourceLabel = (source: string | null | undefined) =>
   sourceLabel[source ?? ''] ?? source ?? '—';
 
 const getStatusLabel = (status: string) =>
-  statusLabel[status] ?? status;
+  ORDER_STATUS_MAP[status] ?? status;
 
 const formatDate = (dt: string) => {
   const d = new Date(dt);
