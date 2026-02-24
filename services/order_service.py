@@ -834,9 +834,17 @@ class OrderService:
             "total_amount": float(order.total_amount or 0),
             "total_cost": float(order.total_cost or 0),
             "margin": float(order.margin or 0),
+            "total_payments": float(order.total_payments or 0),
+            "balance_due": float(order.balance_due or 0),
             "is_paid": bool(order.is_paid),
             "comment": order.comment,
             "delivery_address": order.delivery_address,
+            "closing_result": order.closing_result,
+            "reject_reason": order.reject_reason,
+            "is_on_hold": bool(order.is_on_hold),
+            "on_hold_reason": order.on_hold_reason,
+            "measurement_required": bool(order.measurement_required),
+            "proposal_sent_at": order.proposal_sent_at,
             "customer": OrderService._map_customer_brief(order.customer),
             "installer_id": order.installers[0].installer_id if getattr(order, "installers", None) else None,
             "installer": {
@@ -987,6 +995,7 @@ class OrderService:
                 selectinload(Order.service_links).selectinload(OrderServiceLink.service),
                 selectinload(Order.installers).selectinload(OrderInstaller.installer),
                 selectinload(Order.documents),
+                selectinload(Order.payments),
             )
         )
         result = await session.execute(stmt)
@@ -1006,6 +1015,17 @@ class OrderService:
                 "edit_url": doc.google_edit_url,
             }
             for doc in sorted(order.documents, key=lambda d: d.created_at, reverse=True)
+        ]
+        data["payments"] = [
+            {
+                "id": p.id,
+                "amount": float(p.amount),
+                "date": p.date,
+                "type": p.type.value if hasattr(p.type, "value") else str(p.type),
+                "comment": p.comment,
+                "created_at": p.created_at,
+            }
+            for p in sorted(order.payments, key=lambda d: d.date, reverse=True)
         ]
         return data
 
@@ -1067,11 +1087,22 @@ class OrderService:
             order.on_hold_reason = payload.on_hold_reason
         if "measurement_required" in fields_set and payload.measurement_required is not None:
             order.measurement_required = payload.measurement_required
+        if "measurer_id" in fields_set:
+            order.measurer_id = payload.measurer_id
+        if "measurement_result" in fields_set:
+            order.measurement_result = payload.measurement_result
+        if "proposal_status" in fields_set and payload.proposal_status is not None:
+            order.proposal_status = payload.proposal_status
         if "proposal_sent_at" in fields_set:
             order.proposal_sent_at = OrderService._normalize_naive_datetime(payload.proposal_sent_at)
         # Auto-set closed_at when transitioning to CLOSED
         if "status" in fields_set and order.status == OrderStatus.CLOSED and not order.closed_at:
             order.closed_at = datetime.now()
+            
+        # Validation for closing
+        if order.status == OrderStatus.CLOSED and order.closing_result == "won":
+            if order.balance_due > 0:
+                raise ValueError(f"Cannot close won order with unpaid balance: {order.balance_due}")
 
         if "installer_id" in fields_set:
             from models import OrderInstaller
@@ -1209,7 +1240,7 @@ class OrderService:
                     session.add(new_service_link)
 
             await session.flush()
-            await session.refresh(order, attribute_names=["product_links", "service_links", "installers"])
+            await session.refresh(order, attribute_names=["product_links", "service_links", "installers", "payments"])
             order.calculate_totals()
 
         session.add(order)
@@ -1242,6 +1273,80 @@ class OrderService:
 
         return await OrderService.get_order_detail_for_manager(session, order_id)
 
+    @staticmethod
+    async def add_payment(session: AsyncSession, order_id: int, payload: Any):
+        from models import Payment, PaymentType
+        order = await session.get(Order, order_id)
+        if not order:
+            from core.manager_api_errors import manager_http_error
+            from core.manager_error_codes import ORDER_NOT_FOUND
+            raise manager_http_error(status_code=404, endpoint="add_manager_order_payment", error_code=ORDER_NOT_FOUND)
+        
+        try:
+            ptype = PaymentType(payload.type)
+        except ValueError:
+            raise ValueError(f"Invalid payment type: {payload.type}")
+            
+        new_payment = Payment(
+            order_id=order_id,
+            amount=payload.amount,
+            type=ptype,
+            comment=payload.comment,
+        )
+        session.add(new_payment)
+        await session.flush()
+        
+        await session.refresh(order, attribute_names=["payments", "product_links", "service_links", "installers"])
+        order.calculate_totals()
+        session.add(order)
+        await session.commit()
+        
+        # Return payments mapped exactly as in get_order_detail_for_manager
+        return [
+            {
+                "id": p.id,
+                "amount": float(p.amount),
+                "date": p.date,
+                "type": p.type.value if hasattr(p.type, "value") else str(p.type),
+                "comment": p.comment,
+                "created_at": p.created_at,
+            }
+            for p in sorted(order.payments, key=lambda d: d.date, reverse=True)
+        ]
+
+    @staticmethod
+    async def delete_payment(session: AsyncSession, order_id: int, payment_id: int):
+        from models import Payment
+        order = await session.get(Order, order_id)
+        if not order:
+            from core.manager_api_errors import manager_http_error
+            from core.manager_error_codes import ORDER_NOT_FOUND
+            raise manager_http_error(status_code=404, endpoint="delete_manager_order_payment", error_code=ORDER_NOT_FOUND)
+            
+        payment = await session.get(Payment, payment_id)
+        if not payment or payment.order_id != order_id:
+            raise ValueError("Payment not found on this order")
+            
+        await session.delete(payment)
+        await session.flush()
+        
+        await session.refresh(order, attribute_names=["payments", "product_links", "service_links", "installers"])
+        order.calculate_totals()
+        session.add(order)
+        await session.commit()
+        
+        return [
+            {
+                "id": p.id,
+                "amount": float(p.amount),
+                "date": p.date,
+                "type": p.type.value if hasattr(p.type, "value") else str(p.type),
+                "comment": p.comment,
+                "created_at": p.created_at,
+            }
+            for p in sorted(order.payments, key=lambda d: d.date, reverse=True)
+        ]
+
     # -----------------------------------------------------------------
     # Leads Inbox (Order-based triage)
     # -----------------------------------------------------------------
@@ -1269,16 +1374,17 @@ class OrderService:
         from schemas import LeadsInboxItemResponse, LeadsInboxListResponse
         from sqlalchemy import case as sa_case
 
+        stmt = select(Order).options(selectinload(Order.customer))
+
         if scope == "archive":
-            active_statuses = [OrderStatus.CANCELED]
+            # Archived leads are just closed/lost leads
+            stmt = stmt.where(
+                Order.status == OrderStatus.CLOSED,
+                Order.closing_result == "lost"
+            )
         else:
             active_statuses = [OrderStatus.NEW_LEAD]
-
-        stmt = (
-            select(Order)
-            .options(selectinload(Order.customer))
-            .where(Order.status.in_(active_statuses))
-        )
+            stmt = stmt.where(Order.status.in_(active_statuses))
 
         if scope == "active":
             # new_lead orders float to top, then newest first

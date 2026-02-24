@@ -11,6 +11,7 @@ import type {
   OrderServiceLineResponse,
   ManagerOrderDocumentItem,
   ManagerInstallerResponse,
+  PaymentResponse,
 } from '../../client';
 import { ManagerDocsService, ManagerOrdersService } from '../../client';
 import { STATUS_LABELS, STATUS_ORDER, formatMoney } from './order-utils';
@@ -60,11 +61,18 @@ const comment = ref('');
 const isPaid = ref(false);
 const installerId = ref<number | null>(null);
 
+// Negotiation stage properties
+const measurementRequired = ref(false);
+const measurerId = ref<number | null>(null);
+const measurementResult = ref('');
+const proposalStatus = ref<'draft' | 'sent' | 'approved' | 'rejected'>('draft');
+
 const installersList = ref<ManagerInstallerResponse[]>([]);
 
 const productLines = ref<ProductLine[]>([]);
 const serviceLines = ref<ServiceLine[]>([]);
 const documents = ref<ManagerOrderDocumentItem[]>([]);
+const payments = ref<PaymentResponse[]>([]);
 const localServerErrors = ref<Record<string, string>>({});
 
 const localFormError = ref('');
@@ -169,11 +177,53 @@ const deleteDocument = async (docId: number) => {
   }
 };
 
+const newPaymentAmount = ref<number | null>(null);
+const newPaymentType = ref<string>('prepayment');
+const isAddingPayment = ref(false);
+
+const addPayment = async () => {
+  if (!props.order?.id || !newPaymentAmount.value) return;
+  isAddingPayment.value = true;
+  try {
+    const res = await ManagerOrdersService.addManagerOrderPayment(props.order.id, {
+        amount: newPaymentAmount.value,
+        type: newPaymentType.value,
+    });
+    payments.value = res;
+    newPaymentAmount.value = null;
+    setToast('Платеж добавлен', 'success');
+  } catch (error) {
+    setToast(`Ошибка: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    isAddingPayment.value = false;
+  }
+};
+
+const deletePayment = async (paymentId: number) => {
+  if (!props.order?.id) return;
+  if (!confirm('Удалить платеж?')) return;
+  try {
+    const res = await ManagerOrdersService.deleteManagerOrderPayment(props.order.id, paymentId);
+    payments.value = res;
+    setToast('Платеж удален', 'success');
+  } catch (error) {
+    setToast(`Ошибка: ${getApiErrorMessage(error)}`, 'error');
+  }
+};
+
 
 const totalPreview = computed(() => {
   const pTotal = productLines.value.reduce((sum, line) => sum + line.price * line.quantity, 0);
   const sTotal = serviceLines.value.reduce((sum, line) => sum + line.price * line.quantity, 0);
   return pTotal + sTotal;
+});
+
+const totalPaymentsPreview = computed(() => {
+  return payments.value.reduce((sum, p) => sum + p.amount, 0);
+});
+
+const balanceDuePreview = computed(() => {
+  return Math.max(0, totalPreview.value - totalPaymentsPreview.value);
 });
 
 const marginPreview = computed(() => {
@@ -289,6 +339,10 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   comment.value = order.comment ?? '';
   isPaid.value = order.is_paid;
   installerId.value = order.installer_id ?? null;
+  measurementRequired.value = order.measurement_required ?? false;
+  measurerId.value = order.measurer_id ?? null;
+  measurementResult.value = order.measurement_result ?? '';
+  proposalStatus.value = (order.proposal_status as any) || 'draft';
 
   if (installersList.value.length === 0) {
     api.getManagerInstallers(1, 100).then(res => {
@@ -319,6 +373,9 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
       date: d.date,
       edit_url: d.edit_url
   }));
+  // Payments
+  payments.value = [...(order.payments || [])];
+  
   // Also refresh list to be sure
   loadDocuments(order.id);
 
@@ -456,6 +513,8 @@ const handleSave = () => {
     errors.products = 'Количество товара должно быть больше 0';
   } else if (productLines.value.some((line) => line.price < 0)) {
     errors.products = 'Цена товара не может быть отрицательной';
+  } else if (productLines.value.some((line) => !line.product_id)) {
+    errors.products = 'Выберите товар из выпадающего списка';
   }
 
   if (serviceLines.value.some((line) => line.quantity <= 0)) {
@@ -470,6 +529,22 @@ const handleSave = () => {
     localServerErrors.value = errors;
     localFormError.value = 'Исправьте ошибки в форме';
     return;
+  }
+
+  // Cross-field validation for Negotiation
+  if (status.value === 'execution') {
+    if (totalPreview.value <= 0) {
+      localFormError.value = 'Нельзя перевести в монтаж с пустой сметой';
+      return;
+    }
+    if (measurementRequired.value && !measurementResult.value?.trim()) {
+      localFormError.value = 'Требуется замер: заполните результат замера';
+      return;
+    }
+    if (proposalStatus.value !== 'approved') {
+      localFormError.value = 'Проект должен быть согласован с клиентом';
+      return;
+    }
   }
 
   clearDraft();
@@ -496,6 +571,10 @@ const handleSave = () => {
       cost: line.cost,
       link_id: null,
     })),
+    measurement_required: measurementRequired.value,
+    measurer_id: measurerId.value,
+    measurement_result: measurementResult.value,
+    proposal_status: proposalStatus.value,
   };
   emit('save', { orderId: props.order.id, data: payload });
 };
@@ -568,23 +647,55 @@ watch(
           </select>
           <span v-if="getFieldError('is_paid')" class="text-xs text-red-300">{{ getFieldError('is_paid') }}</span>
         </label>
-        <label class="field-label md:col-span-2">
-          Монтажник
-          <select v-model="installerId" class="field-input">
-            <option :value="null">Не назначен</option>
-            <option v-for="inst in installersList" :key="inst.id" :value="inst.id">
-              {{ inst.name }} {{ !inst.is_active ? '(в архиве)' : '' }}
-            </option>
-          </select>
-        </label>
         <DateTimeField v-model="nextFollowupDate" label="Следующее касание" :error="getFieldError('next_followup_date')" />
-        <DateTimeField v-model="assessmentDate" label="Дата замера" :error="getFieldError('measurement_date')" />
-        <DateTimeField
-          v-model="installationDate"
-          class="md:col-span-2"
-          label="Дата монтажа"
-          :error="getFieldError('installation_date')"
-        />
+      </section>
+
+      <!-- Зона 1: Планирование (Measurement & Logistics) -->
+      <section v-if="status === 'negotiation' || status === 'execution'" class="mt-6 rounded-2xl bg-blue-50/30 border border-blue-100 p-4">
+        <h3 class="text-lg font-semibold font-['Space_Grotesk'] mb-4 text-blue-900 border-b border-blue-100 pb-2">Зона 1: Планирование (Замер и Монтаж)</h3>
+        
+        <label class="flex items-center gap-2 cursor-pointer mb-4">
+          <input type="checkbox" v-model="measurementRequired" class="w-5 h-5 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+          <span class="font-medium text-gray-800">Требуется выезд на замер</span>
+        </label>
+        
+        <div v-if="!measurementRequired" class="text-sm text-gray-500 bg-white p-3 rounded-xl border border-gray-200 mb-4 shadow-sm">
+          Замер не требуется. Можно планировать монтаж сразу.
+        </div>
+        
+        <div v-if="measurementRequired" class="grid gap-3 md:grid-cols-2 mb-4 bg-white p-4 rounded-xl border border-blue-100 shadow-sm">
+          <DateTimeField v-model="assessmentDate" label="Дата и время замера" :error="getFieldError('measurement_date')" />
+          <label class="field-label">
+            Замерщик
+            <select v-model="measurerId" class="field-input">
+              <option :value="null">Не назначен</option>
+              <option v-for="inst in installersList" :key="inst.id" :value="inst.id">
+                {{ inst.name }} {{ !inst.is_active ? '(в архиве)' : '' }}
+              </option>
+            </select>
+          </label>
+          <label class="field-label md:col-span-2">
+            Результат замера
+            <textarea
+              v-model="measurementResult"
+              class="field-input min-h-[60px]"
+              placeholder="Резюме после выезда (длины трасс, доп. работы)..."
+            />
+          </label>
+        </div>
+
+        <div class="grid gap-3 md:grid-cols-2">
+          <DateTimeField v-model="installationDate" label="Дата монтажа" :error="getFieldError('installation_date')" />
+          <label class="field-label">
+            Монтажник
+            <select v-model="installerId" class="field-input">
+              <option :value="null">Не назначен</option>
+              <option v-for="inst in installersList" :key="inst.id" :value="inst.id">
+                {{ inst.name }} {{ !inst.is_active ? '(в архиве)' : '' }}
+              </option>
+            </select>
+          </label>
+        </div>
         <label class="field-label md:col-span-2">
           Комментарий
           <textarea
@@ -607,9 +718,13 @@ watch(
         <CustomerSummaryCard :customer="customer" mode="compact" :show-open-button="false" />
       </section>
 
-      <section class="mt-6">
-        <div class="mb-2 flex items-center justify-between">
-          <h3 class="text-lg font-semibold font-['Space_Grotesk']">Товары</h3>
+      <!-- Зона 2: Смета -->
+      <div class="mt-8 rounded-2xl bg-gray-50/50 border border-gray-200 p-4">
+        <h3 class="text-xl font-bold font-['Space_Grotesk'] text-gray-900 border-b border-gray-200 pb-2 mb-4">Зона 2: Смета</h3>
+        
+        <section class="mt-2">
+          <div class="mb-2 flex items-center justify-between">
+            <h4 class="text-md font-semibold text-gray-800">Товары</h4>
           <button class="btn-mini" @click="addProductLine">Добавить товар</button>
         </div>
         <p v-if="getFieldError('products')" class="mb-2 text-xs text-red-300">{{ getFieldError('products') }}</p>
@@ -672,26 +787,62 @@ watch(
         </div>
       </section>
 
-      <section class="mt-6">
-        <div class="mb-2 flex items-center justify-between">
-          <h3 class="text-lg font-semibold font-['Space_Grotesk']">Услуги</h3>
-          <button class="btn-mini" @click="addServiceLine">Добавить услугу</button>
-        </div>
-        <p v-if="getFieldError('services')" class="mb-2 text-xs text-red-300">{{ getFieldError('services') }}</p>
-        <div class="space-y-2">
-          <div v-for="(line, index) in serviceLines" :key="`service-${index}`" class="grid grid-cols-12 gap-2 rounded-xl border border-gray-200 bg-white p-2">
-            <input v-model="line.title" class="field-input col-span-5" placeholder="Название услуги" />
-            <input v-model.number="line.price" type="number" min="0" class="field-input col-span-2" placeholder="Цена" />
-            <input v-model.number="line.cost" type="number" min="0" class="field-input col-span-2" placeholder="Себест." />
-            <input v-model.number="line.quantity" type="number" min="1" class="field-input col-span-2" placeholder="Кол-во" />
-            <button class="btn-mini-outline col-span-1" @click="removeServiceLine(index)">×</button>
+        <section class="mt-6">
+          <div class="mb-2 flex items-center justify-between">
+            <h4 class="text-md font-semibold text-gray-800">Услуги</h4>
+            <button class="btn-mini" @click="addServiceLine">Добавить услугу</button>
+          </div>
+          <p v-if="getFieldError('services')" class="mb-2 text-xs text-red-300">{{ getFieldError('services') }}</p>
+          <div class="space-y-2">
+            <div v-for="(line, index) in serviceLines" :key="`service-${index}`" class="grid grid-cols-12 gap-2 rounded-xl border border-gray-200 bg-white p-2">
+              <input v-model="line.title" class="field-input col-span-5" placeholder="Название услуги" />
+              <input v-model.number="line.price" type="number" min="0" class="field-input col-span-2" placeholder="Цена" />
+              <input v-model.number="line.cost" type="number" min="0" class="field-input col-span-2" placeholder="Себест." />
+              <input v-model.number="line.quantity" type="number" min="1" class="field-input col-span-2" placeholder="Кол-во" />
+              <button class="btn-mini-outline col-span-1" @click="removeServiceLine(index)">×</button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Зона 3: Экшн-зона (Proposal & Docs) -->
+      <section v-if="status === 'negotiation' || status === 'execution' || status === 'closed'" class="mt-8 rounded-2xl bg-amber-50/30 border border-amber-100 p-4">
+        <h3 class="text-lg font-semibold font-['Space_Grotesk'] text-amber-900 mb-4 border-b border-amber-200 pb-2">Зона 3: Экшн-зона (Согласование)</h3>
+        
+        <div v-if="status === 'negotiation'" class="mb-6">
+          <label class="field-label mb-3">
+            Статус согласования
+            <select v-model="proposalStatus" class="field-input" :class="getFieldError('proposal_status') ? 'border-red-500' : ''">
+              <option value="draft">Черновик (Draft)</option>
+              <option value="sent">Отправлено (Sent)</option>
+              <option value="approved">Согласовано (Approved)</option>
+              <option value="rejected">Отказ (Rejected)</option>
+            </select>
+          </label>
+
+          <div class="flex flex-wrap gap-2">
+            <!-- B2C Action -->
+            <a
+              v-if="customer?.type === 'individual'"
+              :href="`https://wa.me/${(customer?.phone || '').replace(/\\D/g, '')}?text=${encodeURIComponent(`Здравствуйте, ${customer?.name}! Расчет по вашему заказу: Итого к оплате ${formatMoney(totalPreview)}. Подтверждаем?`)}`"
+              target="_blank"
+              class="flex items-center gap-1 rounded-xl bg-[#25D366] px-4 py-2 text-sm font-medium text-white shadow hover:bg-[#20BE5A]"
+            >
+              <span class="material-icons-round text-[18px]">chat</span> Отправить в WhatsApp
+            </a>
+            <a
+              v-if="customer?.type === 'individual'"
+              :href="`viber://chat?number=%2B${(customer?.phone || '').replace(/\\D/g, '')}`"
+              target="_blank"
+              class="flex items-center gap-1 rounded-xl bg-[#7360f2] px-4 py-2 text-sm font-medium text-white shadow hover:bg-[#5e4cd1]"
+            >
+              <span class="material-icons-round text-[18px]">chat</span> Viber
+            </a>
           </div>
         </div>
-      </section>
 
-      <section class="mt-6">
         <div class="mb-2 flex items-center justify-between">
-          <h3 class="text-lg font-semibold font-['Space_Grotesk'] text-slate-800">Документы</h3>
+          <h4 class="text-md font-semibold text-slate-800">Документы (B2B / Договоры)</h4>
           
           <div class="relative">
             <button
@@ -750,8 +901,53 @@ watch(
       </section>
 
 
+      <section v-if="order" class="mt-6">
+        <div class="mb-2 flex items-center justify-between">
+          <h3 class="text-lg flex gap-2 items-center font-semibold font-['Space_Grotesk'] text-slate-800">
+             <span class="material-icons-round text-teal-600">account_balance_wallet</span> Оплаты
+          </h3>
+        </div>
+        
+        <!-- List of Payments -->
+        <div v-if="payments.length" class="space-y-2 mb-4">
+          <div v-for="payment in payments" :key="payment.id" class="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-3">
+             <div>
+                <div class="font-medium text-gray-900">{{ formatMoney(payment.amount) }}</div>
+                <div class="text-xs text-gray-500">{{ new Date(payment.date).toLocaleDateString() }} · {{ payment.type === 'prepayment' ? 'Предоплата' : 'Постоплата' }}</div>
+             </div>
+             <button class="flex h-8 w-8 items-center justify-center rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors" @click="deletePayment(payment.id)" title="Удалить платеж">
+                <span class="material-icons-round text-[18px]">delete</span>
+             </button>
+          </div>
+        </div>
+        <div v-else class="text-sm text-gray-500 italic py-3 text-center rounded-xl border border-dashed border-gray-200 mb-4">
+            Нет оплат
+        </div>
+        
+        <!-- Add Payment Form -->
+        <div class="flex items-end gap-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
+           <label class="flex-1 field-label !mb-0">
+              Сумма
+              <input v-model.number="newPaymentAmount" type="number" min="0" class="field-input mt-1" placeholder="0.00" />
+           </label>
+           <label class="flex-1 field-label !mb-0">
+              Тип
+              <select v-model="newPaymentType" class="field-input mt-1">
+                 <option value="prepayment">Предоплата</option>
+                 <option value="postpayment">Постоплата</option>
+              </select>
+           </label>
+           <button class="btn-mini h-[38px]" :disabled="!newPaymentAmount || isAddingPayment" @click="addPayment">
+              Добавить
+           </button>
+        </div>
+      </section>
+
       <section class="mt-6 rounded-2xl bg-gray-100 p-4">
-        <p class="text-sm text-gray-600">Итого: <span class="font-semibold text-gray-900">{{ formatMoney(totalPreview) }}</span></p>
+        <p class="text-sm text-gray-600">Оплачено: <span class="font-semibold text-teal-600">{{ formatMoney(totalPaymentsPreview) }}</span></p>
+        <p class="text-sm text-gray-600">Остаток: <span class="font-semibold" :class="balanceDuePreview > 0 ? 'text-red-500' : 'text-gray-900'">{{ formatMoney(balanceDuePreview) }}</span></p>
+        <hr class="my-2 border-gray-200" />
+        <p class="text-sm text-gray-600">Итого сумма: <span class="font-semibold text-gray-900">{{ formatMoney(totalPreview) }}</span></p>
         <p class="text-sm text-gray-600">Маржа: <span class="font-semibold text-teal-700">{{ formatMoney(marginPreview) }}</span></p>
       </section>
 

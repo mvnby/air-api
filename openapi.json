@@ -3558,6 +3558,127 @@
         }
       }
     },
+    "/api/manager/orders/{order_id}/payments": {
+      "post": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Add Manager Order Payment",
+        "operationId": "add_manager_order_payment",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaymentCreatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PaymentResponse"
+                  },
+                  "title": "Response Add Manager Order Payment"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/payments/{payment_id}": {
+      "delete": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Delete Manager Order Payment",
+        "operationId": "delete_manager_order_payment",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "payment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Payment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PaymentResponse"
+                  },
+                  "title": "Response Delete Manager Order Payment"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/leads/counter": {
       "get": {
         "tags": [
@@ -8070,6 +8191,33 @@
             "title": "Measurement Required",
             "default": false
           },
+          "measurer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measurer Id"
+          },
+          "measurement_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measurement Result"
+          },
+          "proposal_status": {
+            "type": "string",
+            "title": "Proposal Status",
+            "default": "draft"
+          },
           "proposal_sent_at": {
             "anyOf": [
               {
@@ -8081,6 +8229,16 @@
               }
             ],
             "title": "Proposal Sent At"
+          },
+          "total_payments": {
+            "type": "number",
+            "title": "Total Payments",
+            "default": 0.0
+          },
+          "balance_due": {
+            "type": "number",
+            "title": "Balance Due",
+            "default": 0.0
           },
           "product_lines": {
             "items": {
@@ -8105,6 +8263,34 @@
             "type": "array",
             "title": "Documents",
             "default": []
+          },
+          "payments": {
+            "items": {
+              "$ref": "#/components/schemas/PaymentResponse"
+            },
+            "type": "array",
+            "title": "Payments",
+            "default": []
+          },
+          "needs_attention": {
+            "type": "boolean",
+            "title": "Needs Attention",
+            "readOnly": true
+          },
+          "awaiting_measurement": {
+            "type": "boolean",
+            "title": "Awaiting Measurement",
+            "readOnly": true
+          },
+          "client_thinking": {
+            "type": "boolean",
+            "title": "Client Thinking",
+            "readOnly": true
+          },
+          "ready_for_execution": {
+            "type": "boolean",
+            "title": "Ready For Execution",
+            "readOnly": true
           }
         },
         "type": "object",
@@ -8115,7 +8301,11 @@
           "total_amount",
           "total_cost",
           "margin",
-          "is_paid"
+          "is_paid",
+          "needs_attention",
+          "awaiting_measurement",
+          "client_thinking",
+          "ready_for_execution"
         ],
         "title": "ManagerOrderDetailResponse"
       },
@@ -8367,6 +8557,33 @@
             "title": "Measurement Required",
             "default": false
           },
+          "measurer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measurer Id"
+          },
+          "measurement_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measurement Result"
+          },
+          "proposal_status": {
+            "type": "string",
+            "title": "Proposal Status",
+            "default": "draft"
+          },
           "proposal_sent_at": {
             "anyOf": [
               {
@@ -8378,6 +8595,36 @@
               }
             ],
             "title": "Proposal Sent At"
+          },
+          "total_payments": {
+            "type": "number",
+            "title": "Total Payments",
+            "default": 0.0
+          },
+          "balance_due": {
+            "type": "number",
+            "title": "Balance Due",
+            "default": 0.0
+          },
+          "needs_attention": {
+            "type": "boolean",
+            "title": "Needs Attention",
+            "readOnly": true
+          },
+          "awaiting_measurement": {
+            "type": "boolean",
+            "title": "Awaiting Measurement",
+            "readOnly": true
+          },
+          "client_thinking": {
+            "type": "boolean",
+            "title": "Client Thinking",
+            "readOnly": true
+          },
+          "ready_for_execution": {
+            "type": "boolean",
+            "title": "Ready For Execution",
+            "readOnly": true
           }
         },
         "type": "object",
@@ -8388,7 +8635,11 @@
           "total_amount",
           "total_cost",
           "margin",
-          "is_paid"
+          "is_paid",
+          "needs_attention",
+          "awaiting_measurement",
+          "client_thinking",
+          "ready_for_execution"
         ],
         "title": "ManagerOrderListItemResponse"
       },
@@ -8584,6 +8835,62 @@
             ],
             "title": "No Answer At"
           },
+          "measurement_required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measurement Required"
+          },
+          "measurer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measurer Id"
+          },
+          "measurement_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measurement Result"
+          },
+          "proposal_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Status"
+          },
+          "proposal_sent_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Sent At"
+          },
           "is_paid": {
             "anyOf": [
               {
@@ -8638,29 +8945,6 @@
               }
             ],
             "title": "On Hold Reason"
-          },
-          "measurement_required": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Measurement Required"
-          },
-          "proposal_sent_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Proposal Sent At"
           },
           "customer_id": {
             "anyOf": [
@@ -9833,6 +10117,81 @@
           "new_status"
         ],
         "title": "OrderStatusUpdate"
+      },
+      "PaymentCreatePayload": {
+        "properties": {
+          "amount": {
+            "type": "number",
+            "title": "Amount"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "amount",
+          "type"
+        ],
+        "title": "PaymentCreatePayload"
+      },
+      "PaymentResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "amount": {
+            "type": "number",
+            "title": "Amount"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Date"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "amount",
+          "date",
+          "type",
+          "created_at"
+        ],
+        "title": "PaymentResponse"
       },
       "ProductImageResponse": {
         "properties": {

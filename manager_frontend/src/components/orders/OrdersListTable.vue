@@ -46,7 +46,15 @@ const emit = defineEmits<{
               <p class="text-xs text-gray-500">{{ formatPhone(order.customer?.phone) }}</p>
             </template>
           </td>
-          <td class="px-3 py-3">{{ STATUS_LABELS[order.status] || order.status }}</td>
+          <td class="px-3 py-3">
+            <div class="mb-1">{{ STATUS_LABELS[order.status] || order.status }}</div>
+            <div class="flex flex-col gap-1 items-start">
+              <span v-if="order.needs_attention" class="rounded-full bg-red-100 text-red-700 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">🔴 Внимание</span>
+              <span v-if="order.awaiting_measurement" class="rounded-full bg-blue-100 text-blue-700 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">🕒 Замер</span>
+              <span v-if="order.client_thinking" class="rounded-full bg-amber-100 text-amber-700 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">⏳ Думают</span>
+              <span v-if="order.ready_for_execution" class="rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">✅ Согласовано</span>
+            </div>
+          </td>
           <td class="px-3 py-3">{{ formatDate(order.next_followup_date) }}</td>
           <td class="px-3 py-3">{{ formatMoney(order.total_amount) }}</td>
           <td class="px-3 py-3 font-semibold text-teal-700">{{ formatMoney(order.margin) }}</td>

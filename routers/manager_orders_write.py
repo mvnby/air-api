@@ -1,3 +1,4 @@
+from typing import List
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -5,12 +6,20 @@ from core.database import get_session
 from core.manager_api_errors import manager_http_error
 from core.manager_error_codes import BAD_REQUEST, DOCUMENT_GENERATION_FAILED, ORDER_NOT_FOUND
 from core.security import get_current_username
-from routers.manager_operation_ids import CREATE_MANAGER_ORDER, GENERATE_MANAGER_ORDER_DOCUMENT, PATCH_MANAGER_ORDER
+from routers.manager_operation_ids import (
+    CREATE_MANAGER_ORDER,
+    GENERATE_MANAGER_ORDER_DOCUMENT,
+    PATCH_MANAGER_ORDER,
+    ADD_MANAGER_ORDER_PAYMENT,
+    DELETE_MANAGER_ORDER_PAYMENT,
+)
 from schemas import (
     ManagerOrderCreatePayload,
     ManagerOrderDetailResponse,
     ManagerOrderDocumentResponse,
     ManagerOrderUpdatePayload,
+    PaymentCreatePayload,
+    PaymentResponse,
 )
 from services.document_service import DocumentService
 from services.order_service import OrderService
@@ -119,3 +128,48 @@ async def generate_manager_order_document(
             error_code=DOCUMENT_GENERATION_FAILED,
             message=str(exc),
         ) from exc
+
+
+@router.post(
+    "/{order_id}/payments",
+    response_model=List[PaymentResponse],
+    operation_id=ADD_MANAGER_ORDER_PAYMENT,
+)
+async def add_manager_order_payment(
+    order_id: int,
+    payload: PaymentCreatePayload,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await OrderService.add_payment(session, order_id, payload)
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=ADD_MANAGER_ORDER_PAYMENT,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.delete(
+    "/{order_id}/payments/{payment_id}",
+    response_model=List[PaymentResponse],
+    operation_id=DELETE_MANAGER_ORDER_PAYMENT,
+)
+async def delete_manager_order_payment(
+    order_id: int,
+    payment_id: int,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await OrderService.delete_payment(session, order_id, payment_id)
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=DELETE_MANAGER_ORDER_PAYMENT,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+

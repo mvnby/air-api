@@ -7,6 +7,7 @@ import type { ManagerOrderDocumentItem } from './ManagerOrderDocumentItem';
 import type { OrderCustomerBrief } from './OrderCustomerBrief';
 import type { OrderProductLineResponse } from './OrderProductLineResponse';
 import type { OrderServiceLineResponse } from './OrderServiceLineResponse';
+import type { PaymentResponse } from './PaymentResponse';
 export type ManagerOrderDetailResponse = {
     id: number;
     status: string;
@@ -29,9 +30,19 @@ export type ManagerOrderDetailResponse = {
     is_on_hold?: boolean;
     on_hold_reason?: (string | null);
     measurement_required?: boolean;
+    measurer_id?: (number | null);
+    measurement_result?: (string | null);
+    proposal_status?: string;
     proposal_sent_at?: (string | null);
+    total_payments?: number;
+    balance_due?: number;
     product_lines?: Array<OrderProductLineResponse>;
     service_lines?: Array<OrderServiceLineResponse>;
     documents?: Array<ManagerOrderDocumentItem>;
+    payments?: Array<PaymentResponse>;
+    readonly needs_attention: boolean;
+    readonly awaiting_measurement: boolean;
+    readonly client_thinking: boolean;
+    readonly ready_for_execution: boolean;
 };
 

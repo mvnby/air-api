@@ -5,7 +5,9 @@ from .common import (
     LeadSegmentHint,
     LeadSource,
     LeadStatus,
+    LeadStatus,
     OrderStatus,
+    PaymentType,
 )
 from .customer import Customer, Lead
 from .cart import Cart, CartItem
@@ -17,6 +19,8 @@ from .order import (
     OrderInstaller,
     OrderProductLink,
     OrderServiceLink,
+    OrderServiceLink,
+    Payment,
     Service,
 )
 from .product import (
@@ -53,8 +57,11 @@ __all__ = [
     "OrderStatus",
     "Product",
     "ProductImage",
+    "ProductImage",
     "ProductTagLink",
     "Service",
     "Tag",
     "TagGroup",
+    "Payment",
+    "PaymentType",
 ]

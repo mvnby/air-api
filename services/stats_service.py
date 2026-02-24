@@ -42,7 +42,7 @@ class StatsService:
             .where(
                 Order.next_followup_date.is_not(None),
                 Order.next_followup_date <= end_of_window,
-                Order.status.not_in([OrderStatus.COMPLETED, OrderStatus.CANCELED])
+                Order.status != OrderStatus.CLOSED
             )
             .order_by(Order.next_followup_date.asc())
             .limit(5)
