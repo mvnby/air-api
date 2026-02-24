@@ -15,12 +15,12 @@ export type ManagerOrderUpdatePayload = {
     measurer_id?: (number | null);
     measurement_result?: (string | null);
     proposal_status?: (string | null);
+    proposal_sent_at?: (string | null);
     is_paid?: (boolean | null);
     closing_result?: (string | null);
     reject_reason?: (string | null);
     is_on_hold?: (boolean | null);
     on_hold_reason?: (string | null);
-    proposal_sent_at?: (string | null);
     customer_id?: (number | null);
     customer_type?: (string | null);
     customer_name?: (string | null);

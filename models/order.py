@@ -133,6 +133,22 @@ class Order(SQLModel, table=True):
     # --- Internal: Execution stage ---
     works_plan: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
+    # --- Closing ---
+    closing_result: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True, index=True))
+    reject_reason: Optional[str] = Field(default=None)
+
+    # --- Pause / On Hold ---
+    is_on_hold: bool = Field(default=False, index=True)
+    on_hold_reason: Optional[str] = Field(default=None)
+
+    # --- Internal: Negotiation stage ---
+    measurement_required: bool = Field(default=False)
+    measurement_date: Optional[datetime] = None   # renamed from assessment_date
+    proposal_sent_at: Optional[datetime] = None
+
+    # --- Internal: Execution stage ---
+    works_plan: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
     installation_date: Optional[datetime] = None

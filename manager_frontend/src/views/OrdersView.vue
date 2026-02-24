@@ -136,7 +136,6 @@ onMounted(loadOrders);
             <div v-if="order.is_on_hold" class="hold-badge">
               ⏸ {{ order.on_hold_reason || 'Пауза' }}
             </div>
-
             <!-- Customer -->
             <div class="card-customer">
               <span class="customer-name">{{ order.customer?.name || 'Без имени' }}</span>
@@ -159,7 +158,6 @@ onMounted(loadOrders);
                 Оплачено
               </div>
             </div>
-
             <!-- Closing result (for closed column) -->
             <div v-if="col.key === 'closed' && order.closing_result" class="closing-result"
               :style="{ color: CLOSING_RESULT_LABELS[order.closing_result]?.color }">

@@ -431,6 +431,8 @@ class ManagerOrderUpdatePayload(BaseModel):
     measurer_id: Optional[int] = None
     measurement_result: Optional[str] = None
     proposal_status: Optional[str] = None
+    proposal_sent_at: Optional[datetime] = None
+    
     is_paid: Optional[bool] = None
     # Closing
     closing_result: Optional[str] = None
@@ -438,9 +440,6 @@ class ManagerOrderUpdatePayload(BaseModel):
     # On Hold
     is_on_hold: Optional[bool] = None
     on_hold_reason: Optional[str] = None
-    # Negotiation internals
-    measurement_required: Optional[bool] = None
-    proposal_sent_at: Optional[datetime] = None
     
 
     # Customer Details

@@ -1,6 +1,7 @@
 import type { ManagerOrderListItemResponse } from '../../client';
 
 export const STATUS_ORDER = [
+    'new_lead',
     'negotiation',
     'execution',
     'closed',
