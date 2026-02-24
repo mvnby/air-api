@@ -389,6 +389,7 @@ class ManagerOrderUpdatePayload(BaseModel):
     measurement_required: Optional[bool] = None
     proposal_sent_at: Optional[datetime] = None
     
+
     # Customer Details
     customer_id: Optional[int] = None
     customer_type: Optional[str] = None
