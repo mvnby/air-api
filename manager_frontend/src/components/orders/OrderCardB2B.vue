@@ -33,6 +33,13 @@ const onDragStart = () => {
       <span class="rounded-full bg-gray-100 dark:bg-slate-700 px-2 py-1 text-xs text-gray-700 dark:text-slate-300">{{ STATUS_LABELS[order.status] || order.status }}</span>
     </header>
 
+    <div class="mb-3 flex flex-wrap gap-1">
+      <span v-if="order.needs_attention" class="rounded-full bg-red-100 text-red-700 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">🔴 Внимание (замер)</span>
+      <span v-if="order.awaiting_measurement" class="rounded-full bg-blue-100 text-blue-700 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">🕒 Замер</span>
+      <span v-if="order.client_thinking" class="rounded-full bg-amber-100 text-amber-700 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">⏳ Думают</span>
+      <span v-if="order.ready_for_execution" class="rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">✅ Согласовано</span>
+    </div>
+
     <div class="space-y-1 text-sm text-gray-700 dark:text-slate-300">
       <p>
         Счет:

@@ -1,5 +1,5 @@
 from typing import List, Optional, Any, Dict
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, computed_field
 from datetime import datetime
 from enum import Enum
 from core.input_validation import (
@@ -315,7 +315,34 @@ class ManagerOrderListItemResponse(BaseModel):
     is_on_hold: bool = False
     on_hold_reason: Optional[str] = None
     measurement_required: bool = False
+    measurer_id: Optional[int] = None
+    measurement_result: Optional[str] = None
+    proposal_status: str = "draft"
     proposal_sent_at: Optional[datetime] = None
+    
+    @computed_field
+    @property
+    def needs_attention(self) -> bool:
+        if self.measurement_date and not self.measurement_result:
+            return self.measurement_date.timestamp() < datetime.now().timestamp()
+        return False
+
+    @computed_field
+    @property
+    def awaiting_measurement(self) -> bool:
+        if self.measurement_required and self.measurement_date:
+            return self.measurement_date.timestamp() > datetime.now().timestamp()
+        return False
+
+    @computed_field
+    @property
+    def client_thinking(self) -> bool:
+        return self.proposal_status == "sent"
+
+    @computed_field
+    @property
+    def ready_for_execution(self) -> bool:
+        return self.proposal_status == "approved"
     
     # Financials
     total_payments: float = 0.0
@@ -398,6 +425,12 @@ class ManagerOrderUpdatePayload(BaseModel):
     installation_date: Optional[datetime] = None
     comment: Optional[str] = None
     no_answer_at: Optional[str] = None
+    
+    # Negotiation
+    measurement_required: Optional[bool] = None
+    measurer_id: Optional[int] = None
+    measurement_result: Optional[str] = None
+    proposal_status: Optional[str] = None
     is_paid: Optional[bool] = None
     # Closing
     closing_result: Optional[str] = None

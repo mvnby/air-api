@@ -11,12 +11,15 @@ export type ManagerOrderUpdatePayload = {
     installation_date?: (string | null);
     comment?: (string | null);
     no_answer_at?: (string | null);
+    measurement_required?: (boolean | null);
+    measurer_id?: (number | null);
+    measurement_result?: (string | null);
+    proposal_status?: (string | null);
     is_paid?: (boolean | null);
     closing_result?: (string | null);
     reject_reason?: (string | null);
     is_on_hold?: (boolean | null);
     on_hold_reason?: (string | null);
-    measurement_required?: (boolean | null);
     proposal_sent_at?: (string | null);
     customer_id?: (number | null);
     customer_type?: (string | null);

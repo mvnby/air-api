@@ -1087,6 +1087,12 @@ class OrderService:
             order.on_hold_reason = payload.on_hold_reason
         if "measurement_required" in fields_set and payload.measurement_required is not None:
             order.measurement_required = payload.measurement_required
+        if "measurer_id" in fields_set:
+            order.measurer_id = payload.measurer_id
+        if "measurement_result" in fields_set:
+            order.measurement_result = payload.measurement_result
+        if "proposal_status" in fields_set and payload.proposal_status is not None:
+            order.proposal_status = payload.proposal_status
         if "proposal_sent_at" in fields_set:
             order.proposal_sent_at = OrderService._normalize_naive_datetime(payload.proposal_sent_at)
         # Auto-set closed_at when transitioning to CLOSED

@@ -125,6 +125,9 @@ class Order(SQLModel, table=True):
     # --- Internal: Negotiation stage ---
     measurement_required: bool = Field(default=False)
     measurement_date: Optional[datetime] = None   # renamed from assessment_date
+    measurer_id: Optional[int] = Field(default=None, index=True)
+    measurement_result: Optional[str] = Field(default=None)
+    proposal_status: str = Field(default="draft", sa_column=Column(String, default="draft", index=True))
     proposal_sent_at: Optional[datetime] = None
 
     # --- Internal: Execution stage ---

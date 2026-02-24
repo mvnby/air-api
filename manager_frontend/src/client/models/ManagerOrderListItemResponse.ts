@@ -26,8 +26,15 @@ export type ManagerOrderListItemResponse = {
     is_on_hold?: boolean;
     on_hold_reason?: (string | null);
     measurement_required?: boolean;
+    measurer_id?: (number | null);
+    measurement_result?: (string | null);
+    proposal_status?: string;
     proposal_sent_at?: (string | null);
     total_payments?: number;
     balance_due?: number;
+    readonly needs_attention: boolean;
+    readonly awaiting_measurement: boolean;
+    readonly client_thinking: boolean;
+    readonly ready_for_execution: boolean;
 };
 
