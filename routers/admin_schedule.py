@@ -81,10 +81,11 @@ async def get_calendar_events(
 
             if order.installation_date:
                 color = "#22c55e"
-                if order.status == OrderStatus.COMPLETED:
-                    color = "#6b7280"
-                elif order.status == OrderStatus.CANCELED:
-                    color = "#ef4444"
+                if order.status == OrderStatus.CLOSED:
+                    if order.closing_result == "won":
+                        color = "#6b7280"
+                    elif order.closing_result == "lost":
+                        color = "#ef4444"
 
                 installers_str = ""
                 if order.installers:
