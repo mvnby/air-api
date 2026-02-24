@@ -7875,6 +7875,17 @@
           "request_text": {
             "type": "string",
             "title": "Request Text"
+          },
+          "service_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Type"
           }
         },
         "type": "object",
