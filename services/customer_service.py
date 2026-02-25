@@ -187,3 +187,22 @@ class CustomerService:
                 "pages": (total + limit - 1) // limit if limit else 1,
             },
         }
+
+    @staticmethod
+    async def delete_for_manager(session: AsyncSession, customer_id: int) -> bool:
+        customer = await session.get(Customer, customer_id)
+        if not customer:
+            return False
+            
+        # Check if customer has any orders
+        order_check = await session.execute(
+            select(Order.id).where(Order.customer_id == customer_id).limit(1)
+        )
+        has_orders = order_check.scalar_one_or_none() is not None
+        
+        if has_orders:
+            raise ValueError("Невозможно удалить клиента, так как у него есть связанные заказы.")
+            
+        await session.delete(customer)
+        await session.commit()
+        return True

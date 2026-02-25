@@ -31,6 +31,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: boolean];
   save: [payload: { orderId: number; data: ManagerOrderUpdatePayload }];
+  deleted: [orderId: number];
 }>();
 
 type ProductOption = {
@@ -597,6 +598,28 @@ const closeDrawer = () => {
   clearDraft();
   emit('update:modelValue', false);
 };
+
+const isDeleting = ref(false);
+const deleteOrder = async () => {
+  if (!props.order?.id) return;
+  const proceed = window.confirm("Вы уверены? Это безвозвратно удалит заказ и все связанные с ним документы, выезды и платежи.");
+  if (!proceed) return;
+
+  isDeleting.value = true;
+  try {
+    await ManagerOrdersService.deleteManagerOrder(props.order.id);
+    toast.value = 'Заказ успешно удален';
+    setTimeout(() => {
+      toast.value = '';
+      emit('deleted', props.order!.id);
+      closeDrawer();
+    }, 1500);
+  } catch (err: any) {
+    localFormError.value = getApiErrorMessage(err) || 'Ошибка при удалении заказа';
+  } finally {
+    isDeleting.value = false;
+  }
+};
 const getFieldError = (field: string): string => localServerErrors.value[field] || props.serverErrors?.[field] || '';
 const displayFormError = computed(() => localFormError.value || props.formError || '');
 const closeCustomerModal = () => {
@@ -965,11 +988,18 @@ watch(
         <p class="text-sm text-gray-600">Маржа: <span class="font-semibold text-teal-700">{{ formatMoney(marginPreview) }}</span></p>
       </section>
 
-      <footer class="mt-6 flex justify-end gap-2">
-        <button class="btn-mini-outline" :disabled="saving" @click="closeDrawer">Отмена</button>
-        <button class="btn-mini" :disabled="saving" @click="handleSave">
-          {{ saving ? 'Сохраняем...' : 'Сохранить' }}
-        </button>
+      <footer class="mt-6 flex justify-between gap-2 border-t border-gray-100 pt-4">
+        <div>
+          <button class="btn-mini hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-gray-400 bg-white border border-gray-200 transition-colors" :disabled="saving || isDeleting" @click="deleteOrder" title="Безвозвратное удаление">
+            {{ isDeleting ? 'Удаление...' : 'Удалить заказ' }}
+          </button>
+        </div>
+        <div class="flex gap-2">
+          <button class="btn-mini-outline" :disabled="saving || isDeleting" @click="closeDrawer">Отмена</button>
+          <button class="btn-mini" :disabled="saving || isDeleting" @click="handleSave">
+            {{ saving ? 'Сохраняем...' : 'Сохранить' }}
+          </button>
+        </div>
       </footer>
     </aside>
 

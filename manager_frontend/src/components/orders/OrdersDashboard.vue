@@ -245,6 +245,14 @@ const saveOrder = async (payload: { orderId: number; data: ManagerOrderUpdatePay
   }
 };
 
+const handleOrderDeleted = async (orderId: number) => {
+  orders.value = orders.value.filter((order) => order.id !== orderId);
+  drawerOpen.value = false;
+  selectedOrder.value = null;
+  setToast('Сделка удалена');
+  await loadOrders();
+};
+
 const clearOrderIdFromUrl = () => {
   const url = new URL(window.location.href);
   if (!url.searchParams.has('orderId')) return;
@@ -372,6 +380,7 @@ watch(drawerOpen, (isOpen) => {
       :form-error="orderFormError"
       :saving="saving"
       @save="saveOrder"
+      @deleted="handleOrderDeleted"
     />
 
     <div v-if="showLoginModal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">

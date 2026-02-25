@@ -40,6 +40,7 @@ const saving = ref(false);
 const error = ref('');
 const saveError = ref('');
 const success = ref('');
+const toast = ref('');
 const editMode = ref(false);
 const serverErrors = ref<Record<string, string>>({});
 
@@ -92,6 +93,13 @@ const backLabel = computed(() => (returnTo.value ? 'Назад' : 'К списк
 const formatDate = (iso?: string | null) => {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('ru-RU');
+};
+
+const setToast = (message: string) => {
+  toast.value = message;
+  window.setTimeout(() => {
+    if (toast.value === message) toast.value = '';
+  }, 3500);
 };
 
 const toForm = (item: ManagerCatalogCustomerItemResponse): CustomerForm => ({
@@ -319,6 +327,29 @@ const saveCustomer = async () => {
   }
 };
 
+const isDeleting = ref(false);
+const deleteCustomer = async () => {
+  if (!customer.value?.id) return;
+  const proceed = window.confirm("Вы уверены? Это действие безвозвратно удалит карточку клиента.");
+  if (!proceed) return;
+
+  isDeleting.value = true;
+  error.value = '';
+  try {
+    await api.deleteManagerCustomer(customer.value.id);
+    success.value = 'Клиент успешно удален';
+    setTimeout(() => {
+      navigateToCustomers();
+    }, 1500);
+  } catch (err: any) {
+    const message = getApiErrorMessage(err) || 'Ошибка при удалении клиента';
+    error.value = message;
+    setToast(message);
+  } finally {
+    isDeleting.value = false;
+  }
+};
+
 watch(customerId, () => {
   void loadCustomer();
   void loadCustomerDocs();
@@ -332,6 +363,11 @@ onMounted(() => {
 
 <template>
   <div class="min-h-screen bg-[var(--mv-bg)] text-[var(--mv-text)]">
+    <Transition name="fade">
+      <div v-if="toast" class="fixed top-6 right-6 z-[100] rounded-xl bg-red-600 px-6 py-3 font-medium text-white shadow-2xl">
+        {{ toast }}
+      </div>
+    </Transition>
     <div class="mx-auto max-w-[1200px] px-4 py-6 md:px-8">
       <div class="mb-4 flex items-center gap-2">
         <button class="btn-mini-outline" type="button" @click="navigateToCustomers">
@@ -343,6 +379,9 @@ onMounted(() => {
         </button>
         <button v-if="customer && !editMode" class="btn-mini" type="button" @click="startEdit">
           Редактировать
+        </button>
+        <button v-if="customer && !editMode" class="btn-mini hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-gray-400 bg-white border border-gray-200 transition-colors" type="button" :disabled="isDeleting" @click="deleteCustomer" title="Безвозвратное удаление">
+          {{ isDeleting ? 'Удаление...' : 'Удалить' }}
         </button>
         <button v-if="customer && editMode" class="btn-mini-outline" type="button" :disabled="saving" @click="cancelEdit">
           <X class="h-4 w-4" />

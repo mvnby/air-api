@@ -85,6 +85,14 @@ class ManagerCatalogService:
         return await ProductService.update_product(session, product_id, update_data, tag_ids)
 
     @staticmethod
+    async def delete_product(
+        session: AsyncSession,
+        *,
+        product_id: int,
+    ) -> bool:
+        return await ProductService.delete_for_manager(session, product_id)
+
+    @staticmethod
     async def bulk_round_prices(
         session: AsyncSession,
         *,

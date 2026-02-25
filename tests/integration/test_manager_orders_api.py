@@ -7,13 +7,16 @@ from models import (
     CustomerType,
     Installer,
     Order,
+    OrderDocument,
     OrderInstaller,
     OrderProductLink,
     OrderServiceLink,
     OrderStatus,
+    Payment,
     Product,
     Service,
 )
+from models.order import OrderWorkStage
 
 
 async def _auth_headers(async_client):
@@ -388,3 +391,70 @@ async def test_manager_doc_delete_success(async_client, db, monkeypatch):
     # Verify Google Call
     assert "fid_del" in deleted_ids
 
+
+@pytest.mark.asyncio
+async def test_manager_order_delete_cascades_related_entities(async_client, db, monkeypatch):
+    customer = Customer(name="Delete Order", phone="+375290001234", type=CustomerType.individual)
+    product = Product(title="Delete Product", slug="delete-product", price=4000, area=35)
+    service = Service(title="Delete Service", slug="delete-service", base_price=200)
+    installer = Installer(name="Delete Installer", is_active=True)
+    db.add(customer)
+    db.add(product)
+    db.add(service)
+    db.add(installer)
+    await db.commit()
+    await db.refresh(customer)
+    await db.refresh(product)
+    await db.refresh(service)
+    await db.refresh(installer)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD, delivery_address="Минск")
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    db.add(OrderProductLink(order_id=order.id, product_id=product.id, quantity=1, price=4000, cost=2500))
+    db.add(OrderServiceLink(order_id=order.id, service_id=service.id, title=service.title, quantity=1, price=200, cost=80))
+    db.add(OrderInstaller(order_id=order.id, installer_id=installer.id, role="main", agreed_pay=100))
+    db.add(OrderWorkStage(order_id=order.id, name="Монтаж"))
+    db.add(Payment(order_id=order.id, amount=500))
+    db.add(
+        OrderDocument(
+            order_id=order.id,
+            doc_type="contract",
+            number="D-DELETE-1",
+            google_file_id="google-file-delete-1",
+            google_edit_url="https://docs.google.com/fake",
+        )
+    )
+    await db.commit()
+
+    from services.google_service import get_google_service
+
+    deleted_ids = []
+
+    def _fake_delete_file(file_id):
+        deleted_ids.append(file_id)
+
+    monkeypatch.setattr(get_google_service(), "delete_file", _fake_delete_file)
+
+    headers = await _auth_headers(async_client)
+    resp = await async_client.delete(f"/api/manager/orders/{order.id}", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+
+    assert await db.get(Order, order.id) is None
+
+    plinks = await db.execute(select(OrderProductLink).where(OrderProductLink.order_id == order.id))
+    assert plinks.scalars().first() is None
+    slinks = await db.execute(select(OrderServiceLink).where(OrderServiceLink.order_id == order.id))
+    assert slinks.scalars().first() is None
+    installers = await db.execute(select(OrderInstaller).where(OrderInstaller.order_id == order.id))
+    assert installers.scalars().first() is None
+    stages = await db.execute(select(OrderWorkStage).where(OrderWorkStage.order_id == order.id))
+    assert stages.scalars().first() is None
+    payments = await db.execute(select(Payment).where(Payment.order_id == order.id))
+    assert payments.scalars().first() is None
+    docs = await db.execute(select(OrderDocument).where(OrderDocument.order_id == order.id))
+    assert docs.scalars().first() is None
+    assert "google-file-delete-1" in deleted_ids
