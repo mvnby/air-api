@@ -10,6 +10,7 @@ from routers.manager_operation_ids import (
     CREATE_MANAGER_ORDER,
     GENERATE_MANAGER_ORDER_DOCUMENT,
     PATCH_MANAGER_ORDER,
+    DELETE_MANAGER_ORDER,
     ADD_MANAGER_ORDER_PAYMENT,
     DELETE_MANAGER_ORDER_PAYMENT,
     CREATE_MANAGER_ORDER_STAGE,
@@ -232,3 +233,30 @@ async def delete_manager_order_stage(
         raise manager_http_error(status_code=400, endpoint=DELETE_MANAGER_ORDER_STAGE, error_code=BAD_REQUEST, message=str(exc)) from exc
 
 
+@router.delete(
+    "/{order_id}",
+    response_model=dict,
+    operation_id=DELETE_MANAGER_ORDER,
+)
+async def delete_manager_order(
+    order_id: int,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        await OrderService.delete_order(session, order_id)
+        return {"ok": True}
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=DELETE_MANAGER_ORDER,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise manager_http_error(
+            status_code=500,
+            endpoint=DELETE_MANAGER_ORDER,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc

@@ -548,6 +548,28 @@ onMounted(() => {
     });
 });
 
+const isDeletingProduct = ref<number | null>(null);
+const deleteProduct = async (product: Product) => {
+    const proceed = window.confirm(`Вы уверены, что хотите удалить товар "${product.title}"? Если товар используется в заказах, удаление будет отклонено.`);
+    if (!proceed) return;
+
+    isDeletingProduct.value = product.id;
+    try {
+        await api.deleteProduct(product.id);
+        setToast('Товар успешно удален');
+        await loadProducts();
+        
+        // Remove from selection if deleted
+        if (selectedProductIds.value.has(product.id)) {
+            selectedProductIds.value.delete(product.id);
+        }
+    } catch (e: any) {
+        setToast(getApiErrorMessage(e));
+    } finally {
+        isDeletingProduct.value = null;
+    }
+};
+
 watchDebounced(
     searchQuery,
     () => {
@@ -729,6 +751,9 @@ watchDebounced(
                     <button @click="openEditModal(product)" class="bg-white text-gray-900 px-4 py-2 rounded-full flex items-center gap-2 hover:bg-gray-100 text-sm font-medium transition-colors w-36 justify-center">
                         <Settings class="w-4 h-4 text-teal-600" /> Изменить
                     </button>
+                    <button @click.stop="deleteProduct(product)" :disabled="isDeletingProduct === product.id" class="mt-2 bg-red-600/90 text-white px-4 py-2 rounded-full flex items-center gap-2 hover:bg-red-700 text-sm font-medium transition-colors w-36 justify-center">
+                        <span class="material-icons-round text-[16px]">delete</span> {{ isDeletingProduct === product.id ? 'Удаление...' : 'Удалить' }}
+                    </button>
                 </div>
             </div>
             <div class="p-3.5">
@@ -811,12 +836,15 @@ watchDebounced(
                 </div>
               </td>
               <td class="p-4 text-right">
-                <div class="flex justify-end gap-2">
-                  <button @click="openSearchModal(product)" class="p-2 text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" title="Фото">
+                <div class="flex justify-end gap-2 text-gray-400">
+                  <button @click="openSearchModal(product)" class="p-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" title="Фото">
                     <Images class="w-4 h-4" />
                   </button>
-                  <button @click="openEditModal(product)" class="p-2 text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" title="Изменить">
+                  <button @click="openEditModal(product)" class="p-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" title="Изменить">
                     <Settings class="w-4 h-4" />
+                  </button>
+                  <button @click.stop="deleteProduct(product)" :disabled="isDeletingProduct === product.id" class="p-2 hover:text-red-600 transition-colors" title="Удалить">
+                    <span class="material-icons-round text-[18px]">delete</span>
                   </button>
                 </div>
               </td>

@@ -8,7 +8,9 @@ GET_MANAGER_CUSTOMERS = "get_manager_customers"
 GET_MANAGER_CUSTOMER_DETAIL = "get_manager_customer_detail"
 GET_MANAGER_CUSTOMER_DOCS = "get_manager_customer_docs"
 PATCH_MANAGER_CUSTOMER = "patch_manager_customer"
+DELETE_MANAGER_CUSTOMER = "delete_manager_customer"
 UPDATE_PRODUCT = "update_product"
+DELETE_MANAGER_PRODUCT = "delete_manager_product"
 BULK_ROUND_PRICE = "bulk_round_price"
 GET_ALL_TAGS = "get_all_tags"
 SMART_SEARCH_PRODUCTS = "smart_search_products"
@@ -44,6 +46,7 @@ GET_MANAGER_ORDERS = "get_manager_orders"
 CREATE_MANAGER_ORDER = "create_manager_order"
 GET_MANAGER_ORDER_DETAIL = "get_manager_order_detail"
 PATCH_MANAGER_ORDER = "patch_manager_order"
+DELETE_MANAGER_ORDER = "delete_manager_order"
 GENERATE_MANAGER_ORDER_DOCUMENT = "generate_manager_order_document"
 GET_MANAGER_ORDER_DOCUMENTS = "get_manager_order_documents"
 ADD_MANAGER_ORDER_PAYMENT = "add_manager_order_payment"
@@ -86,7 +89,9 @@ ALL_MANAGER_OPERATION_IDS = (
     GET_MANAGER_CUSTOMER_DETAIL,
     GET_MANAGER_CUSTOMER_DOCS,
     PATCH_MANAGER_CUSTOMER,
+    DELETE_MANAGER_CUSTOMER,
     UPDATE_PRODUCT,
+    DELETE_MANAGER_PRODUCT,
     BULK_ROUND_PRICE,
     GET_ALL_TAGS,
     SMART_SEARCH_PRODUCTS,
@@ -116,6 +121,7 @@ ALL_MANAGER_OPERATION_IDS = (
     CREATE_MANAGER_ORDER,
     GET_MANAGER_ORDER_DETAIL,
     PATCH_MANAGER_ORDER,
+    DELETE_MANAGER_ORDER,
     GENERATE_MANAGER_ORDER_DOCUMENT,
     GET_MANAGER_ORDER_DOCUMENTS,
     ADD_MANAGER_ORDER_PAYMENT,

@@ -306,8 +306,16 @@ export const api = {
         return await ManagerService.patchManagerCustomer(customerId, payload);
     },
 
+    async deleteManagerCustomer(customerId: number) {
+        return await ManagerService.deleteManagerCustomer(customerId);
+    },
+
     async updateProduct(id: number, data: ProductUpdate) {
         return await ManagerService.updateProduct(id, data);
+    },
+
+    async deleteProduct(id: number) {
+        return await ManagerService.deleteManagerProduct(id);
     },
 
     async bulkRoundPrices(productIds: number[]) {

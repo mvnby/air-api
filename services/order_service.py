@@ -1502,3 +1502,51 @@ class OrderService:
 
         return LeadsInboxListResponse(items=items, total=len(items))
 
+    @staticmethod
+    async def delete_order(session: AsyncSession, order_id: int) -> bool:
+        """
+        Delete an order and all cascading dependencies from DB.
+        Google Drive files are deleted on a best-effort basis and do not block DB deletion.
+        """
+        import sqlalchemy as sa
+        from models.order import (
+            Order,
+            OrderDocument,
+            OrderInstaller,
+            OrderProductLink,
+            OrderServiceLink,
+            OrderWorkStage,
+            Payment,
+        )
+        from services.document_service import DocumentService
+        from services.google_service import get_google_service
+        
+        order = await session.get(Order, order_id)
+        if not order:
+            raise ValueError(f"Order {order_id} not found")
+
+        # Delete associated documents from Google Drive (best-effort).
+        # OrderDocument rows themselves are deleted by ORM cascade together with the order.
+        docs = await DocumentService.list_order_documents(session, order_id)
+        for doc in docs:
+            if not doc.google_file_id:
+                continue
+            try:
+                get_google_service().delete_file(doc.google_file_id)
+            except Exception as exc:
+                logger.warning(
+                    "Failed to delete Google Drive file while deleting order",
+                    extra={"order_id": order_id, "doc_id": doc.id, "google_file_id": doc.google_file_id, "error": str(exc)},
+                )
+
+        # Explicit SQL deletes avoid async lazy-load cascade pitfalls on AsyncSession.
+        await session.execute(sa.delete(OrderProductLink).where(OrderProductLink.order_id == order_id))
+        await session.execute(sa.delete(OrderServiceLink).where(OrderServiceLink.order_id == order_id))
+        await session.execute(sa.delete(OrderWorkStage).where(OrderWorkStage.order_id == order_id))
+        await session.execute(sa.delete(OrderInstaller).where(OrderInstaller.order_id == order_id))
+        await session.execute(sa.delete(Payment).where(Payment.order_id == order_id))
+        await session.execute(sa.delete(OrderDocument).where(OrderDocument.order_id == order_id))
+        await session.execute(sa.delete(Order).where(Order.id == order_id))
+        await session.commit()
+        
+        return True

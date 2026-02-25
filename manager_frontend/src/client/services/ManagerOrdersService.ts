@@ -117,6 +117,26 @@ export class ManagerOrdersService {
         });
     }
     /**
+     * Delete Manager Order
+     * @param orderId
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static deleteManagerOrder(
+        orderId: number,
+    ): CancelablePromise<Record<string, any>> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/orders/{order_id}',
+            path: {
+                'order_id': orderId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Generate Manager Order Document
      * @param orderId
      * @param docType

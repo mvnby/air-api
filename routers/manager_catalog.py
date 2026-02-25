@@ -15,8 +15,10 @@ from routers.manager_operation_ids import (
     GET_MANAGER_CUSTOMER_DOCS,
     GET_MANAGER_PRODUCTS,
     PATCH_MANAGER_CUSTOMER,
+    DELETE_MANAGER_CUSTOMER,
     SMART_SEARCH_PRODUCTS,
     UPDATE_PRODUCT,
+    DELETE_MANAGER_PRODUCT,
     IMPORT_ONLINER,
 )
 from schemas import (
@@ -184,6 +186,34 @@ async def patch_customer_for_manager(
     return customer
 
 
+@router.delete(
+    "/customers/{customer_id}",
+    operation_id=DELETE_MANAGER_CUSTOMER,
+)
+async def delete_customer_for_manager(
+    customer_id: int,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        from services.customer_service import CustomerService
+        success = await CustomerService.delete_for_manager(session, customer_id)
+        if not success:
+            raise manager_http_error(
+                status_code=404,
+                endpoint=DELETE_MANAGER_CUSTOMER,
+                error_code=CUSTOMER_NOT_FOUND,
+            )
+        return {"ok": True}
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=DELETE_MANAGER_CUSTOMER,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
 @router.patch(
     "/products/{product_id}",
     response_model=ManagerActionMessageResponse,
@@ -212,6 +242,36 @@ async def update_product(
         )
 
     return result
+
+
+@router.delete(
+    "/products/{product_id}",
+    operation_id=DELETE_MANAGER_PRODUCT,
+)
+async def delete_product(
+    product_id: int,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        success = await ManagerCatalogService.delete_product(
+            session=session,
+            product_id=product_id,
+        )
+        if not success:
+            raise manager_http_error(
+                status_code=404,
+                endpoint=DELETE_MANAGER_PRODUCT,
+                error_code=PRODUCT_NOT_FOUND,
+            )
+        return {"ok": True}
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=DELETE_MANAGER_PRODUCT,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
 
 
 @router.post(

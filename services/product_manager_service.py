@@ -173,9 +173,6 @@ class ProductManagerService:
             {
                 "id": g.id,
                 "title": g.title,
-                "slug": g.slug,
-                "color": g.color,
-                "allow_multiple": g.allow_multiple,
                 "tags": [
                     {"id": t.id, "title": t.title, "slug": t.slug}
                     for t in sorted(g.tags, key=lambda item: (item.sort_order, item.title))
@@ -183,3 +180,36 @@ class ProductManagerService:
             }
             for g in groups
         ]
+
+    @staticmethod
+    async def delete_for_manager(session: AsyncSession, product_id: int) -> bool:
+        from models.order import OrderProductLink
+        from models.product import ProductImage, ProductTagLink
+        import sqlalchemy as sa
+        
+        product = await session.get(Product, product_id)
+        if not product:
+            return False
+            
+        # Check if product is used in any orders
+        link_check = await session.execute(
+            select(OrderProductLink.id).where(OrderProductLink.product_id == product_id).limit(1)
+        )
+        has_orders = link_check.scalar_one_or_none() is not None
+        
+        if has_orders:
+            raise ValueError("Товар используется в заказах. Снимите его с публикации вместо удаления.")
+            
+        # Delete gallery images
+        await session.execute(
+            sa.delete(ProductImage).where(ProductImage.product_id == product_id)
+        )
+        
+        # Delete tag links explicitly to avoid async lazy-load issues on relationship mutation.
+        await session.execute(
+            sa.delete(ProductTagLink).where(ProductTagLink.product_id == product_id)
+        )
+        
+        await session.delete(product)
+        await session.commit()
+        return True

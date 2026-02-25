@@ -1,4 +1,5 @@
 import pytest
+from sqlmodel import select
 
 from core.config import settings
 from models import Customer, CustomerType, Order, OrderStatus
@@ -142,3 +143,40 @@ async def test_manager_customer_patch_rejects_invalid_iban(async_client, db):
     detail = patch_resp.json()["detail"]
     assert detail["error_code"] == "validation_error"
     assert "iban" in detail["field_errors"]
+
+
+@pytest.mark.asyncio
+async def test_manager_customer_delete_blocked_if_has_orders(async_client, db):
+    headers = await _auth_headers(async_client)
+    customer = Customer(name="Delete Blocked", phone="+375299001122", type=CustomerType.individual)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    db.add(Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD))
+    await db.commit()
+
+    resp = await async_client.delete(f"/api/manager/customers/{customer.id}", headers=headers)
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert detail["error_code"] == "bad_request"
+    assert detail["message"] == "Невозможно удалить клиента, так как у него есть связанные заказы."
+
+    still_exists = await db.get(Customer, customer.id)
+    assert still_exists is not None
+
+
+@pytest.mark.asyncio
+async def test_manager_customer_delete_success_without_orders(async_client, db):
+    headers = await _auth_headers(async_client)
+    customer = Customer(name="Delete OK", phone="+375299112233", type=CustomerType.individual)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    resp = await async_client.delete(f"/api/manager/customers/{customer.id}", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+
+    result = await db.execute(select(Customer).where(Customer.id == customer.id))
+    assert result.scalar_one_or_none() is None

@@ -99,6 +99,18 @@ const saveOrder = async (payload: { orderId: number; data: ManagerOrderUpdatePay
   }
 };
 
+const handleOrderDeleted = (orderId: number) => {
+  drawerOpen.value = false;
+  if (selectedOrder.value?.id === orderId) {
+    selectedOrder.value = null;
+  }
+  setToast('Сделка удалена');
+  const calendarApi = calendarRef.value?.getApi();
+  if (calendarApi) {
+    calendarApi.refetchEvents();
+  }
+};
+
 const fetchEvents: EventSourceFunc = async (fetchInfo, successCallback, failureCallback) => {
   isLoading.value = true;
   error.value = null;
@@ -186,6 +198,7 @@ const calendarOptions = ref<CalendarOptions>({
       :form-error="orderFormError"
       :saving="saving"
       @save="saveOrder"
+      @deleted="handleOrderDeleted"
     />
   </div>
 </template>

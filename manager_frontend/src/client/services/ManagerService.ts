@@ -160,6 +160,26 @@ export class ManagerService {
         });
     }
     /**
+     * Delete Customer For Manager
+     * @param customerId
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static deleteManagerCustomer(
+        customerId: number,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/customers/{customer_id}',
+            path: {
+                'customer_id': customerId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Get Customer Docs For Manager
      * @param customerId
      * @returns ManagerCustomerDocumentListResponse Successful Response
@@ -199,6 +219,26 @@ export class ManagerService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Delete Product
+     * @param productId
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static deleteManagerProduct(
+        productId: number,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/products/{product_id}',
+            path: {
+                'product_id': productId,
+            },
             errors: {
                 422: `Validation Error`,
             },
