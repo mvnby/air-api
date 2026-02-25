@@ -904,7 +904,12 @@ class OrderService:
             "is_on_hold": bool(order.is_on_hold),
             "on_hold_reason": order.on_hold_reason,
             "measurement_required": bool(order.measurement_required),
+            "measurer_id": order.measurer_id,
+            "measurement_result": order.measurement_result,
+            "proposal_status": order.proposal_status or "draft",
             "proposal_sent_at": order.proposal_sent_at,
+            "equipment_status": getattr(order.equipment_status, "value", str(order.equipment_status)) if order.equipment_status else "pending",
+            "standard_install_kit_issued": bool(order.standard_install_kit_issued),
             "customer": OrderService._map_customer_brief(order.customer),
             "installer_id": order.installers[0].installer_id if getattr(order, "installers", None) else None,
             "installer": {
@@ -1155,6 +1160,16 @@ class OrderService:
             order.proposal_status = payload.proposal_status
         if "proposal_sent_at" in fields_set:
             order.proposal_sent_at = OrderService._normalize_naive_datetime(payload.proposal_sent_at)
+        
+        # Equipment & Installation
+        if "equipment_status" in fields_set and payload.equipment_status is not None:
+            from models.common import EquipmentStatus
+            try:
+                order.equipment_status = EquipmentStatus(payload.equipment_status)
+            except ValueError as exc:
+                raise ValueError(f"Invalid equipment_status: {payload.equipment_status}") from exc
+        if "standard_install_kit_issued" in fields_set and payload.standard_install_kit_issued is not None:
+            order.standard_install_kit_issued = payload.standard_install_kit_issued
         # Auto-set closed_at when transitioning to CLOSED
         if "status" in fields_set and order.status == OrderStatus.CLOSED and not order.closed_at:
             order.closed_at = datetime.now()

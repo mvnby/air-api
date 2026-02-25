@@ -144,7 +144,7 @@ const generateDocument = async (type: string) => {
   <!-- ZONE 1: Timeline -->
   <section class="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm">
     <div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-        <h3 class="text-lg font-bold text-slate-800 font-['Space_Grotesk']">Зона 1: Хронология выездов</h3>
+        <h3 class="text-lg font-bold text-slate-800 font-['Space_Grotesk']">Хронология выездов</h3>
         <button v-if="!showAddStage" class="btn-mini" @click="showAddStage = true">+ Добавить выезд</button>
     </div>
 
@@ -200,13 +200,13 @@ const generateDocument = async (type: string) => {
 
   <!-- ZONE 2: Picking List -->
   <section class="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm">
-      <div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-          <h3 class="text-lg font-bold text-slate-800 font-['Space_Grotesk']">Зона 2: Склад и Комплектация</h3>
+      <div class="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 border-b border-slate-100 pb-3">
+          <h3 class="text-lg font-bold text-slate-800 font-['Space_Grotesk']">Склад и комплектация</h3>
           
-          <div class="flex items-center gap-2 border border-slate-300 bg-slate-50 rounded-lg p-1">
-              <button class="px-3 py-1 rounded text-xs font-medium transition-colors" :class="order.equipment_status === 'pending' ? 'bg-red-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'" @click="updateEquipmentStatus('pending')">🔴 Не собрано</button>
-              <button class="px-3 py-1 rounded text-xs font-medium transition-colors" :class="order.equipment_status === 'reserved' ? 'bg-amber-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'" @click="updateEquipmentStatus('reserved')">🟡 Забронировано</button>
-              <button class="px-3 py-1 rounded text-xs font-medium transition-colors" :class="order.equipment_status === 'issued' ? 'bg-teal-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'" @click="updateEquipmentStatus('issued')">🟢 Выдано бригаде</button>
+          <div class="flex flex-wrap items-center gap-2 border border-slate-300 bg-slate-50 rounded-lg p-1 mt-3 md:mt-0 w-full md:w-auto">
+              <button class="px-3 py-1 flex-1 md:flex-none justify-center rounded text-xs font-medium transition-colors" :class="order.equipment_status === 'pending' ? 'bg-red-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'" @click="updateEquipmentStatus('pending')">🔴 Не собрано</button>
+              <button class="px-3 py-1 flex-1 md:flex-none justify-center rounded text-xs font-medium transition-colors" :class="order.equipment_status === 'reserved' ? 'bg-amber-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'" @click="updateEquipmentStatus('reserved')">🟡 Забронировано</button>
+              <button class="px-3 py-1 flex-1 md:flex-none justify-center rounded text-xs font-medium transition-colors" :class="order.equipment_status === 'issued' ? 'bg-teal-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'" @click="updateEquipmentStatus('issued')">🟢 Выдано бригаде</button>
           </div>
       </div>
 
@@ -229,7 +229,7 @@ const generateDocument = async (type: string) => {
   <!-- ZONE 3: Finance -->
   <section class="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden flex flex-col md:flex-row">
       <div class="flex-1 p-5 border-b md:border-b-0 md:border-r border-slate-200 bg-slate-50">
-          <h3 class="text-lg font-bold text-slate-800 font-['Space_Grotesk'] mb-4">Зона 3: Финансы</h3>
+          <h3 class="text-lg font-bold text-slate-800 font-['Space_Grotesk'] mb-4">Финансы</h3>
           <div class="mb-4 text-center border border-slate-200 rounded-xl py-6 bg-white shadow-inner">
               <p class="text-sm font-medium text-slate-500 uppercase tracking-wide">Остаток к оплате</p>
               <p class="text-4xl font-black mt-2 tracking-tight" :class="(order.balance_due || 0) > 0 ? 'text-red-500' : 'text-teal-600'">
