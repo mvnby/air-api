@@ -909,45 +909,43 @@ watch(
         class="mt-8"
       />
 
-      <section v-if="order && status !== 'execution'" class="mt-6">
-        <div class="mb-2 flex items-center justify-between">
-          <h3 class="text-lg flex gap-2 items-center font-semibold font-['Space_Grotesk'] text-slate-800">
-             <span class="material-icons-round text-teal-600">account_balance_wallet</span> Оплаты
-          </h3>
+      <section v-if="order && status !== 'execution'" class="mt-6 p-5 rounded-2xl border border-slate-200 bg-slate-50 shadow-sm">
+        <h3 class="text-lg flex gap-2 items-center font-semibold font-['Space_Grotesk'] text-slate-800 mb-4">
+            <span class="material-icons-round text-teal-600">account_balance_wallet</span> Оплаты
+        </h3>
+        
+        <div class="mb-4 text-center border border-slate-200 rounded-xl py-6 bg-white shadow-inner">
+            <p class="text-sm font-medium text-slate-500 uppercase tracking-wide">Остаток к оплате</p>
+            <p class="text-4xl font-black mt-2 tracking-tight" :class="balanceDuePreview > 0 ? 'text-red-500' : 'text-teal-600'">
+                {{ formatMoney(balanceDuePreview) }}
+            </p>
         </div>
         
-        <!-- List of Payments -->
-        <div v-if="payments.length" class="space-y-2 mb-4">
-          <div v-for="payment in payments" :key="payment.id" class="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-3">
-             <div>
-                <div class="font-medium text-gray-900">{{ formatMoney(payment.amount) }}</div>
-                <div class="text-xs text-gray-500">{{ new Date(payment.date).toLocaleDateString() }} · {{ payment.type === 'prepayment' ? 'Предоплата' : 'Постоплата' }}</div>
-             </div>
-             <button class="flex h-8 w-8 items-center justify-center rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors" @click="deletePayment(payment.id)" title="Удалить платеж">
-                <span class="material-icons-round text-[18px]">delete</span>
-             </button>
-          </div>
+        <div class="flex items-end gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+            <label class="flex-1 field-label !mb-0 text-xs">Внести сумму
+                <input v-model.number="newPaymentAmount" type="number" min="0" class="field-input mt-1 shadow-sm" placeholder="0.00" />
+            </label>
+            <label class="w-1/3 field-label !mb-0 text-xs">Тип
+                <select v-model="newPaymentType" class="field-input mt-1 shadow-sm">
+                    <option value="prepayment">Аванс</option>
+                    <option value="postpayment">Доплата</option>
+                </select>
+            </label>
+            <button class="btn-mini h-[38px] w-[100px]" :disabled="!newPaymentAmount || isAddingPayment" @click="addPayment">Внести</button>
         </div>
-        <div v-else class="text-sm text-gray-500 italic py-3 text-center rounded-xl border border-dashed border-gray-200 mb-4">
-            Нет оплат
-        </div>
-        
-        <!-- Add Payment Form -->
-        <div class="flex items-end gap-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
-           <label class="flex-1 field-label !mb-0">
-              Сумма
-              <input v-model.number="newPaymentAmount" type="number" min="0" class="field-input mt-1" placeholder="0.00" />
-           </label>
-           <label class="flex-1 field-label !mb-0">
-              Тип
-              <select v-model="newPaymentType" class="field-input mt-1">
-                 <option value="prepayment">Предоплата</option>
-                 <option value="postpayment">Постоплата</option>
-              </select>
-           </label>
-           <button class="btn-mini h-[38px]" :disabled="!newPaymentAmount || isAddingPayment" @click="addPayment">
-              Добавить
-           </button>
+
+        <div class="mt-4 space-y-2 max-h-32 overflow-y-auto pr-1">
+            <div v-for="p in payments" :key="p.id" class="flex justify-between items-center text-xs py-2 px-3 rounded-lg bg-white border border-slate-100 shadow-sm">
+                <span class="text-slate-500">{{ new Date(p.date).toLocaleDateString() }}</span>
+                <span class="font-bold text-slate-800">{{ formatMoney(p.amount) }}</span>
+                <span class="text-slate-400 w-16 text-right">{{ p.type === 'prepayment' ? 'Аванс' : 'Доплата' }}</span>
+                <button class="flex h-6 w-6 ml-2 items-center justify-center rounded text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors" @click="deletePayment(p.id)" title="Удалить платеж">
+                    <span class="material-icons-round text-[14px]">delete</span>
+                </button>
+            </div>
+            <div v-if="!payments.length" class="text-sm text-gray-500 italic py-3 text-center rounded-xl border border-dashed border-gray-200">
+                Нет оплат
+            </div>
         </div>
       </section>
 
