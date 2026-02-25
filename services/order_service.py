@@ -906,7 +906,7 @@ class OrderService:
             "measurement_required": bool(order.measurement_required),
             "measurer_id": order.measurer_id,
             "measurement_result": order.measurement_result,
-            "proposal_status": order.proposal_status,
+            "proposal_status": order.proposal_status or "draft",
             "proposal_sent_at": order.proposal_sent_at,
             "equipment_status": getattr(order.equipment_status, "value", str(order.equipment_status)) if order.equipment_status else "pending",
             "standard_install_kit_issued": bool(order.standard_install_kit_issued),
