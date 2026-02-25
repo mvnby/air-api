@@ -21,6 +21,8 @@ export type ManagerOrderUpdatePayload = {
     reject_reason?: (string | null);
     is_on_hold?: (boolean | null);
     on_hold_reason?: (string | null);
+    equipment_status?: (string | null);
+    standard_install_kit_issued?: (boolean | null);
     customer_id?: (number | null);
     customer_type?: (string | null);
     customer_name?: (string | null);

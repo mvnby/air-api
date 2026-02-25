@@ -799,6 +799,66 @@ class OrderService:
         return await OrderDAO.get_all(session)
 
     @staticmethod
+    async def add_order_stage(session: AsyncSession, order_id: int, payload: Any):
+        from models import OrderWorkStage
+        stage = OrderWorkStage(
+            order_id=order_id,
+            name=payload.name,
+            status=payload.status or "planned",
+            start_time=payload.start_time,
+            end_time=payload.end_time,
+            installer_id=payload.installer_id,
+            manager_comment=payload.manager_comment,
+            installer_report=payload.installer_report
+        )
+        session.add(stage)
+        await session.commit()
+        return await OrderService.get_order_detail_for_manager(session, order_id)
+
+    @staticmethod
+    async def update_order_stage(session: AsyncSession, order_id: int, stage_id: int, payload: Any):
+        from models import OrderWorkStage, Order, OrderStatus, OrderStageStatus
+        stage = await session.get(OrderWorkStage, stage_id)
+        if not stage or stage.order_id != order_id:
+            raise ValueError("Stage not found")
+            
+        update_data = payload.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(stage, key, value)
+            
+        session.add(stage)
+        await session.flush()
+        
+        # Auto-pause logic
+        order = await session.get(Order, order_id)
+        if order:
+            await session.refresh(order, ['work_stages'])
+            all_completed = True
+            for st in order.work_stages:
+                if st.status != OrderStageStatus.COMPLETED and st.status != OrderStageStatus.CANCELED:
+                    all_completed = False
+                    break
+            
+            # If all are completed/canceled and balance > 0 and not closed
+            if all_completed and order.work_stages and order.balance_due > 0 and order.status != OrderStatus.CLOSED:
+                order.is_on_hold = True
+                order.on_hold_reason = "Все запланированные этапы завершены, ожидается оплата или следующий этап"
+                session.add(order)
+                
+        await session.commit()
+        return await OrderService.get_order_detail_for_manager(session, order_id)
+
+    @staticmethod
+    async def delete_order_stage(session: AsyncSession, order_id: int, stage_id: int):
+        from models import OrderWorkStage
+        stage = await session.get(OrderWorkStage, stage_id)
+        if not stage or stage.order_id != order_id:
+            raise ValueError("Stage not found")
+        await session.delete(stage)
+        await session.commit()
+        return await OrderService.get_order_detail_for_manager(session, order_id)
+
+    @staticmethod
     async def update_status(session: AsyncSession, order_id: int, new_status: Any) -> bool:
         """Update order status."""
         return await OrderDAO.update_status(session, order_id, new_status)

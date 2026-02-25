@@ -4,8 +4,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import BigInteger, Column, JSON, String
 from sqlmodel import Field, Relationship, SQLModel
 
-from .common import ClosingResult, LeadSource, OrderStatus, PaymentType
-
+from .common import ClosingResult, EquipmentStatus, LeadSource, OrderStageStatus, OrderStatus, PaymentType
 
 class Installer(SQLModel, table=True):
     __tablename__ = "installers"
@@ -89,6 +88,25 @@ class OrderServiceLink(SQLModel, table=True):
     service: "Service" = Relationship(back_populates="order_links")
 
 
+class OrderWorkStage(SQLModel, table=True):
+    __tablename__ = "order_work_stage"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    order_id: int = Field(foreign_key="order.id", index=True)
+    
+    name: str  # "Закладка трассы", "Монтаж"
+    status: OrderStageStatus = Field(default=OrderStageStatus.PLANNED, sa_column=Column(String, index=True))
+    
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    
+    installer_id: Optional[int] = Field(default=None, foreign_key="installers.id") 
+    manager_comment: Optional[str] = None
+    installer_report: Optional[str] = None
+
+    order: "Order" = Relationship(back_populates="work_stages")
+    installer: Optional["Installer"] = Relationship()
+
+
 class Order(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
@@ -114,6 +132,7 @@ class Order(SQLModel, table=True):
     balance_due: float = Field(default=0.0)
     is_paid: bool = Field(default=False) # Will be deprecated but left for now
 
+
     # --- Closing ---
     closing_result: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True, index=True))
     reject_reason: Optional[str] = Field(default=None)
@@ -132,22 +151,11 @@ class Order(SQLModel, table=True):
 
     # --- Internal: Execution stage ---
     works_plan: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    
+    # Store equipment state
+    equipment_status: EquipmentStatus = Field(default=EquipmentStatus.PENDING, sa_column=Column(String, default="pending", index=True))
+    standard_install_kit_issued: bool = Field(default=False)
 
-    # --- Closing ---
-    closing_result: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True, index=True))
-    reject_reason: Optional[str] = Field(default=None)
-
-    # --- Pause / On Hold ---
-    is_on_hold: bool = Field(default=False, index=True)
-    on_hold_reason: Optional[str] = Field(default=None)
-
-    # --- Internal: Negotiation stage ---
-    measurement_required: bool = Field(default=False)
-    measurement_date: Optional[datetime] = None   # renamed from assessment_date
-    proposal_sent_at: Optional[datetime] = None
-
-    # --- Internal: Execution stage ---
-    works_plan: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
@@ -160,6 +168,13 @@ class Order(SQLModel, table=True):
     customer: Optional["Customer"] = Relationship(back_populates="orders")
 
     product_links: List[OrderProductLink] = Relationship(
+        back_populates="order",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin",
+        },
+    )
+    work_stages: List[OrderWorkStage] = Relationship(
         back_populates="order",
         sa_relationship_kwargs={
             "cascade": "all, delete-orphan",

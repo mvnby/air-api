@@ -7,6 +7,8 @@ import type { ManagerOrderDetailResponse } from '../models/ManagerOrderDetailRes
 import type { ManagerOrderDocumentResponse } from '../models/ManagerOrderDocumentResponse';
 import type { ManagerOrderListResponse } from '../models/ManagerOrderListResponse';
 import type { ManagerOrderUpdatePayload } from '../models/ManagerOrderUpdatePayload';
+import type { OrderWorkStageCreatePayload } from '../models/OrderWorkStageCreatePayload';
+import type { OrderWorkStageUpdatePayload } from '../models/OrderWorkStageUpdatePayload';
 import type { PaymentCreatePayload } from '../models/PaymentCreatePayload';
 import type { PaymentResponse } from '../models/PaymentResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -178,6 +180,80 @@ export class ManagerOrdersService {
             path: {
                 'order_id': orderId,
                 'payment_id': paymentId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Manager Order Stage
+     * @param orderId
+     * @param requestBody
+     * @returns ManagerOrderDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static createManagerOrderStage(
+        orderId: number,
+        requestBody: OrderWorkStageCreatePayload,
+    ): CancelablePromise<ManagerOrderDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/stages',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Update Manager Order Stage
+     * @param orderId
+     * @param stageId
+     * @param requestBody
+     * @returns ManagerOrderDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static updateManagerOrderStage(
+        orderId: number,
+        stageId: number,
+        requestBody: OrderWorkStageUpdatePayload,
+    ): CancelablePromise<ManagerOrderDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/orders/{order_id}/stages/{stage_id}',
+            path: {
+                'order_id': orderId,
+                'stage_id': stageId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Delete Manager Order Stage
+     * @param orderId
+     * @param stageId
+     * @returns ManagerOrderDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static deleteManagerOrderStage(
+        orderId: number,
+        stageId: number,
+    ): CancelablePromise<ManagerOrderDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/orders/{order_id}/stages/{stage_id}',
+            path: {
+                'order_id': orderId,
+                'stage_id': stageId,
             },
             errors: {
                 422: `Validation Error`,

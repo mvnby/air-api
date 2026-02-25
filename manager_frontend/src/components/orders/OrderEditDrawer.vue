@@ -4,6 +4,7 @@ import { useDebounceFn } from '@vueuse/core';
 import { api } from '../../api';
 import DateTimeField from '../ui/DateTimeField.vue';
 import CustomerSummaryCard from '../customers/CustomerSummaryCard.vue';
+import DealExecutionTab from './DealExecutionTab.vue';
 import type {
   ManagerOrderDetailResponse,
   ManagerOrderUpdatePayload,
@@ -14,7 +15,7 @@ import type {
   PaymentResponse,
 } from '../../client';
 import { ManagerDocsService, ManagerOrdersService } from '../../client';
-import { STATUS_LABELS, STATUS_ORDER, formatMoney } from './order-utils';
+import { formatMoney } from './order-utils';
 import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../../utils/datetime';
 
 import { getApiErrorMessage } from '../../utils/api-errors';
@@ -88,6 +89,19 @@ const setToast = (message: string, type: 'success' | 'error' = 'success') => {
   window.setTimeout(() => {
     if (toast.value === message) toast.value = '';
   }, 3000);
+};
+
+const toggleHold = async () => {
+    if (!props.order) return;
+    const hold = !props.order.is_on_hold;
+    try {
+        await api.patchManagerOrder(props.order.id, { is_on_hold: hold, on_hold_reason: hold ? 'Переговоры / Ручная пауза' : '' });
+        props.order.is_on_hold = hold;
+        props.order.on_hold_reason = hold ? 'Переговоры / Ручная пауза' : '';
+        emit('save', { orderId: props.order.id, data: { status: props.order.status } });
+    } catch {
+        setToast('Ошибка паузы', 'error');
+    }
 };
 
 const isGeneratingDoc = ref(false);
@@ -620,38 +634,24 @@ watch(
     </Transition>
     <div class="flex-1 bg-black/60" @click="closeDrawer" />
     <aside class="h-full w-full max-w-3xl overflow-y-auto bg-white p-6 text-gray-900 border-l border-gray-200 shadow-2xl">
-      <header class="mb-4 flex items-center justify-between">
-        <h2 class="text-xl font-semibold font-['Space_Grotesk']">Редактирование заказа #{{ order?.id }}</h2>
-        <button class="btn-mini-outline" @click="closeDrawer">Закрыть</button>
+      <header class="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+            <h2 class="text-xl font-semibold font-['Space_Grotesk']">Редактирование заказа #{{ order?.id }}</h2>
+            <button v-if="order" type="button" @click="toggleHold" class="text-xs px-2 py-1 rounded" :class="order.is_on_hold ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'">
+                {{ order.is_on_hold ? 'Снять с паузы' : 'Поставить на паузу' }}
+            </button>
+        </div>
+        <button class="btn-mini-outline" type="button" @click="closeDrawer">Закрыть</button>
       </header>
 
       <p v-if="displayFormError" class="mb-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
         {{ displayFormError }}
       </p>
 
-      <section class="grid gap-3 md:grid-cols-2">
-        <label class="field-label">
-          Статус
-          <select v-model="status" class="field-input" :class="getFieldError('status') ? 'border-red-500 focus:outline-red-400' : ''">
-            <option v-for="statusKey in STATUS_ORDER" :key="statusKey" :value="statusKey">
-              {{ STATUS_LABELS[statusKey] || statusKey }}
-            </option>
-          </select>
-          <span v-if="getFieldError('status')" class="text-xs text-red-300">{{ getFieldError('status') }}</span>
-        </label>
-        <label class="field-label">
-          Оплата
-          <select v-model="isPaid" class="field-input" :class="getFieldError('is_paid') ? 'border-red-500 focus:outline-red-400' : ''">
-            <option :value="false">Ожидает оплаты</option>
-            <option :value="true">Оплачен</option>
-          </select>
-          <span v-if="getFieldError('is_paid')" class="text-xs text-red-300">{{ getFieldError('is_paid') }}</span>
-        </label>
-        <DateTimeField v-model="nextFollowupDate" label="Следующее касание" :error="getFieldError('next_followup_date')" />
-      </section>
+
 
       <!-- Зона 1: Планирование (Measurement & Logistics) -->
-      <section v-if="status === 'negotiation' || status === 'execution'" class="mt-6 rounded-2xl bg-blue-50/30 border border-blue-100 p-4">
+      <section v-if="status === 'negotiation'" class="mt-6 rounded-2xl bg-blue-50/30 border border-blue-100 p-4">
         <h3 class="text-lg font-semibold font-['Space_Grotesk'] mb-4 text-blue-900 border-b border-blue-100 pb-2">Зона 1: Планирование (Замер и Монтаж)</h3>
         
         <label class="flex items-center gap-2 cursor-pointer mb-4">
@@ -707,20 +707,19 @@ watch(
         </label>
       </section>
 
-      <section class="mt-6 rounded-2xl bg-gray-100 p-4">
-        <div class="mb-3 flex items-center justify-between gap-3">
-          <h3 class="text-lg font-semibold font-['Space_Grotesk']">Клиент</h3>
-          <div class="flex flex-wrap gap-2">
-            <button class="btn-mini-outline" :disabled="!customer?.id" @click="showCustomerModal = true">Подробнее</button>
-            <button class="btn-mini-outline" :disabled="!customer?.id" @click="openCustomerProfile">Открыть карточку</button>
+      <section class="mt-4 flex items-center justify-between gap-4 rounded-xl bg-slate-100 px-4 py-3 border border-slate-200">
+        <div class="flex-1 overflow-hidden">
+          <div class="truncate font-semibold text-slate-800">
+            {{ customer?.full_legal_name || customer?.name || 'Без имени' }}
+            <span v-if="customer?.phone" class="text-slate-500 text-sm font-normal ml-2">{{ customer.phone }}</span>
           </div>
         </div>
-        <CustomerSummaryCard :customer="customer" mode="compact" :show-open-button="false" />
+        <button class="btn-mini-outline bg-white shrink-0" :disabled="!customer?.id" @click="showCustomerModal = true">Подробнее</button>
       </section>
 
-      <!-- Зона 2: Смета -->
+      <!-- Смета -->
       <div class="mt-8 rounded-2xl bg-gray-50/50 border border-gray-200 p-4">
-        <h3 class="text-xl font-bold font-['Space_Grotesk'] text-gray-900 border-b border-gray-200 pb-2 mb-4">Зона 2: Смета</h3>
+        <h3 class="text-xl font-bold font-['Space_Grotesk'] text-gray-900 border-b border-gray-200 pb-2 mb-4">Смета: Оборудование и услуги</h3>
         
         <section class="mt-2">
           <div class="mb-2 flex items-center justify-between">
@@ -806,7 +805,7 @@ watch(
       </div>
 
       <!-- Зона 3: Экшн-зона (Proposal & Docs) -->
-      <section v-if="status === 'negotiation' || status === 'execution' || status === 'closed'" class="mt-8 rounded-2xl bg-amber-50/30 border border-amber-100 p-4">
+      <section v-if="status === 'negotiation' || status === 'closed'" class="mt-8 rounded-2xl bg-amber-50/30 border border-amber-100 p-4">
         <h3 class="text-lg font-semibold font-['Space_Grotesk'] text-amber-900 mb-4 border-b border-amber-200 pb-2">Зона 3: Экшн-зона (Согласование)</h3>
         
         <div v-if="status === 'negotiation'" class="mb-6">
@@ -901,7 +900,16 @@ watch(
       </section>
 
 
-      <section v-if="order" class="mt-6">
+      <!-- Execution Tab UI -->
+      <DealExecutionTab 
+        v-if="status === 'execution' && order" 
+        :order="order"
+        @refresh="emit('save', { orderId: order.id, data: { status: 'execution' } }) /* triggering parent reload */"
+        @close="closeDrawer"
+        class="mt-8"
+      />
+
+      <section v-if="order && status !== 'execution'" class="mt-6">
         <div class="mb-2 flex items-center justify-between">
           <h3 class="text-lg flex gap-2 items-center font-semibold font-['Space_Grotesk'] text-slate-800">
              <span class="material-icons-round text-teal-600">account_balance_wallet</span> Оплаты

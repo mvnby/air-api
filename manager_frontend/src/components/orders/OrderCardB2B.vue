@@ -45,7 +45,7 @@ const onDragStart = () => {
         Счет:
         <span :class="order.is_paid ? 'text-emerald-300' : 'text-amber-300'">{{ order.is_paid ? 'Оплачен' : 'Ожидает оплаты' }}</span>
       </p>
-      <p class="font-semibold text-teal-700 dark:text-teal-400">Маржа: {{ formatMoney(order.margin) }}</p>
+      <p class="font-semibold" :class="order.margin > 0 ? 'text-teal-700 dark:text-teal-400' : 'text-gray-400 dark:text-slate-500'">Маржа: {{ formatMoney(order.margin) }}</p>
       <p v-if="isOverdue(order)" class="font-semibold text-red-400">Просрочено касание</p>
     </div>
 

@@ -310,6 +310,9 @@ class ManagerOrderListItemResponse(BaseModel):
     installer_id: Optional[int] = None
     installer: Optional[ManagerInstallerResponse] = None
     # New fields
+    equipment_status: str = "pending"
+    standard_install_kit_issued: bool = False
+    
     closing_result: Optional[str] = None
     reject_reason: Optional[str] = None
     is_on_hold: bool = False
@@ -389,11 +392,47 @@ class PaymentResponse(BaseModel):
     created_at: datetime
 
 
+
+class OrderWorkStageCreatePayload(BaseModel):
+    name: str
+    status: Optional[str] = "planned"
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    installer_id: Optional[int] = None
+    manager_comment: Optional[str] = None
+    installer_report: Optional[str] = None
+
+
+class OrderWorkStageUpdatePayload(BaseModel):
+    name: Optional[str] = None
+    status: Optional[str] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    installer_id: Optional[int] = None
+    manager_comment: Optional[str] = None
+    installer_report: Optional[str] = None
+
+
+class OrderWorkStageResponse(BaseModel):
+    id: int
+    order_id: int
+    name: str
+    status: str
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    installer_id: Optional[int] = None
+    manager_comment: Optional[str] = None
+    installer_report: Optional[str] = None
+    installer: Optional[ManagerInstallerResponse] = None
+
+
+
 class ManagerOrderDetailResponse(ManagerOrderListItemResponse):
     product_lines: List[OrderProductLineResponse] = []
     service_lines: List[OrderServiceLineResponse] = []
     documents: List[ManagerOrderDocumentItem] = []
     payments: List[PaymentResponse] = []
+    work_stages: List[OrderWorkStageResponse] = []
 
 
 class ManagerOrderListResponse(BaseModel):
@@ -441,6 +480,9 @@ class ManagerOrderUpdatePayload(BaseModel):
     is_on_hold: Optional[bool] = None
     on_hold_reason: Optional[str] = None
     
+    # Equipment
+    equipment_status: Optional[str] = None
+    standard_install_kit_issued: Optional[bool] = None
 
     # Customer Details
     customer_id: Optional[int] = None
