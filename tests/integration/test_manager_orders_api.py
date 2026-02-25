@@ -1,5 +1,6 @@
 import pytest
 from datetime import datetime, timedelta
+from sqlmodel import select
 
 from core.config import settings
 from models import (
