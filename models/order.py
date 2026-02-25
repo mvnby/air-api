@@ -132,6 +132,7 @@ class Order(SQLModel, table=True):
     balance_due: float = Field(default=0.0)
     is_paid: bool = Field(default=False) # Will be deprecated but left for now
 
+
     # --- Closing ---
     closing_result: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True, index=True))
     reject_reason: Optional[str] = Field(default=None)

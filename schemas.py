@@ -392,6 +392,7 @@ class PaymentResponse(BaseModel):
     created_at: datetime
 
 
+
 class OrderWorkStageCreatePayload(BaseModel):
     name: str
     status: Optional[str] = "planned"
@@ -423,6 +424,7 @@ class OrderWorkStageResponse(BaseModel):
     manager_comment: Optional[str] = None
     installer_report: Optional[str] = None
     installer: Optional[ManagerInstallerResponse] = None
+
 
 
 class ManagerOrderDetailResponse(ManagerOrderListItemResponse):

@@ -179,6 +179,7 @@ async def delete_manager_order_payment(
         ) from exc
 
 
+
 @router.post(
     "/{order_id}/stages",
     response_model=ManagerOrderDetailResponse,
@@ -229,4 +230,5 @@ async def delete_manager_order_stage(
         return await OrderService.delete_order_stage(session, order_id, stage_id)
     except ValueError as exc:
         raise manager_http_error(status_code=400, endpoint=DELETE_MANAGER_ORDER_STAGE, error_code=BAD_REQUEST, message=str(exc)) from exc
+
 
