@@ -1508,7 +1508,16 @@ class OrderService:
         Delete an order and all cascading dependencies from DB.
         Google Drive files are deleted on a best-effort basis and do not block DB deletion.
         """
-        from models.order import Order
+        import sqlalchemy as sa
+        from models.order import (
+            Order,
+            OrderDocument,
+            OrderInstaller,
+            OrderProductLink,
+            OrderServiceLink,
+            OrderWorkStage,
+            Payment,
+        )
         from services.document_service import DocumentService
         from services.google_service import get_google_service
         
@@ -1530,9 +1539,14 @@ class OrderService:
                     extra={"order_id": order_id, "doc_id": doc.id, "google_file_id": doc.google_file_id, "error": str(exc)},
                 )
 
-        # The Order's relationships with cascade="all, delete-orphan" will
-        # handle the rest of the related items (product_links, payments, stages, etc)
-        await session.delete(order)
+        # Explicit SQL deletes avoid async lazy-load cascade pitfalls on AsyncSession.
+        await session.execute(sa.delete(OrderProductLink).where(OrderProductLink.order_id == order_id))
+        await session.execute(sa.delete(OrderServiceLink).where(OrderServiceLink.order_id == order_id))
+        await session.execute(sa.delete(OrderWorkStage).where(OrderWorkStage.order_id == order_id))
+        await session.execute(sa.delete(OrderInstaller).where(OrderInstaller.order_id == order_id))
+        await session.execute(sa.delete(Payment).where(Payment.order_id == order_id))
+        await session.execute(sa.delete(OrderDocument).where(OrderDocument.order_id == order_id))
+        await session.execute(sa.delete(Order).where(Order.id == order_id))
         await session.commit()
         
         return True
