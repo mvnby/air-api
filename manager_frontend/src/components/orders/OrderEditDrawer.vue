@@ -634,14 +634,30 @@ watch(
     </Transition>
     <div class="flex-1 bg-black/60" @click="closeDrawer" />
     <aside class="h-full w-full max-w-3xl overflow-y-auto bg-white p-6 text-gray-900 border-l border-gray-200 shadow-2xl">
-      <header class="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div class="flex items-center gap-3">
-            <h2 class="text-xl font-semibold font-['Space_Grotesk']">Редактирование заказа #{{ order?.id }}</h2>
-            <button v-if="order" type="button" @click="toggleHold" class="text-xs px-2 py-1 rounded" :class="order.is_on_hold ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'">
-                {{ order.is_on_hold ? 'Снять с паузы' : 'Поставить на паузу' }}
+      <header class="mb-4 flex items-start justify-between border-b border-gray-100 pb-4">
+        <div class="flex-1">
+          <div class="flex items-center gap-3 mb-1">
+            <h2 class="text-xl font-semibold font-['Space_Grotesk'] text-gray-900">№{{ order?.id }} {{ customer?.full_legal_name || customer?.name || 'Без имени' }}</h2>
+            <button @click="showCustomerModal = true" class="text-xs font-medium text-teal-600 hover:text-teal-700 bg-teal-50 px-2 py-0.5 rounded flex items-center gap-1 transition-colors" :disabled="!customer?.id">
+              <span class="material-icons-round text-[14px]">info</span>
+              Подробнее
             </button>
+          </div>
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
+            <span v-if="customer?.phone" class="flex items-center gap-1"><span class="material-icons-round text-[14px]">phone</span> {{ customer.phone }}</span>
+            <span v-if="customer?.email" class="flex items-center gap-1"><span class="material-icons-round text-[14px]">email</span> {{ customer.email }}</span>
+            <span v-if="customer?.inn" class="flex items-center gap-1"><span class="font-medium text-xs">УНП</span> {{ customer.inn }}</span>
+          </div>
         </div>
-        <button class="btn-mini-outline" type="button" @click="closeDrawer">Закрыть</button>
+        
+        <div class="flex items-start gap-2 ml-4">
+          <button v-if="order" type="button" @click="toggleHold" class="text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors" :class="order.is_on_hold ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'">
+            {{ order.is_on_hold ? 'Вернуть в работу' : 'Отложить' }}
+          </button>
+          <button class="flex items-center justify-center w-8 h-8 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" type="button" @click="closeDrawer" title="Закрыть">
+            <span class="material-icons-round">close</span>
+          </button>
+        </div>
       </header>
 
       <p v-if="displayFormError" class="mb-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -650,9 +666,9 @@ watch(
 
 
 
-      <!-- Зона 1: Планирование (Measurement & Logistics) -->
+      <!-- Планирование (Measurement & Logistics) -->
       <section v-if="status === 'negotiation'" class="mt-6 rounded-2xl bg-blue-50/30 border border-blue-100 p-4">
-        <h3 class="text-lg font-semibold font-['Space_Grotesk'] mb-4 text-blue-900 border-b border-blue-100 pb-2">Зона 1: Планирование (Замер и Монтаж)</h3>
+        <h3 class="text-lg font-semibold font-['Space_Grotesk'] mb-4 text-blue-900 border-b border-blue-100 pb-2">Планирование (Замер и Монтаж)</h3>
         
         <label class="flex items-center gap-2 cursor-pointer mb-4">
           <input type="checkbox" v-model="measurementRequired" class="w-5 h-5 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
@@ -707,15 +723,7 @@ watch(
         </label>
       </section>
 
-      <section class="mt-4 flex items-center justify-between gap-4 rounded-xl bg-slate-100 px-4 py-3 border border-slate-200">
-        <div class="flex-1 overflow-hidden">
-          <div class="truncate font-semibold text-slate-800">
-            {{ customer?.full_legal_name || customer?.name || 'Без имени' }}
-            <span v-if="customer?.phone" class="text-slate-500 text-sm font-normal ml-2">{{ customer.phone }}</span>
-          </div>
-        </div>
-        <button class="btn-mini-outline bg-white shrink-0" :disabled="!customer?.id" @click="showCustomerModal = true">Подробнее</button>
-      </section>
+
 
       <!-- Смета -->
       <div class="mt-8 rounded-2xl bg-gray-50/50 border border-gray-200 p-4">
@@ -804,9 +812,9 @@ watch(
         </section>
       </div>
 
-      <!-- Зона 3: Экшн-зона (Proposal & Docs) -->
+      <!-- Экшн-зона (Proposal & Docs) -->
       <section v-if="status === 'negotiation' || status === 'closed'" class="mt-8 rounded-2xl bg-amber-50/30 border border-amber-100 p-4">
-        <h3 class="text-lg font-semibold font-['Space_Grotesk'] text-amber-900 mb-4 border-b border-amber-200 pb-2">Зона 3: Экшн-зона (Согласование)</h3>
+        <h3 class="text-lg font-semibold font-['Space_Grotesk'] text-amber-900 mb-4 border-b border-amber-200 pb-2">Согласование</h3>
         
         <div v-if="status === 'negotiation'" class="mb-6">
           <label class="field-label mb-3">

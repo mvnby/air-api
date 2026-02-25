@@ -292,6 +292,7 @@ watch(drawerOpen, (isOpen) => {
   if (!isOpen) {
     clearOrderIdFromUrl();
     openedByUrlOrderId.value = null;
+    pendingOpenOrderId.value = null;
     orderServerErrors.value = {};
     orderFormError.value = '';
   }
