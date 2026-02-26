@@ -112,7 +112,8 @@ const loadOrders = async () => {
       limit: 100,
     });
     if (requestId !== loadRequestId) return;
-    orders.value = response.items;
+    // Leads are managed in the dedicated Leads section and should not appear in Orders.
+    orders.value = response.items.filter((item) => item.status !== 'new_lead');
     if (pendingOpenOrderId.value && openedByUrlOrderId.value !== pendingOpenOrderId.value) {
       await openOrder(pendingOpenOrderId.value, false);
       openedByUrlOrderId.value = pendingOpenOrderId.value;
