@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${SKIP_MANAGER_API_SYNC:-0}" == "1" ]]; then
+  exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+STAGED_FILES="$(git diff --cached --name-only)"
+
+if ! grep -Eq '^(routers/|schemas\.py$|main\.py$)' <<<"$STAGED_FILES"; then
+  exit 0
+fi
+
+echo "[pre-commit] API surface changed, syncing OpenAPI and manager client..."
+"$REPO_ROOT/scripts/sync_manager_api_client.sh"
+git add openapi.json manager_frontend/src/client
+
+echo "[pre-commit] Synced and staged: openapi.json, manager_frontend/src/client"
+
