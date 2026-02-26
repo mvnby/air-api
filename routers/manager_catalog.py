@@ -346,7 +346,11 @@ async def import_from_onliner(
     Returns the count of successfully imported and failed products.
     """
     urls = [u.strip() for u in payload.urls if u.strip()]
-    results = await _importer.import_products_bulk(urls, with_related=payload.with_related)
+    results = await _importer.import_products_bulk(
+        urls,
+        with_related=payload.with_related,
+        update_existing=payload.update_existing,
+    )
     return OnlinerImportResultResponse(
         success_count=len(results["success"]),
         error_count=len(results["errors"]),

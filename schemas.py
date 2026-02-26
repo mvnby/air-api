@@ -985,6 +985,7 @@ class LeadsInboxListResponse(BaseModel):
 class OnlinerImportPayload(BaseModel):
     urls: List[str]
     with_related: bool = False
+    update_existing: bool = False
 
 
 class OnlinerImportResultResponse(BaseModel):
@@ -1049,4 +1050,3 @@ class ManagerTariffUpdatePayload(BaseModel):
 
 class ManagerTariffListResponse(BaseModel):
     items: List[ManagerTariffResponse]
-

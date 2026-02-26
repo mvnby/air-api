@@ -61,7 +61,7 @@ class ProductWriteService:
             payload["specs"] = normalize_specs(
                 payload["specs"],
                 wifi_tag_slugs=wifi_tag_slugs,
-                strict_wifi_from_tags=True,
+                strict_wifi_from_tags=False,
             )
 
         product = await ProductDAO.update_full(session, product_id, payload, tag_ids)

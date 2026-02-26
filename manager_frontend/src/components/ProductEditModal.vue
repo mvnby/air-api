@@ -340,7 +340,13 @@ const save = async () => {
                                             class="w-full h-[38px] border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all text-gray-900 dark:text-slate-200 shadow-inner"
                                         >
                                             <option value="" disabled>Выберите значение</option>
-                                            <option v-for="opt in specsTranslations[row.key]?.options || []" :key="opt" :value="opt">{{ opt }}</option>
+                                            <option v-for="opt in specsTranslations[row.key]?.options || []" :key="opt" :value="opt">
+                                                {{
+                                                    row.key === 'wifi_ready'
+                                                        ? (opt === 'true' ? 'Да (встроен)' : (opt === 'ready' ? 'Ready (модуль отдельно)' : 'Нет'))
+                                                        : opt
+                                                }}
+                                            </option>
                                         </select>
                                     </template>
                                     

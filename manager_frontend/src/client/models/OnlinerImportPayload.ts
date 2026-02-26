@@ -5,5 +5,6 @@
 export type OnlinerImportPayload = {
     urls: Array<string>;
     with_related?: boolean;
+    update_existing?: boolean;
 };
 

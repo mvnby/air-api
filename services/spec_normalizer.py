@@ -14,6 +14,9 @@ KEY_MAP = {
     
     # --- УПРАВЛЕНИЕ ---
     "Wi-Fi": "wifi_ready",
+    "Wi-Fi модуль": "wifi_ready",
+    "Wi-Fi module": "wifi_ready",
+    "Wi-Fi Ready": "wifi_ready",
     "Пульт дистанционного управления": "remote_control",
     "Таймер включения/выключения": "timer",
     "Регулировка направления воздушного потока": "airflow_direction",
@@ -235,13 +238,34 @@ def _classify_wifi_value(value: Any) -> str | None:
     return None
 
 
+def _resolve_dynamic_system_key(key: Any) -> str | None:
+    text = str(key or "").strip().lower().replace("ё", "е")
+    text = (
+        text.replace("‑", "-")
+        .replace("–", "-")
+        .replace("—", "-")
+        .replace("_", " ")
+    )
+    text = re.sub(r"\s+", " ", text)
+    if "wifi" in text or "wi-fi" in text or "wi fi" in text:
+        return "wifi_ready"
+    return None
+
+
 def _apply_wifi_state(
     specs: Dict[str, Any],
     wifi_tag_slugs: Optional[Sequence[str]] = None,
     strict_wifi_from_tags: bool = False,
 ) -> Dict[str, Any]:
     enriched = dict(specs)
-    raw_wifi_value = enriched.get("wifi_ready")
+    wifi_candidates = (
+        enriched.get("wifi_ready"),
+        enriched.get("wifi_module"),
+        enriched.get("wi_fi"),
+        enriched.get("wifi"),
+    )
+    wifi_kinds = [_classify_wifi_value(value) for value in wifi_candidates]
+    wifi_kinds = [kind for kind in wifi_kinds if kind is not None]
 
     # Drop stale keys and rebuild consistently.
     for key in ("wifi_ready", "wifi-builtin", "wifi-ready", "__filter_wifi", "__filter_wifi_builtin"):
@@ -270,7 +294,14 @@ def _apply_wifi_state(
         enriched["__filter_wifi_builtin"] = False
         return enriched
 
-    wifi_kind = _classify_wifi_value(raw_wifi_value)
+    wifi_kind = None
+    if "builtin" in wifi_kinds:
+        wifi_kind = "builtin"
+    elif "ready" in wifi_kinds:
+        wifi_kind = "ready"
+    elif "none" in wifi_kinds:
+        wifi_kind = "none"
+
     if wifi_kind == "builtin":
         enriched["wifi_ready"] = True
         enriched["__filter_wifi"] = True
@@ -368,6 +399,14 @@ def normalize_specs(
     for sys_key in KEY_MAP.values():
         if sys_key in new_specs:
              new_specs[sys_key] = clean_value(sys_key, new_specs[sys_key], keep_units=keep_units)
+
+    for raw_key, raw_val in old_specs.items():
+        if raw_key in KEY_MAP or not isinstance(raw_key, str):
+            continue
+        sys_key = _resolve_dynamic_system_key(raw_key)
+        if not sys_key or sys_key in new_specs:
+            continue
+        new_specs[sys_key] = clean_value(sys_key, raw_val, keep_units=keep_units)
             
     return enrich_filter_keys(
         new_specs,

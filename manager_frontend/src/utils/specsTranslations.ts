@@ -34,7 +34,7 @@ export const specsTranslations: Record<string, SpecConfig> = {
     indoor_unit_weight_kg: { label: 'Вес внутреннего блока', type: 'number', unit: 'кг' },
     outdoor_unit_weight_kg: { label: 'Вес наружного блока', type: 'number', unit: 'кг' },
     wi_fi: { label: 'Wi-Fi', type: 'boolean' },
-    wifi_ready: { label: 'Wi-Fi Ready', type: 'boolean' },
+    wifi_ready: { label: 'Wi-Fi', type: 'select', options: ['true', 'ready', 'false'] },
     color: { label: 'Цвет', type: 'text' },
     country_of_origin: { label: 'Страна-производитель', type: 'text' },
     warranty_years: { label: 'Гарантия', type: 'number', unit: 'лет' },

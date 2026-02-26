@@ -39,3 +39,26 @@ def test_compressor_type_norm_variants():
 
     on_off = normalize_specs({"inverter_type": "on/off", "inverter": False})
     assert on_off["compressor_type_norm"] == "on_off"
+
+
+def test_wifi_module_alias_sets_wifi_filter_flags():
+    specs = normalize_specs({"wifi_module": "true"})
+
+    assert specs["wifi_ready"] is True
+    assert specs["__filter_wifi"] is True
+    assert specs["__filter_wifi_builtin"] is True
+
+
+def test_wifi_ready_false_does_not_override_wifi_module_true():
+    specs = normalize_specs({"wifi_ready": False, "wifi_module": "true"})
+
+    assert specs["wifi_ready"] is True
+    assert specs["__filter_wifi"] is True
+
+
+def test_dynamic_wifi_key_mapping_from_onliner_specs():
+    specs = normalize_specs({"Wi-Fi модуль (опция)": "приобретается отдельно"})
+
+    assert specs["wifi_ready"] == "ready"
+    assert specs["__filter_wifi"] is True
+    assert specs["__filter_wifi_builtin"] is False

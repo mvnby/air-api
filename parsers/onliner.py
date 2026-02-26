@@ -5,6 +5,30 @@ from typing import Dict, Any
 from .base import BaseParser
 
 class OnlinerParser(BaseParser):
+    @staticmethod
+    def _extract_spec_value(cell) -> str:
+        # Onliner uses icon-only values for boolean fields:
+        # <span class="i-tip"></span> -> yes, <span class="i-x"></span> -> no.
+        has_true_icon = bool(
+            cell.find(
+                lambda tag: tag.has_attr("class") and "i-tip" in tag.get("class", [])
+            )
+        )
+        if has_true_icon:
+            return "да"
+
+        has_false_icon = bool(
+            cell.find(
+                lambda tag: tag.has_attr("class") and "i-x" in tag.get("class", [])
+            )
+        )
+        if has_false_icon:
+            return "нет"
+
+        for tip in cell.find_all(['span', 'div'], class_='product-tip-wrapper'):
+            tip.decompose()
+        return cell.get_text(" ", strip=True).replace('\xa0', ' ')
+
     def supports(self, url: str) -> bool:
         return "catalog.onliner.by" in url or "catalog.api.onliner.by" in url
 
@@ -85,22 +109,8 @@ class OnlinerParser(BaseParser):
                 for row in rows:
                     cells = row.find_all('td')
                     if len(cells) == 2:
-                        key = cells[0].get_text(strip=True)
-                        # Check for boolean icons
-                        icon_true = cells[1].find('span', class_='i-tip')
-                        icon_false = cells[1].find('span', class_='i-x')
-                        
-                        value = ""
-                        if icon_true:
-                            value = "да"
-                        elif icon_false:
-                            value = "нет"
-                        else:
-                            # Remove tooltips (BUT do not remove i-tip if we hadn't checked it yet, logic above handles it)
-                            # safe to strict decompose wrapper now
-                            for tip in cells[1].find_all(['span', 'div'], class_='product-tip-wrapper'):
-                                tip.decompose()
-                            value = cells[1].get_text(strip=True).replace('\xa0', ' ')
+                        key = cells[0].get_text(" ", strip=True).replace('\xa0', ' ')
+                        value = self._extract_spec_value(cells[1])
                         
                         all_specs[key] = value
                         
