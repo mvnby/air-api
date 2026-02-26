@@ -6,6 +6,21 @@ from models import Product
 from services.image_service import ImageService
 from services.spec_normalizer import normalize_specs
 
+
+def _augment_auto_slugs_with_wifi_specs(auto_slugs: List[str], specs: dict) -> List[str]:
+    result = list(auto_slugs)
+    normalized_specs_probe = normalize_specs(
+        specs or {},
+        strict_wifi_from_tags=False,
+    )
+    wifi_state = normalized_specs_probe.get("wifi_ready")
+    if wifi_state is True and "wifi-builtin" not in result:
+        result.append("wifi-builtin")
+    elif wifi_state == "ready" and "wifi-ready" not in result:
+        result.append("wifi-ready")
+    return result
+
+
 class ImporterService:
     def __init__(self):
         # Register available parsers
@@ -20,7 +35,7 @@ class ImporterService:
                 return parser
         return None
 
-    async def import_product(self, url: str) -> dict:
+    async def import_product(self, url: str, update_existing: bool = False) -> dict:
         """
         Orchestrates the import process: find parser -> parse -> save to DB.
         Returns a dict: {'product': Product, 'related_urls': List[str]}
@@ -32,7 +47,7 @@ class ImporterService:
             stmt = select(Product).where(Product.source_url == url)
             result = await session.execute(stmt)
             existing = result.scalar_one_or_none()
-            if existing:
+            if existing and not update_existing:
                 # We return it but maybe don't re-save. 
                 # For the sake of bulk import, we'll return the existing one.
                 return {"product": existing, "related_urls": []}
@@ -58,6 +73,9 @@ class ImporterService:
             # 1. Get Auto Tags (Slugs) based on metrics
             metrics = data.get('metrics', {})
             auto_slugs = get_auto_tags(metrics, specs=data.get('specs', {}))
+            # Derive Wi-Fi technical tags from parsed specs so import preserves
+            # "builtin" vs "ready" even before any manual manager edits.
+            auto_slugs = _augment_auto_slugs_with_wifi_specs(auto_slugs, data.get('specs', {}))
             
             # 2. Resolve Auto Tags by SLUG
             for slug in auto_slugs:
@@ -95,7 +113,7 @@ class ImporterService:
             # Main Image
             main_image_url = data.get('main_image')
             local_main_image = None
-            if main_image_url:
+            if main_image_url and not (existing and update_existing):
                 local_main_image = await ImageService.download_and_save_image(
                     main_image_url, 'products', slug
                 )
@@ -106,31 +124,50 @@ class ImporterService:
             # Gallery is filled manually via Manager App.
             local_gallery_images = []
 
-            product = Product(
-                title=data['title'],
-                slug=slug,
-                description=data['description'],
-                price=data['price'],
-                area=data['area'],
-                is_inverter=metrics.get('is_inverter', False),
-                power_cooling=metrics.get('power_cooling'),
-                main_image=local_main_image,  # Use local path
-                images=[],  # Explicitly empty legacy JSON
-                tags=tag_objects,
-                specs=normalize_specs(
-                    data.get('specs', {}),
-                    wifi_tag_slugs=[tag.slug for tag in tag_objects if tag.slug in {"wifi-builtin", "wifi-ready"}],
-                    strict_wifi_from_tags=True,
-                ),
-                is_published=is_published,
-                source_url=url
+            normalized_specs = normalize_specs(
+                data.get('specs', {}),
+                wifi_tag_slugs=[tag.slug for tag in tag_objects if tag.slug in {"wifi-builtin", "wifi-ready"}],
+                strict_wifi_from_tags=False,
             )
-            session.add(product)
+
+            if existing and update_existing:
+                # Re-import mode: refresh key business fields, keep photos/slug/title intact.
+                existing.description = data.get('description', existing.description)
+                existing.price = data.get('price', existing.price)
+                existing.area = data.get('area', existing.area)
+                existing.is_inverter = metrics.get('is_inverter', existing.is_inverter)
+                existing.power_cooling = metrics.get('power_cooling', existing.power_cooling)
+                existing.specs = normalized_specs
+                existing.source_url = url
+                session.add(existing)
+                product = existing
+            else:
+                product = Product(
+                    title=data['title'],
+                    slug=slug,
+                    description=data['description'],
+                    price=data['price'],
+                    area=data['area'],
+                    is_inverter=metrics.get('is_inverter', False),
+                    power_cooling=metrics.get('power_cooling'),
+                    main_image=local_main_image,  # Use local path
+                    images=[],  # Explicitly empty legacy JSON
+                    tags=tag_objects,
+                    specs=normalized_specs,
+                    is_published=is_published,
+                    source_url=url
+                )
+                session.add(product)
             await session.commit()
             await session.refresh(product)
             return {"product": product, "related_urls": data.get('related_urls', [])}
 
-    async def import_products_bulk(self, urls: List[str], with_related: bool = False) -> dict:
+    async def import_products_bulk(
+        self,
+        urls: List[str],
+        with_related: bool = False,
+        update_existing: bool = False,
+    ) -> dict:
         """
         Imports multiple products and returns a summary of success/errors.
         Can recursively import related products.
@@ -144,7 +181,7 @@ class ImporterService:
             if url in processed_urls: continue
             
             try:
-                res = await self.import_product(url)
+                res = await self.import_product(url, update_existing=update_existing)
                 product = res["product"]
                 # Only add to 'success' if it's a NEW import (or just count it)
                 # To keep it simple, we count all as success if they are in DB now.

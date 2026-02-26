@@ -367,7 +367,7 @@ export const api = {
         return await response.json();
     },
 
-    async importFromOnliner(urls: string[], withRelated: boolean): Promise<{
+    async importFromOnliner(urls: string[], withRelated: boolean, updateExisting: boolean): Promise<{
         success_count: number;
         error_count: number;
         successes: string[];
@@ -380,7 +380,7 @@ export const api = {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ urls, with_related: withRelated }),
+            body: JSON.stringify({ urls, with_related: withRelated, update_existing: updateExisting }),
         });
         if (!response.ok) {
             const error = await response.json().catch(() => ({ detail: 'Unknown error' }));

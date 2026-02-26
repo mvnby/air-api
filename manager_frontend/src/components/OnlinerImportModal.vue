@@ -10,6 +10,7 @@ const emit = defineEmits<{
 
 const urlsText = ref('');
 const withRelated = ref(false);
+const updateExisting = ref(false);
 const loading = ref(false);
 const result = ref<{ success_count: number; error_count: number; errors: string[] } | null>(null);
 const importError = ref('');
@@ -29,7 +30,7 @@ const handleImport = async () => {
   importError.value = '';
 
   try {
-    const res = await api.importFromOnliner(urls, withRelated.value);
+    const res = await api.importFromOnliner(urls, withRelated.value, updateExisting.value);
     result.value = res;
     if (res.success_count > 0) {
       emit('imported', res.success_count);
@@ -113,6 +114,29 @@ const handleClose = () => {
                 <div
                   class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200"
                   :class="withRelated ? 'translate-x-5' : 'translate-x-0'"
+                />
+              </div>
+            </label>
+
+            <!-- Re-import existing toggle -->
+            <label
+              class="flex items-center justify-between gap-4 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-3 cursor-pointer select-none"
+              :class="{ 'opacity-50 pointer-events-none': loading }"
+            >
+              <div>
+                <p class="text-sm font-medium text-slate-200">Обновлять существующие товары</p>
+                <p class="text-xs text-slate-500 mt-0.5">
+                  Если товар уже есть, обновим цену и характеристики, фото не перезаписываем
+                </p>
+              </div>
+              <div
+                class="relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200"
+                :class="updateExisting ? 'bg-teal-500' : 'bg-slate-600'"
+                @click="updateExisting = !updateExisting"
+              >
+                <div
+                  class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200"
+                  :class="updateExisting ? 'translate-x-5' : 'translate-x-0'"
                 />
               </div>
             </label>
