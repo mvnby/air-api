@@ -745,14 +745,19 @@ watchDebounced(
                 
                 <!-- Overlay Actions -->
                 <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                    <button
+                      @click.stop="deleteProduct(product)"
+                      :disabled="isDeletingProduct === product.id"
+                      class="absolute top-2.5 right-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-red-600/90 text-white shadow-sm transition-colors hover:bg-red-700 disabled:opacity-50"
+                      title="Удалить"
+                    >
+                      <span class="material-icons-round text-[16px] leading-none">close</span>
+                    </button>
                     <button @click="openSearchModal(product)" class="bg-teal-600 text-white px-4 py-2 rounded-full flex items-center gap-2 hover:bg-teal-700 text-sm font-medium transition-colors w-36 justify-center">
                         <Images class="w-4 h-4" /> Фото
                     </button>
                     <button @click="openEditModal(product)" class="bg-white text-gray-900 px-4 py-2 rounded-full flex items-center gap-2 hover:bg-gray-100 text-sm font-medium transition-colors w-36 justify-center">
                         <Settings class="w-4 h-4 text-teal-600" /> Изменить
-                    </button>
-                    <button @click.stop="deleteProduct(product)" :disabled="isDeletingProduct === product.id" class="mt-2 bg-red-600/90 text-white px-4 py-2 rounded-full flex items-center gap-2 hover:bg-red-700 text-sm font-medium transition-colors w-36 justify-center">
-                        <span class="material-icons-round text-[16px]">delete</span> {{ isDeletingProduct === product.id ? 'Удаление...' : 'Удалить' }}
                     </button>
                 </div>
             </div>
