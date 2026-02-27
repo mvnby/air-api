@@ -5528,6 +5528,624 @@
         }
       }
     },
+    "/api/manager/suppliers": {
+      "get": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "List Suppliers",
+        "operationId": "list_suppliers",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierListResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Create Supplier",
+        "operationId": "create_supplier",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupplierCreatePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/suppliers/{supplier_id}": {
+      "patch": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Patch Supplier",
+        "operationId": "patch_supplier",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupplierUpdatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/supplier-sources": {
+      "get": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "List Supplier Sources",
+        "operationId": "list_supplier_sources",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierPriceSourceListResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Create Supplier Source",
+        "operationId": "create_supplier_source",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupplierPriceSourceCreatePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierPriceSourceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/supplier-sources/{source_id}": {
+      "patch": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Patch Supplier Source",
+        "operationId": "patch_supplier_source",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupplierPriceSourceUpdatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierPriceSourceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Delete Supplier Source",
+        "operationId": "delete_supplier_source",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerActionMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/supplier-sources/{source_id}/sync": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Sync Supplier Source",
+        "operationId": "sync_supplier_source",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierSyncRunResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/supplier-offers/unmapped": {
+      "get": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "List Unmapped Supplier Offers",
+        "operationId": "list_unmapped_supplier_offers",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "supplier_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Supplier Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierOfferListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/supplier-mappings": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Create Supplier Mapping",
+        "operationId": "create_supplier_mapping",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupplierMappingCreatePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierMappingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/supplier-mappings/{mapping_id}": {
+      "delete": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Delete Supplier Mapping",
+        "operationId": "delete_supplier_mapping",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "mapping_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Mapping Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/products/{product_id}/supplier-offers": {
+      "get": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Get Product Supplier Offers",
+        "operationId": "get_product_supplier_offers",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Product Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierOfferListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/products/{product_id}/local-stock": {
+      "put": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Upsert Product Local Stock",
+        "operationId": "upsert_product_local_stock",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Product Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductLocalStockPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductLocalStockResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/system/rebuild-web": {
       "post": {
         "tags": [
@@ -7448,6 +8066,65 @@
             },
             "type": "array",
             "title": "Tags"
+          },
+          "min_cost_byn": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Cost Byn"
+          },
+          "recommended_price_byn": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Price Byn"
+          },
+          "margin_abs_preview": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin Abs Preview"
+          },
+          "margin_pct_preview": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin Pct Preview"
+          },
+          "vitebsk_qty": {
+            "type": "integer",
+            "title": "Vitebsk Qty",
+            "default": 0
+          },
+          "minsk_qty": {
+            "type": "integer",
+            "title": "Minsk Qty",
+            "default": 0
+          },
+          "availability_status": {
+            "type": "string",
+            "title": "Availability Status",
+            "default": "out_of_stock"
           }
         },
         "type": "object",
@@ -10843,6 +11520,62 @@
         ],
         "title": "ProductImageResponse"
       },
+      "ProductLocalStockPayload": {
+        "properties": {
+          "qty": {
+            "type": "integer",
+            "title": "Qty",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "ProductLocalStockPayload"
+      },
+      "ProductLocalStockResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "warehouse_code": {
+            "type": "string",
+            "title": "Warehouse Code"
+          },
+          "qty": {
+            "type": "integer",
+            "title": "Qty"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "product_id",
+          "warehouse_code",
+          "qty",
+          "updated_at"
+        ],
+        "title": "ProductLocalStockResponse"
+      },
       "ProductResponse": {
         "properties": {
           "id": {
@@ -11214,6 +11947,843 @@
           "total_products_using"
         ],
         "title": "SpecsKeysResponse"
+      },
+      "SupplierCreatePayload": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "priority": {
+            "type": "integer",
+            "title": "Priority",
+            "default": 100
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "code"
+        ],
+        "title": "SupplierCreatePayload"
+      },
+      "SupplierListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SupplierResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "SupplierListResponse"
+      },
+      "SupplierMappingCreatePayload": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "supplier_id": {
+            "type": "integer",
+            "title": "Supplier Id"
+          },
+          "external_id": {
+            "type": "string",
+            "title": "External Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "supplier_id",
+          "external_id"
+        ],
+        "title": "SupplierMappingCreatePayload"
+      },
+      "SupplierMappingResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "supplier_id": {
+            "type": "integer",
+            "title": "Supplier Id"
+          },
+          "external_id": {
+            "type": "string",
+            "title": "External Id"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "mapped_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapped By"
+          },
+          "mapped_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Mapped At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "product_id",
+          "supplier_id",
+          "external_id",
+          "is_active",
+          "mapped_at"
+        ],
+        "title": "SupplierMappingResponse"
+      },
+      "SupplierOfferListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SupplierOfferResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "SupplierOfferListResponse"
+      },
+      "SupplierOfferResponse": {
+        "properties": {
+          "supplier_id": {
+            "type": "integer",
+            "title": "Supplier Id"
+          },
+          "supplier_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Name"
+          },
+          "external_id": {
+            "type": "string",
+            "title": "External Id"
+          },
+          "title_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Raw"
+          },
+          "qty": {
+            "type": "integer",
+            "title": "Qty"
+          },
+          "qty_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qty Raw"
+          },
+          "wholesale_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wholesale Raw"
+          },
+          "wholesale_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wholesale Value"
+          },
+          "wholesale_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wholesale Currency"
+          },
+          "rrc_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrc Raw"
+          },
+          "rrc_byn": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrc Byn"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "mapping_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping Id"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "product_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Title"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "supplier_id",
+          "external_id",
+          "qty",
+          "is_active",
+          "updated_at"
+        ],
+        "title": "SupplierOfferResponse"
+      },
+      "SupplierPriceSourceCreatePayload": {
+        "properties": {
+          "supplier_id": {
+            "type": "integer",
+            "title": "Supplier Id"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type",
+            "default": "google_sheet"
+          },
+          "spreadsheet_id": {
+            "type": "string",
+            "title": "Spreadsheet Id"
+          },
+          "sheet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet Name"
+          },
+          "range_a1": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Range A1"
+          },
+          "city_bucket": {
+            "type": "string",
+            "title": "City Bucket",
+            "default": "minsk"
+          },
+          "header_row_index": {
+            "type": "integer",
+            "title": "Header Row Index",
+            "default": 1
+          },
+          "col_external_id": {
+            "type": "string",
+            "title": "Col External Id",
+            "default": "A"
+          },
+          "col_title": {
+            "type": "string",
+            "title": "Col Title",
+            "default": "B"
+          },
+          "col_wholesale": {
+            "type": "string",
+            "title": "Col Wholesale",
+            "default": "C"
+          },
+          "col_wholesale_currency": {
+            "type": "string",
+            "title": "Col Wholesale Currency",
+            "default": "D"
+          },
+          "col_rrc_byn": {
+            "type": "string",
+            "title": "Col Rrc Byn",
+            "default": "E"
+          },
+          "col_qty": {
+            "type": "string",
+            "title": "Col Qty",
+            "default": "F"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "supplier_id",
+          "spreadsheet_id"
+        ],
+        "title": "SupplierPriceSourceCreatePayload"
+      },
+      "SupplierPriceSourceListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SupplierPriceSourceResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "SupplierPriceSourceListResponse"
+      },
+      "SupplierPriceSourceResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "supplier_id": {
+            "type": "integer",
+            "title": "Supplier Id"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          },
+          "spreadsheet_id": {
+            "type": "string",
+            "title": "Spreadsheet Id"
+          },
+          "sheet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet Name"
+          },
+          "range_a1": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Range A1"
+          },
+          "city_bucket": {
+            "type": "string",
+            "title": "City Bucket"
+          },
+          "header_row_index": {
+            "type": "integer",
+            "title": "Header Row Index"
+          },
+          "col_external_id": {
+            "type": "string",
+            "title": "Col External Id"
+          },
+          "col_title": {
+            "type": "string",
+            "title": "Col Title"
+          },
+          "col_wholesale": {
+            "type": "string",
+            "title": "Col Wholesale"
+          },
+          "col_wholesale_currency": {
+            "type": "string",
+            "title": "Col Wholesale Currency"
+          },
+          "col_rrc_byn": {
+            "type": "string",
+            "title": "Col Rrc Byn"
+          },
+          "col_qty": {
+            "type": "string",
+            "title": "Col Qty"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync At"
+          },
+          "last_sync_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync Status"
+          },
+          "last_sync_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync Error"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "supplier_id",
+          "source_type",
+          "spreadsheet_id",
+          "city_bucket",
+          "header_row_index",
+          "col_external_id",
+          "col_title",
+          "col_wholesale",
+          "col_wholesale_currency",
+          "col_rrc_byn",
+          "col_qty",
+          "is_active",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SupplierPriceSourceResponse"
+      },
+      "SupplierPriceSourceUpdatePayload": {
+        "properties": {
+          "source_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Type"
+          },
+          "spreadsheet_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spreadsheet Id"
+          },
+          "sheet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet Name"
+          },
+          "range_a1": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Range A1"
+          },
+          "city_bucket": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City Bucket"
+          },
+          "header_row_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Header Row Index"
+          },
+          "col_external_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Col External Id"
+          },
+          "col_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Col Title"
+          },
+          "col_wholesale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Col Wholesale"
+          },
+          "col_wholesale_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Col Wholesale Currency"
+          },
+          "col_rrc_byn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Col Rrc Byn"
+          },
+          "col_qty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Col Qty"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "title": "SupplierPriceSourceUpdatePayload"
+      },
+      "SupplierResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "priority": {
+            "type": "integer",
+            "title": "Priority"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "code",
+          "is_active",
+          "priority",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SupplierResponse"
+      },
+      "SupplierSyncRunResponse": {
+        "properties": {
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          },
+          "source_id": {
+            "type": "integer",
+            "title": "Source Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "rows_total": {
+            "type": "integer",
+            "title": "Rows Total"
+          },
+          "rows_upserted": {
+            "type": "integer",
+            "title": "Rows Upserted"
+          },
+          "rows_skipped": {
+            "type": "integer",
+            "title": "Rows Skipped"
+          },
+          "rows_deactivated": {
+            "type": "integer",
+            "title": "Rows Deactivated"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "source_id",
+          "status",
+          "rows_total",
+          "rows_upserted",
+          "rows_skipped",
+          "rows_deactivated"
+        ],
+        "title": "SupplierSyncRunResponse"
+      },
+      "SupplierUpdatePayload": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          }
+        },
+        "type": "object",
+        "title": "SupplierUpdatePayload"
       },
       "TagGroupResponse": {
         "properties": {

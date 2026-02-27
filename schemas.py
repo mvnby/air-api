@@ -695,6 +695,13 @@ class ManagerCatalogProductItemResponse(BaseModel):
     specs: Dict[str, Any]
     gallery_images: List[ManagerCatalogProductImageResponse]
     tags: List[ManagerCatalogProductTagResponse]
+    min_cost_byn: Optional[float] = None
+    recommended_price_byn: Optional[float] = None
+    margin_abs_preview: Optional[float] = None
+    margin_pct_preview: Optional[float] = None
+    vitebsk_qty: int = 0
+    minsk_qty: int = 0
+    availability_status: str = "out_of_stock"
 
 
 class ManagerCatalogProductListResponse(BaseModel):
@@ -936,6 +943,158 @@ class ProductUpdate(BaseModel):
     specs: Optional[Dict[str, Any]] = None
     is_published: Optional[bool] = None
     tag_ids: Optional[List[int]] = None
+
+
+class SupplierResponse(BaseModel):
+    id: int
+    name: str
+    code: str
+    is_active: bool
+    priority: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class SupplierCreatePayload(BaseModel):
+    name: str
+    code: str
+    is_active: bool = True
+    priority: int = 100
+
+
+class SupplierUpdatePayload(BaseModel):
+    name: Optional[str] = None
+    code: Optional[str] = None
+    is_active: Optional[bool] = None
+    priority: Optional[int] = None
+
+
+class SupplierListResponse(BaseModel):
+    items: List[SupplierResponse]
+
+
+class SupplierPriceSourceResponse(BaseModel):
+    id: int
+    supplier_id: int
+    source_type: str
+    spreadsheet_id: str
+    sheet_name: Optional[str] = None
+    range_a1: Optional[str] = None
+    city_bucket: str
+    header_row_index: int
+    col_external_id: str
+    col_title: str
+    col_wholesale: str
+    col_wholesale_currency: str
+    col_rrc_byn: str
+    col_qty: str
+    is_active: bool
+    last_sync_at: Optional[datetime] = None
+    last_sync_status: Optional[str] = None
+    last_sync_error: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SupplierPriceSourceCreatePayload(BaseModel):
+    supplier_id: int
+    source_type: str = "google_sheet"
+    spreadsheet_id: str
+    sheet_name: Optional[str] = None
+    range_a1: Optional[str] = None
+    city_bucket: str = "minsk"
+    header_row_index: int = 1
+    col_external_id: str = "A"
+    col_title: str = "B"
+    col_wholesale: str = "C"
+    col_wholesale_currency: str = "D"
+    col_rrc_byn: str = "E"
+    col_qty: str = "F"
+    is_active: bool = True
+
+
+class SupplierPriceSourceUpdatePayload(BaseModel):
+    source_type: Optional[str] = None
+    spreadsheet_id: Optional[str] = None
+    sheet_name: Optional[str] = None
+    range_a1: Optional[str] = None
+    city_bucket: Optional[str] = None
+    header_row_index: Optional[int] = None
+    col_external_id: Optional[str] = None
+    col_title: Optional[str] = None
+    col_wholesale: Optional[str] = None
+    col_wholesale_currency: Optional[str] = None
+    col_rrc_byn: Optional[str] = None
+    col_qty: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class SupplierPriceSourceListResponse(BaseModel):
+    items: List[SupplierPriceSourceResponse]
+
+
+class SupplierSyncRunResponse(BaseModel):
+    run_id: int
+    source_id: int
+    status: str
+    rows_total: int
+    rows_upserted: int
+    rows_skipped: int
+    rows_deactivated: int
+    error: Optional[str] = None
+
+
+class SupplierOfferResponse(BaseModel):
+    supplier_id: int
+    supplier_name: Optional[str] = None
+    external_id: str
+    title_raw: Optional[str] = None
+    qty: int
+    qty_raw: Optional[str] = None
+    wholesale_raw: Optional[str] = None
+    wholesale_value: Optional[float] = None
+    wholesale_currency: Optional[str] = None
+    rrc_raw: Optional[str] = None
+    rrc_byn: Optional[float] = None
+    is_active: bool
+    mapping_id: Optional[int] = None
+    product_id: Optional[int] = None
+    product_title: Optional[str] = None
+    updated_at: datetime
+
+
+class SupplierOfferListResponse(BaseModel):
+    items: List[SupplierOfferResponse]
+    meta: Meta
+
+
+class SupplierMappingCreatePayload(BaseModel):
+    product_id: int
+    supplier_id: int
+    external_id: str
+
+
+class SupplierMappingResponse(BaseModel):
+    id: int
+    product_id: int
+    supplier_id: int
+    external_id: str
+    is_active: bool
+    mapped_by: Optional[str] = None
+    mapped_at: datetime
+
+
+class ProductLocalStockPayload(BaseModel):
+    qty: int = 0
+
+
+class ProductLocalStockResponse(BaseModel):
+    id: int
+    product_id: int
+    warehouse_code: str
+    qty: int
+    updated_by: Optional[str] = None
+    updated_at: datetime
 
 
 class BulkRoundRequest(BaseModel):

@@ -33,7 +33,21 @@ import type { ManagerNormalizeLegacySpecsResponse } from '../models/ManagerNorma
 import type { ManagerTagGroupResponse } from '../models/ManagerTagGroupResponse';
 import type { OnlinerImportPayload } from '../models/OnlinerImportPayload';
 import type { OnlinerImportResultResponse } from '../models/OnlinerImportResultResponse';
+import type { ProductLocalStockPayload } from '../models/ProductLocalStockPayload';
+import type { ProductLocalStockResponse } from '../models/ProductLocalStockResponse';
 import type { ProductUpdate } from '../models/ProductUpdate';
+import type { SupplierCreatePayload } from '../models/SupplierCreatePayload';
+import type { SupplierListResponse } from '../models/SupplierListResponse';
+import type { SupplierMappingCreatePayload } from '../models/SupplierMappingCreatePayload';
+import type { SupplierMappingResponse } from '../models/SupplierMappingResponse';
+import type { SupplierOfferListResponse } from '../models/SupplierOfferListResponse';
+import type { SupplierPriceSourceCreatePayload } from '../models/SupplierPriceSourceCreatePayload';
+import type { SupplierPriceSourceListResponse } from '../models/SupplierPriceSourceListResponse';
+import type { SupplierPriceSourceResponse } from '../models/SupplierPriceSourceResponse';
+import type { SupplierPriceSourceUpdatePayload } from '../models/SupplierPriceSourceUpdatePayload';
+import type { SupplierResponse } from '../models/SupplierResponse';
+import type { SupplierSyncRunResponse } from '../models/SupplierSyncRunResponse';
+import type { SupplierUpdatePayload } from '../models/SupplierUpdatePayload';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -675,6 +689,263 @@ export class ManagerService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/me',
+        });
+    }
+    /**
+     * List Suppliers
+     * @returns SupplierListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listSuppliers(): CancelablePromise<SupplierListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/suppliers',
+        });
+    }
+    /**
+     * Create Supplier
+     * @param requestBody
+     * @returns SupplierResponse Successful Response
+     * @throws ApiError
+     */
+    public static createSupplier(
+        requestBody: SupplierCreatePayload,
+    ): CancelablePromise<SupplierResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/suppliers',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Patch Supplier
+     * @param supplierId
+     * @param requestBody
+     * @returns SupplierResponse Successful Response
+     * @throws ApiError
+     */
+    public static patchSupplier(
+        supplierId: number,
+        requestBody: SupplierUpdatePayload,
+    ): CancelablePromise<SupplierResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/suppliers/{supplier_id}',
+            path: {
+                'supplier_id': supplierId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Supplier Sources
+     * @returns SupplierPriceSourceListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listSupplierSources(): CancelablePromise<SupplierPriceSourceListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/supplier-sources',
+        });
+    }
+    /**
+     * Create Supplier Source
+     * @param requestBody
+     * @returns SupplierPriceSourceResponse Successful Response
+     * @throws ApiError
+     */
+    public static createSupplierSource(
+        requestBody: SupplierPriceSourceCreatePayload,
+    ): CancelablePromise<SupplierPriceSourceResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/supplier-sources',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Patch Supplier Source
+     * @param sourceId
+     * @param requestBody
+     * @returns SupplierPriceSourceResponse Successful Response
+     * @throws ApiError
+     */
+    public static patchSupplierSource(
+        sourceId: number,
+        requestBody: SupplierPriceSourceUpdatePayload,
+    ): CancelablePromise<SupplierPriceSourceResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/supplier-sources/{source_id}',
+            path: {
+                'source_id': sourceId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Delete Supplier Source
+     * @param sourceId
+     * @returns ManagerActionMessageResponse Successful Response
+     * @throws ApiError
+     */
+    public static deleteSupplierSource(
+        sourceId: number,
+    ): CancelablePromise<ManagerActionMessageResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/supplier-sources/{source_id}',
+            path: {
+                'source_id': sourceId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Sync Supplier Source
+     * @param sourceId
+     * @returns SupplierSyncRunResponse Successful Response
+     * @throws ApiError
+     */
+    public static syncSupplierSource(
+        sourceId: number,
+    ): CancelablePromise<SupplierSyncRunResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/supplier-sources/{source_id}/sync',
+            path: {
+                'source_id': sourceId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Unmapped Supplier Offers
+     * @param page
+     * @param limit
+     * @param supplierId
+     * @returns SupplierOfferListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listUnmappedSupplierOffers(
+        page: number = 1,
+        limit: number = 50,
+        supplierId?: (number | null),
+    ): CancelablePromise<SupplierOfferListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/supplier-offers/unmapped',
+            query: {
+                'page': page,
+                'limit': limit,
+                'supplier_id': supplierId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Supplier Mapping
+     * @param requestBody
+     * @returns SupplierMappingResponse Successful Response
+     * @throws ApiError
+     */
+    public static createSupplierMapping(
+        requestBody: SupplierMappingCreatePayload,
+    ): CancelablePromise<SupplierMappingResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/supplier-mappings',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Delete Supplier Mapping
+     * @param mappingId
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static deleteSupplierMapping(
+        mappingId: number,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/supplier-mappings/{mapping_id}',
+            path: {
+                'mapping_id': mappingId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Product Supplier Offers
+     * @param productId
+     * @returns SupplierOfferListResponse Successful Response
+     * @throws ApiError
+     */
+    public static getProductSupplierOffers(
+        productId: number,
+    ): CancelablePromise<SupplierOfferListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/products/{product_id}/supplier-offers',
+            path: {
+                'product_id': productId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Upsert Product Local Stock
+     * @param productId
+     * @param requestBody
+     * @returns ProductLocalStockResponse Successful Response
+     * @throws ApiError
+     */
+    public static upsertProductLocalStock(
+        productId: number,
+        requestBody: ProductLocalStockPayload,
+    ): CancelablePromise<ProductLocalStockResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/manager/products/{product_id}/local-stock',
+            path: {
+                'product_id': productId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
 }

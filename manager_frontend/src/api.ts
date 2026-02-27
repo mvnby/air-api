@@ -26,6 +26,12 @@ import {
     type ManagerSettingUpdatePayload,
     type ManagerTariffCreatePayload,
     type ManagerTariffUpdatePayload,
+    type SupplierCreatePayload,
+    type SupplierUpdatePayload,
+    type SupplierPriceSourceCreatePayload,
+    type SupplierPriceSourceUpdatePayload,
+    type SupplierMappingCreatePayload,
+    type ProductLocalStockPayload,
 } from './client';
 import { ManagerTagsService } from './client/services/ManagerTagsService';
 import { ManagerLeadsInboxService } from './client/services/ManagerLeadsInboxService';
@@ -333,6 +339,66 @@ export const api = {
     async smartSearchProducts(q: string, limit = 40): Promise<Product[]> {
         const res = await ManagerService.smartSearchProducts(q, limit);
         return res.items;
+    },
+
+    async listSuppliers() {
+        return await ManagerService.listSuppliers();
+    },
+
+    async createSupplier(payload: SupplierCreatePayload) {
+        return await ManagerService.createSupplier(payload);
+    },
+
+    async patchSupplier(supplierId: number, payload: SupplierUpdatePayload) {
+        return await ManagerService.patchSupplier(supplierId, payload);
+    },
+
+    async listSupplierSources() {
+        return await ManagerService.listSupplierSources();
+    },
+
+    async createSupplierSource(payload: SupplierPriceSourceCreatePayload) {
+        return await ManagerService.createSupplierSource(payload);
+    },
+
+    async patchSupplierSource(sourceId: number, payload: SupplierPriceSourceUpdatePayload) {
+        return await ManagerService.patchSupplierSource(sourceId, payload);
+    },
+
+    async deleteSupplierSource(sourceId: number) {
+        const res = await fetch(`/api/manager/supplier-sources/${sourceId}`, {
+            method: 'DELETE',
+            credentials: 'include',
+        });
+        if (!res.ok) {
+            const body = await res.text();
+            throw new Error(body || `HTTP ${res.status}`);
+        }
+        return await res.json();
+    },
+
+    async syncSupplierSource(sourceId: number) {
+        return await ManagerService.syncSupplierSource(sourceId);
+    },
+
+    async listUnmappedSupplierOffers(page = 1, limit = 50, supplierId?: number) {
+        return await ManagerService.listUnmappedSupplierOffers(page, limit, supplierId ?? undefined);
+    },
+
+    async createSupplierMapping(payload: SupplierMappingCreatePayload) {
+        return await ManagerService.createSupplierMapping(payload);
+    },
+
+    async deleteSupplierMapping(mappingId: number) {
+        return await ManagerService.deleteSupplierMapping(mappingId);
+    },
+
+    async getProductSupplierOffers(productId: number) {
+        return await ManagerService.getProductSupplierOffers(productId);
+    },
+
+    async upsertProductLocalStock(productId: number, payload: ProductLocalStockPayload) {
+        return await ManagerService.upsertProductLocalStock(productId, payload);
     },
 
     async searchServices(q: string) {

@@ -73,6 +73,8 @@ class Product(SQLModel, table=True):
 
     tags: List[Tag] = Relationship(back_populates="products", link_model=ProductTagLink)
     order_links: List["OrderProductLink"] = Relationship(back_populates="product")
+    supplier_mappings: List["ProductSupplierMapping"] = Relationship(back_populates="product")
+    local_stocks: List["ProductLocalStock"] = Relationship(back_populates="product")
 
     specs: Dict[str, Any] = Field(default={}, sa_column=Column(JSON))
 

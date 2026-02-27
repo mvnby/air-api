@@ -9,6 +9,7 @@ from sqlmodel import select
 from crud.product import ProductDAO
 from models.product import Product, Tag
 from services.product_serialization import sanitize_specs
+from services.product_supply_metrics_service import ProductSupplyMetricsService
 
 # ---------------------------------------------------------------------------
 # BTU index → area (m²) and power_cooling (kW) ranges.
@@ -54,6 +55,7 @@ class ProductManagerService:
         stmt = stmt.limit(limit)
         result = await session.execute(stmt)
         products = result.scalars().all()
+        supply_metrics = await ProductSupplyMetricsService.compute_for_products(session, list(products))
 
         formatted_items = [
             {
@@ -87,6 +89,13 @@ class ProductManagerService:
                     }
                     for t in (p.tags or [])
                 ],
+                "min_cost_byn": supply_metrics.get(p.id, {}).get("min_cost_byn"),
+                "recommended_price_byn": supply_metrics.get(p.id, {}).get("recommended_price_byn"),
+                "margin_abs_preview": supply_metrics.get(p.id, {}).get("margin_abs_preview"),
+                "margin_pct_preview": supply_metrics.get(p.id, {}).get("margin_pct_preview"),
+                "vitebsk_qty": supply_metrics.get(p.id, {}).get("vitebsk_qty", 0),
+                "minsk_qty": supply_metrics.get(p.id, {}).get("minsk_qty", 0),
+                "availability_status": supply_metrics.get(p.id, {}).get("availability_status", "out_of_stock"),
             }
             for p in products
         ]
@@ -116,6 +125,7 @@ class ProductManagerService:
         items, total = await ProductDAO.get_for_manager(
             session, page, limit, search, is_published, area_min, area_max, is_inverter, sort
         )
+        supply_metrics = await ProductSupplyMetricsService.compute_for_products(session, list(items))
 
         formatted_items = []
         for p in items:
@@ -151,6 +161,13 @@ class ProductManagerService:
                         }
                         for t in (p.tags or [])
                     ],
+                    "min_cost_byn": supply_metrics.get(p.id, {}).get("min_cost_byn"),
+                    "recommended_price_byn": supply_metrics.get(p.id, {}).get("recommended_price_byn"),
+                    "margin_abs_preview": supply_metrics.get(p.id, {}).get("margin_abs_preview"),
+                    "margin_pct_preview": supply_metrics.get(p.id, {}).get("margin_pct_preview"),
+                    "vitebsk_qty": supply_metrics.get(p.id, {}).get("vitebsk_qty", 0),
+                    "minsk_qty": supply_metrics.get(p.id, {}).get("minsk_qty", 0),
+                    "availability_status": supply_metrics.get(p.id, {}).get("availability_status", "out_of_stock"),
                 }
             )
 

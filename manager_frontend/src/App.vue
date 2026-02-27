@@ -14,6 +14,8 @@ const InstallersView = defineAsyncComponent(() => import('./views/InstallersView
 const SettingsView = defineAsyncComponent(() => import('./views/SettingsView.vue'));
 const TariffsView = defineAsyncComponent(() => import('./views/TariffsView.vue'));
 const TagsView = defineAsyncComponent(() => import('./views/TagsView.vue'));
+const SupplierFeedsView = defineAsyncComponent(() => import('./views/SupplierFeedsView.vue'));
+const SupplierMappingView = defineAsyncComponent(() => import('./views/SupplierMappingView.vue'));
 
 const isAuthenticated = ref(false);
 const showLoginModal = ref(false);
@@ -41,6 +43,8 @@ const navItems = [
   { path: '/manager/tariffs', label: 'Тарифы на монтаж', icon: Wallet },
   { path: '/manager/settings', label: 'Настройки сайта', icon: Settings },
   { path: '/manager/tags', label: 'Теги', icon: Package },
+  { path: '/manager/suppliers', label: 'Прайсы поставщиков', icon: Package },
+  { path: '/manager/supplier-mapping', label: 'Маппинг прайсов', icon: Package },
 ];
 
 const currentView = computed(() => {
@@ -55,6 +59,8 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/settings')) return 'settings';
   if (path.startsWith('/manager/tariffs')) return 'tariffs';
   if (path.startsWith('/manager/tags')) return 'tags';
+  if (path.startsWith('/manager/suppliers')) return 'suppliers';
+  if (path.startsWith('/manager/supplier-mapping')) return 'supplier-mapping';
   return 'products';
 });
 
@@ -308,6 +314,8 @@ onBeforeUnmount(() => {
       <SettingsView v-else-if="currentView === 'settings'" :key="currentLocation" />
       <TariffsView v-else-if="currentView === 'tariffs'" :key="currentLocation" />
       <TagsView v-else-if="currentView === 'tags'" :key="currentLocation" />
+      <SupplierFeedsView v-else-if="currentView === 'suppliers'" :key="currentLocation" />
+      <SupplierMappingView v-else-if="currentView === 'supplier-mapping'" :key="currentLocation" />
       <ProductsView v-else :key="currentLocation" />
     </main>
   </div>

@@ -32,6 +32,14 @@ from .product import (
     Tag,
     TagGroup,
 )
+from .supplier import (
+    ProductLocalStock,
+    ProductSupplierMapping,
+    Supplier,
+    SupplierOffer,
+    SupplierPriceSource,
+    SupplierSyncRun,
+)
 
 __all__ = [
     "Article",
@@ -64,4 +72,10 @@ __all__ = [
     "TagGroup",
     "Payment",
     "PaymentType",
+    "Supplier",
+    "SupplierPriceSource",
+    "SupplierOffer",
+    "ProductSupplierMapping",
+    "ProductLocalStock",
+    "SupplierSyncRun",
 ]
