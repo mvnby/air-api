@@ -12,6 +12,7 @@ async def test_compute_product_supply_metrics(db):
     db.add(product)
     db.add(supplier)
     db.add(GlobalConfig(key="fx_rate_usd_byn", value="3.2", description="fx"))
+    db.add(GlobalConfig(key="fx_supplier_markup_percent", value="0", description="test"))
     await db.commit()
     await db.refresh(product)
     await db.refresh(supplier)
