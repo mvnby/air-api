@@ -1,6 +1,5 @@
-from datetime import datetime, date, timedelta
-from typing import List, Optional
-from sqlalchemy import select, func, and_, or_
+from datetime import datetime, timedelta
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -15,10 +14,9 @@ class StatsService:
         now = datetime.now()
         start_of_month = datetime(now.year, now.month, 1)
 
-        # 1. Total Amount for WON_DEPOSIT or COMPLETED in the current month
-        # Using updated_at or created_at within the current month, or just creation date
+        # 1. Total Amount for CLOSED deals in the current month
         total_stmt = select(func.sum(Order.total_amount)).where(
-            or_(Order.status == OrderStatus.WON_DEPOSIT, Order.status == OrderStatus.COMPLETED),
+            Order.status == OrderStatus.CLOSED,
             Order.created_at >= start_of_month
         )
         total_result = await session.execute(total_stmt)

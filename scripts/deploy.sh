@@ -19,6 +19,10 @@ echo "📦 Running database migrations..."
 # Use -T to avoid TTY issues
 docker compose -f docker-compose.prod.yml run -T --rm app alembic upgrade head
 
+# 3.1 Ensure required global settings exist (idempotent).
+echo "⚙️ Ensuring default global settings..."
+docker compose -f docker-compose.prod.yml run -T --rm app python3 scripts/ensure_global_config_defaults.py
+
 # 4. Stop old containers
 echo "🛑 Stopping old containers..."
 docker compose -f docker-compose.prod.yml stop app bot || true

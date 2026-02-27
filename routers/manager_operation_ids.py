@@ -80,6 +80,19 @@ DELETE_MANAGER_TAG_GROUP = "delete_manager_tag_group"
 CREATE_MANAGER_TAG = "create_manager_tag"
 UPDATE_MANAGER_TAG = "update_manager_tag"
 DELETE_MANAGER_TAG = "delete_manager_tag"
+LIST_SUPPLIERS = "list_suppliers"
+CREATE_SUPPLIER = "create_supplier"
+PATCH_SUPPLIER = "patch_supplier"
+LIST_SUPPLIER_SOURCES = "list_supplier_sources"
+CREATE_SUPPLIER_SOURCE = "create_supplier_source"
+PATCH_SUPPLIER_SOURCE = "patch_supplier_source"
+DELETE_SUPPLIER_SOURCE = "delete_supplier_source"
+SYNC_SUPPLIER_SOURCE = "sync_supplier_source"
+LIST_UNMAPPED_SUPPLIER_OFFERS = "list_unmapped_supplier_offers"
+CREATE_SUPPLIER_MAPPING = "create_supplier_mapping"
+DELETE_SUPPLIER_MAPPING = "delete_supplier_mapping"
+GET_PRODUCT_SUPPLIER_OFFERS = "get_product_supplier_offers"
+UPSERT_PRODUCT_LOCAL_STOCK = "upsert_product_local_stock"
 
 ALL_MANAGER_OPERATION_IDS = (
     READ_USER_ME,
@@ -151,4 +164,17 @@ ALL_MANAGER_OPERATION_IDS = (
     CREATE_MANAGER_TAG,
     UPDATE_MANAGER_TAG,
     DELETE_MANAGER_TAG,
+    LIST_SUPPLIERS,
+    CREATE_SUPPLIER,
+    PATCH_SUPPLIER,
+    LIST_SUPPLIER_SOURCES,
+    CREATE_SUPPLIER_SOURCE,
+    PATCH_SUPPLIER_SOURCE,
+    DELETE_SUPPLIER_SOURCE,
+    SYNC_SUPPLIER_SOURCE,
+    LIST_UNMAPPED_SUPPLIER_OFFERS,
+    CREATE_SUPPLIER_MAPPING,
+    DELETE_SUPPLIER_MAPPING,
+    GET_PRODUCT_SUPPLIER_OFFERS,
+    UPSERT_PRODUCT_LOCAL_STOCK,
 )

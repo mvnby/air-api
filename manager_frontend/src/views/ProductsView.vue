@@ -788,6 +788,25 @@ watchDebounced(
                         {{ product.price }} руб.
                     </p>
                 </div>
+                <div class="mt-1 space-y-0.5 text-[11px] text-gray-500 dark:text-slate-400">
+                    <div>Себестоимость: {{ product.min_cost_byn != null ? `${product.min_cost_byn.toFixed(2)} BYN` : '—' }}</div>
+                    <div>РРЦ: {{ product.recommended_price_byn != null ? `${product.recommended_price_byn.toFixed(2)} BYN` : '—' }}</div>
+                    <div>Маржа: {{ product.margin_abs_preview != null ? `${product.margin_abs_preview.toFixed(2)} BYN` : '—' }}</div>
+                </div>
+                <div class="mt-2 flex items-center gap-1.5 text-[10px]">
+                    <span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Витебск: {{ product.vitebsk_qty || 0 }}</span>
+                    <span class="px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200">Минск: {{ product.minsk_qty || 0 }}</span>
+                    <span
+                        class="px-1.5 py-0.5 rounded border"
+                        :class="product.availability_status === 'in_stock_now'
+                            ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                            : product.availability_status === 'available_2_3_days'
+                                ? 'bg-amber-100 text-amber-800 border-amber-200'
+                                : 'bg-gray-100 text-gray-600 border-gray-200'"
+                    >
+                        {{ product.availability_status === 'in_stock_now' ? 'Сейчас' : (product.availability_status === 'available_2_3_days' ? '2-3 дня' : 'Нет') }}
+                    </span>
+                </div>
                 <!-- Mini Gallery Preview -->
                 <div class="flex gap-1 mt-2 overflow-hidden h-7" v-if="product.gallery_images && product.gallery_images.length">
                     <img v-for="img in product.gallery_images.slice(0, 6)" :key="img.id" :src="getImageUrl(img.url)" class="w-7 h-7 object-cover rounded" />
@@ -811,6 +830,7 @@ watchDebounced(
               <th class="p-4 text-xs font-semibold uppercase tracking-wider">Фото</th>
               <th class="p-4 text-xs font-semibold uppercase tracking-wider">Название</th>
               <th class="p-4 text-xs font-semibold uppercase tracking-wider">Цена</th>
+              <th class="p-4 text-xs font-semibold uppercase tracking-wider">Supply</th>
               <th class="p-4 text-xs font-semibold uppercase tracking-wider text-right">Действия</th>
             </tr>
           </thead>
@@ -842,6 +862,11 @@ watchDebounced(
                 <div class="text-sm font-semibold text-teal-700 dark:text-teal-400">
                    {{ product.price }} руб.
                 </div>
+              </td>
+              <td class="p-4 text-xs text-gray-600 dark:text-slate-400">
+                <div>Себест: {{ product.min_cost_byn != null ? `${product.min_cost_byn.toFixed(2)}` : '—' }}</div>
+                <div>РРЦ: {{ product.recommended_price_byn != null ? `${product.recommended_price_byn.toFixed(2)}` : '—' }}</div>
+                <div>V: {{ product.vitebsk_qty || 0 }} / M: {{ product.minsk_qty || 0 }}</div>
               </td>
               <td class="p-4 text-right">
                 <div class="flex justify-end gap-2 text-gray-400">

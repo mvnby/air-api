@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from parsers.onliner import OnlinerParser
 from core.logger import logger
 from services.backup_service import backup_service
+from services.supplier_sync_service import SupplierSyncService
 
 class SchedulerService:
     def __init__(self):
@@ -31,6 +32,15 @@ class SchedulerService:
                 except ValueError:
                     return 0
             return 2 # По умолчанию - все, если не настроено
+
+    async def _get_global_config_value(self, key: str, default: str) -> str:
+        from models import GlobalConfig
+
+        async with async_session_maker() as session:
+            stmt = select(GlobalConfig).where(GlobalConfig.key == key)
+            result = await session.execute(stmt)
+            cfg = result.scalar_one_or_none()
+            return cfg.value if cfg and cfg.value is not None else default
 
     async def update_all_prices(self):
         """
@@ -96,6 +106,9 @@ class SchedulerService:
 
         # Run lead archive loop (once a day)
         asyncio.create_task(self._lead_archive_loop())
+
+        # Run supplier sheets sync loop
+        asyncio.create_task(self._supplier_sync_loop())
 
         # Keep the main loop alive 
         while True:
@@ -189,5 +202,28 @@ class SchedulerService:
             except Exception as e:
                 logger.error(f"❌ Lead archive loop error: {e}")
                 await asyncio.sleep(3600)
+
+    async def _supplier_sync_loop(self):
+        while True:
+            try:
+                enabled_value = await self._get_global_config_value("supplier_sync_enabled", "true")
+                enabled = str(enabled_value).strip().lower() in {"1", "true", "yes", "on"}
+                if enabled:
+                    interval_raw = await self._get_global_config_value("supplier_sync_interval_minutes", "60")
+                    try:
+                        interval_minutes = max(5, int(interval_raw))
+                    except ValueError:
+                        interval_minutes = 60
+
+                    logger.info("⏳ Supplier sync job started...")
+                    async with async_session_maker() as session:
+                        results = await SupplierSyncService.sync_all_active_sources(session)
+                    logger.info(f"✅ Supplier sync done. Sources: {len(results)}")
+                    await asyncio.sleep(interval_minutes * 60)
+                else:
+                    await asyncio.sleep(300)
+            except Exception as e:
+                logger.error(f"❌ Supplier sync loop error: {e}")
+                await asyncio.sleep(300)
 
 scheduler_service = SchedulerService()

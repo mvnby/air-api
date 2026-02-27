@@ -14,6 +14,7 @@ from routers import manager_installers
 from routers import manager_settings
 from routers import manager_tariffs
 from routers import manager_tags
+from routers import manager_supply
 
 
 router = APIRouter()
@@ -31,4 +32,4 @@ router.include_router(manager_installers.router)
 router.include_router(manager_settings.router)
 router.include_router(manager_tariffs.router)
 router.include_router(manager_tags.router)
-
+router.include_router(manager_supply.router)

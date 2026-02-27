@@ -48,6 +48,9 @@ const knownKeys = ref<string[]>([]);
 const tagGroups = ref<TagGroupItem[]>([]);
 const tagsLoading = ref(false);
 const tagSearchQuery = ref('');
+const vitebskQty = ref(0);
+const supplierOffers = ref<any[]>([]);
+const localStockSaving = ref(false);
 
 const fetchKeys = async () => {
     try {
@@ -140,13 +143,40 @@ watch(() => props.modelValue, (val) => {
         
         if (knownKeys.value.length === 0) fetchKeys();
         fetchTags();
+        vitebskQty.value = Number((props.product as any).vitebsk_qty || 0);
+        loadSupplierOffers();
     }
 });
+
+const loadSupplierOffers = async () => {
+    if (!props.product) return;
+    try {
+        const res = await api.getProductSupplierOffers(props.product.id);
+        supplierOffers.value = res.items || [];
+    } catch (e) {
+        console.error(e);
+        supplierOffers.value = [];
+    }
+};
 
 const addRow = () => specs.value.push({ key: '', value: '' });
 const removeRow = (index: number) => specs.value.splice(index, 1);
 
 const close = () => emit('update:modelValue', false);
+
+const saveLocalStock = async () => {
+    if (!props.product) return;
+    localStockSaving.value = true;
+    formMessage.value = '';
+    try {
+        await api.upsertProductLocalStock(props.product.id, { qty: Number(vitebskQty.value || 0) });
+        emit('success');
+    } catch (e) {
+        formMessage.value = `Ошибка при обновлении склада: ${getApiErrorMessage(e)}`;
+    } finally {
+        localStockSaving.value = false;
+    }
+};
 
 const save = async () => {
     if (!props.product) return;
@@ -287,6 +317,32 @@ const save = async () => {
                                 <div class="w-11 h-6 bg-gray-200 dark:bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 dark:peer-focus:ring-teal-900 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 dark:after:border-slate-600 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
                                 <span class="ms-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Опубликовано</span>
                             </label>
+                        </div>
+
+                        <div class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3">
+                            <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-slate-500">Supply</h4>
+                            <div class="flex items-end gap-2">
+                                <div class="flex-1">
+                                    <label class="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">Склад Витебск (шт)</label>
+                                    <input v-model.number="vitebskQty" type="number" min="0" class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl text-sm" />
+                                </div>
+                                <button
+                                    @click="saveLocalStock"
+                                    :disabled="localStockSaving"
+                                    class="px-3 py-2 rounded-xl bg-teal-600 text-white text-sm font-semibold disabled:opacity-50"
+                                >
+                                    {{ localStockSaving ? 'Сохранение...' : 'Сохранить' }}
+                                </button>
+                            </div>
+                            <div class="max-h-40 overflow-y-auto space-y-2">
+                                <div v-if="supplierOffers.length === 0" class="text-xs text-gray-500 dark:text-slate-400">Нет привязанных офферов</div>
+                                <div v-for="offer in supplierOffers" :key="`${offer.supplier_id}-${offer.external_id}`" class="text-xs border border-gray-100 dark:border-slate-700 rounded-lg p-2 bg-slate-50 dark:bg-slate-900/40">
+                                    <div class="font-semibold text-gray-700 dark:text-slate-200">{{ offer.supplier_name || offer.supplier_id }} / {{ offer.external_id }}</div>
+                                    <div class="text-gray-500 dark:text-slate-400">
+                                        qty: {{ offer.qty }} | wholesale: {{ offer.wholesale_value ?? '—' }} {{ offer.wholesale_currency || '' }} | rrc: {{ offer.rrc_byn ?? '—' }}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </section>
 

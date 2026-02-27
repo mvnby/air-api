@@ -140,6 +140,33 @@ class GoogleDocsService:
         except Exception as e:
             return f"Google Sheets API Error: {str(e)}"
 
+    def read_sheet_values(
+        self,
+        spreadsheet_id: str,
+        *,
+        sheet_name: Optional[str] = None,
+        range_a1: Optional[str] = None,
+    ) -> List[List[str]]:
+        if not self.creds or not self.creds.valid:
+            self._authenticate()
+            if not self.creds:
+                raise Exception("Ошибка: Нет доступа к Google API (проверьте права).")
+
+        sheets_service = build("sheets", "v4", credentials=self.creds)
+        query_range = range_a1
+        if not query_range:
+            query_range = f"{sheet_name}" if sheet_name else "A:Z"
+        elif sheet_name and "!" not in query_range:
+            query_range = f"{sheet_name}!{query_range}"
+
+        resp = (
+            sheets_service.spreadsheets()
+            .values()
+            .get(spreadsheetId=spreadsheet_id, range=query_range)
+            .execute()
+        )
+        return resp.get("values", [])
+
     def _parse_a1(self, addr: str):
         """Парсит A1 нотацию (напр 'B12') в (row_index, col_index)"""
         # Упрощенный парсер

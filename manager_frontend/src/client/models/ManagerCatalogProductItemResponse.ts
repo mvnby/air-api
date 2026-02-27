@@ -19,5 +19,12 @@ export type ManagerCatalogProductItemResponse = {
     specs: Record<string, any>;
     gallery_images: Array<ManagerCatalogProductImageResponse>;
     tags: Array<ManagerCatalogProductTagResponse>;
+    min_cost_byn?: (number | null);
+    recommended_price_byn?: (number | null);
+    margin_abs_preview?: (number | null);
+    margin_pct_preview?: (number | null);
+    vitebsk_qty?: number;
+    minsk_qty?: number;
+    availability_status?: string;
 };
 

@@ -37,11 +37,17 @@
    git checkout -b fix/short-task-name
    ```
 
+   Один раз настройте локальные git hooks (автосинк OpenAPI + manager client перед commit, если менялись роуты/схемы):
+
+   ```bash
+   ./scripts/setup_git_hooks.sh
+   ```
+
 3. Сделать изменения и локальную проверку:
 
    ```bash
    # Если менялись API схемы или роуты:
-   python3 scripts/legacy/extract_openapi.py && cd manager_frontend && npm run gen:api && cd ..
+   ./scripts/sync_manager_api_client.sh
    
    pytest -q
    cd web && npm run build
