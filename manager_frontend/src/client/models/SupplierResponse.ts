@@ -8,6 +8,9 @@ export type SupplierResponse = {
     code: string;
     is_active: boolean;
     priority: number;
+    spreadsheet_id?: (string | null);
+    spreadsheet_url?: (string | null);
+    google_sheet_synced_at?: (string | null);
     created_at: string;
     updated_at: string;
 };

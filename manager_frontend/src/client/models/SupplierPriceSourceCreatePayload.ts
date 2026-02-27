@@ -5,7 +5,6 @@
 export type SupplierPriceSourceCreatePayload = {
     supplier_id: number;
     source_type?: string;
-    spreadsheet_id: string;
     sheet_name?: (string | null);
     range_a1?: (string | null);
     city_bucket?: string;

@@ -167,6 +167,7 @@ class SupplierSyncService:
 
                 offer_payload = {
                     "supplier_id": source.supplier_id,
+                    "source_id": source.id,
                     "external_id": ext_id,
                     "title_raw": title_raw or None,
                     "qty_raw": qty_raw or None,

@@ -5653,6 +5653,98 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Delete Supplier",
+        "operationId": "delete_supplier",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerActionMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/suppliers/{supplier_id}/sheets": {
+      "get": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "List Supplier Sheets",
+        "operationId": "list_supplier_sheets",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierSheetTabListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/manager/supplier-sources": {
@@ -5874,6 +5966,36 @@
         }
       }
     },
+    "/api/manager/supplier-sources/sync-all": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Sync All Supplier Sources",
+        "operationId": "sync_all_supplier_sources",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SupplierSyncRunResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Sync All Supplier Sources"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/supplier-offers/unmapped": {
       "get": {
         "tags": [
@@ -5925,6 +6047,22 @@
               ],
               "title": "Supplier Id"
             }
+          },
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Id"
+            }
           }
         ],
         "responses": {
@@ -5951,6 +6089,52 @@
         }
       }
     },
+    "/api/manager/supplier-offers/suggestions": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Suggest Supplier Offers",
+        "operationId": "suggest_supplier_offers",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupplierOfferSuggestionsPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierOfferSuggestionsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/supplier-mappings": {
       "post": {
         "tags": [
@@ -5975,6 +6159,52 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SupplierMappingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/supplier-mappings/bulk": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Create Supplier Mappings Bulk",
+        "operationId": "bulk_create_supplier_mappings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupplierMappingBulkCreatePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierMappingBulkCreateResponse"
                 }
               }
             }
@@ -11955,8 +12185,26 @@
             "title": "Name"
           },
           "code": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Code"
+          },
+          "spreadsheet_id_or_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spreadsheet Id Or Url"
           },
           "is_active": {
             "type": "boolean",
@@ -11971,8 +12219,7 @@
         },
         "type": "object",
         "required": [
-          "name",
-          "code"
+          "name"
         ],
         "title": "SupplierCreatePayload"
       },
@@ -11991,6 +12238,111 @@
           "items"
         ],
         "title": "SupplierListResponse"
+      },
+      "SupplierMappingBulkCreatePayload": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SupplierMappingBulkItemPayload"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "skip_conflicts": {
+            "type": "boolean",
+            "title": "Skip Conflicts",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "SupplierMappingBulkCreatePayload"
+      },
+      "SupplierMappingBulkCreateResponse": {
+        "properties": {
+          "created_count": {
+            "type": "integer",
+            "title": "Created Count"
+          },
+          "skipped_count": {
+            "type": "integer",
+            "title": "Skipped Count"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/SupplierMappingBulkErrorResponse"
+            },
+            "type": "array",
+            "title": "Errors",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "created_count",
+          "skipped_count"
+        ],
+        "title": "SupplierMappingBulkCreateResponse"
+      },
+      "SupplierMappingBulkErrorResponse": {
+        "properties": {
+          "supplier_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Id"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "SupplierMappingBulkErrorResponse"
+      },
+      "SupplierMappingBulkItemPayload": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "supplier_id": {
+            "type": "integer",
+            "title": "Supplier Id"
+          },
+          "external_id": {
+            "type": "string",
+            "title": "External Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "supplier_id",
+          "external_id"
+        ],
+        "title": "SupplierMappingBulkItemPayload"
       },
       "SupplierMappingCreatePayload": {
         "properties": {
@@ -12090,6 +12442,28 @@
           "supplier_id": {
             "type": "integer",
             "title": "Supplier Id"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "source_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Name"
           },
           "supplier_name": {
             "anyOf": [
@@ -12240,6 +12614,136 @@
         ],
         "title": "SupplierOfferResponse"
       },
+      "SupplierOfferSuggestionCandidate": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "price": {
+            "type": "integer",
+            "title": "Price"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "title",
+          "price"
+        ],
+        "title": "SupplierOfferSuggestionCandidate"
+      },
+      "SupplierOfferSuggestionItem": {
+        "properties": {
+          "supplier_id": {
+            "type": "integer",
+            "title": "Supplier Id"
+          },
+          "external_id": {
+            "type": "string",
+            "title": "External Id"
+          },
+          "normalized_query": {
+            "type": "string",
+            "title": "Normalized Query"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/SupplierOfferSuggestionCandidate"
+            },
+            "type": "array",
+            "title": "Candidates"
+          },
+          "auto_eligible": {
+            "type": "boolean",
+            "title": "Auto Eligible"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "supplier_id",
+          "external_id",
+          "normalized_query",
+          "candidates",
+          "auto_eligible",
+          "reason"
+        ],
+        "title": "SupplierOfferSuggestionItem"
+      },
+      "SupplierOfferSuggestionRequestItem": {
+        "properties": {
+          "supplier_id": {
+            "type": "integer",
+            "title": "Supplier Id"
+          },
+          "external_id": {
+            "type": "string",
+            "title": "External Id"
+          },
+          "title_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Raw"
+          }
+        },
+        "type": "object",
+        "required": [
+          "supplier_id",
+          "external_id"
+        ],
+        "title": "SupplierOfferSuggestionRequestItem"
+      },
+      "SupplierOfferSuggestionsPayload": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SupplierOfferSuggestionRequestItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "limit_per_offer": {
+            "type": "integer",
+            "title": "Limit Per Offer",
+            "default": 5
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "SupplierOfferSuggestionsPayload"
+      },
+      "SupplierOfferSuggestionsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SupplierOfferSuggestionItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "SupplierOfferSuggestionsResponse"
+      },
       "SupplierPriceSourceCreatePayload": {
         "properties": {
           "supplier_id": {
@@ -12250,10 +12754,6 @@
             "type": "string",
             "title": "Source Type",
             "default": "google_sheet"
-          },
-          "spreadsheet_id": {
-            "type": "string",
-            "title": "Spreadsheet Id"
           },
           "sheet_name": {
             "anyOf": [
@@ -12325,8 +12825,7 @@
         },
         "type": "object",
         "required": [
-          "supplier_id",
-          "spreadsheet_id"
+          "supplier_id"
         ],
         "title": "SupplierPriceSourceCreatePayload"
       },
@@ -12356,13 +12855,20 @@
             "type": "integer",
             "title": "Supplier Id"
           },
+          "supplier_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Name"
+          },
           "source_type": {
             "type": "string",
             "title": "Source Type"
-          },
-          "spreadsheet_id": {
-            "type": "string",
-            "title": "Spreadsheet Id"
           },
           "sheet_name": {
             "anyOf": [
@@ -12472,7 +12978,6 @@
           "id",
           "supplier_id",
           "source_type",
-          "spreadsheet_id",
           "city_bucket",
           "header_row_index",
           "col_external_id",
@@ -12500,16 +13005,16 @@
             ],
             "title": "Source Type"
           },
-          "spreadsheet_id": {
+          "supplier_id": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Spreadsheet Id"
+            "title": "Supplier Id"
           },
           "sheet_name": {
             "anyOf": [
@@ -12658,6 +13163,40 @@
             "type": "integer",
             "title": "Priority"
           },
+          "spreadsheet_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spreadsheet Id"
+          },
+          "spreadsheet_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spreadsheet Url"
+          },
+          "google_sheet_synced_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Sheet Synced At"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -12680,6 +13219,57 @@
           "updated_at"
         ],
         "title": "SupplierResponse"
+      },
+      "SupplierSheetTabListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SupplierSheetTabResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "SupplierSheetTabListResponse"
+      },
+      "SupplierSheetTabResponse": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index"
+          },
+          "sheet_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "SupplierSheetTabResponse"
       },
       "SupplierSyncRunResponse": {
         "properties": {
@@ -12758,6 +13348,17 @@
               }
             ],
             "title": "Code"
+          },
+          "spreadsheet_id_or_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spreadsheet Id Or Url"
           },
           "is_active": {
             "anyOf": [

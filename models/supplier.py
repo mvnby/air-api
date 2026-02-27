@@ -14,6 +14,9 @@ class Supplier(SQLModel, table=True):
     code: str = Field(unique=True, index=True)
     is_active: bool = Field(default=True, index=True)
     priority: int = Field(default=100, index=True)
+    spreadsheet_id: Optional[str] = Field(default=None, index=True)
+    spreadsheet_url: Optional[str] = Field(default=None)
+    google_sheet_synced_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(
         default_factory=datetime.now,
@@ -31,7 +34,7 @@ class SupplierPriceSource(SQLModel, table=True):
     supplier_id: int = Field(foreign_key="supplier.id", index=True)
 
     source_type: str = Field(default="google_sheet", index=True)
-    spreadsheet_id: str = Field(index=True)
+    spreadsheet_id: Optional[str] = Field(default=None, index=True)
     sheet_name: Optional[str] = Field(default=None)
     range_a1: Optional[str] = Field(default=None)
     city_bucket: str = Field(default="minsk", index=True)
@@ -64,6 +67,7 @@ class SupplierOffer(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     supplier_id: int = Field(foreign_key="supplier.id", index=True)
+    source_id: Optional[int] = Field(default=None, foreign_key="supplier_price_source.id", index=True)
     external_id: str = Field(index=True)
 
     title_raw: Optional[str] = None

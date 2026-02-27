@@ -31,6 +31,8 @@ import {
     type SupplierPriceSourceCreatePayload,
     type SupplierPriceSourceUpdatePayload,
     type SupplierMappingCreatePayload,
+    type SupplierMappingBulkCreatePayload,
+    type SupplierOfferSuggestionsPayload,
     type ProductLocalStockPayload,
 } from './client';
 import { ManagerTagsService } from './client/services/ManagerTagsService';
@@ -353,6 +355,18 @@ export const api = {
         return await ManagerService.patchSupplier(supplierId, payload);
     },
 
+    async deleteSupplier(supplierId: number) {
+        const res = await fetch(`/api/manager/suppliers/${supplierId}`, {
+            method: 'DELETE',
+            credentials: 'include',
+        });
+        if (!res.ok) {
+            const body = await res.text();
+            throw new Error(body || `HTTP ${res.status}`);
+        }
+        return await res.json();
+    },
+
     async listSupplierSources() {
         return await ManagerService.listSupplierSources();
     },
@@ -381,12 +395,40 @@ export const api = {
         return await ManagerService.syncSupplierSource(sourceId);
     },
 
-    async listUnmappedSupplierOffers(page = 1, limit = 50, supplierId?: number) {
-        return await ManagerService.listUnmappedSupplierOffers(page, limit, supplierId ?? undefined);
+    async syncAllSupplierSources() {
+        return await ManagerService.syncAllSupplierSources();
+    },
+
+    async listUnmappedSupplierOffers(page = 1, limit = 50, supplierId?: number, sourceId?: number) {
+        const params = new URLSearchParams();
+        params.set('page', String(page));
+        params.set('limit', String(limit));
+        if (supplierId) params.set('supplier_id', String(supplierId));
+        if (sourceId) params.set('source_id', String(sourceId));
+        const res = await fetch(`/api/manager/supplier-offers/unmapped?${params.toString()}`, {
+            credentials: 'include',
+        });
+        if (!res.ok) {
+            const body = await res.text();
+            throw new Error(body || `HTTP ${res.status}`);
+        }
+        return await res.json();
     },
 
     async createSupplierMapping(payload: SupplierMappingCreatePayload) {
         return await ManagerService.createSupplierMapping(payload);
+    },
+
+    async createSupplierMappingsBulk(payload: SupplierMappingBulkCreatePayload) {
+        return await ManagerService.bulkCreateSupplierMappings(payload);
+    },
+
+    async suggestSupplierOffers(payload: SupplierOfferSuggestionsPayload) {
+        return await ManagerService.suggestSupplierOffers(payload);
+    },
+
+    async listSupplierSheets(supplierId: number) {
+        return await ManagerService.listSupplierSheets(supplierId);
     },
 
     async deleteSupplierMapping(mappingId: number) {

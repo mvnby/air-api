@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref } from 'vue';
-import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Wrench, Settings, Wallet, ChevronLeft, ChevronRight } from 'lucide-vue-next';
+import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Wrench, Settings, Wallet, ChevronLeft, ChevronRight, Tags, FileSpreadsheet, Link2 } from 'lucide-vue-next';
 import { api } from './api';
 
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
@@ -41,10 +41,10 @@ const navItems = [
   { path: '/manager/customers', label: 'Клиенты', icon: Users },
   { path: '/manager/installers', label: 'Монтажники', icon: Wrench },
   { path: '/manager/tariffs', label: 'Тарифы на монтаж', icon: Wallet },
+  { path: '/manager/tags', label: 'Теги', icon: Tags },
+  { path: '/manager/suppliers', label: 'Прайсы поставщиков', icon: FileSpreadsheet },
+  { path: '/manager/supplier-mapping', label: 'Маппинг прайсов', icon: Link2 },
   { path: '/manager/settings', label: 'Настройки сайта', icon: Settings },
-  { path: '/manager/tags', label: 'Теги', icon: Package },
-  { path: '/manager/suppliers', label: 'Прайсы поставщиков', icon: Package },
-  { path: '/manager/supplier-mapping', label: 'Маппинг прайсов', icon: Package },
 ];
 
 const currentView = computed(() => {

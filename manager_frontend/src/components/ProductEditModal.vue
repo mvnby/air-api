@@ -51,6 +51,7 @@ const tagSearchQuery = ref('');
 const vitebskQty = ref(0);
 const supplierOffers = ref<any[]>([]);
 const localStockSaving = ref(false);
+const unlinkingMappingId = ref<number | null>(null);
 
 const fetchKeys = async () => {
     try {
@@ -225,6 +226,23 @@ const save = async () => {
         loading.value = false;
     }
 };
+
+const unlinkSupplierOffer = async (offer: any) => {
+    const mappingId = Number(offer?.mapping_id || 0);
+    if (!mappingId) return;
+    if (!confirm('Отвязать этот прайс от товара?')) return;
+    unlinkingMappingId.value = mappingId;
+    formMessage.value = '';
+    try {
+        await api.deleteSupplierMapping(mappingId);
+        await loadSupplierOffers();
+        emit('success');
+    } catch (e) {
+        formMessage.value = `Ошибка при отвязке: ${getApiErrorMessage(e)}`;
+    } finally {
+        unlinkingMappingId.value = null;
+    }
+};
 </script>
 
 <template>
@@ -337,7 +355,17 @@ const save = async () => {
                             <div class="max-h-40 overflow-y-auto space-y-2">
                                 <div v-if="supplierOffers.length === 0" class="text-xs text-gray-500 dark:text-slate-400">Нет привязанных офферов</div>
                                 <div v-for="offer in supplierOffers" :key="`${offer.supplier_id}-${offer.external_id}`" class="text-xs border border-gray-100 dark:border-slate-700 rounded-lg p-2 bg-slate-50 dark:bg-slate-900/40">
-                                    <div class="font-semibold text-gray-700 dark:text-slate-200">{{ offer.supplier_name || offer.supplier_id }} / {{ offer.external_id }}</div>
+                                    <div class="flex items-start justify-between gap-2">
+                                        <div class="font-semibold text-gray-700 dark:text-slate-200">{{ offer.supplier_name || offer.supplier_id }} / {{ offer.external_id }}</div>
+                                        <button
+                                            v-if="offer.mapping_id"
+                                            @click="unlinkSupplierOffer(offer)"
+                                            :disabled="unlinkingMappingId === offer.mapping_id"
+                                            class="px-2 py-1 rounded border border-red-300 text-red-600 text-[11px] font-semibold disabled:opacity-50"
+                                        >
+                                            {{ unlinkingMappingId === offer.mapping_id ? '...' : 'Отвязать' }}
+                                        </button>
+                                    </div>
                                     <div class="text-gray-500 dark:text-slate-400">
                                         qty: {{ offer.qty }} | wholesale: {{ offer.wholesale_value ?? '—' }} {{ offer.wholesale_currency || '' }} | rrc: {{ offer.rrc_byn ?? '—' }}
                                     </div>
