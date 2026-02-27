@@ -4,7 +4,7 @@
 /* eslint-disable */
 export type SupplierPriceSourceUpdatePayload = {
     source_type?: (string | null);
-    spreadsheet_id?: (string | null);
+    supplier_id?: (number | null);
     sheet_name?: (string | null);
     range_a1?: (string | null);
     city_bucket?: (string | null);

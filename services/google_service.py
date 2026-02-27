@@ -1,5 +1,6 @@
 import os.path
 import logging
+import re
 from typing import Dict, Any, List, Optional
 from io import BytesIO
 
@@ -166,6 +167,37 @@ class GoogleDocsService:
             .execute()
         )
         return resp.get("values", [])
+
+    def extract_spreadsheet_id(self, spreadsheet_id_or_url: str) -> str:
+        raw = (spreadsheet_id_or_url or "").strip()
+        if not raw:
+            return ""
+        m = re.search(r"/spreadsheets/d/([a-zA-Z0-9-_]+)", raw)
+        return m.group(1) if m else raw
+
+    def list_sheet_tabs(self, spreadsheet_id: str) -> List[Dict[str, Any]]:
+        if not self.creds or not self.creds.valid:
+            self._authenticate()
+            if not self.creds:
+                raise Exception("Ошибка: Нет доступа к Google API (проверьте права).")
+
+        sheets_service = build("sheets", "v4", credentials=self.creds)
+        spreadsheet = (
+            sheets_service.spreadsheets()
+            .get(spreadsheetId=spreadsheet_id, includeGridData=False)
+            .execute()
+        )
+        out: List[Dict[str, Any]] = []
+        for s in spreadsheet.get("sheets", []):
+            props = s.get("properties", {})
+            out.append(
+                {
+                    "title": props.get("title"),
+                    "index": props.get("index"),
+                    "sheet_id": props.get("sheetId"),
+                }
+            )
+        return out
 
     def _parse_a1(self, addr: str):
         """Парсит A1 нотацию (напр 'B12') в (row_index, col_index)"""

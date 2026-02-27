@@ -951,13 +951,17 @@ class SupplierResponse(BaseModel):
     code: str
     is_active: bool
     priority: int
+    spreadsheet_id: Optional[str] = None
+    spreadsheet_url: Optional[str] = None
+    google_sheet_synced_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
 
 class SupplierCreatePayload(BaseModel):
     name: str
-    code: str
+    code: Optional[str] = None
+    spreadsheet_id_or_url: Optional[str] = None
     is_active: bool = True
     priority: int = 100
 
@@ -965,6 +969,7 @@ class SupplierCreatePayload(BaseModel):
 class SupplierUpdatePayload(BaseModel):
     name: Optional[str] = None
     code: Optional[str] = None
+    spreadsheet_id_or_url: Optional[str] = None
     is_active: Optional[bool] = None
     priority: Optional[int] = None
 
@@ -976,8 +981,8 @@ class SupplierListResponse(BaseModel):
 class SupplierPriceSourceResponse(BaseModel):
     id: int
     supplier_id: int
+    supplier_name: Optional[str] = None
     source_type: str
-    spreadsheet_id: str
     sheet_name: Optional[str] = None
     range_a1: Optional[str] = None
     city_bucket: str
@@ -999,7 +1004,6 @@ class SupplierPriceSourceResponse(BaseModel):
 class SupplierPriceSourceCreatePayload(BaseModel):
     supplier_id: int
     source_type: str = "google_sheet"
-    spreadsheet_id: str
     sheet_name: Optional[str] = None
     range_a1: Optional[str] = None
     city_bucket: str = "minsk"
@@ -1015,7 +1019,7 @@ class SupplierPriceSourceCreatePayload(BaseModel):
 
 class SupplierPriceSourceUpdatePayload(BaseModel):
     source_type: Optional[str] = None
-    spreadsheet_id: Optional[str] = None
+    supplier_id: Optional[int] = None
     sheet_name: Optional[str] = None
     range_a1: Optional[str] = None
     city_bucket: Optional[str] = None
@@ -1046,6 +1050,8 @@ class SupplierSyncRunResponse(BaseModel):
 
 class SupplierOfferResponse(BaseModel):
     supplier_id: int
+    source_id: Optional[int] = None
+    source_name: Optional[str] = None
     supplier_name: Optional[str] = None
     external_id: str
     title_raw: Optional[str] = None
@@ -1072,6 +1078,69 @@ class SupplierMappingCreatePayload(BaseModel):
     product_id: int
     supplier_id: int
     external_id: str
+
+
+class SupplierMappingBulkItemPayload(BaseModel):
+    product_id: int
+    supplier_id: int
+    external_id: str
+
+
+class SupplierMappingBulkCreatePayload(BaseModel):
+    items: List[SupplierMappingBulkItemPayload]
+    skip_conflicts: bool = True
+
+
+class SupplierMappingBulkErrorResponse(BaseModel):
+    supplier_id: Optional[int] = None
+    external_id: Optional[str] = None
+    message: str
+
+
+class SupplierMappingBulkCreateResponse(BaseModel):
+    created_count: int
+    skipped_count: int
+    errors: List[SupplierMappingBulkErrorResponse] = []
+
+
+class SupplierOfferSuggestionRequestItem(BaseModel):
+    supplier_id: int
+    external_id: str
+    title_raw: Optional[str] = None
+
+
+class SupplierOfferSuggestionCandidate(BaseModel):
+    product_id: int
+    title: str
+    price: int
+
+
+class SupplierOfferSuggestionItem(BaseModel):
+    supplier_id: int
+    external_id: str
+    normalized_query: str
+    candidates: List[SupplierOfferSuggestionCandidate]
+    auto_eligible: bool
+    reason: str
+
+
+class SupplierOfferSuggestionsPayload(BaseModel):
+    items: List[SupplierOfferSuggestionRequestItem]
+    limit_per_offer: int = 5
+
+
+class SupplierOfferSuggestionsResponse(BaseModel):
+    items: List[SupplierOfferSuggestionItem]
+
+
+class SupplierSheetTabResponse(BaseModel):
+    title: str
+    index: Optional[int] = None
+    sheet_id: Optional[int] = None
+
+
+class SupplierSheetTabListResponse(BaseModel):
+    items: List[SupplierSheetTabResponse]
 
 
 class SupplierMappingResponse(BaseModel):

@@ -8,14 +8,19 @@ from core.manager_api_errors import manager_http_error
 from core.manager_error_codes import BAD_REQUEST, PRODUCT_NOT_FOUND
 from core.security import get_current_username
 from routers.manager_operation_ids import (
+    BULK_CREATE_SUPPLIER_MAPPINGS,
     CREATE_SUPPLIER,
     CREATE_SUPPLIER_MAPPING,
     CREATE_SUPPLIER_SOURCE,
+    DELETE_SUPPLIER,
     DELETE_SUPPLIER_SOURCE,
     DELETE_SUPPLIER_MAPPING,
     GET_PRODUCT_SUPPLIER_OFFERS,
+    LIST_SUPPLIER_SHEETS,
     LIST_SUPPLIERS,
     LIST_SUPPLIER_SOURCES,
+    SUGGEST_SUPPLIER_OFFERS,
+    SYNC_ALL_SUPPLIER_SOURCES,
     LIST_UNMAPPED_SUPPLIER_OFFERS,
     PATCH_SUPPLIER,
     PATCH_SUPPLIER_SOURCE,
@@ -29,13 +34,18 @@ from schemas import (
     SupplierCreatePayload,
     SupplierListResponse,
     SupplierMappingCreatePayload,
+    SupplierMappingBulkCreatePayload,
+    SupplierMappingBulkCreateResponse,
     SupplierMappingResponse,
     SupplierOfferListResponse,
+    SupplierOfferSuggestionsPayload,
+    SupplierOfferSuggestionsResponse,
     SupplierPriceSourceCreatePayload,
     SupplierPriceSourceListResponse,
     SupplierPriceSourceResponse,
     SupplierPriceSourceUpdatePayload,
     SupplierResponse,
+    SupplierSheetTabListResponse,
     SupplierSyncRunResponse,
     SupplierUpdatePayload,
 )
@@ -97,6 +107,52 @@ async def patch_supplier(
             message="Supplier not found",
         )
     return result
+
+
+@router.delete(
+    "/suppliers/{supplier_id}",
+    response_model=ManagerActionMessageResponse,
+    operation_id=DELETE_SUPPLIER,
+)
+async def delete_supplier(
+    supplier_id: int,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    ok = await SupplierCatalogService.delete_supplier(session, supplier_id)
+    if not ok:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=DELETE_SUPPLIER,
+            error_code=BAD_REQUEST,
+            message="Supplier not found",
+        )
+    return {"message": "Поставщик удалён"}
+
+
+@router.get("/suppliers/{supplier_id}/sheets", response_model=SupplierSheetTabListResponse, operation_id=LIST_SUPPLIER_SHEETS)
+async def list_supplier_sheets(
+    supplier_id: int,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        items = await SupplierCatalogService.list_supplier_sheets(session, supplier_id)
+        return {"items": items}
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=LIST_SUPPLIER_SHEETS,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=LIST_SUPPLIER_SHEETS,
+            error_code=BAD_REQUEST,
+            message=f"Failed to load sheets: {exc}",
+        ) from exc
 
 
 @router.get("/supplier-sources", response_model=SupplierPriceSourceListResponse, operation_id=LIST_SUPPLIER_SOURCES)
@@ -205,6 +261,26 @@ async def sync_supplier_source(
         ) from exc
 
 
+@router.post(
+    "/supplier-sources/sync-all",
+    response_model=list[SupplierSyncRunResponse],
+    operation_id=SYNC_ALL_SUPPLIER_SOURCES,
+)
+async def sync_all_supplier_sources(
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        return await SupplierSyncService.sync_all_active_sources(session)
+    except Exception as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=SYNC_ALL_SUPPLIER_SOURCES,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
 @router.get(
     "/supplier-offers/unmapped",
     response_model=SupplierOfferListResponse,
@@ -214,14 +290,33 @@ async def list_unmapped_supplier_offers(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
     supplier_id: Optional[int] = Query(None),
+    source_id: Optional[int] = Query(None),
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
     return await SupplierMappingService.list_unmapped(
         session=session,
         supplier_id=supplier_id,
+        source_id=source_id,
         page=page,
         limit=limit,
+    )
+
+
+@router.post(
+    "/supplier-offers/suggestions",
+    response_model=SupplierOfferSuggestionsResponse,
+    operation_id=SUGGEST_SUPPLIER_OFFERS,
+)
+async def suggest_supplier_offers(
+    payload: SupplierOfferSuggestionsPayload,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    return await SupplierMappingService.suggest_for_offers(
+        session=session,
+        items=[i.model_dump() for i in payload.items],
+        limit_per_offer=payload.limit_per_offer,
     )
 
 
@@ -250,6 +345,24 @@ async def create_supplier_mapping(
             error_code=BAD_REQUEST,
             message=str(exc),
         ) from exc
+
+
+@router.post(
+    "/supplier-mappings/bulk",
+    response_model=SupplierMappingBulkCreateResponse,
+    operation_id=BULK_CREATE_SUPPLIER_MAPPINGS,
+)
+async def create_supplier_mappings_bulk(
+    payload: SupplierMappingBulkCreatePayload,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_username),
+):
+    return await SupplierMappingService.create_bulk_mappings(
+        session=session,
+        items=[i.model_dump() for i in payload.items],
+        mapped_by=user,
+        skip_conflicts=payload.skip_conflicts,
+    )
 
 
 @router.delete("/supplier-mappings/{mapping_id}", operation_id=DELETE_SUPPLIER_MAPPING)

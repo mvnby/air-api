@@ -46,6 +46,27 @@ class SupplierDAO:
         await session.refresh(supplier)
         return supplier
 
+    @staticmethod
+    async def delete_supplier(session: AsyncSession, supplier: Supplier) -> None:
+        await session.execute(
+            delete(ProductSupplierMapping).where(ProductSupplierMapping.supplier_id == supplier.id)
+        )
+        await session.execute(
+            delete(SupplierOffer).where(SupplierOffer.supplier_id == supplier.id)
+        )
+        await session.execute(
+            delete(SupplierSyncRun).where(
+                SupplierSyncRun.source_id.in_(
+                    select(SupplierPriceSource.id).where(SupplierPriceSource.supplier_id == supplier.id)
+                )
+            )
+        )
+        await session.execute(
+            delete(SupplierPriceSource).where(SupplierPriceSource.supplier_id == supplier.id)
+        )
+        await session.delete(supplier)
+        await session.commit()
+
 
 class SupplierSourceDAO:
     @staticmethod
@@ -58,6 +79,20 @@ class SupplierSourceDAO:
     @staticmethod
     async def get_source(session: AsyncSession, source_id: int) -> Optional[SupplierPriceSource]:
         return await session.get(SupplierPriceSource, source_id)
+
+    @staticmethod
+    async def get_source_by_supplier_sheet(
+        session: AsyncSession,
+        supplier_id: int,
+        sheet_name: str,
+    ) -> Optional[SupplierPriceSource]:
+        result = await session.execute(
+            select(SupplierPriceSource).where(
+                SupplierPriceSource.supplier_id == supplier_id,
+                SupplierPriceSource.sheet_name == sheet_name,
+            )
+        )
+        return result.scalar_one_or_none()
 
     @staticmethod
     async def create_source(session: AsyncSession, payload: dict) -> SupplierPriceSource:
@@ -81,6 +116,20 @@ class SupplierSourceDAO:
     async def list_active_google_sources(session: AsyncSession) -> list[SupplierPriceSource]:
         result = await session.execute(
             select(SupplierPriceSource).where(
+                SupplierPriceSource.is_active.is_(True),
+                SupplierPriceSource.source_type == "google_sheet",
+            )
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_active_google_sources_for_supplier(
+        session: AsyncSession,
+        supplier_id: int,
+    ) -> list[SupplierPriceSource]:
+        result = await session.execute(
+            select(SupplierPriceSource).where(
+                SupplierPriceSource.supplier_id == supplier_id,
                 SupplierPriceSource.is_active.is_(True),
                 SupplierPriceSource.source_type == "google_sheet",
             )
@@ -148,9 +197,38 @@ class SupplierOfferDAO:
         return deactivated
 
     @staticmethod
+    async def deactivate_all_for_supplier(session: AsyncSession, supplier_id: int) -> int:
+        result = await session.execute(
+            select(SupplierOffer).where(
+                SupplierOffer.supplier_id == supplier_id,
+                SupplierOffer.is_active.is_(True),
+            )
+        )
+        offers = list(result.scalars().all())
+        deactivated = 0
+        for offer in offers:
+            offer.is_active = False
+            offer.updated_at = datetime.now()
+            session.add(offer)
+            deactivated += 1
+        return deactivated
+
+    @staticmethod
+    async def clear_source_reference(session: AsyncSession, source_id: int) -> None:
+        result = await session.execute(
+            select(SupplierOffer).where(SupplierOffer.source_id == source_id)
+        )
+        offers = list(result.scalars().all())
+        for offer in offers:
+            offer.source_id = None
+            offer.updated_at = datetime.now()
+            session.add(offer)
+
+    @staticmethod
     async def list_unmapped(
         session: AsyncSession,
         supplier_id: Optional[int] = None,
+        source_id: Optional[int] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> tuple[list[SupplierOffer], int]:
@@ -175,6 +253,9 @@ class SupplierOfferDAO:
         if supplier_id is not None:
             base = base.where(SupplierOffer.supplier_id == supplier_id)
             count_stmt = count_stmt.where(SupplierOffer.supplier_id == supplier_id)
+        if source_id is not None:
+            base = base.where(SupplierOffer.source_id == source_id)
+            count_stmt = count_stmt.where(SupplierOffer.source_id == source_id)
 
         total = (await session.execute(count_stmt)).scalar_one()
         result = await session.execute(
@@ -218,6 +299,22 @@ class SupplierMappingDAO:
     async def delete_mapping(session: AsyncSession, mapping: ProductSupplierMapping) -> None:
         await session.delete(mapping)
         await session.commit()
+
+    @staticmethod
+    async def deactivate_all_for_supplier(session: AsyncSession, supplier_id: int) -> int:
+        result = await session.execute(
+            select(ProductSupplierMapping).where(
+                ProductSupplierMapping.supplier_id == supplier_id,
+                ProductSupplierMapping.is_active.is_(True),
+            )
+        )
+        mappings = list(result.scalars().all())
+        deactivated = 0
+        for mapping in mappings:
+            mapping.is_active = False
+            session.add(mapping)
+            deactivated += 1
+        return deactivated
 
     @staticmethod
     async def list_mappings_for_products(

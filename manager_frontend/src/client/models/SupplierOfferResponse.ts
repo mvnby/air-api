@@ -4,6 +4,8 @@
 /* eslint-disable */
 export type SupplierOfferResponse = {
     supplier_id: number;
+    source_id?: (number | null);
+    source_name?: (string | null);
     supplier_name?: (string | null);
     external_id: string;
     title_raw?: (string | null);

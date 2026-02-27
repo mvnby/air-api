@@ -69,6 +69,7 @@ class ProductSupplyMetricsService:
         for pid in product_ids:
             metrics[pid] = {
                 "min_cost_byn": None,
+                "min_cost_byn_fallback": None,
                 "recommended_price_byn": None,
                 "margin_abs_preview": None,
                 "margin_pct_preview": None,
@@ -86,13 +87,15 @@ class ProductSupplyMetricsService:
 
             if (
                 fx_rate
-                and offer.qty > 0
                 and offer.wholesale_value is not None
                 and (offer.wholesale_currency or "").upper() == "USD"
             ):
                 cost_byn = float((offer.wholesale_value * fx_rate).quantize(Decimal("0.01")))
-                if slot["min_cost_byn"] is None or cost_byn < slot["min_cost_byn"]:
-                    slot["min_cost_byn"] = cost_byn
+                if offer.qty > 0:
+                    if slot["min_cost_byn"] is None or cost_byn < slot["min_cost_byn"]:
+                        slot["min_cost_byn"] = cost_byn
+                if slot["min_cost_byn_fallback"] is None or cost_byn < slot["min_cost_byn_fallback"]:
+                    slot["min_cost_byn_fallback"] = cost_byn
 
             if offer.rrc_byn is not None:
                 rrc = float(offer.rrc_byn)
@@ -106,6 +109,9 @@ class ProductSupplyMetricsService:
                     slot["minsk_incoming"] = True
 
         for pid, slot in metrics.items():
+            if slot["min_cost_byn"] is None:
+                slot["min_cost_byn"] = slot["min_cost_byn_fallback"]
+            slot.pop("min_cost_byn_fallback", None)
             site_price = float(price_map.get(pid, 0))
             min_cost = slot["min_cost_byn"]
             if min_cost is not None and site_price > 0:

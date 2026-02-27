@@ -5,8 +5,8 @@
 export type SupplierPriceSourceResponse = {
     id: number;
     supplier_id: number;
+    supplier_name?: (string | null);
     source_type: string;
-    spreadsheet_id: string;
     sheet_name?: (string | null);
     range_a1?: (string | null);
     city_bucket: string;

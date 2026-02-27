@@ -4,7 +4,8 @@
 /* eslint-disable */
 export type SupplierCreatePayload = {
     name: string;
-    code: string;
+    code?: (string | null);
+    spreadsheet_id_or_url?: (string | null);
     is_active?: boolean;
     priority?: number;
 };

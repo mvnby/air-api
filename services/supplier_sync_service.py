@@ -7,7 +7,7 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from crud.supplier import SupplierOfferDAO, SupplierSourceDAO, SupplierSyncRunDAO
+from crud.supplier import SupplierDAO, SupplierOfferDAO, SupplierSourceDAO, SupplierSyncRunDAO
 from models.supplier import SupplierOffer, SupplierPriceSource
 from services.supplier_availability import parse_qty_with_text_fallback
 from services.google_service import get_google_service
@@ -28,8 +28,10 @@ def _col_to_idx(col: str) -> int:
     return n - 1 if n > 0 else -1
 
 
-def _get_cell(row: list[str], col: str) -> str:
+def _get_cell(row: list[str], col: str, range_start_col_idx: int = 0) -> str:
     idx = _col_to_idx(col)
+    if idx >= 0:
+        idx -= max(0, range_start_col_idx)
     if idx < 0 or idx >= len(row):
         return ""
     return str(row[idx]).strip()
@@ -86,6 +88,17 @@ def _extract_range_start_row(range_a1: Optional[str]) -> int:
     return 1
 
 
+def _extract_range_start_col_idx(range_a1: Optional[str]) -> int:
+    value = (range_a1 or "").strip()
+    if not value:
+        return 0
+    # Supports "C6:K65" and "Sheet1!C6:K65"
+    m = re.search(r"([A-Za-z]+)(\d+)\s*:\s*([A-Za-z]+)(\d+)", value)
+    if not m:
+        return 0
+    return max(0, _col_to_idx(m.group(1)))
+
+
 class SupplierSyncService:
     @staticmethod
     async def sync_source(
@@ -102,8 +115,12 @@ class SupplierSyncService:
         error_message = None
 
         try:
+            supplier = await SupplierDAO.get_supplier(session, source.supplier_id)
+            if not supplier or not supplier.spreadsheet_id:
+                raise ValueError("Supplier spreadsheet is not configured")
+
             values = get_google_service().read_sheet_values(
-                spreadsheet_id=source.spreadsheet_id,
+                spreadsheet_id=supplier.spreadsheet_id,
                 sheet_name=source.sheet_name,
                 range_a1=source.range_a1,
             )
@@ -112,13 +129,14 @@ class SupplierSyncService:
             data_rows = values
             rows_total = len(data_rows)
             range_start_row = _extract_range_start_row(source.range_a1)
+            range_start_col_idx = _extract_range_start_col_idx(source.range_a1)
 
             for idx, row in enumerate(data_rows):
-                title_raw = _get_cell(row, source.col_title)
-                qty_raw = _get_cell(row, source.col_qty)
-                wholesale_raw = _get_cell(row, source.col_wholesale)
-                rrc_raw = _get_cell(row, source.col_rrc_byn)
-                ext_id = _get_cell(row, source.col_external_id)
+                title_raw = _get_cell(row, source.col_title, range_start_col_idx)
+                qty_raw = _get_cell(row, source.col_qty, range_start_col_idx)
+                wholesale_raw = _get_cell(row, source.col_wholesale, range_start_col_idx)
+                rrc_raw = _get_cell(row, source.col_rrc_byn, range_start_col_idx)
+                ext_id = _get_cell(row, source.col_external_id, range_start_col_idx)
                 wholesale_value = _parse_decimal(wholesale_raw)
                 rrc_value = _parse_decimal(rrc_raw)
 
@@ -143,12 +161,13 @@ class SupplierSyncService:
                 if currency_token in {"BYN", "USD", "EUR"}:
                     wholesale_currency = currency_token
                 elif currency_token:
-                    wholesale_currency = _normalize_currency(_get_cell(row, currency_token))
+                    wholesale_currency = _normalize_currency(_get_cell(row, currency_token, range_start_col_idx))
                 else:
                     wholesale_currency = "USD"
 
                 offer_payload = {
                     "supplier_id": source.supplier_id,
+                    "source_id": source.id,
                     "external_id": ext_id,
                     "title_raw": title_raw or None,
                     "qty_raw": qty_raw or None,

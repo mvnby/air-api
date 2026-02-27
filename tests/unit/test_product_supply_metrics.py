@@ -55,3 +55,53 @@ async def test_compute_product_supply_metrics(db):
     assert row["vitebsk_qty"] == 2
     assert row["minsk_qty"] == 4
     assert row["availability_status"] == "in_stock_now"
+
+
+@pytest.mark.asyncio
+async def test_compute_metrics_fallback_cost_for_zero_qty_offer(db):
+    product = Product(title="AC2", slug="ac-metrics-2", price=2470, area=25)
+    supplier = Supplier(name="S2", code="s2", priority=1)
+    db.add(product)
+    db.add(supplier)
+    db.add(GlobalConfig(key="fx_rate_usd_byn", value="3.2", description="fx"))
+    db.add(GlobalConfig(key="fx_supplier_markup_percent", value="0", description="test"))
+    await db.commit()
+    await db.refresh(product)
+    await db.refresh(supplier)
+
+    db.add(
+        SupplierPriceSource(
+            supplier_id=supplier.id,
+            spreadsheet_id="sheet-2",
+            city_bucket="minsk",
+            is_active=True,
+        )
+    )
+    db.add(
+        SupplierOffer(
+            supplier_id=supplier.id,
+            external_id="sku-2",
+            qty=0,
+            qty_raw="нет в наличии",
+            wholesale_value=549,
+            wholesale_currency="USD",
+            rrc_byn=2470,
+            is_active=True,
+        )
+    )
+    db.add(
+        ProductSupplierMapping(
+            product_id=product.id,
+            supplier_id=supplier.id,
+            external_id="sku-2",
+            is_active=True,
+        )
+    )
+    await db.commit()
+
+    metrics = await ProductSupplyMetricsService.compute_for_products(db, [product])
+    row = metrics[product.id]
+    assert row["min_cost_byn"] == 1756.8
+    assert row["margin_abs_preview"] == 713.2
+    assert row["minsk_qty"] == 0
+    assert row["availability_status"] == "out_of_stock"
