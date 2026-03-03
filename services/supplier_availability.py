@@ -55,6 +55,6 @@ def parse_qty_with_text_fallback(raw: str | None) -> int:
 
     status = classify_availability(text)
     if status == "in_stock":
-        # If supplier says "в наличии" with no number, treat as minimally available.
-        return 1
+        # If supplier says "в наличии/есть" with no number, assume practical stock.
+        return 10
     return 0

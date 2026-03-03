@@ -25,7 +25,8 @@ def test_parse_qty_and_currency_normalization():
     assert _normalize_currency("usd") == "USD"
     assert _normalize_currency("$") == "USD"
     assert _normalize_currency("byn") == "BYN"
-    assert _parse_qty("в наличии") == 1
+    assert _parse_qty("в наличии") == 10
+    assert _parse_qty("есть") == 10
     assert _parse_qty("в наличии 4 шт") == 4
     assert _parse_qty("ожидается поставка") == 0
     assert _parse_qty("нет в наличии") == 0
