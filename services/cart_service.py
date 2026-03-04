@@ -91,7 +91,7 @@ class CartService:
 
         return {
             "order_id": int(order.id),
-            "total_amount": float(order.total_amount or 0),
+            "total_amount": float(cart_summary["total_price"]),
             "contact_info": contact_info,
             "items_count": len(cart_summary["items"]),
         }
