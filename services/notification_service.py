@@ -16,10 +16,9 @@ class NotificationService:
     async def notify_admins_new_order(
         session: AsyncSession,
         order_id: int,
-        *,
-        customer_name: str | None = None,
-        customer_username: str | None = None,
-        customer_phone: str | None = None,
+        customer_name: str | None,
+        customer_username: str | None,
+        customer_phone: str | None,
     ) -> None:
         if not settings.admin_list:
             return
@@ -56,4 +55,7 @@ class NotificationService:
         admin_text = "\n".join(message_lines)
 
         for admin_id in settings.admin_list:
-            await BotService.send_message(admin_id, admin_text)
+            try:
+                await BotService.send_message(admin_id, admin_text)
+            except Exception:
+                logger.exception("NOTIFY_NEW_ORDER_SEND_FAILED order_id=%s admin_id=%s", order.id, admin_id)

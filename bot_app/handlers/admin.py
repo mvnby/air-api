@@ -3,7 +3,7 @@ from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 from core.config import settings
 from core.database import async_session_maker
-from crud.product import ProductDAO
+from services.product_service import ProductService
 from ..states import ShopState
 
 router = Router()
@@ -18,12 +18,19 @@ async def edit_price_start(callback: CallbackQuery, state: FSMContext):
 
 @router.message(ShopState.edit_price)
 async def edit_price_finish(message: types.Message, state: FSMContext):
-    if not message.text.isdigit(): return
+    if not message.text.isdigit():
+        await message.answer("Цена должна быть числом.")
+        return
     data = await state.get_data()
     
     async with async_session_maker() as session:
-        await ProductDAO.update_price(session, int(data['product_id']), int(message.text))
-    
+        updated = await ProductService.update_price(session, int(data["product_id"]), int(message.text))
+
+    if not updated:
+        await message.answer("❌ Товар не найден.")
+        await state.clear()
+        return
+
     await message.answer("✅ Цена обновлена.")
     await state.clear()
 
@@ -32,7 +39,15 @@ async def delete_item(callback: CallbackQuery):
     if callback.from_user.id != settings.ADMIN_ID: return
     
     async with async_session_maker() as session:
-        await ProductDAO.delete(session, int(callback.data.split("_")[-1]))
-    
+        try:
+            deleted = await ProductService.delete(session, int(callback.data.split("_")[-1]))
+        except ValueError as exc:
+            await callback.answer(str(exc), show_alert=True)
+            return
+
+    if not deleted:
+        await callback.answer("Товар не найден", show_alert=True)
+        return
+
     await callback.message.delete()
     await callback.answer("Удалено")

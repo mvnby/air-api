@@ -1,8 +1,14 @@
-from typing import Dict, Any
+from typing import Dict, Any, TypedDict
 from sqlalchemy.ext.asyncio import AsyncSession
 from crud.cart import CartDAO
 from services.order_service import OrderService
-from services.product_service import ProductService
+
+
+class CheckoutResultDTO(TypedDict):
+    order_id: int
+    total_amount: float
+    contact_info: str
+    items_count: int
 
 class CartService:
     @staticmethod
@@ -41,7 +47,13 @@ class CartService:
         await CartDAO.clear_cart(session, user_id)
 
     @staticmethod
-    async def checkout(session: AsyncSession, user_id: int, contact_info: str, username: str = None, full_name: str = None):
+    async def checkout(
+        session: AsyncSession,
+        user_id: int,
+        contact_info: str,
+        username: str = None,
+        full_name: str = None,
+    ) -> CheckoutResultDTO:
         """
         Convert Cart to Order.
         """
@@ -70,17 +82,16 @@ class CartService:
             username=username,
             full_name=full_name
         )
-        
-        # ВАЖНОЕ ИСПРАВЛЕНИЕ:
-        # Принудительно обновляем заказ и подгружаем связи, чтобы total_amount посчитался верно
-        # И чтобы product_links.product были доступны для уведомлений
-        await session.refresh(order, ["product_links", "service_links"])
-        
-        # Подгружаем product для каждого product_link (для telegram уведомлений)
-        for link in order.product_links:
-            await session.refresh(link, ["product"])
-        
+
         # Очищаем корзину
         await CartService.clear_cart(session, user_id)
-        
-        return order
+
+        if order.id is None:
+            raise RuntimeError("Order ID was not assigned after checkout")
+
+        return {
+            "order_id": int(order.id),
+            "total_amount": float(order.total_amount or 0),
+            "contact_info": contact_info,
+            "items_count": len(cart_summary["items"]),
+        }
