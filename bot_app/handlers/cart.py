@@ -62,7 +62,7 @@ async def finish_checkout(message: types.Message, state: FSMContext):
     
     async with async_session_maker() as session:
         try:
-            order = await CartService.checkout(
+            checkout_result = await CartService.checkout(
                 session, 
                 user_id=user.id, 
                 contact_info=phone,
@@ -71,13 +71,17 @@ async def finish_checkout(message: types.Message, state: FSMContext):
             )
             await NotificationService.notify_admins_new_order(
                 session,
-                order.id,
+                checkout_result["order_id"],
                 customer_name=user.full_name,
                 customer_username=user.username,
                 customer_phone=phone,
             )
             
-            await message.answer(f"✅ <b>Заказ #{order.id} успешно оформлен!</b>\nМы свяжемся с вами в ближайшее время.", reply_markup=main_menu, parse_mode="HTML")
+            await message.answer(
+                f"✅ <b>Заказ #{checkout_result['order_id']} успешно оформлен!</b>\nМы свяжемся с вами в ближайшее время.",
+                reply_markup=main_menu,
+                parse_mode="HTML",
+            )
             
         except ValueError:
             await message.answer("❌ Корзина пуста.", reply_markup=main_menu)

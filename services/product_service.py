@@ -10,6 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from crud.product import ProductDAO
 from models.product import Product
 from services.product_manager_service import ProductManagerService
 from services.product_read_service import ProductReadService
@@ -20,6 +21,20 @@ logger = logging.getLogger(__name__)
 
 class ProductService(ProductReadService, ProductWriteService, ProductManagerService):
     """Backward-compatible facade that combines product service specializations."""
+
+    @staticmethod
+    async def update_price(
+        session: AsyncSession,
+        product_id: int,
+        new_price: int,
+    ) -> bool:
+        return await ProductDAO.update_price(session, product_id, new_price)
+
+    @staticmethod
+    async def delete(session: AsyncSession, product_id: int) -> bool:
+        # Reuse manager-safe deletion: returns False for missing product and
+        # raises ValueError when product is linked to existing orders.
+        return await ProductManagerService.delete_for_manager(session, product_id)
 
     @staticmethod
     async def search_products(

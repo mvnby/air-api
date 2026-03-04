@@ -2,6 +2,7 @@ import pytest
 from services.cart_service import CartService
 from models import Product
 
+
 async def test_cart_flow(db):
     # 1. Create test product
     product = Product(id=1, title="Test AC", slug="test-ac", price=25000, area=20)
@@ -24,16 +25,33 @@ async def test_cart_flow(db):
     assert len(summary["items"]) == 1
     
     # 5. Checkout
-    order = await CartService.checkout(
+    checkout_result = await CartService.checkout(
         db, 
         user_id=user_id, 
         contact_info="+79990000000",
         username="test_user", 
         full_name="Test User"
     )
-    
-    assert order.id is not None
-    
+
+    assert checkout_result["order_id"] is not None
+    assert checkout_result["contact_info"] == "+79990000000"
+    assert checkout_result["items_count"] == 1
+    assert checkout_result["total_amount"] == 25000
+
     # 6. Verify cart cleared
     summary_after = await CartService.get_cart_summary(db, user_id)
     assert summary_after["is_empty"] is True
+
+
+async def test_checkout_empty_cart_raises(db):
+    user_id = 777
+    await CartService.clear_cart(db, user_id)
+
+    with pytest.raises(ValueError, match="Cart is empty"):
+        await CartService.checkout(
+            db,
+            user_id=user_id,
+            contact_info="+79990000000",
+            username="empty_user",
+            full_name="Empty User",
+        )
