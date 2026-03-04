@@ -759,9 +759,6 @@ watchDebounced(
                     <button @click="openEditModal(product)" class="bg-white text-gray-900 px-4 py-2 rounded-full flex items-center gap-2 hover:bg-gray-100 text-sm font-medium transition-colors w-36 justify-center">
                         <Settings class="w-4 h-4 text-teal-600" /> Изменить
                     </button>
-                    <button @click.stop="deleteProduct(product)" :disabled="isDeletingProduct === product.id" class="mt-2 bg-red-600/90 text-white px-4 py-2 rounded-full flex items-center gap-2 hover:bg-red-700 text-sm font-medium transition-colors w-36 justify-center">
-                        <span class="material-icons-round text-[16px]">delete</span> {{ isDeletingProduct === product.id ? 'Удаление...' : 'Удалить' }}
-                    </button>
                 </div>
             </div>
             <div class="p-3.5">
