@@ -1,8 +1,9 @@
 import html
 import logging
+import re
 
 from aiogram import Router, types, F
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 from core.config import settings
@@ -14,6 +15,58 @@ from ..states import ShopState
 
 router = Router()
 logger = logging.getLogger(__name__)
+
+
+def _is_inline_search_query(text: str) -> bool:
+    if not text:
+        return False
+    # 1..3 tokens, each token contains only latin letters/digits.
+    return bool(re.fullmatch(r"[A-Za-z0-9]+(?:\s+[A-Za-z0-9]+){0,2}", text.strip()))
+
+
+def _is_in_stock_product(product: dict) -> bool:
+    availability = str(product.get("availability_status") or "").strip().lower()
+    vitebsk_qty = int(product.get("vitebsk_qty") or 0)
+    minsk_qty = int(product.get("minsk_qty") or 0)
+    if vitebsk_qty > 0 or minsk_qty > 0:
+        return True
+    return availability in {"in_stock_now", "available_2_3_days"}
+
+
+def _choose_search_products(products: list[dict]) -> tuple[list[dict], str | None]:
+    in_stock = [p for p in products if _is_in_stock_product(p)]
+    if in_stock:
+        return in_stock, None
+    if products:
+        return (
+            products,
+            "⚠️ По вашему запросу сейчас нет товаров в наличии на складах.\n"
+            "Показываю доступные модели, но лучше уточнить сроки поставки у менеджера.",
+        )
+    return [], None
+
+
+async def _render_search_results(message: types.Message, query: str, products: list[dict]) -> None:
+    selected_products, warning_text = _choose_search_products(products)
+    if not selected_products:
+        await message.answer(
+            f"К сожалению, по запросу «{html.escape(query)}» ничего не найдено. "
+            "Попробуйте ввести бренд и мощность, например: Midea 12",
+            parse_mode="HTML",
+        )
+        return
+
+    if warning_text:
+        await message.answer(warning_text)
+
+    await message.answer(
+        f"🔎 Нашел {len(selected_products)} вариантов по запросу «{html.escape(query)}».",
+        parse_mode="HTML",
+    )
+    is_admin = message.from_user.id == settings.ADMIN_ID if message.from_user else False
+    for product in selected_products:
+        await send_product_card(message, product, is_admin)
+
 
 # ==================== УМНЫЙ ПОДБОР ====================
 
@@ -165,19 +218,26 @@ async def search_process(message: types.Message, state: FSMContext):
             sample,
         )
 
-    if not products:
-        await message.answer(
-            f"К сожалению, по запросу «{html.escape(query)}» ничего не найдено. "
-            "Попробуйте ввести бренд и мощность, например: Midea 12",
-            parse_mode="HTML",
-        )
-    else:
-        await message.answer(
-            f"🔎 Нашел {len(products)} вариантов по запросу «{html.escape(query)}».",
-            parse_mode="HTML",
-        )
-        is_admin = message.from_user.id == settings.ADMIN_ID if message.from_user else False
-        for product in products:
-            await send_product_card(message, product, is_admin)
+    await _render_search_results(message, query, products)
 
     await state.clear()
+
+
+@router.message(StateFilter(None), F.text)
+async def auto_search_process(message: types.Message):
+    query = (message.text or "").strip()
+    user_id = message.from_user.id if message.from_user else None
+    if not _is_inline_search_query(query):
+        return
+
+    async with async_session_maker() as session:
+        products = await ProductService.search_products(session, query=query, limit=5)
+        sample = [f"{item.get('id')}:{(item.get('title') or '')[:40]}" for item in products[:3]]
+        logger.info(
+            "BOT_AUTO_SEARCH_RESULT user_id=%s query=%r found=%s sample=%s",
+            user_id,
+            query,
+            len(products),
+            sample,
+        )
+    await _render_search_results(message, query, products)
