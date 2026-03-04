@@ -8,48 +8,12 @@ from aiogram.fsm.context import FSMContext
 from core.config import settings
 from core.database import async_session_maker
 from services.product_service import ProductService
-from ..keyboards import (
-    area_selection_kb,
-    type_selection_kb,
-    winter_selection_kb,
-    wifi_selection_kb,
-    get_search_result_keyboard,
-)
+from ..keyboards import area_selection_kb, type_selection_kb, winter_selection_kb, wifi_selection_kb
 from ..utils import send_product_card
 from ..states import ShopState
 
 router = Router()
 logger = logging.getLogger(__name__)
-
-
-def _format_price_byn(price: object) -> str:
-    try:
-        value = int(float(price))
-    except (TypeError, ValueError):
-        return "—"
-    return f"{value:,}".replace(",", " ") + " BYN"
-
-
-def _format_search_result(product: dict) -> str:
-    title = html.escape(str(product.get("title") or "Без названия"))
-    area_raw = product.get("area")
-    try:
-        area_value = int(float(area_raw))
-    except (TypeError, ValueError):
-        area_value = 0
-
-    power_raw = product.get("power_cooling")
-    try:
-        power_text = f"{float(power_raw):.1f} кВт"
-    except (TypeError, ValueError):
-        power_text = "н/д"
-
-    area_text = f"до {area_value} м²" if area_value > 0 else "площадь не указана"
-    return (
-        f"❄️ <b>{title}</b> ({area_text})\n"
-        f"Мощность: {power_text}\n"
-        f"Цена: {_format_price_byn(product.get('price'))}"
-    )
 
 # ==================== УМНЫЙ ПОДБОР ====================
 
@@ -212,11 +176,8 @@ async def search_process(message: types.Message, state: FSMContext):
             f"🔎 Нашел {len(products)} вариантов по запросу «{html.escape(query)}».",
             parse_mode="HTML",
         )
+        is_admin = message.from_user.id == settings.ADMIN_ID if message.from_user else False
         for product in products:
-            await message.answer(
-                _format_search_result(product),
-                parse_mode="HTML",
-                reply_markup=get_search_result_keyboard(int(product["id"])),
-            )
+            await send_product_card(message, product, is_admin)
 
     await state.clear()
