@@ -14,6 +14,21 @@ from services.supplier_availability import classify_availability
 
 class ProductSupplyMetricsService:
     @staticmethod
+    def _compute_cost_byn(
+        wholesale_value: Decimal | None,
+        wholesale_currency: str | None,
+        fx_rate: Decimal | None,
+    ) -> float | None:
+        if wholesale_value is None:
+            return None
+        currency = (wholesale_currency or "").upper()
+        if currency == "BYN":
+            return float(wholesale_value.quantize(Decimal("0.01")))
+        if currency == "USD" and fx_rate:
+            return float((wholesale_value * fx_rate).quantize(Decimal("0.01")))
+        return None
+
+    @staticmethod
     async def compute_for_products(
         session: AsyncSession,
         products: list[Any],
@@ -85,12 +100,12 @@ class ProductSupplyMetricsService:
                 continue
             slot = metrics[int(mapping.product_id)]
 
-            if (
-                fx_rate
-                and offer.wholesale_value is not None
-                and (offer.wholesale_currency or "").upper() == "USD"
-            ):
-                cost_byn = float((offer.wholesale_value * fx_rate).quantize(Decimal("0.01")))
+            cost_byn = ProductSupplyMetricsService._compute_cost_byn(
+                wholesale_value=offer.wholesale_value,
+                wholesale_currency=offer.wholesale_currency,
+                fx_rate=fx_rate,
+            )
+            if cost_byn is not None:
                 if offer.qty > 0:
                     if slot["min_cost_byn"] is None or cost_byn < slot["min_cost_byn"]:
                         slot["min_cost_byn"] = cost_byn
@@ -121,8 +136,10 @@ class ProductSupplyMetricsService:
 
             if slot["vitebsk_qty"] > 0:
                 slot["availability_status"] = "in_stock_now"
-            elif slot["minsk_qty"] > 0 or slot["minsk_incoming"]:
+            elif slot["minsk_qty"] > 0:
                 slot["availability_status"] = "available_2_3_days"
+            elif slot["minsk_incoming"]:
+                slot["availability_status"] = "check_availability"
             else:
                 slot["availability_status"] = "out_of_stock"
 

@@ -802,9 +802,15 @@ watchDebounced(
                             ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
                             : product.availability_status === 'available_2_3_days'
                                 ? 'bg-amber-100 text-amber-800 border-amber-200'
+                                : product.availability_status === 'check_availability'
+                                    ? 'bg-blue-100 text-blue-800 border-blue-200'
                                 : 'bg-gray-100 text-gray-600 border-gray-200'"
                     >
-                        {{ product.availability_status === 'in_stock_now' ? 'Сейчас' : (product.availability_status === 'available_2_3_days' ? '2-3 дня' : 'Нет') }}
+                        {{ product.availability_status === 'in_stock_now'
+                            ? 'Сейчас'
+                            : (product.availability_status === 'available_2_3_days'
+                                ? '2-3 дня'
+                                : (product.availability_status === 'check_availability' ? 'Уточнить' : 'Нет')) }}
                     </span>
                 </div>
                 <!-- Mini Gallery Preview -->
