@@ -5,11 +5,8 @@ from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
-from sqlalchemy import func
-from sqlmodel import select
 from core.config import settings
 from core.database import async_session_maker
-from models.product import Product
 from services.product_service import ProductService
 from ..keyboards import (
     area_selection_kb,
@@ -194,24 +191,6 @@ async def search_process(message: types.Message, state: FSMContext):
         return
 
     async with async_session_maker() as session:
-        published_total = (
-            await session.execute(select(func.count(Product.id)).where(Product.is_published.is_(True)))
-        ).scalar_one()
-        title_like_total = (
-            await session.execute(
-                select(func.count(Product.id)).where(
-                    Product.is_published.is_(True),
-                    Product.title.ilike(f"%{query}%"),
-                )
-            )
-        ).scalar_one()
-        logger.info(
-            "BOT_SEARCH_DEBUG user_id=%s query=%r published_total=%s title_like_total=%s",
-            user_id,
-            query,
-            published_total,
-            title_like_total,
-        )
         products = await ProductService.search_products(session, query=query, limit=5)
         sample = [f"{item.get('id')}:{(item.get('title') or '')[:40]}" for item in products[:3]]
         logger.info(
