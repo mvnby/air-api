@@ -10,6 +10,7 @@ from models import Product
 from services.product_dict_mapper import map_product_to_dict
 from services.product_filter_service import ProductFilterService
 from services.product_series_service import ProductSeriesService
+from services.product_supply_metrics_service import ProductSupplyMetricsService
 
 
 class ProductReadService(ProductFilterService, ProductSeriesService):
@@ -153,13 +154,28 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
             sort="area_asc",
             limit=limit,
         )
-        return [ProductReadService._to_dict(p) for p in products]
+        supply_metrics = await ProductSupplyMetricsService.compute_for_products(session, list(products))
+
+        items = [ProductReadService._to_dict(p) for p in products]
+        for item in items:
+            pid = item.get("id")
+            metrics = supply_metrics.get(pid, {})
+            item["vitebsk_qty"] = metrics.get("vitebsk_qty", 0)
+            item["minsk_qty"] = metrics.get("minsk_qty", 0)
+            item["availability_status"] = metrics.get("availability_status", "out_of_stock")
+        return items
 
     @staticmethod
     async def get_by_id(session: AsyncSession, product_id: int) -> Optional[Dict[str, Any]]:
         product = await ProductDAO.get_by_id(session, product_id)
         if product:
-            return ProductReadService._to_dict(product)
+            item = ProductReadService._to_dict(product)
+            supply_metrics = await ProductSupplyMetricsService.compute_for_products(session, [product])
+            metrics = supply_metrics.get(product.id, {})
+            item["vitebsk_qty"] = metrics.get("vitebsk_qty", 0)
+            item["minsk_qty"] = metrics.get("minsk_qty", 0)
+            item["availability_status"] = metrics.get("availability_status", "out_of_stock")
+            return item
         return None
 
     @staticmethod

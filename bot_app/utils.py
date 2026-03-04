@@ -7,6 +7,25 @@ from core.database import async_session_maker
 from services.favorite_service import FavoriteService
 from .keyboards import get_product_keyboard
 
+
+def _availability_badge(product: dict) -> str:
+    has_supply_fields = any(
+        key in product for key in ("availability_status", "vitebsk_qty", "minsk_qty")
+    )
+    if not has_supply_fields:
+        return ""
+
+    availability = str(product.get("availability_status") or "").strip().lower()
+    vitebsk_qty = int(product.get("vitebsk_qty") or 0)
+    minsk_qty = int(product.get("minsk_qty") or 0)
+    in_stock = (
+        vitebsk_qty > 0
+        or minsk_qty > 0
+        or availability in {"in_stock_now", "available_2_3_days"}
+    )
+    return "✅ <b>В наличии</b>\n" if in_stock else "⛔ <b>Нет в наличии</b>\n"
+
+
 def format_caption(product):
     # Пытаемся достать характеристики
     specs_str = ""
@@ -16,6 +35,7 @@ def format_caption(product):
     
     return (
         f"❄️ <b>{product['title']}</b>\n"
+        f"{_availability_badge(product)}"
         f"💰 <b>{product['price']} руб.</b>\n"
         f"🏠 Площадь: {product.get('area', '-')} м²\n"
         f"{specs_str}"
