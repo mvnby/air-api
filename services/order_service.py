@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from crud.order import OrderDAO
 from crud.product import ProductDAO
-from models import Order, OrderProductLink, OrderServiceLink, Customer, CustomerType, OrderStatus, Product, LeadSource, Service, OrderInstaller
+from models import Order, OrderProductLink, OrderServiceLink, Customer, CustomerType, OrderStatus, Product, LeadSource, Service, OrderInstaller, OrderWorkStage
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,7 @@ class OrderService:
         Get calendar events for orders (assessments and installations).
         """
         from schemas import CalendarEventResponse, CalendarEventType
+        from models import OrderWorkStage
         
         # Adjust end_date to include the full day if needed, or rely on caller
         
@@ -39,16 +40,22 @@ class OrderService:
         if end_date.tzinfo is not None:
             end_date = end_date.replace(tzinfo=None)
 
-        # Query orders where EITHER measurement_date OR installation_date is in range
+        # Query orders where EITHER measurement_date OR installation_date OR work_stage is in range
         stmt = (
             select(Order)
+            .outerjoin(OrderWorkStage, Order.id == OrderWorkStage.order_id)
             .where(
                 or_(
                     and_(Order.measurement_date >= start_date, Order.measurement_date <= end_date),
-                    and_(Order.installation_date >= start_date, Order.installation_date <= end_date)
+                    and_(Order.installation_date >= start_date, Order.installation_date <= end_date),
+                    and_(OrderWorkStage.start_time >= start_date, OrderWorkStage.start_time <= end_date)
                 )
             )
-            .options(selectinload(Order.customer))
+            .distinct(Order.id)
+            .options(
+                selectinload(Order.customer),
+                selectinload(Order.work_stages).selectinload(OrderWorkStage.installer)
+            )
         )
         
         result = await session.execute(stmt)
@@ -86,6 +93,34 @@ class OrderService:
                     start=order.installation_date,
                     color="#007f80" # Teal
                 ))
+            
+            # Work Stage Events
+            for stage in order.work_stages:
+                if stage.start_time and start_date <= stage.start_time <= end_date:
+                    st_val = stage.status.value if hasattr(stage.status, "value") else str(stage.status)
+                    color = "#0ea5e9" # Sky-500 default
+                    if st_val == "completed":
+                        color = "#10b981" # Emerald-500
+                    elif st_val == "canceled":
+                        color = "#94a3b8" # Slate-400
+                        title = f"Отменен: {stage.name}"
+                    else:
+                        title = stage.name
+
+                    title += f" - {order.customer.name if order.customer else 'Клиент'}"
+                        
+                    events.append(CalendarEventResponse(
+                        id=f"{order.id}-stage-{stage.id}",
+                        order_id=order.id,
+                        type=CalendarEventType.WORK_STAGE,
+                        date=stage.start_time,
+                        status=st_val,
+                        customer_name=order.customer.name if order.customer else "Неизвестный",
+                        address=order.delivery_address,
+                        title=title,
+                        start=stage.start_time,
+                        color=color
+                    ))
                 
         return events
 
@@ -805,8 +840,8 @@ class OrderService:
             order_id=order_id,
             name=payload.name,
             status=payload.status or "planned",
-            start_time=payload.start_time,
-            end_time=payload.end_time,
+            start_time=OrderService._normalize_naive_datetime(payload.start_time),
+            end_time=OrderService._normalize_naive_datetime(payload.end_time),
             installer_id=payload.installer_id,
             manager_comment=payload.manager_comment,
             installer_report=payload.installer_report
@@ -824,6 +859,8 @@ class OrderService:
             
         update_data = payload.model_dump(exclude_unset=True)
         for key, value in update_data.items():
+            if key in ("start_time", "end_time"):
+                value = OrderService._normalize_naive_datetime(value)
             setattr(stage, key, value)
             
         session.add(stage)
@@ -1061,6 +1098,7 @@ class OrderService:
                 selectinload(Order.installers).selectinload(OrderInstaller.installer),
                 selectinload(Order.documents),
                 selectinload(Order.payments),
+                selectinload(Order.work_stages).selectinload(OrderWorkStage.installer),
             )
         )
         result = await session.execute(stmt)
@@ -1091,6 +1129,27 @@ class OrderService:
                 "created_at": p.created_at,
             }
             for p in sorted(order.payments, key=lambda d: d.date, reverse=True)
+        ]
+        data["work_stages"] = [
+            {
+                "id": ws.id,
+                "order_id": ws.order_id,
+                "name": ws.name,
+                "status": ws.status.value if hasattr(ws.status, "value") else str(ws.status),
+                "start_time": ws.start_time,
+                "end_time": ws.end_time,
+                "installer_id": ws.installer_id,
+                "manager_comment": ws.manager_comment,
+                "installer_report": ws.installer_report,
+                "installer": {
+                    "id": ws.installer.id,
+                    "name": ws.installer.name,
+                    "is_active": ws.installer.is_active,
+                    "default_rate": ws.installer.default_rate,
+                    "telegram_id": ws.installer.telegram_id,
+                } if ws.installer else None,
+            }
+            for ws in (order.work_stages or [])
         ]
         return data
 

@@ -32,6 +32,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean];
   save: [payload: { orderId: number; data: ManagerOrderUpdatePayload }];
   deleted: [orderId: number];
+  reload: [orderId: number];
 }>();
 
 type ProductOption = {
@@ -935,7 +936,7 @@ watch(
       <DealExecutionTab 
         v-if="status === 'execution' && order" 
         :order="order"
-        @refresh="emit('save', { orderId: order.id, data: { status: 'execution' } }) /* triggering parent reload */"
+        @refresh="emit('reload', order.id) /* triggering parent reload without closing drawer */"
         @close="closeDrawer"
         class="mt-8"
       />

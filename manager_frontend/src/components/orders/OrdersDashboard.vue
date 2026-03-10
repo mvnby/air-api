@@ -382,6 +382,7 @@ watch(drawerOpen, (isOpen) => {
       :saving="saving"
       @save="saveOrder"
       @deleted="handleOrderDeleted"
+      @reload="openOrder($event, false)"
     />
 
     <div v-if="showLoginModal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">

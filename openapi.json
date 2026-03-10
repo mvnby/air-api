@@ -6778,7 +6778,8 @@
         "type": "string",
         "enum": [
           "measurement",
-          "installation"
+          "installation",
+          "work_stage"
         ],
         "title": "CalendarEventType"
       },

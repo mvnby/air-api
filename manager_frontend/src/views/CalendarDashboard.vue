@@ -199,6 +199,7 @@ const calendarOptions = ref<CalendarOptions>({
       :saving="saving"
       @save="saveOrder"
       @deleted="handleOrderDeleted"
+      @reload="openOrder($event)"
     />
   </div>
 </template>
