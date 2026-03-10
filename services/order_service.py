@@ -30,6 +30,7 @@ class OrderService:
         Get calendar events for orders (assessments and installations).
         """
         from schemas import CalendarEventResponse, CalendarEventType
+        from models import OrderWorkStage
         
         # Adjust end_date to include the full day if needed, or rely on caller
         
@@ -39,16 +40,22 @@ class OrderService:
         if end_date.tzinfo is not None:
             end_date = end_date.replace(tzinfo=None)
 
-        # Query orders where EITHER measurement_date OR installation_date is in range
+        # Query orders where EITHER measurement_date OR installation_date OR work_stage is in range
         stmt = (
             select(Order)
+            .outerjoin(OrderWorkStage, Order.id == OrderWorkStage.order_id)
             .where(
                 or_(
                     and_(Order.measurement_date >= start_date, Order.measurement_date <= end_date),
-                    and_(Order.installation_date >= start_date, Order.installation_date <= end_date)
+                    and_(Order.installation_date >= start_date, Order.installation_date <= end_date),
+                    and_(OrderWorkStage.start_time >= start_date, OrderWorkStage.start_time <= end_date)
                 )
             )
-            .options(selectinload(Order.customer))
+            .distinct()
+            .options(
+                selectinload(Order.customer),
+                selectinload(Order.work_stages).selectinload(OrderWorkStage.installer)
+            )
         )
         
         result = await session.execute(stmt)
@@ -86,6 +93,34 @@ class OrderService:
                     start=order.installation_date,
                     color="#007f80" # Teal
                 ))
+            
+            # Work Stage Events
+            for stage in order.work_stages:
+                if stage.start_time and start_date <= stage.start_time <= end_date:
+                    st_val = stage.status.value if hasattr(stage.status, "value") else str(stage.status)
+                    color = "#0ea5e9" # Sky-500 default
+                    if st_val == "completed":
+                        color = "#10b981" # Emerald-500
+                    elif st_val == "canceled":
+                        color = "#94a3b8" # Slate-400
+                        title = f"Отменен: {stage.title}"
+                    else:
+                        title = stage.title
+
+                    title += f" - {order.customer.name if order.customer else 'Клиент'}"
+                        
+                    events.append(CalendarEventResponse(
+                        id=f"{order.id}-stage-{stage.id}",
+                        order_id=order.id,
+                        type=CalendarEventType.WORK_STAGE,
+                        date=stage.start_time,
+                        status=st_val,
+                        customer_name=order.customer.name if order.customer else "Неизвестный",
+                        address=order.delivery_address,
+                        title=title,
+                        start=stage.start_time,
+                        color=color
+                    ))
                 
         return events
 

@@ -154,6 +154,7 @@ class ServiceResponse(BaseModel):
 class CalendarEventType(str, Enum):
     MEASUREMENT = "measurement"
     INSTALLATION = "installation"
+    WORK_STAGE = "work_stage"
 
 class CalendarEventResponse(BaseModel):
     id: str  # Unique ID for the event (e.g. "123-assessment")
