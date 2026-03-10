@@ -60,6 +60,17 @@ const updateStageStatus = async (stageId: number, newStatus: string) => {
     }
 };
 
+const deleteStage = async (stageId: number, stageName: string) => {
+    if (!window.confirm(`Удалить выезд «${stageName}»?`)) return;
+    try {
+        await ManagerOrdersService.deleteManagerOrderStage(props.order.id, stageId);
+        emit('refresh');
+        setToast('Выезд удален');
+    } catch (e: any) {
+        setToast(`Ошибка: ${getApiErrorMessage(e)}`, 'error');
+    }
+};
+
 const updateEquipmentStatus = async (newStatus: string) => {
     try {
         await ManagerOrdersService.patchManagerOrder(props.order.id, {
@@ -151,19 +162,24 @@ const generateDocument = async (type: string) => {
     <!-- Timeline List -->
     <div class="space-y-4 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-300 before:to-transparent">
         <div v-for="stage in order.work_stages" :key="stage.id" class="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
-            <div class="flex items-center justify-center w-10 h-10 rounded-full border border-white shrink-0 shadow bg-teal-500 text-white z-10">
-                <span class="material-icons-round text-[20px]">{{ stage.status === 'completed' ? 'check' : (stage.status === 'in_progress' ? 'build' : 'schedule') }}</span>
+            <div class="flex items-center justify-center w-10 h-10 rounded-full border border-white shrink-0 shadow z-10" :class="stage.status === 'canceled' ? 'bg-slate-400' : 'bg-teal-500'" >
+                <span class="material-icons-round text-[20px] text-white">{{ stage.status === 'completed' ? 'check' : (stage.status === 'canceled' ? 'close' : (stage.status === 'in_progress' ? 'build' : 'schedule')) }}</span>
             </div>
             
-            <div class="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-xl border border-slate-200 bg-slate-50 shadow text-sm">
+            <div class="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-xl border border-slate-200 bg-slate-50 shadow text-sm" :class="{ 'opacity-50': stage.status === 'canceled' }">
                 <div class="flex items-center justify-between mb-2">
                     <span class="font-bold text-slate-800">{{ stage.name }}</span>
-                    <select :value="stage.status" @change="updateStageStatus(stage.id, ($event.target as HTMLSelectElement).value)" class="text-xs bg-white border border-slate-300 rounded px-1 py-0.5 text-slate-700">
-                        <option value="planned">Планируется</option>
-                        <option value="in_progress">В работе</option>
-                        <option value="completed">Выполнено</option>
-                        <option value="canceled">Отменено</option>
-                    </select>
+                    <div class="flex items-center gap-1">
+                        <select :value="stage.status" @change="updateStageStatus(stage.id, ($event.target as HTMLSelectElement).value)" class="text-xs bg-white border border-slate-300 rounded px-1 py-0.5 text-slate-700">
+                            <option value="planned">Планируется</option>
+                            <option value="in_progress">В работе</option>
+                            <option value="completed">Выполнено</option>
+                            <option value="canceled">Отменено</option>
+                        </select>
+                        <button @click="deleteStage(stage.id, stage.name)" class="text-slate-400 hover:text-red-500 transition-colors p-0.5" title="Удалить выезд">
+                            <span class="material-icons-round text-[16px]">delete_outline</span>
+                        </button>
+                    </div>
                 </div>
                 <div class="text-slate-500 text-xs mt-1">
                     {{ stage.start_time ? new Date(stage.start_time).toLocaleString() : 'План: не задан' }}

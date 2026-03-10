@@ -6,6 +6,7 @@ from .common import (
     LeadSource,
     LeadStatus,
     LeadStatus,
+    OrderStageStatus,
     OrderStatus,
     PaymentType,
 )
@@ -63,6 +64,7 @@ __all__ = [
     "OrderInstaller",
     "OrderProductLink",
     "OrderServiceLink",
+    "OrderStageStatus",
     "OrderStatus",
     "OrderWorkStage",
     "Product",
