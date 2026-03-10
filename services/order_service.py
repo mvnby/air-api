@@ -51,7 +51,7 @@ class OrderService:
                     and_(OrderWorkStage.start_time >= start_date, OrderWorkStage.start_time <= end_date)
                 )
             )
-            .distinct()
+            .distinct(Order.id)
             .options(
                 selectinload(Order.customer),
                 selectinload(Order.work_stages).selectinload(OrderWorkStage.installer)
