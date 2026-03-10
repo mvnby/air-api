@@ -202,6 +202,7 @@ class ProductManagerService:
     async def delete_for_manager(session: AsyncSession, product_id: int) -> bool:
         from models.order import OrderProductLink
         from models.product import ProductImage, ProductTagLink
+        from models.supplier import ProductLocalStock, ProductSupplierMapping
         import sqlalchemy as sa
         
         product = await session.get(Product, product_id)
@@ -225,6 +226,14 @@ class ProductManagerService:
         # Delete tag links explicitly to avoid async lazy-load issues on relationship mutation.
         await session.execute(
             sa.delete(ProductTagLink).where(ProductTagLink.product_id == product_id)
+        )
+        
+        # Delete supplier mappings and local stock (both have NOT NULL product_id).
+        await session.execute(
+            sa.delete(ProductSupplierMapping).where(ProductSupplierMapping.product_id == product_id)
+        )
+        await session.execute(
+            sa.delete(ProductLocalStock).where(ProductLocalStock.product_id == product_id)
         )
         
         await session.delete(product)
