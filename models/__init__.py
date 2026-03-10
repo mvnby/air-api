@@ -20,6 +20,7 @@ from .order import (
     OrderProductLink,
     OrderServiceLink,
     OrderServiceLink,
+    OrderWorkStage,
     Payment,
     Service,
 )
@@ -63,6 +64,7 @@ __all__ = [
     "OrderProductLink",
     "OrderServiceLink",
     "OrderStatus",
+    "OrderWorkStage",
     "Product",
     "ProductImage",
     "ProductImage",
