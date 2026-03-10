@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from crud.order import OrderDAO
 from crud.product import ProductDAO
-from models import Order, OrderProductLink, OrderServiceLink, Customer, CustomerType, OrderStatus, Product, LeadSource, Service, OrderInstaller
+from models import Order, OrderProductLink, OrderServiceLink, Customer, CustomerType, OrderStatus, Product, LeadSource, Service, OrderInstaller, OrderWorkStage
 
 logger = logging.getLogger(__name__)
 
@@ -805,8 +805,8 @@ class OrderService:
             order_id=order_id,
             name=payload.name,
             status=payload.status or "planned",
-            start_time=payload.start_time,
-            end_time=payload.end_time,
+            start_time=OrderService._normalize_naive_datetime(payload.start_time),
+            end_time=OrderService._normalize_naive_datetime(payload.end_time),
             installer_id=payload.installer_id,
             manager_comment=payload.manager_comment,
             installer_report=payload.installer_report
@@ -824,6 +824,8 @@ class OrderService:
             
         update_data = payload.model_dump(exclude_unset=True)
         for key, value in update_data.items():
+            if key in ("start_time", "end_time"):
+                value = OrderService._normalize_naive_datetime(value)
             setattr(stage, key, value)
             
         session.add(stage)
@@ -1061,6 +1063,7 @@ class OrderService:
                 selectinload(Order.installers).selectinload(OrderInstaller.installer),
                 selectinload(Order.documents),
                 selectinload(Order.payments),
+                selectinload(Order.work_stages).selectinload(OrderWorkStage.installer),
             )
         )
         result = await session.execute(stmt)
@@ -1091,6 +1094,27 @@ class OrderService:
                 "created_at": p.created_at,
             }
             for p in sorted(order.payments, key=lambda d: d.date, reverse=True)
+        ]
+        data["work_stages"] = [
+            {
+                "id": ws.id,
+                "order_id": ws.order_id,
+                "name": ws.name,
+                "status": ws.status.value if hasattr(ws.status, "value") else str(ws.status),
+                "start_time": ws.start_time,
+                "end_time": ws.end_time,
+                "installer_id": ws.installer_id,
+                "manager_comment": ws.manager_comment,
+                "installer_report": ws.installer_report,
+                "installer": {
+                    "id": ws.installer.id,
+                    "name": ws.installer.name,
+                    "is_active": ws.installer.is_active,
+                    "default_rate": ws.installer.default_rate,
+                    "telegram_id": ws.installer.telegram_id,
+                } if ws.installer else None,
+            }
+            for ws in (order.work_stages or [])
         ]
         return data
 
