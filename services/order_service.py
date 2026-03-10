@@ -103,9 +103,9 @@ class OrderService:
                         color = "#10b981" # Emerald-500
                     elif st_val == "canceled":
                         color = "#94a3b8" # Slate-400
-                        title = f"Отменен: {stage.title}"
+                        title = f"Отменен: {stage.name}"
                     else:
-                        title = stage.title
+                        title = stage.name
 
                     title += f" - {order.customer.name if order.customer else 'Клиент'}"
                         
