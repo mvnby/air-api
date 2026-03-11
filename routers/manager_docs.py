@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +8,7 @@ from core.manager_error_codes import DOCUMENT_NOT_FOUND, BAD_REQUEST
 from core.security import get_current_username
 from routers.manager_operation_ids import (
     GET_MANAGER_ORDER_DOCUMENTS,
+    UPLOAD_MANAGER_ORDER_DOCUMENT,
     GET_MANAGER_DOC_DOWNLOAD,
     DELETE_MANAGER_DOC,
 )
@@ -45,6 +46,27 @@ async def get_manager_order_documents(
             for d in docs
         ]
     }
+
+
+@router.post(
+    "/orders/{order_id}/documents/upload",
+    response_model=ManagerOrderDocumentItem,
+    operation_id=UPLOAD_MANAGER_ORDER_DOCUMENT,
+)
+async def upload_manager_order_document(
+    order_id: int,
+    file: UploadFile = File(...),
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    doc = await DocumentService.upload_document(session, order_id, file)
+    return ManagerOrderDocumentItem(
+        id=doc.id,
+        doc_type=doc.doc_type,
+        number=doc.number,
+        date=doc.date,
+        edit_url=doc.google_edit_url,
+    )
 
 
 @router.get(

@@ -48,6 +48,7 @@ GET_MANAGER_ORDER_DETAIL = "get_manager_order_detail"
 PATCH_MANAGER_ORDER = "patch_manager_order"
 DELETE_MANAGER_ORDER = "delete_manager_order"
 GENERATE_MANAGER_ORDER_DOCUMENT = "generate_manager_order_document"
+UPLOAD_MANAGER_ORDER_DOCUMENT = "upload_manager_order_document"
 GET_MANAGER_ORDER_DOCUMENTS = "get_manager_order_documents"
 ADD_MANAGER_ORDER_PAYMENT = "add_manager_order_payment"
 DELETE_MANAGER_ORDER_PAYMENT = "delete_manager_order_payment"
@@ -141,6 +142,7 @@ ALL_MANAGER_OPERATION_IDS = (
     PATCH_MANAGER_ORDER,
     DELETE_MANAGER_ORDER,
     GENERATE_MANAGER_ORDER_DOCUMENT,
+    UPLOAD_MANAGER_ORDER_DOCUMENT,
     GET_MANAGER_ORDER_DOCUMENTS,
     ADD_MANAGER_ORDER_PAYMENT,
     DELETE_MANAGER_ORDER_PAYMENT,

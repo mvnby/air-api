@@ -338,8 +338,8 @@ export const api = {
         return await ApiService.adminSearchProductsApiAdminProductsSearchGet(q);
     },
 
-    async smartSearchProducts(q: string, limit = 40): Promise<Product[]> {
-        const res = await ManagerService.smartSearchProducts(q, limit);
+    async smartSearchProducts(q: string, limit = 40, isInverter?: boolean, hasWifi?: boolean): Promise<Product[]> {
+        const res = await ManagerService.smartSearchProducts(q, limit, isInverter, hasWifi);
         return res.items;
     },
 

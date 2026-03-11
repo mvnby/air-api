@@ -12,6 +12,7 @@ export type { Body_bulk_upload_local_images } from './models/Body_bulk_upload_lo
 export type { Body_login_access_token } from './models/Body_login_access_token';
 export type { Body_upload_images_admin_api_upload_images_post } from './models/Body_upload_images_admin_api_upload_images_post';
 export type { Body_upload_local_images } from './models/Body_upload_local_images';
+export type { Body_upload_manager_order_document } from './models/Body_upload_manager_order_document';
 export type { BulkGalleryAddRequest } from './models/BulkGalleryAddRequest';
 export type { BulkGalleryDeleteRequest } from './models/BulkGalleryDeleteRequest';
 export type { BulkRoundRequest } from './models/BulkRoundRequest';

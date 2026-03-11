@@ -304,12 +304,16 @@ export class ManagerService {
      * power_cooling.  Returns matched products with their tags pre-loaded.
      * @param q Free-text search query, e.g. 'mdv loft 18'
      * @param limit
+     * @param isInverter
+     * @param hasWifi
      * @returns ManagerCatalogProductListResponse Successful Response
      * @throws ApiError
      */
     public static smartSearchProducts(
         q: string,
         limit: number = 40,
+        isInverter?: (boolean | null),
+        hasWifi?: (boolean | null),
     ): CancelablePromise<ManagerCatalogProductListResponse> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -317,6 +321,8 @@ export class ManagerService {
             query: {
                 'q': q,
                 'limit': limit,
+                'is_inverter': isInverter,
+                'has_wifi': hasWifi,
             },
             errors: {
                 422: `Validation Error`,

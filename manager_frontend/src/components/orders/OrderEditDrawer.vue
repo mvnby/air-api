@@ -39,8 +39,12 @@ type ProductOption = {
   id: number;
   title: string;
   price: number;
+  cost?: number;
   is_inverter: boolean;
   power_cooling: number | null;
+  availability_status: string;
+  vitebsk_qty: number;
+  minsk_qty: number;
 };
 type ProductLine = { product_id: number; product_query: string; quantity: number; price: number; cost: number };
 type ServiceLine = { service_id?: number | null; title: string; quantity: number; price: number; cost: number };
@@ -63,6 +67,17 @@ const installationDate = ref('');
 const comment = ref('');
 const isPaid = ref(false);
 const installerId = ref<number | null>(null);
+const customerDeliveryAddress = ref('');
+const deliveryAddressInput = ref<HTMLInputElement | null>(null);
+let suggestView: any = null;
+
+const searchInStock = ref(false);
+
+watch(searchInStock, () => {
+  if (activeSuggestionIndex.value !== null) {
+    onProductQueryInput(activeSuggestionIndex.value);
+  }
+});
 
 // Negotiation stage properties
 const measurementRequired = ref(false);
@@ -109,6 +124,33 @@ const toggleHold = async () => {
 const isGeneratingDoc = ref(false);
 const processingDocId = ref<number | null>(null);
 const docDropdownOpen = ref(false);
+
+const isUploadingDoc = ref(false);
+const fileInputRef = ref<HTMLInputElement | null>(null);
+
+const triggerFileUpload = () => {
+  fileInputRef.value?.click();
+};
+
+const handleFileUpload = async (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  if (!target.files || !target.files.length) return;
+  const file = target.files[0] as File;
+  if (!file) return;
+  if (!props.order?.id) return;
+
+  isUploadingDoc.value = true;
+  try {
+    await ManagerDocsService.uploadManagerOrderDocument(props.order.id, { file });
+    await loadDocuments(props.order.id);
+    setToast('Документ загружен', 'success');
+  } catch (error) {
+    setToast(`Ошибка загрузки: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    isUploadingDoc.value = false;
+    if (fileInputRef.value) fileInputRef.value.value = '';
+  }
+};
 
 const hasContract = computed(() => documents.value.some(d => d.doc_type === 'contract'));
 
@@ -266,8 +308,12 @@ const mapSmartSearchItemToOption = (item: any): ProductOption => ({
   id: Number(item.id),
   title: String(item.title ?? ''),
   price: Number(item.price ?? 0),
+  cost: Number(item.min_cost_byn ?? 0),
   is_inverter: Boolean(item.is_inverter),
   power_cooling: item.power_cooling == null ? null : Number(item.power_cooling),
+  availability_status: String(item.availability_status ?? 'out_of_stock'),
+  vitebsk_qty: Number(item.vitebsk_qty ?? 0),
+  minsk_qty: Number(item.minsk_qty ?? 0),
 });
 
 const syncProductLookupFromLines = () => {
@@ -277,8 +323,12 @@ const syncProductLookupFromLines = () => {
       id: line.product_id,
       title: line.product_query,
       price: line.price,
+      cost: line.cost,
       is_inverter: false,
       power_cooling: null,
+      availability_status: 'out_of_stock',
+      vitebsk_qty: 0,
+      minsk_qty: 0,
     });
   }
 };
@@ -288,7 +338,10 @@ const debouncedLoadProductOptions = useDebounceFn(async (index: number, q: strin
     productLookupLoading.value = true;
     const response = await api.smartSearchProducts(q, 20);
     if (requestId !== productSearchRequestId || activeSuggestionIndex.value !== index) return;
-    const options = Array.isArray(response) ? response.map(mapSmartSearchItemToOption) : [];
+    let options = Array.isArray(response) ? response.map(mapSmartSearchItemToOption) : [];
+    if (searchInStock.value) {
+      options = options.filter(o => o.vitebsk_qty > 0 || o.minsk_qty > 0 || o.availability_status === 'check_availability');
+    }
     productOptions.value = options;
     rememberProductOptions(options);
   } catch (error) {
@@ -355,6 +408,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   comment.value = order.comment ?? '';
   isPaid.value = order.is_paid;
   installerId.value = order.installer_id ?? null;
+  customerDeliveryAddress.value = order.delivery_address || '';
   measurementRequired.value = order.measurement_required ?? false;
   measurerId.value = order.measurer_id ?? null;
   measurementResult.value = order.measurement_result ?? '';
@@ -408,7 +462,26 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
 watch(
   () => props.modelValue,
   async (value) => {
-    if (value) await initForm(props.order);
+    if (value) {
+      await initForm(props.order);
+      setTimeout(() => {
+        if (deliveryAddressInput.value && (window as any).ymaps) {
+          (window as any).ymaps.ready(() => {
+            if (!suggestView) {
+              suggestView = new (window as any).ymaps.SuggestView(deliveryAddressInput.value);
+              suggestView.events.add('select', (e: any) => {
+                customerDeliveryAddress.value = e.get('item').value;
+              });
+            }
+          });
+        }
+      }, 500);
+    } else {
+      if (suggestView) {
+        suggestView.destroy();
+        suggestView = null;
+      }
+    }
   },
 );
 
@@ -468,6 +541,10 @@ const selectProductForLine = (index: number, option: ProductOption) => {
   const isNewLine = !row.product_id && Number(row.price || 0) <= 0;
   row.product_id = option.id;
   row.product_query = option.title;
+  // Automatically fill cost if it exists on the product
+  if (option.cost && option.cost > 0) {
+    row.cost = option.cost;
+  }
   rememberProductOption(option);
   activeSuggestionIndex.value = null;
   productOptions.value = [];
@@ -572,6 +649,7 @@ const handleSave = () => {
     comment: comment.value,
     is_paid: isPaid.value,
     installer_id: installerId.value,
+    customer_delivery_address: customerDeliveryAddress.value,
     products: productLines.value.map((line) => ({
       product_id: line.product_id,
       quantity: line.quantity,
@@ -735,6 +813,16 @@ watch(
               </option>
             </select>
           </label>
+          <label class="field-label md:col-span-2">
+            Адрес объекта / доставки
+            <input
+              v-model="customerDeliveryAddress"
+              ref="deliveryAddressInput"
+              class="field-input"
+              placeholder="Начните вводить адрес..."
+            />
+            <span v-if="getFieldError('customer_delivery_address')" class="text-xs text-red-300">{{ getFieldError('customer_delivery_address') }}</span>
+          </label>
         </div>
         <label class="field-label md:col-span-2">
           Комментарий
@@ -755,7 +843,15 @@ watch(
         
         <section class="mt-2">
           <div class="mb-2 flex items-center justify-between">
-            <h4 class="text-md font-semibold text-gray-800">Товары</h4>
+            <div class="flex items-center gap-3">
+              <h4 class="text-md font-semibold text-gray-800">Товары</h4>
+              <div class="flex items-center gap-2">
+                <label class="flex items-center gap-1 text-xs text-gray-600 bg-white border border-gray-200 px-2 py-1 rounded shadow-sm cursor-pointer hover:bg-gray-50 transition-colors">
+                  <input type="checkbox" v-model="searchInStock" class="rounded text-teal-600 focus:ring-teal-500 w-3 h-3 border-gray-300" />
+                  В наличии
+                </label>
+              </div>
+            </div>
           <button class="btn-mini" @click="addProductLine">Добавить товар</button>
         </div>
         <p v-if="getFieldError('products')" class="mb-2 text-xs text-red-300">{{ getFieldError('products') }}</p>
@@ -790,10 +886,19 @@ watch(
                   @click="selectProductForLine(index, item)"
                 >
                   <p class="truncate font-medium text-gray-900 dark:text-slate-100">{{ item.title }}</p>
-                  <p class="mt-1 text-[11px] text-gray-500 dark:text-slate-300">
-                    {{ formatMoney(item.price) }}
-                    · {{ item.is_inverter ? 'Инвертор' : 'On/Off' }}
-                    · {{ item.power_cooling ? `${item.power_cooling.toFixed(1)} кВт` : 'мощность н/д' }}
+                  <p class="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-gray-500 dark:text-slate-300">
+                    <span>{{ formatMoney(item.price) }}</span>
+                    <span>·</span>
+                    <span>{{ item.is_inverter ? 'Инвертор' : 'On/Off' }}</span>
+                    <span>·</span>
+                    <template v-if="item.vitebsk_qty > 0 || item.minsk_qty > 0">
+                      <span v-if="item.vitebsk_qty > 0" class="font-medium text-emerald-600 bg-emerald-50 px-1 rounded">Вит: {{item.vitebsk_qty}}</span>
+                      <span v-if="item.minsk_qty > 0" class="font-medium text-blue-500 bg-blue-50 px-1 rounded">Минск: {{item.minsk_qty}}</span>
+                    </template>
+                    <template v-else>
+                      <span v-if="item.availability_status === 'check_availability'" class="font-medium text-amber-500">Уточнять</span>
+                      <span v-else class="text-gray-400">Нет в наличии</span>
+                    </template>
                   </p>
                 </button>
               </div>
@@ -875,17 +980,30 @@ watch(
         <div class="mb-2 flex items-center justify-between">
           <h4 class="text-md font-semibold text-slate-800">Документы (B2B / Договоры)</h4>
           
-          <div class="relative">
+          <div class="relative flex items-center gap-2">
             <button
                class="flex items-center gap-1 rounded-xl bg-[#007f80] px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/50 disabled:opacity-50"
-               :disabled="isGeneratingDoc || !!processingDocId"
+               :disabled="isGeneratingDoc || !!processingDocId || isUploadingDoc"
                @click="docDropdownOpen = !docDropdownOpen"
             >
               <span class="material-icons-round text-[18px]">add_circle</span> Создать
             </button>
+            
+            <input type="file" ref="fileInputRef" class="hidden" accept=".pdf" @change="handleFileUpload" />
+            <button
+               class="flex items-center gap-1 rounded-xl bg-slate-700 px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500/50 disabled:opacity-50"
+               title="Загрузить PDF"
+               :disabled="isUploadingDoc || !!processingDocId || isGeneratingDoc"
+               @click="triggerFileUpload"
+            >
+              <span v-if="isUploadingDoc" class="material-icons-round animate-spin text-[18px]">loop</span>
+              <span v-else class="material-icons-round text-[18px]">upload_file</span>
+              Загрузить
+            </button>
+
             <div
                v-if="docDropdownOpen"
-               class="absolute right-0 top-full z-10 mt-2 w-48 rounded-xl border border-slate-700 bg-slate-800 p-1 shadow-lg"
+               class="absolute right-[100px] top-full z-10 mt-2 w-48 rounded-xl border border-slate-700 bg-slate-800 p-1 shadow-lg"
             >
               <button
                 v-for="dtype in DOCUMENT_TYPES"
