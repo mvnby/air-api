@@ -5,7 +5,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
-from models import LeadSource, Order
+from models import LeadSource, Order, OrderStatus
 from schemas import OrderPayload, OrderResponse
 from services.bot_service import BotService
 from services.order_service import OrderService
@@ -51,6 +51,7 @@ class WebsiteOrderService:
             customer_address=payload.customer.address,
             items=items,
             lead_source=LeadSource.SITE,
+            initial_status=OrderStatus.NEGOTIATION,
             comment=payload.comment,
             customer_type=payload.customer.type,
             customer_inn=payload.customer.inn,

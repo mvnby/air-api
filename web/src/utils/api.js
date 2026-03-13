@@ -211,6 +211,22 @@ export async function submitContactForm(formData) {
     }
 }
 
+export async function submitProductAvailabilityLead(payload) {
+    const url = `${API_V1}/leads/product-availability`;
+    try {
+        return await fetchJson(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        }, false);
+    } catch (e) {
+        console.error('[API] submitProductAvailabilityLead failed:', e);
+        return null;
+    }
+}
+
 export async function getServiceOptions(category = 'installation_option') {
     const url = `${API_V1}/services/options?category=${category}`;
     const data = await fetchJson(url);

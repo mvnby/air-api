@@ -41,7 +41,7 @@ async def create_manager_order(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        from models import LeadSource
+        from models import LeadSource, OrderStatus
         source_enum = LeadSource(payload.source) if payload.source else LeadSource.MANAGER
         order = await OrderService.create_from_website(
             session=session,
@@ -51,6 +51,7 @@ async def create_manager_order(
             customer_address=None,
             items=[],
             lead_source=source_enum,
+            initial_status=OrderStatus.NEW_LEAD,
             comment=payload.request_text,
         )
         # Save optional service_type into technical_meta

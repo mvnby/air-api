@@ -3,6 +3,7 @@ from fastapi import APIRouter
 
 from routers.api_admin import router as admin_router
 from routers.api_content import router as content_router
+from routers.api_leads import router as leads_router
 from routers.api_orders import router as orders_router
 from routers.api_products import router as products_router
 from routers.api_proxy import router as proxy_router
@@ -10,6 +11,7 @@ from routers.api_proxy import router as proxy_router
 router = APIRouter(prefix="/api", tags=["api"])
 router.include_router(admin_router)
 router.include_router(content_router)
+router.include_router(leads_router)
 router.include_router(orders_router)
 router.include_router(products_router)
 router.include_router(proxy_router)

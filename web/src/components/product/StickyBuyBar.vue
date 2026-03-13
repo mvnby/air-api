@@ -4,10 +4,15 @@
       <div class="price-info">
         <span class="label">Итого:</span>
         <span class="price-val">{{ formattedPrice }}</span>
+        <span v-if="isUnavailableInCities" class="stock-note">Нет в наличии</span>
       </div>
-      <button class="btn btn-primary btn-sm js-track-cart" @click="scrollToBuy">
-        <span class="material-icons-round">shopping_cart</span>
-        В корзину
+      <button
+        class="btn btn-primary btn-sm js-track-cart"
+        :class="{ notify: isUnavailableInCities }"
+        @click="scrollToBuy"
+      >
+        <span class="material-icons-round">{{ isUnavailableInCities ? 'notifications_active' : 'shopping_cart' }}</span>
+        {{ isUnavailableInCities ? 'Сообщить о поступлении' : 'В корзину' }}
       </button>
     </div>
   </div>
@@ -18,13 +23,19 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 
 const props = defineProps({
   price: { type: Number, required: true },
-  currency: { type: String, default: 'Br' }
+  currency: { type: String, default: 'Br' },
+  vitebskQty: { type: Number, default: 0 },
+  minskQty: { type: Number, default: 0 }
 });
 
 const isVisible = ref(false);
 
 const formattedPrice = computed(() => {
   return props.price.toLocaleString('ru-RU') + ' ' + props.currency;
+});
+
+const isUnavailableInCities = computed(() => {
+  return Number(props.vitebskQty) <= 0 && Number(props.minskQty) <= 0;
 });
 
 const handleScroll = () => {
@@ -83,6 +94,27 @@ onUnmounted(() => {
     flex-direction: column;
 }
 
+.stock-note {
+    font-size: 0.75rem;
+    color: #475569;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: fit-content;
+    margin-top: 0.25rem;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.12);
+    border: 1px solid rgba(100, 116, 139, 0.22);
+}
+
+:global(.dark) .stock-note {
+    color: rgba(241, 245, 249, 0.82);
+    background: rgba(148, 163, 184, 0.14);
+    border-color: rgba(148, 163, 184, 0.24);
+}
+
 .label {
     font-size: 0.75rem;
     color: #64748b;
@@ -106,6 +138,25 @@ onUnmounted(() => {
     border: none;
     font-weight: 600;
     cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-sm:hover {
+    opacity: 0.92;
+}
+
+.btn-sm:active {
+    transform: translateY(1px);
+}
+
+.sticky-bar .btn-sm .material-icons-round {
+    font-size: 1.1rem;
+}
+
+.btn-sm.notify {
+    background: #fff7ed;
+    color: #b45309;
+    border: 1px solid #fdba74;
 }
 
 @media (max-width: 768px) {

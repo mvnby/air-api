@@ -108,6 +108,8 @@ export type { OrderWorkStageUpdatePayload } from './models/OrderWorkStageUpdateP
 export type { PaymentCreatePayload } from './models/PaymentCreatePayload';
 export type { PaymentCurrency } from './models/PaymentCurrency';
 export type { PaymentResponse } from './models/PaymentResponse';
+export type { ProductAvailabilityLeadPayload } from './models/ProductAvailabilityLeadPayload';
+export type { ProductAvailabilityLeadResponse } from './models/ProductAvailabilityLeadResponse';
 export type { ProductImageResponse } from './models/ProductImageResponse';
 export type { ProductLocalStockPayload } from './models/ProductLocalStockPayload';
 export type { ProductLocalStockResponse } from './models/ProductLocalStockResponse';

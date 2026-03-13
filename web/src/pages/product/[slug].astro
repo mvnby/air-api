@@ -71,7 +71,13 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
     currency="BYN"
     type="product"
 >
-    <StickyBuyBar client:visible price={product.price} currency="Br" />
+    <StickyBuyBar
+        client:visible
+        price={product.price}
+        currency="Br"
+        vitebskQty={product.vitebsk_qty}
+        minskQty={product.minsk_qty}
+    />
 
     <div class="container product-page">
         <nav class="breadcrumb">
@@ -178,6 +184,9 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                         productId={product.id}
                         title={product.title}
                         image={mainImage}
+                        vitebskQty={product.vitebsk_qty}
+                        minskQty={product.minsk_qty}
+                        availabilityStatus={product.availability_status}
                     />
                 </div>
 
