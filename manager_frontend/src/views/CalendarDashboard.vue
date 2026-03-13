@@ -193,7 +193,8 @@ const calendarOptions = ref<CalendarOptions>({
   eventDurationEditable: false,
   eventDrop: handleEventDrop,
   height: 'auto',
-  firstDay: 1 // Monday
+  firstDay: 1, // Monday
+  slotMinTime: '08:00:00',
 });
 
 </script>

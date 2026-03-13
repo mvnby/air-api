@@ -11,7 +11,8 @@ from sqlmodel import select
 from models.content import GlobalConfig
 
 
-_RATE_CACHE_VALUE: Optional[Decimal] = None
+_RATE_CACHE_VALUE_USD: Optional[Decimal] = None
+_RATE_CACHE_VALUE_EUR: Optional[Decimal] = None
 _RATE_CACHE_AT: Optional[datetime] = None
 _RATE_CACHE_TTL = timedelta(minutes=10)
 
@@ -28,6 +29,7 @@ def _parse_decimal(value: str | None) -> Optional[Decimal]:
 
 class FxRateService:
     NBRB_USD_URL = "https://api.nbrb.by/exrates/rates/USD?parammode=2"
+    NBRB_EUR_URL = "https://api.nbrb.by/exrates/rates/EUR?parammode=2"
 
     @staticmethod
     async def _get_config(session: AsyncSession, key: str) -> Optional[GlobalConfig]:
@@ -59,27 +61,38 @@ class FxRateService:
         return parsed
 
     @staticmethod
-    async def _fetch_nbrb_usd_rate() -> Optional[Decimal]:
-        global _RATE_CACHE_VALUE, _RATE_CACHE_AT
+    async def _fetch_nbrb_rates() -> tuple[Optional[Decimal], Optional[Decimal]]:
+        global _RATE_CACHE_VALUE_USD, _RATE_CACHE_VALUE_EUR, _RATE_CACHE_AT
 
         now = datetime.now()
-        if _RATE_CACHE_VALUE is not None and _RATE_CACHE_AT is not None:
+        if _RATE_CACHE_AT is not None:
             if now - _RATE_CACHE_AT <= _RATE_CACHE_TTL:
-                return _RATE_CACHE_VALUE
+                return _RATE_CACHE_VALUE_USD, _RATE_CACHE_VALUE_EUR
+
+        usd_val = None
+        eur_val = None
 
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(FxRateService.NBRB_USD_URL)
-                resp.raise_for_status()
-                data = resp.json()
-                rate = data.get("Cur_OfficialRate")
-                parsed = _parse_decimal(str(rate) if rate is not None else None)
-                if parsed is not None:
-                    _RATE_CACHE_VALUE = parsed
-                    _RATE_CACHE_AT = now
-                return parsed
+                usd_resp = await client.get(FxRateService.NBRB_USD_URL)
+                if usd_resp.status_code == 200:
+                    data = usd_resp.json()
+                    rate = data.get("Cur_OfficialRate")
+                    usd_val = _parse_decimal(str(rate) if rate is not None else None)
+
+                eur_resp = await client.get(FxRateService.NBRB_EUR_URL)
+                if eur_resp.status_code == 200:
+                    data = eur_resp.json()
+                    rate = data.get("Cur_OfficialRate")
+                    eur_val = _parse_decimal(str(rate) if rate is not None else None)
+
+                _RATE_CACHE_VALUE_USD = usd_val
+                _RATE_CACHE_VALUE_EUR = eur_val
+                _RATE_CACHE_AT = now
         except Exception:
-            return None
+            pass
+
+        return usd_val, eur_val
 
     @staticmethod
     async def get_effective_usd_byn_rate(session: AsyncSession) -> Optional[Decimal]:
@@ -88,9 +101,19 @@ class FxRateService:
         if source == "manual":
             return manual
 
-        nbrb_rate = await FxRateService._fetch_nbrb_usd_rate()
+        usd_rate, _ = await FxRateService._fetch_nbrb_rates()
         # Fallback to manual if NBRB temporarily unavailable.
-        return nbrb_rate if nbrb_rate is not None else manual
+        return usd_rate if usd_rate is not None else manual
+
+    @staticmethod
+    async def get_effective_eur_byn_rate(session: AsyncSession) -> Optional[Decimal]:
+        source = await FxRateService._get_rate_source(session)
+        # We only have manual override for USD currently, so if we can't fetch EUR, we return None
+        if source == "manual":
+            return None
+
+        _, eur_rate = await FxRateService._fetch_nbrb_rates()
+        return eur_rate
 
     @staticmethod
     async def get_supplier_usd_byn_rate(session: AsyncSession) -> Optional[Decimal]:

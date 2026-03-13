@@ -8,6 +8,7 @@ from .common import (
     LeadStatus,
     OrderStageStatus,
     OrderStatus,
+    PaymentCurrency,
     PaymentType,
 )
 from .customer import Customer, Lead
@@ -67,6 +68,7 @@ __all__ = [
     "OrderStageStatus",
     "OrderStatus",
     "OrderWorkStage",
+    "PaymentCurrency",
     "Product",
     "ProductImage",
     "ProductImage",

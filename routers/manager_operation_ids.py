@@ -67,6 +67,8 @@ UPDATE_MANAGER_INSTALLER = "update_manager_installer"
 SEARCH_MANAGER_INSTALLERS = "search_manager_installers"
 
 LIST_MANAGER_SETTINGS = "list_manager_settings"
+GET_FX_RATE = "get_fx_rate"
+SUGGEST_ADDRESS = "suggest_address"
 UPDATE_MANAGER_SETTING = "update_manager_setting"
 
 LIST_MANAGER_TARIFFS = "list_manager_tariffs"
@@ -159,6 +161,8 @@ ALL_MANAGER_OPERATION_IDS = (
     UPDATE_MANAGER_INSTALLER,
     SEARCH_MANAGER_INSTALLERS,
     LIST_MANAGER_SETTINGS,
+    GET_FX_RATE,
+    SUGGEST_ADDRESS,
     UPDATE_MANAGER_SETTING,
     LIST_MANAGER_TARIFFS,
     CREATE_MANAGER_TARIFF,

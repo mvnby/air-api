@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import BigInteger, Column, JSON, String
 from sqlmodel import Field, Relationship, SQLModel
 
-from .common import ClosingResult, EquipmentStatus, LeadSource, OrderStageStatus, OrderStatus, PaymentType
+from .common import ClosingResult, EquipmentStatus, LeadSource, OrderStageStatus, OrderStatus, PaymentCurrency, PaymentType
 
 class Installer(SQLModel, table=True):
     __tablename__ = "installers"
@@ -92,14 +92,14 @@ class OrderWorkStage(SQLModel, table=True):
     __tablename__ = "order_work_stage"
     id: Optional[int] = Field(default=None, primary_key=True)
     order_id: int = Field(foreign_key="order.id", index=True)
-    
+
     name: str  # "Закладка трассы", "Монтаж"
     status: OrderStageStatus = Field(default=OrderStageStatus.PLANNED, sa_column=Column(String, index=True))
-    
+
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
-    
-    installer_id: Optional[int] = Field(default=None, foreign_key="installers.id") 
+
+    installer_id: Optional[int] = Field(default=None, foreign_key="installers.id")
     manager_comment: Optional[str] = None
     installer_report: Optional[str] = None
 
@@ -126,11 +126,16 @@ class Order(SQLModel, table=True):
     total_amount: float = Field(default=0.0)
     total_cost: float = Field(default=0.0)
     margin: float = Field(default=0.0)
-    
+
     # Financials
     total_payments: float = Field(default=0.0)
     balance_due: float = Field(default=0.0)
     is_paid: bool = Field(default=False) # Will be deprecated but left for now
+
+    # Currency tracking
+    target_currency: Optional[PaymentCurrency] = Field(default=None) # 'USD' or 'EUR'
+    target_currency_amount: Optional[float] = Field(default=None) # The fixed total price in chosen currency
+    target_currency_payments: Optional[float] = Field(default=0.0) # Payments made in chosen currency
 
 
     # --- Closing ---
@@ -151,7 +156,7 @@ class Order(SQLModel, table=True):
 
     # --- Internal: Execution stage ---
     works_plan: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
-    
+
     # Store equipment state
     equipment_status: EquipmentStatus = Field(default=EquipmentStatus.PENDING, sa_column=Column(String, default="pending", index=True))
     standard_install_kit_issued: bool = Field(default=False)
@@ -222,13 +227,30 @@ class Order(SQLModel, table=True):
         self.total_amount = p_sum + s_sum
         self.total_cost = p_cost + s_cost + i_cost
         self.margin = self.total_amount - self.total_cost
-        
-        # Calculate payments 
-        amounts = []
+
+        # Infer rate for currency logic if a fixed price is set.
+        rate = 1.0
+        if self.target_currency and self.target_currency_amount and self.target_currency_amount > 0:
+            rate = self.total_amount / self.target_currency_amount
+
+        # Foreign-currency payments only affect totals when the order is fixed in
+        # the same target currency.
+        byn_amounts = []
+        target_amounts = []
         for payment in self.payments:
-            amounts.append(payment.amount)
-        self.total_payments = sum(amounts)
+            curr = getattr(payment, "currency", PaymentCurrency.BYN) or PaymentCurrency.BYN
+            if curr == PaymentCurrency.BYN:
+                byn_amounts.append(payment.amount)
+                if self.target_currency and rate > 0:
+                    target_amounts.append(payment.amount / rate)
+            elif self.target_currency and curr == self.target_currency:
+                target_amounts.append(payment.amount)
+                if rate > 0:
+                    byn_amounts.append(payment.amount * rate)
+
+        self.total_payments = sum(byn_amounts)
         self.balance_due = max(0.0, self.total_amount - self.total_payments)
+        self.target_currency_payments = sum(target_amounts)
 
     def __str__(self):
         customer_name = self.customer.name if self.customer else "N/A"
@@ -260,11 +282,12 @@ class Payment(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     order_id: int = Field(foreign_key="order.id", index=True)
-    
+
     amount: float = Field(default=0.0)
+    currency: PaymentCurrency = Field(default=PaymentCurrency.BYN, sa_column=Column(String, nullable=False, default=PaymentCurrency.BYN.value))
     date: datetime = Field(default_factory=datetime.now)
     type: PaymentType = Field(default=PaymentType.PREPAYMENT, sa_column=Column(String, index=True))
-    
+
     comment: Optional[str] = Field(default=None)
 
     created_at: datetime = Field(default_factory=datetime.now)

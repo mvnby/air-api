@@ -67,6 +67,12 @@ class PaymentType(str, Enum):
     POSTPAYMENT = "postpayment"
 
 
+class PaymentCurrency(str, Enum):
+    BYN = "BYN"
+    USD = "USD"
+    EUR = "EUR"
+
+
 class OrderStageStatus(str, Enum):
     PLANNED = "planned"
     IN_PROGRESS = "in_progress"

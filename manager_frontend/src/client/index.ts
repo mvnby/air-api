@@ -28,6 +28,7 @@ export type { DashboardTouchpoint } from './models/DashboardTouchpoint';
 export type { FilterRange } from './models/FilterRange';
 export type { FiltersConfigResponse } from './models/FiltersConfigResponse';
 export type { FilterTagOption } from './models/FilterTagOption';
+export type { FxRateResponse } from './models/FxRateResponse';
 export type { HTTPValidationError } from './models/HTTPValidationError';
 export type { LeadCreatePayload } from './models/LeadCreatePayload';
 export type { LeadListResponse } from './models/LeadListResponse';
@@ -105,6 +106,7 @@ export type { OrderWorkStageCreatePayload } from './models/OrderWorkStageCreateP
 export type { OrderWorkStageResponse } from './models/OrderWorkStageResponse';
 export type { OrderWorkStageUpdatePayload } from './models/OrderWorkStageUpdatePayload';
 export type { PaymentCreatePayload } from './models/PaymentCreatePayload';
+export type { PaymentCurrency } from './models/PaymentCurrency';
 export type { PaymentResponse } from './models/PaymentResponse';
 export type { ProductImageResponse } from './models/ProductImageResponse';
 export type { ProductLocalStockPayload } from './models/ProductLocalStockPayload';

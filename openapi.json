@@ -3350,6 +3350,202 @@
         ]
       }
     },
+    "/api/manager/orders/{order_id}/documents": {
+      "get": {
+        "tags": [
+          "manager-docs"
+        ],
+        "summary": "Get Manager Order Documents",
+        "operationId": "get_manager_order_documents",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderDocumentListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/documents/upload": {
+      "post": {
+        "tags": [
+          "manager-docs"
+        ],
+        "summary": "Upload Manager Order Document",
+        "operationId": "upload_manager_order_document",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_manager_order_document"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderDocumentItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/docs/{doc_id}/download": {
+      "get": {
+        "tags": [
+          "manager-docs"
+        ],
+        "summary": "Get Manager Doc Download",
+        "operationId": "get_manager_doc_download",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "doc_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Doc Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/docs/{doc_id}": {
+      "delete": {
+        "tags": [
+          "manager-docs"
+        ],
+        "summary": "Delete Manager Doc",
+        "operationId": "delete_manager_doc",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "doc_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Doc Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerActionMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/orders": {
       "get": {
         "tags": [
@@ -4452,202 +4648,6 @@
         }
       }
     },
-    "/api/manager/orders/{order_id}/documents": {
-      "get": {
-        "tags": [
-          "manager-docs"
-        ],
-        "summary": "Get Manager Order Documents",
-        "operationId": "get_manager_order_documents",
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "order_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Order Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ManagerOrderDocumentListResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/manager/orders/{order_id}/documents/upload": {
-      "post": {
-        "tags": [
-          "manager-docs"
-        ],
-        "summary": "Upload Manager Order Document",
-        "operationId": "upload_manager_order_document",
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "order_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Order Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_upload_manager_order_document"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ManagerOrderDocumentItem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/manager/docs/{doc_id}/download": {
-      "get": {
-        "tags": [
-          "manager-docs"
-        ],
-        "summary": "Get Manager Doc Download",
-        "operationId": "get_manager_doc_download",
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "doc_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Doc Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/manager/docs/{doc_id}": {
-      "delete": {
-        "tags": [
-          "manager-docs"
-        ],
-        "summary": "Delete Manager Doc",
-        "operationId": "delete_manager_doc",
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "doc_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Doc Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ManagerActionMessageResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/manager/crm/health-report": {
       "get": {
         "tags": [
@@ -5059,6 +5059,78 @@
             "OAuth2PasswordBearer": []
           }
         ]
+      }
+    },
+    "/api/manager/settings/fx-rate": {
+      "get": {
+        "tags": [
+          "manager/settings"
+        ],
+        "summary": "Get Fx Rate",
+        "operationId": "get_fx_rate",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FxRateResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/settings/address-suggest": {
+      "get": {
+        "tags": [
+          "manager/settings"
+        ],
+        "summary": "Suggest Address",
+        "operationId": "suggest_address",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/manager/settings/{key}": {
@@ -7248,6 +7320,39 @@
           "area"
         ],
         "title": "FiltersConfigResponse"
+      },
+      "FxRateResponse": {
+        "properties": {
+          "usd_byn": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usd Byn"
+          },
+          "eur_byn": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eur Byn"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": "manual"
+          }
+        },
+        "type": "object",
+        "title": "FxRateResponse"
       },
       "HTTPValidationError": {
         "properties": {
@@ -9479,6 +9584,38 @@
             "title": "Standard Install Kit Issued",
             "default": false
           },
+          "target_currency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentCurrency"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target_currency_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Currency Amount"
+          },
+          "target_currency_payments": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Currency Payments"
+          },
           "closing_result": {
             "anyOf": [
               {
@@ -9862,6 +9999,38 @@
             "type": "boolean",
             "title": "Standard Install Kit Issued",
             "default": false
+          },
+          "target_currency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentCurrency"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target_currency_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Currency Amount"
+          },
+          "target_currency_payments": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Currency Payments"
           },
           "closing_result": {
             "anyOf": [
@@ -10294,6 +10463,27 @@
               }
             ],
             "title": "On Hold Reason"
+          },
+          "target_currency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentCurrency"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target_currency_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Currency Amount"
           },
           "equipment_status": {
             "anyOf": [
@@ -11762,6 +11952,10 @@
             "type": "number",
             "title": "Amount"
           },
+          "currency": {
+            "$ref": "#/components/schemas/PaymentCurrency",
+            "default": "BYN"
+          },
           "type": {
             "type": "string",
             "title": "Type"
@@ -11785,6 +11979,15 @@
         ],
         "title": "PaymentCreatePayload"
       },
+      "PaymentCurrency": {
+        "type": "string",
+        "enum": [
+          "BYN",
+          "USD",
+          "EUR"
+        ],
+        "title": "PaymentCurrency"
+      },
       "PaymentResponse": {
         "properties": {
           "id": {
@@ -11794,6 +11997,9 @@
           "amount": {
             "type": "number",
             "title": "Amount"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/PaymentCurrency"
           },
           "date": {
             "type": "string",
@@ -11825,6 +12031,7 @@
         "required": [
           "id",
           "amount",
+          "currency",
           "date",
           "type",
           "created_at"

@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { ManagerOrderProductLinePayload } from './ManagerOrderProductLinePayload';
 import type { ManagerOrderServiceLinePayload } from './ManagerOrderServiceLinePayload';
+import type { PaymentCurrency } from './PaymentCurrency';
 export type ManagerOrderUpdatePayload = {
     status?: (string | null);
     next_followup_date?: (string | null);
@@ -21,6 +22,8 @@ export type ManagerOrderUpdatePayload = {
     reject_reason?: (string | null);
     is_on_hold?: (boolean | null);
     on_hold_reason?: (string | null);
+    target_currency?: (PaymentCurrency | null);
+    target_currency_amount?: (number | null);
     equipment_status?: (string | null);
     standard_install_kit_issued?: (boolean | null);
     customer_id?: (number | null);

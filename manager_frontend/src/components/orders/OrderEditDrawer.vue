@@ -13,8 +13,10 @@ import type {
   ManagerOrderDocumentItem,
   ManagerInstallerResponse,
   PaymentResponse,
+  PaymentCurrency,
+  FxRateResponse,
 } from '../../client';
-import { ManagerDocsService, ManagerOrdersService } from '../../client';
+import { ManagerDocsService, ManagerOrdersService, ManagerSettingsService } from '../../client';
 import { formatMoney } from './order-utils';
 import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../../utils/datetime';
 
@@ -67,9 +69,17 @@ const installationDate = ref('');
 const comment = ref('');
 const isPaid = ref(false);
 const installerId = ref<number | null>(null);
+
 const customerDeliveryAddress = ref('');
-const deliveryAddressInput = ref<HTMLInputElement | null>(null);
-let suggestView: any = null;
+const addressSuggestions = ref<any[]>([]);
+const addressSuggestActive = ref(false);
+const addressLookupLoading = ref(false);
+
+const targetCurrency = ref<PaymentCurrency | null>(null);
+const targetCurrencyAmount = ref<number | null>(null);
+const targetCurrencyPayments = ref<number>(0);
+const enableCurrency = ref(false);
+const currentFxRate = ref<FxRateResponse | null>(null);
 
 const searchInStock = ref(false);
 
@@ -77,6 +87,38 @@ watch(searchInStock, () => {
   if (activeSuggestionIndex.value !== null) {
     onProductQueryInput(activeSuggestionIndex.value);
   }
+});
+
+const syncTargetCurrencyAmountFromRate = () => {
+  const rate = getActiveFxRate(targetCurrency.value);
+  if (!enableCurrency.value || !rate || totalPreview.value <= 0) return;
+  targetCurrencyAmount.value = Number((totalPreview.value / rate).toFixed(2));
+};
+
+watch(enableCurrency, async (val) => {
+  if (!val) {
+    targetCurrency.value = null;
+    targetCurrencyAmount.value = null;
+    targetCurrencyPayments.value = 0;
+  } else if (!targetCurrency.value) {
+    targetCurrency.value = 'USD';
+    try {
+       currentFxRate.value = await ManagerSettingsService.getFxRate();
+       syncTargetCurrencyAmountFromRate();
+    } catch (e) {
+       console.warn('Failed to fetch FX rate', e);
+       enableCurrency.value = false;
+       setToast('Не удалось загрузить курс валют', 'error');
+    }
+  }
+});
+
+watch(targetCurrency, (newCurrency) => {
+  if (newCurrency === 'EUR' && !hasManualEurRate.value) {
+    targetCurrency.value = 'USD';
+    return;
+  }
+  syncTargetCurrencyAmountFromRate();
 });
 
 // Negotiation stage properties
@@ -97,7 +139,19 @@ const localFormError = ref('');
 const showCustomerModal = ref(false);
 
 const customer = computed(() => props.order?.customer ?? null);
+const isB2cCustomer = computed(() => {
+  if (!customer.value) return true; // defaults to B2C if unknown
+  return customer.value.type !== 'company';
+});
 const draftKey = computed(() => (props.order ? `manager_order_drawer_draft_${props.order.id}` : ''));
+const hasManualEurRate = computed(() => Boolean(currentFxRate.value?.eur_byn));
+
+const getActiveFxRate = (currency: PaymentCurrency | null): number | null => {
+  if (!currentFxRate.value || !currency) return null;
+  if (currency === 'USD') return currentFxRate.value.usd_byn ?? null;
+  if (currency === 'EUR') return currentFxRate.value.eur_byn ?? null;
+  return null;
+};
 
 const toastType = ref<'success' | 'error'>('success');
 const setToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -191,22 +245,22 @@ const downloadDocument = async (doc: ManagerOrderDocumentItem) => {
   processingDocId.value = doc.id;
   try {
     const response = await ManagerDocsService.getManagerDocDownload(doc.id);
-    
+
     // Create blob link to download
-    
+
     // If we look at ManagerDocsService.ts: returns CancelablePromise<any>.
     // Let's assume it returns the blob because the browser implementation of fetch/request handles it?
     // Actually, generated code usually parses JSON.
     // If I need Blob, I might need to access raw response or ensure generation config handles binary.
     // Let's implement a fallback or assume naive approach first.
-    
+
     // Actually, easier way for now: open direct URL in new tab which triggers download?
     // But we need auth token. Browser simply opening link won't attach header unless cookie.
     // We use Bearer token.
-    
+
     // We can use the ApiService.getDownloadLink presumably if we had one, but we have a method returning stream.
     // Let's try to handle Blob.
-    
+
     const url = window.URL.createObjectURL(new Blob([response]));
     const link = document.createElement('a');
     link.href = url;
@@ -241,11 +295,22 @@ const isAddingPayment = ref(false);
 
 const addPayment = async () => {
   if (!props.order?.id || !newPaymentAmount.value) return;
+  if (enableCurrency.value) {
+    if (!targetCurrency.value) {
+      setToast('Сначала выберите валюту сделки', 'error');
+      return;
+    }
+    if (!getActiveFxRate(targetCurrency.value)) {
+      setToast('Для выбранной валюты нет доступного курса', 'error');
+      return;
+    }
+  }
   isAddingPayment.value = true;
   try {
     const res = await ManagerOrdersService.addManagerOrderPayment(props.order.id, {
         amount: newPaymentAmount.value,
         type: newPaymentType.value,
+        currency: enableCurrency.value ? (targetCurrency.value || 'USD') : 'BYN',
     });
     payments.value = res;
     newPaymentAmount.value = null;
@@ -257,12 +322,22 @@ const addPayment = async () => {
   }
 };
 
+const deletingPaymentId = ref<number | null>(null);
+
+const confirmDeletePayment = (paymentId: number) => {
+  deletingPaymentId.value = paymentId;
+};
+
+const cancelDeletePayment = () => {
+  deletingPaymentId.value = null;
+};
+
 const deletePayment = async (paymentId: number) => {
   if (!props.order?.id) return;
-  if (!confirm('Удалить платеж?')) return;
   try {
     const res = await ManagerOrdersService.deleteManagerOrderPayment(props.order.id, paymentId);
     payments.value = res;
+    deletingPaymentId.value = null;
     setToast('Платеж удален', 'success');
   } catch (error) {
     setToast(`Ошибка: ${getApiErrorMessage(error)}`, 'error');
@@ -277,17 +352,83 @@ const totalPreview = computed(() => {
 });
 
 const totalPaymentsPreview = computed(() => {
-  return payments.value.reduce((sum, p) => sum + p.amount, 0);
+  const bynPaid = payments.value.filter((p) => p.currency === 'BYN').reduce((sum, p) => sum + p.amount, 0);
+  if (!enableCurrency.value || !currentFxRate.value || !targetCurrency.value) {
+    return bynPaid;
+  }
+  const foreignPaid = payments.value.filter((p) => p.currency === targetCurrency.value).reduce((sum, p) => sum + p.amount, 0);
+  const rate = getActiveFxRate(targetCurrency.value);
+  if (!rate) return bynPaid;
+  return bynPaid + (foreignPaid * rate);
+});
+
+const calculatedTargetCurrencyPayments = computed(() => {
+  return payments.value.reduce((sum, p) => {
+    if (p.currency === targetCurrency.value) {
+      return sum + p.amount;
+    }
+    if (p.currency === 'BYN' && currentFxRate.value && targetCurrency.value) {
+      const rate = getActiveFxRate(targetCurrency.value);
+      if (rate) {
+        return sum + (p.amount / rate);
+      }
+    }
+    return sum;
+  }, 0);
 });
 
 const balanceDuePreview = computed(() => {
+  if (enableCurrency.value && currentFxRate.value && targetCurrency.value) {
+    const rate = getActiveFxRate(targetCurrency.value);
+    if (!rate) return Math.max(0, totalPreview.value - totalPaymentsPreview.value);
+    return targetCurrencyBalanceDue.value * rate;
+  }
   return Math.max(0, totalPreview.value - totalPaymentsPreview.value);
+});
+
+const targetCurrencyBalanceDue = computed(() => {
+  return Math.max(0, (targetCurrencyAmount.value || 0) - calculatedTargetCurrencyPayments.value);
 });
 
 const marginPreview = computed(() => {
   const pCost = productLines.value.reduce((sum, line) => sum + line.cost * line.quantity, 0);
   const sCost = serviceLines.value.reduce((sum, line) => sum + line.cost * line.quantity, 0);
-  return totalPreview.value - (pCost + sCost);
+  return Math.round(totalPreview.value - (pCost + sCost));
+});
+
+const summaryFinancials = computed(() => {
+  const dealRate = (enableCurrency.value && targetCurrency.value && targetCurrencyAmount.value && targetCurrencyAmount.value > 0)
+    ? (totalPreview.value / targetCurrencyAmount.value)
+    : null;
+  const isCurrencyMode = Boolean(enableCurrency.value && targetCurrency.value && currentFxRate.value && dealRate);
+  const curr = targetCurrency.value || 'USD';
+  const currSymbol = curr === 'EUR' ? '€' : '$';
+
+  const bynPaid = payments.value.filter(p => p.currency === 'BYN').reduce((s, p) => s + p.amount, 0);
+  const foreignPaid = isCurrencyMode
+    ? payments.value.filter(p => p.currency === curr).reduce((s, p) => s + p.amount, 0)
+    : 0;
+
+  const totalInTarget = isCurrencyMode ? (targetCurrencyAmount.value || 0) : 0;
+  const paidInTarget = isCurrencyMode && dealRate ? foreignPaid + (bynPaid / dealRate) : 0;
+  const balanceInTarget = Math.max(0, totalInTarget - paidInTarget);
+
+  const totalInByn = totalPreview.value;
+  const paidInByn = isCurrencyMode && dealRate ? bynPaid + (foreignPaid * dealRate) : bynPaid;
+  const balanceInByn = Math.max(0, totalInByn - paidInByn);
+
+  return {
+    isCurrencyMode,
+    targetCurrency: curr,
+    currSymbol,
+    totalInTarget: Math.round(totalInTarget),
+    paidInTarget: Math.round(paidInTarget),
+    balanceInTarget: Math.round(balanceInTarget),
+    totalInByn: Math.round(totalInByn),
+    paidInByn: Math.round(paidInByn),
+    balanceInByn: Math.round(balanceInByn),
+    dealRate: dealRate || 0
+  };
 });
 
 const rememberProductOption = (option: ProductOption) => {
@@ -413,6 +554,21 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   measurerId.value = order.measurer_id ?? null;
   measurementResult.value = order.measurement_result ?? '';
   proposalStatus.value = (order.proposal_status as any) || 'draft';
+  targetCurrency.value = order.target_currency || null;
+  targetCurrencyAmount.value = order.target_currency_amount || null;
+  targetCurrencyPayments.value = order.target_currency_payments || 0;
+
+  // Set default currency toggle state
+  enableCurrency.value = !!order.target_currency;
+
+  if (enableCurrency.value && !currentFxRate.value) {
+      ManagerSettingsService.getFxRate().then(res => {
+          currentFxRate.value = res;
+          if (targetCurrency.value === 'EUR' && !res.eur_byn) {
+            targetCurrency.value = 'USD';
+          }
+      }).catch(e => console.warn('Failed to load fx rate on init', e));
+  }
 
   if (installersList.value.length === 0) {
     api.getManagerInstallers(1, 100).then(res => {
@@ -434,7 +590,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
     price: line.price,
     cost: line.cost,
   }));
-  
+
   // Documents
   documents.value = (order.documents || []).map((d: any) => ({
       id: d.id,
@@ -445,7 +601,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   }));
   // Payments
   payments.value = [...(order.payments || [])];
-  
+
   // Also refresh list to be sure
   loadDocuments(order.id);
 
@@ -464,26 +620,45 @@ watch(
   async (value) => {
     if (value) {
       await initForm(props.order);
-      setTimeout(() => {
-        if (deliveryAddressInput.value && (window as any).ymaps) {
-          (window as any).ymaps.ready(() => {
-            if (!suggestView) {
-              suggestView = new (window as any).ymaps.SuggestView(deliveryAddressInput.value);
-              suggestView.events.add('select', (e: any) => {
-                customerDeliveryAddress.value = e.get('item').value;
-              });
-            }
-          });
-        }
-      }, 500);
-    } else {
-      if (suggestView) {
-        suggestView.destroy();
-        suggestView = null;
-      }
     }
   },
 );
+
+const fetchAddressSuggestions = async (query: string) => {
+  if (!query || query.length < 3) {
+    addressSuggestions.value = [];
+    return;
+  }
+  addressLookupLoading.value = true;
+  try {
+    const res = await ManagerSettingsService.suggestAddress(query);
+    addressSuggestions.value = res.results || [];
+  } catch (err) {
+    console.warn('Failed to fetch address suggestions', err);
+  } finally {
+    addressLookupLoading.value = false;
+  }
+};
+
+const debouncedFetchAddressSuggestions = useDebounceFn(fetchAddressSuggestions, 400);
+
+const onAddressInput = () => {
+  addressSuggestActive.value = true;
+  debouncedFetchAddressSuggestions(customerDeliveryAddress.value);
+};
+
+const selectAddressSuggestion = (item: any) => {
+  customerDeliveryAddress.value = item.title?.text || '';
+  if (item.subtitle?.text) customerDeliveryAddress.value += `, ${item.subtitle.text}`;
+  addressSuggestActive.value = false;
+  addressSuggestions.value = [];
+};
+
+const hideAddressSuggestions = () => {
+  setTimeout(() => {
+    addressSuggestActive.value = false;
+  }, 200);
+};
 
 watch(
   () => props.order,
@@ -587,6 +762,10 @@ const isPriceDifferentFromCatalog = (line: { product_id: number; price: number }
   return catalog !== null && Number(catalog) !== Number(line.price || 0);
 };
 const lineTotal = (line: { quantity: number; price: number }) => Number(line.quantity || 0) * Number(line.price || 0);
+const toIntegerMoney = (value: number | null | undefined): number | null => {
+  if (value == null || Number.isNaN(Number(value))) return null;
+  return Math.round(Number(value));
+};
 
 const handleSave = () => {
   if (!props.order) return;
@@ -640,6 +819,25 @@ const handleSave = () => {
     }
   }
 
+  if (enableCurrency.value) {
+    if (!targetCurrency.value) {
+      localFormError.value = 'Выберите валюту сделки';
+      return;
+    }
+    const activeRate = getActiveFxRate(targetCurrency.value);
+    if (!activeRate) {
+      localFormError.value = 'Для выбранной валюты сейчас нет доступного курса';
+      return;
+    }
+    if (!targetCurrencyAmount.value || targetCurrencyAmount.value <= 0) {
+      localFormError.value = 'Укажите зафиксированную сумму в валюте';
+      return;
+    }
+  } else if (payments.value.some((payment) => payment.currency !== 'BYN')) {
+    localFormError.value = 'Нельзя отключить валютный режим, пока в заказе есть валютные платежи';
+    return;
+  }
+
   clearDraft();
   const payload: ManagerOrderUpdatePayload = {
     status: status.value,
@@ -651,24 +849,26 @@ const handleSave = () => {
     installer_id: installerId.value,
     customer_delivery_address: customerDeliveryAddress.value,
     products: productLines.value.map((line) => ({
-      product_id: line.product_id,
-      quantity: line.quantity,
-      price: line.price,
-      cost: line.cost,
+      product_id: line.product_id || 0,
+      quantity: Math.trunc(Number(line.quantity) || 0),
+      price: Math.round(Number(line.price) || 0),
+      cost: (!line.cost && line.cost !== 0) ? null : toIntegerMoney(line.cost),
       link_id: null,
     })),
     services: serviceLines.value.map((line) => ({
       service_id: line.service_id ?? null,
       title: line.title,
-      quantity: line.quantity,
-      price: line.price,
-      cost: line.cost,
+      quantity: Math.trunc(Number(line.quantity) || 0),
+      price: Math.round(Number(line.price) || 0),
+      cost: (!line.cost && line.cost !== 0) ? null : toIntegerMoney(line.cost),
       link_id: null,
     })),
     measurement_required: measurementRequired.value,
     measurer_id: measurerId.value,
     measurement_result: measurementResult.value,
     proposal_status: proposalStatus.value,
+    target_currency: enableCurrency.value ? (targetCurrency.value || null) : null,
+    target_currency_amount: enableCurrency.value && targetCurrencyAmount.value ? Number(String(targetCurrencyAmount.value).replace(',', '.')) : null,
   };
   emit('save', { orderId: props.order.id, data: payload });
 };
@@ -751,7 +951,7 @@ watch(
             <span v-if="customer?.inn" class="flex items-center gap-1"><span class="font-medium text-xs">УНП</span> {{ customer.inn }}</span>
           </div>
         </div>
-        
+
         <div class="flex items-start gap-2 ml-4">
           <button v-if="order" type="button" @click="toggleHold" class="text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors" :class="order.is_on_hold ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'">
             {{ order.is_on_hold ? 'Вернуть в работу' : 'Отложить' }}
@@ -771,16 +971,16 @@ watch(
       <!-- Планирование (Measurement & Logistics) -->
       <section v-if="status === 'negotiation'" class="mt-6 rounded-2xl bg-blue-50/30 border border-blue-100 p-4">
         <h3 class="text-lg font-semibold font-['Space_Grotesk'] mb-4 text-blue-900 border-b border-blue-100 pb-2">Планирование (Замер и Монтаж)</h3>
-        
+
         <label class="flex items-center gap-2 cursor-pointer mb-4">
           <input type="checkbox" v-model="measurementRequired" class="w-5 h-5 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
           <span class="font-medium text-gray-800">Требуется выезд на замер</span>
         </label>
-        
+
         <div v-if="!measurementRequired" class="text-sm text-gray-500 bg-white p-3 rounded-xl border border-gray-200 mb-4 shadow-sm">
           Замер не требуется. Можно планировать монтаж сразу.
         </div>
-        
+
         <div v-if="measurementRequired" class="grid gap-3 md:grid-cols-2 mb-4 bg-white p-4 rounded-xl border border-blue-100 shadow-sm">
           <DateTimeField v-model="assessmentDate" label="Дата и время замера" :error="getFieldError('measurement_date')" />
           <label class="field-label">
@@ -813,15 +1013,33 @@ watch(
               </option>
             </select>
           </label>
-          <label class="field-label md:col-span-2">
+          <label class="field-label md:col-span-2 relative">
             Адрес объекта / доставки
             <input
               v-model="customerDeliveryAddress"
-              ref="deliveryAddressInput"
+              @input="onAddressInput"
+              @blur="hideAddressSuggestions"
+              @focus="addressSuggestActive = true"
               class="field-input"
-              placeholder="Начните вводить адрес..."
+              placeholder="Введите адрес..."
+              autocomplete="off"
             />
+            <div v-if="addressLookupLoading" class="absolute right-3 top-9">
+              <span class="material-icons-round animate-spin text-gray-400 text-[18px]">refresh</span>
+            </div>
             <span v-if="getFieldError('customer_delivery_address')" class="text-xs text-red-300">{{ getFieldError('customer_delivery_address') }}</span>
+
+            <ul v-if="addressSuggestActive && addressSuggestions.length > 0" class="absolute top-full left-0 z-50 mt-1 max-h-60 w-full overflow-auto rounded-xl bg-white flex flex-col p-1 shadow-2xl border border-gray-100 ring-1 ring-black/5">
+              <li
+                v-for="(item, i) in addressSuggestions"
+                :key="i"
+                class="flex cursor-pointer flex-col px-3 py-2 text-sm hover:bg-gray-50 rounded-lg transition-colors border-b border-gray-50 last:border-0"
+                @mousedown.prevent="selectAddressSuggestion(item)"
+              >
+                <div class="font-medium text-gray-900">{{ item.title?.text }}</div>
+                <div v-if="item.subtitle?.text" class="text-xs text-gray-500 mt-0.5 truncate">{{ item.subtitle?.text }}</div>
+              </li>
+            </ul>
           </label>
         </div>
         <label class="field-label md:col-span-2">
@@ -840,7 +1058,7 @@ watch(
       <!-- Смета -->
       <div class="mt-8 rounded-2xl bg-gray-50/50 border border-gray-200 p-4">
         <h3 class="text-xl font-bold font-['Space_Grotesk'] text-gray-900 border-b border-gray-200 pb-2 mb-4">Смета: Оборудование и услуги</h3>
-        
+
         <section class="mt-2">
           <div class="mb-2 flex items-center justify-between">
             <div class="flex items-center gap-3">
@@ -944,7 +1162,7 @@ watch(
       <!-- Экшн-зона (Proposal & Docs) -->
       <section v-if="status === 'negotiation' || status === 'closed'" class="mt-8 rounded-2xl bg-amber-50/30 border border-amber-100 p-4">
         <h3 class="text-lg font-semibold font-['Space_Grotesk'] text-amber-900 mb-4 border-b border-amber-200 pb-2">Согласование</h3>
-        
+
         <div v-if="status === 'negotiation'" class="mb-6">
           <label class="field-label mb-3">
             Статус согласования
@@ -979,7 +1197,7 @@ watch(
 
         <div class="mb-2 flex items-center justify-between">
           <h4 class="text-md font-semibold text-slate-800">Документы (B2B / Договоры)</h4>
-          
+
           <div class="relative flex items-center gap-2">
             <button
                class="flex items-center gap-1 rounded-xl bg-[#007f80] px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/50 disabled:opacity-50"
@@ -988,7 +1206,7 @@ watch(
             >
               <span class="material-icons-round text-[18px]">add_circle</span> Создать
             </button>
-            
+
             <input type="file" ref="fileInputRef" class="hidden" accept=".pdf" @change="handleFileUpload" />
             <button
                class="flex items-center gap-1 rounded-xl bg-slate-700 px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500/50 disabled:opacity-50"
@@ -1019,7 +1237,7 @@ watch(
             </div>
           </div>
         </div>
-        
+
         <div v-if="documents.length" class="space-y-3 mt-3">
             <div v-for="doc in documents" :key="doc.id" class="flex items-center justify-between rounded-xl border border-slate-700/50 bg-[#1e293b] p-3 text-slate-300">
                 <div class="flex items-center gap-3">
@@ -1050,30 +1268,72 @@ watch(
       </section>
 
 
-      <!-- Execution Tab UI -->
-      <DealExecutionTab 
-        v-if="status === 'execution' && order" 
+      <DealExecutionTab
+        v-if="status === 'execution' && order"
         :order="order"
         @refresh="emit('reload', order.id) /* triggering parent reload without closing drawer */"
         @close="closeDrawer"
         class="mt-8"
       />
 
+      <!-- Оплаты и Валюта (Объединенный блок) -->
       <section v-if="order && status !== 'execution'" class="mt-6 p-5 rounded-2xl border border-slate-200 bg-slate-50 shadow-sm">
-        <h3 class="text-lg flex gap-2 items-center font-semibold font-['Space_Grotesk'] text-slate-800 mb-4">
-            <span class="material-icons-round text-teal-600">account_balance_wallet</span> Оплаты
-        </h3>
-        
-        <div class="mb-4 text-center border border-slate-200 rounded-xl py-6 bg-white shadow-inner">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg flex gap-2 items-center font-semibold font-['Space_Grotesk'] text-slate-800">
+                <span class="material-icons-round text-teal-600">account_balance_wallet</span> Оплаты
+            </h3>
+            <label v-if="isB2cCustomer" class="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm hover:bg-slate-50 transition-colors">
+                <input type="checkbox" v-model="enableCurrency" class="rounded text-blue-600 focus:ring-blue-500 border-slate-300 w-4 h-4" />
+                Считать в валюте
+            </label>
+        </div>
+
+        <!-- Поля валюты (показываются если включен чекбокс) -->
+        <div v-if="enableCurrency" class="mb-5 p-4 rounded-xl border border-blue-100 bg-blue-50/30">
+            <div class="flex gap-4 items-end mb-4">
+                <label class="field-label !mb-0 text-xs w-1/3">Валюта
+                    <select v-model="targetCurrency" class="field-input mt-1">
+                        <option value="USD">USD ($)</option>
+                        <option value="EUR" :disabled="!hasManualEurRate">EUR (€)</option>
+                    </select>
+                </label>
+                <label class="field-label !mb-0 text-xs flex-1">Зафиксировать сумму
+                    <div class="relative">
+                        <input v-model.number="targetCurrencyAmount" type="number" step="0.01" min="0" class="field-input mt-1 w-full" placeholder="Итоговая сумма в валюте" />
+                        <span v-if="currentFxRate?.usd_byn && targetCurrency === 'USD'" class="absolute right-3 top-[50%] -translate-y-[50%] text-[10px] text-blue-400 font-medium bg-blue-50/80 px-1 rounded" title="Текущий курс NBRB">Курс: {{ currentFxRate.usd_byn }}</span>
+                        <span v-else-if="currentFxRate?.eur_byn && targetCurrency === 'EUR'" class="absolute right-3 top-[50%] -translate-y-[50%] text-[10px] text-blue-400 font-medium bg-blue-50/80 px-1 rounded" title="Текущий курс NBRB">Курс: {{ currentFxRate.eur_byn }}</span>
+                    </div>
+                </label>
+            </div>
+            <p v-if="targetCurrency === 'EUR' && !hasManualEurRate" class="text-xs text-amber-700">
+                EUR недоступен при ручном источнике курса. Переключите источник курса на NBRB.
+            </p>
+
+            <div class="flex items-center justify-between border-t border-blue-100 pt-3">
+                 <div class="w-1/2">
+                    <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Внесено оплат ({{ targetCurrency || 'USD' }})</p>
+                    <p class="text-xl font-bold text-gray-800">{{ calculatedTargetCurrencyPayments.toFixed(2) }}</p>
+                 </div>
+                 <div class="text-right">
+                    <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Остаток долга ({{ targetCurrency || 'USD' }})</p>
+                    <p class="text-2xl font-bold" :class="targetCurrencyBalanceDue > 0 ? 'text-red-500' : 'text-blue-600'">
+                        {{ targetCurrencyBalanceDue.toFixed(2) }}
+                    </p>
+                 </div>
+            </div>
+        </div>
+
+        <!-- Стандартные оплаты (BYN), показываются если отключен чекбокс валюты -->
+        <div v-if="!enableCurrency" class="mb-4 text-center border border-slate-200 rounded-xl py-6 bg-white shadow-inner">
             <p class="text-sm font-medium text-slate-500 uppercase tracking-wide">Остаток к оплате</p>
             <p class="text-4xl font-black mt-2 tracking-tight" :class="balanceDuePreview > 0 ? 'text-red-500' : 'text-teal-600'">
                 {{ formatMoney(balanceDuePreview) }}
             </p>
         </div>
-        
-        <div class="flex items-end gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-            <label class="flex-1 field-label !mb-0 text-xs">Внести сумму
-                <input v-model.number="newPaymentAmount" type="number" min="0" class="field-input mt-1 shadow-sm" placeholder="0.00" />
+
+        <div class="flex items-end gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm mt-3">
+            <label class="flex-1 field-label !mb-0 text-xs">Внести платеж ({{ enableCurrency ? (targetCurrency || 'USD') : 'BYN' }})
+                <input v-model.number="newPaymentAmount" type="number" step="0.01" min="0" class="field-input mt-1 shadow-sm" placeholder="0.00" />
             </label>
             <label class="w-1/3 field-label !mb-0 text-xs">Тип
                 <select v-model="newPaymentType" class="field-input mt-1 shadow-sm">
@@ -1087,9 +1347,16 @@ watch(
         <div class="mt-4 space-y-2 max-h-32 overflow-y-auto pr-1">
             <div v-for="p in payments" :key="p.id" class="flex justify-between items-center text-xs py-2 px-3 rounded-lg bg-white border border-slate-100 shadow-sm">
                 <span class="text-slate-500">{{ new Date(p.date).toLocaleDateString() }}</span>
-                <span class="font-bold text-slate-800">{{ formatMoney(p.amount) }}</span>
+                <span class="font-bold text-slate-800" :class="p.currency !== 'BYN' ? 'text-blue-600' : ''">
+                    <template v-if="p.currency !== 'BYN'">{{ p.amount.toFixed(2) }} {{ p.currency }}</template>
+                    <template v-else>{{ formatMoney(p.amount) }}</template>
+                </span>
                 <span class="text-slate-400 w-16 text-right">{{ p.type === 'prepayment' ? 'Аванс' : 'Доплата' }}</span>
-                <button class="flex h-6 w-6 ml-2 items-center justify-center rounded text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors" @click="deletePayment(p.id)" title="Удалить платеж">
+                <div v-if="deletingPaymentId === p.id" class="flex gap-2 ml-2 items-center">
+                    <button class="text-slate-500 hover:text-slate-800 font-medium" @click="cancelDeletePayment()">Отмена</button>
+                    <button class="text-red-500 hover:text-red-700 font-bold" @click="deletePayment(p.id)">Да, удалить</button>
+                </div>
+                <button v-else class="flex h-6 w-6 ml-2 items-center justify-center rounded text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors" @click="confirmDeletePayment(p.id)" title="Удалить платеж">
                     <span class="material-icons-round text-[14px]">delete</span>
                 </button>
             </div>
@@ -1100,11 +1367,38 @@ watch(
       </section>
 
       <section class="mt-6 rounded-2xl bg-gray-100 p-4">
-        <p class="text-sm text-gray-600">Оплачено: <span class="font-semibold text-teal-600">{{ formatMoney(totalPaymentsPreview) }}</span></p>
-        <p class="text-sm text-gray-600">Остаток: <span class="font-semibold" :class="balanceDuePreview > 0 ? 'text-red-500' : 'text-gray-900'">{{ formatMoney(balanceDuePreview) }}</span></p>
-        <hr class="my-2 border-gray-200" />
-        <p class="text-sm text-gray-600">Итого сумма: <span class="font-semibold text-gray-900">{{ formatMoney(totalPreview) }}</span></p>
-        <p class="text-sm text-gray-600">Маржа: <span class="font-semibold text-teal-700">{{ formatMoney(marginPreview) }}</span></p>
+        <div v-if="summaryFinancials.isCurrencyMode" class="space-y-2">
+            <div class="flex justify-between items-center">
+              <p class="text-sm text-gray-600">Оплачено:</p>
+              <p class="text-sm font-semibold text-teal-600">
+                {{ summaryFinancials.paidInTarget }} {{ summaryFinancials.currSymbol }}
+                <span class="text-xs text-gray-400 font-normal ml-1">({{ summaryFinancials.paidInByn }} руб.)</span>
+              </p>
+            </div>
+            <div class="flex justify-between items-center border-b border-gray-200 pb-2">
+              <p class="text-sm text-gray-600">Остаток:</p>
+              <p class="text-sm font-semibold" :class="summaryFinancials.balanceInTarget > 0 ? 'text-red-500' : 'text-gray-900'">
+                {{ summaryFinancials.balanceInTarget }} {{ summaryFinancials.currSymbol }}
+                <span class="text-xs text-gray-400 font-normal ml-1">({{ summaryFinancials.balanceInByn }} руб.)</span>
+              </p>
+            </div>
+            <div class="flex justify-between items-center pt-1">
+              <p class="text-sm font-medium text-gray-700">Итого: {{ summaryFinancials.totalInTarget }} {{ summaryFinancials.currSymbol }}</p>
+              <p class="text-sm text-gray-500">Конвертация (~{{ summaryFinancials.dealRate.toFixed(4) }})</p>
+            </div>
+            <div class="flex justify-between items-center">
+              <p class="text-sm text-gray-700">Всего BYN: {{ summaryFinancials.totalInByn }} руб.</p>
+              <p class="text-sm text-gray-600">Маржа: <span class="font-semibold text-teal-700">{{ summaryFinancials.totalInByn - (productLines.reduce((s,l)=>s+l.cost*l.quantity,0) + serviceLines.reduce((s,l)=>s+l.cost*l.quantity,0)) }} руб.</span></p>
+            </div>
+        </div>
+        <div v-else class="grid grid-cols-2 gap-4">
+           <div>
+            <p class="text-sm text-gray-600">Оплачено: <span class="font-semibold text-teal-600">{{ formatMoney(totalPaymentsPreview) }}</span></p>
+            <p class="text-sm text-gray-600">Остаток: <span class="font-semibold" :class="balanceDuePreview > 0 ? 'text-red-500' : 'text-gray-900'">{{ formatMoney(balanceDuePreview) }}</span></p>
+            <p class="text-sm text-gray-600 mt-2">Итого сумма: <span class="font-semibold text-gray-900">{{ formatMoney(totalPreview) }}</span></p>
+            <p class="text-sm text-gray-600">Маржа: <span class="font-semibold text-teal-700">{{ formatMoney(marginPreview) }}</span></p>
+           </div>
+        </div>
       </section>
 
       <footer class="mt-6 flex justify-between gap-2 border-t border-gray-100 pt-4">
