@@ -917,6 +917,48 @@
         }
       }
     },
+    "/api/v1/leads/product-availability": {
+      "post": {
+        "tags": [
+          "api",
+          "api"
+        ],
+        "summary": "Create Product Availability Lead",
+        "operationId": "create_product_availability_lead",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductAvailabilityLeadPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductAvailabilityLeadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/orders": {
       "post": {
         "tags": [
@@ -12038,6 +12080,59 @@
         ],
         "title": "PaymentResponse"
       },
+      "ProductAvailabilityLeadPayload": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "phone": {
+            "type": "string",
+            "title": "Phone"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "phone"
+        ],
+        "title": "ProductAvailabilityLeadPayload"
+      },
+      "ProductAvailabilityLeadResponse": {
+        "properties": {
+          "lead_id": {
+            "type": "integer",
+            "title": "Lead Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lead_id",
+          "status",
+          "created_at"
+        ],
+        "title": "ProductAvailabilityLeadResponse"
+      },
       "ProductImageResponse": {
         "properties": {
           "id": {
@@ -12191,6 +12286,27 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "vitebsk_qty": {
+            "type": "integer",
+            "title": "Vitebsk Qty",
+            "default": 0
+          },
+          "minsk_qty": {
+            "type": "integer",
+            "title": "Minsk Qty",
+            "default": 0
+          },
+          "availability_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Availability Status"
           },
           "tags": {
             "items": {

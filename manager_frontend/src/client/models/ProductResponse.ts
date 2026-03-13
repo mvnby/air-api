@@ -17,6 +17,9 @@ export type ProductResponse = {
     main_image: (string | null);
     is_published: boolean;
     created_at: string;
+    vitebsk_qty?: number;
+    minsk_qty?: number;
+    availability_status?: (string | null);
     tags?: Array<TagResponse>;
     specs?: Record<string, any>;
     images?: Array<string>;

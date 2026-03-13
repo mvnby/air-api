@@ -1,6 +1,6 @@
 """Helpers to map Product domain models into public API DTOs."""
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from models import Product
 from schemas import (
@@ -16,6 +16,7 @@ from services.product_serialization import parse_legacy_images, sanitize_specs
 def map_product_to_response(
     product: Product,
     series_siblings: Optional[List[Product]] = None,
+    supply_metrics: Optional[Dict[str, Any]] = None,
 ) -> ProductResponse:
     tags_payload = []
     if product.tags:
@@ -79,6 +80,9 @@ def map_product_to_response(
         main_image=product.main_image,
         is_published=product.is_published,
         created_at=product.created_at,
+        vitebsk_qty=int((supply_metrics or {}).get("vitebsk_qty", 0) or 0),
+        minsk_qty=int((supply_metrics or {}).get("minsk_qty", 0) or 0),
+        availability_status=(supply_metrics or {}).get("availability_status"),
         tags=tags_payload,
         specs=specs or {},
         images=images or [],

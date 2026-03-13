@@ -1,8 +1,10 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
-import { getInstallationRates, getGlobalConfig, getProductById } from '../utils/api';
+import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue';
+import IMask from 'imask';
+import { getInstallationRates, getGlobalConfig, getProductById, submitProductAvailabilityLead } from '../utils/api';
 import { addItem } from '../store/cart';
 import { addToast } from '../store/toast';
+import { validateRequiredBelarusPhone } from '../utils/validation';
 
 const props = defineProps({
   basePrice: { type: Number, required: true },
@@ -17,7 +19,10 @@ const props = defineProps({
   productId: { default: 0 },
   title: { type: String, default: '' },
   image: { type: String, default: '' },
-  area: { type: Number, default: 0 }
+  area: { type: Number, default: 0 },
+  vitebskQty: { type: Number, default: 0 },
+  minskQty: { type: Number, default: 0 },
+  availabilityStatus: { type: String, default: null }
 });
 
 const isInstalled = ref(false);
@@ -25,9 +30,21 @@ const rates = ref([]);
 const discount = ref(0);
 const loading = ref(true);
 const buttonState = ref('default');
+const showNotifyModal = ref(false);
+const notifySubmitting = ref(false);
+const notifySuccess = ref(false);
+const notifyPhoneError = ref('');
+const notifyForm = ref({
+    name: '',
+    phone: '',
+});
+const notifyPhoneInputRef = ref(null);
+let notifyMask = null;
 
 const liveBasePrice = ref(props.basePrice);
 const liveOldPrice = ref(props.oldPrice);
+const liveVitebskQty = ref(Number(props.vitebskQty) || 0);
+const liveMinskQty = ref(Number(props.minskQty) || 0);
 
 onMounted(async () => {
     try {
@@ -43,9 +60,42 @@ onMounted(async () => {
         if (freshProduct && freshProduct.price !== undefined) {
             liveBasePrice.value = freshProduct.price;
             liveOldPrice.value = freshProduct.old_price || 0;
+            liveVitebskQty.value = Number(freshProduct.vitebsk_qty) || 0;
+            liveMinskQty.value = Number(freshProduct.minsk_qty) || 0;
         }
     } finally {
         loading.value = false;
+    }
+});
+
+watch(showNotifyModal, async (isOpen) => {
+    if (isOpen) {
+        await nextTick();
+        if (notifyPhoneInputRef.value && !notifyMask) {
+            notifyMask = IMask(notifyPhoneInputRef.value, {
+                mask: '+{375} (00) 000-00-00',
+                lazy: false,
+                placeholderChar: '_',
+            });
+            notifyMask.on('accept', () => {
+                notifyForm.value.phone = notifyMask.value;
+                notifyPhoneError.value = '';
+            });
+        }
+        return;
+    }
+
+    notifyPhoneError.value = '';
+    if (notifyMask) {
+        notifyMask.destroy();
+        notifyMask = null;
+    }
+});
+
+onBeforeUnmount(() => {
+    if (notifyMask) {
+        notifyMask.destroy();
+        notifyMask = null;
     }
 });
 
@@ -130,7 +180,19 @@ const finalInstallPrice = computed(() => {
     return Math.max(0, effectiveInstallPrice.value - discount.value);
 });
 
+const isUnavailableInCities = computed(() => {
+    return liveVitebskQty.value <= 0 && liveMinskQty.value <= 0;
+});
+
+const availabilityMessage = computed(() => {
+    if (isUnavailableInCities.value) {
+        return 'Нет в наличии';
+    }
+    return '';
+});
+
 const shouldShowToggle = computed(() => {
+    if (isUnavailableInCities.value) return false;
     if (!matchedRate.value) return false;
     if (!matchedRate.value.is_fixed) return false;
     return props.showToggle;
@@ -179,6 +241,7 @@ const toggle = (e) => {
 }
 
 const addToCart = () => {
+    if (isUnavailableInCities.value) return;
     if (!props.id) return;
     
     addItem({
@@ -200,6 +263,72 @@ const addToCart = () => {
         buttonState.value = 'default';
     }, 2000);
 }
+
+const buttonLabel = computed(() => {
+    if (isUnavailableInCities.value) return 'Сообщить о поступлении';
+    return buttonState.value === 'success' ? 'Добавлено' : 'В корзину';
+});
+
+const buttonIcon = computed(() => {
+    if (isUnavailableInCities.value) return 'notifications_active';
+    return buttonState.value === 'success' ? 'check' : 'shopping_cart';
+});
+
+const buttonVariant = computed(() => {
+    return isUnavailableInCities.value ? 'notify' : 'primary';
+});
+
+const validateNotifyPhone = () => {
+    notifyPhoneError.value = validateRequiredBelarusPhone(
+        notifyForm.value.phone,
+        Boolean(notifyMask && notifyMask.masked.isComplete),
+    );
+    return !notifyPhoneError.value;
+};
+
+const openNotifyModal = () => {
+    showNotifyModal.value = true;
+};
+
+const closeNotifyModal = () => {
+    showNotifyModal.value = false;
+    notifySubmitting.value = false;
+    notifySuccess.value = false;
+    notifyPhoneError.value = '';
+    notifyForm.value = { name: '', phone: '' };
+};
+
+const handlePrimaryAction = () => {
+    if (isUnavailableInCities.value) {
+        openNotifyModal();
+        return;
+    }
+    addToCart();
+};
+
+const submitNotifyLead = async () => {
+    if (!validateNotifyPhone()) return;
+    if (!props.productId) return;
+
+    notifySubmitting.value = true;
+    const result = await submitProductAvailabilityLead({
+        product_id: Number(props.productId),
+        phone: notifyForm.value.phone,
+        name: (notifyForm.value.name || '').trim() || null,
+    });
+    notifySubmitting.value = false;
+
+    if (!result) {
+        notifyPhoneError.value = 'Не удалось отправить запрос. Попробуйте позже.';
+        return;
+    }
+
+    notifySuccess.value = true;
+    addToast(`Запрос на поступление отправлен: ${props.title}`);
+    setTimeout(() => {
+        closeNotifyModal();
+    }, 2500);
+};
 </script>
 
 <template>
@@ -217,6 +346,10 @@ const addToCart = () => {
         <span class="final-price" :class="{ 'pulse-primary': isInstalled }">
           {{ priceDisplay.current }}
         </span>
+    </div>
+
+    <div v-if="availabilityMessage" class="availability-note">
+      {{ availabilityMessage }}
     </div>
 
     <!-- Toggle -->
@@ -255,18 +388,72 @@ const addToCart = () => {
     <!-- Actions (Centered) -->
     <div class="actions-container">
         <button 
-            class="btn-action primary js-track-cart" 
-            :class="{ success: buttonState === 'success' }"
-            @click.stop="addToCart"
+            class="btn-action js-track-cart"
+            :class="[buttonVariant, { success: buttonState === 'success' && !isUnavailableInCities }]"
+            @click.stop="handlePrimaryAction"
         >
-            <span class="material-icons-round">{{ buttonState === 'success' ? 'check' : 'shopping_cart' }}</span>
-            {{ buttonState === 'success' ? 'Добавлено' : 'В корзину' }}
+            <span class="material-icons-round">{{ buttonIcon }}</span>
+            {{ buttonLabel }}
         </button>
         <!-- "Buy in 1 click" removed for micro cards, kept for large if requested? 
              User specifically said remove quick order from thumbnails. 
              In large view (product page) it might be useful, but user said "it doesn't work".
              Removing from everywhere to be safe and clean.
         -->
+    </div>
+
+    <div v-if="showNotifyModal" class="modal-overlay" @click.self="closeNotifyModal">
+      <div class="modal-card glass">
+        <button class="modal-close-btn" @click="closeNotifyModal" type="button">
+          <span class="material-icons-round">close</span>
+        </button>
+
+        <div v-if="!notifySuccess">
+          <h3 class="modal-title">Сообщить о поступлении</h3>
+          <p class="modal-desc">
+            Оставьте телефон, и мы сообщим, когда <strong>{{ title }}</strong> появится в наличии.
+          </p>
+
+          <form class="notify-form" @submit.prevent="submitNotifyLead">
+            <div class="form-group">
+              <label>Ваше имя</label>
+              <input
+                v-model="notifyForm.name"
+                type="text"
+                class="form-input"
+                placeholder="Необязательно"
+              />
+            </div>
+
+            <div class="form-group">
+              <label>Телефон</label>
+              <input
+                ref="notifyPhoneInputRef"
+                v-model="notifyForm.phone"
+                type="tel"
+                class="form-input"
+                :class="{ invalid: notifyPhoneError }"
+                placeholder="+375 (XX) XXX-XX-XX"
+                @blur="validateNotifyPhone"
+              />
+              <span v-if="notifyPhoneError" class="err-msg">{{ notifyPhoneError }}</span>
+            </div>
+
+            <button type="submit" class="submit-btn" :disabled="notifySubmitting">
+              <span v-if="notifySubmitting">Отправка...</span>
+              <span v-else>Отправить</span>
+            </button>
+          </form>
+        </div>
+
+        <div v-else class="success-state">
+          <div class="success-icon">
+            <span class="material-icons-round">check_circle</span>
+          </div>
+          <h3>Запрос отправлен</h3>
+          <p>Сообщим, когда товар появится в наличии.</p>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -307,6 +494,28 @@ const addToCart = () => {
   .pulse-primary {
     color: var(--primary);
     transform: scale(1.05);
+  }
+
+  .availability-note {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #475569;
+    background: rgba(148, 163, 184, 0.12);
+    border: 1px solid rgba(100, 116, 139, 0.22);
+    border-radius: 999px;
+    padding: 0.45rem 0.9rem;
+    width: auto;
+    max-width: 100%;
+  }
+
+  :global(.dark) .availability-note {
+    color: rgba(241, 245, 249, 0.82);
+    background: rgba(148, 163, 184, 0.14);
+    border-color: rgba(148, 163, 184, 0.24);
   }
 
   /* Discount Badge (Orange) */
@@ -466,6 +675,19 @@ const addToCart = () => {
       box-shadow: 0 6px 20px rgba(var(--primary-rgb), 0.4);
   }
 
+  .btn-action.notify {
+      background: #fff7ed;
+      color: #b45309;
+      border: 1px solid #fdba74;
+      box-shadow: 0 4px 15px rgba(251, 146, 60, 0.18);
+  }
+
+  .btn-action.notify:hover {
+      background: #ffedd5;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(251, 146, 60, 0.22);
+  }
+
   .btn-action.primary.success {
       background: #10b981; /* Emerald 500 */
       box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
@@ -473,6 +695,10 @@ const addToCart = () => {
   }
 
   .btn-action.primary:active {
+      transform: translateY(0);
+  }
+
+  .btn-action.notify:active {
       transform: translateY(0);
   }
 
@@ -497,6 +723,140 @@ const addToCart = () => {
     padding: 1.1rem 2.5rem;
     font-size: 1.1rem;
     border-radius: 16px;
+  }
+
+  .size-large .availability-note {
+    font-size: 1rem;
+  }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    z-index: 120;
+  }
+
+  .modal-card {
+    position: relative;
+    width: min(100%, 420px);
+    border-radius: 1.5rem;
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+  }
+
+  .modal-close-btn {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-title {
+    margin: 0 0 0.5rem;
+    font-size: 1.35rem;
+    font-weight: 800;
+  }
+
+  .modal-desc {
+    margin: 0 0 1.25rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .notify-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  .form-group label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .form-input {
+    border: 1px solid var(--border);
+    border-radius: 0.85rem;
+    padding: 0.85rem 1rem;
+    font: inherit;
+    color: var(--text);
+    background: white;
+  }
+
+  .form-input.invalid {
+    border-color: #dc2626;
+  }
+
+  .form-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.12);
+  }
+
+  .err-msg {
+    font-size: 0.85rem;
+    color: #dc2626;
+  }
+
+  .submit-btn {
+    border: none;
+    border-radius: 1rem;
+    padding: 0.95rem 1.1rem;
+    font: inherit;
+    font-weight: 700;
+    color: white;
+    background: var(--primary);
+    cursor: pointer;
+  }
+
+  .submit-btn:disabled {
+    opacity: 0.7;
+    cursor: wait;
+  }
+
+  .success-state {
+    text-align: center;
+    padding: 1rem 0.5rem;
+  }
+
+  .success-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 4rem;
+    height: 4rem;
+    border-radius: 999px;
+    color: #10b981;
+    background: #ecfdf5;
+    margin-bottom: 0.75rem;
+  }
+
+  .success-icon .material-icons-round {
+    font-size: 2rem;
+  }
+
+  @media (max-width: 640px) {
+    .modal-card {
+      padding: 1.25rem;
+    }
   }
 
   .size-large .installation-toggle {

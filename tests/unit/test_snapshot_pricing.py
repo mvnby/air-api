@@ -1,7 +1,7 @@
 import pytest
 from sqlmodel import select
 from services.order_service import OrderService
-from models import Product, OrderProductLink, LeadSource
+from models import Product, OrderProductLink, LeadSource, OrderStatus
 
 async def test_snapshot_pricing(db):
     # 1. Create test product
@@ -87,3 +87,40 @@ async def test_order_without_installation(db):
     assert link.is_installation_included is False
     assert link.installation_price == 0
     assert order_no_install.total_amount == product.price * 2
+
+
+async def test_create_from_website_supports_negotiation_status_and_preserves_checkout_data(db):
+    product = Product(id=64, title="Negotiation Product", slug="negotiation-product", price=1999, area=25)
+    db.add(product)
+    await db.commit()
+    await db.refresh(product)
+
+    order = await OrderService.create_from_website(
+        session=db,
+        customer_name="Клиент корзины",
+        customer_phone="+375447770011",
+        customer_email="checkout@example.com",
+        customer_address="г. Минск, ул. Монтажная 7",
+        items=[
+            {
+                "product_id": product.id,
+                "quantity": 1,
+                "with_installation": True,
+                "installation_price": 300,
+                "installation_meta": {"source": "checkout"},
+            }
+        ],
+        lead_source=LeadSource.SITE,
+        initial_status=OrderStatus.NEGOTIATION,
+        comment="Оформлен через корзину",
+    )
+
+    stmt = select(OrderProductLink).where(OrderProductLink.order_id == order.id)
+    result = await db.execute(stmt)
+    link = result.scalar_one()
+
+    assert order.status == OrderStatus.NEGOTIATION
+    assert order.delivery_address == "г. Минск, ул. Монтажная 7"
+    assert link.product_id == product.id
+    assert link.is_installation_included is True
+    assert link.installation_price == 300

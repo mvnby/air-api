@@ -1,6 +1,6 @@
 """Read-oriented product service operations (catalog/search/filters)."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -14,6 +14,16 @@ from services.product_supply_metrics_service import ProductSupplyMetricsService
 
 
 class ProductReadService(ProductFilterService, ProductSeriesService):
+    @staticmethod
+    async def get_supply_metrics_map(
+        session: AsyncSession,
+        products: Iterable[Product],
+    ) -> Dict[int, Dict[str, Any]]:
+        product_list = list(products)
+        if not product_list:
+            return {}
+        return await ProductSupplyMetricsService.compute_for_products(session, product_list)
+
     @staticmethod
     def validate_public_pagination(page: int, limit: int) -> None:
         if page < 1:

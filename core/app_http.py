@@ -51,9 +51,23 @@ def _manager_error_response(*, status_code: int, message: str, error_code: str, 
     )
 
 
+def _serialize_validation_errors(errors: list[dict]) -> list[dict]:
+    serialized: list[dict] = []
+    for item in errors:
+        clean_item = dict(item)
+        ctx = clean_item.get("ctx")
+        if isinstance(ctx, dict):
+            clean_ctx = {}
+            for key, value in ctx.items():
+                clean_ctx[key] = str(value) if isinstance(value, Exception) else value
+            clean_item["ctx"] = clean_ctx
+        serialized.append(clean_item)
+    return serialized
+
+
 async def manager_validation_exception_handler(request: Request, exc: RequestValidationError):
     if not _is_manager_api_path(str(request.url.path)):
-        return JSONResponse(status_code=422, content={"detail": exc.errors()})
+        return JSONResponse(status_code=422, content={"detail": _serialize_validation_errors(exc.errors())})
 
     field_errors: dict[str, str] = {}
     for item in exc.errors():

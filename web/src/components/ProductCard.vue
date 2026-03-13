@@ -146,6 +146,9 @@ const showAreaBadge = computed(() => Boolean(props.product.area));
           :productId="product.id"
           :title="product.title"
           :image="resolveImageUrl(product.main_image)"
+          :vitebskQty="product.vitebsk_qty"
+          :minskQty="product.minsk_qty"
+          :availabilityStatus="product.availability_status"
         />
     </div>
   </div>

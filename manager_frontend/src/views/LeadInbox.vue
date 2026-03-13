@@ -130,7 +130,12 @@ const confirmReject = async () => {
       ? (rejectTarget.value.comment ? `${rejectTarget.value.comment}\n[Отказ: ${rejectReason.value}]` : `[Отказ: ${rejectReason.value}]`)
       : rejectTarget.value.comment;
 
-    await api.patchManagerOrder(rejectTarget.value.id, { status: 'canceled', comment: newComment || undefined });
+    await api.patchManagerOrder(rejectTarget.value.id, {
+      status: 'closed',
+      closing_result: 'lost',
+      reject_reason: rejectReason.value || undefined,
+      comment: newComment || undefined,
+    });
     setToast(`Заявка #${rejectTarget.value.id} перемещена в архив`);
     rejectTarget.value = null;
     rejectReason.value = '';

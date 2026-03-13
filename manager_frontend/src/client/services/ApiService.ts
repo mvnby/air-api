@@ -7,6 +7,8 @@ import type { CatalogResponse } from '../models/CatalogResponse';
 import type { FiltersConfigResponse } from '../models/FiltersConfigResponse';
 import type { OrderPayload } from '../models/OrderPayload';
 import type { OrderResponse } from '../models/OrderResponse';
+import type { ProductAvailabilityLeadPayload } from '../models/ProductAvailabilityLeadPayload';
+import type { ProductAvailabilityLeadResponse } from '../models/ProductAvailabilityLeadResponse';
 import type { ProductResponse } from '../models/ProductResponse';
 import type { ServiceResponse } from '../models/ServiceResponse';
 import type { SpecsKeysResponse } from '../models/SpecsKeysResponse';
@@ -193,6 +195,25 @@ export class ApiService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/config',
+        });
+    }
+    /**
+     * Create Product Availability Lead
+     * @param requestBody
+     * @returns ProductAvailabilityLeadResponse Successful Response
+     * @throws ApiError
+     */
+    public static createProductAvailabilityLead(
+        requestBody: ProductAvailabilityLeadPayload,
+    ): CancelablePromise<ProductAvailabilityLeadResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/leads/product-availability',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**

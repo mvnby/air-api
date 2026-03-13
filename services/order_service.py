@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from crud.order import OrderDAO
 from crud.product import ProductDAO
 from models import Order, OrderProductLink, OrderServiceLink, Customer, CustomerType, OrderStatus, PaymentCurrency, Product, LeadSource, Service, OrderInstaller, OrderWorkStage
+from services.product_supply_metrics_service import ProductSupplyMetricsService
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,26 @@ class OrderService:
     async def _refresh_order_financials(session: AsyncSession, order: Order) -> None:
         await session.refresh(order, attribute_names=["payments", "product_links", "service_links", "installers"])
         order.calculate_totals()
+
+    @staticmethod
+    async def _get_product_purchase_cost(
+        session: AsyncSession,
+        product: Product,
+        cache: Optional[Dict[int, int]] = None,
+    ) -> int:
+        product_id = int(product.id or 0)
+        if product_id <= 0:
+            return 0
+        if cache is not None and product_id in cache:
+            return cache[product_id]
+
+        metrics = await ProductSupplyMetricsService.compute_for_products(session, [product])
+        raw_cost = (metrics.get(product_id) or {}).get("min_cost_byn")
+        cost = int(round(float(raw_cost))) if raw_cost is not None else 0
+
+        if cache is not None:
+            cache[product_id] = cost
+        return cost
 
     @staticmethod
     def _normalize_naive_datetime(dt: Optional[datetime]) -> Optional[datetime]:
@@ -174,6 +195,7 @@ class OrderService:
         customer_address: Optional[str],
         items: List[Dict[str, Any]],  # [{"product_id": int, "quantity": int}]
         lead_source: LeadSource = LeadSource.SITE,
+        initial_status: OrderStatus = OrderStatus.NEW_LEAD,
         comment: Optional[str] = None,
         customer_type: str = "individual",
         customer_inn: Optional[str] = None,
@@ -188,7 +210,7 @@ class OrderService:
         
         Handles:
         1. Customer lookup/creation by phone
-        2. Order creation with NEW_LEAD status and lead_source
+        2. Order creation with the requested initial status and lead_source
         3. Product linking with current prices
         4. Total calculation
         
@@ -200,6 +222,7 @@ class OrderService:
             customer_address: Delivery address
             items: List of cart items [{product_id, quantity}]
             lead_source: Source of the lead (SITE, BOT, PHONE, etc.)
+            initial_status: Initial order status in CRM workflow
             comment: Optional note or initial customer request
             
         Returns:
@@ -265,7 +288,7 @@ class OrderService:
         order = Order(
             customer_id=customer.id,
             delivery_address=customer_address,
-            status=OrderStatus.NEW_LEAD,
+            status=initial_status,
             lead_source=lead_source,
             comment=comment,
             title=f"Заказ с сайта от {datetime.now().strftime('%d.%m %H:%M')}",
@@ -278,6 +301,7 @@ class OrderService:
         total_amount = 0.0
         added_items = []
         installation_services = []  # Collect installation services to add after products
+        product_cost_cache: Dict[int, int] = {}
         
         for item in items:
             product_id = item.get("product_id")
@@ -293,13 +317,18 @@ class OrderService:
                 # Extract installation fields (Phase: Snapshot Pricing Refactor)
                 with_installation = item.get("with_installation", False)
                 installation_price = int(item.get("installation_price", 0))
+                product_cost = await OrderService._get_product_purchase_cost(
+                    session,
+                    product,
+                    product_cost_cache,
+                )
                 
                 link = OrderProductLink(
                     order_id=order.id,
                     product_id=product.id,
                     quantity=item["quantity"],
                     price=product.price,
-                    cost=0,
+                    cost=product_cost,
                     # Save snapshot for history
                     is_installation_included=with_installation,
                     installation_price=installation_price if with_installation else 0,
@@ -611,6 +640,8 @@ class OrderService:
         
         # 4. Update totals and commit
         order.total_amount = total_amount
+        await session.flush()
+        await OrderService._refresh_order_financials(session, order)
         session.add(order)
         await session.commit()
         await session.refresh(order)
@@ -619,7 +650,7 @@ class OrderService:
         logger.info(
             f"NEW ORDER #{order.id} | Source: {lead_source.value} | "
             f"Customer: {customer.name} ({customer.phone}) | "
-            f"Total: {total_amount} RUB | Items: {len(added_items)} | "
+            f"Total: {order.total_amount} RUB | Items: {len(added_items)} | "
             f"Installation services: {len(installation_services)}"
         )
         logger.debug(f"Order #{order.id} items: {', '.join(added_items)}")

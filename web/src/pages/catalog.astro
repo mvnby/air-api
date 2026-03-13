@@ -82,6 +82,9 @@ interface Product {
     slug: string;
     main_image?: string;
     description?: string;
+    vitebsk_qty?: number;
+    minsk_qty?: number;
+    availability_status?: string | null;
     is_inverter?: boolean;
     area?: number;
     badges?: Array<{ text: string; class?: string }>;

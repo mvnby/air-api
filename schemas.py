@@ -72,6 +72,9 @@ class ProductSiblingResponse(BaseModel):
 
 
 class ProductResponse(ProductBase):
+    vitebsk_qty: int = 0
+    minsk_qty: int = 0
+    availability_status: Optional[str] = None
     tags: List[TagResponse] = []
     specs: Dict[str, Any] = {}
     images: List[str] = [] # Legacy
@@ -234,6 +237,23 @@ class OrderResponse(BaseModel):
     id: int
     status: str
     total_amount: float
+    created_at: datetime
+
+
+class ProductAvailabilityLeadPayload(BaseModel):
+    product_id: int
+    phone: str
+    name: Optional[str] = None
+
+    @field_validator("phone")
+    @classmethod
+    def _validate_phone(cls, value: str) -> str:
+        return validate_required_phone(value)
+
+
+class ProductAvailabilityLeadResponse(BaseModel):
+    lead_id: int
+    status: str
     created_at: datetime
 
 

@@ -81,9 +81,16 @@ async def get_catalog(
         is_inverter=is_inverter,
         search=q,
     )
+    supply_metrics = await ProductService.get_supply_metrics_map(session, payload["items"])
 
     return CatalogResponse(
-        items=[map_product_to_response(product) for product in payload["items"]],
+        items=[
+            map_product_to_response(
+                product,
+                supply_metrics=supply_metrics.get(product.id),
+            )
+            for product in payload["items"]
+        ],
         meta=Meta(**payload["meta"]),
     )
 
@@ -94,4 +101,9 @@ async def get_product_by_identifier(identifier: str, session: AsyncSession = Dep
     if not product:
         raise HTTPException(status_code=404, detail=f"Product with identifier '{identifier}' not found")
     siblings = await ProductService.get_series_siblings(session, product, limit=8)
-    return map_product_to_response(product, series_siblings=siblings)
+    supply_metrics = await ProductService.get_supply_metrics_map(session, [product])
+    return map_product_to_response(
+        product,
+        series_siblings=siblings,
+        supply_metrics=supply_metrics.get(product.id),
+    )
