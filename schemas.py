@@ -10,8 +10,14 @@ from core.input_validation import (
     validate_optional_unp,
     validate_required_phone,
 )
+from models import PaymentCurrency
 
 # --- SHARED ---
+
+class FxRateResponse(BaseModel):
+    usd_byn: Optional[float] = None
+    eur_byn: Optional[float] = None
+    source: str = "manual"
 
 class Meta(BaseModel):
     total: int
@@ -164,7 +170,7 @@ class CalendarEventResponse(BaseModel):
     status: str
     customer_name: Optional[str] = None
     address: Optional[str] = None
-    
+
     # FullCalendar fields
     title: str
     start: datetime
@@ -313,7 +319,12 @@ class ManagerOrderListItemResponse(BaseModel):
     # New fields
     equipment_status: str = "pending"
     standard_install_kit_issued: bool = False
-    
+
+    # Target Currency
+    target_currency: Optional[PaymentCurrency] = None
+    target_currency_amount: Optional[float] = None
+    target_currency_payments: Optional[float] = None
+
     closing_result: Optional[str] = None
     reject_reason: Optional[str] = None
     is_on_hold: bool = False
@@ -323,7 +334,7 @@ class ManagerOrderListItemResponse(BaseModel):
     measurement_result: Optional[str] = None
     proposal_status: str = "draft"
     proposal_sent_at: Optional[datetime] = None
-    
+
     @computed_field
     @property
     def needs_attention(self) -> bool:
@@ -347,7 +358,7 @@ class ManagerOrderListItemResponse(BaseModel):
     @property
     def ready_for_execution(self) -> bool:
         return self.proposal_status == "approved"
-    
+
     # Financials
     total_payments: float = 0.0
     balance_due: float = 0.0
@@ -380,6 +391,7 @@ class ManagerCustomerDocumentListResponse(BaseModel):
 
 class PaymentCreatePayload(BaseModel):
     amount: float
+    currency: PaymentCurrency = PaymentCurrency.BYN
     type: str # prepayment or postpayment
     comment: Optional[str] = None
 
@@ -387,6 +399,7 @@ class PaymentCreatePayload(BaseModel):
 class PaymentResponse(BaseModel):
     id: int
     amount: float
+    currency: PaymentCurrency
     date: datetime
     type: str
     comment: Optional[str] = None
@@ -465,14 +478,14 @@ class ManagerOrderUpdatePayload(BaseModel):
     installation_date: Optional[datetime] = None
     comment: Optional[str] = None
     no_answer_at: Optional[str] = None
-    
+
     # Negotiation
     measurement_required: Optional[bool] = None
     measurer_id: Optional[int] = None
     measurement_result: Optional[str] = None
     proposal_status: Optional[str] = None
     proposal_sent_at: Optional[datetime] = None
-    
+
     is_paid: Optional[bool] = None
     # Closing
     closing_result: Optional[str] = None
@@ -480,7 +493,11 @@ class ManagerOrderUpdatePayload(BaseModel):
     # On Hold
     is_on_hold: Optional[bool] = None
     on_hold_reason: Optional[str] = None
-    
+
+    # Target Currency
+    target_currency: Optional[PaymentCurrency] = None
+    target_currency_amount: Optional[float] = None
+
     # Equipment
     equipment_status: Optional[str] = None
     standard_install_kit_issued: Optional[bool] = None
@@ -499,13 +516,13 @@ class ManagerOrderUpdatePayload(BaseModel):
     customer_iban: Optional[str] = None
     customer_delivery_address: Optional[str] = None
     confirm_critical_customer_changes: Optional[bool] = None
-    
+
     # Qualification Meta fields
     object_type: Optional[str] = None
     service_type: Optional[str] = None
     equipment_class: Optional[str] = None
     marketing_source: Optional[str] = None
-    
+
     installer_id: Optional[int] = None
     products: Optional[List[ManagerOrderProductLinePayload]] = None
     services: Optional[List[ManagerOrderServiceLinePayload]] = None

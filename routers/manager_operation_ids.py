@@ -48,6 +48,7 @@ GET_MANAGER_ORDER_DETAIL = "get_manager_order_detail"
 PATCH_MANAGER_ORDER = "patch_manager_order"
 DELETE_MANAGER_ORDER = "delete_manager_order"
 GENERATE_MANAGER_ORDER_DOCUMENT = "generate_manager_order_document"
+UPLOAD_MANAGER_ORDER_DOCUMENT = "upload_manager_order_document"
 GET_MANAGER_ORDER_DOCUMENTS = "get_manager_order_documents"
 ADD_MANAGER_ORDER_PAYMENT = "add_manager_order_payment"
 DELETE_MANAGER_ORDER_PAYMENT = "delete_manager_order_payment"
@@ -66,6 +67,8 @@ UPDATE_MANAGER_INSTALLER = "update_manager_installer"
 SEARCH_MANAGER_INSTALLERS = "search_manager_installers"
 
 LIST_MANAGER_SETTINGS = "list_manager_settings"
+GET_FX_RATE = "get_fx_rate"
+SUGGEST_ADDRESS = "suggest_address"
 UPDATE_MANAGER_SETTING = "update_manager_setting"
 
 LIST_MANAGER_TARIFFS = "list_manager_tariffs"
@@ -141,6 +144,7 @@ ALL_MANAGER_OPERATION_IDS = (
     PATCH_MANAGER_ORDER,
     DELETE_MANAGER_ORDER,
     GENERATE_MANAGER_ORDER_DOCUMENT,
+    UPLOAD_MANAGER_ORDER_DOCUMENT,
     GET_MANAGER_ORDER_DOCUMENTS,
     ADD_MANAGER_ORDER_PAYMENT,
     DELETE_MANAGER_ORDER_PAYMENT,
@@ -157,6 +161,8 @@ ALL_MANAGER_OPERATION_IDS = (
     UPDATE_MANAGER_INSTALLER,
     SEARCH_MANAGER_INSTALLERS,
     LIST_MANAGER_SETTINGS,
+    GET_FX_RATE,
+    SUGGEST_ADDRESS,
     UPDATE_MANAGER_SETTING,
     LIST_MANAGER_TARIFFS,
     CREATE_MANAGER_TARIFF,

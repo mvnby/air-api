@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import FullCalendar from '@fullcalendar/vue3';
 import dayGridPlugin from '@fullcalendar/daygrid';
+import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import type { CalendarOptions, EventSourceFunc } from '@fullcalendar/core';
 import { ManagerCalendarService, type CalendarEventResponse, type ManagerOrderDetailResponse, type ManagerOrderUpdatePayload } from '../client';
@@ -36,6 +37,38 @@ const handleEventClick = (info: any) => {
     openOrder(orderId);
   } else {
     console.warn('Event clicked without order_id', info.event);
+  }
+};
+
+const handleEventDrop = async (info: any) => {
+  const event = info.event;
+  const orderId = event.extendedProps.order_id;
+  const type = event.extendedProps.type;
+  
+  if (!orderId || !type) {
+    info.revert();
+    return;
+  }
+  
+  const payload: Partial<ManagerOrderUpdatePayload> = {};
+  if (type === 'measurement') {
+    payload.measurement_date = event.start.toISOString();
+  } else if (type === 'installation') {
+    payload.installation_date = event.start.toISOString();
+  } else {
+    info.revert();
+    setToast('Невозможно изменить время для этого типа события');
+    return;
+  }
+  
+  try {
+    await api.patchManagerOrder(orderId, payload);
+    setToast('Время изменено');
+  } catch (error: any) {
+    console.error('Failed to update event time', error);
+    const parsed = parseApiFieldErrors(error, []);
+    setToast(`Ошибка сохранения: ${parsed.message}`);
+    info.revert();
   }
 };
 
@@ -146,18 +179,22 @@ const fetchEvents: EventSourceFunc = async (fetchInfo, successCallback, failureC
 };
 
 const calendarOptions = ref<CalendarOptions>({
-  plugins: [ dayGridPlugin, interactionPlugin ],
+  plugins: [ dayGridPlugin, timeGridPlugin, interactionPlugin ],
   initialView: 'dayGridMonth',
   locale: 'ru',
   headerToolbar: {
     left: 'prev,next today',
     center: 'title',
-    right: 'dayGridMonth,dayGridWeek'
+    right: 'dayGridMonth,timeGridWeek,timeGridDay'
   },
   events: fetchEvents,
   eventClick: handleEventClick,
+  editable: true,
+  eventDurationEditable: false,
+  eventDrop: handleEventDrop,
   height: 'auto',
-  firstDay: 1 // Monday
+  firstDay: 1, // Monday
+  slotMinTime: '08:00:00',
 });
 
 </script>

@@ -2,7 +2,9 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { Body_upload_manager_order_document } from '../models/Body_upload_manager_order_document';
 import type { ManagerActionMessageResponse } from '../models/ManagerActionMessageResponse';
+import type { ManagerOrderDocumentItem } from '../models/ManagerOrderDocumentItem';
 import type { ManagerOrderDocumentListResponse } from '../models/ManagerOrderDocumentListResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
@@ -23,6 +25,30 @@ export class ManagerDocsService {
             path: {
                 'order_id': orderId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Upload Manager Order Document
+     * @param orderId
+     * @param formData
+     * @returns ManagerOrderDocumentItem Successful Response
+     * @throws ApiError
+     */
+    public static uploadManagerOrderDocument(
+        orderId: number,
+        formData: Body_upload_manager_order_document,
+    ): CancelablePromise<ManagerOrderDocumentItem> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/documents/upload',
+            path: {
+                'order_id': orderId,
+            },
+            formData: formData,
+            mediaType: 'multipart/form-data',
             errors: {
                 422: `Validation Error`,
             },

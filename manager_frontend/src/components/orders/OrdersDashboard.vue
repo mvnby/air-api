@@ -235,6 +235,8 @@ const saveOrder = async (payload: { orderId: number; data: ManagerOrderUpdatePay
       'customer_bic',
       'customer_iban',
       'customer_delivery_address',
+      'target_currency',
+      'target_currency_amount',
       'products',
       'services',
     ]);

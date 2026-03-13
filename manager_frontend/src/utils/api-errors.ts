@@ -75,7 +75,11 @@ export const parseApiFieldErrors = (
   if (Array.isArray(detail)) {
     for (const item of detail as ValidationItem[]) {
       if (!item?.msg || !Array.isArray(item.loc) || !item.loc.length) continue;
-      const field = String(item.loc[item.loc.length - 1] || '');
+      let field = String(item.loc[item.loc.length - 1] || '');
+      if (!allowed.has(field)) {
+        const nestedField = item.loc.find((part) => typeof part === 'string' && allowed.has(String(part)));
+        if (nestedField) field = String(nestedField);
+      }
       if (!field || !allowed.has(field)) continue;
       if (!fieldErrors[field]) fieldErrors[field] = item.msg;
     }

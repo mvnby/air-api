@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional
 from schemas import BulkRoundRequest, ManagerCustomerUpdatePayload, ProductUpdate
 from services.customer_service import CustomerService
 from services.product_service import ProductService
+from services.product_manager_service import ProductManagerService
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -112,6 +113,8 @@ class ManagerCatalogService:
         *,
         q: str,
         limit: int = 40,
+        is_inverter: Optional[bool] = None,
+        has_wifi: Optional[bool] = None,
     ):
-        return await ProductService.smart_search(session=session, q=q, limit=limit)
+        return await ProductManagerService.smart_search(session=session, q=q, limit=limit, is_inverter=is_inverter, has_wifi=has_wifi)
 

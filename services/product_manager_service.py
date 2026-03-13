@@ -25,6 +25,8 @@ class ProductManagerService:
         session: AsyncSession,
         q: str,
         limit: int = 40,
+        is_inverter: Optional[bool] = None,
+        has_wifi: Optional[bool] = None,
     ) -> List[Dict[str, Any]]:
         """Parse a free-text query and return matching products.
 
@@ -51,6 +53,14 @@ class ProductManagerService:
         )
 
         stmt = ProductDAO._apply_smart_search_filter(stmt, q)
+
+        stmt = ProductDAO._apply_common_filters(
+            session=session,
+            stmt=stmt,
+            is_inverter=is_inverter,
+            has_wifi=has_wifi,
+            is_published=None,
+        )
 
         stmt = stmt.limit(limit)
         result = await session.execute(stmt)

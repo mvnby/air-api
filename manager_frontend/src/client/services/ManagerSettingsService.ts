@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { FxRateResponse } from '../models/FxRateResponse';
 import type { ManagerSettingListResponse } from '../models/ManagerSettingListResponse';
 import type { ManagerSettingResponse } from '../models/ManagerSettingResponse';
 import type { ManagerSettingUpdatePayload } from '../models/ManagerSettingUpdatePayload';
@@ -18,6 +19,37 @@ export class ManagerSettingsService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/settings',
+        });
+    }
+    /**
+     * Get Fx Rate
+     * @returns FxRateResponse Successful Response
+     * @throws ApiError
+     */
+    public static getFxRate(): CancelablePromise<FxRateResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/settings/fx-rate',
+        });
+    }
+    /**
+     * Suggest Address
+     * @param q
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static suggestAddress(
+        q: string,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/settings/address-suggest',
+            query: {
+                'q': q,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**

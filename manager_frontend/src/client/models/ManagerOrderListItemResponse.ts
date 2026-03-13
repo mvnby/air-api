@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { ManagerInstallerResponse } from './ManagerInstallerResponse';
 import type { OrderCustomerBrief } from './OrderCustomerBrief';
+import type { PaymentCurrency } from './PaymentCurrency';
 export type ManagerOrderListItemResponse = {
     id: number;
     status: string;
@@ -23,6 +24,9 @@ export type ManagerOrderListItemResponse = {
     installer?: (ManagerInstallerResponse | null);
     equipment_status?: string;
     standard_install_kit_issued?: boolean;
+    target_currency?: (PaymentCurrency | null);
+    target_currency_amount?: (number | null);
+    target_currency_payments?: (number | null);
     closing_result?: (string | null);
     reject_reason?: (string | null);
     is_on_hold?: boolean;

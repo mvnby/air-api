@@ -122,6 +122,61 @@ class DocumentService:
         return order_id
 
     @staticmethod
+    async def upload_document(
+        session: AsyncSession,
+        order_id: int,
+        file: "fastapi.UploadFile"
+    ) -> OrderDocument:
+        """
+        Загружает произвольный PDF в Google Drive и связывает его с заказом.
+        """
+        import os
+        import tempfile
+        import fastapi
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            content = await file.read()
+            tmp.write(content)
+            tmp_path = tmp.name
+
+        try:
+            from services.google_service import get_google_service, DESTINATION_FOLDER_ID
+            
+            doc_type = "uploaded_pdf"
+            file_id = get_google_service().upload_file(
+                file_path=tmp_path,
+                filename=file.filename,
+                mime_type=file.content_type or "application/pdf",
+                folder_id=DESTINATION_FOLDER_ID
+            )
+            
+            edit_url = f"https://drive.google.com/file/d/{file_id}/view?usp=sharing"
+            
+            current_year = datetime.now().year
+            query = select(OrderDocument).where(OrderDocument.order_id == order_id)
+            result = await session.execute(query)
+            count = len(result.scalars().all())
+            doc_number = f"UPL-{current_year}-{count+1}"
+
+            new_doc = OrderDocument(
+                order_id=order_id,
+                doc_type=doc_type,
+                number=doc_number,
+                date=datetime.now(),
+                google_file_id=file_id,
+                google_edit_url=edit_url
+            )
+            
+            session.add(new_doc)
+            await session.commit()
+            await session.refresh(new_doc)
+            return new_doc
+            
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    @staticmethod
     async def list_order_documents(
         session: AsyncSession,
         order_id: int

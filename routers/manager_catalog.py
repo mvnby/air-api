@@ -313,6 +313,8 @@ async def get_all_tags(
 async def smart_search_products(
     q: str = Query(..., min_length=1, description="Free-text search query, e.g. 'mdv loft 18'"),
     limit: int = Query(40, ge=1, le=100),
+    is_inverter: Optional[bool] = Query(None),
+    has_wifi: Optional[bool] = Query(None),
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
@@ -327,6 +329,8 @@ async def smart_search_products(
         session=session,
         q=q,
         limit=limit,
+        is_inverter=is_inverter,
+        has_wifi=has_wifi,
     )
 
 

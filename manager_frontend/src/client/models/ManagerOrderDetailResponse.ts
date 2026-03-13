@@ -8,6 +8,7 @@ import type { OrderCustomerBrief } from './OrderCustomerBrief';
 import type { OrderProductLineResponse } from './OrderProductLineResponse';
 import type { OrderServiceLineResponse } from './OrderServiceLineResponse';
 import type { OrderWorkStageResponse } from './OrderWorkStageResponse';
+import type { PaymentCurrency } from './PaymentCurrency';
 import type { PaymentResponse } from './PaymentResponse';
 export type ManagerOrderDetailResponse = {
     id: number;
@@ -28,6 +29,9 @@ export type ManagerOrderDetailResponse = {
     installer?: (ManagerInstallerResponse | null);
     equipment_status?: string;
     standard_install_kit_issued?: boolean;
+    target_currency?: (PaymentCurrency | null);
+    target_currency_amount?: (number | null);
+    target_currency_payments?: (number | null);
     closing_result?: (string | null);
     reject_reason?: (string | null);
     is_on_hold?: boolean;

@@ -8,11 +8,25 @@ from sqlalchemy.orm import selectinload
 
 from crud.order import OrderDAO
 from crud.product import ProductDAO
-from models import Order, OrderProductLink, OrderServiceLink, Customer, CustomerType, OrderStatus, Product, LeadSource, Service, OrderInstaller, OrderWorkStage
+from models import Order, OrderProductLink, OrderServiceLink, Customer, CustomerType, OrderStatus, PaymentCurrency, Product, LeadSource, Service, OrderInstaller, OrderWorkStage
 
 logger = logging.getLogger(__name__)
 
 class OrderService:
+    @staticmethod
+    def _normalize_payment_currency(raw: Any) -> PaymentCurrency:
+        if isinstance(raw, PaymentCurrency):
+            return raw
+        try:
+            return PaymentCurrency(str(raw).upper())
+        except Exception as exc:
+            raise ValueError(f"Invalid payment currency: {raw}") from exc
+
+    @staticmethod
+    async def _refresh_order_financials(session: AsyncSession, order: Order) -> None:
+        await session.refresh(order, attribute_names=["payments", "product_links", "service_links", "installers"])
+        order.calculate_totals()
+
     @staticmethod
     def _normalize_naive_datetime(dt: Optional[datetime]) -> Optional[datetime]:
         """Convert timezone-aware datetime to naive (for DB compatibility)."""
@@ -947,6 +961,9 @@ class OrderService:
             "proposal_sent_at": order.proposal_sent_at,
             "equipment_status": getattr(order.equipment_status, "value", str(order.equipment_status)) if order.equipment_status else "pending",
             "standard_install_kit_issued": bool(order.standard_install_kit_issued),
+            "target_currency": order.target_currency,
+            "target_currency_amount": float(order.target_currency_amount) if order.target_currency_amount is not None else None,
+            "target_currency_payments": float(order.target_currency_payments) if order.target_currency_payments is not None else 0.0,
             "customer": OrderService._map_customer_brief(order.customer),
             "installer_id": order.installers[0].installer_id if getattr(order, "installers", None) else None,
             "installer": {
@@ -1123,6 +1140,7 @@ class OrderService:
             {
                 "id": p.id,
                 "amount": float(p.amount),
+                "currency": p.currency,
                 "date": p.date,
                 "type": p.type.value if hasattr(p.type, "value") else str(p.type),
                 "comment": p.comment,
@@ -1229,6 +1247,27 @@ class OrderService:
                 raise ValueError(f"Invalid equipment_status: {payload.equipment_status}") from exc
         if "standard_install_kit_issued" in fields_set and payload.standard_install_kit_issued is not None:
             order.standard_install_kit_issued = payload.standard_install_kit_issued
+
+        currency_fields_changed = False
+
+        # Currency
+        if "target_currency" in fields_set:
+            new_target_currency = payload.target_currency
+            if new_target_currency is not None:
+                new_target_currency = OrderService._normalize_payment_currency(new_target_currency)
+            if new_target_currency is None:
+                has_foreign_payments = any(
+                    OrderService._normalize_payment_currency(payment.currency) != PaymentCurrency.BYN
+                    for payment in order.payments
+                )
+                if has_foreign_payments:
+                    raise ValueError("Cannot disable currency mode while foreign-currency payments exist")
+            order.target_currency = new_target_currency
+            currency_fields_changed = True
+        if "target_currency_amount" in fields_set:
+            order.target_currency_amount = payload.target_currency_amount
+            currency_fields_changed = True
+
         # Auto-set closed_at when transitioning to CLOSED
         if "status" in fields_set and order.status == OrderStatus.CLOSED and not order.closed_at:
             order.closed_at = datetime.now()
@@ -1374,8 +1413,10 @@ class OrderService:
                     session.add(new_service_link)
 
             await session.flush()
-            await session.refresh(order, attribute_names=["product_links", "service_links", "installers", "payments"])
-            order.calculate_totals()
+            await OrderService._refresh_order_financials(session, order)
+        elif currency_fields_changed:
+            await session.flush()
+            await OrderService._refresh_order_financials(session, order)
 
         session.add(order)
         await session.commit()
@@ -1421,17 +1462,21 @@ class OrderService:
         except ValueError:
             raise ValueError(f"Invalid payment type: {payload.type}")
             
+        currency = OrderService._normalize_payment_currency(payload.currency if hasattr(payload, "currency") else PaymentCurrency.BYN)
+        if currency != PaymentCurrency.BYN and order.target_currency != currency:
+            raise ValueError("Foreign-currency payment requires matching order target currency")
+
         new_payment = Payment(
             order_id=order_id,
             amount=payload.amount,
+            currency=currency,
             type=ptype,
             comment=payload.comment,
         )
         session.add(new_payment)
         await session.flush()
-        
-        await session.refresh(order, attribute_names=["payments", "product_links", "service_links", "installers"])
-        order.calculate_totals()
+
+        await OrderService._refresh_order_financials(session, order)
         session.add(order)
         await session.commit()
         
@@ -1440,6 +1485,7 @@ class OrderService:
             {
                 "id": p.id,
                 "amount": float(p.amount),
+                "currency": p.currency.value if hasattr(p.currency, "value") else str(p.currency),
                 "date": p.date,
                 "type": p.type.value if hasattr(p.type, "value") else str(p.type),
                 "comment": p.comment,
@@ -1464,8 +1510,7 @@ class OrderService:
         await session.delete(payment)
         await session.flush()
         
-        await session.refresh(order, attribute_names=["payments", "product_links", "service_links", "installers"])
-        order.calculate_totals()
+        await OrderService._refresh_order_financials(session, order)
         session.add(order)
         await session.commit()
         
@@ -1473,6 +1518,7 @@ class OrderService:
             {
                 "id": p.id,
                 "amount": float(p.amount),
+                "currency": p.currency.value if hasattr(p.currency, "value") else str(p.currency),
                 "date": p.date,
                 "type": p.type.value if hasattr(p.type, "value") else str(p.type),
                 "comment": p.comment,
