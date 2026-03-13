@@ -23,7 +23,8 @@ async def test_checkout_flow(async_client: AsyncClient, cart_product):
     Test the Checkout flow (Create Order).
     Note: The project uses a client-side cart (Nanostores). 
     There are no /api/v1/cart/add endpoints. 
-    The 'Cart' is fully passed to /api/v1/orders at checkout.
+    The 'Cart' is fully passed to /api/v1/orders at checkout and
+    should create a negotiation-stage order, not a raw inbox lead.
     """
     payload = {
         "customer": {
@@ -51,7 +52,7 @@ async def test_checkout_flow(async_client: AsyncClient, cart_product):
     assert response.status_code == 200
     data = response.json()
     assert "id" in data
-    assert data["status"] == "new_lead"
+    assert data["status"] == "negotiation"
     
     # Calculate expected total: (Product * 2) + (Install * 2)
     # 2000 * 2 + 250 * 2 = 4000 + 500 = 4500
