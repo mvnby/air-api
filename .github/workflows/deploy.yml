@@ -50,6 +50,8 @@ jobs:
 
       - name: Build Manager Frontend (Required for Backend Image)
         working-directory: ./manager_frontend
+        env:
+          WEBSITE_URL: https://mvn.by
         run: |
           npm ci
           npm run build

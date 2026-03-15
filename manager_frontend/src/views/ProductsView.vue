@@ -38,7 +38,7 @@ const setToast = (message: string) => {
 };
 
 const getPublicSiteBaseUrl = () => {
-    const configured = String(import.meta.env.VITE_PUBLIC_SITE_URL || '').trim();
+    const configured = String(import.meta.env.WEBSITE_URL || '').trim();
     if (configured) {
         return configured.replace(/\/+$/, '');
     }
@@ -46,9 +46,6 @@ const getPublicSiteBaseUrl = () => {
     const { protocol, hostname, host } = window.location;
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
         return `${protocol}//${hostname}:4321`;
-    }
-    if (hostname.startsWith('api.')) {
-        return `${protocol}//${hostname.slice(4)}`;
     }
     return `${protocol}//${host}`;
 };
