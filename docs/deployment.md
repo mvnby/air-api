@@ -68,6 +68,25 @@ The workflow requires these env vars in the build step:
 1. **deploy-backend:** Builds and pushes Docker image, deploys to API server
 2. **deploy-frontend:** Builds Astro site, uploads to web server via SCP
 
+## Manager Frontend Env Model
+
+`manager_frontend` is built inside GitHub Actions and then embedded into the backend Docker image.
+Because of that, its public URLs are controlled by build-time env, not by `/opt/air-api/.env` on the server.
+
+Current source of truth:
+
+- **Local dev:** root `.env` or `.env.development.local`
+- **Production deploy:** `.github/workflows/deploy.yml`
+
+Important details:
+
+- Vite reads root env files because `manager_frontend/vite.config.ts` uses `envDir: '../'`.
+- `env.prod` is legacy and is no longer part of the active deployment path.
+- For local-safe defaults, `.env.example` now uses `WEBSITE_URL=http://localhost:4321`.
+- If you need a local override without touching `.env`, copy `.env.development.local.example` to `.env.development.local`.
+
+For production manager builds, set `WEBSITE_URL` explicitly in the workflow step that runs `npm run build`.
+
 ## Safety Checks 🛡️
 
 To prevent deploying an empty site (when API is down or config is wrong), we added a pre-build check:

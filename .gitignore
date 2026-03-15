@@ -1,5 +1,7 @@
 # Секретные ключи (никогда не выгружать!)
 .env
+.env.local
+.env.*.local
 
 # Виртуальное окружение
 .venv/
@@ -35,5 +37,4 @@ backups/*
 /media/*
 web/temp/*
 .agent/workflows/plan.md
-env.prod
 .agent/*

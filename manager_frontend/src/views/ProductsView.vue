@@ -38,7 +38,7 @@ const setToast = (message: string) => {
 };
 
 const getPublicSiteBaseUrl = () => {
-    const configured = String(import.meta.env.VITE_PUBLIC_SITE_URL || '').trim();
+    const configured = String(import.meta.env.WEBSITE_URL || '').trim();
     if (configured) {
         return configured.replace(/\/+$/, '');
     }

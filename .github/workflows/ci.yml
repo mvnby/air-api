@@ -28,6 +28,7 @@ jobs:
           echo "ADMIN_USERNAME=admin" >> .env
           echo "ADMIN_PASSWORD=admin" >> .env
           echo "ENVIRONMENT=test" >> .env
+          echo "WEBSITE_URL=http://localhost:4321" >> .env
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

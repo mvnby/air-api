@@ -5,7 +5,7 @@ import path from 'path'
 // https://vitejs.dev/config/
 export default defineConfig({
   envDir: '../',
-  envPrefix: ['VITE_', 'YANDEX_'],
+  envPrefix: ['VITE_', 'YANDEX_', 'WEBSITE_'],
   plugins: [vue()],
   base: '/manager/',
   server: {
