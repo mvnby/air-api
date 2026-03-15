@@ -2,7 +2,7 @@
 import { ref, onMounted, watch, computed } from 'vue';
 import { watchDebounced } from '@vueuse/core';
 import { api, type Product } from '../api';
-import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images, Settings, ArrowLeft, LayoutGrid, List, Package } from 'lucide-vue-next';
+import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images, Settings, ArrowLeft, LayoutGrid, List, Package, Link2, ExternalLink } from 'lucide-vue-next';
 import BulkSpecsModal from '../components/BulkSpecsModal.vue';
 import ProductEditModal from '../components/ProductEditModal.vue';
 import OnlinerImportModal from '../components/OnlinerImportModal.vue';
@@ -35,6 +35,65 @@ const setToast = (message: string) => {
     window.setTimeout(() => {
         if (toast.value === message) toast.value = '';
     }, 4000);
+};
+
+const getPublicSiteBaseUrl = () => {
+    const configured = String(import.meta.env.VITE_PUBLIC_SITE_URL || '').trim();
+    if (configured) {
+        return configured.replace(/\/+$/, '');
+    }
+
+    const { protocol, hostname, host } = window.location;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return `${protocol}//${hostname}:4321`;
+    }
+    return `${protocol}//${host}`;
+};
+
+const buildPublicProductUrl = (product: Product) => {
+    if (!product.slug) return null;
+    return `${getPublicSiteBaseUrl()}/product/${product.slug}`;
+};
+
+const copyTextToClipboard = async (text: string) => {
+    if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', 'true');
+    textarea.style.position = 'absolute';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+};
+
+const copyPublicProductLink = async (product: Product) => {
+    const url = buildPublicProductUrl(product);
+    if (!url) {
+        setToast('У товара нет публичного slug');
+        return;
+    }
+
+    try {
+        await copyTextToClipboard(url);
+        setToast('Ссылка на сайт скопирована');
+    } catch (e) {
+        setToast(`Не удалось скопировать ссылку: ${getApiErrorMessage(e)}`);
+    }
+};
+
+const openPublicProductPage = (product: Product) => {
+    const url = buildPublicProductUrl(product);
+    if (!url) {
+        setToast('У товара нет публичного slug');
+        return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
 };
 
 const handleOnlinerImported = async (successCount: number) => {
@@ -759,11 +818,14 @@ watchDebounced(
                     <button @click="openEditModal(product)" class="bg-white text-gray-900 px-4 py-2 rounded-full flex items-center gap-2 hover:bg-gray-100 text-sm font-medium transition-colors w-36 justify-center">
                         <Settings class="w-4 h-4 text-teal-600" /> Изменить
                     </button>
+                    <button @click="copyPublicProductLink(product)" class="bg-white text-gray-900 px-4 py-2 rounded-full flex items-center gap-2 hover:bg-gray-100 text-sm font-medium transition-colors w-36 justify-center">
+                        <Link2 class="w-4 h-4 text-teal-600" /> Ссылка
+                    </button>
                 </div>
             </div>
             <div class="p-3.5">
                 <h3 class="font-medium text-gray-900 dark:text-slate-200 text-sm truncate" :title="product.title">{{ product.title }}</h3>
-                <div class="mt-0.5 h-6 flex items-center">
+                <div class="mt-0.5 flex items-center justify-between gap-3 min-h-6">
                     <template v-if="editingPriceId === product.id">
                         <input 
                             v-model="priceBuffer"
@@ -784,6 +846,15 @@ watchDebounced(
                     >
                         {{ product.price }} руб.
                     </p>
+                    <button
+                        @click="openPublicProductPage(product)"
+                        class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-900/30 hover:bg-teal-100 dark:hover:bg-teal-900/40 transition-colors disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:bg-teal-50 dark:disabled:hover:bg-teal-900/30"
+                        :disabled="!product.slug"
+                        :title="product.slug ? 'Открыть карточку товара на сайте' : 'У товара нет публичного slug'"
+                    >
+                        <ExternalLink class="w-3.5 h-3.5" />
+                        сайт
+                    </button>
                 </div>
                 <div class="mt-1 space-y-0.5 text-[11px] text-gray-500 dark:text-slate-400">
                     <div>Себестоимость: {{ product.min_cost_byn != null ? `${product.min_cost_byn.toFixed(2)} BYN` : '—' }}</div>
@@ -873,6 +944,12 @@ watchDebounced(
               </td>
               <td class="p-4 text-right">
                 <div class="flex justify-end gap-2 text-gray-400">
+                  <button @click="copyPublicProductLink(product)" class="p-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" :title="product.slug ? 'Скопировать ссылку на сайт' : 'У товара нет публичного slug'" :disabled="!product.slug">
+                    <Link2 class="w-4 h-4" />
+                  </button>
+                  <button @click="openPublicProductPage(product)" class="p-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" :title="product.slug ? 'Открыть сайт' : 'У товара нет публичного slug'" :disabled="!product.slug">
+                    <ExternalLink class="w-4 h-4" />
+                  </button>
                   <button @click="openSearchModal(product)" class="p-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" title="Фото">
                     <Images class="w-4 h-4" />
                   </button>
