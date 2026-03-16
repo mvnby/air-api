@@ -1,5 +1,6 @@
-import { computed } from 'nanostores';
+import { atom, computed } from 'nanostores';
 import { persistentAtom } from '@nanostores/persistent';
+import { refreshProductPrices } from '../utils/api';
 
 export type CartItem = {
     id: string;          // Product slug
@@ -15,16 +16,21 @@ export type CartItem = {
     category?: string; // Helpful for installation matching
 };
 
+const createPersistentStore = <T>(key: string, initial: T) => {
+    if (import.meta.env.SSR) {
+        return atom<T>(initial);
+    }
+
+    return persistentAtom<T>(key, initial, {
+        encode: JSON.stringify,
+        decode: JSON.parse,
+    });
+};
+
 // Persistent store: key 'mvn_cart', initial value []
-// Uses JSON encoder/decoder for complex objects
-export const isCartOpen = persistentAtom<boolean>('mvn_cart_open', false, {
-    encode: JSON.stringify,
-    decode: JSON.parse,
-});
-export const cartItems = persistentAtom<CartItem[]>('mvn_cart', [], {
-    encode: JSON.stringify,
-    decode: JSON.parse,
-});
+// Uses JSON encoder/decoder for complex objects in the browser only.
+export const isCartOpen = createPersistentStore<boolean>('mvn_cart_open', false);
+export const cartItems = createPersistentStore<CartItem[]>('mvn_cart', []);
 
 export const cartTotal = computed(cartItems, items => {
     return items.reduce((sum, item) => {
@@ -144,8 +150,6 @@ export async function refreshPrices() {
     const idsToFetch = current.map(i => i.id);
 
     try {
-        // Dynamic import to avoid circular dependencies if any, though utils/api shouldn't depend on store
-        const { refreshProductPrices } = await import('../utils/api');
         const freshProducts: any[] = await refreshProductPrices(idsToFetch);
 
         if (!freshProducts || freshProducts.length === 0) return;
