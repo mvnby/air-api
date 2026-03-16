@@ -144,9 +144,10 @@ async def public_address_suggest(q: str = Query(..., min_length=2)):
     try:
         items = await AddressSuggestService.suggest(q)
     except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.warning("Public address suggest disabled: %s", exc)
+        items = []
     except httpx.HTTPError:
         logger.exception("Public Yandex address suggest failed")
-        raise HTTPException(status_code=502, detail="Address suggestion service temporarily unavailable")
+        items = []
 
     return AddressSuggestResponse(items=items)
