@@ -35,6 +35,7 @@ let addressSuggestTimer = null;
 
 const items = useStore(cartItems);
 const total = useStore(cartTotal);
+const isHydrated = ref(false);
 const formatPrice = (p) => p.toLocaleString('ru-RU') + ' р.';
 
 watch(
@@ -108,6 +109,7 @@ const validate = () => {
 
 // Refresh prices on mount to ensure freshness
 onMounted(() => {
+    isHydrated.value = true;
     refreshPrices();
     
     if (phoneInput.value) {
@@ -288,12 +290,16 @@ const submitOrderHandler = async () => {
 
 <template>
 <div class="checkout-container">
-    <div v-if="items.length === 0" key="empty" class="empty-msg"> 
+    <div v-if="!isHydrated" key="loading" class="empty-msg">
+        <h2>Загружаем корзину</h2>
+    </div>
+
+    <div v-else-if="items.length === 0" key="empty" class="empty-msg">
         <h2>Корзина пуста</h2>
         <a href="/catalog">В каталог</a>
     </div>
 
-    <div v-if="items.length > 0" key="form" class="checkout-layout-grid-v2">
+    <div v-else key="form" class="checkout-layout-grid-v2">
         <!-- Form -->
         <div class="form-section card">
             <h2>Оформление заказа</h2>
