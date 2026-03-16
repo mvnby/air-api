@@ -12,6 +12,7 @@ import { onMounted, ref } from 'vue';
 const items = useStore(cartItems);
 const total = useStore(cartTotal);
 const options = useStore(installationOptions);
+const isHydrated = ref(false);
 
 const formatPrice = (p) => p.toLocaleString('ru-RU') + ' р.';
 
@@ -23,6 +24,7 @@ const rates = ref([]);
 const discount = ref(0);
 
 onMounted(async () => {
+    isHydrated.value = true;
     const [ratesData, configData] = await Promise.all([
         getInstallationRates(),
         getGlobalConfig(),
@@ -94,14 +96,19 @@ const toggleOption = (item, opt) => {
 
 <template>
 <div class="cart-container">
-    <div v-if="items.length === 0" key="empty" class="empty-state">
+    <div v-if="!isHydrated" key="loading" class="empty-state">
+        <span class="material-icons-round empty-icon">hourglass_top</span>
+        <h2>Загружаем корзину</h2>
+    </div>
+
+    <div v-else-if="items.length === 0" key="empty" class="empty-state">
         <span class="material-icons-round empty-icon">shopping_cart</span>
         <h2>Корзина пуста</h2>
         <p>Перейдите в каталог, чтобы выбрать товары</p>
         <a href="/catalog" class="btn btn-primary">В каталог</a>
     </div>
 
-    <div v-if="items.length > 0" key="list" class="cart-layout-grid-v2">
+    <div v-else key="list" class="cart-layout-grid-v2">
         <!-- List -->
         <div class="cart-items">
             <div v-for="item in items" :key="item.id + item.withInstallation" class="cart-item">

@@ -1,8 +1,14 @@
 <script setup>
+import { onMounted, ref } from 'vue';
 import { useStore } from '@nanostores/vue';
 import { cartCount } from '../../store/cart';
 
 const count = useStore(cartCount);
+const isHydrated = ref(false);
+
+onMounted(() => {
+    isHydrated.value = true;
+});
 </script>
 
 <template>
@@ -10,7 +16,7 @@ const count = useStore(cartCount);
     <div class="icon-wrapper">
         <span class="material-icons-round">shopping_cart</span>
         <transition name="pop">
-            <span v-if="count > 0" class="badge" key="count">{{ count }}</span>
+            <span v-if="isHydrated && count > 0" class="badge" key="count">{{ count }}</span>
         </transition>
     </div>
   </a>
