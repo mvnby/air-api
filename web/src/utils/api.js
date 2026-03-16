@@ -283,7 +283,13 @@ export async function getCompanyByUnp(unp) {
     return await fetchJson(`${API_V1}/proxy/egr?unp=${unp}`);
 }
 
+export async function getAddressSuggestions(query) {
+    const normalized = String(query || '').trim();
+    if (normalized.length < 2) return { items: [] };
+    return await fetchJson(`${API_V1}/address-suggest?q=${encodeURIComponent(normalized)}`) || { items: [] };
+}
+
 export async function getBankBySearch(search) {
     if (!search) return null;
-    return await fetchJson(`${API_V1}/proxy/bank?search=${search}`);
+    return await fetchJson(`${API_V1}/proxy/bank?search=${encodeURIComponent(search)}`);
 }

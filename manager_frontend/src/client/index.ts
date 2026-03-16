@@ -7,6 +7,8 @@ export { CancelablePromise, CancelError } from './core/CancelablePromise';
 export { OpenAPI } from './core/OpenAPI';
 export type { OpenAPIConfig } from './core/OpenAPI';
 
+export type { AddressSuggestionItem } from './models/AddressSuggestionItem';
+export type { AddressSuggestResponse } from './models/AddressSuggestResponse';
 export type { ArticleResponse } from './models/ArticleResponse';
 export type { Body_bulk_upload_local_images } from './models/Body_bulk_upload_local_images';
 export type { Body_login_access_token } from './models/Body_login_access_token';

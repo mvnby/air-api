@@ -4,9 +4,11 @@ from datetime import datetime, timedelta
 import logging
 
 import httpx
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from core.security import get_current_username
+from schemas import AddressSuggestResponse
+from services.address_suggest_service import AddressSuggestService
 
 router = APIRouter(tags=["api"])
 logger = logging.getLogger(__name__)
@@ -135,3 +137,16 @@ async def public_find_bank(search: str = Query(None, description="BIC код и�
         return _extract_bank_response(found_bank)
 
     return {"error": "Банк не найден"}
+
+
+@router.get("/v1/address-suggest", response_model=AddressSuggestResponse, operation_id="public_address_suggest")
+async def public_address_suggest(q: str = Query(..., min_length=2)):
+    try:
+        items = await AddressSuggestService.suggest(q)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except httpx.HTTPError:
+        logger.exception("Public Yandex address suggest failed")
+        raise HTTPException(status_code=502, detail="Address suggestion service temporarily unavailable")
+
+    return AddressSuggestResponse(items=items)

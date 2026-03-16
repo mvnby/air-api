@@ -1775,6 +1775,50 @@
         }
       }
     },
+    "/api/v1/address-suggest": {
+      "get": {
+        "tags": [
+          "api",
+          "api"
+        ],
+        "summary": "Public Address Suggest",
+        "operationId": "public_address_suggest",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddressSuggestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/products/list": {
       "get": {
         "tags": [
@@ -6607,6 +6651,49 @@
   },
   "components": {
     "schemas": {
+      "AddressSuggestResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AddressSuggestionItem"
+            },
+            "type": "array",
+            "title": "Items",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "AddressSuggestResponse"
+      },
+      "AddressSuggestionItem": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtitle"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "value"
+        ],
+        "title": "AddressSuggestionItem"
+      },
       "ArticleResponse": {
         "properties": {
           "id": {

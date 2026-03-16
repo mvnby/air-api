@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { AddressSuggestResponse } from '../models/AddressSuggestResponse';
 import type { ArticleResponse } from '../models/ArticleResponse';
 import type { CatalogResponse } from '../models/CatalogResponse';
 import type { FiltersConfigResponse } from '../models/FiltersConfigResponse';
@@ -489,6 +490,26 @@ export class ApiService {
             url: '/api/v1/proxy/bank',
             query: {
                 'search': search,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Public Address Suggest
+     * @param q
+     * @returns AddressSuggestResponse Successful Response
+     * @throws ApiError
+     */
+    public static publicAddressSuggest(
+        q: string,
+    ): CancelablePromise<AddressSuggestResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/address-suggest',
+            query: {
+                'q': q,
             },
             errors: {
                 422: `Validation Error`,

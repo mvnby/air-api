@@ -1,8 +1,8 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useStore } from '@nanostores/vue';
 import { cartItems, cartTotal, clearCart, refreshPrices } from '../../store/cart';
-import { createOrder, getProductBySlug, getCompanyByUnp, getBankBySearch } from '../../utils/api';
+import { createOrder, getProductBySlug, getCompanyByUnp, getBankBySearch, getAddressSuggestions } from '../../utils/api';
 import IMask from 'imask';
 import { validateOptionalByIban, validateOptionalByUnp, validateRequiredBelarusPhone } from '../../utils/validation';
 
@@ -27,10 +27,61 @@ const errors = ref({});
 const isSubmitting = ref(false);
 const isLoadingData = ref(false);
 const submitError = ref(null);
+const addressSuggestions = ref([]);
+const isAddressSuggestLoading = ref(false);
+const showAddressSuggestions = ref(false);
+const skipNextAddressSuggestLookup = ref(false);
+let addressSuggestTimer = null;
 
 const items = useStore(cartItems);
 const total = useStore(cartTotal);
 const formatPrice = (p) => p.toLocaleString('ru-RU') + ' р.';
+
+watch(
+    () => form.value.address,
+    (value) => {
+        if (addressSuggestTimer) {
+            window.clearTimeout(addressSuggestTimer);
+            addressSuggestTimer = null;
+        }
+
+        const query = String(value || '').trim();
+        if (skipNextAddressSuggestLookup.value) {
+            skipNextAddressSuggestLookup.value = false;
+            return;
+        }
+
+        if (query.length < 2) {
+            addressSuggestions.value = [];
+            showAddressSuggestions.value = false;
+            isAddressSuggestLoading.value = false;
+            return;
+        }
+
+        addressSuggestTimer = window.setTimeout(async () => {
+            isAddressSuggestLoading.value = true;
+            const lookupValue = query;
+
+            try {
+                const response = await getAddressSuggestions(lookupValue);
+                if (String(form.value.address || '').trim() !== lookupValue) return;
+
+                addressSuggestions.value = Array.isArray(response?.items) ? response.items : [];
+                showAddressSuggestions.value = addressSuggestions.value.length > 0;
+            } catch (e) {
+                console.warn('Failed to fetch address suggestions', e);
+                if (String(form.value.address || '').trim() === lookupValue) {
+                    addressSuggestions.value = [];
+                    showAddressSuggestions.value = false;
+                }
+            } finally {
+                if (String(form.value.address || '').trim() === lookupValue) {
+                    isAddressSuggestLoading.value = false;
+                }
+            }
+        }, 300);
+    }
+);
 
 // Validation
 const validate = () => {
@@ -130,6 +181,25 @@ const onIbanBlur = async () => {
      }
 };
 
+const onAddressFocus = () => {
+    if (addressSuggestions.value.length > 0) {
+        showAddressSuggestions.value = true;
+    }
+};
+
+const onAddressBlur = () => {
+    window.setTimeout(() => {
+        showAddressSuggestions.value = false;
+    }, 150);
+};
+
+const applyAddressSuggestion = (suggestion) => {
+    skipNextAddressSuggestLookup.value = true;
+    form.value.address = suggestion.value;
+    addressSuggestions.value = [];
+    showAddressSuggestions.value = false;
+};
+
 const submitOrderHandler = async () => {
     if (!validate()) return;
     if (items.value.length === 0) return;
@@ -177,7 +247,7 @@ const submitOrderHandler = async () => {
             customer: {
                 name: form.value.name,
                 phone: form.value.phone,
-                address: form.value.address,
+                address: form.value.address.trim(),
                 type: isLegalEntity.value ? 'company' : 'individual',
                 inn: isLegalEntity.value ? form.value.inn : null,
                 full_legal_name: isLegalEntity.value ? form.value.full_legal_name : null,
@@ -346,12 +416,32 @@ const submitOrderHandler = async () => {
 
                 <div class="form-group">
                     <label for="address">Адрес доставки</label>
-                    <textarea 
-                        id="address" 
-                        v-model="form.address" 
-                        placeholder="г. Витебск, ул. ..."
-                        rows="3"
-                    ></textarea>
+                    <div class="address-suggest">
+                        <div class="input-with-loader">
+                            <input
+                                type="text"
+                                id="address"
+                                v-model="form.address"
+                                @focus="onAddressFocus"
+                                @blur="onAddressBlur"
+                                autocomplete="street-address"
+                                placeholder="Начните вводить адрес доставки"
+                            />
+                            <span v-if="isAddressSuggestLoading" class="loader-icon material-icons-round">sync</span>
+                        </div>
+                        <div v-if="showAddressSuggestions" class="suggest-dropdown">
+                            <button
+                                v-for="suggestion in addressSuggestions"
+                                :key="suggestion.value"
+                                type="button"
+                                class="suggest-option"
+                                @mousedown.prevent="applyAddressSuggestion(suggestion)"
+                            >
+                                <span class="suggest-title">{{ suggestion.title }}</span>
+                                <span v-if="suggestion.subtitle" class="suggest-subtitle">{{ suggestion.subtitle }}</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -655,6 +745,48 @@ input.invalid {
 
 .input-with-loader {
     position: relative;
+}
+.address-suggest {
+    position: relative;
+}
+.suggest-dropdown {
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    left: 0;
+    right: 0;
+    z-index: 20;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
+    overflow: hidden;
+}
+.suggest-option {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    padding: 0.85rem 1rem;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+.suggest-option + .suggest-option {
+    border-top: 1px solid var(--border);
+}
+.suggest-option:hover {
+    background: rgba(0, 127, 128, 0.08);
+}
+.suggest-title {
+    font-weight: 600;
+    color: var(--text);
+}
+.suggest-subtitle {
+    font-size: 0.88rem;
+    color: var(--text-muted);
 }
 .loader-icon {
     position: absolute;

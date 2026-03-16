@@ -19,6 +19,16 @@ class FxRateResponse(BaseModel):
     eur_byn: Optional[float] = None
     source: str = "manual"
 
+
+class AddressSuggestionItem(BaseModel):
+    title: str
+    subtitle: Optional[str] = None
+    value: str
+
+
+class AddressSuggestResponse(BaseModel):
+    items: List[AddressSuggestionItem] = []
+
 class Meta(BaseModel):
     total: int
     page: int

@@ -1,6 +1,5 @@
 import logging
 import httpx
-import os
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +7,7 @@ from core.database import get_session
 from core.security import get_current_username
 from routers.manager_operation_ids import GET_FX_RATE, LIST_MANAGER_SETTINGS, SUGGEST_ADDRESS, UPDATE_MANAGER_SETTING
 from schemas import ManagerSettingListResponse, ManagerSettingResponse, ManagerSettingUpdatePayload, FxRateResponse
+from services.address_suggest_service import AddressSuggestService
 from services.settings_service import SettingsService
 from services.fx_rate_service import FxRateService
 
@@ -37,18 +37,10 @@ async def get_fx_rate(session: AsyncSession = Depends(get_session)):
 
 @router.get("/address-suggest", operation_id=SUGGEST_ADDRESS)
 async def suggest_address(q: str = Query(..., min_length=2)):
-    api_key = os.getenv("YANDEX_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="YANDEX_API_KEY not configured")
-
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(
-                "https://suggest-maps.yandex.ru/v1/suggest",
-                params={"apikey": api_key, "text": q},
-            )
-            resp.raise_for_status()
-            return resp.json()
+        return await AddressSuggestService.fetch_raw(q)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     except httpx.HTTPError:
         logger.exception("Yandex address suggest failed")
         raise HTTPException(status_code=502, detail="Address suggestion service temporarily unavailable")
