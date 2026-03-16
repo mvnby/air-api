@@ -8,6 +8,7 @@ import type { PaymentCurrency } from './PaymentCurrency';
 export type ManagerOrderListItemResponse = {
     id: number;
     status: string;
+    lead_source?: (string | null);
     created_at: string;
     updated_at?: (string | null);
     next_followup_date?: (string | null);

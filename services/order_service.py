@@ -968,6 +968,11 @@ class OrderService:
         return {
             "id": int(order.id or 0),
             "status": order.status.value if hasattr(order.status, "value") else str(order.status or OrderStatus.NEW_LEAD.value),
+            "lead_source": (
+                order.lead_source.value
+                if order.lead_source and hasattr(order.lead_source, "value")
+                else (str(order.lead_source) if order.lead_source else None)
+            ),
             "created_at": order.created_at,
             "updated_at": order.updated_at,
             "next_followup_date": order.next_followup_date,

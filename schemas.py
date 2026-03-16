@@ -332,6 +332,7 @@ class OrderServiceLineResponse(BaseModel):
 class ManagerOrderListItemResponse(BaseModel):
     id: int
     status: str
+    lead_source: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     next_followup_date: Optional[datetime] = None

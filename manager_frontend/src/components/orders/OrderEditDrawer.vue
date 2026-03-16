@@ -139,6 +139,7 @@ const localFormError = ref('');
 const showCustomerModal = ref(false);
 
 const customer = computed(() => props.order?.customer ?? null);
+const isWebsiteOrder = computed(() => props.order?.lead_source === 'site');
 const isB2cCustomer = computed(() => {
   if (!customer.value) return true; // defaults to B2C if unknown
   return customer.value.type !== 'company';
@@ -161,6 +162,66 @@ const setToast = (message: string, type: 'success' | 'error' = 'success') => {
     if (toast.value === message) toast.value = '';
   }, 3000);
 };
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const copyText = async (value: string | null | undefined, label: string) => {
+  const normalized = String(value || '').trim();
+  if (!normalized) {
+    setToast(`${label} отсутствует`, 'error');
+    return;
+  }
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(normalized);
+    } else {
+      const textarea = document.createElement('textarea');
+      textarea.value = normalized;
+      textarea.setAttribute('readonly', 'true');
+      textarea.style.position = 'absolute';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    setToast(`${label} скопирован`, 'success');
+  } catch (error) {
+    setToast(`Не удалось скопировать ${label.toLowerCase()}`, 'error');
+  }
+};
+
+const websiteProductSummaryLines = computed(() => {
+  return (props.order?.product_lines ?? []).map((line) => ({
+    id: line.id,
+    title: line.product_title || `Товар #${line.product_id}`,
+    quantity: line.quantity,
+    lineTotal: line.line_total,
+    installationIncluded: Boolean(line.is_installation_included),
+    installationPrice: Number(line.installation_price || 0),
+  }));
+});
+
+const websiteServiceSummaryLines = computed(() => {
+  return (props.order?.service_lines ?? []).map((line) => ({
+    id: line.id,
+    title: line.service_title || 'Услуга',
+    quantity: line.quantity,
+    lineTotal: line.line_total,
+  }));
+});
 
 const toggleHold = async () => {
     if (!props.order) return;
@@ -940,6 +1001,13 @@ watch(
         <div class="flex-1">
           <div class="flex items-center gap-3 mb-1">
             <h2 class="text-xl font-semibold font-['Space_Grotesk'] text-gray-900">№{{ order?.id }} {{ customer?.full_legal_name || customer?.name || 'Без имени' }}</h2>
+            <span
+              v-if="isWebsiteOrder"
+              class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700"
+            >
+              <span class="material-icons-round text-[14px]">language</span>
+              Сайт
+            </span>
             <button @click="showCustomerModal = true" class="text-xs font-medium text-teal-600 hover:text-teal-700 bg-teal-50 px-2 py-0.5 rounded flex items-center gap-1 transition-colors" :disabled="!customer?.id">
               <span class="material-icons-round text-[14px]">info</span>
               Подробнее
@@ -965,6 +1033,107 @@ watch(
       <p v-if="displayFormError" class="mb-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
         {{ displayFormError }}
       </p>
+
+      <section v-if="isWebsiteOrder" class="mb-6 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-teal-50 p-4 shadow-sm">
+        <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700">Входящий заказ с сайта</p>
+            <p class="mt-1 text-sm text-gray-500">
+              <span v-if="formatDateTime(order?.created_at)">Создан: {{ formatDateTime(order?.created_at) }}</span>
+              <span v-if="order?.status" class="ml-2 inline-flex items-center rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-gray-600 ring-1 ring-gray-200">
+                {{ order.status }}
+              </span>
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 transition hover:bg-gray-50"
+              @click="copyText(customer?.phone, 'Телефон')"
+            >
+              <span class="material-icons-round text-[16px]">content_copy</span>
+              Телефон
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 transition hover:bg-gray-50"
+              @click="copyText(customerDeliveryAddress, 'Адрес')"
+            >
+              <span class="material-icons-round text-[16px]">content_copy</span>
+              Адрес
+            </button>
+          </div>
+        </div>
+
+        <div class="grid gap-3 md:grid-cols-2">
+          <div class="rounded-xl bg-white/90 p-3 ring-1 ring-emerald-100">
+            <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-500">Клиент</p>
+            <p class="mt-2 text-sm font-semibold text-gray-900">{{ customer?.full_legal_name || customer?.name || 'Без имени' }}</p>
+            <p v-if="customer?.phone" class="mt-1 text-sm text-gray-700">{{ customer.phone }}</p>
+            <p v-if="customer?.email" class="mt-1 text-sm text-gray-500">{{ customer.email }}</p>
+          </div>
+
+          <div class="rounded-xl bg-white/90 p-3 ring-1 ring-emerald-100">
+            <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-500">Адрес доставки</p>
+            <p class="mt-2 text-sm font-medium text-gray-900">{{ customerDeliveryAddress || 'Адрес не указан' }}</p>
+          </div>
+
+          <div class="rounded-xl bg-white/90 p-3 ring-1 ring-emerald-100 md:col-span-2">
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-500">Состав заказа</p>
+              <span class="text-xs font-medium text-emerald-700">
+                {{ websiteProductSummaryLines.length + websiteServiceSummaryLines.length }} поз.
+              </span>
+            </div>
+            <div class="mt-3 space-y-2">
+              <div
+                v-for="line in websiteProductSummaryLines"
+                :key="`website-product-${line.id}`"
+                class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2"
+              >
+                <div class="flex items-start justify-between gap-3">
+                  <div>
+                    <p class="text-sm font-medium text-gray-900">{{ line.title }}</p>
+                    <div class="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
+                      <span>Кол-во: {{ line.quantity }}</span>
+                      <span v-if="line.installationIncluded" class="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
+                        <span class="material-icons-round text-[14px]">construction</span>
+                        Монтаж включен
+                        <span v-if="line.installationPrice > 0">+ {{ formatMoney(line.installationPrice) }}</span>
+                      </span>
+                    </div>
+                  </div>
+                  <span class="whitespace-nowrap text-sm font-semibold text-gray-800">{{ formatMoney(line.lineTotal) }}</span>
+                </div>
+              </div>
+
+              <div
+                v-for="line in websiteServiceSummaryLines"
+                :key="`website-service-${line.id}`"
+                class="flex items-start justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2"
+              >
+                <div>
+                  <p class="text-sm font-medium text-gray-900">{{ line.title }}</p>
+                  <p class="mt-1 text-xs text-gray-500">Кол-во: {{ line.quantity }}</p>
+                </div>
+                <span class="whitespace-nowrap text-sm font-semibold text-gray-800">{{ formatMoney(line.lineTotal) }}</span>
+              </div>
+
+              <p
+                v-if="!websiteProductSummaryLines.length && !websiteServiceSummaryLines.length"
+                class="rounded-xl border border-dashed border-gray-200 px-3 py-4 text-sm text-gray-500"
+              >
+                Позиции заказа отсутствуют.
+              </p>
+            </div>
+          </div>
+
+          <div v-if="comment?.trim()" class="rounded-xl bg-white/90 p-3 ring-1 ring-emerald-100 md:col-span-2">
+            <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-500">Комментарий клиента</p>
+            <p class="mt-2 whitespace-pre-line text-sm text-gray-800">{{ comment }}</p>
+          </div>
+        </div>
+      </section>
 
 
 

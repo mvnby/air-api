@@ -9581,6 +9581,17 @@
             "type": "string",
             "title": "Status"
           },
+          "lead_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -9996,6 +10007,17 @@
           "status": {
             "type": "string",
             "title": "Status"
+          },
+          "lead_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source"
           },
           "created_at": {
             "type": "string",
