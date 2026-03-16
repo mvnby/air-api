@@ -11,17 +11,40 @@ import httpx
 class AddressSuggestService:
     API_URL = "https://suggest-maps.yandex.ru/v1/suggest"
     MAX_ITEMS = 8
+    LANGUAGE = "ru_BY"
+    VITEBSK_CENTER = "30.2049,55.1904"
+    VITEBSK_REGION_BBOX = "27.4,54.0~31.9,56.4"
+    BELARUS_BBOX = "23.1,51.2~32.8,56.3"
 
     @classmethod
-    async def fetch_raw(cls, query: str) -> dict[str, Any]:
+    async def fetch_raw(
+        cls,
+        query: str,
+        *,
+        bbox: str | None = None,
+        ull: str | None = None,
+        strict_bounds: bool = True,
+    ) -> dict[str, Any]:
         api_key = os.getenv("YANDEX_API_KEY", "").strip()
         if not api_key:
             raise RuntimeError("YANDEX_API_KEY not configured")
 
+        params: dict[str, Any] = {
+            "apikey": api_key,
+            "text": query,
+            "lang": cls.LANGUAGE,
+            "results": cls.MAX_ITEMS,
+            "print_address": 1,
+            "ull": ull or cls.VITEBSK_CENTER,
+            "bbox": bbox or cls.BELARUS_BBOX,
+        }
+        if strict_bounds:
+            params["strict_bounds"] = 1
+
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(
                 cls.API_URL,
-                params={"apikey": api_key, "text": query},
+                params=params,
             )
             response.raise_for_status()
             payload = response.json()
@@ -31,8 +54,22 @@ class AddressSuggestService:
 
     @classmethod
     async def suggest(cls, query: str) -> list[dict[str, str | None]]:
-        payload = await cls.fetch_raw(query)
-        return cls.normalize_results(payload)
+        items: list[dict[str, str | None]] = []
+        seen_values: set[str] = set()
+
+        for bbox in (cls.VITEBSK_REGION_BBOX, cls.BELARUS_BBOX):
+            payload = await cls.fetch_raw(query, bbox=bbox, strict_bounds=True)
+            scoped_items = cls.normalize_results(payload)
+            for item in scoped_items:
+                value = item.get("value")
+                if not value or value in seen_values:
+                    continue
+                seen_values.add(value)
+                items.append(item)
+                if len(items) >= cls.MAX_ITEMS:
+                    return items
+
+        return items
 
     @classmethod
     def normalize_results(cls, payload: dict[str, Any]) -> list[dict[str, str | None]]:
