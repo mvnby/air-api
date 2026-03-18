@@ -22,7 +22,7 @@ const props = defineProps({
   }
 });
 
-const formatPrice = (price) => price ? price.toLocaleString() + " р." : "";
+const formatPrice = (price) => price ? price.toLocaleString() : "";
 
 // --- Logic for Tags & Badges ---
 

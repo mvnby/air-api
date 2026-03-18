@@ -14,7 +14,7 @@ const total = useStore(cartTotal);
 const options = useStore(installationOptions);
 const isHydrated = ref(false);
 
-const formatPrice = (p) => p.toLocaleString('ru-RU') + ' р.';
+const formatPrice = (p) => p.toLocaleString('ru-RU');
 
 // Subtotals
 const equipmentTotal = () => items.value.reduce((sum, i) => sum + i.price * i.quantity, 0);
@@ -117,7 +117,7 @@ const toggleOption = (item, opt) => {
                 </div>
                 <div class="item-info">
                     <h3 class="item-name">{{ item.name }}</h3>
-                    <div class="item-price">{{ formatPrice(item.price) }}</div>
+                    <div class="item-price">{{ formatPrice(item.price) }} <span class="price-byn"></span></div>
                     
                     <div class="item-controls">
                          <!-- Installation Toggle -->
@@ -129,7 +129,7 @@ const toggleOption = (item, opt) => {
                             <div class="checkbox">
                                 <span v-if="item.withInstallation" class="material-icons-round check">check</span>
                             </div>
-                            <span class="label">Монтаж (+{{ item.installationPrice }} р.)</span>
+                            <span class="label">Монтаж (+{{ item.installationPrice }} <span class="price-byn"></span>)</span>
                         </div>
                         
                           <!-- Installation Settings -->
@@ -152,7 +152,7 @@ const toggleOption = (item, opt) => {
                                             @change="toggleOption(item, opt)"
                                         />
                                         <span class="addon-name">{{ opt.name }}</span>
-                                        <span class="addon-price">+{{ opt.price }} р.</span>
+                                        <span class="addon-price">+{{ opt.price }} <span class="price-byn"></span></span>
                                         <span v-if="opt.description" class="info-icon" :title="opt.description">i</span>
                                         <!-- Optional Image Thumbnail -->
                                         <div v-if="opt.image" class="addon-thumb-hover">
@@ -176,7 +176,7 @@ const toggleOption = (item, opt) => {
                     </button>
                 </div>
                  <div class="item-total">
-                    {{ formatPrice((item.price + (item.withInstallation ? item.installationPrice : 0)) * item.quantity) }}
+                    {{ formatPrice((item.price + (item.withInstallation ? item.installationPrice : 0)) * item.quantity) }} <span class="price-byn"></span>
                 </div>
             </div>
         </div>
@@ -186,16 +186,16 @@ const toggleOption = (item, opt) => {
             <h3>Ваш заказ</h3>
             <div class="summary-row">
                 <span>Оборудование:</span>
-                <span>{{ formatPrice(equipmentTotal()) }}</span>
+                <span>{{ formatPrice(equipmentTotal()) }} <span class="price-byn"></span></span>
             </div>
             <div class="summary-row">
                 <span>Услуги (Монтаж):</span>
-                <span>{{ formatPrice(servicesTotal()) }}</span>
+                <span>{{ formatPrice(servicesTotal()) }} <span class="price-byn"></span></span>
             </div>
             <div class="summary-divider"></div>
             <div class="summary-total">
                 <span>Итого:</span>
-                <span>{{ formatPrice(total) }}</span>
+                <span>{{ formatPrice(total) }} <span class="price-byn"></span></span>
             </div>
             
             <a href="/checkout" class="btn btn-primary btn-block checkout-btn">

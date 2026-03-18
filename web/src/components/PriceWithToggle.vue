@@ -199,7 +199,7 @@ const shouldShowToggle = computed(() => {
 });
 
 // Force ru-RU to match server side rendering
-const format = (num) => num.toLocaleString('ru-RU') + ' ' + props.currency;
+const format = (num) => num.toLocaleString('ru-RU');
 
 const priceDisplay = computed(() => {
     // Case 1: No match or non-fixed -> Just Product Price
@@ -341,10 +341,10 @@ const submitNotifyLead = async () => {
         </div>
         
         <span v-if="priceDisplay.old" class="old-price">
-            {{ priceDisplay.old }}
+            {{ priceDisplay.old }} <span class="price-byn"></span>
         </span>
         <span class="final-price" :class="{ 'pulse-primary': isInstalled }">
-          {{ priceDisplay.current }}
+          {{ priceDisplay.current }} <span class="price-byn"></span>
         </span>
     </div>
 
@@ -370,11 +370,11 @@ const submitNotifyLead = async () => {
                   {{ effectiveInstallPrice }}
                 </span>
                 <span class="discount-price">
-                  +{{ finalInstallPrice }} {{ currency }}
+                  +{{ finalInstallPrice }} <span class="price-byn"></span>
                 </span>
              </div>
              <span v-else class="inst-price">
-                +{{ effectiveInstallPrice }} {{ currency }}
+                +{{ effectiveInstallPrice }} <span class="price-byn"></span>
              </span>
           </div>
       </div>
@@ -382,7 +382,7 @@ const submitNotifyLead = async () => {
 
     <!-- Non-fixed rate message -->
     <div v-if="matchedRate && !matchedRate.is_fixed" class="non-fixed-message">
-        Монтаж: <span class="inst-price">от {{ matchedRate.base_price }} {{ currency }}</span>
+        Монтаж: <span class="inst-price">от {{ matchedRate.base_price }} <span class="price-byn"></span></span>
     </div>
 
     <!-- Actions (Centered) -->

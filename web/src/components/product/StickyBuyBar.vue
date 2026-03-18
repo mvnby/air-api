@@ -3,7 +3,7 @@
     <div class="bar-content">
       <div class="price-info">
         <span class="label">Итого:</span>
-        <span class="price-val">{{ formattedPrice }}</span>
+        <span class="price-val">{{ formattedPrice }} <span class="price-byn"></span></span>
         <span v-if="isUnavailableInCities" class="stock-note">Нет в наличии</span>
       </div>
       <button
@@ -31,7 +31,7 @@ const props = defineProps({
 const isVisible = ref(false);
 
 const formattedPrice = computed(() => {
-  return props.price.toLocaleString('ru-RU') + ' ' + props.currency;
+  return props.price.toLocaleString('ru-RU');
 });
 
 const isUnavailableInCities = computed(() => {

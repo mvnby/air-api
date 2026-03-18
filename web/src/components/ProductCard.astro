@@ -40,7 +40,7 @@ const {
   baseInstallationPrice = 360,
 } = Astro.props;
 
-const formatPrice = (price: number) => price.toLocaleString() + " р.";
+const formatPrice = (price: number) => price.toLocaleString();
 
 // --- Logic for Tags & Badges ---
 
@@ -171,7 +171,7 @@ const showAreaBadge = !!product.area;
             client:visible
             basePrice={product.price}
             installPrice={baseInstallationPrice}
-            currency="р."
+            currency=""
             showToggle={showInstallation}
             tags={product.tags}
             area={product.area}
@@ -230,7 +230,7 @@ const showAreaBadge = !!product.area;
             client:visible
             basePrice={product.price}
             installPrice={baseInstallationPrice}
-            currency="р."
+            currency=""
             showToggle={true}
             tags={product.tags}
             area={product.area}
@@ -257,7 +257,7 @@ const showAreaBadge = !!product.area;
       <div class="m-info">
         <h4>{product.title}</h4>
         <div class="m-footer">
-          <span class="final-price small">{formatPrice(product.price)}</span>
+          <span class="final-price small">{formatPrice(product.price)} <span class="price-byn"></span></span>
           <button class="add-btn micro plain js-track-cart">
             <span class="material-icons-round">arrow_forward</span>
           </button>
