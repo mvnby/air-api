@@ -100,11 +100,11 @@ const displayProduct = heroProduct;
 				<div class="promo-text">
 					<h2>Стандартный монтаж «под ключ»</h2>
 					<div class="price-header">
-						<p class="price-tag">{minStandardPrice} р.</p>
+						<p class="price-tag">{minStandardPrice} <span class="price-byn"></span></p>
 						{
 							minBundlePrice < minStandardPrice && (
 								<p class="bundle-price-badge">
-									<strong>{minBundlePrice} р.</strong> при
+									<strong>{minBundlePrice} <span class="price-byn"></span></strong> при
 									покупке у нас
 								</p>
 							)
@@ -158,7 +158,7 @@ const displayProduct = heroProduct;
 				</div>
 				<div class="m-price-box">
 					<span class="m-from">от</span>
-					<span class="m-val">110 р.</span>
+					<span class="m-val">110 <span class="price-byn"></span></span>
 				</div>
 			</a>
 

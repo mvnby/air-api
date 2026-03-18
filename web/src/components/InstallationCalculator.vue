@@ -322,7 +322,7 @@ const submitOrder = async () => {
       
       <p class="helper-text">
         В базовый монтаж включено <strong>{{ activeRate?.included_pipe_meters || 3 }} метра</strong>. 
-        Дополнительный метр: <strong>{{ activeRate?.extra_pipe_price }} BYN</strong>
+        Дополнительный метр: <strong>{{ activeRate?.extra_pipe_price }} <span class="price-byn"></span></strong>
       </p>
     </div>
 
@@ -359,7 +359,7 @@ const submitOrder = async () => {
                 <div class="option-content">
                     <div class="option-header">
                         <span class="option-title">{{ opt.name }}</span>
-                        <span class="option-price">+{{ opt.price }} BYN</span>
+                        <span class="option-price">+{{ opt.price }} <span class="price-byn"></span></span>
                     </div>
                     
                     <p class="option-desc" v-if="opt.description">
@@ -381,7 +381,7 @@ const submitOrder = async () => {
           <div class="price-value">
              <span v-if="!isFixedPrice" class="price-prefix">от</span>
              {{ calculatedPrice }} 
-             <span class="currency">BYN</span>
+             <span class="currency"><span class="price-byn"></span></span>
           </div>
           <p v-if="priceComment" class="price-comment">
              {{ priceComment }}
@@ -393,7 +393,7 @@ const submitOrder = async () => {
       <div v-if="discount > 0" class="promo-banner squircle">
         <span class="material-icons-round promo-icon">info</span>
         <p>
-          Купите кондиционер у нас и получите скидку <strong>{{ discount }} BYN</strong> на этот монтаж!
+          Купите кондиционер у нас и получите скидку <strong>{{ discount }} <span class="price-byn"></span></strong> на этот монтаж!
         </p>
       </div>
 

@@ -36,7 +36,7 @@ let addressSuggestTimer = null;
 const items = useStore(cartItems);
 const total = useStore(cartTotal);
 const isHydrated = ref(false);
-const formatPrice = (p) => p.toLocaleString('ru-RU') + ' р.';
+const formatPrice = (p) => p.toLocaleString('ru-RU');
 
 watch(
     () => form.value.address,
@@ -111,15 +111,18 @@ const validate = () => {
 onMounted(() => {
     isHydrated.value = true;
     refreshPrices();
-    
-    if (phoneInput.value) {
-        mask = IMask(phoneInput.value, {
+});
+
+// Init phone mask when the input element appears in DOM
+// (The form is behind v-if on cart items, so phoneInput may be null at mount time)
+watch(phoneInput, (el) => {
+    if (el && !mask) {
+        mask = IMask(el, {
             mask: '+{375} (00) 000-00-00',
             lazy: false,
             placeholderChar: '_'
         });
         
-        // Initial sync
         mask.on('accept', () => {
             form.value.phone = mask.value;
         });
@@ -482,13 +485,13 @@ const submitOrderHandler = async () => {
                 <div class="items-list">
                     <div v-for="item in items" :key="item.id+item.withInstallation" class="mini-item">
                         <span class="name">{{ item.name }} <span class="qty">x{{ item.quantity }}</span></span>
-                        <span class="price">{{ formatPrice((item.price + (item.withInstallation ? item.installationPrice : 0)) * item.quantity) }}</span>
+                        <span class="price">{{ formatPrice((item.price + (item.withInstallation ? item.installationPrice : 0)) * item.quantity) }} <span class="price-byn"></span></span>
                     </div>
                 </div>
                 <div class="divider"></div>
                 <div class="total-row">
                     <span>Итого:</span>
-                    <span class="total-val">{{ formatPrice(total) }}</span>
+                    <span class="total-val">{{ formatPrice(total) }} <span class="price-byn"></span></span>
                 </div>
                 
                 <div class="desktop-action">

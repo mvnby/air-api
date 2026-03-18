@@ -22,11 +22,11 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
         <div class="content">
             <h2>Стандартный монтаж «под ключ»</h2>
             <div class="price-header">
-                <p class="price-tag">от {minStandardPrice} BYN</p>
+                <p class="price-tag">от {minStandardPrice} <span class="price-byn"></span></p>
                 {
                     minBundlePrice < minStandardPrice && (
                         <p class="bundle-price-badge">
-                            от <strong>{minBundlePrice} BYN</strong> при покупке
+                            от <strong>{minBundlePrice} <span class="price-byn"></span></strong> при покупке
                             у нас
                         </p>
                     )
