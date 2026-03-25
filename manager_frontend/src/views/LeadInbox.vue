@@ -33,6 +33,52 @@ const phoneModelRef = ref('');
 
 const { unmaskedValue: createPhoneUnmasked } = useBelarusPhoneMask(createPhoneInputRef, phoneModelRef);
 
+// Customer Search in Create Modal
+const searchTimeout = ref<number | null>(null);
+const foundCustomers = ref<any[]>([]);
+const existingCustomerId = ref<number | null>(null);
+
+const searchCustomer = async () => {
+  if (existingCustomerId.value) return; 
+
+  const query = phoneModelRef.value.replace(/\D/g, '').length >= 3 ? phoneModelRef.value : createForm.value.name;
+  
+  if (!query || query.length < 3) {
+    foundCustomers.value = [];
+    return;
+  }
+
+  try {
+    const res = await api.getManagerCustomers(1, 4, query);
+    foundCustomers.value = res.items || [];
+  } catch (e) {
+    console.error('Customer search failed', e);
+    foundCustomers.value = [];
+  }
+};
+
+const onSearchInput = () => {
+  if (existingCustomerId.value) {
+     existingCustomerId.value = null;
+  }
+  if (searchTimeout.value) clearTimeout(searchTimeout.value);
+  searchTimeout.value = window.setTimeout(searchCustomer, 400);
+};
+
+const selectCustomer = (c: any) => {
+  existingCustomerId.value = c.id;
+  createForm.value.name = c.name || c.full_legal_name || '';
+  phoneModelRef.value = c.phone || c.inn || '';
+  foundCustomers.value = [];
+};
+
+const clearSelectedCustomer = () => {
+  existingCustomerId.value = null;
+  createForm.value.name = '';
+  phoneModelRef.value = '';
+  foundCustomers.value = [];
+};
+
 watch(phoneModelRef, (val) => {
   createForm.value.phone = val;
 });
@@ -69,6 +115,8 @@ watch(scope, load);
 const openCreateModal = () => {
   Object.assign(createForm.value, { source: 'manager', request_text: '', name: '', phone: '', service_type: '' });
   phoneModelRef.value = '';
+  existingCustomerId.value = null;
+  foundCustomers.value = [];
   showCreateModal.value = true;
 };
 
@@ -80,6 +128,7 @@ const submitCreateLead = async () => {
   createSaving.value = true;
   try {
     await api.createManagerOrder({
+      customer_id: existingCustomerId.value || undefined,
       source: createForm.value.source,
       request_text: createForm.value.request_text,
       name: createForm.value.name || undefined,
@@ -296,25 +345,51 @@ const scopeOptions: { value: Scope; label: string }[] = [
           Новый лид
         </h2>
 
-        <div class="space-y-3">
+        <div class="space-y-3 relative">
+          <!-- Selected Customer Banner -->
+          <div v-if="existingCustomerId" class="bg-teal-50 dark:bg-teal-900/30 border border-teal-200 dark:border-teal-800 text-teal-800 dark:text-teal-300 px-3 py-2 rounded-xl flex items-center justify-between text-sm col-span-full">
+            <div class="flex items-center gap-2">
+              <span class="material-icons-round text-teal-500 text-lg">check_circle</span>
+              <span>Привязан клиент: <strong>{{ createForm.name || phoneModelRef || 'Без имени' }}</strong></span>
+            </div>
+            <button @click="clearSelectedCustomer" class="text-teal-600 hover:text-teal-800 dark:text-teal-400 dark:hover:text-teal-200 p-1 rounded-md hover:bg-teal-100 dark:hover:bg-teal-800 transition-colors" title="Отвязать клиента">
+              <span class="material-icons-round text-[16px]">close</span>
+            </button>
+          </div>
+
           <div>
             <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Имя / Компания</label>
             <input
               v-model="createForm.name"
+              @input="onSearchInput"
               type="text"
               placeholder="Иванов Иван"
               class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
             />
           </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Телефон</label>
+          <div class="relative">
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Телефон / УНП</label>
             <input
               ref="createPhoneInputRef"
               v-model="phoneModelRef"
-              type="tel"
+              @input="onSearchInput"
+              type="text"
               placeholder="+375 (29) 000-00-00"
               class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
             />
+
+            <!-- Autocomplete Dropdown -->
+            <div v-if="foundCustomers.length > 0 && !existingCustomerId" class="absolute z-10 w-full left-0 top-[100%] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-lg mt-1 max-h-48 overflow-y-auto">
+              <button
+                v-for="c in foundCustomers"
+                :key="c.id"
+                @click="selectCustomer(c)"
+                class="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-700 border-b border-slate-100 dark:border-slate-700 last:border-0"
+              >
+                <div class="text-sm font-semibold text-slate-800 dark:text-white">{{ c.name || c.full_legal_name || 'Без имени' }}</div>
+                <div class="text-xs text-slate-500 dark:text-slate-400">{{ c.phone || c.inn || 'Нет данных' }} <span class="text-[10px] ml-1 opacity-50">{{ c.type === 'company' ? 'Юр. лицо' : 'Физ. лицо' }}</span></div>
+              </button>
+            </div>
           </div>
           <div>
             <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Источник</label>

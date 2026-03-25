@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type ManagerOrderCreatePayload = {
+    customer_id?: (number | null);
     name?: (string | null);
     phone?: (string | null);
     source: string;
