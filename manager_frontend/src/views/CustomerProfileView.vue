@@ -4,6 +4,7 @@ import { ArrowLeft, Building2, Mail, Phone, ReceiptText, Save, UserRound, X } fr
 import { api } from '../api';
 import { ManagerService, type ManagerCatalogCustomerItemResponse, type ManagerCustomerDocumentItem } from '../client';
 import { useBelarusPhoneMask } from '../composables/useBelarusPhoneMask';
+import { useB2BLookup } from '../composables/useB2BLookup';
 import { dispatchCustomerUpdated } from '../utils/customer-events';
 import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
 import { normalizeIban, normalizeUnp } from '../utils/legal-requisites';
@@ -79,6 +80,8 @@ const phoneModel = computed({
 });
 
 const phoneMask = useBelarusPhoneMask(phoneInputRef, phoneModel);
+
+const { lookupCompany, lookupBank, isEgrLoading, isBankLoading } = useB2BLookup();
 
 const customerId = computed(() => {
   const raw = new URLSearchParams(window.location.search).get('customerId');
@@ -227,9 +230,28 @@ const cancelEdit = () => {
 };
 
 const normalizeForm = () => {
-  form.value.email = normalizeEmail(form.value.email || '');
-  form.value.inn = normalizeUnp(form.value.inn || '');
-  form.value.iban = normalizeIban(form.value.iban || '');
+    form.value.email = normalizeEmail(form.value.email || '');
+    form.value.inn = normalizeUnp(form.value.inn || '');
+    form.value.iban = normalizeIban(form.value.iban || '');
+};
+
+const onInnBlur = async () => {
+    if (!form.value.inn || form.value.inn.length !== 9) return;
+    const data = await lookupCompany(form.value.inn);
+    if (data) {
+        if (!form.value.full_legal_name) form.value.full_legal_name = data.fullLegalName || '';
+        if (!form.value.legal_address) form.value.legal_address = data.legalAddress || '';
+        if (!form.value.name) form.value.name = data.fullLegalName || '';
+    }
+};
+
+const onIbanBlur = async () => {
+    if (!form.value.iban || form.value.iban.length < 15) return;
+    const data = await lookupBank(form.value.iban);
+    if (data) {
+        if (!form.value.bank_name) form.value.bank_name = data.bankName || '';
+        if (!form.value.bic) form.value.bic = data.bic || '';
+    }
 };
 
 const validateForm = (): boolean => {
@@ -440,7 +462,12 @@ onMounted(() => {
                 <span v-if="phoneError" class="field-error">{{ phoneError }}</span>
                 <input v-model="form.email" type="email" placeholder="Email" :class="fieldClass('email')" />
                 <span v-if="emailError" class="field-error">{{ emailError }}</span>
-                <input v-model="form.inn" type="text" placeholder="УНП" :class="fieldClass('inn')" />
+                <div class="relative">
+                    <input v-model="form.inn" type="text" placeholder="УНП" :class="fieldClass('inn')" @blur="onInnBlur" />
+                    <div v-if="isEgrLoading" class="absolute right-3 top-2">
+                        <span class="material-icons-round animate-spin text-teal-500 text-sm">refresh</span>
+                    </div>
+                </div>
                 <span v-if="innError" class="field-error">{{ innError }}</span>
                 <input v-model="form.kpp" type="text" placeholder="КПП" :class="fieldClass('kpp')" />
               </div>
@@ -473,7 +500,12 @@ onMounted(() => {
                   <input v-model="form.actual_address" type="text" placeholder="Факт. адрес" :class="fieldClass('actual_address')" />
                   <input v-model="form.bank_name" type="text" placeholder="Название банка" :class="fieldClass('bank_name')" />
                   <input v-model="form.bic" type="text" placeholder="BIC" :class="fieldClass('bic')" />
-                  <input v-model="form.iban" type="text" placeholder="IBAN" :class="fieldClass('iban')" />
+                  <div class="relative">
+                    <input v-model="form.iban" type="text" placeholder="IBAN" :class="fieldClass('iban')" @blur="onIbanBlur" />
+                    <div v-if="isBankLoading" class="absolute right-3 top-2">
+                        <span class="material-icons-round animate-spin text-teal-500 text-sm">refresh</span>
+                    </div>
+                  </div>
                   <span v-if="ibanError" class="field-error">{{ ibanError }}</span>
                   <input v-model="form.signer_name" type="text" placeholder="Подписант" :class="fieldClass('signer_name')" />
                   <input v-model="form.signer_position" type="text" placeholder="Должность подписанта" :class="fieldClass('signer_position')" />

@@ -4,6 +4,7 @@ import { api } from '../../api';
 import type { LeadsInboxItemResponse } from '../../api';
 import type { ManagerOrderUpdatePayload } from '../../client';
 import { useBelarusPhoneMask } from '../../composables/useBelarusPhoneMask';
+import { useB2BLookup } from '../../composables/useB2BLookup';
 
 const props = defineProps<{
   lead: LeadsInboxItemResponse;
@@ -26,12 +27,20 @@ const customerCity = ref('Витебск');
 const customerAddress = ref('');
 const companyName = ref('');
 const companyInn = ref('');
+const companyFullLegalName = ref('');
+const companyLegalAddress = ref('');
+const companyIban = ref('');
+const companyBic = ref('');
+const companyBankName = ref('');
+
 const objectType = ref('apartment');
 const serviceType = ref('turnkey');
 const equipmentClass = ref('');
 const marketingSource = ref('');
 const managerComment = ref(props.lead.comment || '');
 const existingCustomerId = ref<number | null>(null);
+
+const { lookupCompany, lookupBank, isEgrLoading, isBankLoading } = useB2BLookup();
 
 // Customer Search
 const searchTimeout = ref<number | null>(null);
@@ -78,10 +87,29 @@ const onSearchInput = () => {
 
 // Auto-search initially if phone exists
 watch(() => props.lead, () => {
-  if (customerPhone.value) {
-    searchCustomer();
-  }
+    if (customerPhone.value) {
+        searchCustomer();
+    }
 }, { immediate: true });
+
+const onInnBlur = async () => {
+    if (!companyInn.value || companyInn.value.length !== 9) return;
+    const data = await lookupCompany(companyInn.value);
+    if (data) {
+        if (!companyFullLegalName.value) companyFullLegalName.value = data.fullLegalName || '';
+        if (!companyLegalAddress.value) companyLegalAddress.value = data.legalAddress || '';
+        if (!companyName.value) companyName.value = data.fullLegalName || '';
+    }
+};
+
+const onIbanBlur = async () => {
+    if (!companyIban.value || companyIban.value.length < 15) return;
+    const data = await lookupBank(companyIban.value);
+    if (data) {
+        if (!companyBankName.value) companyBankName.value = data.bankName || '';
+        if (!companyBic.value) companyBic.value = data.bic || '';
+    }
+};
 
 
 const submitQualify = async () => {
@@ -95,7 +123,11 @@ const submitQualify = async () => {
       customer_phone: unmaskedPhone.value || customerPhone.value || undefined,
       customer_delivery_address: [customerCity.value, customerAddress.value].filter(Boolean).join(', ') || undefined,
       customer_inn: customerType.value === 'company' ? (companyInn.value || undefined) : undefined,
-      customer_full_legal_name: customerType.value === 'company' ? (companyName.value || undefined) : undefined,
+      customer_full_legal_name: customerType.value === 'company' ? (companyFullLegalName.value || companyName.value || undefined) : undefined,
+      customer_legal_address: customerType.value === 'company' ? (companyLegalAddress.value || undefined) : undefined,
+      customer_iban: customerType.value === 'company' ? (companyIban.value || undefined) : undefined,
+      customer_bic: customerType.value === 'company' ? (companyBic.value || undefined) : undefined,
+      customer_bank_name: customerType.value === 'company' ? (companyBankName.value || undefined) : undefined,
       comment: managerComment.value || undefined,
       object_type: objectType.value || undefined,
       service_type: serviceType.value || undefined,
@@ -174,12 +206,44 @@ const submitQualify = async () => {
             <!-- Company fields -->
             <template v-if="customerType === 'company'">
               <div class="md:col-span-2">
-                <label class="block text-xs font-semibold text-slate-500 mb-1">Название компании</label>
+                <label class="block text-xs font-semibold text-slate-500 mb-1">УНП</label>
+                <div class="relative">
+                  <input v-model="companyInn" type="text" @input="onSearchInput" @blur="onInnBlur" class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 transition-shadow" placeholder="9 цифр">
+                  <div v-if="isEgrLoading" class="absolute right-3 top-2.5">
+                    <span class="material-icons-round animate-spin text-teal-500 text-sm">refresh</span>
+                  </div>
+                </div>
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-xs font-semibold text-slate-500 mb-1">Короткое название (для списка)</label>
                 <input v-model="companyName" type="text" class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 transition-shadow" placeholder="ООО Мастер Воздуха">
               </div>
               <div class="md:col-span-2">
-                <label class="block text-xs font-semibold text-slate-500 mb-1">УНП</label>
-                <input v-model="companyInn" type="text" @input="onSearchInput" class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 transition-shadow">
+                <label class="block text-xs font-semibold text-slate-500 mb-1">Полное юридическое название</label>
+                <input v-model="companyFullLegalName" type="text" class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 transition-shadow">
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-xs font-semibold text-slate-500 mb-1">Юридический адрес</label>
+                <input v-model="companyLegalAddress" type="text" class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 transition-shadow">
+              </div>
+              <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="md:col-span-2">
+                  <label class="block text-xs font-semibold text-slate-500 mb-1">IBAN (Расчетный счет)</label>
+                  <div class="relative">
+                    <input v-model="companyIban" type="text" @blur="onIbanBlur" class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 transition-shadow">
+                    <div v-if="isBankLoading" class="absolute right-3 top-2.5">
+                      <span class="material-icons-round animate-spin text-teal-500 text-sm">refresh</span>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-500 mb-1">BIC</label>
+                  <input v-model="companyBic" type="text" class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 transition-shadow">
+                </div>
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-xs font-semibold text-slate-500 mb-1">Название банка</label>
+                <input v-model="companyBankName" type="text" class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 transition-shadow">
               </div>
             </template>
 
