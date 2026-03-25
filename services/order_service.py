@@ -199,11 +199,11 @@ class OrderService:
         comment: Optional[str] = None,
         customer_type: str = "individual",
         customer_inn: Optional[str] = None,
-        customer_legal_name: Optional[str] = None,
         customer_legal_address: Optional[str] = None,
         customer_iban: Optional[str] = None,
         customer_bic: Optional[str] = None,
-        customer_bank_name: Optional[str] = None
+        customer_bank_name: Optional[str] = None,
+        customer_id: Optional[int] = None
     ) -> Order:
         """
         Create order from website checkout.
@@ -233,8 +233,11 @@ class OrderService:
         # 1. Find or create customer
         customer = None
         
-        # Only lookup if phone is valid (at least 6 digits/chars) to avoid matching empty strings
-        if len(phone_clean) > 5:
+        if customer_id:
+            customer = await session.get(Customer, customer_id)
+            if not customer:
+                raise ValueError(f"Customer with id {customer_id} not found")
+        elif len(phone_clean) > 5:
             stmt = select(Customer).where(Customer.phone == phone_clean)
             result = await session.execute(stmt)
             # Handle potential duplicates gracefully

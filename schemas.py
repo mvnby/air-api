@@ -560,6 +560,7 @@ class ManagerOrderUpdatePayload(BaseModel):
 
 
 class ManagerOrderCreatePayload(BaseModel):
+    customer_id: Optional[int] = None
     name: Optional[str] = None
     phone: Optional[str] = None
     source: str

@@ -9522,6 +9522,17 @@
       },
       "ManagerOrderCreatePayload": {
         "properties": {
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
           "name": {
             "anyOf": [
               {
