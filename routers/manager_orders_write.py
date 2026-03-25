@@ -54,6 +54,9 @@ async def create_manager_order(
             initial_status=OrderStatus.NEW_LEAD,
             comment=payload.request_text,
             customer_id=payload.customer_id,
+            customer_type=payload.customer_type,
+            customer_inn=payload.customer_inn,
+            customer_full_legal_name=payload.customer_full_legal_name,
         )
         # Save optional service_type into technical_meta
         if payload.service_type:

@@ -199,6 +199,7 @@ class OrderService:
         comment: Optional[str] = None,
         customer_type: str = "individual",
         customer_inn: Optional[str] = None,
+        customer_full_legal_name: Optional[str] = None,
         customer_legal_address: Optional[str] = None,
         customer_iban: Optional[str] = None,
         customer_bic: Optional[str] = None,
@@ -255,7 +256,7 @@ class OrderService:
                 type=CustomerType.company if customer_type == "company" else CustomerType.individual,
                 actual_address=customer_address,
                 inn=customer_inn,
-                full_legal_name=customer_legal_name,
+                full_legal_name=customer_full_legal_name,
                 legal_address=customer_legal_address,
                 iban=customer_iban,
                 bic=customer_bic,
@@ -274,8 +275,8 @@ class OrderService:
                 customer.type = CustomerType.company
                 if customer_inn:
                     customer.inn = customer_inn
-                if customer_legal_name:
-                    customer.full_legal_name = customer_legal_name
+                if customer_full_legal_name:
+                    customer.full_legal_name = customer_full_legal_name
                 if customer_legal_address:
                     customer.legal_address = customer_legal_address
                 if customer_iban:

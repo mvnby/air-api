@@ -55,7 +55,7 @@ class WebsiteOrderService:
             comment=payload.comment,
             customer_type=payload.customer.type,
             customer_inn=payload.customer.inn,
-            customer_legal_name=payload.customer.full_legal_name,
+            customer_full_legal_name=payload.customer.full_legal_name,
             customer_legal_address=payload.customer.legal_address,
             customer_iban=payload.customer.iban,
             customer_bic=payload.customer.bic,
