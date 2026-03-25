@@ -1641,6 +1641,9 @@ class OrderService:
                     else None
                 ),
                 created_at=order.created_at,
+                customer_type=order.customer.type if order.customer else "individual",
+                customer_inn=order.customer.inn if order.customer else None,
+                customer_full_legal_name=order.customer.full_legal_name if order.customer else None,
             )
             for order in orders
         ]

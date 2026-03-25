@@ -8189,6 +8189,33 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "customer_type": {
+            "type": "string",
+            "title": "Customer Type",
+            "default": "individual"
+          },
+          "customer_inn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Inn"
+          },
+          "customer_full_legal_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Full Legal Name"
           }
         },
         "type": "object",

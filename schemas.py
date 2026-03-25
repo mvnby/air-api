@@ -1254,6 +1254,9 @@ class LeadsInboxItemResponse(BaseModel):
     comment: Optional[str] = None
     no_answer_at: Optional[datetime] = None
     created_at: datetime
+    customer_type: str = "individual"
+    customer_inn: Optional[str] = None
+    customer_full_legal_name: Optional[str] = None
 
 
 class LeadsInboxListResponse(BaseModel):
