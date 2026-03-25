@@ -30,6 +30,8 @@ const createForm = ref({
   isCompany: false,
   inn: '',
   fullLegalName: '',
+  target_date: '',
+  address: '',
 });
 
 const { lookupCompany, isEgrLoading } = useB2BLookup();
@@ -128,6 +130,8 @@ const openCreateModal = () => {
     isCompany: false,
     inn: '',
     fullLegalName: '',
+    target_date: '',
+    address: '',
   });
   phoneModelRef.value = '';
   existingCustomerId.value = null;
@@ -152,6 +156,8 @@ const submitCreateLead = async () => {
             customer_type: createForm.value.isCompany ? 'company' : 'individual',
             customer_inn: createForm.value.isCompany ? (createForm.value.inn || undefined) : undefined,
             customer_full_legal_name: createForm.value.isCompany ? (createForm.value.fullLegalName || createForm.value.name || undefined) : undefined,
+            address: createForm.value.service_type === 'maintenance' && createForm.value.address ? createForm.value.address : undefined,
+            target_date: createForm.value.service_type === 'maintenance' && createForm.value.target_date ? new Date(createForm.value.target_date).toISOString() : undefined,
         });
         showCreateModal.value = false;
         setToast('Лид создан');
@@ -485,8 +491,30 @@ const scopeOptions: { value: Scope; label: string }[] = [
               <option value="pre_install">🧱 Закладка трассы (Ремонт)</option>
               <option value="maintenance">❄️ Сервис / ТО</option>
               <option value="repair">🛠 Ремонт</option>
+              <option value="dismantling">🏗️ Демонтаж</option>
             </select>
           </div>
+          <template v-if="createForm.service_type === 'maintenance'">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 col-span-full">
+              <div>
+                <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Дата и время ТО</label>
+                <input
+                  v-model="createForm.target_date"
+                  type="datetime-local"
+                  class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Адрес объекта</label>
+                <input
+                  v-model="createForm.address"
+                  type="text"
+                  placeholder="г. Минск, ул. ..."
+                  class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+            </div>
+          </template>
           <div>
             <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Запрос <span class="text-red-400">*</span></label>
             <textarea

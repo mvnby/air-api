@@ -43,21 +43,31 @@ async def create_manager_order(
     try:
         from models import LeadSource, OrderStatus
         source_enum = LeadSource(payload.source) if payload.source else LeadSource.MANAGER
+        initial_status = OrderStatus.EXECUTION if payload.service_type == "maintenance" else OrderStatus.NEW_LEAD
         order = await OrderService.create_from_website(
             session=session,
             customer_name=payload.name or "Новый клиент",
             customer_phone=payload.phone or "",
             customer_email=None,
-            customer_address=None,
+            customer_address=payload.address,
             items=[],
             lead_source=source_enum,
-            initial_status=OrderStatus.NEW_LEAD,
+            initial_status=initial_status,
             comment=payload.request_text,
             customer_id=payload.customer_id,
             customer_type=payload.customer_type,
             customer_inn=payload.customer_inn,
             customer_full_legal_name=payload.customer_full_legal_name,
         )
+        # Apply target_date if maintenance
+        if payload.service_type == "maintenance" and payload.target_date:
+            raw_order_date = await session.get(type(order), order.id)
+            if raw_order_date is not None:
+                raw_order_date.installation_date = payload.target_date
+                session.add(raw_order_date)
+                await session.commit()
+                await session.refresh(raw_order_date)
+                order = raw_order_date
         # Save optional service_type into technical_meta
         if payload.service_type:
             from sqlalchemy.orm import Session

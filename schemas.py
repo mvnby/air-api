@@ -569,6 +569,8 @@ class ManagerOrderCreatePayload(BaseModel):
     customer_type: str = "individual"
     customer_inn: Optional[str] = None
     customer_full_legal_name: Optional[str] = None
+    target_date: Optional[datetime] = None
+    address: Optional[str] = None
 
 
 class ManagerOrderDocumentResponse(BaseModel):
