@@ -280,13 +280,13 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.SSH_HOST_WEB }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.SSH_HOST_WEB }} >> ~/.ssh/known_hosts || true
 
       - name: Deploy to Web Server
         run: |
-          # Upload files using rsync over SSH
+          # Upload files using rsync over SSH with retries
           rsync -avz --delete \
-            -e "ssh -i ~/.ssh/deploy_key" \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ConnectionAttempts=10" \
             web/dist/ \
             ${{ secrets.SSH_USER_WEB }}@${{ secrets.SSH_HOST_WEB }}:/var/www/user2154318/data/www/mvn.by/
           
