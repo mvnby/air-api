@@ -1550,6 +1550,32 @@
         }
       }
     },
+    "/api/v1/products/vitebsk-featured": {
+      "get": {
+        "tags": [
+          "api",
+          "api"
+        ],
+        "summary": "Get Vitebsk Featured Products",
+        "operationId": "get_vitebsk_featured_products",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProductResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Get Vitebsk Featured Products"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/products/{identifier}": {
       "get": {
         "tags": [
