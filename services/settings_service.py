@@ -43,3 +43,17 @@ class SettingsService:
         await session.refresh(setting)
         
         return setting
+
+    @staticmethod
+    async def create_setting(session: AsyncSession, key: str, value: str, description: str | None = None) -> GlobalConfig:
+        # check uniqueness
+        stmt = select(GlobalConfig).where(GlobalConfig.key == key)
+        res = await session.execute(stmt)
+        if res.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail=f"Setting '{key}' already exists")
+
+        setting = GlobalConfig(key=key, value=value, description=description or "")
+        session.add(setting)
+        await session.commit()
+        await session.refresh(setting)
+        return setting

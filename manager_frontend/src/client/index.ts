@@ -27,6 +27,8 @@ export type { CommonGalleryImageResponse } from './models/CommonGalleryImageResp
 export type { CustomerPayload } from './models/CustomerPayload';
 export type { DashboardStatsResponse } from './models/DashboardStatsResponse';
 export type { DashboardTouchpoint } from './models/DashboardTouchpoint';
+export type { DocumentTemplateItem } from './models/DocumentTemplateItem';
+export type { DocumentTemplateListResponse } from './models/DocumentTemplateListResponse';
 export type { FilterRange } from './models/FilterRange';
 export type { FiltersConfigResponse } from './models/FiltersConfigResponse';
 export type { FilterTagOption } from './models/FilterTagOption';
@@ -82,6 +84,7 @@ export type { ManagerOrderListResponse } from './models/ManagerOrderListResponse
 export type { ManagerOrderProductLinePayload } from './models/ManagerOrderProductLinePayload';
 export type { ManagerOrderServiceLinePayload } from './models/ManagerOrderServiceLinePayload';
 export type { ManagerOrderUpdatePayload } from './models/ManagerOrderUpdatePayload';
+export type { ManagerSettingCreatePayload } from './models/ManagerSettingCreatePayload';
 export type { ManagerSettingListResponse } from './models/ManagerSettingListResponse';
 export type { ManagerSettingResponse } from './models/ManagerSettingResponse';
 export type { ManagerSettingUpdatePayload } from './models/ManagerSettingUpdatePayload';

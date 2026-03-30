@@ -140,12 +140,14 @@ export class ManagerOrdersService {
      * Generate Manager Order Document
      * @param orderId
      * @param docType
+     * @param templateId Google Drive template file ID
      * @returns ManagerOrderDocumentResponse Successful Response
      * @throws ApiError
      */
     public static generateManagerOrderDocument(
         orderId: number,
         docType: string,
+        templateId?: (string | null),
     ): CancelablePromise<ManagerOrderDocumentResponse> {
         return __request(OpenAPI, {
             method: 'POST',
@@ -153,6 +155,9 @@ export class ManagerOrdersService {
             path: {
                 'order_id': orderId,
                 'doc_type': docType,
+            },
+            query: {
+                'template_id': templateId,
             },
             errors: {
                 422: `Validation Error`,

@@ -1,5 +1,5 @@
-from typing import List
-from fastapi import APIRouter, Depends
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
@@ -43,7 +43,7 @@ async def create_manager_order(
     try:
         from models import LeadSource, OrderStatus
         source_enum = LeadSource(payload.source) if payload.source else LeadSource.MANAGER
-        initial_status = OrderStatus.EXECUTION if payload.service_type == "maintenance" else OrderStatus.NEW_LEAD
+        initial_status = OrderStatus.NEGOTIATION if payload.service_type == "maintenance" else OrderStatus.NEW_LEAD
         order = await OrderService.create_from_website(
             session=session,
             customer_name=payload.name or "Новый клиент",
@@ -63,7 +63,7 @@ async def create_manager_order(
         if payload.service_type == "maintenance" and payload.target_date:
             raw_order_date = await session.get(type(order), order.id)
             if raw_order_date is not None:
-                raw_order_date.installation_date = payload.target_date
+                raw_order_date.installation_date = payload.target_date.replace(tzinfo=None)
                 session.add(raw_order_date)
                 await session.commit()
                 await session.refresh(raw_order_date)
@@ -126,6 +126,7 @@ async def patch_manager_order(
 async def generate_manager_order_document(
     order_id: int,
     doc_type: str,
+    template_id: Optional[str] = Query(None, description="Google Drive template file ID"),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
 ):
@@ -134,6 +135,7 @@ async def generate_manager_order_document(
             session=session,
             order_id=order_id,
             doc_type=doc_type,
+            template_id=template_id,
         )
     except ValueError as exc:
         raise manager_http_error(
@@ -149,6 +151,7 @@ async def generate_manager_order_document(
             error_code=DOCUMENT_GENERATION_FAILED,
             message=str(exc),
         ) from exc
+
 
 
 @router.post(

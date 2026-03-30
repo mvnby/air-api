@@ -579,6 +579,13 @@ class ManagerOrderDocumentResponse(BaseModel):
     edit_url: str
 
 
+class DocumentTemplateItem(BaseModel):
+    id: str
+    name: str
+
+
+class DocumentTemplateListResponse(BaseModel):
+    items: List[DocumentTemplateItem]
 
 
 
@@ -1292,6 +1299,12 @@ class ManagerSettingResponse(BaseModel):
 
 
 class ManagerSettingUpdatePayload(BaseModel):
+    value: str
+    description: Optional[str] = None
+
+
+class ManagerSettingCreatePayload(BaseModel):
+    key: str
     value: str
     description: Optional[str] = None
 

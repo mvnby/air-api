@@ -57,6 +57,7 @@ UPDATE_MANAGER_ORDER_STAGE = "update_manager_order_stage"
 DELETE_MANAGER_ORDER_STAGE = "delete_manager_order_stage"
 GET_MANAGER_DOC_DOWNLOAD = "get_manager_doc_download"
 DELETE_MANAGER_DOC = "delete_manager_doc"
+GET_DOC_TEMPLATES = "get_doc_templates"
 GET_MANAGER_CRM_HEALTH_REPORT = "get_manager_crm_health_report"
 GET_DASHBOARD_STATS = "get_dashboard_stats"
 IMPORT_ONLINER = "import_onliner"
@@ -70,6 +71,7 @@ LIST_MANAGER_SETTINGS = "list_manager_settings"
 GET_FX_RATE = "get_fx_rate"
 SUGGEST_ADDRESS = "suggest_address"
 UPDATE_MANAGER_SETTING = "update_manager_setting"
+CREATE_MANAGER_SETTING = "create_manager_setting"
 
 LIST_MANAGER_TARIFFS = "list_manager_tariffs"
 CREATE_MANAGER_TARIFF = "create_manager_tariff"
@@ -161,6 +163,7 @@ ALL_MANAGER_OPERATION_IDS = (
     UPDATE_MANAGER_INSTALLER,
     SEARCH_MANAGER_INSTALLERS,
     LIST_MANAGER_SETTINGS,
+    CREATE_MANAGER_SETTING,
     GET_FX_RATE,
     SUGGEST_ADDRESS,
     UPDATE_MANAGER_SETTING,
@@ -193,4 +196,5 @@ ALL_MANAGER_OPERATION_IDS = (
     SYNC_ALL_SUPPLIER_SOURCES,
     SUGGEST_SUPPLIER_OFFERS,
     BULK_CREATE_SUPPLIER_MAPPINGS,
+    GET_DOC_TEMPLATES,
 )

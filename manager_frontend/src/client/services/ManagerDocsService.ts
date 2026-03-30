@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { Body_upload_manager_order_document } from '../models/Body_upload_manager_order_document';
+import type { DocumentTemplateListResponse } from '../models/DocumentTemplateListResponse';
 import type { ManagerActionMessageResponse } from '../models/ManagerActionMessageResponse';
 import type { ManagerOrderDocumentItem } from '../models/ManagerOrderDocumentItem';
 import type { ManagerOrderDocumentListResponse } from '../models/ManagerOrderDocumentListResponse';
@@ -88,6 +89,26 @@ export class ManagerDocsService {
             url: '/api/manager/docs/{doc_id}',
             path: {
                 'doc_id': docId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Doc Templates
+     * @param docType
+     * @returns DocumentTemplateListResponse Successful Response
+     * @throws ApiError
+     */
+    public static getDocTemplates(
+        docType: string,
+    ): CancelablePromise<DocumentTemplateListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/docs/templates/{doc_type}',
+            path: {
+                'doc_type': docType,
             },
             errors: {
                 422: `Validation Error`,

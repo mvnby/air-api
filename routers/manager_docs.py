@@ -11,11 +11,14 @@ from routers.manager_operation_ids import (
     UPLOAD_MANAGER_ORDER_DOCUMENT,
     GET_MANAGER_DOC_DOWNLOAD,
     DELETE_MANAGER_DOC,
+    GET_DOC_TEMPLATES,
 )
 from schemas import (
     ManagerOrderDocumentListResponse,
     ManagerOrderDocumentItem,
     ManagerActionMessageResponse,
+    DocumentTemplateListResponse,
+    DocumentTemplateItem,
 )
 from services.document_service import DocumentService
 
@@ -124,3 +127,22 @@ async def delete_manager_doc(
         )
 
     return {"message": "Document deleted"}
+
+
+@router.get(
+    "/docs/templates/{doc_type}",
+    response_model=DocumentTemplateListResponse,
+    operation_id=GET_DOC_TEMPLATES,
+)
+async def get_doc_templates(
+    doc_type: str,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    items = await DocumentService.get_available_templates(session, doc_type)
+    return {
+        "items": [
+            DocumentTemplateItem(id=t["id"], name=t["name"])
+            for t in items
+        ]
+    }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { ManagerOrdersService } from '../../client';
-import type { ManagerOrderDetailResponse } from '../../client';
+import { ref, computed, watch } from 'vue';
+import { ManagerOrdersService, ManagerDocsService } from '../../client';
+import type { ManagerOrderDetailResponse, ManagerOrderDocumentItem } from '../../client';
 import { formatMoney } from './order-utils';
 import DateTimeField from '../ui/DateTimeField.vue';
 import { getApiErrorMessage } from '../../utils/api-errors';
@@ -126,15 +126,134 @@ const addPayment = async () => {
   }
 };
 
-const generateDocument = async (type: string) => {
+const generateDocument = async (type: string, templateId?: string) => {
   try {
-    const res = await ManagerOrdersService.generateManagerOrderDocument(props.order.id, type);
+    const res = await ManagerOrdersService.generateManagerOrderDocument(props.order.id, type, templateId);
     window.open(res.edit_url, '_blank');
+    await loadDocuments();
     emit('refresh');
   } catch (error) {
     setToast(`Ошибка генерации: ${getApiErrorMessage(error)}`, 'error');
   }
 };
+
+// --- Documents panel ---
+const documents = ref<ManagerOrderDocumentItem[]>([]);
+const isGeneratingDoc = ref(false);
+const processingDocId = ref<number | null>(null);
+const docDropdownOpen = ref(false);
+const isUploadingDoc = ref(false);
+const fileInputRef = ref<HTMLInputElement | null>(null);
+
+const contractTemplates = ref<{id: string; name: string}[]>([]);
+const selectedContractTemplateId = ref<string>('');
+
+const DOCUMENT_TYPES = [
+  { type: 'contract', label: 'Договор' },
+  { type: 'invoice', label: 'Счет' },
+  { type: 'act', label: 'Акт' },
+  { type: 'offer', label: 'КП' },
+  { type: 'tn2', label: 'ТН-2' },
+  { type: 'ttn1', label: 'ТТН-1' },
+];
+
+const hasContract = computed(() => documents.value.some(d => d.doc_type === 'contract'));
+
+const loadDocuments = async () => {
+  try {
+    const res = await ManagerDocsService.getManagerOrderDocuments(props.order.id);
+    documents.value = res.items;
+  } catch (error) {
+    console.error('Failed to load documents', error);
+  }
+};
+
+const loadContractTemplates = async () => {
+  try {
+    const res = await ManagerDocsService.getDocTemplates('contract');
+    contractTemplates.value = res.items;
+    if (res.items.length > 0 && res.items[0]) {
+      selectedContractTemplateId.value = res.items[0].id;
+    }
+  } catch (e) {
+    console.warn('Failed to load contract templates', e);
+  }
+};
+
+const handleDocGenerate = async (type: string) => {
+  isGeneratingDoc.value = true;
+  docDropdownOpen.value = false;
+  try {
+    const templateId = (type === 'contract' && selectedContractTemplateId.value)
+      ? selectedContractTemplateId.value
+      : undefined;
+    await generateDocument(type, templateId);
+    setToast('Документ создан', 'success');
+  } finally {
+    isGeneratingDoc.value = false;
+  }
+};
+
+const downloadDocument = async (doc: ManagerOrderDocumentItem) => {
+  processingDocId.value = doc.id;
+  try {
+    const response = await ManagerDocsService.getManagerDocDownload(doc.id);
+    const url = window.URL.createObjectURL(new Blob([response]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${doc.number}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (error) {
+    setToast('Ошибка скачивания', 'error');
+  } finally {
+    processingDocId.value = null;
+  }
+};
+
+const deleteDocument = async (docId: number) => {
+  if (!confirm('Удалить документ?')) return;
+  processingDocId.value = docId;
+  try {
+    await ManagerDocsService.deleteManagerDoc(docId);
+    await loadDocuments();
+    setToast('Документ удален', 'success');
+  } catch (error) {
+    setToast('Ошибка удаления', 'error');
+  } finally {
+    processingDocId.value = null;
+  }
+};
+
+const triggerFileUpload = () => {
+  fileInputRef.value?.click();
+};
+
+const handleFileUpload = async (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  if (!target.files || !target.files.length) return;
+  const file = target.files[0] as File;
+  if (!file) return;
+
+  isUploadingDoc.value = true;
+  try {
+    await ManagerDocsService.uploadManagerOrderDocument(props.order.id, { file });
+    await loadDocuments();
+    setToast('Документ загружен', 'success');
+  } catch (error) {
+    setToast(`Ошибка загрузки: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    isUploadingDoc.value = false;
+    if (fileInputRef.value) fileInputRef.value.value = '';
+  }
+};
+
+// Load documents and templates on mount
+watch(() => props.order.id, () => {
+  loadDocuments();
+  loadContractTemplates();
+}, { immediate: true });
 </script>
 
 <template>
@@ -269,16 +388,88 @@ const generateDocument = async (type: string) => {
           </div>
       </div>
 
-      <div class="flex-1 p-5 flex flex-col items-center justify-center bg-white space-y-4">
-          <div class="w-full space-y-3">
-              <button class="w-full flex items-center justify-center gap-2 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl transition-colors border border-slate-200" @click="generateDocument('act')">
-                  <span class="material-icons-round text-[20px] text-amber-500">description</span> 
-                  Акт выполненных работ
+      <div class="flex-1 p-5 flex flex-col bg-white space-y-4">
+          <!-- Full Documents Panel -->
+          <div class="mb-2 flex items-center justify-between">
+            <h4 class="text-md font-semibold text-slate-800">Documents (B2B / Contracts)</h4>
+            <div class="relative flex items-center gap-2">
+              <button
+                class="flex items-center gap-1 rounded-xl bg-[#007f80] px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/50 disabled:opacity-50"
+                :disabled="isGeneratingDoc || !!processingDocId || isUploadingDoc"
+                @click="docDropdownOpen = !docDropdownOpen"
+              >
+                <span class="material-icons-round text-[18px]">add_circle</span> Create
               </button>
-              <button class="w-full flex items-center justify-center gap-2 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl transition-colors border border-slate-200" @click="generateDocument('tn2')">
-                  <span class="material-icons-round text-[20px] text-blue-500">receipt</span> 
-                  ТН-2 / Гарантийный талон
+
+              <input type="file" ref="fileInputRef" class="hidden" accept=".pdf" @change="handleFileUpload" />
+              <button
+                class="flex items-center gap-1 rounded-xl bg-slate-700 px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500/50 disabled:opacity-50"
+                title="Upload PDF"
+                :disabled="isUploadingDoc || !!processingDocId || isGeneratingDoc"
+                @click="triggerFileUpload"
+              >
+                <span v-if="isUploadingDoc" class="material-icons-round animate-spin text-[18px]">loop</span>
+                <span v-else class="material-icons-round text-[18px]">upload_file</span>
+                Upload
               </button>
+
+              <div
+                v-if="docDropdownOpen"
+                class="absolute right-[100px] top-full z-10 mt-2 w-56 rounded-xl border border-slate-700 bg-slate-800 p-1 shadow-lg"
+              >
+                <!-- Contract template selector -->
+                <div v-if="contractTemplates.length > 1" class="px-3 py-2 border-b border-slate-700">
+                  <label class="text-[11px] uppercase tracking-wide text-slate-400 mb-1 block">Шаблон договора</label>
+                  <select
+                    v-model="selectedContractTemplateId"
+                    class="w-full rounded-lg border border-slate-600 bg-slate-700 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/50"
+                    style="border-radius: 12px"
+                  >
+                    <option v-for="t in contractTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
+                  </select>
+                </div>
+
+                <button
+                  v-for="dtype in DOCUMENT_TYPES"
+                  :key="dtype.type"
+                  class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-700 disabled:opacity-50 disabled:hover:bg-transparent"
+                  :disabled="(dtype.type === 'act' || dtype.type === 'ttn1' || dtype.type === 'tn2') && !hasContract"
+                  :title="(dtype.type === 'act' || dtype.type === 'ttn1' || dtype.type === 'tn2') && !hasContract ? 'Сначала создайте договор' : ''"
+                  @click="handleDocGenerate(dtype.type)"
+                >
+                  {{ dtype.label }}
+                  <span v-if="(dtype.type === 'act' || dtype.type === 'ttn1' || dtype.type === 'tn2') && !hasContract" class="material-icons-round text-[16px] text-amber-500">lock</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="documents.length" class="space-y-3">
+            <div v-for="doc in documents" :key="doc.id" class="flex items-center justify-between rounded-xl border border-slate-700/50 bg-[#1e293b] p-3 text-slate-300">
+              <div class="flex items-center gap-3">
+                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 text-teal-400">
+                  <span class="material-icons-round text-xl">description</span>
+                </div>
+                <div>
+                  <p class="text-sm font-medium text-white">{{ doc.number || doc.doc_type }}</p>
+                  <p class="text-xs text-slate-400">{{ new Date(doc.date).toLocaleDateString() }} · <span class="uppercase">{{ doc.doc_type }}</span></p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <a :href="doc.edit_url" target="_blank" class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white" title="Редактировать">
+                  <span class="material-icons-round text-[18px]">edit</span>
+                </a>
+                <button class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white disabled:opacity-50" :disabled="processingDocId === doc.id" @click="downloadDocument(doc)" title="Скачать PDF">
+                  <span class="material-icons-round text-[18px]">download</span>
+                </button>
+                <button class="flex h-8 w-8 items-center justify-center rounded-lg text-red-400 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50" :disabled="processingDocId === doc.id" @click="deleteDocument(doc.id)" title="Удалить">
+                  <span class="material-icons-round text-[18px]">delete</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-sm text-slate-500 italic py-3 text-center rounded-xl border border-dashed border-slate-700">
+            Нет сформированных документов
           </div>
           
           <hr class="w-full border-slate-100 my-2" />
