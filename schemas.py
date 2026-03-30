@@ -569,6 +569,8 @@ class ManagerOrderCreatePayload(BaseModel):
     customer_type: str = "individual"
     customer_inn: Optional[str] = None
     customer_full_legal_name: Optional[str] = None
+    target_date: Optional[datetime] = None
+    address: Optional[str] = None
 
 
 class ManagerOrderDocumentResponse(BaseModel):
@@ -577,6 +579,13 @@ class ManagerOrderDocumentResponse(BaseModel):
     edit_url: str
 
 
+class DocumentTemplateItem(BaseModel):
+    id: str
+    name: str
+
+
+class DocumentTemplateListResponse(BaseModel):
+    items: List[DocumentTemplateItem]
 
 
 
@@ -1254,6 +1263,9 @@ class LeadsInboxItemResponse(BaseModel):
     comment: Optional[str] = None
     no_answer_at: Optional[datetime] = None
     created_at: datetime
+    customer_type: str = "individual"
+    customer_inn: Optional[str] = None
+    customer_full_legal_name: Optional[str] = None
 
 
 class LeadsInboxListResponse(BaseModel):
@@ -1287,6 +1299,12 @@ class ManagerSettingResponse(BaseModel):
 
 
 class ManagerSettingUpdatePayload(BaseModel):
+    value: str
+    description: Optional[str] = None
+
+
+class ManagerSettingCreatePayload(BaseModel):
+    key: str
     value: str
     description: Optional[str] = None
 

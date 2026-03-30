@@ -278,6 +278,21 @@ const DOCUMENT_TYPES = [
   { type: 'ttn1', label: 'ТТН-1' },
 ];
 
+const contractTemplates = ref<{id: string; name: string}[]>([]);
+const selectedContractTemplateId = ref<string>('');
+
+const loadContractTemplates = async () => {
+  try {
+    const res = await ManagerDocsService.getDocTemplates('contract');
+    contractTemplates.value = res.items;
+    if (res.items.length > 0 && res.items[0]) {
+      selectedContractTemplateId.value = res.items[0].id;
+    }
+  } catch (e) {
+    console.warn('Failed to load contract templates', e);
+  }
+};
+
 const loadDocuments = async (orderId: number) => {
   try {
     const res = await ManagerDocsService.getManagerOrderDocuments(orderId);
@@ -287,11 +302,11 @@ const loadDocuments = async (orderId: number) => {
   }
 };
 
-const generateDocument = async (type: string) => {
+const generateDocument = async (type: string, templateId?: string) => {
   if (!props.order?.id) return;
   isGeneratingDoc.value = true;
   try {
-    const res = await ManagerOrdersService.generateManagerOrderDocument(props.order.id, type);
+    const res = await ManagerOrdersService.generateManagerOrderDocument(props.order.id, type, templateId);
     window.open(res.edit_url, '_blank');
     await loadDocuments(props.order.id);
     setToast('Документ создан', 'success');
@@ -665,6 +680,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
 
   // Also refresh list to be sure
   loadDocuments(order.id);
+  loadContractTemplates();
 
   productLookupById.value = {};
 
@@ -1329,7 +1345,7 @@ watch(
       </div>
 
       <!-- Экшн-зона (Proposal & Docs) -->
-      <section v-if="status === 'negotiation' || status === 'closed'" class="mt-8 rounded-2xl bg-amber-50/30 border border-amber-100 p-4">
+      <section class="mt-8 rounded-2xl bg-amber-50/30 border border-amber-100 p-4">
         <h3 class="text-lg font-semibold font-['Space_Grotesk'] text-amber-900 mb-4 border-b border-amber-200 pb-2">Согласование</h3>
 
         <div v-if="status === 'negotiation'" class="mb-6">
@@ -1390,15 +1406,27 @@ watch(
 
             <div
                v-if="docDropdownOpen"
-               class="absolute right-[100px] top-full z-10 mt-2 w-48 rounded-xl border border-slate-700 bg-slate-800 p-1 shadow-lg"
+               class="absolute right-[100px] top-full z-10 mt-2 w-56 rounded-xl border border-slate-700 bg-slate-800 p-1 shadow-lg"
             >
+              <!-- Contract template selector -->
+              <div v-if="contractTemplates.length > 1" class="px-3 py-2 border-b border-slate-700">
+                <label class="text-[11px] uppercase tracking-wide text-slate-400 mb-1 block">Шаблон договора</label>
+                <select
+                  v-model="selectedContractTemplateId"
+                  class="w-full rounded-lg border border-slate-600 bg-slate-700 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/50"
+                  style="border-radius: 12px"
+                >
+                  <option v-for="t in contractTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
+                </select>
+              </div>
+
               <button
                 v-for="dtype in DOCUMENT_TYPES"
                 :key="dtype.type"
                 class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-700 disabled:opacity-50 disabled:hover:bg-transparent"
                 :disabled="(dtype.type === 'act' || dtype.type === 'ttn1' || dtype.type === 'tn2') && !hasContract"
                 :title="(dtype.type === 'act' || dtype.type === 'ttn1' || dtype.type === 'tn2') && !hasContract ? 'Сначала создайте договор' : ''"
-                @click="generateDocument(dtype.type); docDropdownOpen = false"
+                @click="generateDocument(dtype.type, dtype.type === 'contract' ? selectedContractTemplateId || undefined : undefined); docDropdownOpen = false"
               >
                 {{ dtype.label }}
                 <span v-if="(dtype.type === 'act' || dtype.type === 'ttn1' || dtype.type === 'tn2') && !hasContract" class="material-icons-round text-[16px] text-amber-500">lock</span>

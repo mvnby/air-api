@@ -3632,6 +3632,53 @@
         }
       }
     },
+    "/api/manager/docs/templates/{doc_type}": {
+      "get": {
+        "tags": [
+          "manager-docs"
+        ],
+        "summary": "Get Doc Templates",
+        "operationId": "get_doc_templates",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "doc_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Doc Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentTemplateListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/orders": {
       "get": {
         "tags": [
@@ -3979,6 +4026,24 @@
               "type": "string",
               "title": "Doc Type"
             }
+          },
+          {
+            "name": "template_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Google Drive template file ID",
+              "title": "Template Id"
+            },
+            "description": "Google Drive template file ID"
           }
         ],
         "responses": {
@@ -5135,6 +5200,50 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ManagerSettingListResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "manager/settings"
+        ],
+        "summary": "Create Manager Setting",
+        "operationId": "create_manager_setting",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerSettingCreatePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerSettingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -7367,6 +7476,40 @@
         ],
         "title": "DashboardTouchpoint"
       },
+      "DocumentTemplateItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "DocumentTemplateItem"
+      },
+      "DocumentTemplateListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentTemplateItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "DocumentTemplateListResponse"
+      },
       "FilterRange": {
         "properties": {
           "min": {
@@ -8189,6 +8332,33 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "customer_type": {
+            "type": "string",
+            "title": "Customer Type",
+            "default": "individual"
+          },
+          "customer_inn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Inn"
+          },
+          "customer_full_legal_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Full Legal Name"
           }
         },
         "type": "object",
@@ -9600,6 +9770,29 @@
               }
             ],
             "title": "Customer Full Legal Name"
+          },
+          "target_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Date"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
           }
         },
         "type": "object",
@@ -10925,6 +11118,35 @@
         },
         "type": "object",
         "title": "ManagerOrderUpdatePayload"
+      },
+      "ManagerSettingCreatePayload": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "value"
+        ],
+        "title": "ManagerSettingCreatePayload"
       },
       "ManagerSettingListResponse": {
         "properties": {

@@ -17,7 +17,7 @@ const emit = defineEmits<{
 
 // Form State
 const isLoading = ref(false);
-const customerType = ref<'individual' | 'company'>('individual');
+const customerType = ref<'individual' | 'company'>(props.lead.customer_type as any || 'individual');
 const customerName = ref(props.lead.customer_name || '');
 // @ts-ignore (phone exists on the original response dynamically, we handle it if present)
 const customerPhone = ref((props.lead as any).customer_phone || (props.lead as any).phone || '');
@@ -25,9 +25,9 @@ const phoneInputRef = ref<HTMLInputElement | null>(null);
 const { unmaskedValue: unmaskedPhone } = useBelarusPhoneMask(phoneInputRef, customerPhone, { lazy: false });
 const customerCity = ref('Витебск');
 const customerAddress = ref('');
-const companyName = ref('');
-const companyInn = ref('');
-const companyFullLegalName = ref('');
+const companyName = ref(props.lead.customer_name || '');
+const companyInn = ref(props.lead.customer_inn || '');
+const companyFullLegalName = ref(props.lead.customer_full_legal_name || '');
 const companyLegalAddress = ref('');
 const companyIban = ref('');
 const companyBic = ref('');

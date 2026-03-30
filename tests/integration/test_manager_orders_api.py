@@ -240,8 +240,8 @@ async def test_manager_order_generate_document(async_client, db, monkeypatch):
         doc_type = "contract"
         google_edit_url = "https://docs.google.com/fake"
 
-    async def _fake_create_or_get_document(session, order_id, doc_type):
-        _ = (session, order_id, doc_type)
+    async def _fake_create_or_get_document(session, order_id, doc_type, template_id=None):
+        _ = (session, order_id, doc_type, template_id)
         return _FakeDoc()
 
     from services import document_service

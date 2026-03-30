@@ -12,5 +12,7 @@ export type ManagerOrderCreatePayload = {
     customer_type?: string;
     customer_inn?: (string | null);
     customer_full_legal_name?: (string | null);
+    target_date?: (string | null);
+    address?: (string | null);
 };
 

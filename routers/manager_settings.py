@@ -5,8 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.security import get_current_username
-from routers.manager_operation_ids import GET_FX_RATE, LIST_MANAGER_SETTINGS, SUGGEST_ADDRESS, UPDATE_MANAGER_SETTING
-from schemas import ManagerSettingListResponse, ManagerSettingResponse, ManagerSettingUpdatePayload, FxRateResponse
+from routers.manager_operation_ids import CREATE_MANAGER_SETTING, GET_FX_RATE, LIST_MANAGER_SETTINGS, SUGGEST_ADDRESS, UPDATE_MANAGER_SETTING
+from schemas import ManagerSettingCreatePayload, ManagerSettingListResponse, ManagerSettingResponse, ManagerSettingUpdatePayload, FxRateResponse
 from services.address_suggest_service import AddressSuggestService
 from services.settings_service import SettingsService
 from services.fx_rate_service import FxRateService
@@ -52,4 +52,13 @@ async def update_manager_setting(
     session: AsyncSession = Depends(get_session)
 ):
     setting = await SettingsService.update_setting(session, key, payload)
+    return setting
+
+
+@router.post("", response_model=ManagerSettingResponse, operation_id=CREATE_MANAGER_SETTING)
+async def create_manager_setting(
+    payload: ManagerSettingCreatePayload,
+    session: AsyncSession = Depends(get_session)
+):
+    setting = await SettingsService.create_setting(session, payload.key, payload.value, payload.description)
     return setting

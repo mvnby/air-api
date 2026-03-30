@@ -1,9 +1,10 @@
+import json
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import OrderDocument, Order
+from models import OrderDocument, Order, GlobalConfig
 from services.google_service import get_google_service
 from services.documents.base import TEMPLATES, DOC_NAMES, BaseDocumentStrategy
 from services.documents.factory import DocumentFactory
@@ -13,12 +14,43 @@ class DocumentService:
     """Сервис для работы с документами заказов через Google Drive"""
 
     ALLOWED_DOC_TYPES = {"contract", "invoice", "work_order", "act", "offer", "tn2", "ttn1"}
+
+    @staticmethod
+    async def get_available_templates(
+        session: AsyncSession,
+        doc_type: str,
+    ) -> List[dict]:
+        """
+        Возвращает список доступных шаблонов для данного типа документа.
+        Для contract — читает GlobalConfig key 'contract_templates' (JSON).
+        Для остальных — возвращает единственный дефолтный шаблон.
+        """
+        default_id = TEMPLATES.get(doc_type)
+        default_name = DOC_NAMES.get(doc_type, doc_type)
+
+        if doc_type == "contract":
+            try:
+                query = select(GlobalConfig).where(GlobalConfig.key == "contract_templates")
+                result = await session.execute(query)
+                config = result.scalars().first()
+                if config and config.value:
+                    items = json.loads(config.value)
+                    if isinstance(items, list) and len(items) > 0:
+                        return items
+            except Exception:
+                pass
+
+        # Fallback: единственный шаблон по умолчанию
+        if default_id:
+            return [{"id": default_id, "name": f"{default_name} (по умолчанию)"}]
+        return []
     
     @staticmethod
     async def create_or_get_document(
         session: AsyncSession,
         order_id: int,
-        doc_type: str = "contract"
+        doc_type: str = "contract",
+        template_id: Optional[str] = None,
     ) -> OrderDocument:
         """
         Создает документ или возвращает существующий.
@@ -27,6 +59,7 @@ class DocumentService:
             session: Асинхронная сессия БД
             order_id: ID заказа
             doc_type: Тип документа (contract, invoice, offer, act, etc.)
+            template_id: Опциональный ID шаблона (Google Drive file ID)
             
         Returns:
             OrderDocument объект с данными о документе
@@ -44,13 +77,14 @@ class DocumentService:
             return existing_doc
         
         # 2. Создаем новый документ
-        return await DocumentService._create_new_document(session, order_id, doc_type)
+        return await DocumentService._create_new_document(session, order_id, doc_type, template_id=template_id)
 
     @staticmethod
     async def generate_manager_order_document(
         session: AsyncSession,
         order_id: int,
         doc_type: str,
+        template_id: Optional[str] = None,
     ) -> dict:
         if doc_type not in DocumentService.ALLOWED_DOC_TYPES:
             raise ValueError(f"Unsupported document type: {doc_type}")
@@ -59,6 +93,7 @@ class DocumentService:
             session=session,
             order_id=order_id,
             doc_type=doc_type,
+            template_id=template_id,
         )
         return {
             "doc_id": doc.id,
@@ -207,7 +242,8 @@ class DocumentService:
     async def _create_new_document(
         session: AsyncSession,
         order_id: int,
-        doc_type: str
+        doc_type: str,
+        template_id: Optional[str] = None,
     ) -> OrderDocument:
         """Создает новый документ в Google Drive и сохраняет в БД"""
         
@@ -220,8 +256,9 @@ class DocumentService:
             if not result.scalars().first():
                 raise ValueError("Невозможно создать акт/накладную: отсутствует договор")
 
-        # 1. Получаем template_id
-        template_id = TEMPLATES.get(doc_type)
+        # 1. Получаем template_id (используем переданный или дефолтный)
+        if not template_id:
+            template_id = TEMPLATES.get(doc_type)
         if not template_id:
             raise ValueError(f"Unknown document type: {doc_type}")
         

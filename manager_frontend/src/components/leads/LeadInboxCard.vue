@@ -109,13 +109,22 @@ const getRelativeTime = (dt: string | null | undefined) => {
         >{{ getSourceIcon(item.source) }}</span>
 
         <!-- Name -->
-        <span class="font-semibold text-slate-800 dark:text-white truncate text-sm">
-          {{ item.customer_name || '(Имя не указано)' }}
-        </span>
+        <div class="flex flex-col min-w-0">
+          <span class="font-semibold text-slate-800 dark:text-white truncate text-sm">
+            {{ item.customer_name || item.customer_full_legal_name || '(Имя не указано)' }}
+          </span>
+          <span v-if="item.customer_type === 'company' && item.customer_inn" class="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-tighter">
+            УНП {{ item.customer_inn }}
+          </span>
+        </div>
       </div>
 
       <!-- Badges -->
       <div class="flex items-center gap-2 shrink-0">
+        <span
+          v-if="item.customer_type === 'company'"
+          class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600"
+        >🏢 ЮР</span>
         <span
           v-if="item.is_new"
           class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold bg-teal-500 text-white"

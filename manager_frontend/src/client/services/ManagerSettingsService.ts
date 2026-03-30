@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { FxRateResponse } from '../models/FxRateResponse';
+import type { ManagerSettingCreatePayload } from '../models/ManagerSettingCreatePayload';
 import type { ManagerSettingListResponse } from '../models/ManagerSettingListResponse';
 import type { ManagerSettingResponse } from '../models/ManagerSettingResponse';
 import type { ManagerSettingUpdatePayload } from '../models/ManagerSettingUpdatePayload';
@@ -19,6 +20,25 @@ export class ManagerSettingsService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/settings',
+        });
+    }
+    /**
+     * Create Manager Setting
+     * @param requestBody
+     * @returns ManagerSettingResponse Successful Response
+     * @throws ApiError
+     */
+    public static createManagerSetting(
+        requestBody: ManagerSettingCreatePayload,
+    ): CancelablePromise<ManagerSettingResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/settings',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**
