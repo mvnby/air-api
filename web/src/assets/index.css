@@ -68,7 +68,7 @@
     --info-text: #7dd3fc;
     --success-bg: rgba(16, 185, 129, 0.15);
     --success-text: #6ee7b7;
-    --warning-bg: rgba(245, 158, 11, 0.15);
+    --warning-bg: rgb(49, 44, 44);
     --warning-text: #fcd34d;
     --error-bg: rgba(239, 68, 68, 0.15);
     --error-text: #fca5a5;

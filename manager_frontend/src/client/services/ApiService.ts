@@ -393,6 +393,17 @@ export class ApiService {
         });
     }
     /**
+     * Get Vitebsk Featured Products
+     * @returns ProductResponse Successful Response
+     * @throws ApiError
+     */
+    public static getVitebskFeaturedProducts(): CancelablePromise<Array<ProductResponse>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/products/vitebsk-featured',
+        });
+    }
+    /**
      * Get Product By Identifier
      * @param identifier
      * @returns ProductResponse Successful Response

@@ -185,10 +185,15 @@ const isUnavailableInCities = computed(() => {
 });
 
 const availabilityMessage = computed(() => {
-    if (isUnavailableInCities.value) {
-        return 'Нет в наличии';
-    }
-    return '';
+    if (liveVitebskQty.value > 0) return 'В наличии в Витебске';
+    if (liveMinskQty.value > 0) return 'В наличии в Минске';
+    return 'Нет в наличии';
+});
+
+const availabilityTone = computed(() => {
+    if (liveVitebskQty.value > 0) return 'vitebsk';
+    if (liveMinskQty.value > 0) return 'minsk';
+    return 'out';
 });
 
 const shouldShowToggle = computed(() => {
@@ -348,7 +353,11 @@ const submitNotifyLead = async () => {
         </span>
     </div>
 
-    <div v-if="availabilityMessage" class="availability-note">
+    <div
+      v-if="availabilityMessage"
+      class="availability-note"
+      :class="availabilityTone"
+    >
       {{ availabilityMessage }}
     </div>
 
@@ -512,10 +521,34 @@ const submitNotifyLead = async () => {
     max-width: 100%;
   }
 
+  .availability-note.vitebsk {
+    color: var(--primary);
+    background: rgba(0, 127, 128, 0.12);
+    border-color: rgba(0, 127, 128, 0.28);
+  }
+
+  .availability-note.minsk {
+    color: #0369a1;
+    background: rgba(3, 105, 161, 0.10);
+    border-color: rgba(3, 105, 161, 0.22);
+  }
+
   :global(.dark) .availability-note {
     color: rgba(241, 245, 249, 0.82);
     background: rgba(148, 163, 184, 0.14);
     border-color: rgba(148, 163, 184, 0.24);
+  }
+
+  :global(.dark) .availability-note.vitebsk {
+    color: #5eead4;
+    background: rgba(0, 127, 128, 0.18);
+    border-color: rgba(94, 234, 212, 0.28);
+  }
+
+  :global(.dark) .availability-note.minsk {
+    color: #7dd3fc;
+    background: rgba(3, 105, 161, 0.16);
+    border-color: rgba(125, 211, 252, 0.22);
   }
 
   /* Discount Badge (Orange) */

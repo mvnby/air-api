@@ -78,6 +78,12 @@ export async function getCatalog(params = {}) {
     return data;
 }
 
+export async function getVitebskFeaturedProducts() {
+    const url = `${API_V1}/products/vitebsk-featured`;
+    const data = await fetchJson(url);
+    return data || [];
+}
+
 export async function getFiltersConfig() {
     const data = await fetchJson(`${API_V1}/filters/config`);
     return data || { price: { min: null, max: null }, area: { min: null, max: null }, brands: [], expert_tags: [] };

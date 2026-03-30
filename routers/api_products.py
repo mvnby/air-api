@@ -15,6 +15,7 @@ from schemas import (
     SpecsKeysResponse,
 )
 from services.description_generator import DescriptionGeneratorService
+from services.catalog import CatalogService
 from services.product_response_mapper import map_product_to_response
 from services.product_service import ProductService
 
@@ -93,6 +94,23 @@ async def get_catalog(
         ],
         meta=Meta(**payload["meta"]),
     )
+
+
+@router.get(
+    "/v1/products/vitebsk-featured",
+    response_model=List[ProductResponse],
+    operation_id="get_vitebsk_featured_products",
+)
+async def get_vitebsk_featured_products(session: AsyncSession = Depends(get_session)):
+    products = await CatalogService.get_vitebsk_featured_products(session, limit=6)
+    supply_metrics = await ProductService.get_supply_metrics_map(session, products)
+    return [
+        map_product_to_response(
+            product,
+            supply_metrics=supply_metrics.get(product.id),
+        )
+        for product in products
+    ]
 
 
 @router.get("/v1/products/{identifier}", response_model=ProductResponse, operation_id="get_product")

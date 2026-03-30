@@ -1,10 +1,11 @@
 ---
 import ProductCard from "./ProductCard.astro";
-import { getCatalog } from "../utils/api";
+import { getCatalog, getVitebskFeaturedProducts } from "../utils/api";
 
 interface Props {
     title?: string;
     tags?: string[];
+    vitebskFeatured?: boolean;
     filters?: {
         area_min?: number;
         area_max?: number;
@@ -16,33 +17,46 @@ interface Props {
     limit?: number;
 }
 
-const { title, tags = [], filters = {}, limit = 4 } = Astro.props;
+const { title, tags = [], vitebskFeatured = false, filters = {}, limit = 4 } = Astro.props;
 
-// Fetch products based on tags
-// The API now supports faceted filtering: OR within groups, AND between groups.
-const data = await getCatalog({
-    tag_slugs: tags,
-    area_min: filters.area_min,
-    area_max: filters.area_max,
-    is_inverter: filters.is_inverter,
-    has_wifi: filters.has_wifi,
-    has_fresh_air: filters.has_fresh_air,
-    heating_min: filters.heating_min,
-    limit: limit,
-    sort: "area_asc", // Default sort by area for these groups usually makes sense? Or let it be default.
-});
+let products: any[] = [];
 
-const products = data.items || [];
-const viewAllParams = new URLSearchParams();
-if (tags.length) {
-    viewAllParams.set("tag_slugs", tags.join(","));
+const viewAllHref = (() => {
+    if (vitebskFeatured) return "/catalog";
+
+    const viewAllParams = new URLSearchParams();
+    if (tags.length) viewAllParams.set("tag_slugs", tags.join(","));
+    if (filters.area_min != null) viewAllParams.set("area_min", String(filters.area_min));
+    if (filters.area_max != null) viewAllParams.set("area_max", String(filters.area_max));
+    if (filters.is_inverter != null) viewAllParams.set("is_inverter", String(filters.is_inverter));
+    if (filters.has_wifi != null) viewAllParams.set("has_wifi", String(filters.has_wifi));
+    if (filters.has_fresh_air != null) viewAllParams.set("has_fresh_air", String(filters.has_fresh_air));
+    if (filters.heating_min != null) viewAllParams.set("heating_min", String(filters.heating_min));
+
+    const query = viewAllParams.toString();
+    return query ? `/catalog?${query}` : "/catalog";
+})();
+
+// Fetch products:
+// - regular group: via /v1/catalog with faceted filters
+// - vitebsk featured: via /v1/products/vitebsk-featured (real stock only)
+if (vitebskFeatured) {
+    products = await getVitebskFeaturedProducts();
+    products = products.slice(0, limit);
+} else {
+    const data = await getCatalog({
+        tag_slugs: tags,
+        area_min: filters.area_min,
+        area_max: filters.area_max,
+        is_inverter: filters.is_inverter,
+        has_wifi: filters.has_wifi,
+        has_fresh_air: filters.has_fresh_air,
+        heating_min: filters.heating_min,
+        limit: limit,
+        sort: "area_asc",
+    });
+    products = data.items || [];
 }
-if (filters.area_min != null) viewAllParams.set("area_min", String(filters.area_min));
-if (filters.area_max != null) viewAllParams.set("area_max", String(filters.area_max));
-if (filters.is_inverter != null) viewAllParams.set("is_inverter", String(filters.is_inverter));
-if (filters.has_wifi != null) viewAllParams.set("has_wifi", String(filters.has_wifi));
-if (filters.has_fresh_air != null) viewAllParams.set("has_fresh_air", String(filters.has_fresh_air));
-if (filters.heating_min != null) viewAllParams.set("heating_min", String(filters.heating_min));
 ---
 
 {
@@ -52,7 +66,7 @@ if (filters.heating_min != null) viewAllParams.set("heating_min", String(filters
                 <div class="group-header">
                     <h3>{title}</h3>
                     <a
-                        href={`/catalog?${viewAllParams.toString()}`}
+                        href={viewAllHref}
                         class="view-all"
                     >
                         Смотреть все{" "}
@@ -107,13 +121,23 @@ if (filters.heating_min != null) viewAllParams.set("heating_min", String(filters
 
     .group-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        grid-template-columns: repeat(3, 1fr);
         gap: 2rem;
+    }
+
+    @media (max-width: 1100px) {
+        .group-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
     }
 
     @media (max-width: 768px) {
         .group-header h3 {
             font-size: 1.5rem;
+        }
+
+        .group-grid {
+            grid-template-columns: 1fr;
         }
     }
 </style>

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
+import { useDebounceFn } from '@vueuse/core';
 import { api, type LeadsInboxItemResponse } from '../api';
+import { ManagerSettingsService } from '../client';
 import LeadInboxCard from '../components/leads/LeadInboxCard.vue';
 import LeadQualifyModal from '../components/leads/LeadQualifyModal.vue';
 import { useBelarusPhoneMask } from '../composables/useBelarusPhoneMask';
@@ -119,6 +121,47 @@ const load = async () => {
 onMounted(load);
 watch(scope, load);
 
+// ── Address Suggest ─────────────────────────────────────────────────────────
+const addressSuggestions = ref<any[]>([]);
+const addressSuggestActive = ref(false);
+const addressLookupLoading = ref(false);
+
+const fetchAddressSuggestions = async (query: string) => {
+  if (!query || query.length < 3) {
+    addressSuggestions.value = [];
+    return;
+  }
+  addressLookupLoading.value = true;
+  try {
+    const res = await ManagerSettingsService.suggestAddress(query);
+    addressSuggestions.value = res.results || [];
+  } catch (err) {
+    console.warn('Failed to fetch address suggestions', err);
+  } finally {
+    addressLookupLoading.value = false;
+  }
+};
+
+const debouncedFetchAddressSuggestions = useDebounceFn(fetchAddressSuggestions, 400);
+
+const onAddressInput = () => {
+  addressSuggestActive.value = true;
+  debouncedFetchAddressSuggestions(createForm.value.address);
+};
+
+const selectAddressSuggestion = (item: any) => {
+  createForm.value.address = item.title?.text || '';
+  if (item.subtitle?.text) createForm.value.address += `, ${item.subtitle.text}`;
+  addressSuggestActive.value = false;
+  addressSuggestions.value = [];
+};
+
+const hideAddressSuggestions = () => {
+  setTimeout(() => {
+    addressSuggestActive.value = false;
+  }, 200);
+};
+
 // ── Create Lead ───────────────────────────────────────────────────────────────
 const openCreateModal = () => {
   Object.assign(createForm.value, { 
@@ -136,6 +179,7 @@ const openCreateModal = () => {
   phoneModelRef.value = '';
   existingCustomerId.value = null;
   foundCustomers.value = [];
+  addressSuggestions.value = [];
   showCreateModal.value = true;
 };
 
@@ -504,14 +548,34 @@ const scopeOptions: { value: Scope; label: string }[] = [
                   class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
               </div>
-              <div>
+              <div class="relative">
                 <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Адрес объекта</label>
-                <input
-                  v-model="createForm.address"
-                  type="text"
-                  placeholder="г. Минск, ул. ..."
-                  class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                />
+                <div class="relative">
+                  <input
+                    v-model="createForm.address"
+                    @input="onAddressInput"
+                    @blur="hideAddressSuggestions"
+                    type="text"
+                    placeholder="г. Минск, ул. ..."
+                    class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                  <div v-if="addressLookupLoading" class="absolute right-3 top-2.5">
+                    <span class="material-icons-round animate-spin text-teal-500 text-sm">refresh</span>
+                  </div>
+                </div>
+
+                <!-- Autocomplete Dropdown for Address -->
+                <div v-if="addressSuggestActive && addressSuggestions.length > 0" class="absolute z-10 w-full left-0 top-[100%] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-lg mt-1 max-h-48 overflow-y-auto">
+                  <button
+                    v-for="(sug, sidx) in addressSuggestions"
+                    :key="sidx"
+                    @click.prevent="selectAddressSuggestion(sug)"
+                    class="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-700 border-b border-slate-100 dark:border-slate-700 last:border-0"
+                  >
+                    <div class="text-sm font-semibold text-slate-800 dark:text-white">{{ sug.title?.text || sug.value }}</div>
+                    <div v-if="sug.subtitle?.text" class="text-xs text-slate-500 dark:text-slate-400">{{ sug.subtitle.text }}</div>
+                  </button>
+                </div>
               </div>
             </div>
           </template>
