@@ -1273,19 +1273,26 @@ class LeadsInboxListResponse(BaseModel):
     total: int
 
 
-# --- ONLINER IMPORT ---
+# --- CATALOG IMPORT (universal) ---
 
-class OnlinerImportPayload(BaseModel):
+class CatalogImportPayload(BaseModel):
+    """Universal import payload — accepts URLs from any supported source
+    (onliner.by, aircond.by, etc.).  ImporterService routes by domain."""
     urls: List[str]
     with_related: bool = False
     update_existing: bool = False
 
 
-class OnlinerImportResultResponse(BaseModel):
+class CatalogImportResultResponse(BaseModel):
     success_count: int
     error_count: int
     successes: List[str]
     errors: List[str]
+
+
+# Backward-compatible aliases for the legacy import-onliner endpoint
+OnlinerImportPayload = CatalogImportPayload
+OnlinerImportResultResponse = CatalogImportResultResponse
 
 
 # --- SETTINGS ---

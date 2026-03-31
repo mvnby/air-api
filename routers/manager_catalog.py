@@ -9,6 +9,7 @@ from core.manager_error_codes import BAD_REQUEST, CUSTOMER_NOT_FOUND, PRODUCT_NO
 from core.security import get_current_username
 from routers.manager_operation_ids import (
     BULK_ROUND_PRICE,
+    CATALOG_IMPORT,
     GET_ALL_TAGS,
     GET_MANAGER_CUSTOMERS,
     GET_MANAGER_CUSTOMER_DETAIL,
@@ -23,6 +24,8 @@ from routers.manager_operation_ids import (
 )
 from schemas import (
     BulkRoundRequest,
+    CatalogImportPayload,
+    CatalogImportResultResponse,
     ManagerActionMessageResponse,
     ManagerCatalogCustomerItemResponse,
     ManagerBulkRoundPriceResponse,
@@ -356,6 +359,34 @@ async def import_from_onliner(
         update_existing=payload.update_existing,
     )
     return OnlinerImportResultResponse(
+        success_count=len(results["success"]),
+        error_count=len(results["errors"]),
+        successes=results["success"],
+        errors=results["errors"],
+    )
+
+
+@router.post(
+    "/catalog/import",
+    response_model=CatalogImportResultResponse,
+    operation_id=CATALOG_IMPORT,
+)
+async def catalog_import(
+    payload: CatalogImportPayload,
+    _user: str = Depends(get_current_username),
+):
+    """
+    Universal product import endpoint.
+    Accepts URLs from any supported source (onliner.by, aircond.by, etc.).
+    ImporterService automatically routes each URL to the appropriate parser.
+    """
+    urls = [u.strip() for u in payload.urls if u.strip()]
+    results = await _importer.import_products_bulk(
+        urls,
+        with_related=payload.with_related,
+        update_existing=payload.update_existing,
+    )
+    return CatalogImportResultResponse(
         success_count=len(results["success"]),
         error_count=len(results["errors"]),
         successes=results["success"],

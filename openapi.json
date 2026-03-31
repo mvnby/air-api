@@ -2579,7 +2579,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/OnlinerImportPayload"
+                "$ref": "#/components/schemas/CatalogImportPayload"
               }
             }
           },
@@ -2591,7 +2591,54 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OnlinerImportResultResponse"
+                  "$ref": "#/components/schemas/CatalogImportResultResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/catalog/import": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Catalog Import",
+        "description": "Universal product import endpoint.\nAccepts URLs from any supported source (onliner.by, aircond.by, etc.).\nImporterService automatically routes each URL to the appropriate parser.",
+        "operationId": "catalog_import",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogImportPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogImportResultResponse"
                 }
               }
             }
@@ -7281,6 +7328,67 @@
         "type": "object",
         "title": "CartItemPayload"
       },
+      "CatalogImportPayload": {
+        "properties": {
+          "urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Urls"
+          },
+          "with_related": {
+            "type": "boolean",
+            "title": "With Related",
+            "default": false
+          },
+          "update_existing": {
+            "type": "boolean",
+            "title": "Update Existing",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "urls"
+        ],
+        "title": "CatalogImportPayload",
+        "description": "Universal import payload \u2014 accepts URLs from any supported source\n(onliner.by, aircond.by, etc.).  ImporterService routes by domain."
+      },
+      "CatalogImportResultResponse": {
+        "properties": {
+          "success_count": {
+            "type": "integer",
+            "title": "Success Count"
+          },
+          "error_count": {
+            "type": "integer",
+            "title": "Error Count"
+          },
+          "successes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Successes"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success_count",
+          "error_count",
+          "successes",
+          "errors"
+        ],
+        "title": "CatalogImportResultResponse"
+      },
       "CatalogResponse": {
         "properties": {
           "items": {
@@ -11769,66 +11877,6 @@
           "pages"
         ],
         "title": "Meta"
-      },
-      "OnlinerImportPayload": {
-        "properties": {
-          "urls": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Urls"
-          },
-          "with_related": {
-            "type": "boolean",
-            "title": "With Related",
-            "default": false
-          },
-          "update_existing": {
-            "type": "boolean",
-            "title": "Update Existing",
-            "default": false
-          }
-        },
-        "type": "object",
-        "required": [
-          "urls"
-        ],
-        "title": "OnlinerImportPayload"
-      },
-      "OnlinerImportResultResponse": {
-        "properties": {
-          "success_count": {
-            "type": "integer",
-            "title": "Success Count"
-          },
-          "error_count": {
-            "type": "integer",
-            "title": "Error Count"
-          },
-          "successes": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Successes"
-          },
-          "errors": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Errors"
-          }
-        },
-        "type": "object",
-        "required": [
-          "success_count",
-          "error_count",
-          "successes",
-          "errors"
-        ],
-        "title": "OnlinerImportResultResponse"
       },
       "OrderCustomerBrief": {
         "properties": {

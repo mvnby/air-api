@@ -2,7 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type OnlinerImportResultResponse = {
+export type CatalogImportResultResponse = {
     success_count: number;
     error_count: number;
     successes: Array<string>;

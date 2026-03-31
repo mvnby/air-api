@@ -8,6 +8,8 @@ import type { BulkGalleryAddRequest } from '../models/BulkGalleryAddRequest';
 import type { BulkGalleryDeleteRequest } from '../models/BulkGalleryDeleteRequest';
 import type { BulkRoundRequest } from '../models/BulkRoundRequest';
 import type { BulkSpecUpdate } from '../models/BulkSpecUpdate';
+import type { CatalogImportPayload } from '../models/CatalogImportPayload';
+import type { CatalogImportResultResponse } from '../models/CatalogImportResultResponse';
 import type { CommonGalleryImageResponse } from '../models/CommonGalleryImageResponse';
 import type { ManagerActionMessageResponse } from '../models/ManagerActionMessageResponse';
 import type { ManagerAuthStatusResponse } from '../models/ManagerAuthStatusResponse';
@@ -31,8 +33,6 @@ import type { ManagerMediaSetMainImageResponse } from '../models/ManagerMediaSet
 import type { ManagerMediaUploadLocalImagesResponse } from '../models/ManagerMediaUploadLocalImagesResponse';
 import type { ManagerNormalizeLegacySpecsResponse } from '../models/ManagerNormalizeLegacySpecsResponse';
 import type { ManagerTagGroupResponse } from '../models/ManagerTagGroupResponse';
-import type { OnlinerImportPayload } from '../models/OnlinerImportPayload';
-import type { OnlinerImportResultResponse } from '../models/OnlinerImportResultResponse';
 import type { ProductLocalStockPayload } from '../models/ProductLocalStockPayload';
 import type { ProductLocalStockResponse } from '../models/ProductLocalStockResponse';
 import type { ProductUpdate } from '../models/ProductUpdate';
@@ -336,15 +336,37 @@ export class ManagerService {
      * related models (sibling AC units linked on the same page).
      * Returns the count of successfully imported and failed products.
      * @param requestBody
-     * @returns OnlinerImportResultResponse Successful Response
+     * @returns CatalogImportResultResponse Successful Response
      * @throws ApiError
      */
     public static importOnliner(
-        requestBody: OnlinerImportPayload,
-    ): CancelablePromise<OnlinerImportResultResponse> {
+        requestBody: CatalogImportPayload,
+    ): CancelablePromise<CatalogImportResultResponse> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/catalog/import-onliner',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Catalog Import
+     * Universal product import endpoint.
+     * Accepts URLs from any supported source (onliner.by, aircond.by, etc.).
+     * ImporterService automatically routes each URL to the appropriate parser.
+     * @param requestBody
+     * @returns CatalogImportResultResponse Successful Response
+     * @throws ApiError
+     */
+    public static catalogImport(
+        requestBody: CatalogImportPayload,
+    ): CancelablePromise<CatalogImportResultResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/catalog/import',
             body: requestBody,
             mediaType: 'application/json',
             errors: {

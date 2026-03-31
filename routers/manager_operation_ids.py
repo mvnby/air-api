@@ -61,6 +61,7 @@ GET_DOC_TEMPLATES = "get_doc_templates"
 GET_MANAGER_CRM_HEALTH_REPORT = "get_manager_crm_health_report"
 GET_DASHBOARD_STATS = "get_dashboard_stats"
 IMPORT_ONLINER = "import_onliner"
+CATALOG_IMPORT = "catalog_import"
 
 GET_MANAGER_INSTALLERS = "get_manager_installers"
 CREATE_MANAGER_INSTALLER = "create_manager_installer"
@@ -197,4 +198,5 @@ ALL_MANAGER_OPERATION_IDS = (
     SUGGEST_SUPPLIER_OFFERS,
     BULK_CREATE_SUPPLIER_MAPPINGS,
     GET_DOC_TEMPLATES,
+    CATALOG_IMPORT,
 )

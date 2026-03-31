@@ -1,10 +1,15 @@
+import logging
 from typing import List, Optional
+
 from parsers.base import BaseParser
+from parsers.aircond import AircondParser
 from parsers.onliner import OnlinerParser
 from core.database import async_session_maker
-from models import Product
+from models import Product, ProductImage
 from services.image_service import ImageService
 from services.spec_normalizer import normalize_specs
+
+logger = logging.getLogger(__name__)
 
 
 def _augment_auto_slugs_with_wifi_specs(auto_slugs: List[str], specs: dict) -> List[str]:
@@ -25,7 +30,8 @@ class ImporterService:
     def __init__(self):
         # Register available parsers
         self.parsers: List[BaseParser] = [
-            OnlinerParser()
+            AircondParser(),
+            OnlinerParser(),
         ]
 
     def get_parser(self, url: str) -> Optional[BaseParser]:
@@ -118,11 +124,13 @@ class ImporterService:
                     main_image_url, 'products', slug
                 )
             
-            # --- STOP LEGACY GALLERY PARSING (Phase 48) ---
-            # We no longer download 'images' array from Onliner/Source.
-            # Only 'main_image' is kept.
-            # Gallery is filled manually via Manager App.
-            local_gallery_images = []
+            # --- Gallery images ---
+            # Phase 48: Onliner gallery download disabled (manual via Manager).
+            # Aircond.by returns save_gallery=True → persist to ProductImage.
+            save_gallery = data.get("save_gallery", False)
+            gallery_image_urls: List[str] = []
+            if save_gallery and not (existing and update_existing):
+                gallery_image_urls = data.get("images", [])
 
             normalized_specs = normalize_specs(
                 data.get('specs', {}),
@@ -160,6 +168,28 @@ class ImporterService:
                 session.add(product)
             await session.commit()
             await session.refresh(product)
+
+            # Persist gallery images into ProductImage (aircond.by)
+            if gallery_image_urls and product.id:
+                for img_url in gallery_image_urls:
+                    try:
+                        local_path = await ImageService.download_and_save_image(
+                            img_url, "products", product.slug or slug
+                        )
+                        if local_path:
+                            pi = ProductImage(
+                                product_id=product.id,
+                                url=local_path,
+                                is_installation_photo=False,
+                            )
+                            session.add(pi)
+                    except Exception as exc:
+                        logger.warning(
+                            "Gallery image save failed for %s: %s", img_url, exc
+                        )
+                if session.new:
+                    await session.commit()
+
             return {"product": product, "related_urls": data.get('related_urls', [])}
 
     async def import_products_bulk(
