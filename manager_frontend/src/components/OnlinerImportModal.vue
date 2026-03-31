@@ -30,7 +30,7 @@ const handleImport = async () => {
   importError.value = '';
 
   try {
-    const res = await api.importFromOnliner(urls, withRelated.value, updateExisting.value);
+    const res = await api.importProducts(urls, withRelated.value, updateExisting.value);
     result.value = res;
     if (res.success_count > 0) {
       emit('imported', res.success_count);
@@ -63,7 +63,7 @@ const handleClose = () => {
           <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700/50">
             <div class="flex items-center gap-3">
               <span class="material-icons-round text-teal-400 text-2xl">cloud_download</span>
-              <h2 class="text-lg font-bold text-white">Импорт из Onliner</h2>
+              <h2 class="text-lg font-bold text-white">Импорт товаров</h2>
             </div>
             <button
               @click="handleClose"
@@ -86,7 +86,7 @@ const handleClose = () => {
                 v-model="urlsText"
                 :disabled="loading"
                 rows="7"
-                placeholder="https://catalog.onliner.by/split_systems/midea/msmb-09hrn8-wifib&#10;https://catalog.onliner.by/split_systems/samsung/..."
+                placeholder="https://catalog.onliner.by/split_systems/midea/msmb-09hrn8-wifib&#10;https://aircond.by/split-sistemy/mdv-integra-pro-inverter-..."
                 class="w-full rounded-xl border border-slate-600 bg-slate-900 text-slate-100 placeholder-slate-600 text-sm px-4 py-3 resize-none outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all disabled:opacity-50"
               />
               <p class="text-xs text-slate-500 mt-1.5">
@@ -100,9 +100,9 @@ const handleClose = () => {
               :class="{ 'opacity-50 pointer-events-none': loading }"
             >
               <div>
-                <p class="text-sm font-medium text-slate-200">Добавить сопутствующие модели</p>
+                <p class="text-sm font-medium text-slate-200">Спарсить связанные</p>
                 <p class="text-xs text-slate-500 mt-0.5">
-                  Импортировать также связанные модели с каждой страницы
+                  Серию для Aircond.by / модификации для Onliner
                 </p>
               </div>
               <!-- Toggle switch -->

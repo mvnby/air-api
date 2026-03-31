@@ -22,6 +22,8 @@ export type { BulkSpecUpdate } from './models/BulkSpecUpdate';
 export type { CalendarEventResponse } from './models/CalendarEventResponse';
 export type { CalendarEventType } from './models/CalendarEventType';
 export type { CartItemPayload } from './models/CartItemPayload';
+export type { CatalogImportPayload } from './models/CatalogImportPayload';
+export type { CatalogImportResultResponse } from './models/CatalogImportResultResponse';
 export type { CatalogResponse } from './models/CatalogResponse';
 export type { CommonGalleryImageResponse } from './models/CommonGalleryImageResponse';
 export type { CustomerPayload } from './models/CustomerPayload';
@@ -99,8 +101,6 @@ export type { ManagerTariffListResponse } from './models/ManagerTariffListRespon
 export type { ManagerTariffResponse } from './models/ManagerTariffResponse';
 export type { ManagerTariffUpdatePayload } from './models/ManagerTariffUpdatePayload';
 export type { Meta } from './models/Meta';
-export type { OnlinerImportPayload } from './models/OnlinerImportPayload';
-export type { OnlinerImportResultResponse } from './models/OnlinerImportResultResponse';
 export type { OrderCustomerBrief } from './models/OrderCustomerBrief';
 export type { OrderPayload } from './models/OrderPayload';
 export type { OrderProductLineResponse } from './models/OrderProductLineResponse';

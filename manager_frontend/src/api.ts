@@ -475,26 +475,22 @@ export const api = {
         return await response.json();
     },
 
-    async importFromOnliner(urls: string[], withRelated: boolean, updateExisting: boolean): Promise<{
+    async importProducts(urls: string[], withRelated: boolean, updateExisting: boolean): Promise<{
         success_count: number;
         error_count: number;
         successes: string[];
         errors: string[];
     }> {
-        const response = await fetch('/api/manager/catalog/import-onliner', {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ urls, with_related: withRelated, update_existing: updateExisting }),
+        return await ManagerService.catalogImport({
+            urls,
+            with_related: withRelated,
+            update_existing: updateExisting,
         });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-            throw new Error(error.detail || 'Failed to import from Onliner');
-        }
-        return await response.json();
+    },
+
+    /** @deprecated Use importProducts() — kept for backward compatibility */
+    async importFromOnliner(urls: string[], withRelated: boolean, updateExisting: boolean) {
+        return await this.importProducts(urls, withRelated, updateExisting);
     },
 
     async getManagerTagGroups() {
