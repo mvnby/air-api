@@ -1,6 +1,8 @@
 import re
 from typing import Any, Dict, List, Optional, Sequence
 
+from services.tag_logic import extract_brand_name, extract_brand_slug
+
 # 1. Маппинг (Русский -> Системный)
 KEY_MAP = {
     # --- ОСНОВНОЕ ---
@@ -11,6 +13,9 @@ KEY_MAP = {
     "Цвет": "color",
     "Хладагент (фреон)": "freon_type",
     "Инверторная технология": "inverter",
+    "Бренд": "brand",
+    "Марка": "brand",
+    "Производитель": "brand",
     
     # --- УПРАВЛЕНИЕ ---
     "Wi-Fi": "wifi_ready",
@@ -359,6 +364,8 @@ def normalize_specs(
     keep_units: bool = True,
     wifi_tag_slugs: Optional[Sequence[str]] = None,
     strict_wifi_from_tags: bool = False,
+    title: Optional[str] = None,
+    auto_tag_slugs: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Normalizes a dictionary of specifications:
@@ -407,6 +414,15 @@ def normalize_specs(
         if not sys_key or sys_key in new_specs:
             continue
         new_specs[sys_key] = clean_value(sys_key, raw_val, keep_units=keep_units)
+
+    if not str(new_specs.get("brand", "")).strip():
+        inferred_brand = extract_brand_name(new_specs, title=title or "")
+        if inferred_brand:
+            new_specs["brand"] = inferred_brand
+
+    brand_slug = extract_brand_slug(new_specs, title=title or "")
+    if auto_tag_slugs is not None and brand_slug and brand_slug not in auto_tag_slugs:
+        auto_tag_slugs.append(brand_slug)
             
     return enrich_filter_keys(
         new_specs,

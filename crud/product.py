@@ -15,7 +15,7 @@ from models import Product, Tag, TagGroup, ProductTagLink
 from models.product_constants import BTU_MAPPING
 
 
-ALLOWED_FILTER_GROUP_SLUGS = {"brand", "series", "expert-badge"}
+ALLOWED_FILTER_GROUP_SLUGS = {"brand", "series", "expert-badge", "type", "category"}
 
 
 class ProductDAO:
@@ -156,20 +156,24 @@ class ProductDAO:
                     stmt = stmt.where(or_(fresh_air_expr == False, fresh_air_expr.is_(None)))
 
         if tag_slugs:
-            for slug in tag_slugs:
-                subq = (
+            normalized_slugs = [slug.strip().lower() for slug in tag_slugs if slug and slug.strip()]
+            # AND between groups, OR within each group.
+            for group_slug in sorted(ALLOWED_FILTER_GROUP_SLUGS):
+                group_subq = (
                     select(ProductTagLink.product_id)
                     .join(Tag, ProductTagLink.tag_id == Tag.id)
-                    .where(Tag.slug == slug)
-                    .where(Tag.group.has(TagGroup.slug.in_(ALLOWED_FILTER_GROUP_SLUGS)))
+                    .join(TagGroup, Tag.group_id == TagGroup.id)
+                    .where(Tag.slug.in_(normalized_slugs))
+                    .where(TagGroup.slug == group_slug)
                 )
-                allowed_slug_exists = (
+                group_slug_exists = (
                     select(Tag.id)
-                    .where(Tag.slug == slug)
-                    .where(Tag.group.has(TagGroup.slug.in_(ALLOWED_FILTER_GROUP_SLUGS)))
+                    .join(TagGroup, Tag.group_id == TagGroup.id)
+                    .where(Tag.slug.in_(normalized_slugs))
+                    .where(TagGroup.slug == group_slug)
                 )
-                # Backcompat: technical/legacy slugs should be ignored (not zero-result).
-                stmt = stmt.where(or_(~exists(allowed_slug_exists), Product.id.in_(subq)))
+                # Backcompat: unknown/legacy slugs should be ignored (not zero-result).
+                stmt = stmt.where(or_(~exists(group_slug_exists), Product.id.in_(group_subq)))
 
         return stmt
 

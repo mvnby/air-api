@@ -62,3 +62,15 @@ def test_dynamic_wifi_key_mapping_from_onliner_specs():
     assert specs["wifi_ready"] == "ready"
     assert specs["__filter_wifi"] is True
     assert specs["__filter_wifi_builtin"] is False
+
+
+def test_brand_normalization_and_auto_tag_slug_output():
+    auto_slugs = []
+    specs = normalize_specs(
+        {"Бренд": "TCL", "Тип кондиционера": "сплит-система"},
+        title="TCL Elite TAC-09",
+        auto_tag_slugs=auto_slugs,
+    )
+
+    assert specs["brand"] == "TCL"
+    assert "tcl" in auto_slugs

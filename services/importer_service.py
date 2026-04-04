@@ -1,13 +1,24 @@
 import logging
 from typing import List, Optional
 
+import slugify
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
 from parsers.base import BaseParser
 from parsers.aircond import AircondParser
 from parsers.onliner import OnlinerParser
 from core.database import async_session_maker
-from models import Product, ProductImage
+from models import Product, ProductImage, Tag, TagGroup
 from services.image_service import ImageService
 from services.spec_normalizer import normalize_specs
+from services.tag_logic import (
+    CATEGORY_TAG_TITLES,
+    detect_category_slug,
+    extract_brand_name,
+    extract_brand_slug,
+    get_auto_tags,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +35,73 @@ def _augment_auto_slugs_with_wifi_specs(auto_slugs: List[str], specs: dict) -> L
     elif wifi_state == "ready" and "wifi-ready" not in result:
         result.append("wifi-ready")
     return result
+
+
+async def _ensure_tag_group(
+    session,
+    *,
+    slug: str,
+    title: str,
+    allow_multiple: bool = True,
+    sort_order: int = 0,
+) -> TagGroup:
+    group = (
+        await session.execute(select(TagGroup).where(TagGroup.slug == slug))
+    ).scalar_one_or_none()
+    if group:
+        return group
+
+    group = TagGroup(
+        slug=slug,
+        title=title,
+        is_public=True,
+        allow_multiple=allow_multiple,
+        sort_order=sort_order,
+    )
+    session.add(group)
+    await session.flush()
+    return group
+
+
+async def _ensure_tag(
+    session,
+    *,
+    group: TagGroup,
+    slug: str,
+    title: str,
+    sort_order: int = 0,
+) -> Tag:
+    tag = (await session.execute(select(Tag).where(Tag.slug == slug))).scalar_one_or_none()
+    if tag:
+        changed = False
+        if tag.group_id != group.id:
+            tag.group_id = group.id
+            changed = True
+        if not tag.is_filter:
+            tag.is_filter = True
+            changed = True
+        if not tag.is_public:
+            tag.is_public = True
+            changed = True
+        if title and not tag.title:
+            tag.title = title
+            changed = True
+        if changed:
+            session.add(tag)
+            await session.flush()
+        return tag
+
+    tag = Tag(
+        slug=slug,
+        title=title,
+        group_id=group.id,
+        is_public=True,
+        is_filter=True,
+        sort_order=sort_order,
+    )
+    session.add(tag)
+    await session.flush()
+    return tag
 
 
 class ImporterService:
@@ -49,7 +127,6 @@ class ImporterService:
         url = url.strip().replace('\r', '').replace('\n', '')
         async with async_session_maker() as session:
             # 0. Check for duplicates (live products only)
-            from sqlmodel import select
             stmt = select(Product).where(Product.source_url == url)
             result = await session.execute(stmt)
             existing = result.scalar_one_or_none()
@@ -70,20 +147,67 @@ class ImporterService:
             # Resolve Categories/Tags
             tag_names = data.get('categories', [])
             tag_objects = []
-            
-            from models import Tag
-            import slugify
-            from sqlalchemy.orm import selectinload
-            from services.tag_logic import get_auto_tags
-            
-            # 1. Get Auto Tags (Slugs) based on metrics
+            title = data.get("title", "")
+
+            # 1. Get Auto Tags (Slugs) based on metrics/specs/title
             metrics = data.get('metrics', {})
-            auto_slugs = get_auto_tags(metrics, specs=data.get('specs', {}))
+            raw_specs = data.get("specs", {}) or {}
+            auto_slugs = get_auto_tags(metrics, specs=raw_specs, title=title)
             # Derive Wi-Fi technical tags from parsed specs so import preserves
             # "builtin" vs "ready" even before any manual manager edits.
-            auto_slugs = _augment_auto_slugs_with_wifi_specs(auto_slugs, data.get('specs', {}))
-            
-            # 2. Resolve Auto Tags by SLUG
+            auto_slugs = _augment_auto_slugs_with_wifi_specs(auto_slugs, raw_specs)
+
+            auto_tag_slugs_from_normalizer: List[str] = []
+            normalized_specs = normalize_specs(
+                raw_specs,
+                wifi_tag_slugs=[slug for slug in auto_slugs if slug in {"wifi-builtin", "wifi-ready"}],
+                strict_wifi_from_tags=False,
+                title=title,
+                auto_tag_slugs=auto_tag_slugs_from_normalizer,
+            )
+            for slug in auto_tag_slugs_from_normalizer:
+                if slug not in auto_slugs:
+                    auto_slugs.append(slug)
+
+            # Ensure core filter tags exist for brand/category.
+            category_slug = detect_category_slug(metrics=metrics, specs=normalized_specs, title=title)
+            if category_slug:
+                auto_slugs.append(category_slug)
+                category_group = await _ensure_tag_group(
+                    session,
+                    slug="category",
+                    title="Категория",
+                    allow_multiple=False,
+                    sort_order=20,
+                )
+                await _ensure_tag(
+                    session,
+                    group=category_group,
+                    slug=category_slug,
+                    title=CATEGORY_TAG_TITLES.get(category_slug, category_slug),
+                )
+
+            brand_slug = extract_brand_slug(specs=normalized_specs, title=title)
+            brand_title = extract_brand_name(specs=normalized_specs, title=title)
+            if brand_slug and brand_title:
+                auto_slugs.append(brand_slug)
+                brand_group = await _ensure_tag_group(
+                    session,
+                    slug="brand",
+                    title="Бренд",
+                    allow_multiple=False,
+                    sort_order=10,
+                )
+                await _ensure_tag(
+                    session,
+                    group=brand_group,
+                    slug=brand_slug,
+                    title=brand_title,
+                )
+
+            auto_slugs = list(dict.fromkeys(auto_slugs))
+
+            # 2. Resolve Auto Tags by slug
             for slug in auto_slugs:
                 stmt = select(Tag).options(selectinload(Tag.group)).where(Tag.slug == slug)
                 result = await session.execute(stmt)
@@ -131,12 +255,6 @@ class ImporterService:
             gallery_image_urls: List[str] = []
             if save_gallery and not (existing and update_existing):
                 gallery_image_urls = data.get("images", [])
-
-            normalized_specs = normalize_specs(
-                data.get('specs', {}),
-                wifi_tag_slugs=[tag.slug for tag in tag_objects if tag.slug in {"wifi-builtin", "wifi-ready"}],
-                strict_wifi_from_tags=False,
-            )
 
             if existing and update_existing:
                 # Re-import mode: refresh key business fields, keep photos/slug/title intact.

@@ -28,16 +28,16 @@ const hasWifiRaw = searchParams.get("has_wifi");
 const heatingMinRaw = searchParams.get("heating_min");
 const areaMinRaw = searchParams.get("area_min");
 let areaMaxRaw = searchParams.get("area_max");
-
-// Smart Default: if no area/inverter/tags specified, default to area_max=29
-if (tagSlugsRaw.length === 0 && !isInverterRaw && !hasWifiRaw && !heatingMinRaw && !areaMinRaw && !areaMaxRaw) {
-    areaMaxRaw = "29";
-}
+const categorySlugs = new Set(["cat-household", "cat-multi", "cat-industrial"]);
 
 const userTagSlugs = tagSlugsRaw
     .flatMap((value) => value.split(","))
     .map((s) => s.trim())
     .filter(Boolean);
+
+if (!userTagSlugs.some((slug) => categorySlugs.has(slug))) {
+    userTagSlugs.push("cat-household");
+}
 
 const parsedIsInverter =
     isInverterRaw === "true"
@@ -55,7 +55,7 @@ const parsedHasWifi =
 const parsedAreaMin = areaMinRaw ? parseInt(areaMinRaw, 10) : undefined;
 const parsedAreaMax = areaMaxRaw ? parseInt(areaMaxRaw, 10) : undefined;
 const parsedHeatingMin = heatingMinRaw ? parseInt(heatingMinRaw, 10) : undefined;
-const tag_slugs: string[] = [...userTagSlugs];
+const tag_slugs: string[] = [...new Set(userTagSlugs)];
 
 let canonicalPath = "/catalog";
 let robotsValue: string | undefined;
@@ -102,7 +102,7 @@ interface Product {
 
 const data = await getCatalog({
     page,
-    limit: 100,
+    limit: 20,
     sort,
     tag_slugs,
     is_inverter: parsedIsInverter,
@@ -112,7 +112,7 @@ const data = await getCatalog({
     area_max: parsedAreaMax,
 });
 const products = (data.items || []) as Product[];
-const meta = data.meta || { total: 0, page: 1, limit: 12, pages: 1 };
+const meta = data.meta || { total: 0, page: 1, limit: 20, pages: 1 };
 ---
 
 <Layout
@@ -141,8 +141,7 @@ const meta = data.meta || { total: 0, page: 1, limit: 12, pages: 1 };
                 return tags;
             };
 
-            const normalizeTags = (tags) =>
-                [...new Set(tags.filter((tag) => tag !== "wall"))].sort();
+            const normalizeTags = (tags) => [...new Set(tags)].sort();
 
             const sortRaw = sp.get("sort") || "newest";
             const allowedSorts = [

@@ -8,7 +8,7 @@ from sqlmodel import func, select
 from models import Product, Tag, TagGroup
 
 
-ALLOWED_FILTER_GROUP_SLUGS = {"brand", "series", "expert-badge"}
+ALLOWED_FILTER_GROUP_SLUGS = {"brand", "series", "expert-badge", "type", "category"}
 
 
 class ProductFilterService:

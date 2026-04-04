@@ -51,6 +51,7 @@ class ProductWriteService:
             wifi_tag_slugs = [tag.slug for tag in tag_rows if tag.slug in {"wifi-builtin", "wifi-ready"}]
 
         if "specs" in payload and payload["specs"] is not None:
+            existing_product = None
             if wifi_tag_slugs is None:
                 existing_product = await ProductDAO.get_by_id(session, product_id)
                 wifi_tag_slugs = [
@@ -58,10 +59,13 @@ class ProductWriteService:
                     for tag in (existing_product.tags or [])
                     if tag.slug in {"wifi-builtin", "wifi-ready"}
                 ] if existing_product else []
+            if existing_product is None and "title" not in payload:
+                existing_product = await ProductDAO.get_by_id(session, product_id)
             payload["specs"] = normalize_specs(
                 payload["specs"],
                 wifi_tag_slugs=wifi_tag_slugs,
                 strict_wifi_from_tags=False,
+                title=payload.get("title") or (existing_product.title if existing_product else ""),
             )
 
         product = await ProductDAO.update_full(session, product_id, payload, tag_ids)
