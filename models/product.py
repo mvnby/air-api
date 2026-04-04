@@ -75,6 +75,10 @@ class Product(SQLModel, table=True):
     order_links: List["OrderProductLink"] = Relationship(back_populates="product")
     supplier_mappings: List["ProductSupplierMapping"] = Relationship(back_populates="product")
     local_stocks: List["ProductLocalStock"] = Relationship(back_populates="product")
+    brand_id: Optional[int] = Field(default=None, foreign_key="brand.id", index=True)
+    series_id: Optional[int] = Field(default=None, foreign_key="product_series.id", index=True)
+    brand: Optional["Brand"] = Relationship(back_populates="products")
+    series: Optional["ProductSeries"] = Relationship(back_populates="products")
 
     specs: Dict[str, Any] = Field(default={}, sa_column=Column(JSON))
 

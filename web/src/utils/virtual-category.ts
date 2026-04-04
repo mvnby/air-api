@@ -85,7 +85,7 @@ export function buildCatalogQueryFromVirtual(
 ): CatalogQuery {
     return {
         page: 1,
-        limit: 100,
+        limit: 20,
         sort: config.filters.sort || DEFAULT_SORT,
         tag_slugs: [...(config.filters.tag_slugs || [])],
         is_inverter: config.filters.is_inverter,

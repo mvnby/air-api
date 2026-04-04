@@ -83,11 +83,16 @@ const filteredTagGroups = computed(() => {
 
 const isTagSelected = (id: number) => selectedTagIds.value.has(id);
 
-const toggleTag = (id: number) => {
-    if (selectedTagIds.value.has(id)) {
-        selectedTagIds.value.delete(id);
+const toggleTag = (tagId: number, group: TagGroupItem) => {
+    if (selectedTagIds.value.has(tagId)) {
+        selectedTagIds.value.delete(tagId);
     } else {
-        selectedTagIds.value.add(id);
+        if (!group.allow_multiple) {
+            for (const groupTag of group.tags) {
+                selectedTagIds.value.delete(groupTag.id);
+            }
+        }
+        selectedTagIds.value.add(tagId);
     }
 };
 
@@ -493,7 +498,7 @@ const unlinkSupplierOffer = async (offer: any) => {
                                         <button 
                                             v-for="tag in group.tags" 
                                             :key="tag.id"
-                                            @click="toggleTag(tag.id)"
+                                            @click="toggleTag(tag.id, group)"
                                             class="px-2.5 py-1 rounded-full text-xs font-semibold border cursor-pointer transition-all"
                                             :class="isTagSelected(tag.id) ? getSelectedColorClasses(group.color) : getColorClasses(group.color)"
                                         >

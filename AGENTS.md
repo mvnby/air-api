@@ -23,6 +23,11 @@ This file defines practical workflows and commands for contributors and coding a
   - New product functionality must be implemented in `manager_frontend/` + `routers/manager_*`.
   - Legacy SQLAdmin (`admin/`) is compatibility-only: bugfixes, regressions, and required maintenance.
   - Do not introduce net-new business features in legacy admin unless explicitly approved.
+- Frontend theme consistency (mandatory):
+  - For glass/panel/filter surfaces use global tokens from `web/src/assets/index.css` (`--panel-*` family).
+  - Do not hardcode light-only panel colors (`rgba(255,255,255,...)`, `#fff`) inside page/component styles.
+  - Before frontend PR handoff run `bash scripts/audit_theme_hardcodes.sh` and fix new violations in touched files.
+  - Keep detailed style rules in `docs/ui.md` and update it when adding new global design tokens.
 
 ## Commands
 
@@ -49,6 +54,7 @@ Run from `web/`:
 
 - Install deps: `npm install`
 - Dev server: `npm run dev`
+- Theme hardcode audit: `npm run audit:theme`
 - Build (includes API pre-check): `npm run build`
 - Preview build: `npm run preview`
 - API readiness check only: `npm run check-api`
@@ -144,6 +150,7 @@ Production server intentionally runs from Docker images only (no git checkout in
 2. Safe defaults:
    - `OPS_MODE=report_only`
    - `RUN_NORMALIZE_LEGACY=false`
+   - `RUN_BACKFILL_BRAND_SERIES=false`
    - `RUN_CLEANUP_LEGACY_LINKS=false`
    - `RUN_REPORT_LEGACY_LINKS=true`
    - `DRY_RUN=true`
@@ -152,6 +159,8 @@ Production server intentionally runs from Docker images only (no git checkout in
      - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/report_legacy_tag_links.py`
    - Normalize:
      - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/normalize_legacy.py`
+   - Backfill brand/series:
+     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/backfill_brand_series.py`
    - Cleanup dry-run:
      - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/cleanup_legacy_tag_links.py`
    - Cleanup execute (manual-only):

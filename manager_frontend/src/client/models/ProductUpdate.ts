@@ -9,6 +9,8 @@ export type ProductUpdate = {
     slug?: (string | null);
     specs?: (Record<string, any> | null);
     is_published?: (boolean | null);
+    brand_id?: (number | null);
+    series_id?: (number | null);
     tag_ids?: (Array<number> | null);
 };
 

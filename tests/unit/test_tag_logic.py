@@ -1,4 +1,4 @@
-from services.tag_logic import get_auto_tags
+from services.tag_logic import detect_category_slug, extract_brand_slug, get_auto_tags
 
 
 def test_get_auto_tags_skips_legacy_area_and_compressor_tags():
@@ -12,3 +12,44 @@ def test_get_auto_tags_skips_legacy_area_and_compressor_tags():
     assert "on-off" not in tags
     assert "winter-20" in tags
     assert "wall" in tags
+    assert "cat-household" in tags
+
+
+def test_get_auto_tags_extracts_multi_and_brand():
+    tags = get_auto_tags(
+        {"power_cooling": 5.2},
+        {
+            "Тип кондиционера": "мульти-сплит система",
+            "Бренд": "TCL",
+        },
+        title="Кондиционер TCL TAC-12",
+    )
+
+    assert "cat-multi" in tags
+    assert "tcl" in tags
+
+
+def test_detect_category_slug_for_semi_industrial():
+    slug = detect_category_slug(
+        metrics={},
+        specs={"Тип внутреннего блока": "кассетный"},
+        title="MDV кассетная сплит-система",
+    )
+    assert slug == "cat-industrial"
+
+
+def test_detect_category_slug_for_multi_inner_block():
+    slug = detect_category_slug(
+        metrics={},
+        specs={"Тип": "внутренний блок", "indoor_type": "настенный"},
+        title="Внутренний блок TCL BreezeIN 1.0",
+    )
+    assert slug == "cat-multi"
+
+
+def test_extract_brand_slug_falls_back_to_title_first_brand_word():
+    slug = extract_brand_slug(
+        specs={"Тип кондиционера": "сплит-система"},
+        title="Haier Coral DC-Inverter",
+    )
+    assert slug == "haier"

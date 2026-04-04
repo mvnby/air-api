@@ -1,8 +1,23 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import ProductCard from './ProductCard.vue';
-import { getCatalog } from '../utils/api';
+import { getCatalog, getFiltersConfig } from '../utils/api';
 import { getBrandConfig } from '../utils/brands';
+
+const BASE_LIMIT = 20;
+const CATEGORY_TABS = [
+  { slug: 'cat-household', title: 'Бытовые' },
+  { slug: 'cat-multi', title: 'Мульти-сплит' },
+  { slug: 'cat-industrial', title: 'Полупромышленные' },
+];
+const POWER_PRESETS = [
+  { key: 'area-20', title: 'до 20 м²', min: null, max: 20 },
+  { key: 'area-25', title: 'до 25 м²', min: null, max: 25 },
+  { key: 'area-35', title: 'до 35 м²', min: null, max: 35 },
+  { key: 'area-50', title: 'до 50 м²', min: null, max: 50 },
+  { key: 'area-70', title: 'до 70 м²', min: null, max: 70 },
+];
+const CATEGORY_SLUGS = new Set(CATEGORY_TABS.map((tab) => tab.slug));
 
 const props = defineProps({
   initialProducts: {
@@ -11,7 +26,7 @@ const props = defineProps({
   },
   initialMeta: {
     type: Object,
-    default: () => ({ total: 0, page: 1, limit: 12, pages: 1 })
+    default: () => ({ total: 0, page: 1, limit: BASE_LIMIT, pages: 1 })
   },
   forcedTitle: {
     type: String,
@@ -27,794 +42,1091 @@ const props = defineProps({
   }
 });
 
-const products = ref(props.initialProducts);
-const meta = ref(props.initialMeta);
-const loading = ref(false);
+const products = ref(props.initialProducts || []);
+const meta = ref(props.initialMeta || { total: 0, page: 1, limit: BASE_LIMIT, pages: 1 });
+
+const loadingInitial = ref(false);
+const loadingMore = ref(false);
+const loadingBrands = ref(false);
+
 const activeTags = ref([]);
+const searchQuery = ref('');
+const sort = ref('newest');
+const mobileSearchOpen = ref(false);
+const advancedFiltersOpen = ref(false);
+
+const currentAreaMin = ref(null);
+const currentAreaMax = ref(null);
 const currentIsInverter = ref(null);
 const currentHasWifi = ref(null);
 const currentHasFreshAir = ref(null);
 const currentHeatingMin = ref(null);
-const searchQuery = ref('');
+
+const availableBrands = ref([]);
 let searchDebounceTimeout = null;
 
-// --- URL & State Management ---
-
-const getParamsFromUrl = () => {
-    if (typeof window === 'undefined') return {};
-    const sp = new URLSearchParams(window.location.search);
-    const params = {};
-    const tags = [];
-    
-    // Parse tag_slugs properly (comma separated or multiple keys)
-    sp.getAll('tag_slugs').forEach(val => {
-        val.split(',').forEach(t => {
-            if (t.trim()) tags.push(t.trim());
-        });
-    });
-    
-    params.tag_slugs = tags;
-    params.page = sp.get('page') || 1;
-    params.sort = sp.get('sort') || 'newest';
-    params.area_min = sp.get('area_min') || null;
-    params.area_max = sp.get('area_max') || null;
-    params.has_wifi = sp.get('has_wifi') === 'true'
-      ? true
-      : sp.get('has_wifi') === 'false'
-        ? false
-        : null;
-    params.has_fresh_air = sp.get('has_fresh_air') === 'true'
-      ? true
-      : sp.get('has_fresh_air') === 'false'
-        ? false
-        : null;
-    params.heating_min = sp.get('heating_min') || null;
-    params.is_inverter = sp.get('is_inverter') === 'true'
-      ? true
-      : sp.get('is_inverter') === 'false'
-        ? false
-        : null;
-    params.q = sp.get('q') || '';
-    return params;
-};
-
-const currentAreaMin = ref(null);
-const currentAreaMax = ref(null);
 const lockedFilters = computed(() => props.lockedInitialFilters || null);
+const knownBrandSlugs = computed(() => new Set(availableBrands.value.map((brand) => brand.slug)));
+const activeCategorySlug = computed(() => activeTags.value.find((slug) => CATEGORY_SLUGS.has(slug)) || null);
+const activeBrandSlug = computed(() => activeTags.value.find((slug) => knownBrandSlugs.value.has(slug)) || null);
+const isHouseholdCategory = computed(() => activeCategorySlug.value === 'cat-household');
 
-const applyLockedState = () => {
-    if (!lockedFilters.value) return false;
-
-    const lockedTags = Array.isArray(lockedFilters.value.tag_slugs)
-        ? lockedFilters.value.tag_slugs
-        : [];
-    activeTags.value = [...lockedTags];
-    currentAreaMin.value = lockedFilters.value.area_min != null ? String(lockedFilters.value.area_min) : null;
-    currentAreaMax.value = lockedFilters.value.area_max != null ? String(lockedFilters.value.area_max) : null;
-    currentIsInverter.value = typeof lockedFilters.value.is_inverter === 'boolean' ? lockedFilters.value.is_inverter : null;
-    currentHasWifi.value = typeof lockedFilters.value.has_wifi === 'boolean' ? lockedFilters.value.has_wifi : null;
-    currentHasFreshAir.value = typeof lockedFilters.value.has_fresh_air === 'boolean' ? lockedFilters.value.has_fresh_air : null;
-    currentHeatingMin.value = lockedFilters.value.heating_min != null ? String(lockedFilters.value.heating_min) : null;
-    return true;
-};
-
-// Update activeTags and Area from URL
-const syncStateFromUrl = () => {
-    const params = getParamsFromUrl();
-    activeTags.value = params.tag_slugs || [];
-    currentIsInverter.value = params.is_inverter;
-    currentHasWifi.value = params.has_wifi;
-    currentHasFreshAir.value = params.has_fresh_air;
-    currentHeatingMin.value = params.heating_min;
-    searchQuery.value = params.q || '';
-    
-    // Only update area if they are present in URL, otherwise keep current (to support defaults)
-    if (params.area_min || params.area_max) {
-        currentAreaMin.value = params.area_min;
-        currentAreaMax.value = params.area_max;
-    } else if (
-        params.tag_slugs.length === 0 &&
-        params.is_inverter === null &&
-        params.has_wifi === null &&
-        params.has_fresh_air === null &&
-        params.heating_min === null &&
-        !params.q
-    ) {
-        // If NO filters in URL, try preset state for virtual pages before fallback default.
-        if (!applyLockedState()) {
-            currentAreaMin.value = null;
-            currentAreaMax.value = '29';
-        }
-    }
-};
-
-const fetchProducts = async () => {
-    loading.value = true;
-    try {
-        const params = getParamsFromUrl();
-
-        const apiParams = {
-            tag_slugs: params.tag_slugs,
-            page: params.page,
-            limit: 100,
-            sort: params.sort,
-            area_min: params.area_min,
-            area_max: params.area_max,
-            is_inverter: params.is_inverter,
-            has_wifi: params.has_wifi,
-            has_fresh_air: params.has_fresh_air,
-            heating_min: params.heating_min,
-            q: params.q,
-        };
-
-        const data = await getCatalog(apiParams);
-        products.value = data.items || [];
-        meta.value = data.meta || { total: 0, page: 1, limit: 12, pages: 1 };
-    } catch (e) {
-        console.error("Fetch error", e);
-    } finally {
-        loading.value = false;
-    }
-};
-
-const updateUrlAndFetch = () => {
-    const sp = new URLSearchParams(window.location.search);
-    
-    // Update tag_slugs
-    sp.delete('tag_slugs');
-    if (activeTags.value.length > 0) {
-        sp.set('tag_slugs', activeTags.value.join(','));
-    }
-
-    // Update area
-    sp.delete('area_min');
-    sp.delete('area_max');
-    if (currentAreaMin.value) sp.set('area_min', currentAreaMin.value);
-    if (currentAreaMax.value) sp.set('area_max', currentAreaMax.value);
-
-    // Update JSONB/column filters
-    sp.delete('is_inverter');
-    sp.delete('has_wifi');
-    sp.delete('has_fresh_air');
-    sp.delete('heating_min');
-    if (currentIsInverter.value !== null) sp.set('is_inverter', String(currentIsInverter.value));
-    if (currentHasWifi.value !== null) sp.set('has_wifi', String(currentHasWifi.value));
-    if (currentHasFreshAir.value !== null) sp.set('has_fresh_air', String(currentHasFreshAir.value));
-    if (currentHeatingMin.value !== null) sp.set('heating_min', String(currentHeatingMin.value));
-    
-    sp.delete('q');
-    if (searchQuery.value.trim()) sp.set('q', searchQuery.value.trim());
-    
-    const newUrl = `${window.location.pathname}?${sp.toString()}`;
-    window.history.pushState({}, '', newUrl);
-    fetchProducts();
-};
-
-const onSearchInput = () => {
-    // If user is typing, clear other filters
-    if (searchQuery.value && searchQuery.value.trim().length > 0) {
-        currentAreaMin.value = null;
-        currentAreaMax.value = null;
-        activeTags.value = [];
-        currentIsInverter.value = null;
-        currentHasWifi.value = null;
-        currentHasFreshAir.value = null;
-        currentHeatingMin.value = null;
-    }
-
-    if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout);
-    searchDebounceTimeout = setTimeout(() => {
-        const currentSp = new URLSearchParams(window.location.search);
-        currentSp.set('page', '1');
-        const newUrl = `${window.location.pathname}?${currentSp.toString()}`;
-        window.history.replaceState({}, '', newUrl);
-        
-        updateUrlAndFetch();
-    }, 500);
-};
-
-// --- Filter Actions ---
-
-const isTagActive = (slug) => activeTags.value.includes(slug);
-
-const toggleTag = (slug) => {
-    if (activeTags.value.includes(slug)) {
-        activeTags.value = activeTags.value.filter(t => t !== slug);
-    } else {
-        activeTags.value.push(slug);
-    }
-    // Reset page to 1
-    const sp = new URLSearchParams(window.location.search);
-    sp.set('page', '1');
-    const newUrl = `${window.location.pathname}?${sp.toString()}`;
-    window.history.replaceState({}, '', newUrl); // update temp URL before main update
-    
-    updateUrlAndFetch();
-};
-
-const toggleBooleanFilter = (key) => {
-    if (key === 'is_inverter') {
-        currentIsInverter.value = currentIsInverter.value === true ? null : true;
-    } else if (key === 'has_wifi') {
-        currentHasWifi.value = currentHasWifi.value === true ? null : true;
-    } else if (key === 'has_fresh_air') {
-        currentHasFreshAir.value = currentHasFreshAir.value === true ? null : true;
-    }
-
-    const sp = new URLSearchParams(window.location.search);
-    sp.set('page', '1');
-    const newUrl = `${window.location.pathname}?${sp.toString()}`;
-    window.history.replaceState({}, '', newUrl);
-    updateUrlAndFetch();
-};
-
-const toggleHeatingFilter = () => {
-    currentHeatingMin.value = currentHeatingMin.value ? null : '-20';
-    const sp = new URLSearchParams(window.location.search);
-    sp.set('page', '1');
-    const newUrl = `${window.location.pathname}?${sp.toString()}`;
-    window.history.replaceState({}, '', newUrl);
-    updateUrlAndFetch();
-};
-
-const goToPage = (p) => {
-    const sp = new URLSearchParams(window.location.search);
-    sp.set('page', p);
-    const newUrl = `${window.location.pathname}?${sp.toString()}`;
-    window.history.pushState({}, '', newUrl);
-    fetchProducts();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-};
-
-const setAreaFilter = (min, max) => {
-    currentAreaMin.value = min;
-    currentAreaMax.value = max;
-    
-    const sp = new URLSearchParams(window.location.search);
-    sp.set('page', '1');
-    const newUrl = `${window.location.pathname}?${sp.toString()}`;
-    window.history.replaceState({}, '', newUrl);
-
-    updateUrlAndFetch();
-};
-
-onMounted(() => {
-    const sp = new URLSearchParams(window.location.search);
-    const hasFilters = sp.has('tag_slugs') || sp.has('area_min') || sp.has('area_max') || sp.has('is_inverter') || sp.has('has_wifi') || sp.has('has_fresh_air') || sp.has('heating_min');
-    
-    syncStateFromUrl();
-    
-    if (window.location.search && hasFilters) {
-        fetchProducts();
-    } else if (!hasFilters) {
-        // If no filters, we already set the default in syncStateFromUrl.
-        // But we might need to fetch if Astro didn't.
-        // Actually, Astro SHOULD have fetched with area_max=29.
-        // Let's verify by fetching if products are empty or if we want to be sure.
-        // But to avoid double fetch on landing, we can skip it if initialProducts is present.
-    }
+const activePowerPresetKey = computed(() => {
+  const min = currentAreaMin.value === null || currentAreaMin.value === undefined || currentAreaMin.value === ''
+    ? null
+    : Number(currentAreaMin.value);
+  const max = currentAreaMax.value === null || currentAreaMax.value === undefined || currentAreaMax.value === ''
+    ? null
+    : Number(currentAreaMax.value);
+  const found = POWER_PRESETS.find((preset) => preset.min === min && preset.max === max);
+  return found?.key || null;
 });
 
-// Computed active states for complex buttons
-const isHeatingActive = computed(() => {
-    return currentHeatingMin.value !== null;
-});
-
-const isInverterActive = computed(() => currentIsInverter.value === true);
-const isWifiActive = computed(() => currentHasWifi.value === true);
-const isFreshAirActive = computed(() => currentHasFreshAir.value === true);
-
-const isAreaActive = (min, max) => {
-    return currentAreaMin.value == min && currentAreaMax.value == max;
-};
+const hasActiveAdvancedFilters = computed(() => (
+  sort.value !== 'newest'
+  || currentIsInverter.value !== null
+  || currentHasWifi.value !== null
+  || currentHasFreshAir.value !== null
+  || currentHeatingMin.value !== null
+));
 
 const pageTitle = computed(() => {
-    if (props.forcedTitle) return props.forcedTitle;
-    if (isAreaActive(null, '29')) return "Кондиционеры для небольших помещений (до 25 м²)";
-    if (isAreaActive('30', '39')) return "Кондиционеры для средних помещений (до 35 м²)";
-    if (isAreaActive('40', '59')) return "Кондиционеры для больших помещений (до 50 м²)";
-    if (isAreaActive('60', null)) return "Мощные кондиционеры (от 60 м²)";
-    return "Каталог кондиционеров в Витебске";
+  if (props.forcedTitle) return props.forcedTitle;
+  if (activeCategorySlug.value === 'cat-multi') return 'Мульти-сплит системы';
+  if (activeCategorySlug.value === 'cat-industrial') return 'Полупромышленные кондиционеры';
+  return 'Бытовые кондиционеры';
 });
 
 const pageDescription = computed(() => {
-    if (props.forcedDescription) return props.forcedDescription;
-    if (isAreaActive(null, '29')) return "Тихие и энергоэффективные модели, идеально подходящие для спален и детских комнат.";
-    if (isAreaActive('40', '59')) return "Производительные сплит-системы для просторных гостиных и офисов.";
-    return "Современные системы кондиционирования для идеального климата в вашем доме и офисе.";
+  if (props.forcedDescription) return props.forcedDescription;
+  if (activeCategorySlug.value === 'cat-multi') {
+    return 'Системы с одним наружным блоком и несколькими внутренними для гибкого зонирования.';
+  }
+  if (activeCategorySlug.value === 'cat-industrial') {
+    return 'Кассетные, канальные и напольно-потолочные решения для коммерческих и сложных объектов.';
+  }
+  return 'Настенные сплит-системы для квартиры и дома с удобной фильтрацией по брендам.';
 });
 
-const groupedProducts = computed(() => {
-    const groups = {};
-    
-    products.value.forEach(product => {
-        // Find brand tag
-        const brandTag = product.tags?.find(t => 
-            t.group?.slug === 'brand' || t.group_slug === 'brand'
-        );
-        
-        const brandName = brandTag ? brandTag.title : 'Другие бренды';
-        const brandSlug = brandTag ? brandTag.slug : 'other';
-        const brandSortOrder = brandTag ? (brandTag.sort_order ?? 999) : 1000;
-        
-        if (!groups[brandName]) {
-            groups[brandName] = {
-                brandName,
-                brandSlug,
-                brandSortOrder,
-                config: getBrandConfig(brandSlug),
-                items: []
-            };
-        }
-        groups[brandName].items.push(product);
-    });
-    
-    // Sort products inside each brand by price
-    Object.values(groups).forEach(group => {
-        group.items.sort((a, b) => (a.price || 0) - (b.price || 0));
-    });
-    
-    // Sort brands by sort_order, then by name
-    return Object.values(groups).sort((a, b) => {
-        if (a.brandSortOrder !== b.brandSortOrder) {
-            return a.brandSortOrder - b.brandSortOrder;
-        }
-        return a.brandName.localeCompare(b.brandName);
-    });
+const hasMore = computed(() => {
+  const currentPage = Number(meta.value?.page || 1);
+  const totalPages = Number(meta.value?.pages || 1);
+  return currentPage < totalPages;
 });
 
+const getParamsFromUrl = () => {
+  if (typeof window === 'undefined') return null;
+  const sp = new URLSearchParams(window.location.search);
+
+  const tags = [];
+  sp.getAll('tag_slugs').forEach((value) => {
+    value.split(',').forEach((tag) => {
+      const clean = tag.trim();
+      if (clean) tags.push(clean);
+    });
+  });
+
+  return {
+    page: Number.parseInt(sp.get('page') || '1', 10) || 1,
+    sort: sp.get('sort') || 'newest',
+    q: sp.get('q') || '',
+    tag_slugs: tags,
+    area_min: sp.get('area_min') || null,
+    area_max: sp.get('area_max') || null,
+    is_inverter: sp.get('is_inverter') === 'true'
+      ? true
+      : sp.get('is_inverter') === 'false'
+        ? false
+        : null,
+    has_wifi: sp.get('has_wifi') === 'true'
+      ? true
+      : sp.get('has_wifi') === 'false'
+        ? false
+        : null,
+    has_fresh_air: sp.get('has_fresh_air') === 'true'
+      ? true
+      : sp.get('has_fresh_air') === 'false'
+        ? false
+        : null,
+    heating_min: sp.get('heating_min') || null,
+  };
+};
+
+const applyLockedFilters = (params) => {
+  if (!lockedFilters.value) return params;
+
+  const merged = { ...params };
+  const lockedTagSlugs = Array.isArray(lockedFilters.value.tag_slugs)
+    ? lockedFilters.value.tag_slugs
+    : [];
+
+  merged.tag_slugs = [...new Set([...(params.tag_slugs || []), ...lockedTagSlugs])];
+
+  const scalarKeys = [
+    'area_min',
+    'area_max',
+    'is_inverter',
+    'has_wifi',
+    'has_fresh_air',
+    'heating_min',
+    'sort',
+  ];
+
+  scalarKeys.forEach((key) => {
+    if (lockedFilters.value[key] !== undefined && lockedFilters.value[key] !== null) {
+      merged[key] = lockedFilters.value[key];
+    }
+  });
+
+  return merged;
+};
+
+const syncStateFromUrl = () => {
+  const params = getParamsFromUrl();
+  if (!params) return;
+
+  activeTags.value = [...params.tag_slugs];
+  searchQuery.value = params.q;
+  sort.value = params.sort;
+
+  currentAreaMin.value = params.area_min;
+  currentAreaMax.value = params.area_max;
+  currentIsInverter.value = params.is_inverter;
+  currentHasWifi.value = params.has_wifi;
+  currentHasFreshAir.value = params.has_fresh_air;
+  currentHeatingMin.value = params.heating_min;
+
+  if (!activeTags.value.some((slug) => CATEGORY_SLUGS.has(slug))) {
+    const lockedCategory = (Array.isArray(lockedFilters.value?.tag_slugs)
+      ? lockedFilters.value.tag_slugs
+      : []
+    ).find((slug) => CATEGORY_SLUGS.has(slug));
+
+    activeTags.value.push(lockedCategory || 'cat-household');
+  }
+};
+
+const buildApiParams = (page = 1) => {
+  const base = {
+    page,
+    limit: BASE_LIMIT,
+    sort: sort.value,
+    tag_slugs: [...activeTags.value],
+    q: searchQuery.value.trim() || undefined,
+    area_min: currentAreaMin.value || undefined,
+    area_max: currentAreaMax.value || undefined,
+    is_inverter: currentIsInverter.value,
+    has_wifi: currentHasWifi.value,
+    has_fresh_air: currentHasFreshAir.value,
+    heating_min: currentHeatingMin.value || undefined,
+  };
+
+  return applyLockedFilters(base);
+};
+
+const syncUrlFromState = (page = 1, { replace = false } = {}) => {
+  if (typeof window === 'undefined') return;
+
+  const params = buildApiParams(page);
+  const sp = new URLSearchParams();
+
+  if (params.tag_slugs && params.tag_slugs.length > 0) {
+    sp.set('tag_slugs', params.tag_slugs.join(','));
+  }
+  if (page > 1) sp.set('page', String(page));
+  if (params.sort && params.sort !== 'newest') sp.set('sort', params.sort);
+  if (params.q) sp.set('q', params.q);
+
+  if (params.area_min !== undefined) sp.set('area_min', String(params.area_min));
+  if (params.area_max !== undefined) sp.set('area_max', String(params.area_max));
+  if (params.is_inverter !== null && params.is_inverter !== undefined) sp.set('is_inverter', String(params.is_inverter));
+  if (params.has_wifi !== null && params.has_wifi !== undefined) sp.set('has_wifi', String(params.has_wifi));
+  if (params.has_fresh_air !== null && params.has_fresh_air !== undefined) sp.set('has_fresh_air', String(params.has_fresh_air));
+  if (params.heating_min !== undefined) sp.set('heating_min', String(params.heating_min));
+
+  const query = sp.toString();
+  const newUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
+  if (replace) {
+    window.history.replaceState({}, '', newUrl);
+  } else {
+    window.history.pushState({}, '', newUrl);
+  }
+};
+
+const fetchProducts = async ({ page = 1, append = false } = {}) => {
+  if (append) {
+    loadingMore.value = true;
+  } else {
+    loadingInitial.value = true;
+  }
+
+  try {
+    const apiParams = buildApiParams(page);
+    const data = await getCatalog(apiParams);
+
+    const incomingItems = data.items || [];
+    if (append) {
+      const seen = new Set(products.value.map((item) => item.id));
+      const merged = [...products.value];
+      incomingItems.forEach((item) => {
+        if (!seen.has(item.id)) {
+          merged.push(item);
+          seen.add(item.id);
+        }
+      });
+      products.value = merged;
+    } else {
+      products.value = incomingItems;
+    }
+
+    meta.value = data.meta || { total: 0, page: 1, limit: BASE_LIMIT, pages: 1 };
+  } catch (error) {
+    console.error('Fetch catalog failed', error);
+  } finally {
+    loadingInitial.value = false;
+    loadingMore.value = false;
+  }
+};
+
+const updateBrandsFallbackFromProducts = () => {
+  if (availableBrands.value.length > 0) return;
+
+  const acc = new Map();
+  products.value.forEach((product) => {
+    const brandTag = (product.tags || []).find((tag) =>
+      (tag.group?.slug === 'brand' || tag.group_slug === 'brand') && tag.slug
+    );
+    if (!brandTag) return;
+
+    if (!acc.has(brandTag.slug)) {
+      acc.set(brandTag.slug, {
+        slug: brandTag.slug,
+        title: brandTag.title,
+        sort_order: brandTag.sort_order ?? 999,
+      });
+    }
+  });
+
+  availableBrands.value = [...acc.values()].sort((a, b) => {
+    if ((a.sort_order ?? 999) !== (b.sort_order ?? 999)) {
+      return (a.sort_order ?? 999) - (b.sort_order ?? 999);
+    }
+    return (a.title || '').localeCompare(b.title || '');
+  });
+};
+
+const loadBrands = async () => {
+  loadingBrands.value = true;
+  try {
+    const filters = await getFiltersConfig();
+    availableBrands.value = (filters?.brands || []).map((brand) => ({
+      ...brand,
+      sort_order: brand.sort_order ?? 999,
+    }));
+  } catch (error) {
+    console.error('Failed to load brands', error);
+  } finally {
+    loadingBrands.value = false;
+    updateBrandsFallbackFromProducts();
+  }
+};
+
+const setCategory = async (categorySlug) => {
+  activeTags.value = activeTags.value.filter((slug) => !CATEGORY_SLUGS.has(slug));
+  activeTags.value.push(categorySlug);
+  if (categorySlug !== 'cat-household') {
+    currentAreaMin.value = null;
+    currentAreaMax.value = null;
+  }
+
+  syncUrlFromState(1);
+  await fetchProducts({ page: 1, append: false });
+};
+
+const toggleBrand = async (brandSlug) => {
+  const brandSet = knownBrandSlugs.value;
+  if (brandSlug === '__all__') {
+    activeTags.value = activeTags.value.filter((slug) => !brandSet.has(slug));
+    syncUrlFromState(1);
+    await fetchProducts({ page: 1, append: false });
+    return;
+  }
+
+  const isActive = activeBrandSlug.value === brandSlug;
+
+  activeTags.value = activeTags.value.filter((slug) => !brandSet.has(slug));
+  if (!isActive) {
+    activeTags.value.push(brandSlug);
+  }
+
+  syncUrlFromState(1);
+  await fetchProducts({ page: 1, append: false });
+};
+
+const loadMore = async () => {
+  if (!hasMore.value || loadingMore.value) return;
+  const nextPage = Number(meta.value?.page || 1) + 1;
+  syncUrlFromState(nextPage);
+  await fetchProducts({ page: nextPage, append: true });
+};
+
+const setPowerPreset = async (preset) => {
+  if (activePowerPresetKey.value === preset.key) {
+    currentAreaMin.value = null;
+    currentAreaMax.value = null;
+  } else {
+    currentAreaMin.value = preset.min;
+    currentAreaMax.value = preset.max;
+  }
+
+  syncUrlFromState(1);
+  await fetchProducts({ page: 1, append: false });
+};
+
+const toggleBooleanFilter = async (key, value) => {
+  const map = {
+    is_inverter: currentIsInverter,
+    has_wifi: currentHasWifi,
+    has_fresh_air: currentHasFreshAir,
+  };
+  const target = map[key];
+  if (!target) return;
+
+  target.value = target.value === value ? null : value;
+  syncUrlFromState(1);
+  await fetchProducts({ page: 1, append: false });
+};
+
+const setHeatingMin = async (value) => {
+  currentHeatingMin.value = currentHeatingMin.value === value ? null : value;
+  syncUrlFromState(1);
+  await fetchProducts({ page: 1, append: false });
+};
+
+const resetAdvancedFilters = async () => {
+  sort.value = 'newest';
+  currentIsInverter.value = null;
+  currentHasWifi.value = null;
+  currentHasFreshAir.value = null;
+  currentHeatingMin.value = null;
+  if (!isHouseholdCategory.value) {
+    currentAreaMin.value = null;
+    currentAreaMax.value = null;
+  }
+  syncUrlFromState(1);
+  await fetchProducts({ page: 1, append: false });
+};
+
+const onSortChange = async () => {
+  syncUrlFromState(1);
+  await fetchProducts({ page: 1, append: false });
+};
+
+const onSearchInput = () => {
+  if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout);
+  searchDebounceTimeout = setTimeout(async () => {
+    syncUrlFromState(1, { replace: true });
+    await fetchProducts({ page: 1, append: false });
+  }, 450);
+};
+
+onMounted(async () => {
+  syncStateFromUrl();
+  await loadBrands();
+
+  const currentMetaLimit = Number(props.initialMeta?.limit || BASE_LIMIT);
+  const urlPage = Number(getParamsFromUrl()?.page || 1);
+
+  if (!props.initialProducts?.length || currentMetaLimit !== BASE_LIMIT || urlPage > 1) {
+    await fetchProducts({ page: Math.max(1, urlPage), append: false });
+  }
+});
 </script>
 
 <template>
-  <div>
-    <!-- Dynamic Header -->
+  <div class="catalog-shell">
     <header class="catalog-header">
+      <div class="header-top">
         <div class="breadcrumb">
-            <a href="/">Главная</a>
-            <span class="sep">/</span>
-            <span>Каталог</span>
+          <a href="/">Главная</a>
+          <span class="sep">/</span>
+          <span>Каталог</span>
         </div>
-        <h1 class="gradient-text">{{ pageTitle }}</h1>
-        <p style="max-width: 700px; color: var(--text-muted); min-height: 3em;">
-            {{ pageDescription }}
-        </p>
+
+        <div class="search-input-wrapper header-search catalog-desktop-only">
+          <span class="material-icons-round search-icon">search</span>
+          <input
+            v-model="searchQuery"
+            type="text"
+            class="search-input"
+            placeholder="Поиск по модели, бренду, характеристике"
+            @input="onSearchInput"
+          />
+        </div>
+
+        <button
+          class="search-toggle catalog-mobile-only"
+          :class="{ active: mobileSearchOpen }"
+          @click="mobileSearchOpen = !mobileSearchOpen"
+          aria-label="Открыть поиск"
+          type="button"
+        >
+          <span class="material-icons-round">{{ mobileSearchOpen ? 'close' : 'search' }}</span>
+        </button>
+      </div>
+
+      <div v-if="mobileSearchOpen" class="search-input-wrapper header-search catalog-mobile-only mobile-search">
+        <span class="material-icons-round search-icon">search</span>
+        <input
+          v-model="searchQuery"
+          type="text"
+          class="search-input"
+          placeholder="Поиск по модели, бренду, характеристике"
+          @input="onSearchInput"
+        />
+      </div>
+
+      <h1 class="gradient-text">{{ pageTitle }}</h1>
+      <p class="header-description">{{ pageDescription }}</p>
     </header>
 
-    <!-- Search Bar -->
-    <div class="search-container">
-        <div class="search-input-wrapper">
-             <span class="material-icons-round search-icon">search</span>
-             <input 
-                type="text" 
-                v-model="searchQuery" 
-                @input="onSearchInput"
-                placeholder="Поиск (например: LG, инвертор, 25 м²)"
-                class="search-input"
-             />
-             <button v-if="searchQuery" @click="searchQuery = ''; onSearchInput()" class="clear-search">
-                <span class="material-icons-round">close</span>
-             </button>
+    <section class="glass-panel category-panel">
+      <div class="section-label">Категория</div>
+      <div class="category-tabs">
+        <button
+          v-for="tab in CATEGORY_TABS"
+          :key="tab.slug"
+          class="category-tab"
+          :class="{ active: activeCategorySlug === tab.slug }"
+          @click="setCategory(tab.slug)"
+        >
+          {{ tab.title }}
+        </button>
+      </div>
+    </section>
+
+    <section class="glass-panel brand-panel">
+      <div class="section-head">
+        <div class="section-label">Бренд</div>
+        <div v-if="loadingBrands" class="label-hint">Обновляем список...</div>
+      </div>
+      <div class="brand-strip">
+        <button
+          class="brand-pill"
+          :class="{ active: activeBrandSlug === null }"
+          @click="toggleBrand('__all__')"
+        >
+          Все бренды
+        </button>
+
+        <button
+          v-for="brand in availableBrands"
+          :key="brand.slug"
+          class="brand-pill"
+          :class="{ active: activeBrandSlug === brand.slug }"
+          @click="toggleBrand(brand.slug)"
+        >
+          <img
+            v-if="getBrandConfig(brand.slug).logo"
+            :src="getBrandConfig(brand.slug).logo"
+            :alt="brand.title"
+            class="brand-pill-logo"
+          />
+          <span>{{ brand.title }}</span>
+        </button>
+      </div>
+    </section>
+
+    <section v-if="isHouseholdCategory" class="glass-panel quick-power-panel">
+      <div class="section-label">Мощность</div>
+      <div class="quick-chip-row">
+        <button
+          class="quick-chip"
+          :class="{ active: activePowerPresetKey === null }"
+          @click="setPowerPreset({ key: '__all__', min: null, max: null })"
+        >
+          Любая
+        </button>
+        <button
+          v-for="preset in POWER_PRESETS"
+          :key="preset.key"
+          class="quick-chip"
+          :class="{ active: activePowerPresetKey === preset.key }"
+          @click="setPowerPreset(preset)"
+        >
+          {{ preset.title }}
+        </button>
+      </div>
+    </section>
+
+    <section class="filters-toolbar">
+      <button class="filters-toggle-btn" type="button" @click="advancedFiltersOpen = !advancedFiltersOpen">
+        <span class="material-icons-round">tune</span>
+        <span>{{ advancedFiltersOpen ? 'Скрыть фильтры' : 'Фильтры' }}</span>
+      </button>
+      <button
+        v-if="hasActiveAdvancedFilters"
+        type="button"
+        class="filters-reset-btn"
+        @click="resetAdvancedFilters"
+      >
+        Сбросить
+      </button>
+    </section>
+
+    <transition name="fade-up">
+      <section v-if="advancedFiltersOpen" class="glass-panel advanced-panel">
+        <div class="advanced-row">
+          <label class="control-label" for="catalog-sort">Сортировка</label>
+          <select id="catalog-sort" v-model="sort" class="filters-select" @change="onSortChange">
+            <option value="newest">Сначала новые</option>
+            <option value="price_asc">Сначала дешевле</option>
+            <option value="price_desc">Сначала дороже</option>
+          </select>
         </div>
-    </div>
 
-    <!-- Area Selection (Primary Filter Row) -->
-    <div class="area-filters">
-        <div class="filter-label">Площадь помещения:</div>
-        <div class="chips-row">
-            <button 
-                class="chip" 
-                :class="{ active: isAreaActive(null, '29') }"
-                @click="setAreaFilter(null, '29')"
+        <div class="advanced-row">
+          <div class="control-label">Тип компрессора</div>
+          <div class="quick-chip-row">
+            <button
+              class="quick-chip"
+              :class="{ active: currentIsInverter === true }"
+              @click="toggleBooleanFilter('is_inverter', true)"
             >
-                До 25 м²
+              Инвертор
             </button>
-            <button 
-                class="chip" 
-                :class="{ active: isAreaActive('30', '39') }"
-                @click="setAreaFilter('30', '39')"
+            <button
+              class="quick-chip"
+              :class="{ active: currentIsInverter === false }"
+              @click="toggleBooleanFilter('is_inverter', false)"
             >
-                До 35 м²
+              On/Off
             </button>
-            <button 
-                class="chip" 
-                :class="{ active: isAreaActive('40', '59') }"
-                @click="setAreaFilter('40', '59')"
-            >
-                До 50 м²
-            </button>
-            <button 
-                class="chip" 
-                :class="{ active: isAreaActive('60', null) }"
-                @click="setAreaFilter('60', null)"
-            >
-                60+ м²
-            </button>
-            <button 
-                class="chip" 
-                :class="{ active: isAreaActive(null, null) }"
-                @click="setAreaFilter(null, null)"
-            >
-                Все
-            </button>
+          </div>
         </div>
+
+        <div class="advanced-row">
+          <div class="control-label">Дополнительно</div>
+          <div class="quick-chip-row">
+            <button
+              class="quick-chip"
+              :class="{ active: currentHasWifi === true }"
+              @click="toggleBooleanFilter('has_wifi', true)"
+            >
+              Wi-Fi
+            </button>
+            <button
+              class="quick-chip"
+              :class="{ active: currentHasFreshAir === true }"
+              @click="toggleBooleanFilter('has_fresh_air', true)"
+            >
+              Приток воздуха
+            </button>
+          </div>
+        </div>
+
+        <div class="advanced-row">
+          <div class="control-label">Обогрев</div>
+          <div class="quick-chip-row">
+            <button class="quick-chip" :class="{ active: currentHeatingMin === '-15' }" @click="setHeatingMin('-15')">
+              до -15°C
+            </button>
+            <button class="quick-chip" :class="{ active: currentHeatingMin === '-20' }" @click="setHeatingMin('-20')">
+              до -20°C
+            </button>
+            <button class="quick-chip" :class="{ active: currentHeatingMin === '-25' }" @click="setHeatingMin('-25')">
+              до -25°C
+            </button>
+            <button class="quick-chip" :class="{ active: currentHeatingMin === '-30' }" @click="setHeatingMin('-30')">
+              до -30°C
+            </button>
+          </div>
+        </div>
+      </section>
+    </transition>
+
+    <div v-if="loadingInitial" class="grid skeleton-grid">
+      <div v-for="i in 8" :key="`skeleton-${i}`" class="skeleton-card" />
     </div>
 
-    <!-- Secondary Filters Bar -->
-    <div class="filters-bar">
-        <!-- Inverter -->
-        <button 
-            class="filter-btn" 
-            :class="{ active: isInverterActive }"
-            @click="toggleBooleanFilter('is_inverter')"
-        >
-            <span class="material-icons-round icon">equalizer</span>
-            Инвертор
+    <div v-else-if="products.length > 0" class="catalog-content">
+      <transition-group name="fade-up" tag="div" class="grid">
+        <ProductCard
+          v-for="product in products"
+          :key="product.id"
+          :product="product"
+          :showInstallation="true"
+        />
+      </transition-group>
+
+      <div v-if="loadingMore" class="grid skeleton-grid skeleton-grid-more">
+        <div v-for="i in 4" :key="`skeleton-more-${i}`" class="skeleton-card" />
+      </div>
+
+      <div v-if="hasMore" class="load-more-wrap">
+        <button class="load-more-btn" :disabled="loadingMore" @click="loadMore">
+          {{ loadingMore ? 'Загружаем...' : 'Показать еще' }}
         </button>
-
-        <!-- Removed generic Area 25m as it's now in main row -->
-
-        <!-- Calculator Link -->
-        <a 
-            href="/kak-vybrat-konditsioner"
-            class="filter-btn"
-            style="border-color: var(--primary); color: var(--primary);"
-        >
-            <span class="material-icons-round icon">calculate</span>
-            Подбор
-        </a>
-
-        <!-- Heating -25/-30 -->
-        <button 
-            class="filter-btn" 
-            :class="{ active: isHeatingActive }"
-            @click="toggleHeatingFilter"
-        >
-            <span class="material-icons-round icon">ac_unit</span>
-            Обогрев в мороз
-        </button>
-
-        <!-- WiFi -->
-        <button 
-            class="filter-btn" 
-            :class="{ active: isWifiActive }"
-            @click="toggleBooleanFilter('has_wifi')"
-        >
-            <span class="material-icons-round icon">wifi</span>
-            Wi-Fi модуль
-        </button>
-
-        <!-- Fresh Air -->
-        <button 
-            class="filter-btn" 
-            :class="{ active: isFreshAirActive }"
-            @click="toggleBooleanFilter('has_fresh_air')"
-        >
-            <span class="material-icons-round icon">air</span>
-            Приток свежего воздуха
-        </button>
-
+      </div>
     </div>
 
-    <!-- Grid -->
-    <div v-if="loading" class="loading-state">
-        <span class="material-icons-round spin">refresh</span>
-        Загрузка...
-    </div>
-    
-    <div v-else-if="groupedProducts.length > 0" class="catalog-content">
-        <section v-for="group in groupedProducts" :key="group.brandName" class="brand-section">
-            <div class="brand-header-wrapper">
-                <div class="brand-header-container">
-                    <img 
-                        v-if="group.config.logo" 
-                        :src="group.config.logo" 
-                        :alt="group.brandName"
-                        class="brand-logo"
-                    />
-                    <h2 v-else class="brand-title" :class="group.config.color">
-                        {{ group.brandName }}
-                    </h2>
-                </div>
-            </div>
-            <div class="grid">
-                 <ProductCard 
-                    v-for="product in group.items" 
-                    :key="product.id" 
-                    :product="product" 
-                    :showInstallation="true"
-                 />
-            </div>
-        </section>
-    </div>
-    
     <div v-else class="empty-status card">
-        <span class="material-icons-round large">search_off</span>
-        <h3>Товары не найдены</h3>
-        <p>Попробуйте изменить параметры поиска.</p>
+      <span class="material-icons-round large">search_off</span>
+      <h3>Товары не найдены</h3>
+      <p>Попробуйте выбрать другой бренд или категорию.</p>
     </div>
-
   </div>
 </template>
 
 <style scoped>
-    /* Catalog Header (moved from Astro) */
-    .catalog-header {
-        margin-bottom: 2rem;
-    }
-    .breadcrumb {
-        font-size: 0.9rem;
-        color: var(--text-muted);
-        margin-bottom: 1rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        font-weight: 500;
-    }
-    .breadcrumb a {
-        color: inherit;
-        text-decoration: none;
-    }
-    .breadcrumb a:hover {
-        color: var(--primary);
-    }
-    .sep {
-        opacity: 0.5;
-    }
-    .catalog-header h1 {
-        font-size: 2.5rem;
-        margin-bottom: 0.5rem;
-        font-weight: 800;
-        line-height: 1.1;
-    }
+.catalog-header {
+  margin-bottom: 1.5rem;
+}
 
-    /* Area Filters */
-    .area-filters {
-        margin-bottom: 1.5rem;
-    }
-    .filter-label {
-        font-size: 0.9rem;
-        font-weight: 700;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-bottom: 0.75rem;
-    }
-    .chips-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.75rem;
-    }
-    .chip {
-        padding: 0.5rem 1.25rem;
-        border-radius: 12px;
-        background: var(--surface);
-        border: 2px solid var(--border);
-        font-weight: 700;
-        font-size: 0.95rem;
-        cursor: pointer;
-        transition: all 0.2s;
-        color: var(--text);
-        font-family: inherit;
-    }
-    .chip:hover {
-        border-color: var(--primary);
-        color: var(--primary);
-    }
-    .chip.active {
-        background: var(--primary);
-        color: white;
-        border-color: var(--primary);
-        box-shadow: 0 4px 12px rgba(0, 127, 128, 0.2);
-    }
+.header-top {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-bottom: 1rem;
+}
 
-    /* Filters Bar */
-    .filters-bar {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        margin-bottom: 2.5rem;
-        overflow-x: auto;
-        padding-bottom: 0.5rem;
-        scrollbar-width: thin;
-    }
+.breadcrumb {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  min-width: 0;
+}
 
-    .filter-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.6rem 1.25rem;
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: 99px;
-        font-weight: 600;
-        font-size: 0.95rem;
-        color: var(--text);
-        white-space: nowrap;
-        transition: all 0.2s;
-        cursor: pointer;
-        text-decoration: none;
-        font-family: inherit;
-    }
+.breadcrumb a {
+  color: inherit;
+  text-decoration: none;
+}
 
-    .filter-btn:hover {
-        border-color: var(--primary);
-        color: var(--primary);
-        background: rgba(0, 127, 128, 0.05);
-    }
+.breadcrumb a:hover {
+  color: var(--primary);
+}
 
-    .filter-btn.active {
-        background: var(--primary);
-        color: white;
-        border-color: var(--primary);
-    }
+.sep {
+  opacity: 0.5;
+}
 
-    .icon {
-        font-size: 1.2rem;
-    }
+.catalog-desktop-only {
+  display: flex !important;
+}
 
-    /* Grid & Catalog Content */
-    .catalog-content {
-        width: 100%;
-        display: flex;
-        flex-direction: column;
-        gap: 4rem;
-    }
+.catalog-mobile-only {
+  display: none !important;
+}
 
-    .brand-section {
-        position: relative;
-    }
+.header-search {
+  width: min(620px, 58vw);
+  margin-left: auto;
+}
 
-    .brand-header-wrapper {
-        position: sticky;
-        top: 0;
-        z-index: 10;
-        background: rgba(255, 255, 255, 0.9);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border-bottom: 1px solid var(--border);
-        margin: 2rem 0;
-        transition: all 0.3s ease;
-    }
+.search-toggle {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid var(--panel-chip-border);
+  background: var(--panel-pill-bg);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
 
-    .brand-header-container {
-        display: flex;
-        align-items: center;
-        padding: 1rem 0;
-    }
+.search-toggle.active {
+  border-color: rgba(0, 127, 128, 0.8);
+}
 
-    .brand-logo {
-        height: 2.5rem;
-        object-fit: contain;
-        display: block;
-    }
+.mobile-search {
+  width: 100%;
+  margin-bottom: 0.85rem;
+}
 
-    .brand-title {
-        font-size: 2rem;
-        font-weight: 800;
-        color: var(--text);
-        margin: 0;
-    }
+.catalog-header h1 {
+  font-size: clamp(2rem, 4vw, 2.7rem);
+  margin: 0 0 0.5rem;
+  line-height: 1.12;
+}
 
-    .grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-        gap: 2rem;
-    }
-    
-    .loading-state {
-        text-align: center;
-        padding: 4rem;
-        color: var(--text-muted);
-        font-size: 1.2rem;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 1rem;
-    }
-    .spin {
-        animation: spin 1s linear infinite;
-        font-size: 2rem;
-    }
-    @keyframes spin { 100% { -webkit-transform: rotate(360deg); transform:rotate(360deg); } }
+.header-description {
+  max-width: 760px;
+  color: var(--text-muted);
+  margin: 0;
+}
 
-    .empty-status {
-        text-align: center;
-        padding: 5rem;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 1rem;
-    }
-    .large {
-        font-size: 4rem;
-        color: var(--text-muted);
-        opacity: 0.5;
-    }
+.glass-panel {
+  background: var(--panel-glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--panel-glass-border);
+  border-radius: 18px;
+  box-shadow: var(--panel-glass-shadow);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
 
-    .pagination {
-        display: flex;
-        justify-content: center;
-        gap: 0.75rem;
-        margin-top: 5rem;
-    }
-    .page-link {
-        width: 48px;
-        height: 48px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 12px;
-        background: var(--surface);
-        border: 1px solid var(--border);
-        font-weight: 700;
-        transition: all 0.2s;
-        cursor: pointer;
-        font-family: inherit;
-        font-size: 1rem;
-    }
-    .page-link:hover {
-        border-color: var(--primary);
-        color: var(--primary);
-        transform: translateY(-2px);
-    }
-    .page-link.active {
-        background: var(--primary);
-        color: white;
-        border-color: var(--primary);
-        box-shadow: 0 10px 15px -3px rgba(0, 127, 128, 0.3);
-    }
-    
-    @media (max-width: 768px) {
-        .filters-bar {
-            padding-bottom: 1rem;
-        }
-    }
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
 
-    /* Search Bar Styles */
-    .search-container {
-        margin-bottom: 2rem;
-        max-width: 600px;
-    }
-    .search-input-wrapper {
-        position: relative;
-        display: flex;
-        align-items: center;
-    }
-    .search-input {
-        width: 100%;
-        padding: 0.8rem 1rem 0.8rem 2.8rem;
-        border: 2px solid var(--border);
-        border-radius: 12px;
-        background: var(--surface);
-        font-size: 1rem;
-        transition: all 0.2s;
-        font-family: inherit;
-    }
-    .search-input:focus {
-        border-color: var(--primary);
-        outline: none;
-        box-shadow: 0 0 0 3px rgba(0, 127, 128, 0.1);
-    }
-    .search-icon {
-        position: absolute;
-        left: 0.8rem;
-        color: var(--text-muted);
-        pointer-events: none;
-    }
-    .clear-search {
-        position: absolute;
-        right: 0.5rem;
-        background: none;
-        border: none;
-        color: var(--text-muted);
-        cursor: pointer;
-        padding: 0.2rem;
-        display: flex;
-        align-items: center;
-        border-radius: 50%;
-    }
-    .clear-search:hover {
-        background: rgba(0,0,0,0.05);
-        color: var(--text);
-    }
+.section-label {
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
+.label-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.category-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.category-tab {
+  border: 1px solid var(--panel-chip-border);
+  background: var(--panel-chip-bg);
+  color: var(--text);
+  border-radius: 14px;
+  padding: 0.82rem 1rem;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.category-tab:hover {
+  transform: translateY(-1px);
+  border-color: var(--panel-chip-hover-border);
+}
+
+.category-tab.active {
+  color: var(--panel-active-text);
+  border-color: transparent;
+  background: var(--panel-active-gradient);
+  box-shadow: 0 12px 25px -18px rgba(10, 102, 89, 0.9);
+}
+
+.brand-strip {
+  display: flex;
+  gap: 0.6rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+  scrollbar-width: thin;
+}
+
+.brand-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--panel-chip-border);
+  background: var(--panel-pill-bg);
+  border-radius: 999px;
+  padding: 0.52rem 0.95rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.brand-pill:hover {
+  border-color: var(--panel-chip-hover-border);
+  transform: translateY(-1px);
+}
+
+.brand-pill.active {
+  color: var(--panel-active-text);
+  border-color: transparent;
+  background: var(--panel-active-gradient-alt);
+  box-shadow: 0 10px 24px -16px rgba(18, 90, 145, 0.85);
+}
+
+.brand-pill-logo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  display: block;
+}
+
+.search-container {
+  margin: 1rem 0 1.6rem;
+  max-width: 680px;
+}
+
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 0.9rem;
+  color: var(--text-muted);
+}
+
+.search-input {
+  width: 100%;
+  border: 1px solid var(--panel-input-border);
+  border-radius: 14px;
+  background: var(--panel-input-bg);
+  color: var(--text);
+  font-size: 0.96rem;
+  padding: 0.8rem 1rem 0.8rem 2.85rem;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  font-family: inherit;
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: rgba(0, 127, 128, 0.65);
+  box-shadow: 0 0 0 4px rgba(0, 127, 128, 0.12);
+}
+
+.quick-power-panel {
+  margin-top: -0.1rem;
+}
+
+.quick-chip-row {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.quick-chip {
+  border: 1px solid var(--panel-chip-border);
+  background: var(--panel-chip-bg);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.48rem 0.9rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.quick-chip:hover {
+  transform: translateY(-1px);
+  border-color: var(--panel-chip-hover-border);
+}
+
+.quick-chip.active {
+  color: var(--panel-active-text);
+  border-color: transparent;
+  background: var(--panel-active-gradient-alt);
+}
+
+.filters-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.3rem 0 1rem;
+}
+
+.filters-toggle-btn,
+.filters-reset-btn {
+  border: 1px solid var(--panel-chip-border);
+  background: var(--panel-pill-bg);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.52rem 0.92rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.filters-reset-btn {
+  color: var(--text-muted);
+}
+
+.advanced-panel {
+  margin-top: -0.2rem;
+}
+
+.advanced-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.advanced-row + .advanced-row {
+  margin-top: 0.9rem;
+}
+
+.control-label {
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.filters-select {
+  width: 100%;
+  max-width: 280px;
+  border: 1px solid var(--panel-input-border);
+  border-radius: 12px;
+  background: var(--panel-input-bg);
+  color: var(--text);
+  font-size: 0.9rem;
+  padding: 0.6rem 0.7rem;
+}
+
+.catalog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.3rem;
+}
+
+.skeleton-grid {
+  margin-top: 0.2rem;
+}
+
+.skeleton-grid-more {
+  margin-top: 0.8rem;
+}
+
+.skeleton-card {
+  border-radius: 14px;
+  min-height: 390px;
+  background: var(--panel-skeleton);
+  background-size: 220% 100%;
+  animation: shimmer 1.25s infinite linear;
+}
+
+@keyframes shimmer {
+  to {
+    background-position-x: -220%;
+  }
+}
+
+.load-more-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.4rem;
+}
+
+.load-more-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 0.82rem 1.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--panel-active-text);
+  background: var(--panel-active-gradient);
+  box-shadow: 0 14px 28px -20px rgba(17, 122, 142, 1);
+  cursor: pointer;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.load-more-btn:hover {
+  transform: translateY(-1px);
+}
+
+.load-more-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.fade-up-enter-active,
+.fade-up-leave-active {
+  transition: all 0.26s ease;
+}
+
+.fade-up-enter-from,
+.fade-up-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.empty-status {
+  text-align: center;
+  padding: 4rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.large {
+  font-size: 4rem;
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
+@media (max-width: 980px) {
+  .category-tabs {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .header-top {
+    align-items: center;
+    margin-bottom: 0.8rem;
+  }
+
+  .catalog-desktop-only {
+    display: none !important;
+  }
+
+  .catalog-mobile-only {
+    display: flex !important;
+  }
+
+  .breadcrumb {
+    font-size: 0.85rem;
+    gap: 0.4rem;
+    margin-right: auto;
+  }
+
+  .glass-panel {
+    border-radius: 16px;
+    padding: 0.9rem;
+  }
+
+  .brand-pill {
+    padding: 0.5rem 0.84rem;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filters-toolbar {
+    margin-top: 0;
+  }
+}
 </style>

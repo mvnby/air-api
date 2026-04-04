@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "astro dev",
     "check-api": "node scripts/check-api.js",
+    "audit:theme": "bash ../scripts/audit_theme_hardcodes.sh",
     "build": "npm run check-api && astro build",
     "preview": "astro preview",
     "astro": "astro"

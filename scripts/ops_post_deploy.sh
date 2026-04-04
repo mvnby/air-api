@@ -7,6 +7,7 @@ OPS_SUMMARY_FILE="${OPS_SUMMARY_FILE:-/tmp/ops_summary.txt}"
 
 OPS_MODE="${OPS_MODE:-report_only}" # report_only | normalize_report | full
 RUN_NORMALIZE_LEGACY="${RUN_NORMALIZE_LEGACY:-false}"
+RUN_BACKFILL_BRAND_SERIES="${RUN_BACKFILL_BRAND_SERIES:-false}"
 HIDE_LEGACY_GROUPS="${HIDE_LEGACY_GROUPS:-}"
 RUN_REPORT_LEGACY_LINKS="${RUN_REPORT_LEGACY_LINKS:-true}"
 RUN_CLEANUP_LEGACY_LINKS="${RUN_CLEANUP_LEGACY_LINKS:-false}"
@@ -28,6 +29,7 @@ log init "start"
 log init "RUN_POST_DEPLOY_OPS=${RUN_POST_DEPLOY_OPS}"
 log init "OPS_MODE=${OPS_MODE}"
 log init "RUN_NORMALIZE_LEGACY=${RUN_NORMALIZE_LEGACY}"
+log init "RUN_BACKFILL_BRAND_SERIES=${RUN_BACKFILL_BRAND_SERIES}"
 log init "HIDE_LEGACY_GROUPS=${HIDE_LEGACY_GROUPS:-<empty>}"
 log init "RUN_REPORT_LEGACY_LINKS=${RUN_REPORT_LEGACY_LINKS}"
 log init "RUN_CLEANUP_LEGACY_LINKS=${RUN_CLEANUP_LEGACY_LINKS}"
@@ -68,6 +70,7 @@ script_exists() {
 }
 
 normalize_enabled="false"
+backfill_brand_series_enabled="false"
 report_enabled="true"
 cleanup_enabled="false"
 case "${OPS_MODE}" in
@@ -95,6 +98,9 @@ esac
 if [[ "${RUN_NORMALIZE_LEGACY}" == "true" ]]; then
   normalize_enabled="true"
 fi
+if [[ "${RUN_BACKFILL_BRAND_SERIES}" == "true" ]]; then
+  backfill_brand_series_enabled="true"
+fi
 if [[ "${RUN_REPORT_LEGACY_LINKS}" == "false" ]]; then
   report_enabled="false"
 fi
@@ -116,6 +122,19 @@ if [[ "${normalize_enabled}" == "true" ]]; then
   fi
 else
   ops_skipped+=("normalize_legacy:disabled")
+fi
+
+if [[ "${backfill_brand_series_enabled}" == "true" ]]; then
+  if script_exists "scripts/backfill_brand_series.py"; then
+    log backfill "Running backfill_brand_series.py"
+    run_in_app "python3 scripts/backfill_brand_series.py"
+    ops_actions+=("backfill_brand_series")
+  else
+    log backfill "Skip: scripts/backfill_brand_series.py not found in image"
+    ops_skipped+=("backfill_brand_series:missing_script")
+  fi
+else
+  ops_skipped+=("backfill_brand_series:disabled")
 fi
 
 if [[ -n "${HIDE_LEGACY_GROUPS}" ]]; then

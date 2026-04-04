@@ -70,6 +70,8 @@ class ProductManagerService:
         formatted_items = [
             {
                 "id": p.id,
+                "brand_id": p.brand_id,
+                "series_id": p.series_id,
                 "title": p.title,
                 "slug": p.slug,
                 "price": p.price,
@@ -142,6 +144,8 @@ class ProductManagerService:
             formatted_items.append(
                 {
                     "id": p.id,
+                    "brand_id": p.brand_id,
+                    "series_id": p.series_id,
                     "title": p.title,
                     "slug": p.slug,
                     "price": p.price,
@@ -200,8 +204,18 @@ class ProductManagerService:
             {
                 "id": g.id,
                 "title": g.title,
+                "slug": g.slug,
+                "color": g.color,
+                "is_public": g.is_public,
+                "allow_multiple": g.allow_multiple,
                 "tags": [
-                    {"id": t.id, "title": t.title, "slug": t.slug}
+                    {
+                        "id": t.id,
+                        "title": t.title,
+                        "slug": t.slug,
+                        "is_public": t.is_public,
+                        "is_filter": t.is_filter,
+                    }
                     for t in sorted(g.tags, key=lambda item: (item.sort_order, item.title))
                 ],
             }

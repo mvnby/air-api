@@ -12,6 +12,7 @@ from .common import (
     PaymentType,
 )
 from .customer import Customer, Lead
+from .brand import Brand, ProductSeries
 from .cart import Cart, CartItem
 from .content import Article, GlobalConfig
 from .order import (
@@ -48,6 +49,7 @@ __all__ = [
     "Article",
     "Cart",
     "CartItem",
+    "Brand",
     "Customer",
     "CustomerType",
     "Favorite",
@@ -72,6 +74,7 @@ __all__ = [
     "Product",
     "ProductImage",
     "ProductImage",
+    "ProductSeries",
     "ProductTagLink",
     "Service",
     "Tag",

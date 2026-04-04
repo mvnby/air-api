@@ -744,6 +744,8 @@ class ManagerCatalogProductTagResponse(BaseModel):
 
 class ManagerCatalogProductItemResponse(BaseModel):
     id: int
+    brand_id: Optional[int] = None
+    series_id: Optional[int] = None
     title: str
     slug: Optional[str]
     price: int
@@ -1004,6 +1006,8 @@ class ProductUpdate(BaseModel):
     slug: Optional[str] = None
     specs: Optional[Dict[str, Any]] = None
     is_published: Optional[bool] = None
+    brand_id: Optional[int] = None
+    series_id: Optional[int] = None
     tag_ids: Optional[List[int]] = None
 
 

@@ -46,7 +46,7 @@ if (!category) {
 const query = buildCatalogQueryFromVirtual(category);
 const data = await getCatalog(query);
 const products = (data.items || []) as Product[];
-const meta = data.meta || { total: 0, page: 1, limit: 12, pages: 1 };
+const meta = data.meta || { total: 0, page: 1, limit: 20, pages: 1 };
 const robotsValue = category.indexable === false ? "noindex,follow" : undefined;
 ---
 

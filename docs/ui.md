@@ -19,6 +19,32 @@
   - Secondary Surface: `#1e293b` (Slate 800)
   - Text Muted: rgba(255, 255, 255, 0.6)
 
+### Theme Token Contract (Обязательно)
+Источник токенов: `web/src/assets/index.css`.
+
+Для panel / glass / filter UI использовать только глобальные токены:
+- `--panel-glass-bg`
+- `--panel-glass-border`
+- `--panel-glass-shadow`
+- `--panel-chip-bg`
+- `--panel-chip-border`
+- `--panel-chip-hover-border`
+- `--panel-pill-bg`
+- `--panel-input-bg`
+- `--panel-input-border`
+- `--panel-active-gradient`
+- `--panel-active-gradient-alt`
+- `--panel-active-text`
+- `--panel-skeleton`
+
+Запрещено в component-level стилях (кроме `web/src/assets/index.css`):
+- Хардкодить светлые panel-значения вида `rgba(255,255,255,...)`, `#fff`, `#ffffff`.
+- Хардкодить градиенты активных tab/pill (`#0f8f8d -> #3aa56e`, `#0a8e8c -> #2b6eb3`) напрямую в компонентах.
+
+Перед PR по UI запускать аудит:
+- `bash scripts/audit_theme_hardcodes.sh`
+- или из `web/`: `npm run audit:theme`
+
 ## ✍️ Типографика
 - **Заголовки (Headings)**: `Space Grotesk` (700-800 weight). Характерный, технологичный вид.
 - **Основной текст (Body)**: `Inter` (стандарт). Чистота и читаемость.
