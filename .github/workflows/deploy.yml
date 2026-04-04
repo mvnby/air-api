@@ -161,6 +161,7 @@ jobs:
           RUN_POST_DEPLOY_OPS: ${{ secrets.RUN_POST_DEPLOY_OPS }}
           OPS_MODE: ${{ secrets.OPS_MODE }}
           RUN_NORMALIZE_LEGACY: ${{ secrets.RUN_NORMALIZE_LEGACY }}
+          RUN_BACKFILL_BRAND_SERIES: ${{ secrets.RUN_BACKFILL_BRAND_SERIES }}
           HIDE_LEGACY_GROUPS: ${{ secrets.HIDE_LEGACY_GROUPS }}
           RUN_REPORT_LEGACY_LINKS: ${{ secrets.RUN_REPORT_LEGACY_LINKS }}
           RUN_CLEANUP_LEGACY_LINKS: ${{ secrets.RUN_CLEANUP_LEGACY_LINKS }}
@@ -169,8 +170,9 @@ jobs:
           set -euo pipefail
           SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v"
           : "${RUN_POST_DEPLOY_OPS:=true}"
-          : "${OPS_MODE:=report_only}"
-          : "${RUN_NORMALIZE_LEGACY:=false}"
+          : "${OPS_MODE:=normalize_report}"
+          : "${RUN_NORMALIZE_LEGACY:=true}"
+          : "${RUN_BACKFILL_BRAND_SERIES:=true}"
           : "${RUN_REPORT_LEGACY_LINKS:=true}"
           : "${RUN_CLEANUP_LEGACY_LINKS:=false}"
           : "${DRY_RUN:=true}"
@@ -182,6 +184,7 @@ jobs:
             RUN_POST_DEPLOY_OPS='${RUN_POST_DEPLOY_OPS}' \
             OPS_MODE='${OPS_MODE}' \
             RUN_NORMALIZE_LEGACY='${RUN_NORMALIZE_LEGACY}' \
+            RUN_BACKFILL_BRAND_SERIES='${RUN_BACKFILL_BRAND_SERIES}' \
             HIDE_LEGACY_GROUPS='${HIDE_LEGACY_GROUPS}' \
             RUN_REPORT_LEGACY_LINKS='${RUN_REPORT_LEGACY_LINKS}' \
             RUN_CLEANUP_LEGACY_LINKS='${RUN_CLEANUP_LEGACY_LINKS}' \

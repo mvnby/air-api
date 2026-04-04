@@ -17,6 +17,7 @@ from services.tag_logic import (
     extract_brand_name,
     extract_brand_slug,
 )
+from services.brand_series_service import sync_product_brand_series
 
 # --- НАСТРОЙКИ ---
 KEEP_UNITS = True  # True = Оставляем "кВт", "мм". False = Чистим до числа.
@@ -190,7 +191,7 @@ async def run_normalize():
                 "power_cooling": p.power_cooling,
             }
 
-            brand_slug = auto_tag_slugs[0] if auto_tag_slugs else extract_brand_slug(new_specs, title=p.title or "")
+            brand_slug = extract_brand_slug(new_specs, title=p.title or "")
             brand_title = extract_brand_name(new_specs, title=p.title or "")
             desired_brand_tag = None
             if brand_slug and brand_title:
@@ -217,6 +218,15 @@ async def run_normalize():
             brand_changed = _replace_group_tag(p, "brand", desired_brand_tag)
             if category_changed or brand_changed:
                 updated_tag_sets += 1
+                row_changed = True
+
+            brand_series_changed = await sync_product_brand_series(
+                session,
+                product=p,
+                specs=new_specs,
+                title=p.title or "",
+            )
+            if brand_series_changed:
                 row_changed = True
 
             if row_changed:

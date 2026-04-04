@@ -70,6 +70,8 @@ class ProductManagerService:
         formatted_items = [
             {
                 "id": p.id,
+                "brand_id": p.brand_id,
+                "series_id": p.series_id,
                 "title": p.title,
                 "slug": p.slug,
                 "price": p.price,
@@ -142,6 +144,8 @@ class ProductManagerService:
             formatted_items.append(
                 {
                     "id": p.id,
+                    "brand_id": p.brand_id,
+                    "series_id": p.series_id,
                     "title": p.title,
                     "slug": p.slug,
                     "price": p.price,

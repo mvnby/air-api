@@ -19,6 +19,7 @@ from services.tag_logic import (
     extract_brand_slug,
     get_auto_tags,
 )
+from services.brand_series_service import sync_product_brand_series
 
 logger = logging.getLogger(__name__)
 
@@ -284,6 +285,14 @@ class ImporterService:
                     source_url=url
                 )
                 session.add(product)
+
+            await sync_product_brand_series(
+                session,
+                product=product,
+                specs=normalized_specs,
+                title=title,
+                tags=tag_objects,
+            )
             await session.commit()
             await session.refresh(product)
 

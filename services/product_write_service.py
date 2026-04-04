@@ -8,6 +8,7 @@ from sqlmodel import select
 
 from crud.product import ProductDAO
 from models import Product, ProductImage, Tag
+from services.brand_series_service import sync_product_brand_series
 from services.spec_normalizer import normalize_specs
 
 
@@ -71,6 +72,14 @@ class ProductWriteService:
         product = await ProductDAO.update_full(session, product_id, payload, tag_ids)
         if not product:
             return None
+
+        await sync_product_brand_series(
+            session,
+            product=product,
+            specs=payload.get("specs", product.specs),
+            title=payload.get("title", product.title),
+        )
+        await session.commit()
         return {"message": "Product updated", "id": product.id}
 
     @staticmethod
