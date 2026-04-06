@@ -340,6 +340,7 @@ ul {
 .nav-links {
     display: flex;
     gap: 2rem;
+    align-items: center;
 }
 
 .nav-links a {
@@ -349,6 +350,73 @@ ul {
 }
 
 .nav-links a:hover {
+    color: var(--primary);
+}
+
+.nav-dropdown {
+    position: relative;
+}
+
+.nav-dropdown-trigger {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 1rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    cursor: pointer;
+    padding: 0;
+    font-family: inherit;
+}
+
+.nav-dropdown-trigger .material-icons-round {
+    font-size: 1.1rem;
+    transition: transform 0.2s ease;
+}
+
+.nav-dropdown.open .nav-dropdown-trigger,
+.nav-dropdown:focus-within .nav-dropdown-trigger {
+    color: var(--primary);
+}
+
+.nav-dropdown.open .nav-dropdown-trigger .material-icons-round,
+.nav-dropdown:focus-within .nav-dropdown-trigger .material-icons-round {
+    transform: rotate(180deg);
+}
+
+.nav-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 0.7rem);
+    left: 0;
+    min-width: 220px;
+    display: none;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.55rem;
+    border: 1px solid var(--panel-glass-border);
+    border-radius: 14px;
+    background: var(--panel-glass-bg);
+    box-shadow: var(--panel-glass-shadow);
+    z-index: 110;
+}
+
+.nav-dropdown.open .nav-dropdown-menu,
+.nav-dropdown:focus-within .nav-dropdown-menu {
+    display: flex;
+}
+
+.nav-dropdown-menu a {
+    display: block;
+    border-radius: 10px;
+    padding: 0.45rem 0.6rem;
+    color: var(--text);
+    font-weight: 600;
+}
+
+.nav-dropdown-menu a:hover {
+    background: var(--panel-chip-bg);
     color: var(--primary);
 }
 

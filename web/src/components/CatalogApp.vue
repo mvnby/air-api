@@ -5,11 +5,7 @@ import { getCatalog, getFiltersConfig } from '../utils/api';
 import { getBrandConfig } from '../utils/brands';
 
 const BASE_LIMIT = 20;
-const CATEGORY_TABS = [
-  { slug: 'cat-household', title: 'Бытовые' },
-  { slug: 'cat-multi', title: 'Мульти-сплит' },
-  { slug: 'cat-industrial', title: 'Полупромышленные' },
-];
+const CATEGORY_SLUG_LIST = ['cat-household', 'cat-multi', 'cat-industrial'];
 const POWER_PRESETS = [
   { key: 'area-20', title: 'до 20 м²', min: null, max: 20 },
   { key: 'area-25', title: 'до 25 м²', min: null, max: 25 },
@@ -23,7 +19,7 @@ const INDUSTRIAL_TYPE_OPTIONS = [
   { value: 'floor_ceiling', title: 'Напольно-потолочные' },
   { value: 'column', title: 'Колонные' },
 ];
-const CATEGORY_SLUGS = new Set(CATEGORY_TABS.map((tab) => tab.slug));
+const CATEGORY_SLUGS = new Set(CATEGORY_SLUG_LIST);
 
 const props = defineProps({
   initialProducts: {
@@ -551,25 +547,6 @@ const loadBrands = async () => {
   }
 };
 
-const setCategory = async (categorySlug) => {
-  activeTags.value = activeTags.value.filter((slug) => !CATEGORY_SLUGS.has(slug));
-  activeTags.value.push(categorySlug);
-  if (categorySlug !== 'cat-household') {
-    currentAreaMin.value = null;
-    currentAreaMax.value = null;
-  }
-  if (categorySlug !== 'cat-industrial') {
-    currentIndoorTypes.value = [];
-  }
-  if (categorySlug !== 'cat-multi') {
-    selectedOutdoorSlug.value = '';
-    selectedIndoorQuantities.value = {};
-  }
-
-  syncUrlFromState(1);
-  await fetchProducts({ page: 1, append: false });
-};
-
 const toggleIndustrialType = async (value) => {
   if (!isIndustrialCategory.value) return;
   const set = new Set(currentIndoorTypes.value);
@@ -706,8 +683,16 @@ onMounted(async () => {
 
   const currentMetaLimit = Number(props.initialMeta?.limit || BASE_LIMIT);
   const urlPage = Number(getParamsFromUrl()?.page || 1);
+  const hasUrlQuery = typeof window !== 'undefined'
+    ? Array.from(new URLSearchParams(window.location.search).keys()).length > 0
+    : false;
 
-  if (!props.initialProducts?.length || currentMetaLimit !== BASE_LIMIT || urlPage > 1) {
+  if (
+    hasUrlQuery
+    || !props.initialProducts?.length
+    || currentMetaLimit !== BASE_LIMIT
+    || urlPage > 1
+  ) {
     await fetchProducts({ page: Math.max(1, urlPage), append: false });
   }
   syncMultiSelectionState();
@@ -767,21 +752,6 @@ onMounted(async () => {
         Как выбрать тип полупромышленного кондиционера
       </a>
     </header>
-
-    <section class="glass-panel category-panel">
-      <div class="section-label">Категория</div>
-      <div class="category-tabs">
-        <button
-          v-for="tab in CATEGORY_TABS"
-          :key="tab.slug"
-          class="category-tab"
-          :class="{ active: activeCategorySlug === tab.slug }"
-          @click="setCategory(tab.slug)"
-        >
-          {{ tab.title }}
-        </button>
-      </div>
-    </section>
 
     <section class="glass-panel brand-panel">
       <div class="section-head">
@@ -1174,36 +1144,6 @@ onMounted(async () => {
 .label-hint {
   font-size: 0.8rem;
   color: var(--text-muted);
-}
-
-.category-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.65rem;
-}
-
-.category-tab {
-  border: 1px solid var(--panel-chip-border);
-  background: var(--panel-chip-bg);
-  color: var(--text);
-  border-radius: 14px;
-  padding: 0.82rem 1rem;
-  font-size: 0.92rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-}
-
-.category-tab:hover {
-  transform: translateY(-1px);
-  border-color: var(--panel-chip-hover-border);
-}
-
-.category-tab.active {
-  color: var(--panel-active-text);
-  border-color: transparent;
-  background: var(--panel-active-gradient);
-  box-shadow: 0 12px 25px -18px rgba(10, 102, 89, 0.9);
 }
 
 .brand-strip {
@@ -1614,10 +1554,6 @@ onMounted(async () => {
 }
 
 @media (max-width: 980px) {
-  .category-tabs {
-    grid-template-columns: 1fr;
-  }
-
   .multi-config-grid {
     grid-template-columns: 1fr;
   }
