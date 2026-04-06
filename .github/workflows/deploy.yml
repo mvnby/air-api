@@ -162,6 +162,7 @@ jobs:
           OPS_MODE: ${{ secrets.OPS_MODE }}
           RUN_NORMALIZE_LEGACY: ${{ secrets.RUN_NORMALIZE_LEGACY }}
           RUN_BACKFILL_BRAND_SERIES: ${{ secrets.RUN_BACKFILL_BRAND_SERIES }}
+          RUN_SAFE_BRAND_CLEANUP: ${{ secrets.RUN_SAFE_BRAND_CLEANUP }}
           HIDE_LEGACY_GROUPS: ${{ secrets.HIDE_LEGACY_GROUPS }}
           RUN_REPORT_LEGACY_LINKS: ${{ secrets.RUN_REPORT_LEGACY_LINKS }}
           RUN_CLEANUP_LEGACY_LINKS: ${{ secrets.RUN_CLEANUP_LEGACY_LINKS }}
@@ -173,6 +174,7 @@ jobs:
           : "${OPS_MODE:=normalize_report}"
           : "${RUN_NORMALIZE_LEGACY:=true}"
           : "${RUN_BACKFILL_BRAND_SERIES:=true}"
+          : "${RUN_SAFE_BRAND_CLEANUP:=true}"
           : "${RUN_REPORT_LEGACY_LINKS:=true}"
           : "${RUN_CLEANUP_LEGACY_LINKS:=false}"
           : "${DRY_RUN:=true}"
@@ -185,6 +187,7 @@ jobs:
             OPS_MODE='${OPS_MODE}' \
             RUN_NORMALIZE_LEGACY='${RUN_NORMALIZE_LEGACY}' \
             RUN_BACKFILL_BRAND_SERIES='${RUN_BACKFILL_BRAND_SERIES}' \
+            RUN_SAFE_BRAND_CLEANUP='${RUN_SAFE_BRAND_CLEANUP}' \
             HIDE_LEGACY_GROUPS='${HIDE_LEGACY_GROUPS}' \
             RUN_REPORT_LEGACY_LINKS='${RUN_REPORT_LEGACY_LINKS}' \
             RUN_CLEANUP_LEGACY_LINKS='${RUN_CLEANUP_LEGACY_LINKS}' \

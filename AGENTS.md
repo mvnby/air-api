@@ -151,6 +151,7 @@ Production server intentionally runs from Docker images only (no git checkout in
    - `OPS_MODE=report_only`
    - `RUN_NORMALIZE_LEGACY=false`
    - `RUN_BACKFILL_BRAND_SERIES=false`
+   - `RUN_SAFE_BRAND_CLEANUP=false`
    - `RUN_CLEANUP_LEGACY_LINKS=false`
    - `RUN_REPORT_LEGACY_LINKS=true`
    - `DRY_RUN=true`
@@ -161,6 +162,8 @@ Production server intentionally runs from Docker images only (no git checkout in
      - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/normalize_legacy.py`
    - Backfill brand/series:
      - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/backfill_brand_series.py`
+   - Backfill + safe brand cleanup:
+     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/backfill_brand_series.py --safe-brand-cleanup`
    - Cleanup dry-run:
      - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/cleanup_legacy_tag_links.py`
    - Cleanup execute (manual-only):

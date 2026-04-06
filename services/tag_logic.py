@@ -17,6 +17,8 @@ _TITLE_SKIP_TOKENS = {
     "сплит",
     "система",
     "сплит-система",
+    "мульти-сплит-система",
+    "мульти-сплит система",
     "мульти-сплит",
     "мульти",
     "инверторный",
@@ -30,6 +32,24 @@ _TITLE_SKIP_TOKENS = {
     "бытовые",
     "полупромышленный",
     "полупромышленные",
+    "внутренний",
+    "наружный",
+    "внутренний-блок",
+    "наружный-блок",
+    "внутренний блок",
+    "наружный блок",
+}
+
+_INVALID_BRAND_EXACT = {
+    "мульти-сплит-система",
+    "мульти-сплит система",
+    "сплит-система",
+    "сплит система",
+    "внутренний блок",
+    "наружный блок",
+    "мульти-сплит",
+    "бытовые",
+    "полупромышленные",
 }
 
 
@@ -41,6 +61,34 @@ def _to_text(value: Any) -> str:
 
 def _normalized(value: Any) -> str:
     return _to_text(value).lower().replace("ё", "е")
+
+
+def is_invalid_brand_name(value: Any) -> bool:
+    text = _normalized(value)
+    if not text:
+        return True
+
+    compact = " ".join(text.replace("_", " ").replace("-", " ").split())
+    if text in _INVALID_BRAND_EXACT or compact in _INVALID_BRAND_EXACT:
+        return True
+
+    if "внутренн" in compact and "блок" in compact:
+        return True
+    if "наружн" in compact and "блок" in compact:
+        return True
+    if ("сплит" in compact or "мульти" in compact) and "систем" in compact:
+        return True
+    if compact in {"кондиционер", "система", "блок"}:
+        return True
+
+    return False
+
+
+def is_invalid_brand_slug(value: Any) -> bool:
+    slug = _to_text(value).strip().lower()
+    if not slug:
+        return True
+    return is_invalid_brand_name(slug.replace("-", " "))
 
 
 def _first_existing(specs: Dict[str, Any], keys: Iterable[str]) -> Any:
@@ -90,6 +138,8 @@ def _extract_brand_from_title(title: str) -> Optional[str]:
             continue
         if token.lower() in _TITLE_SKIP_TOKENS:
             continue
+        if is_invalid_brand_name(token):
+            continue
         if not re.search(r"[a-zа-я]", token, flags=re.IGNORECASE):
             continue
         return token
@@ -106,7 +156,7 @@ def extract_brand_name(specs: Optional[Dict[str, Any]] = None, title: str = "") 
         primary = re.split(r"[,/|;]", _to_text(raw_brand), maxsplit=1)[0].strip()
         if primary:
             token = primary.split()[0]
-            if token:
+            if token and not is_invalid_brand_name(token):
                 return token
 
     return _extract_brand_from_title(title)
@@ -117,7 +167,9 @@ def extract_brand_slug(specs: Optional[Dict[str, Any]] = None, title: str = "") 
     if not brand_name:
         return None
     slug = slugify(brand_name, lowercase=True)
-    return slug or None
+    if not slug or is_invalid_brand_slug(slug):
+        return None
+    return slug
 
 
 def detect_category_slug(

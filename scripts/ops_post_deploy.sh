@@ -8,6 +8,7 @@ OPS_SUMMARY_FILE="${OPS_SUMMARY_FILE:-/tmp/ops_summary.txt}"
 OPS_MODE="${OPS_MODE:-report_only}" # report_only | normalize_report | full
 RUN_NORMALIZE_LEGACY="${RUN_NORMALIZE_LEGACY:-false}"
 RUN_BACKFILL_BRAND_SERIES="${RUN_BACKFILL_BRAND_SERIES:-false}"
+RUN_SAFE_BRAND_CLEANUP="${RUN_SAFE_BRAND_CLEANUP:-false}"
 HIDE_LEGACY_GROUPS="${HIDE_LEGACY_GROUPS:-}"
 RUN_REPORT_LEGACY_LINKS="${RUN_REPORT_LEGACY_LINKS:-true}"
 RUN_CLEANUP_LEGACY_LINKS="${RUN_CLEANUP_LEGACY_LINKS:-false}"
@@ -30,6 +31,7 @@ log init "RUN_POST_DEPLOY_OPS=${RUN_POST_DEPLOY_OPS}"
 log init "OPS_MODE=${OPS_MODE}"
 log init "RUN_NORMALIZE_LEGACY=${RUN_NORMALIZE_LEGACY}"
 log init "RUN_BACKFILL_BRAND_SERIES=${RUN_BACKFILL_BRAND_SERIES}"
+log init "RUN_SAFE_BRAND_CLEANUP=${RUN_SAFE_BRAND_CLEANUP}"
 log init "HIDE_LEGACY_GROUPS=${HIDE_LEGACY_GROUPS:-<empty>}"
 log init "RUN_REPORT_LEGACY_LINKS=${RUN_REPORT_LEGACY_LINKS}"
 log init "RUN_CLEANUP_LEGACY_LINKS=${RUN_CLEANUP_LEGACY_LINKS}"
@@ -127,7 +129,11 @@ fi
 if [[ "${backfill_brand_series_enabled}" == "true" ]]; then
   if script_exists "scripts/backfill_brand_series.py"; then
     log backfill "Running backfill_brand_series.py"
-    run_in_app "python3 scripts/backfill_brand_series.py"
+    backfill_cmd="python3 scripts/backfill_brand_series.py"
+    if [[ "${RUN_SAFE_BRAND_CLEANUP}" == "true" ]]; then
+      backfill_cmd="${backfill_cmd} --safe-brand-cleanup"
+    fi
+    run_in_app "${backfill_cmd}"
     ops_actions+=("backfill_brand_series")
   else
     log backfill "Skip: scripts/backfill_brand_series.py not found in image"

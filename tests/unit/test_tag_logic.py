@@ -1,4 +1,9 @@
-from services.tag_logic import detect_category_slug, extract_brand_slug, get_auto_tags
+from services.tag_logic import (
+    detect_category_slug,
+    extract_brand_name,
+    extract_brand_slug,
+    get_auto_tags,
+)
 
 
 def test_get_auto_tags_skips_legacy_area_and_compressor_tags():
@@ -53,3 +58,19 @@ def test_extract_brand_slug_falls_back_to_title_first_brand_word():
         title="Haier Coral DC-Inverter",
     )
     assert slug == "haier"
+
+
+def test_extract_brand_name_skips_category_like_tokens():
+    name = extract_brand_name(
+        specs={"Тип кондиционера": "мульти-сплит система"},
+        title="Мульти-сплит-система TCL Free Match",
+    )
+    assert name == "TCL"
+
+
+def test_extract_brand_slug_rejects_invalid_service_tokens():
+    slug = extract_brand_slug(
+        specs={"Бренд": "Мульти-сплит-система"},
+        title="Мульти-сплит-система внутренний блок",
+    )
+    assert slug is None

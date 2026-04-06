@@ -4,11 +4,18 @@ import re
 from typing import Any, Dict, Iterable, Optional, Sequence
 
 from slugify import slugify
-from sqlmodel import select
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from sqlmodel import select
 
-from models import Brand, Product, ProductSeries, Tag
-from services.tag_logic import extract_brand_name, extract_brand_slug
+from models import Brand, Product, ProductSeries, ProductTagLink, Tag, TagGroup
+from services.tag_logic import (
+    extract_brand_name,
+    extract_brand_slug,
+    is_invalid_brand_name,
+    is_invalid_brand_slug,
+)
 
 
 SERIES_SPEC_KEYS = (
@@ -50,17 +57,50 @@ def _primary_token(value: str) -> str:
     return re.split(r"[,/|;]", _to_text(value), maxsplit=1)[0].strip()
 
 
-def _brand_title_from_tags(tags: Sequence[Tag]) -> Optional[str]:
+def _safe_group_slug(tag: Tag, group_slug_by_id: Dict[int, str]) -> Optional[str]:
+    group_id = getattr(tag, "group_id", None)
+    if group_id is not None and group_id in group_slug_by_id:
+        return group_slug_by_id[group_id]
+
+    # Access loaded relationship from instance dict only.
+    loaded_group = getattr(tag, "__dict__", {}).get("group")
+    if loaded_group is None and not hasattr(tag, "__dict__"):
+        # Lightweight objects from tests (e.g. SimpleNamespace) may not use SQLAlchemy state.
+        loaded_group = getattr(tag, "group", None)
+    return getattr(loaded_group, "slug", None)
+
+
+def _brand_tag_from_tags(
+    tags: Sequence[Tag],
+    group_slug_by_id: Dict[int, str],
+) -> Optional[Tag]:
     for tag in tags:
         if not tag:
             continue
-        group_slug = getattr(getattr(tag, "group", None), "slug", None)
-        if group_slug == "brand" and _to_text(getattr(tag, "title", "")):
-            return _to_text(tag.title)
+        if _safe_group_slug(tag, group_slug_by_id) != "brand":
+            continue
+        if not _to_text(getattr(tag, "title", "")):
+            continue
+        if is_invalid_brand_name(tag.title) or is_invalid_brand_slug(tag.slug):
+            continue
+        return tag
     return None
 
 
-def extract_series_name(specs: Optional[Dict[str, Any]] = None, tags: Optional[Sequence[Tag]] = None) -> Optional[str]:
+def _brand_title_from_tags(
+    tags: Sequence[Tag],
+    group_slug_by_id: Dict[int, str],
+) -> Optional[str]:
+    tag = _brand_tag_from_tags(tags, group_slug_by_id)
+    return _to_text(tag.title) if tag else None
+
+
+def extract_series_name(
+    specs: Optional[Dict[str, Any]] = None,
+    tags: Optional[Sequence[Tag]] = None,
+    *,
+    group_slug_by_id: Optional[Dict[int, str]] = None,
+) -> Optional[str]:
     specs = specs or {}
     raw = _first_non_empty(specs, SERIES_SPEC_KEYS)
     if raw:
@@ -68,11 +108,142 @@ def extract_series_name(specs: Optional[Dict[str, Any]] = None, tags: Optional[S
         if series:
             return series
 
+    slug_map = group_slug_by_id or {}
     for tag in tags or []:
-        group_slug = getattr(getattr(tag, "group", None), "slug", None)
-        if group_slug == "series" and _to_text(getattr(tag, "title", "")):
+        if _safe_group_slug(tag, slug_map) == "series" and _to_text(getattr(tag, "title", "")):
             return _to_text(tag.title)
     return None
+
+
+async def _load_product_tags(session: AsyncSession, product_id: int) -> list[Tag]:
+    stmt = (
+        select(Tag)
+        .join(ProductTagLink, ProductTagLink.tag_id == Tag.id)
+        .where(ProductTagLink.product_id == product_id)
+        .options(selectinload(Tag.group))
+    )
+    return list((await session.execute(stmt)).scalars().all())
+
+
+async def _build_group_slug_map(session: AsyncSession, tags: Sequence[Tag]) -> Dict[int, str]:
+    result: Dict[int, str] = {}
+    missing_ids: set[int] = set()
+    for tag in tags:
+        if tag.group_id is None:
+            continue
+        loaded_group = getattr(tag, "__dict__", {}).get("group")
+        if loaded_group and getattr(loaded_group, "slug", None):
+            result[tag.group_id] = loaded_group.slug
+        else:
+            missing_ids.add(tag.group_id)
+
+    if missing_ids:
+        stmt = select(TagGroup.id, TagGroup.slug).where(TagGroup.id.in_(missing_ids))
+        rows = (await session.execute(stmt)).all()
+        for group_id, slug in rows:
+            result[group_id] = slug
+    return result
+
+
+async def _ensure_brand_group(session: AsyncSession) -> TagGroup:
+    group = (
+        await session.execute(select(TagGroup).where(TagGroup.slug == "brand"))
+    ).scalar_one_or_none()
+    if group:
+        return group
+
+    group = TagGroup(
+        slug="brand",
+        title="Бренд",
+        is_public=True,
+        allow_multiple=False,
+        sort_order=10,
+    )
+    session.add(group)
+    await session.flush()
+    return group
+
+
+async def _ensure_brand_tag(
+    session: AsyncSession,
+    *,
+    brand: Brand,
+    brand_group: TagGroup,
+) -> Tag:
+    brand_slug = _to_text(brand.slug).lower()
+    if not brand_slug:
+        brand_slug = slugify(_to_text(brand.title), lowercase=True)
+
+    existing = (await session.execute(select(Tag).where(Tag.slug == brand_slug))).scalar_one_or_none()
+    if existing:
+        changed = False
+        if existing.group_id != brand_group.id:
+            existing.group_id = brand_group.id
+            changed = True
+        if not existing.is_public:
+            existing.is_public = True
+            changed = True
+        if not existing.is_filter:
+            existing.is_filter = True
+            changed = True
+        if not _to_text(existing.title):
+            existing.title = _to_text(brand.title) or brand_slug.upper()
+            changed = True
+        if changed:
+            session.add(existing)
+            await session.flush()
+        return existing
+
+    tag = Tag(
+        group_id=brand_group.id,
+        title=_to_text(brand.title) or brand_slug.upper(),
+        slug=brand_slug,
+        is_public=True,
+        is_filter=True,
+    )
+    session.add(tag)
+    await session.flush()
+    return tag
+
+
+async def _sync_product_brand_tag_link(
+    session: AsyncSession,
+    *,
+    product_id: int,
+    brand_group_id: int,
+    brand_tag_id: int,
+) -> bool:
+    changed = False
+    existing_brand_tag_ids = (
+        await session.execute(
+            select(ProductTagLink.tag_id)
+            .join(Tag, ProductTagLink.tag_id == Tag.id)
+            .where(ProductTagLink.product_id == product_id)
+            .where(Tag.group_id == brand_group_id)
+        )
+    ).scalars().all()
+
+    to_remove = [tag_id for tag_id in existing_brand_tag_ids if tag_id != brand_tag_id]
+    if to_remove:
+        await session.execute(
+            delete(ProductTagLink)
+            .where(ProductTagLink.product_id == product_id)
+            .where(ProductTagLink.tag_id.in_(to_remove))
+        )
+        changed = True
+
+    has_link = (
+        await session.execute(
+            select(ProductTagLink.product_id)
+            .where(ProductTagLink.product_id == product_id)
+            .where(ProductTagLink.tag_id == brand_tag_id)
+        )
+    ).first() is not None
+    if not has_link:
+        session.add(ProductTagLink(product_id=product_id, tag_id=brand_tag_id))
+        changed = True
+
+    return changed
 
 
 async def ensure_brand(
@@ -175,21 +346,59 @@ async def sync_product_brand_series(
 ) -> bool:
     data_specs = specs if specs is not None else (product.specs or {})
     product_title = title if title is not None else (product.title or "")
-    tag_list = list(tags or (product.tags or []))
 
-    brand_name = extract_brand_name(specs=data_specs, title=product_title)
-    if not brand_name:
-        brand_name = _brand_title_from_tags(tag_list)
+    if tags is not None:
+        tag_list = list(tags)
+    elif product.id:
+        tag_list = await _load_product_tags(session, product.id)
+    else:
+        tag_list = list(getattr(product, "tags", []) or [])
+
+    group_slug_by_id = await _build_group_slug_map(session, tag_list)
+    selected_brand_tag = _brand_tag_from_tags(tag_list, group_slug_by_id)
+
+    brand_name: Optional[str] = None
+    brand_slug: Optional[str] = None
+    if selected_brand_tag is not None:
+        brand_name = _to_text(selected_brand_tag.title)
+        brand_slug = selected_brand_tag.slug
+    else:
+        brand_name = extract_brand_name(specs=data_specs, title=product_title)
+        if not brand_name:
+            brand_name = _brand_title_from_tags(tag_list, group_slug_by_id)
+        brand_slug = extract_brand_slug(specs=data_specs, title=product_title)
+
+    if brand_name and is_invalid_brand_name(brand_name):
+        brand_name = None
+    if brand_slug and is_invalid_brand_slug(brand_slug):
+        brand_slug = None
 
     changed = False
     if brand_name:
-        brand_slug = extract_brand_slug(specs=data_specs, title=product_title)
-        brand = await ensure_brand(session, title=brand_name, slug=brand_slug)
-        if product.brand_id != brand.id:
-            product.brand_id = brand.id
-            changed = True
+        if not brand_slug:
+            generated = slugify(brand_name, lowercase=True)
+            brand_slug = generated or None
+        if brand_slug:
+            brand = await ensure_brand(session, title=brand_name, slug=brand_slug)
+            if product.brand_id != brand.id:
+                product.brand_id = brand.id
+                changed = True
 
-    series_name = extract_series_name(specs=data_specs, tags=tag_list)
+            brand_group = await _ensure_brand_group(session)
+            brand_tag = await _ensure_brand_tag(session, brand=brand, brand_group=brand_group)
+            if product.id and await _sync_product_brand_tag_link(
+                session,
+                product_id=product.id,
+                brand_group_id=brand_group.id,
+                brand_tag_id=brand_tag.id,
+            ):
+                changed = True
+
+    series_name = extract_series_name(
+        specs=data_specs,
+        tags=tag_list,
+        group_slug_by_id=group_slug_by_id,
+    )
     if series_name:
         series = await ensure_series(session, title=series_name, brand_id=product.brand_id)
         if product.series_id != series.id:
