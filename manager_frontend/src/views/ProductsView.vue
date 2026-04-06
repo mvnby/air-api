@@ -4,6 +4,7 @@ import { watchDebounced } from '@vueuse/core';
 import { api, type Product } from '../api';
 import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images, Settings, ArrowLeft, LayoutGrid, List, Package, Link2, ExternalLink } from 'lucide-vue-next';
 import BulkSpecsModal from '../components/BulkSpecsModal.vue';
+import BulkCompatibilityModal from '../components/BulkCompatibilityModal.vue';
 import ProductEditModal from '../components/ProductEditModal.vue';
 import OnlinerImportModal from '../components/OnlinerImportModal.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
@@ -109,6 +110,7 @@ const pendingEditHandled = ref(false);
 // Bulk Actions
 const selectedProductIds = ref<Set<number>>(new Set());
 const showBulkSpecsModal = ref(false);
+const showBulkCompatibilityModal = ref(false);
 const commonGalleryImages = ref<Array<{ url: string; product_count: number }>>([]);
 const commonGalleryLoading = ref(false);
 const bulkRoundLoading = ref(false);
@@ -165,6 +167,16 @@ const openBulkUpdate = () => {
     if (selectedProductIds.value.size === 0) return;
     showBulkSpecsModal.value = true;
 };
+
+const openBulkCompatibility = () => {
+    if (selectedProductIds.value.size === 0) return;
+    showBulkCompatibilityModal.value = true;
+};
+
+const selectedProductsForBulkCompatibility = computed(() => {
+    const selected = selectedProductIds.value;
+    return products.value.filter((product) => selected.has(product.id));
+});
 
 const loadCommonGallery = async () => {
     if (selectedIdsArray.value.length === 0) {
@@ -684,6 +696,9 @@ watchDebounced(
               <button @click="openBulkUpdate" class="flex items-center gap-1 bg-teal-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-teal-700 transition-colors">
                   <Edit3 class="w-3.5 h-3.5" /> Характеристики
               </button>
+              <button @click="openBulkCompatibility" class="flex items-center gap-1 bg-indigo-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-indigo-700 transition-colors">
+                  <Link2 class="w-3.5 h-3.5" /> Совместимость
+              </button>
               <button 
                 @click="handleBulkRoundPrices" 
                 :disabled="bulkRoundLoading"
@@ -1167,6 +1182,11 @@ watchDebounced(
     <BulkSpecsModal 
         v-model="showBulkSpecsModal"
         :selected-product-ids="Array.from(selectedProductIds)"
+        @success="handleBulkSuccess"
+    />
+    <BulkCompatibilityModal
+        v-model="showBulkCompatibilityModal"
+        :selected-products="selectedProductsForBulkCompatibility"
         @success="handleBulkSuccess"
     />
 
