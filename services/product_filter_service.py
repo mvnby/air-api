@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import func, select
 
 from models import Product, Tag, TagGroup
+from services.tag_logic import is_invalid_brand_name, is_invalid_brand_slug
 
 
 ALLOWED_FILTER_GROUP_SLUGS = {"brand", "series", "expert-badge", "type", "category"}
@@ -62,6 +63,11 @@ class ProductFilterService:
         )
 
         brands = list((await session.execute(brands_stmt)).scalars().all())
+        brands = [
+            t
+            for t in brands
+            if not is_invalid_brand_name(t.title) and not is_invalid_brand_slug(t.slug)
+        ]
         expert_tags = list((await session.execute(expert_stmt)).scalars().all())
 
         return {

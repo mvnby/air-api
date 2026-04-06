@@ -47,9 +47,15 @@ class ProductWriteService:
     ) -> Optional[Dict[str, Any]]:
         payload = dict(update_data)
         wifi_tag_slugs: Optional[List[str]] = None
+        selected_tags: Optional[List[Tag]] = None
         if tag_ids is not None:
-            tag_rows = (await session.execute(select(Tag).where(Tag.id.in_(tag_ids)))).scalars().all()
-            wifi_tag_slugs = [tag.slug for tag in tag_rows if tag.slug in {"wifi-builtin", "wifi-ready"}]
+            tag_rows = (
+                await session.execute(
+                    select(Tag).where(Tag.id.in_(tag_ids)).options(selectinload(Tag.group))
+                )
+            ).scalars().all()
+            selected_tags = list(tag_rows)
+            wifi_tag_slugs = [tag.slug for tag in selected_tags if tag.slug in {"wifi-builtin", "wifi-ready"}]
 
         if "specs" in payload and payload["specs"] is not None:
             existing_product = None
@@ -78,6 +84,7 @@ class ProductWriteService:
             product=product,
             specs=payload.get("specs", product.specs),
             title=payload.get("title", product.title),
+            tags=selected_tags,
         )
         await session.commit()
         return {"message": "Product updated", "id": product.id}

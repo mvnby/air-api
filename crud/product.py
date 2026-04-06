@@ -339,7 +339,11 @@ class ProductDAO:
         update_data: Dict[str, Any],
         tag_ids: Optional[List[int]] = None,
     ) -> Optional[Product]:
-        stmt = select(Product).where(Product.id == product_id).options(selectinload(Product.tags))
+        stmt = (
+            select(Product)
+            .where(Product.id == product_id)
+            .options(selectinload(Product.tags).selectinload(Tag.group))
+        )
         result = await session.execute(stmt)
         product = result.scalar_one_or_none()
         if not product:
@@ -349,7 +353,7 @@ class ProductDAO:
             setattr(product, key, value)
 
         if tag_ids is not None:
-            tag_stmt = select(Tag).where(Tag.id.in_(tag_ids))
+            tag_stmt = select(Tag).where(Tag.id.in_(tag_ids)).options(selectinload(Tag.group))
             tag_result = await session.execute(tag_stmt)
             product.tags = list(tag_result.scalars().all())
 

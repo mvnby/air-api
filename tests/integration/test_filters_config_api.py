@@ -38,3 +38,31 @@ async def test_filters_config_returns_ranges_and_allowed_tags(async_client, db):
     assert [item["slug"] for item in data["brands"]] == ["haier"]
     assert [item["slug"] for item in data["expert_tags"]] == ["hit"]
     assert "wifi-builtin" not in [item["slug"] for item in data["expert_tags"]]
+
+
+@pytest.mark.asyncio
+async def test_filters_config_hides_obvious_pseudo_brands(async_client, db):
+    brand_group = TagGroup(title="Brand", slug="brand")
+    db.add(brand_group)
+    await db.commit()
+    await db.refresh(brand_group)
+
+    valid_brand = Tag(title="TCL", slug="tcl", group_id=brand_group.id, is_public=True)
+    pseudo_brand = Tag(
+        title="Мульти-сплит-система",
+        slug="multi-split-sistema",
+        group_id=brand_group.id,
+        is_public=True,
+    )
+    db.add(valid_brand)
+    db.add(pseudo_brand)
+    db.add(Product(title="A", slug="cfg-brand-a", price=1000, area=20, is_published=True))
+    await db.commit()
+
+    response = await async_client.get("/api/v1/filters/config")
+    assert response.status_code == 200
+    data = response.json()
+
+    slugs = [item["slug"] for item in data["brands"]]
+    assert "tcl" in slugs
+    assert "multi-split-sistema" not in slugs
