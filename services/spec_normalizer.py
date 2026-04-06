@@ -1,11 +1,12 @@
 import re
 from typing import Any, Dict, List, Optional, Sequence
 
-from services.tag_logic import extract_brand_name, extract_brand_slug
+from services.tag_logic import extract_brand_name, extract_brand_slug, is_invalid_brand_name
 
 # 1. Маппинг (Русский -> Системный)
 KEY_MAP = {
     # --- ОСНОВНОЕ ---
+    "Тип": "type",
     "Тип кондиционера": "type",
     "Тип внутреннего блока": "indoor_type",
     "Режим работы": "modes",
@@ -13,6 +14,7 @@ KEY_MAP = {
     "Цвет": "color",
     "Хладагент (фреон)": "freon_type",
     "Инверторная технология": "inverter",
+    "Инверторный": "inverter",
     "Бренд": "brand",
     "Марка": "brand",
     "Производитель": "brand",
@@ -63,6 +65,9 @@ KEY_MAP = {
     # --- МОНТАЖ ---
     "Максимальная длина магистрали": "pipe_max_length",
     "Перепад высот": "pipe_max_height",
+    "Максимальное количество внутренних блоков": "multi_max_indoor_units",
+    "Максимальная суммарная длина магистрали": "multi_max_total_pipe_length",
+    "Максимальный перепад высот": "multi_max_height_diff",
     "Диаметр жидкостной трубы": "pipe_liquid",
     "Диаметр газовой трубы": "pipe_gas",
     
@@ -450,10 +455,13 @@ def normalize_specs(
             continue
         new_specs[sys_key] = clean_value(sys_key, raw_val, keep_units=keep_units)
 
-    if not str(new_specs.get("brand", "")).strip():
+    current_brand = str(new_specs.get("brand", "")).strip()
+    if not current_brand or is_invalid_brand_name(current_brand):
         inferred_brand = extract_brand_name(new_specs, title=title or "")
         if inferred_brand:
             new_specs["brand"] = inferred_brand
+        elif current_brand and is_invalid_brand_name(current_brand):
+            new_specs.pop("brand", None)
 
     brand_slug = extract_brand_slug(new_specs, title=title or "")
     if auto_tag_slugs is not None and brand_slug and brand_slug not in auto_tag_slugs:
