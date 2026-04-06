@@ -103,6 +103,12 @@ const parseNumber = (value) => {
 };
 
 const normalizeText = (value) => String(value || '').toLowerCase().replace(/ё/g, 'е');
+const normalizeBrand = (value) => normalizeText(value).replace(/[^a-z0-9а-я]/g, '');
+const isSameBrand = (left, right) => {
+  const a = normalizeBrand(left);
+  const b = normalizeBrand(right);
+  return Boolean(a) && Boolean(b) && a === b;
+};
 const parseSlugList = (value) => {
   if (Array.isArray(value)) {
     return Array.from(new Set(value.map((item) => String(item || '').trim()).filter(Boolean)));
@@ -150,10 +156,18 @@ const selectedOutdoorUnit = computed(
 const selectedOutdoorCompatibleIndoorSlugs = computed(() => new Set(
   parseSlugList(getSpecValue(selectedOutdoorUnit.value, ['compatible_indoor_slugs'])),
 ));
+const hasOutdoorBrandRestriction = computed(() => Boolean(normalizeBrand(getProductBrand(selectedOutdoorUnit.value))));
 const hasOutdoorCompatRestriction = computed(() => selectedOutdoorCompatibleIndoorSlugs.value.size > 0);
 const multiIndoorOptionsFiltered = computed(() => {
-  if (!hasOutdoorCompatRestriction.value) return multiIndoorOptions.value;
-  return multiIndoorOptions.value.filter((product) => selectedOutdoorCompatibleIndoorSlugs.value.has(product.slug));
+  let result = [...multiIndoorOptions.value];
+  const selectedBrand = getProductBrand(selectedOutdoorUnit.value);
+  if (selectedBrand) {
+    result = result.filter((product) => isSameBrand(getProductBrand(product), selectedBrand));
+  }
+  if (hasOutdoorCompatRestriction.value) {
+    result = result.filter((product) => selectedOutdoorCompatibleIndoorSlugs.value.has(product.slug));
+  }
+  return result;
 });
 
 const selectedIndoorRows = computed(() => multiIndoorOptionsFiltered.value
@@ -180,8 +194,18 @@ const allowedCoolingLimit = computed(() => (
 const brandMismatchCount = computed(() => selectedIndoorRows.value.filter((row) => (
   outdoorBrand.value
   && row.brand
-  && row.brand.toLowerCase() !== outdoorBrand.value.toLowerCase()
+  && !isSameBrand(row.brand, outdoorBrand.value)
 )).length);
+const multiIndoorFilterHint = computed(() => {
+  const messages = [];
+  if (hasOutdoorBrandRestriction.value && outdoorBrand.value) {
+    messages.push(`Показаны внутренние блоки бренда ${outdoorBrand.value}.`);
+  }
+  if (hasOutdoorCompatRestriction.value) {
+    messages.push('Дополнительно применен список явной совместимости для выбранного наружного.');
+  }
+  return messages.join(' ');
+});
 
 const multiValidation = computed(() => {
   const reasons = [];
@@ -868,8 +892,8 @@ onMounted(async () => {
 
           <div class="multi-config-column">
             <div class="control-label">2. Внутренние блоки</div>
-            <div v-if="hasOutdoorCompatRestriction" class="multi-compat-hint">
-              Показаны только совместимые внутренние блоки для выбранного наружного.
+            <div v-if="multiIndoorFilterHint" class="multi-compat-hint">
+              {{ multiIndoorFilterHint }}
             </div>
             <div class="multi-indoor-list">
               <div v-for="indoor in multiIndoorOptionsFiltered" :key="indoor.slug" class="multi-indoor-item">

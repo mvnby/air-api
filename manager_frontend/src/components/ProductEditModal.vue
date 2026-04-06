@@ -60,6 +60,7 @@ const compatibilityOutdoorSlugs = ref<string[]>([]);
 const compatibilityQuery = ref('');
 const compatibilityResults = ref<Product[]>([]);
 const compatibilityLoading = ref(false);
+const compatibilityInfo = ref('');
 
 const normalizeText = (value: unknown): string => String(value ?? '').toLowerCase().replace(/ё/g, 'е').trim();
 
@@ -86,12 +87,96 @@ const parseSlugList = (value: unknown): string[] => {
     return [];
 };
 
+const getProductSpecsMap = (product: Product | null | undefined): Record<string, any> => (
+    ((product as any)?.specs || {}) as Record<string, any>
+);
+
+const getBrandFromSpecs = (product: Product | null | undefined): string => {
+    const specsMap = getProductSpecsMap(product);
+    const raw = specsMap.brand ?? specsMap['Бренд'] ?? specsMap['Марка'] ?? specsMap['Производитель'];
+    return String(raw ?? '').trim();
+};
+
+const getCurrentEditedBrandFromSpecs = (): string => {
+    const byKey = new Map(
+        specs.value.map((row) => [normalizeText(row.key), String(row.value ?? '').trim()]),
+    );
+    return (
+        byKey.get('brand')
+        || byKey.get('бренд')
+        || byKey.get('марка')
+        || byKey.get('производитель')
+        || ''
+    ).trim();
+};
+
+const isIndoorProduct = (product: Product): boolean => {
+    const specsMap = getProductSpecsMap(product);
+    const typeText = normalizeText(specsMap.type ?? specsMap['Тип']);
+    const titleText = normalizeText((product as any)?.title);
+    return typeText.includes('внутрен') || titleText.includes('внутренний блок');
+};
+
+const isOutdoorProduct = (product: Product): boolean => {
+    if (isIndoorProduct(product)) return false;
+    const specsMap = getProductSpecsMap(product);
+    const typeText = normalizeText(specsMap.type ?? specsMap['Тип']);
+    const titleText = normalizeText((product as any)?.title);
+    return typeText.includes('наруж') || typeText.includes('мульти') || titleText.includes('мульти-сплит');
+};
+
 const isMultiRelatedProduct = (product: Product): boolean => {
     const tags = (product as any).tags || [];
     return tags.some((tag: any) => tag.slug === 'cat-multi');
 };
 
 const categoryGroup = computed(() => tagGroups.value.find((group) => group.slug === 'category') || null);
+const brandGroup = computed(() => tagGroups.value.find((group) => group.slug === 'brand') || null);
+const selectedBrandTag = computed(() => {
+    const group = brandGroup.value;
+    if (!group) return null;
+    return group.tags.find((tag) => selectedTagIds.value.has(tag.id)) || null;
+});
+const currentBrandId = computed<number | null>(() => {
+    const raw = Number((props.product as any)?.brand_id || 0);
+    return Number.isFinite(raw) && raw > 0 ? raw : null;
+});
+const currentBrandTitle = computed<string>(() => (
+    String(
+        selectedBrandTag.value?.title
+        || getCurrentEditedBrandFromSpecs()
+        || getBrandFromSpecs(props.product)
+        || '',
+    ).trim()
+));
+const hasBrandContext = computed(() => Boolean(currentBrandId.value || currentBrandTitle.value));
+
+const isSameBrandCandidate = (candidate: Product): boolean => {
+    const candidateBrandIdRaw = Number((candidate as any)?.brand_id || 0);
+    const candidateBrandId = Number.isFinite(candidateBrandIdRaw) && candidateBrandIdRaw > 0
+        ? candidateBrandIdRaw
+        : null;
+
+    if (currentBrandId.value && candidateBrandId) {
+        return candidateBrandId === currentBrandId.value;
+    }
+
+    const currentBrand = normalizeText(currentBrandTitle.value);
+    const candidateBrand = normalizeText(getBrandFromSpecs(candidate));
+    if (currentBrand && candidateBrand) return currentBrand === candidateBrand;
+
+    if (hasBrandContext.value) return false;
+    return true;
+};
+
+const filterCompatibilityCandidates = (items: Product[]): Product[] => (
+    items.filter((item) => {
+        if (!isMultiRelatedProduct(item)) return false;
+        if (item.id === props.product?.id) return false;
+        if (!isSameBrandCandidate(item)) return false;
+        return true;
+    })
+);
 
 const upsertSpecRow = (key: string, value: string) => {
     const existing = specs.value.find((row) => row.key === key);
@@ -156,19 +241,85 @@ const searchCompatibilityProducts = async () => {
     const q = compatibilityQuery.value.trim();
     if (q.length < 2) {
         compatibilityResults.value = [];
+        compatibilityInfo.value = '';
         return;
     }
 
     compatibilityLoading.value = true;
     try {
         const result = await api.smartSearchProducts(q, 40);
-        compatibilityResults.value = result.filter((item) => {
-            if (!isMultiRelatedProduct(item)) return false;
-            return item.id !== props.product?.id;
-        });
+        compatibilityResults.value = filterCompatibilityCandidates(result);
+        if (hasBrandContext.value) {
+            compatibilityInfo.value = compatibilityResults.value.length > 0
+                ? 'Показаны кандидаты только текущего бренда.'
+                : 'Совместимые кандидаты текущего бренда не найдены.';
+        } else {
+            compatibilityInfo.value = 'Бренд у текущего товара не определен. Показаны все мульти-кандидаты.';
+        }
     } catch (e) {
         console.error(e);
         compatibilityResults.value = [];
+        compatibilityInfo.value = '';
+    } finally {
+        compatibilityLoading.value = false;
+    }
+};
+
+const guessSearchSeedForBrand = (): string => {
+    const fromQuery = compatibilityQuery.value.trim();
+    if (fromQuery.length >= 2) return fromQuery;
+    const fromBrand = currentBrandTitle.value.trim();
+    if (fromBrand.length >= 2) return fromBrand;
+    const firstWord = String(form.value.title || props.product?.title || '').trim().split(/\s+/)[0] || '';
+    return firstWord.length >= 2 ? firstWord : '';
+};
+
+const autoFillCompatibilityByBrand = async () => {
+    compatibilityInfo.value = '';
+    if (!hasBrandContext.value) {
+        compatibilityInfo.value = 'Сначала задайте бренд (тег группы Бренд или spec brand).';
+        return;
+    }
+
+    const seed = guessSearchSeedForBrand();
+    if (!seed) {
+        compatibilityInfo.value = 'Не удалось определить поисковую фразу для автоподбора.';
+        return;
+    }
+
+    compatibilityLoading.value = true;
+    try {
+        const result = await api.smartSearchProducts(seed, 100);
+        const filtered = filterCompatibilityCandidates(result);
+        compatibilityResults.value = filtered;
+
+        const beforeIndoor = compatibilityIndoorSlugs.value.length;
+        const beforeOutdoor = compatibilityOutdoorSlugs.value.length;
+
+        const indoorCandidates = filtered
+            .filter((item) => isIndoorProduct(item))
+            .map((item) => String(item.slug || '').trim())
+            .filter(Boolean);
+        const outdoorCandidates = filtered
+            .filter((item) => isOutdoorProduct(item))
+            .map((item) => String(item.slug || '').trim())
+            .filter(Boolean);
+
+        if (currentProductRole.value === 'outdoor') {
+            compatibilityIndoorSlugs.value = Array.from(new Set([...compatibilityIndoorSlugs.value, ...indoorCandidates]));
+        } else if (currentProductRole.value === 'indoor') {
+            compatibilityOutdoorSlugs.value = Array.from(new Set([...compatibilityOutdoorSlugs.value, ...outdoorCandidates]));
+        } else {
+            compatibilityIndoorSlugs.value = Array.from(new Set([...compatibilityIndoorSlugs.value, ...indoorCandidates]));
+            compatibilityOutdoorSlugs.value = Array.from(new Set([...compatibilityOutdoorSlugs.value, ...outdoorCandidates]));
+        }
+
+        const addedIndoor = compatibilityIndoorSlugs.value.length - beforeIndoor;
+        const addedOutdoor = compatibilityOutdoorSlugs.value.length - beforeOutdoor;
+        compatibilityInfo.value = `Автоподбор по бренду: +${Math.max(0, addedIndoor)} внутренних, +${Math.max(0, addedOutdoor)} наружных.`;
+    } catch (e) {
+        console.error(e);
+        compatibilityInfo.value = 'Ошибка автоподбора. Проверьте сеть/API и повторите.';
     } finally {
         compatibilityLoading.value = false;
     }
@@ -281,6 +432,7 @@ watch(() => props.modelValue, (val) => {
         });
         compatibilityQuery.value = '';
         compatibilityResults.value = [];
+        compatibilityInfo.value = '';
         
         // Load tags
         const productTags = (props.product as any).tags || [];
@@ -576,15 +728,20 @@ const unlinkSupplierOffer = async (offer: any) => {
                         <div class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3">
                             <div class="flex items-start justify-between gap-2">
                                 <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-slate-500">Совместимость мульти</h4>
-                                <span class="text-[11px] text-gray-500 dark:text-slate-400">
-                                    Роль: {{
-                                        currentProductRole === 'indoor'
-                                            ? 'внутренний'
-                                            : currentProductRole === 'outdoor'
-                                                ? 'наружный'
-                                                : 'не определена'
-                                    }}
-                                </span>
+                                <div class="text-[11px] text-gray-500 dark:text-slate-400 text-right">
+                                    <div>
+                                        Роль: {{
+                                            currentProductRole === 'indoor'
+                                                ? 'внутренний'
+                                                : currentProductRole === 'outdoor'
+                                                    ? 'наружный'
+                                                    : 'не определена'
+                                        }}
+                                    </div>
+                                    <div>
+                                        Бренд: {{ currentBrandTitle || 'не задан' }}
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="flex gap-2">
@@ -603,6 +760,17 @@ const unlinkSupplierOffer = async (offer: any) => {
                                 >
                                     {{ compatibilityLoading ? '...' : 'Поиск' }}
                                 </button>
+                                <button
+                                    type="button"
+                                    class="px-3 py-2 rounded-lg border border-teal-200 dark:border-teal-800 text-sm font-semibold text-teal-700 dark:text-teal-300 disabled:opacity-50"
+                                    :disabled="compatibilityLoading || !hasBrandContext"
+                                    @click="autoFillCompatibilityByBrand"
+                                >
+                                    Авто по бренду
+                                </button>
+                            </div>
+                            <div v-if="compatibilityInfo" class="text-[11px] text-gray-500 dark:text-slate-400">
+                                {{ compatibilityInfo }}
                             </div>
 
                             <div v-if="compatibilityResults.length > 0" class="max-h-40 overflow-y-auto space-y-2">
