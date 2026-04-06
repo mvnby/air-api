@@ -288,6 +288,7 @@ export const api = {
         areaMin?: number,
         areaMax?: number,
         isInverter?: boolean,
+        categorySlug?: string,
         sort = 'newest',
     ) {
         return await ManagerService.getManagerProducts(
@@ -298,6 +299,7 @@ export const api = {
             areaMin ?? undefined,
             areaMax ?? undefined,
             isInverter ?? undefined,
+            categorySlug ?? undefined,
             sort,
         );
     },
@@ -338,8 +340,14 @@ export const api = {
         return await ApiService.adminSearchProductsApiAdminProductsSearchGet(q);
     },
 
-    async smartSearchProducts(q: string, limit = 40, isInverter?: boolean, hasWifi?: boolean): Promise<Product[]> {
-        const res = await ManagerService.smartSearchProducts(q, limit, isInverter, hasWifi);
+    async smartSearchProducts(
+        q: string,
+        limit = 40,
+        isInverter?: boolean,
+        hasWifi?: boolean,
+        categorySlug?: string,
+    ): Promise<Product[]> {
+        const res = await ManagerService.smartSearchProducts(q, limit, isInverter, hasWifi, categorySlug);
         return res.items;
     },
 

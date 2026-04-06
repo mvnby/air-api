@@ -2005,6 +2005,24 @@
             }
           },
           {
+            "name": "category_slug",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Category tag slug: cat-household/cat-multi/cat-industrial",
+              "title": "Category Slug"
+            },
+            "description": "Category tag slug: cat-household/cat-multi/cat-industrial"
+          },
+          {
             "name": "sort",
             "in": "query",
             "required": false,
@@ -2583,6 +2601,24 @@
               ],
               "title": "Has Wifi"
             }
+          },
+          {
+            "name": "category_slug",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Category tag slug: cat-household/cat-multi/cat-industrial",
+              "title": "Category Slug"
+            },
+            "description": "Category tag slug: cat-household/cat-multi/cat-industrial"
           }
         ],
         "responses": {

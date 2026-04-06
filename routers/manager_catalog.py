@@ -61,6 +61,7 @@ async def list_products_for_manager(
     area_min: Optional[int] = Query(None),
     area_max: Optional[int] = Query(None),
     is_inverter: Optional[bool] = Query(None),
+    category_slug: Optional[str] = Query(None, description="Category tag slug: cat-household/cat-multi/cat-industrial"),
     sort: str = Query("newest"),
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
@@ -78,6 +79,7 @@ async def list_products_for_manager(
         area_min=area_min,
         area_max=area_max,
         is_inverter=is_inverter,
+        category_slug=category_slug,
         sort=sort,
     )
 
@@ -318,6 +320,7 @@ async def smart_search_products(
     limit: int = Query(40, ge=1, le=100),
     is_inverter: Optional[bool] = Query(None),
     has_wifi: Optional[bool] = Query(None),
+    category_slug: Optional[str] = Query(None, description="Category tag slug: cat-household/cat-multi/cat-industrial"),
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
@@ -334,6 +337,7 @@ async def smart_search_products(
         limit=limit,
         is_inverter=is_inverter,
         has_wifi=has_wifi,
+        category_slug=category_slug,
     )
 
 

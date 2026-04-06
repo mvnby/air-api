@@ -19,6 +19,7 @@ class ManagerCatalogService:
         area_min: Optional[int],
         area_max: Optional[int],
         is_inverter: Optional[bool],
+        category_slug: Optional[str],
         sort: str,
     ) -> Dict[str, Any]:
         return await ProductService.get_manager_list(
@@ -30,6 +31,7 @@ class ManagerCatalogService:
             area_min=area_min,
             area_max=area_max,
             is_inverter=is_inverter,
+            category_slug=category_slug,
             sort=sort,
         )
 
@@ -115,6 +117,13 @@ class ManagerCatalogService:
         limit: int = 40,
         is_inverter: Optional[bool] = None,
         has_wifi: Optional[bool] = None,
+        category_slug: Optional[str] = None,
     ):
-        return await ProductManagerService.smart_search(session=session, q=q, limit=limit, is_inverter=is_inverter, has_wifi=has_wifi)
-
+        return await ProductManagerService.smart_search(
+            session=session,
+            q=q,
+            limit=limit,
+            is_inverter=is_inverter,
+            has_wifi=has_wifi,
+            category_slug=category_slug,
+        )

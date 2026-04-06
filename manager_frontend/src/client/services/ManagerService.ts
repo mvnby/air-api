@@ -68,6 +68,7 @@ export class ManagerService {
      * @param areaMin
      * @param areaMax
      * @param isInverter
+     * @param categorySlug Category tag slug: cat-household/cat-multi/cat-industrial
      * @param sort
      * @returns ManagerCatalogProductListResponse Successful Response
      * @throws ApiError
@@ -80,6 +81,7 @@ export class ManagerService {
         areaMin?: (number | null),
         areaMax?: (number | null),
         isInverter?: (boolean | null),
+        categorySlug?: (string | null),
         sort: string = 'newest',
     ): CancelablePromise<ManagerCatalogProductListResponse> {
         return __request(OpenAPI, {
@@ -93,6 +95,7 @@ export class ManagerService {
                 'area_min': areaMin,
                 'area_max': areaMax,
                 'is_inverter': isInverter,
+                'category_slug': categorySlug,
                 'sort': sort,
             },
             errors: {
@@ -306,6 +309,7 @@ export class ManagerService {
      * @param limit
      * @param isInverter
      * @param hasWifi
+     * @param categorySlug Category tag slug: cat-household/cat-multi/cat-industrial
      * @returns ManagerCatalogProductListResponse Successful Response
      * @throws ApiError
      */
@@ -314,6 +318,7 @@ export class ManagerService {
         limit: number = 40,
         isInverter?: (boolean | null),
         hasWifi?: (boolean | null),
+        categorySlug?: (string | null),
     ): CancelablePromise<ManagerCatalogProductListResponse> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -323,6 +328,7 @@ export class ManagerService {
                 'limit': limit,
                 'is_inverter': isInverter,
                 'has_wifi': hasWifi,
+                'category_slug': categorySlug,
             },
             errors: {
                 422: `Validation Error`,
