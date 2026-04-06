@@ -201,6 +201,31 @@ def _normalize_compressor_type(value: Any, inverter_value: Any) -> str | None:
     return None
 
 
+def _normalize_indoor_type_kind(*values: Any) -> str | None:
+    for raw in values:
+        text = str(raw or "").strip().lower().replace("ё", "е")
+        if not text:
+            continue
+        text = text.replace("—", "-")
+        text = re.sub(r"\s+", " ", text)
+
+        if "каналь" in text or "duct" in text:
+            return "duct"
+        if "кассет" in text or "cassette" in text:
+            return "cassette"
+        if (
+            "напольно" in text
+            or "подпотолоч" in text
+            or "потолоч" in text
+            or "floor-ceiling" in text
+            or "floor ceiling" in text
+        ):
+            return "floor_ceiling"
+        if "колонн" in text or "column" in text or "console" in text:
+            return "column"
+    return None
+
+
 def _classify_wifi_value(value: Any) -> str | None:
     if isinstance(value, bool):
         return "builtin" if value else "none"
@@ -359,6 +384,13 @@ def enrich_filter_keys(
     )
     if compressor_type_norm:
         enriched["compressor_type_norm"] = compressor_type_norm
+
+    indoor_type_kind = _normalize_indoor_type_kind(
+        enriched.get("indoor_type"),
+        enriched.get("type"),
+    )
+    if indoor_type_kind:
+        enriched["__filter_indoor_type"] = indoor_type_kind
 
     return enriched
 

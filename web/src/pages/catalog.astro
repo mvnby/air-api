@@ -28,6 +28,7 @@ const hasWifiRaw = searchParams.get("has_wifi");
 const heatingMinRaw = searchParams.get("heating_min");
 const areaMinRaw = searchParams.get("area_min");
 let areaMaxRaw = searchParams.get("area_max");
+const indoorTypesRaw = searchParams.getAll("indoor_types");
 const categorySlugs = new Set(["cat-household", "cat-multi", "cat-industrial"]);
 
 const userTagSlugs = tagSlugsRaw
@@ -56,20 +57,27 @@ const parsedAreaMin = areaMinRaw ? parseInt(areaMinRaw, 10) : undefined;
 const parsedAreaMax = areaMaxRaw ? parseInt(areaMaxRaw, 10) : undefined;
 const parsedHeatingMin = heatingMinRaw ? parseInt(heatingMinRaw, 10) : undefined;
 const tag_slugs: string[] = [...new Set(userTagSlugs)];
+const parsedIndoorTypes = indoorTypesRaw
+    .flatMap((value) => value.split(","))
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+const hasIndustrialCategory = tag_slugs.includes("cat-industrial");
 
 let canonicalPath = "/catalog";
 let robotsValue: string | undefined;
 
 if (hasQueryParams) {
-    const matchedVirtual = matchVirtualCategoryByFilters({
-        sort,
-        tag_slugs: userTagSlugs,
-        is_inverter: parsedIsInverter,
-        has_wifi: parsedHasWifi,
-        heating_min: parsedHeatingMin,
-        area_min: parsedAreaMin,
-        area_max: parsedAreaMax,
-    });
+    const matchedVirtual = parsedIndoorTypes.length
+        ? null
+        : matchVirtualCategoryByFilters({
+            sort,
+            tag_slugs: userTagSlugs,
+            is_inverter: parsedIsInverter,
+            has_wifi: parsedHasWifi,
+            heating_min: parsedHeatingMin,
+            area_min: parsedAreaMin,
+            area_max: parsedAreaMax,
+        });
     if (matchedVirtual) {
         canonicalPath = `/catalog/${matchedVirtual.slug}`;
     }
@@ -110,6 +118,10 @@ const data = await getCatalog({
     heating_min: parsedHeatingMin,
     area_min: parsedAreaMin,
     area_max: parsedAreaMax,
+    indoor_types:
+        hasIndustrialCategory && parsedIndoorTypes.length > 0
+            ? parsedIndoorTypes
+            : undefined,
 });
 const products = (data.items || []) as Product[];
 const meta = data.meta || { total: 0, page: 1, limit: 20, pages: 1 };
@@ -177,6 +189,13 @@ const meta = data.meta || { total: 0, page: 1, limit: 20, pages: 1 };
                 heating_min: toNumber(sp.get("heating_min")),
                 area_min: toNumber(sp.get("area_min")),
                 area_max: toNumber(sp.get("area_max")),
+                indoor_types: normalizeTags(
+                    sp
+                        .getAll("indoor_types")
+                        .flatMap((raw) => raw.split(","))
+                        .map((raw) => raw.trim().toLowerCase())
+                        .filter(Boolean),
+                ),
             };
 
             const matched = virtualCategories.find((category) => {
@@ -194,6 +213,7 @@ const meta = data.meta || { total: 0, page: 1, limit: 20, pages: 1 };
                     heating_min: category.filters.heating_min,
                     area_min: category.filters.area_min,
                     area_max: category.filters.area_max,
+                    indoor_types: normalizeTags(category.filters.indoor_types || []),
                 };
 
                 return (
@@ -204,6 +224,12 @@ const meta = data.meta || { total: 0, page: 1, limit: 20, pages: 1 };
                     normalizedInput.heating_min === normalizedCategory.heating_min &&
                     normalizedInput.area_min === normalizedCategory.area_min &&
                     normalizedInput.area_max === normalizedCategory.area_max &&
+                    normalizedInput.indoor_types.length ===
+                        normalizedCategory.indoor_types.length &&
+                    normalizedInput.indoor_types.every(
+                        (value, idx) =>
+                            value === normalizedCategory.indoor_types[idx],
+                    ) &&
                     normalizedInput.tag_slugs.length ===
                         normalizedCategory.tag_slugs.length &&
                     normalizedInput.tag_slugs.every(

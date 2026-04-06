@@ -292,6 +292,7 @@ export class ApiService {
      * @param heatingMin
      * @param hasWifi
      * @param hasFreshAir
+     * @param indoorTypes Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)
      * @param tagSlugs
      * @param isInverter
      * @param q Smart search query
@@ -309,6 +310,7 @@ export class ApiService {
         heatingMin?: (number | null),
         hasWifi?: (boolean | null),
         hasFreshAir?: (boolean | null),
+        indoorTypes?: (Array<string> | null),
         tagSlugs?: (Array<string> | null),
         isInverter?: (boolean | null),
         q?: (string | null),
@@ -327,6 +329,7 @@ export class ApiService {
                 'heating_min': heatingMin,
                 'has_wifi': hasWifi,
                 'has_fresh_air': hasFreshAir,
+                'indoor_types': indoorTypes,
                 'tag_slugs': tagSlugs,
                 'is_inverter': isInverter,
                 'q': q,
@@ -348,6 +351,7 @@ export class ApiService {
      * @param heatingMin
      * @param hasWifi
      * @param hasFreshAir
+     * @param indoorTypes Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)
      * @param tagSlugs
      * @param isInverter
      * @param q Smart search query
@@ -365,6 +369,7 @@ export class ApiService {
         heatingMin?: (number | null),
         hasWifi?: (boolean | null),
         hasFreshAir?: (boolean | null),
+        indoorTypes?: (Array<string> | null),
         tagSlugs?: (Array<string> | null),
         isInverter?: (boolean | null),
         q?: (string | null),
@@ -383,6 +388,7 @@ export class ApiService {
                 'heating_min': heatingMin,
                 'has_wifi': hasWifi,
                 'has_fresh_air': hasFreshAir,
+                'indoor_types': indoorTypes,
                 'tag_slugs': tagSlugs,
                 'is_inverter': isInverter,
                 'q': q,

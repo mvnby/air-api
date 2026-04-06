@@ -5,7 +5,7 @@ All methods accept AsyncSession as first argument for DI/transaction control.
 """
 from typing import Optional, List, Dict, Any
 
-from sqlalchemy import Integer, Boolean, cast, func, and_, or_, exists
+from sqlalchemy import Integer, Boolean, String, cast, func, and_, or_, exists
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -16,6 +16,7 @@ from models.product_constants import BTU_MAPPING
 
 
 ALLOWED_FILTER_GROUP_SLUGS = {"brand", "series", "expert-badge", "type", "category"}
+ALLOWED_INDOOR_TYPE_FILTERS = {"duct", "cassette", "floor_ceiling", "column"}
 
 
 class ProductDAO:
@@ -71,6 +72,13 @@ class ProductDAO:
         return cast(func.jsonb_extract_path_text(cast(Product.specs, JSONB), key), Boolean)
 
     @staticmethod
+    def _json_text_expr(session: AsyncSession, key: str):
+        dialect = session.bind.dialect.name if session.bind is not None else ""
+        if dialect == "sqlite":
+            return func.lower(cast(func.json_extract(Product.specs, f"$.{key}"), String))
+        return func.lower(func.jsonb_extract_path_text(cast(Product.specs, JSONB), key))
+
+    @staticmethod
     def _apply_common_filters(
         session: AsyncSession,
         stmt,
@@ -82,6 +90,7 @@ class ProductDAO:
         heating_min: Optional[int] = None,
         has_wifi: Optional[bool] = None,
         has_fresh_air: Optional[bool] = None,
+        indoor_types: Optional[List[str]] = None,
         tag_slugs: Optional[List[str]] = None,
         is_published: Optional[bool] = True,
     ):
@@ -154,6 +163,15 @@ class ProductDAO:
                     stmt = stmt.where(or_(fresh_air_expr == 0, fresh_air_expr.is_(None)))
                 else:
                     stmt = stmt.where(or_(fresh_air_expr == False, fresh_air_expr.is_(None)))
+
+        if indoor_types:
+            normalized_types = [
+                str(value).strip().lower()
+                for value in indoor_types
+                if value and str(value).strip().lower() in ALLOWED_INDOOR_TYPE_FILTERS
+            ]
+            if normalized_types:
+                stmt = stmt.where(ProductDAO._json_text_expr(session, "__filter_indoor_type").in_(normalized_types))
 
         if tag_slugs:
             normalized_slugs = [slug.strip().lower() for slug in tag_slugs if slug and slug.strip()]
@@ -230,6 +248,7 @@ class ProductDAO:
         heating_min: Optional[int] = None,
         has_wifi: Optional[bool] = None,
         has_fresh_air: Optional[bool] = None,
+        indoor_types: Optional[List[str]] = None,
         tag_slugs: Optional[List[str]] = None,
         is_published: Optional[bool] = True,
         sort: str = "newest",
@@ -254,6 +273,7 @@ class ProductDAO:
             heating_min=heating_min,
             has_wifi=has_wifi,
             has_fresh_air=has_fresh_air,
+            indoor_types=indoor_types,
             tag_slugs=tag_slugs,
             is_published=is_published,
         )
@@ -289,6 +309,7 @@ class ProductDAO:
         heating_min: Optional[int] = None,
         has_wifi: Optional[bool] = None,
         has_fresh_air: Optional[bool] = None,
+        indoor_types: Optional[List[str]] = None,
         tag_slugs: Optional[List[str]] = None,
         is_published: Optional[bool] = True,
         faceted_tag_ids: Optional[dict[int, list[int]]] = None,
@@ -306,6 +327,7 @@ class ProductDAO:
             heating_min=heating_min,
             has_wifi=has_wifi,
             has_fresh_air=has_fresh_air,
+            indoor_types=indoor_types,
             tag_slugs=tag_slugs,
             is_published=is_published,
         )

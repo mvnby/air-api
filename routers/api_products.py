@@ -56,6 +56,10 @@ async def get_catalog(
     heating_min: Optional[int] = None,
     has_wifi: Optional[bool] = None,
     has_fresh_air: Optional[bool] = None,
+    indoor_types: Optional[List[str]] = Query(
+        None,
+        description="Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)",
+    ),
     tag_slugs: Optional[List[str]] = Query(None),
     is_inverter: Optional[bool] = None,
     q: Optional[str] = Query(None, description="Smart search query"),
@@ -78,6 +82,7 @@ async def get_catalog(
         heating_min=heating_min,
         has_wifi=has_wifi,
         has_fresh_air=has_fresh_air,
+        indoor_types=indoor_types,
         tag_slugs=tag_slugs,
         is_inverter=is_inverter,
         search=q,

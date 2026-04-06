@@ -17,6 +17,12 @@ const POWER_PRESETS = [
   { key: 'area-50', title: 'до 50 м²', min: null, max: 50 },
   { key: 'area-70', title: 'до 70 м²', min: null, max: 70 },
 ];
+const INDUSTRIAL_TYPE_OPTIONS = [
+  { value: 'duct', title: 'Канальные' },
+  { value: 'cassette', title: 'Кассетные' },
+  { value: 'floor_ceiling', title: 'Напольно-потолочные' },
+  { value: 'column', title: 'Колонные' },
+];
 const CATEGORY_SLUGS = new Set(CATEGORY_TABS.map((tab) => tab.slug));
 
 const props = defineProps({
@@ -61,6 +67,7 @@ const currentIsInverter = ref(null);
 const currentHasWifi = ref(null);
 const currentHasFreshAir = ref(null);
 const currentHeatingMin = ref(null);
+const currentIndoorTypes = ref([]);
 
 const availableBrands = ref([]);
 let searchDebounceTimeout = null;
@@ -70,6 +77,7 @@ const knownBrandSlugs = computed(() => new Set(availableBrands.value.map((brand)
 const activeCategorySlug = computed(() => activeTags.value.find((slug) => CATEGORY_SLUGS.has(slug)) || null);
 const activeBrandSlug = computed(() => activeTags.value.find((slug) => knownBrandSlugs.value.has(slug)) || null);
 const isHouseholdCategory = computed(() => activeCategorySlug.value === 'cat-household');
+const isIndustrialCategory = computed(() => activeCategorySlug.value === 'cat-industrial');
 
 const activePowerPresetKey = computed(() => {
   const min = currentAreaMin.value === null || currentAreaMin.value === undefined || currentAreaMin.value === ''
@@ -107,6 +115,8 @@ const pageDescription = computed(() => {
   }
   return 'Настенные сплит-системы для квартиры и дома с удобной фильтрацией по брендам.';
 });
+
+const semiGuideUrl = '/blog/polupromyshlennye-kondicionery-tipy-i-vybor';
 
 const hasMore = computed(() => {
   const currentPage = Number(meta.value?.page || 1);
@@ -148,6 +158,7 @@ const getParamsFromUrl = () => {
       : sp.get('has_fresh_air') === 'false'
         ? false
         : null,
+    indoor_types: sp.getAll('indoor_types').flatMap((value) => value.split(',')).map((v) => v.trim()).filter(Boolean),
     heating_min: sp.get('heating_min') || null,
   };
 };
@@ -194,6 +205,7 @@ const syncStateFromUrl = () => {
   currentIsInverter.value = params.is_inverter;
   currentHasWifi.value = params.has_wifi;
   currentHasFreshAir.value = params.has_fresh_air;
+  currentIndoorTypes.value = [...params.indoor_types];
   currentHeatingMin.value = params.heating_min;
 
   if (!activeTags.value.some((slug) => CATEGORY_SLUGS.has(slug))) {
@@ -218,6 +230,7 @@ const buildApiParams = (page = 1) => {
     is_inverter: currentIsInverter.value,
     has_wifi: currentHasWifi.value,
     has_fresh_air: currentHasFreshAir.value,
+    indoor_types: isIndustrialCategory.value ? [...currentIndoorTypes.value] : undefined,
     heating_min: currentHeatingMin.value || undefined,
   };
 
@@ -242,6 +255,9 @@ const syncUrlFromState = (page = 1, { replace = false } = {}) => {
   if (params.is_inverter !== null && params.is_inverter !== undefined) sp.set('is_inverter', String(params.is_inverter));
   if (params.has_wifi !== null && params.has_wifi !== undefined) sp.set('has_wifi', String(params.has_wifi));
   if (params.has_fresh_air !== null && params.has_fresh_air !== undefined) sp.set('has_fresh_air', String(params.has_fresh_air));
+  if (params.indoor_types && params.indoor_types.length > 0) {
+    params.indoor_types.forEach((value) => sp.append('indoor_types', value));
+  }
   if (params.heating_min !== undefined) sp.set('heating_min', String(params.heating_min));
 
   const query = sp.toString();
@@ -338,7 +354,29 @@ const setCategory = async (categorySlug) => {
     currentAreaMin.value = null;
     currentAreaMax.value = null;
   }
+  if (categorySlug !== 'cat-industrial') {
+    currentIndoorTypes.value = [];
+  }
 
+  syncUrlFromState(1);
+  await fetchProducts({ page: 1, append: false });
+};
+
+const toggleIndustrialType = async (value) => {
+  if (!isIndustrialCategory.value) return;
+  const set = new Set(currentIndoorTypes.value);
+  if (set.has(value)) {
+    set.delete(value);
+  } else {
+    set.add(value);
+  }
+  currentIndoorTypes.value = [...set];
+  syncUrlFromState(1);
+  await fetchProducts({ page: 1, append: false });
+};
+
+const clearIndustrialTypes = async () => {
+  currentIndoorTypes.value = [];
   syncUrlFromState(1);
   await fetchProducts({ page: 1, append: false });
 };
@@ -408,6 +446,7 @@ const resetAdvancedFilters = async () => {
   currentIsInverter.value = null;
   currentHasWifi.value = null;
   currentHasFreshAir.value = null;
+  currentIndoorTypes.value = [];
   currentHeatingMin.value = null;
   if (!isHouseholdCategory.value) {
     currentAreaMin.value = null;
@@ -488,6 +527,13 @@ onMounted(async () => {
 
       <h1 class="gradient-text">{{ pageTitle }}</h1>
       <p class="header-description">{{ pageDescription }}</p>
+      <a
+        v-if="isIndustrialCategory"
+        :href="semiGuideUrl"
+        class="semi-guide-link"
+      >
+        Как выбрать тип полупромышленного кондиционера
+      </a>
     </header>
 
     <section class="glass-panel category-panel">
@@ -555,6 +601,28 @@ onMounted(async () => {
           @click="setPowerPreset(preset)"
         >
           {{ preset.title }}
+        </button>
+      </div>
+    </section>
+
+    <section v-if="isIndustrialCategory" class="glass-panel quick-power-panel">
+      <div class="section-label">Тип внутреннего блока</div>
+      <div class="quick-chip-row">
+        <button
+          class="quick-chip"
+          :class="{ active: currentIndoorTypes.length === 0 }"
+          @click="clearIndustrialTypes"
+        >
+          Все типы
+        </button>
+        <button
+          v-for="item in INDUSTRIAL_TYPE_OPTIONS"
+          :key="item.value"
+          class="quick-chip"
+          :class="{ active: currentIndoorTypes.includes(item.value) }"
+          @click="toggleIndustrialType(item.value)"
+        >
+          {{ item.title }}
         </button>
       </div>
     </section>
@@ -759,6 +827,19 @@ onMounted(async () => {
   max-width: 760px;
   color: var(--text-muted);
   margin: 0;
+}
+
+.semi-guide-link {
+  display: inline-flex;
+  margin-top: 0.7rem;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.semi-guide-link:hover {
+  text-decoration: underline;
 }
 
 .glass-panel {

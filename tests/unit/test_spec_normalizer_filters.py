@@ -74,3 +74,14 @@ def test_brand_normalization_and_auto_tag_slug_output():
 
     assert specs["brand"] == "TCL"
     assert "tcl" in auto_slugs
+
+
+def test_indoor_type_filter_key_for_semi_industrial():
+    cassette = normalize_specs({"Тип внутреннего блока": "кассетный"})
+    assert cassette["__filter_indoor_type"] == "cassette"
+
+    duct = normalize_specs({"indoor_type": "Канальный"})
+    assert duct["__filter_indoor_type"] == "duct"
+
+    floor_ceiling = normalize_specs({"Тип внутреннего блока": "напольно-потолочный"})
+    assert floor_ceiling["__filter_indoor_type"] == "floor_ceiling"
