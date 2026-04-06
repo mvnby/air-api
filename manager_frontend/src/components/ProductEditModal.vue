@@ -1101,10 +1101,7 @@ const unlinkSupplierOffer = async (offer: any) => {
                             </label>
                         </div>
 
-                        <div
-                            v-if="isCurrentProductMulti"
-                            class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3"
-                        >
+                        <div class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3">
                             <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-slate-500">Supply</h4>
                             <div class="flex items-end gap-2">
                                 <div class="flex-1">
@@ -1140,7 +1137,10 @@ const unlinkSupplierOffer = async (offer: any) => {
                             </div>
                         </div>
 
-                        <div class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3">
+                        <div
+                            v-if="isCurrentProductMulti"
+                            class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3"
+                        >
                             <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-slate-500">Быстрые пресеты</h4>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 <button
