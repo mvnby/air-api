@@ -22,10 +22,33 @@
             </div>
 
             <nav class="mobile-nav">
-              <a href="/catalog" class="nav-item" @click="isOpen = false">
-                <span class="material-icons-round icon">grid_view</span>
-                Каталог
-              </a>
+              <div class="nav-item-group">
+                <div class="nav-item nav-item-title">
+                  <span class="material-icons-round icon">grid_view</span>
+                  Каталог
+                </div>
+                <a
+                  href="/catalog?tag_slugs=cat-household"
+                  class="nav-subitem"
+                  @click="isOpen = false"
+                >
+                  Бытовые
+                </a>
+                <a
+                  href="/catalog?tag_slugs=cat-multi"
+                  class="nav-subitem"
+                  @click="isOpen = false"
+                >
+                  Мультисплит
+                </a>
+                <a
+                  href="/catalog?tag_slugs=cat-industrial"
+                  class="nav-subitem"
+                  @click="isOpen = false"
+                >
+                  Полупром
+                </a>
+              </div>
               <a href="/services" class="nav-item" @click="isOpen = false">
                 <span class="material-icons-round icon">handyman</span>
                 Услуги
@@ -137,6 +160,17 @@ watch(isOpen, (val) => {
   flex: 1;
 }
 
+.nav-item-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-bottom: 0.2rem;
+}
+
+.nav-item-title {
+  cursor: default;
+}
+
 .nav-item {
   display: flex;
   align-items: center;
@@ -157,6 +191,20 @@ watch(isOpen, (val) => {
   color: var(--text-muted);
 }
 .nav-item:hover .icon {
+  color: var(--primary);
+}
+
+.nav-subitem {
+  padding: 0.65rem 1rem 0.65rem 2.85rem;
+  border-radius: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.nav-subitem:hover,
+.nav-subitem:active {
+  background: var(--bg);
   color: var(--primary);
 }
 

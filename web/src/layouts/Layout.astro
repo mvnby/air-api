@@ -152,7 +152,22 @@ const address = config["address"] || SITE_CONFIG.address;
 				</a>
 
 				<div class="nav-links">
-					<a href="/catalog">Каталог</a>
+					<div class="nav-dropdown">
+						<button
+							type="button"
+							class="nav-dropdown-trigger"
+							aria-expanded="false"
+							aria-controls="catalog-menu"
+						>
+							<span>Каталог</span>
+							<span class="material-icons-round">expand_more</span>
+						</button>
+						<div id="catalog-menu" class="nav-dropdown-menu">
+							<a href="/catalog?tag_slugs=cat-household">Бытовые</a>
+							<a href="/catalog?tag_slugs=cat-multi">Мультисплит</a>
+							<a href="/catalog?tag_slugs=cat-industrial">Полупром</a>
+						</div>
+					</div>
 					<a href="/services">Услуги</a>
 					<a href="/blog">Статьи</a>
 					<a href="/contacts">Контакты</a>
@@ -268,6 +283,88 @@ const address = config["address"] || SITE_CONFIG.address;
 					document.documentElement.classList.toggle("dark");
 				localStorage.setItem("theme", isDark ? "dark" : "light");
 			});
+
+			const navDropdown = document.querySelector(".nav-dropdown");
+			const navDropdownTrigger = document.querySelector(".nav-dropdown-trigger");
+			if (navDropdown && navDropdownTrigger) {
+				let closeTimer = null;
+				let pinnedOpen = false;
+
+				const setOpen = (isOpen) => {
+					navDropdown.classList.toggle("open", isOpen);
+					navDropdownTrigger.setAttribute(
+						"aria-expanded",
+						isOpen ? "true" : "false",
+					);
+				};
+
+				const clearCloseTimer = () => {
+					if (closeTimer) {
+						clearTimeout(closeTimer);
+						closeTimer = null;
+					}
+				};
+
+				const openDropdown = () => {
+					clearCloseTimer();
+					setOpen(true);
+				};
+
+				const closeDropdown = () => {
+					clearCloseTimer();
+					setOpen(false);
+				};
+
+				const scheduleClose = () => {
+					if (pinnedOpen) return;
+					clearCloseTimer();
+					closeTimer = setTimeout(() => {
+						setOpen(false);
+					}, 220);
+				};
+
+				navDropdown.addEventListener("mouseenter", () => {
+					openDropdown();
+				});
+
+				navDropdown.addEventListener("mouseleave", () => {
+					scheduleClose();
+				});
+
+				navDropdownTrigger.addEventListener("click", (event) => {
+					event.preventDefault();
+					const isAlreadyPinned = pinnedOpen && navDropdown.classList.contains("open");
+					if (isAlreadyPinned) {
+						pinnedOpen = false;
+						closeDropdown();
+						return;
+					}
+
+					pinnedOpen = true;
+					openDropdown();
+				});
+
+				navDropdown.querySelectorAll(".nav-dropdown-menu a").forEach((link) => {
+					link.addEventListener("click", () => {
+						pinnedOpen = false;
+						closeDropdown();
+					});
+				});
+
+				document.addEventListener("click", (event) => {
+					if (!navDropdown.contains(event.target)) {
+						pinnedOpen = false;
+						closeDropdown();
+					}
+				});
+
+				document.addEventListener("keydown", (event) => {
+					if (event.key === "Escape") {
+						pinnedOpen = false;
+						closeDropdown();
+					}
+				});
+			}
 		</script>
 	</body>
 </html>

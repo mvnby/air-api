@@ -5,11 +5,7 @@ import { getCatalog, getFiltersConfig } from '../utils/api';
 import { getBrandConfig } from '../utils/brands';
 
 const BASE_LIMIT = 20;
-const CATEGORY_TABS = [
-  { slug: 'cat-household', title: 'Бытовые' },
-  { slug: 'cat-multi', title: 'Мульти-сплит' },
-  { slug: 'cat-industrial', title: 'Полупромышленные' },
-];
+const CATEGORY_SLUG_LIST = ['cat-household', 'cat-multi', 'cat-industrial'];
 const POWER_PRESETS = [
   { key: 'area-20', title: 'до 20 м²', min: null, max: 20 },
   { key: 'area-25', title: 'до 25 м²', min: null, max: 25 },
@@ -23,7 +19,7 @@ const INDUSTRIAL_TYPE_OPTIONS = [
   { value: 'floor_ceiling', title: 'Напольно-потолочные' },
   { value: 'column', title: 'Колонные' },
 ];
-const CATEGORY_SLUGS = new Set(CATEGORY_TABS.map((tab) => tab.slug));
+const CATEGORY_SLUGS = new Set(CATEGORY_SLUG_LIST);
 
 const props = defineProps({
   initialProducts: {
@@ -103,6 +99,23 @@ const parseNumber = (value) => {
 };
 
 const normalizeText = (value) => String(value || '').toLowerCase().replace(/ё/g, 'е');
+const normalizeBrand = (value) => normalizeText(value).replace(/[^a-z0-9а-я]/g, '');
+const isSameBrand = (left, right) => {
+  const a = normalizeBrand(left);
+  const b = normalizeBrand(right);
+  return Boolean(a) && Boolean(b) && a === b;
+};
+const parseSlugList = (value) => {
+  if (Array.isArray(value)) {
+    return Array.from(new Set(value.map((item) => String(item || '').trim()).filter(Boolean)));
+  }
+  if (typeof value === 'string') {
+    return Array.from(new Set(
+      value.split(/[,\n;]/g).map((item) => item.trim()).filter(Boolean),
+    ));
+  }
+  return [];
+};
 
 const getProductBrand = (product) => {
   const fromSpecs = getSpecValue(product, ['brand', 'Бренд', 'Марка', 'Производитель']);
@@ -136,8 +149,24 @@ const multiIndoorOptions = computed(() => products.value.filter((product) => isI
 const selectedOutdoorUnit = computed(
   () => multiOutdoorOptions.value.find((product) => product.slug === selectedOutdoorSlug.value) || null
 );
+const selectedOutdoorCompatibleIndoorSlugs = computed(() => new Set(
+  parseSlugList(getSpecValue(selectedOutdoorUnit.value, ['compatible_indoor_slugs'])),
+));
+const hasOutdoorBrandRestriction = computed(() => Boolean(normalizeBrand(getProductBrand(selectedOutdoorUnit.value))));
+const hasOutdoorCompatRestriction = computed(() => selectedOutdoorCompatibleIndoorSlugs.value.size > 0);
+const multiIndoorOptionsFiltered = computed(() => {
+  let result = [...multiIndoorOptions.value];
+  const selectedBrand = getProductBrand(selectedOutdoorUnit.value);
+  if (selectedBrand) {
+    result = result.filter((product) => isSameBrand(getProductBrand(product), selectedBrand));
+  }
+  if (hasOutdoorCompatRestriction.value) {
+    result = result.filter((product) => selectedOutdoorCompatibleIndoorSlugs.value.has(product.slug));
+  }
+  return result;
+});
 
-const selectedIndoorRows = computed(() => multiIndoorOptions.value
+const selectedIndoorRows = computed(() => multiIndoorOptionsFiltered.value
   .map((product) => ({
     product,
     qty: Number(selectedIndoorQuantities.value[product.slug] || 0),
@@ -161,8 +190,18 @@ const allowedCoolingLimit = computed(() => (
 const brandMismatchCount = computed(() => selectedIndoorRows.value.filter((row) => (
   outdoorBrand.value
   && row.brand
-  && row.brand.toLowerCase() !== outdoorBrand.value.toLowerCase()
+  && !isSameBrand(row.brand, outdoorBrand.value)
 )).length);
+const multiIndoorFilterHint = computed(() => {
+  const messages = [];
+  if (hasOutdoorBrandRestriction.value && outdoorBrand.value) {
+    messages.push(`Показаны внутренние блоки бренда ${outdoorBrand.value}.`);
+  }
+  if (hasOutdoorCompatRestriction.value) {
+    messages.push('Дополнительно применен список явной совместимости для выбранного наружного.');
+  }
+  return messages.join(' ');
+});
 
 const multiValidation = computed(() => {
   const reasons = [];
@@ -183,6 +222,9 @@ const multiValidation = computed(() => {
   }
   if (brandMismatchCount.value > 0) {
     reasons.push('В конфигурации смешаны бренды. Для v1 поддерживается один бренд.');
+  }
+  if (hasOutdoorCompatRestriction.value && selectedIndoorCount.value === 0) {
+    reasons.push('Для выбранного наружного блока добавьте совместимые внутренние блоки из списка ниже.');
   }
   return {
     isValid: reasons.length === 0,
@@ -216,7 +258,7 @@ const formatKw = (value) => {
 
 const syncMultiSelectionState = () => {
   const outdoorSlugs = new Set(multiOutdoorOptions.value.map((product) => product.slug));
-  const indoorSlugs = new Set(multiIndoorOptions.value.map((product) => product.slug));
+  const indoorSlugs = new Set(multiIndoorOptionsFiltered.value.map((product) => product.slug));
 
   if (outdoorSlugs.size > 0 && !outdoorSlugs.has(selectedOutdoorSlug.value)) {
     selectedOutdoorSlug.value = multiOutdoorOptions.value[0].slug;
@@ -523,7 +565,6 @@ const setCategory = async (categorySlug) => {
   syncUrlFromState(1);
   await fetchProducts({ page: 1, append: false });
 };
-
 const toggleIndustrialType = async (value) => {
   if (!isIndustrialCategory.value) return;
   const set = new Set(currentIndoorTypes.value);
@@ -549,6 +590,7 @@ const selectMultiOutdoor = (slug) => {
 
 const changeIndoorQty = (slug, delta) => {
   if (!isMultiCategory.value) return;
+  if (!multiIndoorOptionsFiltered.value.some((item) => item.slug === slug)) return;
   const next = { ...selectedIndoorQuantities.value };
   const current = Number(next[slug] || 0);
   const updated = Math.max(0, current + delta);
@@ -659,8 +701,16 @@ onMounted(async () => {
 
   const currentMetaLimit = Number(props.initialMeta?.limit || BASE_LIMIT);
   const urlPage = Number(getParamsFromUrl()?.page || 1);
+  const hasUrlQuery = typeof window !== 'undefined'
+    ? Array.from(new URLSearchParams(window.location.search).keys()).length > 0
+    : false;
 
-  if (!props.initialProducts?.length || currentMetaLimit !== BASE_LIMIT || urlPage > 1) {
+  if (
+    hasUrlQuery
+    || !props.initialProducts?.length
+    || currentMetaLimit !== BASE_LIMIT
+    || urlPage > 1
+  ) {
     await fetchProducts({ page: Math.max(1, urlPage), append: false });
   }
   syncMultiSelectionState();
@@ -720,21 +770,6 @@ onMounted(async () => {
         Как выбрать тип полупромышленного кондиционера
       </a>
     </header>
-
-    <section class="glass-panel category-panel">
-      <div class="section-label">Категория</div>
-      <div class="category-tabs">
-        <button
-          v-for="tab in CATEGORY_TABS"
-          :key="tab.slug"
-          class="category-tab"
-          :class="{ active: activeCategorySlug === tab.slug }"
-          @click="setCategory(tab.slug)"
-        >
-          {{ tab.title }}
-        </button>
-      </div>
-    </section>
 
     <section class="glass-panel brand-panel">
       <div class="section-head">
@@ -845,8 +880,11 @@ onMounted(async () => {
 
           <div class="multi-config-column">
             <div class="control-label">2. Внутренние блоки</div>
+            <div v-if="multiIndoorFilterHint" class="multi-compat-hint">
+              {{ multiIndoorFilterHint }}
+            </div>
             <div class="multi-indoor-list">
-              <div v-for="indoor in multiIndoorOptions" :key="indoor.slug" class="multi-indoor-item">
+              <div v-for="indoor in multiIndoorOptionsFiltered" :key="indoor.slug" class="multi-indoor-item">
                 <div class="multi-indoor-main">
                   <div class="multi-indoor-title">{{ indoor.title }}</div>
                   <div class="multi-indoor-meta">
@@ -1126,36 +1164,6 @@ onMounted(async () => {
   color: var(--text-muted);
 }
 
-.category-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.65rem;
-}
-
-.category-tab {
-  border: 1px solid var(--panel-chip-border);
-  background: var(--panel-chip-bg);
-  color: var(--text);
-  border-radius: 14px;
-  padding: 0.82rem 1rem;
-  font-size: 0.92rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-}
-
-.category-tab:hover {
-  transform: translateY(-1px);
-  border-color: var(--panel-chip-hover-border);
-}
-
-.category-tab.active {
-  color: var(--panel-active-text);
-  border-color: transparent;
-  background: var(--panel-active-gradient);
-  box-shadow: 0 12px 25px -18px rgba(10, 102, 89, 0.9);
-}
-
 .brand-strip {
   display: flex;
   gap: 0.6rem;
@@ -1288,6 +1296,10 @@ onMounted(async () => {
   color: var(--text-muted);
 }
 
+.multi-compat-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
 .multi-outdoor-list,
 .multi-indoor-list {
   display: flex;
@@ -1559,7 +1571,7 @@ onMounted(async () => {
 }
 
 @media (max-width: 980px) {
-  .category-tabs {
+  .multi-config-grid {
     grid-template-columns: 1fr;
   }
 

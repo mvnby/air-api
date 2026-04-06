@@ -79,12 +79,16 @@ class ProductWriteService:
         if not product:
             return None
 
+        explicit_brand_override = "brand_id" in payload
+        explicit_brand_id = payload.get("brand_id") if explicit_brand_override else None
         await sync_product_brand_series(
             session,
             product=product,
             specs=payload.get("specs", product.specs),
             title=payload.get("title", product.title),
             tags=selected_tags,
+            explicit_brand_id=explicit_brand_id,
+            explicit_brand_override=explicit_brand_override,
         )
         await session.commit()
         return {"message": "Product updated", "id": product.id}

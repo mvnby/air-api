@@ -46,6 +46,36 @@ export type DashboardView = 'kanban' | 'list';
 export { type Product, type DashboardStatsResponse, type DashboardTouchpoint };
 export type { LeadsInboxItemResponse };
 
+export interface ManagerBrand {
+    id: number;
+    title: string;
+    slug: string;
+    logo_url?: string | null;
+    description?: string | null;
+    is_published: boolean;
+    sort_order: number;
+    created_at: string;
+    products_count: number;
+}
+
+export interface ManagerBrandCreatePayload {
+    title: string;
+    slug?: string | null;
+    logo_url?: string | null;
+    description?: string | null;
+    is_published?: boolean;
+    sort_order?: number;
+}
+
+export interface ManagerBrandUpdatePayload {
+    title?: string | null;
+    slug?: string | null;
+    logo_url?: string | null;
+    description?: string | null;
+    is_published?: boolean | null;
+    sort_order?: number | null;
+}
+
 export const api = {
     async login(username: string, password: string) {
         return await LoginService.loginAccessToken({ username, password });
@@ -288,6 +318,7 @@ export const api = {
         areaMin?: number,
         areaMax?: number,
         isInverter?: boolean,
+        categorySlug?: string,
         sort = 'newest',
     ) {
         return await ManagerService.getManagerProducts(
@@ -298,6 +329,7 @@ export const api = {
             areaMin ?? undefined,
             areaMax ?? undefined,
             isInverter ?? undefined,
+            categorySlug ?? undefined,
             sort,
         );
     },
@@ -338,8 +370,14 @@ export const api = {
         return await ApiService.adminSearchProductsApiAdminProductsSearchGet(q);
     },
 
-    async smartSearchProducts(q: string, limit = 40, isInverter?: boolean, hasWifi?: boolean): Promise<Product[]> {
-        const res = await ManagerService.smartSearchProducts(q, limit, isInverter, hasWifi);
+    async smartSearchProducts(
+        q: string,
+        limit = 40,
+        isInverter?: boolean,
+        hasWifi?: boolean,
+        categorySlug?: string,
+    ): Promise<Product[]> {
+        const res = await ManagerService.smartSearchProducts(q, limit, isInverter, hasWifi, categorySlug);
         return res.items;
     },
 
@@ -519,6 +557,55 @@ export const api = {
 
     async deleteManagerTag(tagId: number) {
         return await ManagerTagsService.deleteManagerTag(tagId);
+    },
+
+    async listManagerBrands(): Promise<{ items: ManagerBrand[] }> {
+        const res = await fetch('/api/manager/brands', { credentials: 'include' });
+        if (!res.ok) {
+            const body = await res.text();
+            throw new Error(body || `HTTP ${res.status}`);
+        }
+        return await res.json();
+    },
+
+    async createManagerBrand(payload: ManagerBrandCreatePayload): Promise<ManagerBrand> {
+        const res = await fetch('/api/manager/brands', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+            const body = await res.text();
+            throw new Error(body || `HTTP ${res.status}`);
+        }
+        return await res.json();
+    },
+
+    async updateManagerBrand(brandId: number, payload: ManagerBrandUpdatePayload): Promise<ManagerBrand> {
+        const res = await fetch(`/api/manager/brands/${brandId}`, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+            const body = await res.text();
+            throw new Error(body || `HTTP ${res.status}`);
+        }
+        return await res.json();
+    },
+
+    async deleteManagerBrand(brandId: number): Promise<{ message: string }> {
+        const res = await fetch(`/api/manager/brands/${brandId}`, {
+            method: 'DELETE',
+            credentials: 'include',
+        });
+        if (!res.ok) {
+            const body = await res.text();
+            throw new Error(body || `HTTP ${res.status}`);
+        }
+        return await res.json();
     },
     // Leads Inbox (Order-based triage)
     async getLeadsCounter() {

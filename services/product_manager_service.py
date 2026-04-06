@@ -27,6 +27,7 @@ class ProductManagerService:
         limit: int = 40,
         is_inverter: Optional[bool] = None,
         has_wifi: Optional[bool] = None,
+        category_slug: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Parse a free-text query and return matching products.
 
@@ -59,6 +60,7 @@ class ProductManagerService:
             stmt=stmt,
             is_inverter=is_inverter,
             has_wifi=has_wifi,
+            tag_slugs=[category_slug] if category_slug else None,
             is_published=None,
         )
 
@@ -132,10 +134,11 @@ class ProductManagerService:
         area_min: Optional[int] = None,
         area_max: Optional[int] = None,
         is_inverter: Optional[bool] = None,
+        category_slug: Optional[str] = None,
         sort: str = "newest",
     ) -> Dict[str, Any]:
         items, total = await ProductDAO.get_for_manager(
-            session, page, limit, search, is_published, area_min, area_max, is_inverter, sort
+            session, page, limit, search, is_published, area_min, area_max, is_inverter, category_slug, sort
         )
         supply_metrics = await ProductSupplyMetricsService.compute_for_products(session, list(items))
 

@@ -86,6 +86,10 @@ DELETE_MANAGER_TAG_GROUP = "delete_manager_tag_group"
 CREATE_MANAGER_TAG = "create_manager_tag"
 UPDATE_MANAGER_TAG = "update_manager_tag"
 DELETE_MANAGER_TAG = "delete_manager_tag"
+LIST_MANAGER_BRANDS = "list_manager_brands"
+CREATE_MANAGER_BRAND = "create_manager_brand"
+UPDATE_MANAGER_BRAND = "update_manager_brand"
+DELETE_MANAGER_BRAND = "delete_manager_brand"
 LIST_SUPPLIERS = "list_suppliers"
 CREATE_SUPPLIER = "create_supplier"
 PATCH_SUPPLIER = "patch_supplier"
@@ -179,6 +183,10 @@ ALL_MANAGER_OPERATION_IDS = (
     CREATE_MANAGER_TAG,
     UPDATE_MANAGER_TAG,
     DELETE_MANAGER_TAG,
+    LIST_MANAGER_BRANDS,
+    CREATE_MANAGER_BRAND,
+    UPDATE_MANAGER_BRAND,
+    DELETE_MANAGER_BRAND,
     LIST_SUPPLIERS,
     CREATE_SUPPLIER,
     PATCH_SUPPLIER,

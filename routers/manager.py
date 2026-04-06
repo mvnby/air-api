@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from routers import manager_auth
+from routers import manager_brands
 from routers import manager_calendar
 from routers import manager_catalog
 from routers import manager_crm
@@ -29,6 +30,7 @@ router.include_router(manager_crm.router)
 router.include_router(manager_calendar.router)
 router.include_router(manager_dashboard.router)
 router.include_router(manager_installers.router)
+router.include_router(manager_brands.router)
 router.include_router(manager_settings.router)
 router.include_router(manager_tariffs.router)
 router.include_router(manager_tags.router)

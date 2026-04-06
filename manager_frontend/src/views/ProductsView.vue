@@ -4,6 +4,7 @@ import { watchDebounced } from '@vueuse/core';
 import { api, type Product } from '../api';
 import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images, Settings, ArrowLeft, LayoutGrid, List, Package, Link2, ExternalLink } from 'lucide-vue-next';
 import BulkSpecsModal from '../components/BulkSpecsModal.vue';
+import BulkCompatibilityModal from '../components/BulkCompatibilityModal.vue';
 import ProductEditModal from '../components/ProductEditModal.vue';
 import OnlinerImportModal from '../components/OnlinerImportModal.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
@@ -109,6 +110,7 @@ const pendingEditHandled = ref(false);
 // Bulk Actions
 const selectedProductIds = ref<Set<number>>(new Set());
 const showBulkSpecsModal = ref(false);
+const showBulkCompatibilityModal = ref(false);
 const commonGalleryImages = ref<Array<{ url: string; product_count: number }>>([]);
 const commonGalleryLoading = ref(false);
 const bulkRoundLoading = ref(false);
@@ -132,8 +134,22 @@ const isInverter = ref<boolean | undefined>();
 const viewType = ref<'grid' | 'table'>('grid');
 const SMART_SEARCH_LIMIT = 100;
 const hasSearchQuery = computed(() => searchQuery.value.trim().length > 0);
+const categorySlug = ref<'cat-household' | 'cat-multi' | 'cat-industrial'>('cat-household');
+const CATEGORY_FILTER_TABS: Array<{ slug: 'cat-household' | 'cat-multi' | 'cat-industrial'; title: string }> = [
+    { slug: 'cat-household', title: 'Бытовые' },
+    { slug: 'cat-multi', title: 'Мульти-сплит' },
+    { slug: 'cat-industrial', title: 'Полупром' },
+];
 
 const applyFilters = () => {
+    page.value = 1;
+    loadProducts();
+};
+
+const setCategoryFilter = (slug: 'cat-household' | 'cat-multi' | 'cat-industrial') => {
+    if (categorySlug.value === slug) return;
+    categorySlug.value = slug;
+    selectedProductIds.value.clear();
     page.value = 1;
     loadProducts();
 };
@@ -165,6 +181,16 @@ const openBulkUpdate = () => {
     if (selectedProductIds.value.size === 0) return;
     showBulkSpecsModal.value = true;
 };
+
+const openBulkCompatibility = () => {
+    if (selectedProductIds.value.size === 0) return;
+    showBulkCompatibilityModal.value = true;
+};
+
+const selectedProductsForBulkCompatibility = computed(() => {
+    const selected = selectedProductIds.value;
+    return products.value.filter((product) => selected.has(product.id));
+});
 
 const loadCommonGallery = async () => {
     if (selectedIdsArray.value.length === 0) {
@@ -251,7 +277,13 @@ const loadProducts = async () => {
   page.value = 1;
   try {
     if (hasSearchQuery.value) {
-      const smartResults = await api.smartSearchProducts(searchQuery.value.trim(), SMART_SEARCH_LIMIT);
+      const smartResults = await api.smartSearchProducts(
+          searchQuery.value.trim(),
+          SMART_SEARCH_LIMIT,
+          undefined,
+          undefined,
+          categorySlug.value,
+      );
       const filtered = smartResults.filter((product) => {
         if (areaMin.value !== undefined && product.area < areaMin.value) return false;
         if (areaMax.value !== undefined && product.area > areaMax.value) return false;
@@ -268,7 +300,8 @@ const loadProducts = async () => {
           undefined, // isPublished (not exposed yet)
           areaMin.value,
           areaMax.value,
-          isInverter.value
+          isInverter.value,
+          categorySlug.value,
       );
       products.value = data.items ? data.items : (Array.isArray(data) ? data : []);
       hasMore.value = products.value.length >= limit;
@@ -306,7 +339,8 @@ const loadMore = async () => {
             undefined, 
             areaMin.value, 
             areaMax.value, 
-            isInverter.value
+            isInverter.value,
+            categorySlug.value,
         );
         const newItems = data.items ? data.items : (Array.isArray(data) ? data : []);
         if (newItems.length < limit) {
@@ -684,6 +718,9 @@ watchDebounced(
               <button @click="openBulkUpdate" class="flex items-center gap-1 bg-teal-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-teal-700 transition-colors">
                   <Edit3 class="w-3.5 h-3.5" /> Характеристики
               </button>
+              <button @click="openBulkCompatibility" class="flex items-center gap-1 bg-indigo-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-indigo-700 transition-colors">
+                  <Link2 class="w-3.5 h-3.5" /> Совместимость
+              </button>
               <button 
                 @click="handleBulkRoundPrices" 
                 :disabled="bulkRoundLoading"
@@ -727,6 +764,24 @@ watchDebounced(
 
     <!-- Filters -->
     <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 mb-6 flex flex-wrap gap-4 items-end">
+        <div class="w-full">
+            <label class="block text-xs font-medium text-gray-500 mb-1">Категория каталога</label>
+            <div class="flex flex-wrap gap-2">
+                <button
+                    v-for="tab in CATEGORY_FILTER_TABS"
+                    :key="tab.slug"
+                    type="button"
+                    class="px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors"
+                    :class="categorySlug === tab.slug
+                        ? 'bg-teal-600 text-white border-teal-600'
+                        : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-200 border-gray-300 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'"
+                    @click="setCategoryFilter(tab.slug)"
+                >
+                    {{ tab.title }}
+                </button>
+            </div>
+        </div>
+
         <div class="flex-1 min-w-[200px]">
             <label class="block text-xs font-medium text-gray-500 mb-1">Поиск по модели</label>
             <div class="relative">
@@ -1167,6 +1222,11 @@ watchDebounced(
     <BulkSpecsModal 
         v-model="showBulkSpecsModal"
         :selected-product-ids="Array.from(selectedProductIds)"
+        @success="handleBulkSuccess"
+    />
+    <BulkCompatibilityModal
+        v-model="showBulkCompatibilityModal"
+        :selected-products="selectedProductsForBulkCompatibility"
         @success="handleBulkSuccess"
     />
 

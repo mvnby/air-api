@@ -394,6 +394,7 @@ class ProductDAO:
         area_min: Optional[int] = None,
         area_max: Optional[int] = None,
         is_inverter: Optional[bool] = None,
+        category_slug: Optional[str] = None,
         sort: str = "newest",
     ) -> tuple[List[Product], int]:
         stmt = select(Product).options(
@@ -421,6 +422,19 @@ class ProductDAO:
         if search:
             stmt = stmt.where(Product.title.ilike(f"%{search}%"))
             count_stmt = count_stmt.where(Product.title.ilike(f"%{search}%"))
+
+        if category_slug:
+            normalized_category = str(category_slug).strip().lower()
+            if normalized_category:
+                category_subq = (
+                    select(ProductTagLink.product_id)
+                    .join(Tag, ProductTagLink.tag_id == Tag.id)
+                    .join(TagGroup, Tag.group_id == TagGroup.id)
+                    .where(TagGroup.slug == "category")
+                    .where(Tag.slug == normalized_category)
+                )
+                stmt = stmt.where(Product.id.in_(category_subq))
+                count_stmt = count_stmt.where(Product.id.in_(category_subq))
 
         if sort == "price_asc":
             stmt = stmt.order_by(Product.price.asc())
