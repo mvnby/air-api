@@ -82,3 +82,33 @@ async def test_catalog_filters_by_wifi_and_heating(async_client: AsyncClient, db
     assert "good" in slugs
     assert "weak" not in slugs
     assert all(not key.startswith("__") for key in payload["items"][0]["specs"].keys())
+
+
+@pytest.mark.asyncio
+async def test_catalog_filters_by_indoor_types(async_client: AsyncClient, db):
+    cassette = Product(
+        title="Cassette Unit",
+        slug="cassette-unit",
+        price=2100,
+        area=80,
+        is_published=True,
+        specs=normalize_specs({"Тип внутреннего блока": "кассетный"}),
+    )
+    duct = Product(
+        title="Duct Unit",
+        slug="duct-unit",
+        price=2300,
+        area=90,
+        is_published=True,
+        specs=normalize_specs({"Тип внутреннего блока": "канальный"}),
+    )
+    db.add(cassette)
+    db.add(duct)
+    await db.commit()
+
+    response = await async_client.get("/api/v1/products?indoor_types=cassette")
+    assert response.status_code == 200
+    payload = response.json()
+    slugs = [item["slug"] for item in payload["items"]]
+    assert "cassette-unit" in slugs
+    assert "duct-unit" not in slugs

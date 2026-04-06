@@ -110,6 +110,35 @@ Configured in `web/package.json`:
 ```
 If `check-api` fails, `astro build` will NOT run, protecting the production site.
 
+## Post-Deploy Data Ops (Brands/Categories)
+
+When release includes normalization or brand/category sync changes, run data ops in safe mode first:
+
+```bash
+# 1) Dry-run backfill + safe cleanup (no commit)
+docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app \
+  python3 scripts/backfill_brand_series.py --dry-run --safe-brand-cleanup
+
+# 2) Apply only after dry-run review
+docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app \
+  python3 scripts/backfill_brand_series.py --safe-brand-cleanup
+```
+
+Optional automation through `ops_post_deploy.sh`:
+
+```bash
+RUN_POST_DEPLOY_OPS=true \
+RUN_BACKFILL_BRAND_SERIES=true \
+RUN_SAFE_BRAND_CLEANUP=true \
+OPS_MODE=report_only \
+bash scripts/ops_post_deploy.sh
+```
+
+After apply, smoke-check:
+- `/health`
+- `/api/v1/products?limit=5`
+- `/api/v1/filters/config`
+
 ## Common Issues
 
 ### Issue: Catalog shows "Товары не найдены"

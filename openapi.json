@@ -1244,6 +1244,27 @@
             }
           },
           {
+            "name": "indoor_types",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)",
+              "title": "Indoor Types"
+            },
+            "description": "Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)"
+          },
+          {
             "name": "tag_slugs",
             "in": "query",
             "required": false,
@@ -1471,6 +1492,27 @@
               ],
               "title": "Has Fresh Air"
             }
+          },
+          {
+            "name": "indoor_types",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)",
+              "title": "Indoor Types"
+            },
+            "description": "Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)"
           },
           {
             "name": "tag_slugs",
