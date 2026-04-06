@@ -28,6 +28,16 @@ const applyReverse = ref(false);
 
 const normalizeText = (value: unknown): string => String(value ?? '').toLowerCase().replace(/ё/g, 'е').trim();
 const normalizeBrandToken = (value: unknown): string => normalizeText(value).replace(/[^a-z0-9а-я]/g, '');
+const INVALID_BRAND_TOKENS = new Set([
+    'мультисплитсистема',
+    'сплитсистема',
+    'внутреннийблок',
+    'наружныйблок',
+    'полупромышленныйкондиционер',
+    'кондиционер',
+]);
+
+const isInvalidBrandToken = (token: string): boolean => INVALID_BRAND_TOKENS.has(token);
 
 const getSpecsMap = (product: Product | null | undefined): Record<string, any> => (
     ((product as any)?.specs || {}) as Record<string, any>
@@ -36,6 +46,32 @@ const getSpecsMap = (product: Product | null | undefined): Record<string, any> =
 const getBrandFromSpecs = (product: Product | null | undefined): string => {
     const specs = getSpecsMap(product);
     return String(specs.brand ?? specs['Бренд'] ?? specs['Марка'] ?? specs['Производитель'] ?? '').trim();
+};
+
+const getBrandFromTags = (product: Product | null | undefined): string => {
+    const tags = ((product as any)?.tags || []) as Array<any>;
+    const brandTag = tags.find((tag) => {
+        const groupSlug = normalizeText(tag?.group?.slug || tag?.group_slug || '');
+        const groupTitle = normalizeText(tag?.group_title || tag?.group?.title || '');
+        return groupSlug === 'brand' || groupTitle === 'бренд' || groupTitle === 'brand';
+    });
+    return String(brandTag?.title ?? '').trim();
+};
+
+const getResolvedBrandName = (product: Product | null | undefined): string => {
+    const candidates = [getBrandFromTags(product), getBrandFromSpecs(product)]
+        .map((value) => String(value || '').trim())
+        .filter(Boolean);
+    if (candidates.length === 0) return '';
+
+    const valid = candidates.find((value) => !isInvalidBrandToken(normalizeBrandToken(value)));
+    return valid ?? candidates[0] ?? '';
+};
+
+const getResolvedBrandToken = (product: Product | null | undefined): string => {
+    const token = normalizeBrandToken(getResolvedBrandName(product));
+    if (!token || isInvalidBrandToken(token)) return '';
+    return token;
 };
 
 const isMultiRelatedProduct = (product: Product): boolean => {
@@ -79,23 +115,36 @@ const selectedBrandIds = computed(() => {
 
 const selectedBrandTokens = computed(() => {
     const tokens = selectedMultiProducts.value
-        .map((item) => normalizeBrandToken(getBrandFromSpecs(item)))
+        .filter((item) => Number((item as any)?.brand_id || 0) <= 0)
+        .map((item) => getResolvedBrandToken(item))
         .filter(Boolean);
     return Array.from(new Set(tokens));
 });
 
-const hasBrandConflict = computed(() => selectedBrandIds.value.length > 1 || selectedBrandTokens.value.length > 1);
+const hasBrandConflict = computed(() => (
+    selectedBrandIds.value.length > 1
+    || (selectedBrandIds.value.length === 0 && selectedBrandTokens.value.length > 1)
+));
 const selectedBrandId = computed<number | null>(() => (
     selectedBrandIds.value.length === 1 ? (selectedBrandIds.value[0] ?? null) : null
 ));
 const selectedBrandName = computed<string>(() => {
+    if (selectedBrandId.value) {
+        const withId = selectedMultiProducts.value.find((item) => Number((item as any)?.brand_id || 0) === selectedBrandId.value);
+        const resolved = getResolvedBrandName(withId);
+        if (resolved) return resolved;
+    }
     const names = selectedMultiProducts.value
-        .map((item) => getBrandFromSpecs(item))
+        .filter((item) => Number((item as any)?.brand_id || 0) <= 0)
+        .map((item) => getResolvedBrandName(item))
         .filter((name) => name.trim().length > 0);
     const unique = Array.from(new Set(names));
     if (unique.length === 1) return unique[0] ?? '';
     return '';
 });
+const selectedBrandToken = computed<string>(() => (
+    selectedBrandTokens.value.length === 1 ? (selectedBrandTokens.value[0] ?? '') : ''
+));
 
 const oppositeRoleLabel = computed(() => (
     selectedRole.value === 'outdoor'
@@ -124,12 +173,12 @@ const canUseModal = computed(() => (
 const isSameBrandCandidate = (candidate: Product): boolean => {
     if (selectedBrandId.value) {
         const candidateBrandId = Number((candidate as any)?.brand_id || 0);
-        if (candidateBrandId > 0) return candidateBrandId === selectedBrandId.value;
+        return candidateBrandId > 0 && candidateBrandId === selectedBrandId.value;
     }
 
-    const selectedToken = normalizeBrandToken(selectedBrandName.value || selectedBrandTokens.value[0] || '');
+    const selectedToken = selectedBrandToken.value;
     if (selectedToken) {
-        const candidateToken = normalizeBrandToken(getBrandFromSpecs(candidate));
+        const candidateToken = getResolvedBrandToken(candidate);
         return Boolean(candidateToken) && candidateToken === selectedToken;
     }
     return true;
@@ -209,9 +258,9 @@ const searchCandidates = async (seedOverride?: string) => {
 };
 
 const searchByBrand = async () => {
-    const brandSeed = (selectedBrandName.value || '').trim();
+    const brandSeed = (selectedBrandName.value || selectedBrandToken.value || '').trim();
     if (!brandSeed) {
-        error.value = 'У выбранных товаров не определен бренд в specs.';
+        error.value = 'У выбранных товаров не определен бренд (brand_id/specs/tag).';
         return;
     }
     query.value = brandSeed;

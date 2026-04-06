@@ -246,6 +246,36 @@ async def _sync_product_brand_tag_link(
     return changed
 
 
+async def _clear_product_brand_tag_links(
+    session: AsyncSession,
+    *,
+    product_id: int,
+    brand_group_id: int,
+) -> bool:
+    brand_tag_ids = (
+        await session.execute(select(Tag.id).where(Tag.group_id == brand_group_id))
+    ).scalars().all()
+    if not brand_tag_ids:
+        return False
+
+    existing = (
+        await session.execute(
+            select(ProductTagLink.tag_id)
+            .where(ProductTagLink.product_id == product_id)
+            .where(ProductTagLink.tag_id.in_(brand_tag_ids))
+        )
+    ).scalars().all()
+    if not existing:
+        return False
+
+    await session.execute(
+        delete(ProductTagLink)
+        .where(ProductTagLink.product_id == product_id)
+        .where(ProductTagLink.tag_id.in_(brand_tag_ids))
+    )
+    return True
+
+
 async def ensure_brand(
     session: AsyncSession,
     *,
@@ -343,6 +373,8 @@ async def sync_product_brand_series(
     specs: Optional[Dict[str, Any]] = None,
     title: Optional[str] = None,
     tags: Optional[Sequence[Tag]] = None,
+    explicit_brand_id: Optional[int] = None,
+    explicit_brand_override: bool = False,
 ) -> bool:
     data_specs = specs if specs is not None else (product.specs or {})
     product_title = title if title is not None else (product.title or "")
@@ -359,10 +391,34 @@ async def sync_product_brand_series(
 
     brand_name: Optional[str] = None
     brand_slug: Optional[str] = None
-    if selected_brand_tag is not None:
+    changed = False
+    skip_auto_brand_detection = False
+
+    if explicit_brand_override:
+        if explicit_brand_id is not None:
+            explicit_brand = await session.get(Brand, explicit_brand_id)
+            if explicit_brand:
+                brand_name = _to_text(explicit_brand.title)
+                brand_slug = _to_text(explicit_brand.slug)
+            else:
+                skip_auto_brand_detection = False
+        else:
+            if product.brand_id is not None:
+                product.brand_id = None
+                changed = True
+            brand_group = await _ensure_brand_group(session)
+            if product.id and await _clear_product_brand_tag_links(
+                session,
+                product_id=product.id,
+                brand_group_id=brand_group.id,
+            ):
+                changed = True
+            skip_auto_brand_detection = True
+
+    if not skip_auto_brand_detection and brand_name is None and selected_brand_tag is not None:
         brand_name = _to_text(selected_brand_tag.title)
         brand_slug = selected_brand_tag.slug
-    else:
+    elif not skip_auto_brand_detection and brand_name is None:
         brand_name = extract_brand_name(specs=data_specs, title=product_title)
         if not brand_name:
             brand_name = _brand_title_from_tags(tag_list, group_slug_by_id)
@@ -373,7 +429,6 @@ async def sync_product_brand_series(
     if brand_slug and is_invalid_brand_slug(brand_slug):
         brand_slug = None
 
-    changed = False
     if brand_name:
         if not brand_slug:
             generated = slugify(brand_name, lowercase=True)

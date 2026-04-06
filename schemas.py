@@ -910,6 +910,40 @@ class ManagerTagGroupResponse(BaseModel):
     tags: List[ManagerTagOptionResponse]
 
 
+class ManagerBrandResponse(BaseModel):
+    id: int
+    title: str
+    slug: str
+    logo_url: Optional[str] = None
+    description: Optional[str] = None
+    is_published: bool
+    sort_order: int
+    created_at: datetime
+    products_count: int = 0
+
+
+class ManagerBrandListResponse(BaseModel):
+    items: List[ManagerBrandResponse]
+
+
+class ManagerBrandCreatePayload(BaseModel):
+    title: str
+    slug: Optional[str] = None
+    logo_url: Optional[str] = None
+    description: Optional[str] = None
+    is_published: bool = True
+    sort_order: int = 0
+
+
+class ManagerBrandUpdatePayload(BaseModel):
+    title: Optional[str] = None
+    slug: Optional[str] = None
+    logo_url: Optional[str] = None
+    description: Optional[str] = None
+    is_published: Optional[bool] = None
+    sort_order: Optional[int] = None
+
+
 class ManagerActionMessageResponse(BaseModel):
     message: str
 
