@@ -52,6 +52,127 @@ const vitebskQty = ref(0);
 const supplierOffers = ref<any[]>([]);
 const localStockSaving = ref(false);
 const unlinkingMappingId = ref<number | null>(null);
+const COMPATIBLE_INDOOR_KEY = 'compatible_indoor_slugs';
+const COMPATIBLE_OUTDOOR_KEY = 'compatible_outdoor_slugs';
+const COMPATIBILITY_KEYS = new Set([COMPATIBLE_INDOOR_KEY, COMPATIBLE_OUTDOOR_KEY]);
+const compatibilityIndoorSlugs = ref<string[]>([]);
+const compatibilityOutdoorSlugs = ref<string[]>([]);
+const compatibilityQuery = ref('');
+const compatibilityResults = ref<Product[]>([]);
+const compatibilityLoading = ref(false);
+
+const normalizeText = (value: unknown): string => String(value ?? '').toLowerCase().replace(/ё/g, 'е').trim();
+
+const parseSlugList = (value: unknown): string[] => {
+    if (Array.isArray(value)) {
+        return Array.from(
+            new Set(
+                value
+                    .map((item) => String(item ?? '').trim())
+                    .filter(Boolean),
+            ),
+        );
+    }
+    if (typeof value === 'string') {
+        return Array.from(
+            new Set(
+                value
+                    .split(/[,\n;]/g)
+                    .map((item) => item.trim())
+                    .filter(Boolean),
+            ),
+        );
+    }
+    return [];
+};
+
+const isMultiRelatedProduct = (product: Product): boolean => {
+    const tags = (product as any).tags || [];
+    return tags.some((tag: any) => tag.slug === 'cat-multi');
+};
+
+const categoryGroup = computed(() => tagGroups.value.find((group) => group.slug === 'category') || null);
+
+const upsertSpecRow = (key: string, value: string) => {
+    const existing = specs.value.find((row) => row.key === key);
+    if (existing) {
+        existing.value = value;
+    } else {
+        specs.value.unshift({ key, value });
+    }
+};
+
+const setCategoryTag = async (categorySlug: string) => {
+    if (!categorySlug) return;
+    if (tagGroups.value.length === 0) await fetchTags();
+    const group = categoryGroup.value;
+    if (!group) return;
+    for (const tag of group.tags) {
+        selectedTagIds.value.delete(tag.id);
+    }
+    const target = group.tags.find((tag) => tag.slug === categorySlug);
+    if (target) selectedTagIds.value.add(target.id);
+};
+
+const applyPreset = async (preset: 'multi_outdoor' | 'multi_indoor' | 'semi_cassette' | 'semi_duct' | 'semi_floor_ceiling' | 'semi_column') => {
+    if (preset === 'multi_outdoor') {
+        await setCategoryTag('cat-multi');
+        upsertSpecRow('type', 'мульти-сплит-система');
+        return;
+    }
+    if (preset === 'multi_indoor') {
+        await setCategoryTag('cat-multi');
+        upsertSpecRow('type', 'внутренний блок');
+        return;
+    }
+
+    await setCategoryTag('cat-industrial');
+    upsertSpecRow('type', 'полупромышленный кондиционер');
+    if (preset === 'semi_cassette') upsertSpecRow('indoor_type', 'кассетный');
+    if (preset === 'semi_duct') upsertSpecRow('indoor_type', 'канальный');
+    if (preset === 'semi_floor_ceiling') upsertSpecRow('indoor_type', 'напольно-потолочный');
+    if (preset === 'semi_column') upsertSpecRow('indoor_type', 'колонный');
+};
+
+const addCompatibilitySlug = (target: 'indoor' | 'outdoor', slug: string) => {
+    const clean = slug.trim();
+    if (!clean) return;
+    if (target === 'indoor') {
+        compatibilityIndoorSlugs.value = Array.from(new Set([...compatibilityIndoorSlugs.value, clean]));
+    } else {
+        compatibilityOutdoorSlugs.value = Array.from(new Set([...compatibilityOutdoorSlugs.value, clean]));
+    }
+};
+
+const removeCompatibilitySlug = (target: 'indoor' | 'outdoor', slug: string) => {
+    if (target === 'indoor') {
+        compatibilityIndoorSlugs.value = compatibilityIndoorSlugs.value.filter((item) => item !== slug);
+    } else {
+        compatibilityOutdoorSlugs.value = compatibilityOutdoorSlugs.value.filter((item) => item !== slug);
+    }
+};
+
+const searchCompatibilityProducts = async () => {
+    const q = compatibilityQuery.value.trim();
+    if (q.length < 2) {
+        compatibilityResults.value = [];
+        return;
+    }
+
+    compatibilityLoading.value = true;
+    try {
+        const result = await api.smartSearchProducts(q, 40);
+        compatibilityResults.value = result.filter((item) => {
+            if (!isMultiRelatedProduct(item)) return false;
+            return item.id !== props.product?.id;
+        });
+    } catch (e) {
+        console.error(e);
+        compatibilityResults.value = [];
+    } finally {
+        compatibilityLoading.value = false;
+    }
+};
 
 const fetchKeys = async () => {
     try {
@@ -116,6 +237,19 @@ const selectedColorClasses: Record<string, string> = {
 };
 const getSelectedColorClasses = (color: string) => selectedColorClasses[color] || selectedColorClasses.secondary;
 
+const currentProductRole = computed<'indoor' | 'outdoor' | 'unknown'>(() => {
+    const specsMap: Record<string, any> = {};
+    for (const row of specs.value) {
+        if (row.key?.trim()) specsMap[row.key.trim()] = row.value;
+    }
+    const typeText = normalizeText(specsMap.type ?? specsMap['Тип']);
+    const titleText = normalizeText(form.value.title || props.product?.title || '');
+    const joined = `${typeText} ${titleText}`;
+    if (joined.includes('внутрен')) return 'indoor';
+    if (joined.includes('наруж') || joined.includes('мульти-сплит')) return 'outdoor';
+    return 'unknown';
+});
+
 watch(() => props.modelValue, (val) => {
     if (val && props.product) {
         formMessage.value = '';
@@ -130,7 +264,11 @@ watch(() => props.modelValue, (val) => {
         
         // Convert specs object to array
         const s = props.product.specs || {};
-        specs.value = Object.entries(s).map(([key, value]) => {
+        compatibilityIndoorSlugs.value = parseSlugList((s as any)[COMPATIBLE_INDOOR_KEY]);
+        compatibilityOutdoorSlugs.value = parseSlugList((s as any)[COMPATIBLE_OUTDOOR_KEY]);
+        specs.value = Object.entries(s)
+        .filter(([key]) => !COMPATIBILITY_KEYS.has(key))
+        .map(([key, value]) => {
             let sVal = String(value);
             const config = specsTranslations[key];
             if (config?.type === 'number' && config.unit) {
@@ -141,6 +279,8 @@ watch(() => props.modelValue, (val) => {
             }
             return { key, value: sVal };
         });
+        compatibilityQuery.value = '';
+        compatibilityResults.value = [];
         
         // Load tags
         const productTags = (props.product as any).tags || [];
@@ -188,7 +328,7 @@ const save = async () => {
     if (!props.product) return;
     
     // Process specs back to object
-    const validSpecs: Record<string, string> = {};
+    const validSpecs: Record<string, any> = {};
     for (const row of specs.value) {
         if (row.key.trim()) {
             let finalValue = row.value;
@@ -200,6 +340,13 @@ const save = async () => {
             }
             validSpecs[row.key.trim()] = finalValue.toString().trim();
         }
+    }
+
+    if (compatibilityIndoorSlugs.value.length > 0) {
+        validSpecs[COMPATIBLE_INDOOR_KEY] = [...compatibilityIndoorSlugs.value];
+    }
+    if (compatibilityOutdoorSlugs.value.length > 0) {
+        validSpecs[COMPATIBLE_OUTDOOR_KEY] = [...compatibilityOutdoorSlugs.value];
     }
 
     loading.value = true;
@@ -373,6 +520,147 @@ const unlinkSupplierOffer = async (offer: any) => {
                                     </div>
                                     <div class="text-gray-500 dark:text-slate-400">
                                         qty: {{ offer.qty }} | wholesale: {{ offer.wholesale_value ?? '—' }} {{ offer.wholesale_currency || '' }} | rrc: {{ offer.rrc_byn ?? '—' }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3">
+                            <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-slate-500">Быстрые пресеты</h4>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    class="px-3 py-2 rounded-lg border border-teal-200 text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-900/20 text-xs font-semibold text-left"
+                                    @click="applyPreset('multi_outdoor')"
+                                >
+                                    Мульти: наружный блок
+                                </button>
+                                <button
+                                    type="button"
+                                    class="px-3 py-2 rounded-lg border border-teal-200 text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-900/20 text-xs font-semibold text-left"
+                                    @click="applyPreset('multi_indoor')"
+                                >
+                                    Мульти: внутренний блок
+                                </button>
+                                <button
+                                    type="button"
+                                    class="px-3 py-2 rounded-lg border border-indigo-200 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 text-xs font-semibold text-left"
+                                    @click="applyPreset('semi_cassette')"
+                                >
+                                    Полупром: кассетный
+                                </button>
+                                <button
+                                    type="button"
+                                    class="px-3 py-2 rounded-lg border border-indigo-200 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 text-xs font-semibold text-left"
+                                    @click="applyPreset('semi_duct')"
+                                >
+                                    Полупром: канальный
+                                </button>
+                                <button
+                                    type="button"
+                                    class="px-3 py-2 rounded-lg border border-indigo-200 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 text-xs font-semibold text-left"
+                                    @click="applyPreset('semi_floor_ceiling')"
+                                >
+                                    Полупром: напольно-потолочный
+                                </button>
+                                <button
+                                    type="button"
+                                    class="px-3 py-2 rounded-lg border border-indigo-200 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 text-xs font-semibold text-left"
+                                    @click="applyPreset('semi_column')"
+                                >
+                                    Полупром: колонный
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3">
+                            <div class="flex items-start justify-between gap-2">
+                                <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-slate-500">Совместимость мульти</h4>
+                                <span class="text-[11px] text-gray-500 dark:text-slate-400">
+                                    Роль: {{
+                                        currentProductRole === 'indoor'
+                                            ? 'внутренний'
+                                            : currentProductRole === 'outdoor'
+                                                ? 'наружный'
+                                                : 'не определена'
+                                    }}
+                                </span>
+                            </div>
+
+                            <div class="flex gap-2">
+                                <input
+                                    v-model="compatibilityQuery"
+                                    type="text"
+                                    placeholder="Найти мульти-товары (например TCL FMA)"
+                                    class="flex-1 px-3 py-2 bg-slate-100 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg text-sm"
+                                    @keyup.enter="searchCompatibilityProducts"
+                                />
+                                <button
+                                    type="button"
+                                    class="px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 text-sm font-semibold"
+                                    :disabled="compatibilityLoading"
+                                    @click="searchCompatibilityProducts"
+                                >
+                                    {{ compatibilityLoading ? '...' : 'Поиск' }}
+                                </button>
+                            </div>
+
+                            <div v-if="compatibilityResults.length > 0" class="max-h-40 overflow-y-auto space-y-2">
+                                <div
+                                    v-for="candidate in compatibilityResults"
+                                    :key="candidate.id"
+                                    class="rounded-lg border border-gray-100 dark:border-slate-700 p-2 bg-slate-50 dark:bg-slate-900/40"
+                                >
+                                    <div class="text-xs font-semibold text-gray-700 dark:text-slate-200">{{ candidate.title }}</div>
+                                    <div class="text-[11px] text-gray-500 dark:text-slate-400 mb-2">{{ candidate.slug }}</div>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <button
+                                            type="button"
+                                            class="px-2 py-1 rounded border border-indigo-300 text-indigo-700 text-[11px] font-semibold"
+                                            :disabled="!candidate.slug"
+                                            @click="addCompatibilitySlug('indoor', candidate.slug || '')"
+                                        >
+                                            В совместимые внутренние
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="px-2 py-1 rounded border border-teal-300 text-teal-700 text-[11px] font-semibold"
+                                            :disabled="!candidate.slug"
+                                            @click="addCompatibilitySlug('outdoor', candidate.slug || '')"
+                                        >
+                                            В совместимые наружные
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="space-y-2">
+                                <div>
+                                    <p class="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500 mb-1">Совместимые внутренние (для наружного)</p>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <span
+                                            v-for="slug in compatibilityIndoorSlugs"
+                                            :key="`indoor-${slug}`"
+                                            class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 text-[11px] font-semibold"
+                                        >
+                                            {{ slug }}
+                                            <button type="button" class="text-indigo-700" @click="removeCompatibilitySlug('indoor', slug)">×</button>
+                                        </span>
+                                        <span v-if="compatibilityIndoorSlugs.length === 0" class="text-[11px] text-gray-400">Не задано</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <p class="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500 mb-1">Совместимые наружные (для внутреннего)</p>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <span
+                                            v-for="slug in compatibilityOutdoorSlugs"
+                                            :key="`outdoor-${slug}`"
+                                            class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-teal-100 text-teal-800 text-[11px] font-semibold"
+                                        >
+                                            {{ slug }}
+                                            <button type="button" class="text-teal-700" @click="removeCompatibilitySlug('outdoor', slug)">×</button>
+                                        </span>
+                                        <span v-if="compatibilityOutdoorSlugs.length === 0" class="text-[11px] text-gray-400">Не задано</span>
                                     </div>
                                 </div>
                             </div>

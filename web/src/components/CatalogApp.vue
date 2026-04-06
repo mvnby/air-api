@@ -103,6 +103,17 @@ const parseNumber = (value) => {
 };
 
 const normalizeText = (value) => String(value || '').toLowerCase().replace(/ё/g, 'е');
+const parseSlugList = (value) => {
+  if (Array.isArray(value)) {
+    return Array.from(new Set(value.map((item) => String(item || '').trim()).filter(Boolean)));
+  }
+  if (typeof value === 'string') {
+    return Array.from(new Set(
+      value.split(/[,\n;]/g).map((item) => item.trim()).filter(Boolean),
+    ));
+  }
+  return [];
+};
 
 const getProductBrand = (product) => {
   const fromSpecs = getSpecValue(product, ['brand', 'Бренд', 'Марка', 'Производитель']);
@@ -136,8 +147,16 @@ const multiIndoorOptions = computed(() => products.value.filter((product) => isI
 const selectedOutdoorUnit = computed(
   () => multiOutdoorOptions.value.find((product) => product.slug === selectedOutdoorSlug.value) || null
 );
+const selectedOutdoorCompatibleIndoorSlugs = computed(() => new Set(
+  parseSlugList(getSpecValue(selectedOutdoorUnit.value, ['compatible_indoor_slugs'])),
+));
+const hasOutdoorCompatRestriction = computed(() => selectedOutdoorCompatibleIndoorSlugs.value.size > 0);
+const multiIndoorOptionsFiltered = computed(() => {
+  if (!hasOutdoorCompatRestriction.value) return multiIndoorOptions.value;
+  return multiIndoorOptions.value.filter((product) => selectedOutdoorCompatibleIndoorSlugs.value.has(product.slug));
+});
 
-const selectedIndoorRows = computed(() => multiIndoorOptions.value
+const selectedIndoorRows = computed(() => multiIndoorOptionsFiltered.value
   .map((product) => ({
     product,
     qty: Number(selectedIndoorQuantities.value[product.slug] || 0),
@@ -184,6 +203,9 @@ const multiValidation = computed(() => {
   if (brandMismatchCount.value > 0) {
     reasons.push('В конфигурации смешаны бренды. Для v1 поддерживается один бренд.');
   }
+  if (hasOutdoorCompatRestriction.value && selectedIndoorCount.value === 0) {
+    reasons.push('Для выбранного наружного блока добавьте совместимые внутренние блоки из списка ниже.');
+  }
   return {
     isValid: reasons.length === 0,
     reasons,
@@ -216,7 +238,7 @@ const formatKw = (value) => {
 
 const syncMultiSelectionState = () => {
   const outdoorSlugs = new Set(multiOutdoorOptions.value.map((product) => product.slug));
-  const indoorSlugs = new Set(multiIndoorOptions.value.map((product) => product.slug));
+  const indoorSlugs = new Set(multiIndoorOptionsFiltered.value.map((product) => product.slug));
 
   if (outdoorSlugs.size > 0 && !outdoorSlugs.has(selectedOutdoorSlug.value)) {
     selectedOutdoorSlug.value = multiOutdoorOptions.value[0].slug;
@@ -549,6 +571,7 @@ const selectMultiOutdoor = (slug) => {
 
 const changeIndoorQty = (slug, delta) => {
   if (!isMultiCategory.value) return;
+  if (!multiIndoorOptionsFiltered.value.some((item) => item.slug === slug)) return;
   const next = { ...selectedIndoorQuantities.value };
   const current = Number(next[slug] || 0);
   const updated = Math.max(0, current + delta);
@@ -845,8 +868,11 @@ onMounted(async () => {
 
           <div class="multi-config-column">
             <div class="control-label">2. Внутренние блоки</div>
+            <div v-if="hasOutdoorCompatRestriction" class="multi-compat-hint">
+              Показаны только совместимые внутренние блоки для выбранного наружного.
+            </div>
             <div class="multi-indoor-list">
-              <div v-for="indoor in multiIndoorOptions" :key="indoor.slug" class="multi-indoor-item">
+              <div v-for="indoor in multiIndoorOptionsFiltered" :key="indoor.slug" class="multi-indoor-item">
                 <div class="multi-indoor-main">
                   <div class="multi-indoor-title">{{ indoor.title }}</div>
                   <div class="multi-indoor-meta">
@@ -1285,6 +1311,11 @@ onMounted(async () => {
 
 .multi-config-empty {
   font-size: 0.92rem;
+  color: var(--text-muted);
+}
+
+.multi-compat-hint {
+  font-size: 0.8rem;
   color: var(--text-muted);
 }
 
