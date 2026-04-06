@@ -547,6 +547,24 @@ const loadBrands = async () => {
   }
 };
 
+const setCategory = async (categorySlug) => {
+  activeTags.value = activeTags.value.filter((slug) => !CATEGORY_SLUGS.has(slug));
+  activeTags.value.push(categorySlug);
+  if (categorySlug !== 'cat-household') {
+    currentAreaMin.value = null;
+    currentAreaMax.value = null;
+  }
+  if (categorySlug !== 'cat-industrial') {
+    currentIndoorTypes.value = [];
+  }
+  if (categorySlug !== 'cat-multi') {
+    selectedOutdoorSlug.value = '';
+    selectedIndoorQuantities.value = {};
+  }
+
+  syncUrlFromState(1);
+  await fetchProducts({ page: 1, append: false });
+};
 const toggleIndustrialType = async (value) => {
   if (!isIndustrialCategory.value) return;
   const set = new Set(currentIndoorTypes.value);
@@ -1282,7 +1300,6 @@ onMounted(async () => {
   font-size: 0.8rem;
   color: var(--text-muted);
 }
-
 .multi-outdoor-list,
 .multi-indoor-list {
   display: flex;
@@ -1554,6 +1571,10 @@ onMounted(async () => {
 }
 
 @media (max-width: 980px) {
+  .multi-config-grid {
+    grid-template-columns: 1fr;
+  }
+
   .multi-config-grid {
     grid-template-columns: 1fr;
   }
