@@ -76,6 +76,35 @@ def test_brand_normalization_and_auto_tag_slug_output():
     assert "tcl" in auto_slugs
 
 
+def test_invalid_brand_value_falls_back_to_title_brand():
+    auto_slugs = []
+    specs = normalize_specs(
+        {"Бренд": "Мульти-сплит-система", "Тип": "мульти-сплит-система"},
+        title="Мульти-сплит-система TCL Free Match Inverter",
+        auto_tag_slugs=auto_slugs,
+    )
+
+    assert specs["brand"] == "TCL"
+    assert "tcl" in auto_slugs
+
+
+def test_multisplit_russian_keys_are_normalized():
+    specs = normalize_specs(
+        {
+            "Тип": "внутренний блок",
+            "Инверторный": "да",
+            "Максимальное количество внутренних блоков": "4",
+        }
+    )
+
+    assert specs["type"] == "внутренний блок"
+    assert specs["inverter"] is True
+    assert specs["multi_max_indoor_units"] == "4"
+    assert "Тип" not in specs
+    assert "Инверторный" not in specs
+    assert "Максимальное количество внутренних блоков" not in specs
+
+
 def test_indoor_type_filter_key_for_semi_industrial():
     cassette = normalize_specs({"Тип внутреннего блока": "кассетный"})
     assert cassette["__filter_indoor_type"] == "cassette"

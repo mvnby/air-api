@@ -68,6 +68,8 @@ const currentHasWifi = ref(null);
 const currentHasFreshAir = ref(null);
 const currentHeatingMin = ref(null);
 const currentIndoorTypes = ref([]);
+const selectedOutdoorSlug = ref('');
+const selectedIndoorQuantities = ref({});
 
 const availableBrands = ref([]);
 let searchDebounceTimeout = null;
@@ -78,6 +80,160 @@ const activeCategorySlug = computed(() => activeTags.value.find((slug) => CATEGO
 const activeBrandSlug = computed(() => activeTags.value.find((slug) => knownBrandSlugs.value.has(slug)) || null);
 const isHouseholdCategory = computed(() => activeCategorySlug.value === 'cat-household');
 const isIndustrialCategory = computed(() => activeCategorySlug.value === 'cat-industrial');
+const isMultiCategory = computed(() => activeCategorySlug.value === 'cat-multi');
+
+const getSpecValue = (product, keys = []) => {
+  if (!product) return null;
+  const specs = product.specs || {};
+  for (const key of keys) {
+    if (specs[key] !== undefined && specs[key] !== null && String(specs[key]).trim() !== '') {
+      return specs[key];
+    }
+  }
+  return null;
+};
+
+const parseNumber = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const match = String(value).replace(',', '.').match(/[-+]?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const parsed = Number.parseFloat(match[0]);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeText = (value) => String(value || '').toLowerCase().replace(/ё/g, 'е');
+
+const getProductBrand = (product) => {
+  const fromSpecs = getSpecValue(product, ['brand', 'Бренд', 'Марка', 'Производитель']);
+  if (fromSpecs) return String(fromSpecs).trim();
+  const brandTag = (product?.tags || []).find((tag) => (tag.group?.slug || tag.group_slug) === 'brand');
+  return brandTag?.title || '';
+};
+
+const getCoolingKw = (product) => parseNumber(getSpecValue(product, ['capacity_cooling_kw', 'Мощность охлаждения']));
+
+const isIndoorUnit = (product) => {
+  const typeText = normalizeText(getSpecValue(product, ['type', 'Тип']));
+  const titleText = normalizeText(product?.title);
+  return typeText.includes('внутрен') || titleText.includes('внутренний блок');
+};
+
+const isOutdoorUnit = (product) => {
+  if (isIndoorUnit(product)) return false;
+  const typeText = normalizeText(getSpecValue(product, ['type', 'Тип']));
+  const titleText = normalizeText(product?.title);
+  return typeText.includes('мульти') || typeText.includes('наруж') || titleText.includes('мульти-сплит');
+};
+
+const getOutdoorPortsMax = (product) => parseNumber(
+  getSpecValue(product, ['multi_max_indoor_units', 'Максимальное количество внутренних блоков'])
+);
+
+const multiOutdoorOptions = computed(() => products.value.filter((product) => isOutdoorUnit(product)));
+const multiIndoorOptions = computed(() => products.value.filter((product) => isIndoorUnit(product)));
+
+const selectedOutdoorUnit = computed(
+  () => multiOutdoorOptions.value.find((product) => product.slug === selectedOutdoorSlug.value) || null
+);
+
+const selectedIndoorRows = computed(() => multiIndoorOptions.value
+  .map((product) => ({
+    product,
+    qty: Number(selectedIndoorQuantities.value[product.slug] || 0),
+    brand: getProductBrand(product),
+    coolingKw: getCoolingKw(product),
+  }))
+  .filter((row) => row.qty > 0));
+
+const selectedIndoorCount = computed(
+  () => selectedIndoorRows.value.reduce((sum, row) => sum + row.qty, 0)
+);
+const indoorCoolingSum = computed(
+  () => selectedIndoorRows.value.reduce((sum, row) => sum + ((row.coolingKw || 0) * row.qty), 0)
+);
+const outdoorPortsMax = computed(() => getOutdoorPortsMax(selectedOutdoorUnit.value));
+const outdoorCoolingKw = computed(() => getCoolingKw(selectedOutdoorUnit.value));
+const outdoorBrand = computed(() => getProductBrand(selectedOutdoorUnit.value));
+const allowedCoolingLimit = computed(() => (
+  outdoorCoolingKw.value ? Number((outdoorCoolingKw.value * 1.3).toFixed(2)) : null
+));
+const brandMismatchCount = computed(() => selectedIndoorRows.value.filter((row) => (
+  outdoorBrand.value
+  && row.brand
+  && row.brand.toLowerCase() !== outdoorBrand.value.toLowerCase()
+)).length);
+
+const multiValidation = computed(() => {
+  const reasons = [];
+  if (!selectedOutdoorUnit.value) {
+    reasons.push('Выберите наружный блок.');
+  }
+  if (selectedIndoorCount.value <= 0) {
+    reasons.push('Добавьте хотя бы один внутренний блок.');
+  }
+  if (outdoorPortsMax.value && selectedIndoorCount.value > outdoorPortsMax.value) {
+    reasons.push(`Превышен лимит портов: ${selectedIndoorCount.value} из ${outdoorPortsMax.value}.`);
+  }
+  if (allowedCoolingLimit.value && indoorCoolingSum.value > allowedCoolingLimit.value + 0.001) {
+    reasons.push(
+      `Суммарная мощность внутренних (${indoorCoolingSum.value.toFixed(1)} кВт) выше лимита `
+      + `(${allowedCoolingLimit.value.toFixed(1)} кВт).`
+    );
+  }
+  if (brandMismatchCount.value > 0) {
+    reasons.push('В конфигурации смешаны бренды. Для v1 поддерживается один бренд.');
+  }
+  return {
+    isValid: reasons.length === 0,
+    reasons,
+    summary: selectedOutdoorUnit.value
+      ? `Наружный блок: ${selectedOutdoorUnit.value.title}. `
+        + `Внутренних блоков: ${selectedIndoorCount.value}. `
+        + `Суммарная мощность: ${indoorCoolingSum.value.toFixed(1)} кВт.`
+      : 'Выберите наружный блок и добавьте внутренние блоки.',
+  };
+});
+
+const multiLeadUrl = computed(() => {
+  if (!selectedOutdoorUnit.value) return '/contacts';
+  const sp = new URLSearchParams();
+  sp.set('topic', 'multi_split');
+  sp.set('outdoor', selectedOutdoorUnit.value.slug);
+  sp.set(
+    'indoors',
+    selectedIndoorRows.value
+      .map((row) => `${row.product.slug}:${row.qty}`)
+      .join(','),
+  );
+  return `/contacts?${sp.toString()}`;
+});
+
+const formatKw = (value) => {
+  if (!Number.isFinite(value)) return '—';
+  return String(Number(value).toFixed(1)).replace('.0', '');
+};
+
+const syncMultiSelectionState = () => {
+  const outdoorSlugs = new Set(multiOutdoorOptions.value.map((product) => product.slug));
+  const indoorSlugs = new Set(multiIndoorOptions.value.map((product) => product.slug));
+
+  if (outdoorSlugs.size > 0 && !outdoorSlugs.has(selectedOutdoorSlug.value)) {
+    selectedOutdoorSlug.value = multiOutdoorOptions.value[0].slug;
+  }
+  if (outdoorSlugs.size === 0) {
+    selectedOutdoorSlug.value = '';
+  }
+
+  const nextQuantities = {};
+  Object.entries(selectedIndoorQuantities.value || {}).forEach(([slug, qty]) => {
+    const count = Number(qty || 0);
+    if (indoorSlugs.has(slug) && count > 0) {
+      nextQuantities[slug] = count;
+    }
+  });
+  selectedIndoorQuantities.value = nextQuantities;
+};
 
 const activePowerPresetKey = computed(() => {
   const min = currentAreaMin.value === null || currentAreaMin.value === undefined || currentAreaMin.value === ''
@@ -295,6 +451,8 @@ const fetchProducts = async ({ page = 1, append = false } = {}) => {
       products.value = incomingItems;
     }
 
+    syncMultiSelectionState();
+
     meta.value = data.meta || { total: 0, page: 1, limit: BASE_LIMIT, pages: 1 };
   } catch (error) {
     console.error('Fetch catalog failed', error);
@@ -357,6 +515,10 @@ const setCategory = async (categorySlug) => {
   if (categorySlug !== 'cat-industrial') {
     currentIndoorTypes.value = [];
   }
+  if (categorySlug !== 'cat-multi') {
+    selectedOutdoorSlug.value = '';
+    selectedIndoorQuantities.value = {};
+  }
 
   syncUrlFromState(1);
   await fetchProducts({ page: 1, append: false });
@@ -379,6 +541,28 @@ const clearIndustrialTypes = async () => {
   currentIndoorTypes.value = [];
   syncUrlFromState(1);
   await fetchProducts({ page: 1, append: false });
+};
+
+const selectMultiOutdoor = (slug) => {
+  selectedOutdoorSlug.value = slug;
+};
+
+const changeIndoorQty = (slug, delta) => {
+  if (!isMultiCategory.value) return;
+  const next = { ...selectedIndoorQuantities.value };
+  const current = Number(next[slug] || 0);
+  const updated = Math.max(0, current + delta);
+  if (updated <= 0) {
+    delete next[slug];
+  } else {
+    next[slug] = updated;
+  }
+  selectedIndoorQuantities.value = next;
+};
+
+const clearMultiConfig = () => {
+  selectedIndoorQuantities.value = {};
+  selectedOutdoorSlug.value = multiOutdoorOptions.value[0]?.slug || '';
 };
 
 const toggleBrand = async (brandSlug) => {
@@ -479,6 +663,7 @@ onMounted(async () => {
   if (!props.initialProducts?.length || currentMetaLimit !== BASE_LIMIT || urlPage > 1) {
     await fetchProducts({ page: Math.max(1, urlPage), append: false });
   }
+  syncMultiSelectionState();
 });
 </script>
 
@@ -625,6 +810,73 @@ onMounted(async () => {
           {{ item.title }}
         </button>
       </div>
+    </section>
+
+    <section v-if="isMultiCategory" class="glass-panel multi-config-panel">
+      <div class="section-head">
+        <div class="section-label">Подбор Мульти-Сплит</div>
+        <div class="label-hint">v1: проверка по портам, мощности и бренду</div>
+      </div>
+
+      <div v-if="multiOutdoorOptions.length === 0 || multiIndoorOptions.length === 0" class="multi-config-empty">
+        Недостаточно данных для подбора. Для конфигуратора нужны и наружные, и внутренние блоки в категории.
+      </div>
+
+      <template v-else>
+        <div class="multi-config-grid">
+          <div class="multi-config-column">
+            <div class="control-label">1. Наружный блок</div>
+            <div class="multi-outdoor-list">
+              <button
+                v-for="outdoor in multiOutdoorOptions"
+                :key="outdoor.slug"
+                class="multi-outdoor-card"
+                :class="{ active: selectedOutdoorSlug === outdoor.slug }"
+                @click="selectMultiOutdoor(outdoor.slug)"
+              >
+                <div class="multi-outdoor-title">{{ outdoor.title }}</div>
+                <div class="multi-outdoor-meta">
+                  До {{ getOutdoorPortsMax(outdoor) || '?' }} внутренних
+                  · {{ formatKw(getCoolingKw(outdoor)) }} кВт
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <div class="multi-config-column">
+            <div class="control-label">2. Внутренние блоки</div>
+            <div class="multi-indoor-list">
+              <div v-for="indoor in multiIndoorOptions" :key="indoor.slug" class="multi-indoor-item">
+                <div class="multi-indoor-main">
+                  <div class="multi-indoor-title">{{ indoor.title }}</div>
+                  <div class="multi-indoor-meta">
+                    {{ formatKw(getCoolingKw(indoor)) }} кВт
+                    · {{ getSpecValue(indoor, ['indoor_type', 'Тип внутреннего блока']) || 'внутренний блок' }}
+                  </div>
+                </div>
+                <div class="multi-qty-control">
+                  <button type="button" @click="changeIndoorQty(indoor.slug, -1)">−</button>
+                  <span>{{ Number(selectedIndoorQuantities[indoor.slug] || 0) }}</span>
+                  <button type="button" @click="changeIndoorQty(indoor.slug, 1)">+</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="multi-config-summary" :class="{ invalid: !multiValidation.isValid }">
+          <p>{{ multiValidation.summary }}</p>
+          <ul v-if="multiValidation.reasons.length > 0" class="multi-config-errors">
+            <li v-for="reason in multiValidation.reasons" :key="reason">{{ reason }}</li>
+          </ul>
+          <div class="multi-config-actions">
+            <button type="button" class="filters-reset-btn" @click="clearMultiConfig">Сбросить</button>
+            <a :href="multiLeadUrl" class="load-more-btn" :class="{ disabled: !multiValidation.isValid }">
+              Отправить менеджеру
+            </a>
+          </div>
+        </div>
+      </template>
     </section>
 
     <section class="filters-toolbar">
@@ -1019,6 +1271,145 @@ onMounted(async () => {
   background: var(--panel-active-gradient-alt);
 }
 
+.multi-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.multi-config-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.multi-config-empty {
+  font-size: 0.92rem;
+  color: var(--text-muted);
+}
+
+.multi-outdoor-list,
+.multi-indoor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.multi-outdoor-card {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--panel-chip-border);
+  background: var(--panel-chip-bg);
+  border-radius: 12px;
+  padding: 0.72rem 0.82rem;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.multi-outdoor-card:hover {
+  border-color: var(--panel-chip-hover-border);
+  transform: translateY(-1px);
+}
+
+.multi-outdoor-card.active {
+  border-color: transparent;
+  background: var(--panel-active-gradient);
+  color: var(--panel-active-text);
+}
+
+.multi-outdoor-title,
+.multi-indoor-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.multi-outdoor-meta,
+.multi-indoor-meta {
+  margin-top: 0.25rem;
+  font-size: 0.82rem;
+  opacity: 0.86;
+}
+
+.multi-indoor-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+  border: 1px solid var(--panel-chip-border);
+  background: var(--panel-chip-bg);
+  border-radius: 12px;
+  padding: 0.62rem 0.75rem;
+}
+
+.multi-indoor-main {
+  min-width: 0;
+}
+
+.multi-qty-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.multi-qty-control button {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-chip-border);
+  background: var(--panel-pill-bg);
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.multi-qty-control span {
+  min-width: 20px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.multi-config-summary {
+  margin-top: 0.85rem;
+  border: 1px solid var(--panel-chip-border);
+  border-radius: 12px;
+  padding: 0.78rem 0.85rem;
+  background: var(--panel-chip-bg);
+}
+
+.multi-config-summary.invalid {
+  border-color: var(--error);
+}
+
+.multi-config-summary p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.multi-config-errors {
+  margin: 0.55rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--error-text);
+  font-size: 0.84rem;
+}
+
+.multi-config-actions {
+  margin-top: 0.7rem;
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.multi-config-actions .load-more-btn {
+  text-decoration: none;
+}
+
+.multi-config-actions .load-more-btn.disabled {
+  pointer-events: none;
+  opacity: 0.65;
+}
+
 .filters-toolbar {
   display: flex;
   align-items: center;
@@ -1169,6 +1560,10 @@ onMounted(async () => {
 
 @media (max-width: 980px) {
   .category-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .multi-config-grid {
     grid-template-columns: 1fr;
   }
 }
