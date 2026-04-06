@@ -21,6 +21,19 @@ interface TagGroupItem {
     tags: TagItem[];
 }
 
+interface MultiComboRuleLine {
+    slug: string;
+    qty: number;
+}
+
+interface MultiComboRule {
+    id: string;
+    title: string;
+    lines: MultiComboRuleLine[];
+}
+
+type MultiCompatMode = 'free_match' | 'strict';
+
 const props = defineProps<{
     modelValue: boolean;
     product: Product | null;
@@ -57,9 +70,21 @@ const localStockSaving = ref(false);
 const unlinkingMappingId = ref<number | null>(null);
 const COMPATIBLE_INDOOR_KEY = 'compatible_indoor_slugs';
 const COMPATIBLE_OUTDOOR_KEY = 'compatible_outdoor_slugs';
-const COMPATIBILITY_KEYS = new Set([COMPATIBLE_INDOOR_KEY, COMPATIBLE_OUTDOOR_KEY]);
+const MULTI_COMBO_RULES_KEY = 'multi_combo_rules';
+const MULTI_COMPAT_MODE_KEY = 'multi_compat_mode';
+const MULTI_CAPACITY_COMBOS_KEY = 'multi_capacity_combos';
+const COMPATIBILITY_KEYS = new Set([
+    COMPATIBLE_INDOOR_KEY,
+    COMPATIBLE_OUTDOOR_KEY,
+    MULTI_COMBO_RULES_KEY,
+    MULTI_COMPAT_MODE_KEY,
+    MULTI_CAPACITY_COMBOS_KEY,
+]);
 const compatibilityIndoorSlugs = ref<string[]>([]);
 const compatibilityOutdoorSlugs = ref<string[]>([]);
+const multiComboRules = ref<MultiComboRule[]>([]);
+const multiCompatMode = ref<MultiCompatMode>('free_match');
+const capacityCombosInput = ref('');
 const compatibilityQuery = ref('');
 const compatibilityResults = ref<Product[]>([]);
 const compatibilityLoading = ref(false);
@@ -102,6 +127,128 @@ const parseSlugList = (value: unknown): string[] => {
     }
     return [];
 };
+
+const normalizeCapacityToken = (value: unknown): string => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    const numeric = raw.replace(',', '.').match(/\d+(?:\.\d+)?/);
+    if (!numeric) return '';
+    const parsed = Number.parseFloat(numeric[0]);
+    if (!Number.isFinite(parsed) || parsed <= 0) return '';
+
+    let klass = parsed;
+    if (klass >= 1000) klass = klass / 1000;
+    const rounded = Math.max(1, Math.round(klass));
+    return String(rounded).padStart(2, '0');
+};
+
+const normalizeCapacityCombo = (value: unknown): string => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    const tokens = raw
+        .split('+')
+        .map((item) => normalizeCapacityToken(item))
+        .filter(Boolean);
+    if (tokens.length === 0) return '';
+    return tokens
+        .sort((a, b) => Number(a) - Number(b))
+        .join('+');
+};
+
+const parseCapacityCombos = (value: unknown): string[] => {
+    const chunks = Array.isArray(value)
+        ? value.map((item) => String(item ?? ''))
+        : String(value ?? '')
+            .split(/[,\n;]/g)
+            .map((item) => item.trim());
+    const unique = new Set<string>();
+    for (const chunk of chunks) {
+        const normalized = normalizeCapacityCombo(chunk);
+        if (!normalized) continue;
+        unique.add(normalized);
+    }
+    return Array.from(unique);
+};
+
+const normalizedCapacityCombos = computed(() => parseCapacityCombos(capacityCombosInput.value));
+
+const makeRuleId = (): string => `rule-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+const toPositiveInt = (value: unknown): number => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return 1;
+    return Math.max(1, Math.floor(parsed));
+};
+
+const buildEmptyComboRule = (): MultiComboRule => ({
+    id: makeRuleId(),
+    title: '',
+    lines: [{ slug: '', qty: 1 }],
+});
+
+const normalizeRuleLine = (line: unknown): MultiComboRuleLine | null => {
+    if (!line) return null;
+    if (typeof line === 'string') {
+        const [rawSlug, rawQty] = line.split(':');
+        const slug = String(rawSlug || '').trim();
+        if (!slug) return null;
+        return {
+            slug,
+            qty: toPositiveInt(rawQty || 1),
+        };
+    }
+    if (typeof line !== 'object') return null;
+
+    const obj = line as Record<string, unknown>;
+    const slug = String(obj.slug ?? obj.indoor_slug ?? obj.model_slug ?? '').trim();
+    if (!slug) return null;
+    return {
+        slug,
+        qty: toPositiveInt(obj.qty ?? obj.quantity ?? obj.count ?? 1),
+    };
+};
+
+const normalizeRuleLines = (lines: unknown): MultiComboRuleLine[] => {
+    if (!Array.isArray(lines)) return [];
+    const acc = new Map<string, number>();
+    for (const line of lines) {
+        const normalized = normalizeRuleLine(line);
+        if (!normalized) continue;
+        const prev = Number(acc.get(normalized.slug) || 0);
+        acc.set(normalized.slug, prev + normalized.qty);
+    }
+    return Array.from(acc.entries()).map(([slug, qty]) => ({ slug, qty }));
+};
+
+const parseMultiComboRules = (value: unknown): MultiComboRule[] => {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map((item) => {
+            if (!item || typeof item !== 'object') return null;
+            const obj = item as Record<string, unknown>;
+            const rawLines = obj.lines ?? obj.items ?? [];
+            const lines = normalizeRuleLines(rawLines);
+            if (lines.length === 0) return null;
+            return {
+                id: makeRuleId(),
+                title: String(obj.title ?? obj.name ?? '').trim(),
+                lines,
+            } as MultiComboRule;
+        })
+        .filter((rule): rule is MultiComboRule => Boolean(rule));
+};
+
+const serializeMultiComboRules = (): Array<{ title?: string; lines: MultiComboRuleLine[] }> => (
+    multiComboRules.value
+        .map((rule) => {
+            const lines = normalizeRuleLines(rule.lines);
+            if (lines.length === 0) return null;
+            const title = String(rule.title || '').trim();
+            if (!title) return { lines };
+            return { title, lines };
+        })
+        .filter((rule): rule is { title?: string; lines: MultiComboRuleLine[] } => Boolean(rule))
+);
 
 const getProductSpecsMap = (product: Product | null | undefined): Record<string, any> => (
     ((product as any)?.specs || {}) as Record<string, any>
@@ -242,6 +389,62 @@ const filterCompatibilityCandidates = (items: Product[]): Product[] => (
         return true;
     })
 );
+
+const indoorSlugOptions = computed(() => {
+    const all = new Set<string>();
+    for (const slug of compatibilityIndoorSlugs.value) {
+        const clean = String(slug || '').trim();
+        if (clean) all.add(clean);
+    }
+    for (const item of compatibilityResults.value) {
+        const slug = String((item as any)?.slug || '').trim();
+        if (!slug) continue;
+        if (isIndoorProduct(item)) all.add(slug);
+    }
+    for (const rule of multiComboRules.value) {
+        for (const line of rule.lines) {
+            const clean = String(line.slug || '').trim();
+            if (clean) all.add(clean);
+        }
+    }
+    return Array.from(all).sort((a, b) => a.localeCompare(b, 'ru'));
+});
+
+const addMultiComboRule = () => {
+    multiComboRules.value = [...multiComboRules.value, buildEmptyComboRule()];
+};
+
+const removeMultiComboRule = (ruleId: string) => {
+    multiComboRules.value = multiComboRules.value.filter((rule) => rule.id !== ruleId);
+};
+
+const addMultiComboRuleLine = (ruleId: string) => {
+    const rule = multiComboRules.value.find((item) => item.id === ruleId);
+    if (!rule) return;
+    rule.lines.push({ slug: '', qty: 1 });
+};
+
+const removeMultiComboRuleLine = (ruleId: string, lineIndex: number) => {
+    const rule = multiComboRules.value.find((item) => item.id === ruleId);
+    if (!rule) return;
+    if (rule.lines.length <= 1) {
+        rule.lines[0] = { slug: '', qty: 1 };
+        return;
+    }
+    rule.lines.splice(lineIndex, 1);
+};
+
+const fillRuleFromIndoorCompatibility = (ruleId: string) => {
+    const rule = multiComboRules.value.find((item) => item.id === ruleId);
+    if (!rule) return;
+    if (compatibilityIndoorSlugs.value.length === 0) return;
+    rule.lines = compatibilityIndoorSlugs.value.map((slug) => ({ slug, qty: 1 }));
+};
+
+const getRulePreview = (rule: MultiComboRule): string => {
+    const parts = normalizeRuleLines(rule.lines).map((line) => `${line.qty}×${line.slug}`);
+    return parts.join(' + ');
+};
 
 const upsertSpecRow = (key: string, value: string) => {
     const existing = specs.value.find((row) => row.key === key);
@@ -576,6 +779,29 @@ const currentProductRole = computed<'indoor' | 'outdoor' | 'unknown'>(() => {
     return 'unknown';
 });
 
+const isCurrentProductMulti = computed<boolean>(() => {
+    const category = categoryGroup.value;
+    if (category) {
+        const selectedMultiTag = category.tags.find((tag) => normalizeText(tag.slug) === 'cat-multi');
+        if (selectedMultiTag && selectedTagIds.value.has(selectedMultiTag.id)) return true;
+    }
+
+    const productTags = ((props.product as any)?.tags || []) as Array<{ slug?: string }>;
+    if (productTags.some((tag) => normalizeText(tag?.slug || '') === 'cat-multi')) return true;
+
+    const specsMap: Record<string, any> = {};
+    for (const row of specs.value) {
+        if (row.key?.trim()) specsMap[row.key.trim()] = row.value;
+    }
+    const typeText = normalizeText(specsMap.type ?? specsMap['Тип']);
+    const titleText = normalizeText(form.value.title || props.product?.title || '');
+    return (
+        typeText.includes('мульти')
+        || titleText.includes('мульти-сплит')
+        || titleText.includes('мульти сплит')
+    );
+});
+
 watch(() => props.modelValue, async (val) => {
     if (val && props.product) {
         formMessage.value = '';
@@ -592,6 +818,11 @@ watch(() => props.modelValue, async (val) => {
         const s = props.product.specs || {};
         compatibilityIndoorSlugs.value = parseSlugList((s as any)[COMPATIBLE_INDOOR_KEY]);
         compatibilityOutdoorSlugs.value = parseSlugList((s as any)[COMPATIBLE_OUTDOOR_KEY]);
+        multiComboRules.value = parseMultiComboRules((s as any)[MULTI_COMBO_RULES_KEY]);
+        multiCompatMode.value = String((s as any)[MULTI_COMPAT_MODE_KEY] || 'free_match') === 'strict'
+            ? 'strict'
+            : 'free_match';
+        capacityCombosInput.value = parseCapacityCombos((s as any)[MULTI_CAPACITY_COMBOS_KEY]).join(', ');
         specs.value = Object.entries(s)
         .filter(([key]) => !COMPATIBILITY_KEYS.has(key))
         .map(([key, value]) => {
@@ -715,6 +946,17 @@ const save = async () => {
     }
     if (compatibilityOutdoorSlugs.value.length > 0) {
         validSpecs[COMPATIBLE_OUTDOOR_KEY] = [...compatibilityOutdoorSlugs.value];
+    }
+    validSpecs[MULTI_COMPAT_MODE_KEY] = multiCompatMode.value;
+    if (multiCompatMode.value === 'free_match') {
+        if (normalizedCapacityCombos.value.length > 0) {
+            validSpecs[MULTI_CAPACITY_COMBOS_KEY] = [...normalizedCapacityCombos.value];
+        }
+    } else {
+        const serializedMultiRules = serializeMultiComboRules();
+        if (serializedMultiRules.length > 0) {
+            validSpecs[MULTI_COMBO_RULES_KEY] = serializedMultiRules;
+        }
     }
 
     loading.value = true;
@@ -895,7 +1137,10 @@ const unlinkSupplierOffer = async (offer: any) => {
                             </div>
                         </div>
 
-                        <div class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3">
+                        <div
+                            v-if="isCurrentProductMulti"
+                            class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3"
+                        >
                             <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-slate-500">Быстрые пресеты</h4>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 <button
@@ -1118,6 +1363,156 @@ const unlinkSupplierOffer = async (offer: any) => {
                                         </span>
                                         <span v-if="compatibilityOutdoorSlugs.length === 0" class="text-[11px] text-gray-400">Не задано</span>
                                     </div>
+                                </div>
+                            </div>
+
+                            <div v-if="currentProductRole === 'outdoor'" class="rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-3 space-y-2">
+                                <div class="flex items-center justify-between gap-2">
+                                    <p class="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">
+                                        Режим совместимости мульти
+                                    </p>
+                                </div>
+
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <label class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-slate-300 rounded border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-2 cursor-pointer">
+                                        <input
+                                            v-model="multiCompatMode"
+                                            type="radio"
+                                            value="free_match"
+                                            class="accent-teal-600"
+                                        />
+                                        <span>
+                                            <strong>Free Match (по умолчанию)</strong><br />
+                                            По таблице мощностей: 09+09, 09+12 и т.д.
+                                        </span>
+                                    </label>
+                                    <label class="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-slate-300 rounded border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-2 cursor-pointer">
+                                        <input
+                                            v-model="multiCompatMode"
+                                            type="radio"
+                                            value="strict"
+                                            class="accent-indigo-600"
+                                        />
+                                        <span>
+                                            <strong>Строгий</strong><br />
+                                            Только точные наборы моделей (slug+qty).
+                                        </span>
+                                    </label>
+                                </div>
+
+                                <div v-if="multiCompatMode === 'free_match'" class="rounded-lg border border-teal-200 dark:border-teal-800/50 bg-white dark:bg-slate-900 p-2.5 space-y-2">
+                                    <p class="text-[11px] text-gray-500 dark:text-slate-400">
+                                        Введите допустимые комбинации через запятую или с новой строки. Пример: <code>09+09, 09+12, 12+12</code>
+                                    </p>
+                                    <textarea
+                                        v-model="capacityCombosInput"
+                                        rows="3"
+                                        placeholder="09+09, 09+12, 12+12"
+                                        class="w-full px-2.5 py-2 bg-slate-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-xs"
+                                    />
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <span
+                                            v-for="combo in normalizedCapacityCombos"
+                                            :key="combo"
+                                            class="inline-flex items-center px-2 py-1 rounded-full bg-teal-100 text-teal-800 text-[11px] font-semibold"
+                                        >
+                                            {{ combo }}
+                                        </span>
+                                        <span v-if="normalizedCapacityCombos.length === 0" class="text-[11px] text-gray-400">
+                                            Комбинации не заданы. Будет fallback-проверка по портам/бренду.
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div v-else class="space-y-2">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <p class="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">
+                                            Точные конфигурации (slug)
+                                        </p>
+                                        <button
+                                            type="button"
+                                            class="px-2.5 py-1 rounded border border-teal-300 dark:border-teal-800 text-teal-700 dark:text-teal-300 text-[11px] font-semibold"
+                                            @click="addMultiComboRule"
+                                        >
+                                            + Конфигурация
+                                        </button>
+                                    </div>
+                                    <p class="text-[11px] text-gray-500 dark:text-slate-400">
+                                        Используйте только если нужны жестко фиксированные наборы конкретных внутренних моделей.
+                                    </p>
+
+                                    <div v-if="multiComboRules.length === 0" class="text-[11px] text-gray-400">
+                                        Строгие конфигурации не заданы.
+                                    </div>
+
+                                    <div v-for="rule in multiComboRules" :key="rule.id" class="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-2.5 space-y-2">
+                                        <div class="flex items-center gap-2">
+                                            <input
+                                                v-model="rule.title"
+                                                type="text"
+                                                placeholder="Название (например 09+12)"
+                                                class="flex-1 px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-xs"
+                                            />
+                                            <button
+                                                type="button"
+                                                class="px-2 py-1 rounded border border-red-300 dark:border-red-800 text-red-600 dark:text-red-300 text-[11px] font-semibold"
+                                                @click="removeMultiComboRule(rule.id)"
+                                            >
+                                                Удалить
+                                            </button>
+                                        </div>
+
+                                        <div class="space-y-1.5">
+                                            <div v-for="(line, lineIndex) in rule.lines" :key="`${rule.id}-${lineIndex}`" class="grid grid-cols-[1fr_84px_auto] gap-1.5 items-center">
+                                                <input
+                                                    v-model="line.slug"
+                                                    list="multi-indoor-slugs"
+                                                    type="text"
+                                                    placeholder="slug внутреннего блока"
+                                                    class="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-xs"
+                                                />
+                                                <input
+                                                    v-model.number="line.qty"
+                                                    type="number"
+                                                    min="1"
+                                                    step="1"
+                                                    class="px-2 py-1.5 bg-slate-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-xs text-center"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    class="px-2 py-1 rounded border border-gray-200 dark:border-slate-700 text-gray-600 dark:text-slate-300 text-[11px] font-semibold"
+                                                    @click="removeMultiComboRuleLine(rule.id, lineIndex)"
+                                                >
+                                                    ×
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div class="flex items-center gap-2">
+                                            <button
+                                                type="button"
+                                                class="px-2.5 py-1 rounded border border-gray-200 dark:border-slate-700 text-[11px] font-semibold"
+                                                @click="addMultiComboRuleLine(rule.id)"
+                                            >
+                                                + Блок
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="px-2.5 py-1 rounded border border-indigo-300 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-[11px] font-semibold disabled:opacity-50"
+                                                :disabled="compatibilityIndoorSlugs.length === 0"
+                                                @click="fillRuleFromIndoorCompatibility(rule.id)"
+                                            >
+                                                Заполнить из совместимых
+                                            </button>
+                                            <span class="text-[11px] text-gray-500 dark:text-slate-400 truncate">
+                                                {{ getRulePreview(rule) || '—' }}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <datalist id="multi-indoor-slugs">
+                                        <option v-for="slug in indoorSlugOptions" :key="slug" :value="slug" />
+                                    </datalist>
                                 </div>
                             </div>
                         </div>
