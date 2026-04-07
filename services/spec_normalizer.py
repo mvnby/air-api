@@ -73,27 +73,39 @@ KEY_MAP = {
     
     # --- ШУМ ---
     "Шум внутреннего блока": "noise_indoor",
+    "Шум внутреннего блока, дБ": "noise_indoor",
     "Уровень шума внутреннего блока": "noise_indoor",
     "Уровень шума (макс), дБ": "noise_indoor",
     "Шум наружного блока": "noise_outdoor",
+    "Шум наружного блока, дБ": "noise_outdoor",
+    "Шум внешнего блока": "noise_outdoor",
+    "Шум внешнего блока, дБ": "noise_outdoor",
     "Уровень шума наружного блока": "noise_outdoor",
+    "Уровень шума наружного блока, дБ": "noise_outdoor",
     
     # --- ГАБАРИТЫ ВНУТРЕННИЙ ---
     "Ширина внутреннего блока": "width_indoor",
     "Высота внутреннего блока": "height_indoor",
     "Глубина внутреннего блока": "depth_indoor",
     "Вес внутреннего блока": "weight_indoor",
+    "Вес внутреннего блока, кг": "weight_indoor",
     
     # --- ГАБАРИТЫ НАРУЖНЫЙ ---
     "Ширина наружного блока": "width_outdoor",
     "Высота наружного блока": "height_outdoor",
     "Глубина наружного блока": "depth_outdoor",
     "Вес наружного блока": "weight_outdoor",
+    "Вес наружного блока, кг": "weight_outdoor",
+    "Вес внешнего блока": "weight_outdoor",
+    "Вес внешнего блока, кг": "weight_outdoor",
     
     # --- МОНТАЖ ---
     "Максимальная длина магистрали": "pipe_max_length",
+    "Максимальная длина коммуникаций": "pipe_max_length",
+    "Максимальная длина коммуникаций, м": "pipe_max_length",
     "Макс. длина трассы": "pipe_max_length",
     "Перепад высот": "pipe_max_height",
+    "Перепад высот, м": "pipe_max_height",
     "Максимальный перепад высот": "multi_max_height_diff",
     "Максимальное количество внутренних блоков": "multi_max_indoor_units",
     "Максимальная суммарная длина магистрали": "multi_max_total_pipe_length",
@@ -102,9 +114,21 @@ KEY_MAP = {
     
     # --- ТЕМПЕРАТУРЫ ---
     "Рабочая температура при охлаждении": "temp_range_cool",
+    "Рабочий диапазон температур при охлаждении": "temp_range_cool",
+    "Рабочий диапазон температур при охлаждении,°C": "temp_range_cool",
     "Рабочая температура при обогреве": "temp_range_heat",
+    "Рабочий диапазон температур при обогреве": "temp_range_heat",
+    "Рабочий диапазон температур при обогреве,°C": "temp_range_heat",
     "Минимальная температура наружного воздуха": "temp_range_heat",
     "Мин. температура (обогрев)": "temp_range_heat",
+    
+    # --- ПЛОЩАДЬ (с единицами) ---
+    "Обслуживаемая площадь до": "area_m2",
+    "Обслуживаемая площадь до, м2": "area_m2",
+    
+    # --- ЭНЕРГОЭФФЕКТИВНОСТЬ (без скобок) ---
+    "Энергоэффективность при охлаждении": "energy_class_cooling",
+    "Энергоэффективность при обогреве": "energy_class_heating",
     
     "Максимальный расход воздуха внутреннего блока": "airflow_max",
 
@@ -122,6 +146,48 @@ KEY_MAP = {
     "Обеззараживание ультрафиолетом": "uv_sterilization",
     "Самоочистка": "self_cleaning",
 }
+
+# Composite dimension keys: "940×1250×340" → split into width/height/depth
+# Maps raw key patterns → (width_key, height_key, depth_key)
+_DIMENSIONS_MAP = {
+    "Габариты внутреннего блока (ШхВхГ)": ("width_indoor", "height_indoor", "depth_indoor"),
+    "Габариты внутреннего блока (ШхВхГ), мм": ("width_indoor", "height_indoor", "depth_indoor"),
+    "Габариты наружного блока (ШхВхГ)": ("width_outdoor", "height_outdoor", "depth_outdoor"),
+    "Габариты наружного блока (ШхВхГ), мм": ("width_outdoor", "height_outdoor", "depth_outdoor"),
+    "Габариты внешнего блока (ШхВхГ)": ("width_outdoor", "height_outdoor", "depth_outdoor"),
+    "Габариты внешнего блока (ШхВхГ), мм": ("width_outdoor", "height_outdoor", "depth_outdoor"),
+}
+
+
+def _split_dimensions(specs: Dict[str, Any]) -> Dict[str, Any]:
+    """Split composite dimension values like '940×1250×340' into
+    individual width/height/depth keys.
+
+    Handles various separators: ×, x, X, *, х (cyrillic).
+    """
+    result = dict(specs)
+    for raw_key, (w_key, h_key, d_key) in _DIMENSIONS_MAP.items():
+        val = result.pop(raw_key, None)
+        if val is None:
+            continue
+        text = str(val).strip()
+        # Normalize separators
+        text = re.sub(r"[×xX*х]", "×", text)
+        parts = [p.strip() for p in text.split("×") if p.strip()]
+        nums = []
+        for p in parts:
+            m = re.search(r"(\d+(?:[.,]\d+)?)", p)
+            if m:
+                nums.append(m.group(1).replace(",", "."))
+        if len(nums) >= 3:
+            result.setdefault(w_key, nums[0])
+            result.setdefault(h_key, nums[1])
+            result.setdefault(d_key, nums[2])
+        elif len(nums) == 1:
+            # Single value — keep as-is under width key
+            result.setdefault(w_key, nums[0])
+    return result
+
 
 def clean_value(key: str, val: Any, keep_units: bool = True) -> Any:
     if not isinstance(val, str):
@@ -457,6 +523,10 @@ def normalize_specs(
         specs = {}
         
     old_specs = specs.copy()
+
+    # Split composite dimension keys ("Габариты ... (ШхВхГ)" → width/height/depth)
+    old_specs = _split_dimensions(old_specs)
+
     new_specs = old_specs.copy()
     
     # Проходим по старым русским ключам
