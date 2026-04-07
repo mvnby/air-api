@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from parsers.base import BaseParser
 from parsers.aircond import AircondParser
 from parsers.onliner import OnlinerParser
+from parsers.tvoy_klimat import TvoyKlimatParser
 from core.database import async_session_maker
 from models import Product, ProductImage, Tag, TagGroup
 from services.image_service import ImageService
@@ -110,6 +111,7 @@ class ImporterService:
         # Register available parsers
         self.parsers: List[BaseParser] = [
             AircondParser(),
+            TvoyKlimatParser(),
             OnlinerParser(),
         ]
 

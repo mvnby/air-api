@@ -116,6 +116,101 @@ const parseSlugList = (value) => {
   }
   return [];
 };
+const normalizeCapacityToken = (value) => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const numeric = raw.replace(',', '.').match(/\d+(?:\.\d+)?/);
+  if (!numeric) return '';
+  let parsed = Number.parseFloat(numeric[0]);
+  if (!Number.isFinite(parsed) || parsed <= 0) return '';
+  if (parsed >= 1000) parsed = parsed / 1000;
+  return String(Math.max(1, Math.round(parsed))).padStart(2, '0');
+};
+const normalizeCapacityCombo = (value) => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const tokens = raw
+    .split('+')
+    .map((item) => normalizeCapacityToken(item))
+    .filter(Boolean)
+    .sort((a, b) => Number(a) - Number(b));
+  return tokens.join('+');
+};
+const parseCapacityCombos = (value) => {
+  const chunks = Array.isArray(value)
+    ? value.map((item) => String(item ?? ''))
+    : String(value ?? '').split(/[,\n;]/g).map((item) => item.trim());
+  const unique = new Set();
+  chunks.forEach((chunk) => {
+    const normalized = normalizeCapacityCombo(chunk);
+    if (normalized) unique.add(normalized);
+  });
+  return Array.from(unique);
+};
+const getCapacityClassFromKw = (kw) => {
+  if (!Number.isFinite(kw) || kw <= 0) return '';
+  const approx = kw * 3.412;
+  const standards = [7, 9, 12, 18, 24, 30, 36, 42, 48, 60];
+  let nearest = standards[0];
+  let best = Number.POSITIVE_INFINITY;
+  standards.forEach((candidate) => {
+    const diff = Math.abs(candidate - approx);
+    if (diff < best) {
+      best = diff;
+      nearest = candidate;
+    }
+  });
+  return String(nearest).padStart(2, '0');
+};
+const toPositiveInt = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 1;
+  return Math.max(1, Math.floor(parsed));
+};
+const normalizeRuleLines = (lines) => {
+  if (!Array.isArray(lines)) return [];
+  const merged = new Map();
+  lines.forEach((line) => {
+    if (!line) return;
+    if (typeof line === 'string') {
+      const [slugRaw, qtyRaw] = line.split(':');
+      const slug = String(slugRaw || '').trim();
+      if (!slug) return;
+      merged.set(slug, Number(merged.get(slug) || 0) + toPositiveInt(qtyRaw || 1));
+      return;
+    }
+    if (typeof line !== 'object') return;
+    const slug = String(line.slug ?? line.indoor_slug ?? line.model_slug ?? '').trim();
+    if (!slug) return;
+    const qty = toPositiveInt(line.qty ?? line.quantity ?? line.count ?? 1);
+    merged.set(slug, Number(merged.get(slug) || 0) + qty);
+  });
+  return Array.from(merged.entries()).map(([slug, qty]) => ({ slug, qty }));
+};
+const getComboSignature = (lines) => normalizeRuleLines(lines)
+  .sort((a, b) => a.slug.localeCompare(b.slug, 'ru'))
+  .map((line) => `${line.slug}:${line.qty}`)
+  .join('|');
+const parseMultiComboRules = (value) => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const lines = normalizeRuleLines(item.lines ?? item.items ?? []);
+      if (lines.length === 0) return null;
+      const title = String(item.title ?? item.name ?? '').trim();
+      return {
+        title,
+        lines,
+        signature: getComboSignature(lines),
+      };
+    })
+    .filter(Boolean);
+};
+const formatComboRule = (rule) => (
+  String(rule?.title || '').trim()
+  || rule.lines.map((line) => `${line.qty}×${line.slug}`).join(' + ')
+);
 
 const getProductBrand = (product) => {
   const fromSpecs = getSpecValue(product, ['brand', 'Бренд', 'Марка', 'Производитель']);
@@ -125,6 +220,23 @@ const getProductBrand = (product) => {
 };
 
 const getCoolingKw = (product) => parseNumber(getSpecValue(product, ['capacity_cooling_kw', 'Мощность охлаждения']));
+const getIndoorCapacityClass = (product) => {
+  const direct = normalizeCapacityToken(getSpecValue(product, [
+    'capacity_class',
+    'btu_class',
+    'BTU класс',
+    'Класс BTU',
+    'BTU',
+    'БТЕ',
+    'Мощность BTU',
+  ]));
+  if (direct) return direct;
+  const kw = getCoolingKw(product);
+  const fromKw = getCapacityClassFromKw(kw);
+  if (fromKw) return fromKw;
+  const titleMatch = String(product?.title || '').match(/\b(07|09|12|18|24|30|36|42|48|60)\b/);
+  return titleMatch?.[1] || '';
+};
 
 const isIndoorUnit = (product) => {
   const typeText = normalizeText(getSpecValue(product, ['type', 'Тип']));
@@ -149,11 +261,28 @@ const multiIndoorOptions = computed(() => products.value.filter((product) => isI
 const selectedOutdoorUnit = computed(
   () => multiOutdoorOptions.value.find((product) => product.slug === selectedOutdoorSlug.value) || null
 );
+const selectedOutdoorCompatMode = computed(() => (
+  String(getSpecValue(selectedOutdoorUnit.value, ['multi_compat_mode']) || '').trim().toLowerCase() === 'strict'
+    ? 'strict'
+    : 'free_match'
+));
 const selectedOutdoorCompatibleIndoorSlugs = computed(() => new Set(
   parseSlugList(getSpecValue(selectedOutdoorUnit.value, ['compatible_indoor_slugs'])),
 ));
+const selectedOutdoorComboRules = computed(() => (
+  parseMultiComboRules(getSpecValue(selectedOutdoorUnit.value, ['multi_combo_rules']))
+));
+const selectedOutdoorCapacityCombos = computed(() => (
+  parseCapacityCombos(getSpecValue(selectedOutdoorUnit.value, ['multi_capacity_combos']))
+));
 const hasOutdoorBrandRestriction = computed(() => Boolean(normalizeBrand(getProductBrand(selectedOutdoorUnit.value))));
 const hasOutdoorCompatRestriction = computed(() => selectedOutdoorCompatibleIndoorSlugs.value.size > 0);
+const hasOutdoorStrictComboRestriction = computed(() => (
+  selectedOutdoorCompatMode.value === 'strict' && selectedOutdoorComboRules.value.length > 0
+));
+const hasOutdoorCapacityComboRestriction = computed(() => (
+  selectedOutdoorCompatMode.value === 'free_match' && selectedOutdoorCapacityCombos.value.length > 0
+));
 const multiIndoorOptionsFiltered = computed(() => {
   let result = [...multiIndoorOptions.value];
   const selectedBrand = getProductBrand(selectedOutdoorUnit.value);
@@ -192,6 +321,36 @@ const brandMismatchCount = computed(() => selectedIndoorRows.value.filter((row) 
   && row.brand
   && !isSameBrand(row.brand, outdoorBrand.value)
 )).length);
+const selectedIndoorSignature = computed(() => getComboSignature(
+  selectedIndoorRows.value.map((row) => ({
+    slug: String(row.product?.slug || ''),
+    qty: Number(row.qty || 0),
+  })),
+));
+const selectedIndoorCapacityTokens = computed(() => {
+  const tokens = [];
+  selectedIndoorRows.value.forEach((row) => {
+    const klass = getIndoorCapacityClass(row.product);
+    if (!klass) return;
+    const qty = Math.max(0, Number(row.qty || 0));
+    for (let idx = 0; idx < qty; idx += 1) {
+      tokens.push(klass);
+    }
+  });
+  return tokens.sort((a, b) => Number(a) - Number(b));
+});
+const selectedIndoorMissingCapacityCount = computed(() => (
+  selectedIndoorRows.value.filter((row) => !getIndoorCapacityClass(row.product)).length
+));
+const selectedIndoorCapacitySignature = computed(() => (
+  selectedIndoorCapacityTokens.value.join('+')
+));
+const matchedComboRule = computed(() => (
+  selectedOutdoorComboRules.value.find((rule) => rule.signature === selectedIndoorSignature.value) || null
+));
+const matchedCapacityCombo = computed(() => (
+  selectedOutdoorCapacityCombos.value.find((combo) => combo === selectedIndoorCapacitySignature.value) || ''
+));
 const multiIndoorFilterHint = computed(() => {
   const messages = [];
   if (hasOutdoorBrandRestriction.value && outdoorBrand.value) {
@@ -200,7 +359,19 @@ const multiIndoorFilterHint = computed(() => {
   if (hasOutdoorCompatRestriction.value) {
     messages.push('Дополнительно применен список явной совместимости для выбранного наружного.');
   }
+  if (hasOutdoorStrictComboRestriction.value) {
+    messages.push('Режим strict: доступны только заранее заданные конфигурации конкретных моделей.');
+  }
+  if (hasOutdoorCapacityComboRestriction.value) {
+    messages.push('Режим free match: проверяем комбинацию по мощностным классам (09+12 и т.д.).');
+  }
   return messages.join(' ');
+});
+
+const multiValidationHint = computed(() => {
+  if (hasOutdoorStrictComboRestriction.value) return 'v3 strict: exact slug-конфигурации + порты/бренд';
+  if (hasOutdoorCapacityComboRestriction.value) return 'v3 free match: таблица мощностей + порты/бренд';
+  return 'v2: порты/мощность/бренд';
 });
 
 const multiValidation = computed(() => {
@@ -214,18 +385,32 @@ const multiValidation = computed(() => {
   if (outdoorPortsMax.value && selectedIndoorCount.value > outdoorPortsMax.value) {
     reasons.push(`Превышен лимит портов: ${selectedIndoorCount.value} из ${outdoorPortsMax.value}.`);
   }
-  if (allowedCoolingLimit.value && indoorCoolingSum.value > allowedCoolingLimit.value + 0.001) {
+  const shouldCheckCoolingLimit = !hasOutdoorStrictComboRestriction.value && !hasOutdoorCapacityComboRestriction.value;
+  if (shouldCheckCoolingLimit && allowedCoolingLimit.value && indoorCoolingSum.value > allowedCoolingLimit.value + 0.001) {
     reasons.push(
       `Суммарная мощность внутренних (${indoorCoolingSum.value.toFixed(1)} кВт) выше лимита `
       + `(${allowedCoolingLimit.value.toFixed(1)} кВт).`
     );
   }
   if (brandMismatchCount.value > 0) {
-    reasons.push('В конфигурации смешаны бренды. Для v1 поддерживается один бренд.');
+    reasons.push('В конфигурации смешаны бренды. Для подбора поддерживается один бренд.');
   }
   if (hasOutdoorCompatRestriction.value && selectedIndoorCount.value === 0) {
     reasons.push('Для выбранного наружного блока добавьте совместимые внутренние блоки из списка ниже.');
   }
+  if (hasOutdoorStrictComboRestriction.value && selectedIndoorCount.value > 0 && !matchedComboRule.value) {
+    reasons.push('Выбранная комбинация не входит в строгие допустимые конфигурации.');
+  }
+  if (hasOutdoorCapacityComboRestriction.value && selectedIndoorCount.value > 0) {
+    if (selectedIndoorMissingCapacityCount.value > 0) {
+      reasons.push('Для части внутренних блоков не удалось определить мощностной класс (09/12/18).');
+    } else if (!matchedCapacityCombo.value) {
+      reasons.push('Выбранная комбинация не входит в допустимую таблицу free match.');
+    }
+  }
+  const matchedConfigText = matchedComboRule.value
+    ? formatComboRule(matchedComboRule.value)
+    : matchedCapacityCombo.value;
   return {
     isValid: reasons.length === 0,
     reasons,
@@ -233,6 +418,7 @@ const multiValidation = computed(() => {
       ? `Наружный блок: ${selectedOutdoorUnit.value.title}. `
         + `Внутренних блоков: ${selectedIndoorCount.value}. `
         + `Суммарная мощность: ${indoorCoolingSum.value.toFixed(1)} кВт.`
+        + (matchedConfigText ? ` Конфигурация: ${matchedConfigText}.` : '')
       : 'Выберите наружный блок и добавьте внутренние блоки.',
   };
 });
@@ -850,7 +1036,7 @@ onMounted(async () => {
     <section v-if="isMultiCategory" class="glass-panel multi-config-panel">
       <div class="section-head">
         <div class="section-label">Подбор Мульти-Сплит</div>
-        <div class="label-hint">v1: проверка по портам, мощности и бренду</div>
+        <div class="label-hint">{{ multiValidationHint }}</div>
       </div>
 
       <div v-if="multiOutdoorOptions.length === 0 || multiIndoorOptions.length === 0" class="multi-config-empty">
@@ -904,6 +1090,29 @@ onMounted(async () => {
 
         <div class="multi-config-summary" :class="{ invalid: !multiValidation.isValid }">
           <p>{{ multiValidation.summary }}</p>
+          <div v-if="hasOutdoorStrictComboRestriction || hasOutdoorCapacityComboRestriction" class="multi-rules-block">
+            <div class="multi-rules-label">
+              {{
+                hasOutdoorStrictComboRestriction
+                  ? 'Допустимые строгие конфигурации:'
+                  : 'Допустимые комбинации free match:'
+              }}
+            </div>
+            <div class="multi-rules-list">
+              <span
+                v-for="rule in (hasOutdoorStrictComboRestriction ? selectedOutdoorComboRules : selectedOutdoorCapacityCombos)"
+                :key="hasOutdoorStrictComboRestriction ? rule.signature : rule"
+                class="multi-rule-pill"
+                :class="{
+                  active: hasOutdoorStrictComboRestriction
+                    ? (matchedComboRule && matchedComboRule.signature === rule.signature)
+                    : (matchedCapacityCombo && matchedCapacityCombo === rule)
+                }"
+              >
+                {{ hasOutdoorStrictComboRestriction ? formatComboRule(rule) : rule }}
+              </span>
+            </div>
+          </div>
           <ul v-if="multiValidation.reasons.length > 0" class="multi-config-errors">
             <li v-for="reason in multiValidation.reasons" :key="reason">{{ reason }}</li>
           </ul>
@@ -1399,6 +1608,38 @@ onMounted(async () => {
   font-size: 0.9rem;
 }
 
+.multi-rules-block {
+  margin-top: 0.55rem;
+}
+
+.multi-rules-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+
+.multi-rules-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.multi-rule-pill {
+  border-radius: 999px;
+  border: 1px solid var(--panel-chip-border);
+  background: var(--panel-pill-bg);
+  padding: 0.28rem 0.62rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.multi-rule-pill.active {
+  border-color: transparent;
+  color: var(--panel-active-text);
+  background: var(--panel-active-gradient-alt);
+}
+
 .multi-config-errors {
   margin: 0.55rem 0 0;
   padding-left: 1.1rem;
@@ -1571,10 +1812,6 @@ onMounted(async () => {
 }
 
 @media (max-width: 980px) {
-  .multi-config-grid {
-    grid-template-columns: 1fr;
-  }
-
   .multi-config-grid {
     grid-template-columns: 1fr;
   }
