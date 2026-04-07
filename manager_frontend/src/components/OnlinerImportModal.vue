@@ -86,7 +86,7 @@ const handleClose = () => {
                 v-model="urlsText"
                 :disabled="loading"
                 rows="7"
-                placeholder="https://catalog.onliner.by/split_systems/midea/msmb-09hrn8-wifib&#10;https://aircond.by/split-sistemy/mdv-integra-pro-inverter-..."
+                placeholder="https://catalog.onliner.by/split_systems/midea/msmb-09hrn8-wifib&#10;https://aircond.by/split-sistemy/mdv-integra-pro-inverter-...&#10;https://tvoy-klimat.by/catalog/bytovye-konditsionery/..."
                 class="w-full rounded-xl border border-slate-600 bg-slate-900 text-slate-100 placeholder-slate-600 text-sm px-4 py-3 resize-none outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all disabled:opacity-50"
               />
               <p class="text-xs text-slate-500 mt-1.5">
