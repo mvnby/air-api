@@ -43,7 +43,11 @@ async def create_manager_order(
     try:
         from models import LeadSource, OrderStatus
         source_enum = LeadSource(payload.source) if payload.source else LeadSource.MANAGER
-        initial_status = OrderStatus.NEGOTIATION if payload.service_type == "maintenance" else OrderStatus.NEW_LEAD
+        # Orders from customer card (customer_id provided) or maintenance skip new_lead
+        if payload.customer_id or payload.service_type == "maintenance":
+            initial_status = OrderStatus.NEGOTIATION
+        else:
+            initial_status = OrderStatus.NEW_LEAD
         order = await OrderService.create_from_website(
             session=session,
             customer_name=payload.name or "Новый клиент",

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { ArrowLeft, Building2, Mail, Phone, ReceiptText, Save, UserRound, X } from 'lucide-vue-next';
+import { ArrowLeft, Building2, Mail, Phone, Plus, ReceiptText, Save, UserRound, X } from 'lucide-vue-next';
+import CreateOrderModal from '../components/CreateOrderModal.vue';
 import { api } from '../api';
 import { ManagerService, type ManagerCatalogCustomerItemResponse, type ManagerCustomerDocumentItem } from '../client';
 import { useBelarusPhoneMask } from '../composables/useBelarusPhoneMask';
@@ -43,6 +44,7 @@ const saveError = ref('');
 const success = ref('');
 const toast = ref('');
 const editMode = ref(false);
+const showCreateOrder = ref(false);
 const serverErrors = ref<Record<string, string>>({});
 
 const documents = ref<ManagerCustomerDocumentItem[]>([]);
@@ -213,6 +215,12 @@ const openOrders = () => {
     ? `/manager/orders/kanban?search=${encodeURIComponent(search)}`
     : '/manager/orders/kanban';
   window.history.pushState({}, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+};
+
+const onOrderCreated = (orderId: number) => {
+  showCreateOrder.value = false;
+  window.history.pushState({}, '', `/manager/orders/kanban?orderId=${orderId}`);
   window.dispatchEvent(new PopStateEvent('popstate'));
 };
 
@@ -399,6 +407,10 @@ onMounted(() => {
         <button v-if="customer" class="btn-mini" type="button" @click="openOrders">
           Сделки клиента
         </button>
+        <button v-if="customer && !editMode" class="btn-mini" type="button" @click="showCreateOrder = true">
+          <Plus class="h-4 w-4" />
+          Новый заказ
+        </button>
         <button v-if="customer && !editMode" class="btn-mini" type="button" @click="startEdit">
           Редактировать
         </button>
@@ -554,6 +566,14 @@ onMounted(() => {
         </section>
 
       </div>
+
+      <CreateOrderModal
+        v-if="showCreateOrder && customer"
+        :customer-id="customer.id"
+        :customer-name="customer.full_legal_name || customer.name || `Клиент #${customer.id}`"
+        @close="showCreateOrder = false"
+        @created="onOrderCreated"
+      />
     </div>
   </div>
 </template>
