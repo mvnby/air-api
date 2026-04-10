@@ -147,11 +147,19 @@ const submitForm = async () => {
 
 <style scoped>
 .contact-form-container {
-  padding: 2.5rem;
+  padding: 1.5rem;
   min-height: 480px;
   display: flex;
   flex-direction: column;
   justify-content: center;
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+@media (min-width: 768px) {
+  .contact-form-container {
+    padding: 2.5rem;
+  }
 }
 
 .contact-form {
