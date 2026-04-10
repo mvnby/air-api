@@ -1,0 +1,278 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import ContactForm from "../../components/ContactForm.vue";
+
+export async function getStaticPaths() {
+    try {
+        const res = await fetch('http://127.0.0.1:8000/api/v1/content/services');
+        if (!res.ok) {
+            console.error('Failed to fetch services for SSG');
+            return [];
+        }
+        const data = await res.json();
+        return data.map((service: any) => ({
+            params: { slug: service.slug },
+            props: { service }
+        }));
+    } catch (e) {
+        console.error('Error fetching services:', e);
+        // В случае отсутствия бэкенда во время сборки — fallback пути
+        return [
+            { 
+                params: { slug: 'obslujivanie-kondicionerov' }, 
+                props: { 
+                    service: { 
+                        title: 'Обслуживание кондиционеров', 
+                        description: 'Профессиональное обслуживание сплит-систем.',
+                        slug: 'obslujivanie-kondicionerov' 
+                    } 
+                } 
+            },
+            {
+                params: { slug: 'montaj-konditionerov' },
+                props: {
+                    service: {
+                        title: 'Установка кондиционеров',
+                        description: 'Профессиональный монтаж и установка.',
+                        slug: 'montaj-konditionerov'
+                    }
+                }
+            }
+        ];
+    }
+}
+
+const { service } = Astro.props;
+---
+
+<Layout
+    title={service.title}
+    description={service.description?.slice(0, 150) || service.title}
+>
+    <!-- Hero Секция -->
+    <section class="hero-section">
+        <div class="container hero-container">
+            <div class="hero-text">
+                <h1 class="gradient-text hero-title" style="word-break: break-word; hyphens: auto;">{service.title}</h1>
+                <p class="breadcrumbs">Главная / Услуги / {service.title}</p>
+                <div class="hero-desc">
+                    {service.description ? 
+                        <div set:html={service.description} /> 
+                        : 
+                        <p>Профессиональная климатическая услуга от «Мастера Воздуха» с гарантией качества и надежности.</p>
+                    }
+                </div>
+            </div>
+            
+            <div class="hero-image-wrapper">
+                {service.image ? (
+                    <img src={service.image} alt={service.title} class="hero-img" />
+                ) : (
+                    <div class="hero-placeholder flex-center">
+                        <span class="material-icons-round" style="font-size: 5rem; color: var(--primary);">hvac</span>
+                    </div>
+                )}
+            </div>
+        </div>
+    </section>
+
+    <!-- Основной контент -->
+    <section class="container detail-grid">
+        <div class="content">
+            <!-- Преимущества -->
+            <div class="benefits-section rounded-3xl mb-8">
+                <h2 style="font-family: 'Space Grotesk', sans-serif; margin-bottom: 2rem;">Наши преимущества</h2>
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div class="advantage-card glass">
+                        <span class="material-icons-round primary-icon">cleaning_services</span>
+                        <h3>Чистота</h3>
+                        <p>Используем пылесос и оставляем порядок.</p>
+                    </div>
+                    <div class="advantage-card glass">
+                        <span class="material-icons-round primary-icon">air</span>
+                        <h3>Вакуумирование</h3>
+                        <p>Обязательный этап для долголетия компрессора.</p>
+                    </div>
+                    <div class="advantage-card glass">
+                        <span class="material-icons-round primary-icon">description</span>
+                        <h3>Договор</h3>
+                        <p>Официальное оформление сделки и акта работ.</p>
+                    </div>
+                    <div class="advantage-card glass">
+                        <span class="material-icons-round primary-icon">verified</span>
+                        <h3>Гарантия 5 лет</h3>
+                        <p>Длительная гарантия на выполненные работы.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar / Форма -->
+        <div class="sidebar">
+            <div class="order-form-wrapper">
+                <ContactForm 
+                    client:visible 
+                    title="Заказать сервис"
+                    subtitle="Консультация и выезд мастера бесплатно"
+                    buttonText="Оставить заявку"
+                    subject={`Заявка: ${service.title}`}
+                />
+            </div>
+        </div>
+    </section>
+</Layout>
+
+<style>
+    .hero-section {
+        background: var(--bg);
+        margin-bottom: 2rem;
+        padding-top: 4rem;
+        padding-bottom: 2rem;
+    }
+    
+    .hero-container {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 4rem;
+        align-items: center;
+    }
+    
+    .hero-title {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: clamp(2.5rem, 5vw, 4rem);
+        font-weight: 800;
+        margin-bottom: 0.5rem;
+        background: linear-gradient(90deg, #007f80, #10b981);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        line-height: 1.1;
+    }
+    
+    .breadcrumbs {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        margin-bottom: 2rem;
+    }
+    
+    .hero-desc {
+        font-size: 1.1rem;
+        line-height: 1.6;
+        color: var(--text-main);
+    }
+    
+    .hero-image-wrapper {
+        display: flex;
+        justify-content: flex-end;
+    }
+    
+    .hero-placeholder {
+        width: 100%;
+        aspect-ratio: 4/3;
+        border-radius: 2rem;
+        background: var(--panel-glass-bg);
+        border: 1px solid var(--panel-glass-border);
+        box-shadow: var(--panel-glass-shadow);
+    }
+    
+    .hero-img {
+        width: 100%;
+        max-height: 400px;
+        object-fit: cover;
+        border-radius: 2rem;
+        box-shadow: 0 10px 30px rgba(0, 127, 128, 0.05);
+    }
+
+    /* Иерархия отступов: 4rem мобильные, 6rem десктоп */
+    .detail-grid {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 4rem;
+        margin-bottom: 6rem;
+    }
+
+    .benefits-section h2 {
+        font-size: 1.75rem;
+        font-weight: 700;
+    }
+
+    .advantage-card {
+        padding: 1.5rem;
+        background: var(--panel-glass-bg);
+        border: 1px solid var(--panel-glass-border);
+        box-shadow: var(--panel-glass-shadow);
+        border-radius: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .advantage-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+    }
+    
+    .primary-icon {
+        color: #007f80;
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .advantage-card h3 {
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin: 0;
+        color: var(--primary);
+    }
+    
+    .advantage-card p {
+        font-size: 0.95rem;
+        color: var(--text-muted);
+        margin: 0;
+        line-height: 1.5;
+    }
+
+    /* Стильная карточка формы "Заказать сервис" - Glassmorphism, 2rem border radius */
+    .order-form-wrapper {
+        border-radius: 2rem;
+        overflow: hidden; 
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        background: var(--panel-glass-bg);
+        border: 1px solid var(--panel-glass-border);
+        box-shadow: var(--panel-glass-shadow);
+    }
+
+    .flex-center {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Адаптив (мобильные) */
+    @media (max-width: 900px) {
+        .hero-container {
+            grid-template-columns: 1fr;
+            gap: 2rem;
+        }
+        
+        .hero-image-wrapper {
+            justify-content: center;
+        }
+        
+        .detail-grid {
+            grid-template-columns: 1fr;
+            gap: 2rem;
+            margin-bottom: 4rem; /* 4rem на мобилках */
+        }
+        
+        /* Форма заказа не должна быть первым экраном: sidebar переходит вниз */
+        .sidebar {
+            order: 2;
+        }
+        
+        .content {
+            order: 1;
+        }
+    }
+</style>
