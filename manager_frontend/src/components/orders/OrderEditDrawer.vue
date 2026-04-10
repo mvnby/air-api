@@ -138,6 +138,45 @@ const localServerErrors = ref<Record<string, string>>({});
 const localFormError = ref('');
 const showCustomerModal = ref(false);
 
+const showChangeCustomerModal = ref(false);
+const customerSearchQuery = ref('');
+const customerSearchResults = ref<any[]>([]);
+const isCustomerSearchLoading = ref(false);
+
+const debouncedSearchCustomer = useDebounceFn(async (query: string) => {
+  if (!query || query.length < 3) {
+    customerSearchResults.value = [];
+    return;
+  }
+  isCustomerSearchLoading.value = true;
+  try {
+    const res = await api.getManagerCustomers(1, 10, query);
+    customerSearchResults.value = res.items || [];
+  } catch (error) {
+    console.error('Customer search error', error);
+  } finally {
+    isCustomerSearchLoading.value = false;
+  }
+}, 400);
+
+const onCustomerSearchInput = () => {
+  debouncedSearchCustomer(customerSearchQuery.value);
+};
+
+const assignNewCustomer = async (newCustomer: any) => {
+  if (!props.order?.id) return;
+  try {
+    const res = await api.patchManagerOrder(props.order.id, { customer_id: newCustomer.id });
+    Object.assign(props.order, res);
+    await initForm(props.order);
+    showChangeCustomerModal.value = false;
+    setToast('Клиент успешно изменен', 'success');
+    emit('reload', props.order.id); // Reload parent list if necessary
+  } catch (error) {
+    setToast(`Ошибка смены клиента: ${getApiErrorMessage(error)}`, 'error');
+  }
+};
+
 const customer = computed(() => props.order?.customer ?? null);
 const isWebsiteOrder = computed(() => props.order?.lead_source === 'site');
 const isB2cCustomer = computed(() => {
@@ -1028,6 +1067,10 @@ watch(
               <span class="material-icons-round text-[14px]">info</span>
               Подробнее
             </button>
+            <button @click="showChangeCustomerModal = true" class="text-xs font-medium text-slate-600 hover:text-slate-700 bg-slate-100 px-2 py-0.5 rounded flex items-center gap-1 transition-colors">
+              <span class="material-icons-round text-[14px]">swap_horiz</span>
+              Изменить
+            </button>
           </div>
           <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
             <span v-if="customer?.phone" class="flex items-center gap-1"><span class="material-icons-round text-[14px]">phone</span> {{ customer.phone }}</span>
@@ -1624,10 +1667,77 @@ watch(
           <button class="btn-mini-outline" @click="closeCustomerModal">Закрыть</button>
         </div>
         <CustomerSummaryCard :customer="customer" mode="expanded" :show-open-button="false" />
-        <div class="mt-4 flex justify-end">
+        <div class="mt-4 flex justify-end gap-2">
+          <button class="btn-mini-outline" @click="showChangeCustomerModal = true">Сменить</button>
           <button class="btn-mini" :disabled="!customer?.id" @click="openCustomerProfile">Редактировать в карточке клиента</button>
         </div>
       </div>
     </div>
+
+    <!-- Modal for changing order customer -->
+    <Transition name="fade">
+      <div
+        v-if="showChangeCustomerModal"
+        class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+        @click.self="showChangeCustomerModal = false"
+      >
+        <div class="w-full max-w-lg rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+          <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between shadow-sm bg-slate-50/50">
+            <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <span class="material-icons-round text-slate-500">swap_horiz</span>
+              Сменить клиента для заказа
+            </h3>
+            <button class="bg-slate-100 hover:bg-slate-200 text-slate-500 w-8 h-8 flex items-center justify-center rounded-full transition-colors" @click="showChangeCustomerModal = false">
+              <span class="material-icons-round text-[18px]">close</span>
+            </button>
+          </div>
+          
+          <div class="p-6 overflow-y-auto">
+            <div class="relative mb-4">
+              <span class="material-icons-round absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+              <input 
+                v-model="customerSearchQuery" 
+                @input="onCustomerSearchInput"
+                type="text" 
+                class="w-full bg-slate-50 border-none rounded-xl pl-11 pr-4 py-3 text-sm focus:ring-2 focus:ring-teal-500 transition-shadow" 
+                placeholder="Поиск по телефону, УНП, имени..." 
+                autofocus
+              />
+              <span v-if="isCustomerSearchLoading" class="material-icons-round absolute right-4 top-1/2 -translate-y-1/2 text-teal-500 animate-spin">refresh</span>
+            </div>
+
+            <div v-if="customerSearchQuery.length >= 3 && customerSearchResults.length === 0 && !isCustomerSearchLoading" class="text-center py-6 text-slate-500 text-sm bg-slate-50 rounded-xl border border-slate-100 border-dashed">
+              Клиенты не найдены
+            </div>
+
+            <div v-if="customerSearchQuery.length < 3" class="text-center py-6 text-slate-400 text-xs uppercase tracking-wider font-semibold">
+              Введите минимум 3 символа
+            </div>
+
+            <div class="space-y-2 mt-2">
+              <button
+                v-for="res in customerSearchResults"
+                :key="`csearch-${res.id}`"
+                class="w-full text-left p-4 rounded-xl border border-slate-100 bg-white hover:border-teal-200 hover:shadow-md hover:-translate-y-0.5 transition-all outline-none focus:ring-2 focus:ring-teal-500 flex flex-col gap-1 group"
+                @click="assignNewCustomer(res)"
+              >
+                <div class="font-bold text-slate-800 text-sm group-hover:text-teal-700 transition-colors">
+                  {{ res.full_legal_name || res.name || `Клиент #${res.id}` }}
+                </div>
+                <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                  <span v-if="res.phone" class="flex items-center gap-1"><span class="material-icons-round text-[12px]">phone</span> {{ res.phone }}</span>
+                  <span v-if="res.inn" class="flex items-center gap-1"><span class="font-medium">УНП:</span> {{ res.inn }}</span>
+                </div>
+              </button>
+            </div>
+          </div>
+          <div class="px-6 py-4 border-t border-gray-100 bg-slate-50/50 flex justify-end">
+            <button class="px-5 py-2 rounded-xl text-slate-600 font-medium hover:bg-slate-200 hover:text-slate-800 transition-colors" @click="showChangeCustomerModal = false">
+              Отмена
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
