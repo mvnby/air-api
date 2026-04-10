@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
-import { Search, Users, ChevronLeft, ChevronRight, Phone, Mail, Building } from 'lucide-vue-next';
+import { Search, Users, ChevronLeft, ChevronRight, Phone, Mail, Building, Plus } from 'lucide-vue-next';
 import { api } from '../api';
 import type { ManagerCatalogCustomerItemResponse } from '../client';
 import { CUSTOMER_UPDATED_EVENT, type CustomerUpdatedEventPayload } from '../utils/customer-events';
+import CreateOrderModal from '../components/CreateOrderModal.vue';
 
 // --- State ---
 const customers = ref<ManagerCatalogCustomerItemResponse[]>([]);
@@ -16,6 +17,20 @@ const meta = ref({ total: 0, pages: 1, limit: 20 });
 const recentlyUpdated = ref<Record<number, number>>({});
 const cleanupTimers = new Map<number, number>();
 const toast = ref('');
+const showCreateOrder = ref(false);
+const createOrderCustomer = ref<{ id: number; name: string } | null>(null);
+
+function openCreateOrder(customer: ManagerCatalogCustomerItemResponse) {
+  createOrderCustomer.value = { id: customer.id, name: customer.full_legal_name || customer.name || `Клиент #${customer.id}` };
+  showCreateOrder.value = true;
+}
+
+function onOrderCreated(orderId: number) {
+  showCreateOrder.value = false;
+  createOrderCustomer.value = null;
+  window.history.pushState({}, '', `/manager/orders/kanban?orderId=${orderId}`);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
 
 function setToast(msg: string) {
   toast.value = msg;
@@ -247,6 +262,9 @@ onUnmounted(() => {
           </div>
           <div class="footer-actions">
             <div class="date-added">{{ formatDate(customer.created_at) }}</div>
+            <button class="open-btn" @click="openCreateOrder(customer)" title="Создать заказ">
+              <Plus :size="14" />
+            </button>
             <button class="open-btn" @click="openCustomerProfile(customer.id)">Карточка</button>
           </div>
         </div>
@@ -263,6 +281,14 @@ onUnmounted(() => {
         <ChevronRight :size="16" />
       </button>
     </div>
+
+    <CreateOrderModal
+      v-if="showCreateOrder && createOrderCustomer"
+      :customer-id="createOrderCustomer.id"
+      :customer-name="createOrderCustomer.name"
+      @close="showCreateOrder = false; createOrderCustomer = null"
+      @created="onOrderCreated"
+    />
 
   </div>
 </template>
