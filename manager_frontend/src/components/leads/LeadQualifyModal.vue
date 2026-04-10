@@ -115,9 +115,16 @@ const onIbanBlur = async () => {
 const submitQualify = async () => {
   isLoading.value = true;
   try {
-    const payload: ManagerOrderUpdatePayload = {
+    const payload: ManagerOrderUpdatePayload = existingCustomerId.value ? {
       status: 'negotiation',
-      customer_id: existingCustomerId.value || undefined,
+      customer_id: existingCustomerId.value,
+      comment: managerComment.value || undefined,
+      object_type: objectType.value || undefined,
+      service_type: serviceType.value || undefined,
+      equipment_class: equipmentClass.value || undefined,
+      marketing_source: marketingSource.value || undefined,
+    } : {
+      status: 'negotiation',
       customer_type: customerType.value,
       customer_name: customerName.value || undefined,
       customer_phone: unmaskedPhone.value || customerPhone.value || undefined,
