@@ -23,8 +23,10 @@ export async function getStaticPaths() {
         },
     ];
     const seoServiceSlugs = seoFallbackServices.map((service) => service.slug);
-    const resolveApiBase = () => {
-        const raw = (import.meta.env.INTERNAL_API_URL || import.meta.env.PUBLIC_API_URL || "http://localhost:8000/api/v1").replace(/\/$/, "");
+    const resolveApiBase = (): string | null => {
+        const candidate = String(import.meta.env.INTERNAL_API_URL || import.meta.env.PUBLIC_API_URL || "").trim();
+        if (!candidate) return null;
+        const raw = candidate.replace(/\/$/, "");
         if (raw.endsWith("/api/v1")) return raw;
         return `${raw.replace(/\/api\/v1$/, "")}/api/v1`;
     };
@@ -34,9 +36,15 @@ export async function getStaticPaths() {
         params: { slug: service.slug },
         props: { service },
     });
+    const apiBase = resolveApiBase();
 
     try {
-        const res = await fetch(`${resolveApiBase()}/content/services`);
+        if (!apiBase) {
+            console.warn("Services SSG API base is not configured, using fallback list.");
+            return seoFallbackServices.map(toStaticPath);
+        }
+
+        const res = await fetch(`${apiBase}/content/services`);
         if (!res.ok) {
             console.error("Failed to fetch services for SSG, using fallback list", res.status);
             return seoFallbackServices.map(toStaticPath);
@@ -67,11 +75,22 @@ export async function getStaticPaths() {
 }
 
 const { service } = Astro.props;
+const sanitizeDescription = (value?: string | null): string => {
+    if (!value) return "";
+    // Hotfix policy: render description only as plain text to fully block script/HTML injection.
+    return value
+        .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, " ")
+        .replace(/<\/?[^>]+(>|$)/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+};
+const safeDescription = sanitizeDescription(service.description);
 ---
 
 <Layout
     title={service.title}
-    description={service.description?.slice(0, 150) || service.title}
+    description={safeDescription.slice(0, 150) || service.title}
 >
     <!-- Hero Секция -->
     <section class="hero-section">
@@ -80,9 +99,9 @@ const { service } = Astro.props;
                 <h1 class="gradient-text hero-title" style="word-break: break-word; hyphens: auto;">{service.title}</h1>
                 <p class="breadcrumbs">Главная / Услуги / {service.title}</p>
                 <div class="hero-desc">
-                    {service.description ? 
-                        <div set:html={service.description} /> 
-                        : 
+                    {safeDescription ?
+                        <p>{safeDescription}</p>
+                        :
                         <p>Профессиональная климатическая услуга от «Мастера Воздуха» с гарантией качества и надежности.</p>
                     }
                 </div>
