@@ -31,6 +31,31 @@ class HobotParser(BaseParser):
         return segments[-1] if segments else "unknown"
 
     @staticmethod
+    def _normalize_model_title(raw_title: str) -> str:
+        title = re.sub(r"\s+", " ", (raw_title or "").strip())
+        if not title:
+            return "Без названия"
+
+        title = re.sub(
+            r"^(?:(?:кассетн(?:ый|ая|ое|ые)|настенн(?:ый|ая|ое|ые)|канальн(?:ый|ая|ое|ые)|"
+            r"напольно-потолочн(?:ый|ая|ое|ые)|мобильн(?:ый|ая|ое|ые)|бытов(?:ой|ая|ое|ые)|"
+            r"колонн(?:ый|ая|ое|ые)|универсальн(?:ый|ая|ое|ые)|инверторн(?:ый|ая|ое|ые)|"
+            r"полупромышленн(?:ый|ая|ое|ые))\s+)+",
+            "",
+            title,
+            flags=re.IGNORECASE,
+        )
+
+        title = re.sub(
+            r"^(?:кондиционер|сплит[\s-]?система|мульти[\s-]?сплит[\s-]?система|внутренний\s+блок|наружный\s+блок)\s+",
+            "",
+            title,
+            flags=re.IGNORECASE,
+        )
+        title = re.sub(r"\s+", " ", title).strip(" -")
+        return title or "Без названия"
+
+    @staticmethod
     def _parse_first_number(value: str) -> float | None:
         if not value:
             return None
@@ -231,7 +256,8 @@ class HobotParser(BaseParser):
         soup = BeautifulSoup(response.text, "html.parser")
 
         h1 = soup.select_one("h1")
-        title = h1.get_text(" ", strip=True) if h1 else "Без названия"
+        title_raw = h1.get_text(" ", strip=True) if h1 else "Без названия"
+        title = self._normalize_model_title(title_raw)
         if "страница не найдена" in title.lower():
             raise ValueError("URL hobot.by не найден (404-шаблон страницы).")
         if not self._looks_like_product_page(soup):

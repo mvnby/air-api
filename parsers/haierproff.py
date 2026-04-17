@@ -31,6 +31,23 @@ class HaierProffParser(BaseParser):
         return segments[-1] if segments else "unknown"
 
     @staticmethod
+    def _normalize_title(raw_title: str) -> str:
+        title = re.sub(r"\s+", " ", (raw_title or "").strip())
+        if not title:
+            return "Без названия"
+        if not re.match(r"^haier\b", title, flags=re.IGNORECASE):
+            title = f"Haier {title}"
+        return title
+
+    @staticmethod
+    def _extract_series_from_title(title: str) -> str | None:
+        match = re.search(r"(?:^|\s)Серия\s+(.+)$", title, flags=re.IGNORECASE)
+        if not match:
+            return None
+        series = re.sub(r"\s+", " ", match.group(1)).strip(" -")
+        return series or None
+
+    @staticmethod
     def _parse_first_number(value: str) -> float | None:
         if not value:
             return None
@@ -180,7 +197,8 @@ class HaierProffParser(BaseParser):
             raise ValueError("URL haierproff.ru не похож на карточку товара кондиционера.")
 
         title_el = soup.select_one(".product-page__title")
-        title = title_el.get_text(" ", strip=True) if title_el else "Без названия"
+        title_raw = title_el.get_text(" ", strip=True) if title_el else "Без названия"
+        title = self._normalize_title(title_raw)
 
         price_text = ""
         price_el = soup.select_one(".product-page__price")
@@ -197,6 +215,9 @@ class HaierProffParser(BaseParser):
         description = "\n".join(dict.fromkeys(description_parts))
 
         specs = self._extract_specs(soup)
+        series = self._extract_series_from_title(title)
+        if series:
+            specs.setdefault("Серия", series)
         metrics = self._extract_metrics(specs, title)
         images = self._collect_images(soup, str(response.url))
         related_urls = self._collect_related_urls(soup, str(response.url))
