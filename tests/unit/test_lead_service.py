@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from models import Customer, CustomerType, Lead, Order
+from models import Customer, CustomerBranch, CustomerType, Lead, Order
 from schemas import LeadCreatePayload, LeadLossPayload, LeadQualifyPayload
 from services.lead_service import LeadService
 
@@ -95,6 +95,90 @@ async def test_qualify_lead_creates_order_and_updates_status(db):
     assert order is not None
     assert order.customer_id == result["customer_id"]
     assert order.comment == "Квалифицированный лид"
+
+
+@pytest.mark.asyncio
+async def test_qualify_lead_with_customer_branch_sets_order_branch_and_snapshot(db):
+    customer = Customer(name="Branch Owner", phone="+375291010101", type=CustomerType.company, inn="111111111")
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    branch = CustomerBranch(
+        customer_id=customer.id,
+        name="Склад Минск",
+        delivery_address="Минск, Притыцкого 1",
+        is_default=True,
+    )
+    db.add(branch)
+    await db.commit()
+    await db.refresh(branch)
+
+    lead_data = await LeadService.create_lead(
+        db,
+        LeadCreatePayload(
+            source="manager",
+            name="Lead with branch",
+            request_text="Нужна поставка на склад",
+        ),
+    )
+
+    result = await LeadService.qualify_lead(
+        db,
+        lead_id=lead_data["id"],
+        payload=LeadQualifyPayload(
+            customer_id=customer.id,
+            customer_branch_id=branch.id,
+            order_comment="Сделка с филиалом",
+        ),
+    )
+
+    assert result is not None
+    order = await db.get(Order, result["order_id"])
+    assert order is not None
+    assert order.customer_id == customer.id
+    assert order.customer_branch_id == branch.id
+    assert order.delivery_address == "Минск, Притыцкого 1"
+
+
+@pytest.mark.asyncio
+async def test_qualify_lead_rejects_foreign_customer_branch(db):
+    customer_a = Customer(name="Customer A", phone="+375291111111", type=CustomerType.company, inn="222222222")
+    customer_b = Customer(name="Customer B", phone="+375292222222", type=CustomerType.company, inn="333333333")
+    db.add(customer_a)
+    db.add(customer_b)
+    await db.commit()
+    await db.refresh(customer_a)
+    await db.refresh(customer_b)
+
+    branch_b = CustomerBranch(
+        customer_id=customer_b.id,
+        name="Branch B",
+        delivery_address="Гомель, Советская 2",
+        is_default=True,
+    )
+    db.add(branch_b)
+    await db.commit()
+    await db.refresh(branch_b)
+
+    lead_data = await LeadService.create_lead(
+        db,
+        LeadCreatePayload(
+            source="manager",
+            name="Lead invalid branch",
+            request_text="Проверка валидации филиала",
+        ),
+    )
+
+    with pytest.raises(ValueError, match="does not belong"):
+        await LeadService.qualify_lead(
+            db,
+            lead_id=lead_data["id"],
+            payload=LeadQualifyPayload(
+                customer_id=customer_a.id,
+                customer_branch_id=branch_b.id,
+            ),
+        )
 
 
 @pytest.mark.asyncio

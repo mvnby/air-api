@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ManagerInstallerResponse } from './ManagerInstallerResponse';
+import type { OrderCustomerBranchBrief } from './OrderCustomerBranchBrief';
 import type { OrderCustomerBrief } from './OrderCustomerBrief';
 import type { PaymentCurrency } from './PaymentCurrency';
 export type ManagerOrderListItemResponse = {
@@ -21,6 +22,7 @@ export type ManagerOrderListItemResponse = {
     comment?: (string | null);
     delivery_address?: (string | null);
     customer?: (OrderCustomerBrief | null);
+    customer_branch?: (OrderCustomerBranchBrief | null);
     installer_id?: (number | null);
     installer?: (ManagerInstallerResponse | null);
     equipment_status?: string;

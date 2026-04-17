@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from crud.order import OrderDAO
 from crud.product import ProductDAO
-from models import Order, OrderProductLink, OrderServiceLink, Customer, CustomerType, OrderStatus, PaymentCurrency, Product, LeadSource, Service, OrderInstaller, OrderWorkStage
+from models import Order, OrderProductLink, OrderServiceLink, Customer, CustomerBranch, CustomerType, OrderStatus, PaymentCurrency, Product, LeadSource, Service, OrderInstaller, OrderWorkStage
 from services.product_supply_metrics_service import ProductSupplyMetricsService
 
 logger = logging.getLogger(__name__)
@@ -968,6 +968,19 @@ class OrderService:
         }
 
     @staticmethod
+    def _map_customer_branch_brief(branch: Optional[CustomerBranch]) -> Optional[Dict[str, Any]]:
+        if not branch:
+            return None
+        return {
+            "id": int(branch.id or 0),
+            "name": branch.name,
+            "delivery_address": branch.delivery_address,
+            "contact_name": branch.contact_name,
+            "contact_phone": branch.contact_phone,
+            "is_default": bool(branch.is_default),
+        }
+
+    @staticmethod
     def _map_order_list_item(order: Order) -> Dict[str, Any]:
         return {
             "id": int(order.id or 0),
@@ -1005,6 +1018,7 @@ class OrderService:
             "target_currency_amount": float(order.target_currency_amount) if order.target_currency_amount is not None else None,
             "target_currency_payments": float(order.target_currency_payments) if order.target_currency_payments is not None else 0.0,
             "customer": OrderService._map_customer_brief(order.customer),
+            "customer_branch": OrderService._map_customer_branch_brief(order.customer_branch),
             "installer_id": order.installers[0].installer_id if getattr(order, "installers", None) else None,
             "installer": {
                 "id": order.installers[0].installer.id,
@@ -1073,6 +1087,7 @@ class OrderService:
             .outerjoin(Customer, Order.customer_id == Customer.id)
             .options(
                 selectinload(Order.customer),
+                selectinload(Order.customer_branch),
                 selectinload(Order.product_links).selectinload(OrderProductLink.product),
                 selectinload(Order.service_links).selectinload(OrderServiceLink.service),
                 selectinload(Order.installers).selectinload(OrderInstaller.installer),
@@ -1150,6 +1165,7 @@ class OrderService:
             .where(Order.id == order_id)
             .options(
                 selectinload(Order.customer),
+                selectinload(Order.customer_branch),
                 selectinload(Order.product_links).selectinload(OrderProductLink.product),
                 selectinload(Order.service_links).selectinload(OrderServiceLink.service),
                 selectinload(Order.installers).selectinload(OrderInstaller.installer),
@@ -1328,12 +1344,33 @@ class OrderService:
                 session.add(new_installer_link)
 
         # 1. Handle explicit customer linkage (if manager finds existing customer)
+        customer_id_changed = False
         if "customer_id" in fields_set and payload.customer_id is not None:
             if order.customer_id != payload.customer_id:
                 # Link to new existing customer
                 new_customer = await session.get(Customer, payload.customer_id)
                 if new_customer:
                     order.customer_id = payload.customer_id
+                    customer_id_changed = True
+
+        # If customer was switched and branch wasn't explicitly provided, prevent stale cross-customer linkage.
+        if customer_id_changed and "customer_branch_id" not in fields_set and order.customer_branch_id is not None:
+            linked_branch = await session.get(CustomerBranch, order.customer_branch_id)
+            if linked_branch and int(linked_branch.customer_id) != int(order.customer_id or 0):
+                order.customer_branch_id = None
+
+        if "customer_branch_id" in fields_set:
+            if payload.customer_branch_id is None:
+                order.customer_branch_id = None
+            else:
+                if order.customer_id is None:
+                    raise ValueError("Cannot set customer branch without customer")
+                branch = await session.get(CustomerBranch, payload.customer_branch_id)
+                if not branch:
+                    raise ValueError("Customer branch not found")
+                if int(branch.customer_id) != int(order.customer_id):
+                    raise ValueError("Customer branch does not belong to selected customer")
+                order.customer_branch_id = int(branch.id)
 
         customer_field_map = {
             "customer_name": "name",

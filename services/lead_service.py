@@ -9,6 +9,7 @@ from sqlmodel import select
 
 from models import (
     Customer,
+    CustomerBranch,
     CustomerType,
     Lead,
     LeadIntakeSource,
@@ -354,6 +355,7 @@ class LeadService:
 
         customer = None
         selected_customer_id = getattr(payload, "customer_id", None)
+        selected_customer_branch_id = getattr(payload, "customer_branch_id", None)
         if selected_customer_id:
             customer = await session.get(Customer, int(selected_customer_id))
             if not customer:
@@ -411,13 +413,26 @@ class LeadService:
 
         order_comment = LeadService._clean_optional(payload.order_comment) or lead.request_text
         title_suffix = (order_comment or "").strip()
+        selected_branch: Optional[CustomerBranch] = None
+        if selected_customer_branch_id is not None:
+            selected_branch = await session.get(CustomerBranch, int(selected_customer_branch_id))
+            if not selected_branch:
+                raise ValueError("Selected customer branch not found")
+            if int(selected_branch.customer_id) != int(customer.id or 0):
+                raise ValueError("Selected customer branch does not belong to selected customer")
+
+        order_delivery_address = LeadService._clean_optional(payload.delivery_address)
+        if not order_delivery_address and selected_branch:
+            order_delivery_address = selected_branch.delivery_address
+
         order = Order(
             customer_id=customer.id,
+            customer_branch_id=int(selected_branch.id) if selected_branch and selected_branch.id is not None else None,
             status=OrderStatus.NEW_LEAD,
             lead_source=OrderLeadSource.MANAGER,
             comment=order_comment,
             title=f"Лид #{lead.id}" if not title_suffix else f"Лид #{lead.id}: {title_suffix[:96]}",
-            delivery_address=LeadService._clean_optional(payload.delivery_address),
+            delivery_address=order_delivery_address,
         )
         session.add(order)
         await session.flush()

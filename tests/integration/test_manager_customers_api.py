@@ -2,7 +2,7 @@ import pytest
 from sqlmodel import select
 
 from core.config import settings
-from models import Customer, CustomerType, Order, OrderStatus
+from models import Customer, CustomerBranch, CustomerType, Order, OrderStatus
 
 
 async def _auth_headers(async_client):
@@ -143,6 +143,65 @@ async def test_manager_customer_patch_rejects_invalid_iban(async_client, db):
     detail = patch_resp.json()["detail"]
     assert detail["error_code"] == "validation_error"
     assert "iban" in detail["field_errors"]
+
+
+@pytest.mark.asyncio
+async def test_manager_customer_branch_crud(async_client, db):
+    headers = await _auth_headers(async_client)
+
+    customer = Customer(
+        name="Филиальный клиент",
+        phone="+375291009900",
+        type=CustomerType.company,
+        inn="123456789",
+    )
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    create_resp = await async_client.post(
+        f"/api/manager/customers/{customer.id}/branches",
+        headers=headers,
+        json={
+            "name": "Склад Минск",
+            "delivery_address": "Минск, Притыцкого 1",
+            "contact_name": "Олег",
+            "contact_phone": "+375 (29) 100-99-00",
+            "is_default": True,
+        },
+    )
+    assert create_resp.status_code == 200
+    created = create_resp.json()
+    assert created["customer_id"] == customer.id
+    assert created["delivery_address"] == "Минск, Притыцкого 1"
+    assert created["is_default"] is True
+    branch_id = created["id"]
+
+    list_resp = await async_client.get(f"/api/manager/customers/{customer.id}/branches", headers=headers)
+    assert list_resp.status_code == 200
+    items = list_resp.json()["items"]
+    assert len(items) == 1
+    assert items[0]["id"] == branch_id
+
+    patch_resp = await async_client.patch(
+        f"/api/manager/customers/{customer.id}/branches/{branch_id}",
+        headers=headers,
+        json={"delivery_address": "Минск, Победителей 100", "is_default": False},
+    )
+    assert patch_resp.status_code == 200
+    patched = patch_resp.json()
+    assert patched["delivery_address"] == "Минск, Победителей 100"
+    assert patched["is_default"] is False
+
+    delete_resp = await async_client.delete(
+        f"/api/manager/customers/{customer.id}/branches/{branch_id}",
+        headers=headers,
+    )
+    assert delete_resp.status_code == 200
+    assert delete_resp.json()["message"] == "Branch deleted"
+
+    branch_after = await db.get(CustomerBranch, branch_id)
+    assert branch_after is None
 
 
 @pytest.mark.asyncio

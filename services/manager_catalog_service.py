@@ -1,6 +1,12 @@
 from typing import Any, Dict, Optional
 
-from schemas import BulkRoundRequest, ManagerCustomerUpdatePayload, ProductUpdate
+from schemas import (
+    BulkRoundRequest,
+    ManagerCustomerBranchCreatePayload,
+    ManagerCustomerBranchUpdatePayload,
+    ManagerCustomerUpdatePayload,
+    ProductUpdate,
+)
 from services.customer_service import CustomerService
 from services.product_service import ProductService
 from services.product_manager_service import ProductManagerService
@@ -74,6 +80,55 @@ class ManagerCatalogService:
             session=session,
             customer_id=customer_id,
             payload=update_data,
+        )
+
+    @staticmethod
+    async def list_customer_branches(
+        session: AsyncSession,
+        *,
+        customer_id: int,
+    ) -> Optional[Dict[str, Any]]:
+        return await CustomerService.list_branches_for_manager(session=session, customer_id=customer_id)
+
+    @staticmethod
+    async def create_customer_branch(
+        session: AsyncSession,
+        *,
+        customer_id: int,
+        payload: ManagerCustomerBranchCreatePayload,
+    ) -> Optional[Dict[str, Any]]:
+        return await CustomerService.create_branch_for_manager(
+            session=session,
+            customer_id=customer_id,
+            payload=payload.model_dump(exclude_unset=True),
+        )
+
+    @staticmethod
+    async def update_customer_branch(
+        session: AsyncSession,
+        *,
+        customer_id: int,
+        branch_id: int,
+        payload: ManagerCustomerBranchUpdatePayload,
+    ) -> Optional[Dict[str, Any]]:
+        return await CustomerService.update_branch_for_manager(
+            session=session,
+            customer_id=customer_id,
+            branch_id=branch_id,
+            payload=payload.model_dump(exclude_unset=True),
+        )
+
+    @staticmethod
+    async def delete_customer_branch(
+        session: AsyncSession,
+        *,
+        customer_id: int,
+        branch_id: int,
+    ) -> Optional[bool]:
+        return await CustomerService.delete_branch_for_manager(
+            session=session,
+            customer_id=customer_id,
+            branch_id=branch_id,
         )
 
     @staticmethod

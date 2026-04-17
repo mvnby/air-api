@@ -5,6 +5,7 @@ from sqlmodel import select
 from core.config import settings
 from models import (
     Customer,
+    CustomerBranch,
     CustomerType,
     Installer,
     Order,
@@ -160,6 +161,82 @@ async def test_manager_order_patch_scalar_fields(async_client, db):
     assert data["status"] == "negotiation"
     assert data["comment"] == "updated from manager"
     assert data["is_paid"] is True
+
+
+@pytest.mark.asyncio
+async def test_manager_order_patch_customer_branch_validation(async_client, db):
+    c1 = Customer(name="Branch C1", phone="+375295511111", type=CustomerType.individual)
+    c2 = Customer(name="Branch C2", phone="+375295522222", type=CustomerType.individual)
+    db.add(c1)
+    db.add(c2)
+    await db.commit()
+    await db.refresh(c1)
+    await db.refresh(c2)
+
+    branch_c1 = CustomerBranch(customer_id=c1.id, name="Точка C1", delivery_address="Минск, Ленина 1", is_default=True)
+    branch_c2 = CustomerBranch(customer_id=c2.id, name="Точка C2", delivery_address="Минск, Ленина 2", is_default=True)
+    db.add(branch_c1)
+    db.add(branch_c2)
+    await db.commit()
+    await db.refresh(branch_c1)
+    await db.refresh(branch_c2)
+
+    order = Order(customer_id=c1.id, status=OrderStatus.NEW_LEAD, is_paid=False)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+
+    ok_resp = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={"customer_branch_id": branch_c1.id},
+        headers=headers,
+    )
+    assert ok_resp.status_code == 200
+    ok_payload = ok_resp.json()
+    assert ok_payload["customer_branch"]["id"] == branch_c1.id
+    assert ok_payload["customer_branch"]["delivery_address"] == "Минск, Ленина 1"
+
+    bad_resp = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={"customer_branch_id": branch_c2.id},
+        headers=headers,
+    )
+    assert bad_resp.status_code == 400
+    assert "does not belong" in str(bad_resp.json()["detail"]["message"]).lower()
+
+
+@pytest.mark.asyncio
+async def test_manager_order_switch_customer_clears_incompatible_branch(async_client, db):
+    c1 = Customer(name="Switch C1", phone="+375295533333", type=CustomerType.individual)
+    c2 = Customer(name="Switch C2", phone="+375295544444", type=CustomerType.individual)
+    db.add(c1)
+    db.add(c2)
+    await db.commit()
+    await db.refresh(c1)
+    await db.refresh(c2)
+
+    branch_c1 = CustomerBranch(customer_id=c1.id, name="Склад C1", delivery_address="Витебск, 1", is_default=True)
+    db.add(branch_c1)
+    await db.commit()
+    await db.refresh(branch_c1)
+
+    order = Order(customer_id=c1.id, customer_branch_id=branch_c1.id, status=OrderStatus.NEW_LEAD, is_paid=False)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+    resp = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={"customer_id": c2.id},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["customer"]["id"] == c2.id
+    assert payload["customer_branch"] is None
 
 
 @pytest.mark.asyncio

@@ -4,16 +4,38 @@ from sqlalchemy import exists, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import Customer, CustomerType, Order
+from models import Customer, CustomerBranch, CustomerType, Order
 
 
 class CustomerService:
+    @staticmethod
+    def _clean_optional(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = str(value).strip()
+        return cleaned or None
+
+    @staticmethod
+    def _to_branch_item(branch: CustomerBranch) -> Dict[str, Any]:
+        return {
+            "id": int(branch.id or 0),
+            "customer_id": int(branch.customer_id),
+            "name": branch.name,
+            "delivery_address": branch.delivery_address,
+            "contact_name": branch.contact_name,
+            "contact_phone": branch.contact_phone,
+            "is_default": bool(branch.is_default),
+            "created_at": branch.created_at.isoformat() if branch.created_at else None,
+            "updated_at": branch.updated_at.isoformat() if branch.updated_at else None,
+        }
+
     @staticmethod
     def _to_manager_item(
         customer: Customer,
         *,
         order_count: int,
         last_delivery_address: Optional[str] = None,
+        branches: Optional[list[dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         return {
             "id": int(customer.id or 0),
@@ -36,6 +58,7 @@ class CustomerService:
             "created_at": customer.created_at.isoformat() if customer.created_at else None,
             "order_count": order_count,
             "is_archived": customer.is_archived,
+            "branches": branches or [],
         }
 
     @staticmethod
@@ -59,12 +82,147 @@ class CustomerService:
         )
         order_count = int(order_count_result.scalar() or 0)
         last_delivery_address = await CustomerService._get_last_delivery_address(session=session, customer_id=customer_id)
+        branches = await CustomerService.list_branches_for_manager(session=session, customer_id=customer_id)
 
         return CustomerService._to_manager_item(
             customer,
             order_count=order_count,
             last_delivery_address=last_delivery_address,
+            branches=branches["items"] if branches else [],
         )
+
+    @staticmethod
+    async def list_branches_for_manager(session: AsyncSession, customer_id: int) -> Optional[Dict[str, Any]]:
+        customer = await session.get(Customer, customer_id)
+        if not customer:
+            return None
+
+        result = await session.execute(
+            select(CustomerBranch)
+            .where(CustomerBranch.customer_id == customer_id)
+            .order_by(CustomerBranch.is_default.desc(), CustomerBranch.created_at.asc(), CustomerBranch.id.asc())
+        )
+        branches = list(result.scalars().all())
+        return {"items": [CustomerService._to_branch_item(branch) for branch in branches]}
+
+    @staticmethod
+    async def create_branch_for_manager(
+        session: AsyncSession,
+        *,
+        customer_id: int,
+        payload: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        customer = await session.get(Customer, customer_id)
+        if not customer:
+            return None
+
+        delivery_address = CustomerService._clean_optional(payload.get("delivery_address"))
+        if not delivery_address:
+            raise ValueError("Адрес филиала обязателен")
+
+        requested_default = bool(payload.get("is_default"))
+        first_branch_result = await session.execute(
+            select(func.count(CustomerBranch.id)).where(CustomerBranch.customer_id == customer_id)
+        )
+        has_existing_branches = int(first_branch_result.scalar() or 0) > 0
+        effective_default = requested_default or (not has_existing_branches)
+
+        if effective_default:
+            await session.execute(
+                CustomerBranch.__table__.update()
+                .where(CustomerBranch.customer_id == customer_id)
+                .values(is_default=False)
+            )
+
+        branch = CustomerBranch(
+            customer_id=customer_id,
+            name=CustomerService._clean_optional(payload.get("name")),
+            delivery_address=delivery_address,
+            contact_name=CustomerService._clean_optional(payload.get("contact_name")),
+            contact_phone=CustomerService._clean_optional(payload.get("contact_phone")),
+            is_default=effective_default,
+        )
+        session.add(branch)
+        await session.commit()
+        await session.refresh(branch)
+        return CustomerService._to_branch_item(branch)
+
+    @staticmethod
+    async def update_branch_for_manager(
+        session: AsyncSession,
+        *,
+        customer_id: int,
+        branch_id: int,
+        payload: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        customer = await session.get(Customer, customer_id)
+        if not customer:
+            return None
+
+        branch = await session.get(CustomerBranch, branch_id)
+        if not branch or int(branch.customer_id) != int(customer_id):
+            return None
+
+        if "name" in payload:
+            branch.name = CustomerService._clean_optional(payload.get("name"))
+        if "delivery_address" in payload:
+            delivery_address = CustomerService._clean_optional(payload.get("delivery_address"))
+            if not delivery_address:
+                raise ValueError("Адрес филиала обязателен")
+            branch.delivery_address = delivery_address
+        if "contact_name" in payload:
+            branch.contact_name = CustomerService._clean_optional(payload.get("contact_name"))
+        if "contact_phone" in payload:
+            branch.contact_phone = CustomerService._clean_optional(payload.get("contact_phone"))
+
+        if payload.get("is_default") is True:
+            await session.execute(
+                CustomerBranch.__table__.update()
+                .where(CustomerBranch.customer_id == customer_id)
+                .values(is_default=False)
+            )
+            branch.is_default = True
+        elif payload.get("is_default") is False:
+            branch.is_default = False
+
+        session.add(branch)
+        await session.commit()
+        await session.refresh(branch)
+        return CustomerService._to_branch_item(branch)
+
+    @staticmethod
+    async def delete_branch_for_manager(
+        session: AsyncSession,
+        *,
+        customer_id: int,
+        branch_id: int,
+    ) -> Optional[bool]:
+        customer = await session.get(Customer, customer_id)
+        if not customer:
+            return None
+
+        branch = await session.get(CustomerBranch, branch_id)
+        if not branch or int(branch.customer_id) != int(customer_id):
+            return None
+
+        was_default = bool(branch.is_default)
+        await session.delete(branch)
+        await session.flush()
+
+        if was_default:
+            next_branch_result = await session.execute(
+                select(CustomerBranch)
+                .where(CustomerBranch.customer_id == customer_id)
+                .order_by(CustomerBranch.created_at.asc(), CustomerBranch.id.asc())
+                .limit(1)
+            )
+            next_branch = next_branch_result.scalars().first()
+            if next_branch:
+                next_branch.is_default = True
+                session.add(next_branch)
+
+        await session.commit()
+        return True
 
     @staticmethod
     async def update_for_manager(

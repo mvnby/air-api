@@ -4,6 +4,7 @@
 /* eslint-disable */
 export type LeadQualifyPayload = {
     customer_id?: (number | null);
+    customer_branch_id?: (number | null);
     name?: (string | null);
     phone?: (string | null);
     email?: (string | null);

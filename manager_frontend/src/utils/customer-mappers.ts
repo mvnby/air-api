@@ -20,6 +20,8 @@ export function mapCustomerToLeadCreatePrefill(
 export function mapCustomerToLeadQualifyPrefill(
   customer: ManagerCatalogCustomerItemResponse,
 ): Partial<LeadQualifyPayload> {
+  const branches = Array.isArray(customer.branches) ? customer.branches : [];
+  const defaultBranch = branches.find((branch) => branch.is_default) || branches[0];
   return {
     name: customer.name || undefined,
     phone: customer.phone ? normalizePhoneForApi(customer.phone) : undefined,
@@ -30,6 +32,6 @@ export function mapCustomerToLeadQualifyPrefill(
     iban: customer.iban || undefined,
     bic: customer.bic || undefined,
     bank_name: customer.bank_name || undefined,
-    delivery_address: customer.last_delivery_address || customer.actual_address || undefined,
+    delivery_address: defaultBranch?.delivery_address || customer.last_delivery_address || customer.actual_address || undefined,
   };
 }
