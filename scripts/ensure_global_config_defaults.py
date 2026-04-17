@@ -14,6 +14,7 @@ from models.content import GlobalConfig
 
 DEFAULT_CONFIGS: list[tuple[str, str, str]] = [
     ("fx_rate_usd_byn", "3.4", "Курс USD/BYN для закупки"),
+    ("fx_rate_rub_byn", "0.0350", "Курс RUB/BYN для импорта"),
     ("supplier_sync_enabled", "true", "Включить авто-синк поставщиков"),
     ("supplier_sync_interval_minutes", "60", "Интервал синка поставщиков (мин)"),
     ("fx_rate_source", "manual", "Источник курса USD/BYN: manual | nbrb"),

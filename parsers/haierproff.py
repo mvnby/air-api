@@ -206,6 +206,7 @@ class HaierProffParser(BaseParser):
             "slug": self._slug_from_url(str(response.url)),
             "description": description,
             "price": price,
+            "price_currency": "RUB",
             "area": metrics["area"],
             "main_image": images[0] if images else "",
             "images": images[1:] if len(images) > 1 else [],

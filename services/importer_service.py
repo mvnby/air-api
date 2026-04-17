@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal
 from typing import List, Optional
 
 import slugify
@@ -15,6 +16,7 @@ from parsers.tvoy_klimat import TvoyKlimatParser
 from core.database import async_session_maker
 from models import Product, ProductImage, Tag, TagGroup
 from services.image_service import ImageService
+from services.fx_rate_service import FxRateService
 from services.spec_normalizer import normalize_specs
 from services.tag_logic import (
     CATEGORY_TAG_TITLES,
@@ -40,6 +42,40 @@ def _augment_auto_slugs_with_wifi_specs(auto_slugs: List[str], specs: dict) -> L
     elif wifi_state == "ready" and "wifi-ready" not in result:
         result.append("wifi-ready")
     return result
+
+
+async def _normalize_import_price_to_byn(session, *, data: dict, source_url: str) -> None:
+    """Convert source price to BYN if parser reports foreign currency."""
+    raw_price = data.get("price")
+    if raw_price is None:
+        return
+
+    currency = str(data.get("price_currency") or "BYN").strip().upper()
+    if currency in {"", "BYN"}:
+        return
+
+    try:
+        source_price = Decimal(str(raw_price))
+    except Exception:
+        logger.warning("Price conversion skipped for %s: invalid source price=%r", source_url, raw_price)
+        return
+
+    if currency != "RUB":
+        logger.warning("Price conversion skipped for %s: unsupported currency=%s", source_url, currency)
+        return
+
+    rub_byn_rate = await FxRateService.get_effective_rub_byn_rate(session)
+    if rub_byn_rate is None:
+        logger.warning("Price conversion skipped for %s: RUB/BYN rate unavailable", source_url)
+        return
+
+    converted_price = (source_price * rub_byn_rate).quantize(Decimal("1"))
+    data["price"] = int(converted_price)
+
+    specs = dict(data.get("specs") or {})
+    specs["Цена источника"] = f"{int(source_price)} RUB"
+    specs["Курс RUB/BYN (импорт)"] = str(rub_byn_rate)
+    data["specs"] = specs
 
 
 async def _ensure_tag_group(
@@ -149,6 +185,7 @@ class ImporterService:
                 raise ValueError("No parser found for this URL")
 
             data = await parser.parse(url)
+            await _normalize_import_price_to_byn(session, data=data, source_url=url)
             
             # Determine publishing status
             is_published = True 
