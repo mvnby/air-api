@@ -300,7 +300,8 @@ class HobotParser(BaseParser):
                 headers=self._HEADERS,
             ) as image_client:
                 images = await self._choose_best_image_urls(image_client, images)
-        related_urls = self._collect_related_urls(soup, str(response.url))
+        # User decision: disable related crawling for hobot to avoid mass unintended imports.
+        related_urls: List[str] = []
 
         return {
             "title": title,

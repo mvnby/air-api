@@ -48,6 +48,31 @@ class HaierProffParser(BaseParser):
         return series or None
 
     @staticmethod
+    def _infer_type_specs_from_url(url: str) -> Dict[str, str]:
+        lowered = (url or "").lower()
+        inferred: Dict[str, str] = {}
+
+        if "vnutrennij-blok" in lowered:
+            inferred["Тип"] = "Внутренний блок"
+        elif "naruzhnyj-blok" in lowered:
+            inferred["Тип"] = "Наружный блок"
+        elif "split-sistema" in lowered:
+            inferred["Тип"] = "Сплит-система"
+
+        if "kasset" in lowered:
+            inferred["Тип внутреннего блока"] = "Кассетный"
+        elif "kanal" in lowered:
+            inferred["Тип внутреннего блока"] = "Канальный"
+        elif "kolonn" in lowered:
+            inferred["Тип внутреннего блока"] = "Колонный"
+        elif "napolno" in lowered or "potolochn" in lowered:
+            inferred["Тип внутреннего блока"] = "Напольно-потолочный"
+        elif "nastenn" in lowered or "super-match-as" in lowered:
+            inferred["Тип внутреннего блока"] = "Настенный"
+
+        return inferred
+
+    @staticmethod
     def _parse_first_number(value: str) -> float | None:
         if not value:
             return None
@@ -218,6 +243,8 @@ class HaierProffParser(BaseParser):
         series = self._extract_series_from_title(title)
         if series:
             specs.setdefault("Серия", series)
+        for key, value in self._infer_type_specs_from_url(str(response.url)).items():
+            specs.setdefault(key, value)
         metrics = self._extract_metrics(specs, title)
         images = self._collect_images(soup, str(response.url))
         related_urls = self._collect_related_urls(soup, str(response.url))

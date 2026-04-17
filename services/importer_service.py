@@ -28,6 +28,7 @@ from services.tag_logic import (
 from services.brand_series_service import sync_product_brand_series
 
 logger = logging.getLogger(__name__)
+_CATEGORY_TAG_SLUGS = {"cat-household", "cat-multi", "cat-industrial"}
 
 
 def _augment_auto_slugs_with_wifi_specs(auto_slugs: List[str], specs: dict) -> List[str]:
@@ -176,9 +177,22 @@ class ImporterService:
             result = await session.execute(stmt)
             existing = result.scalar_one_or_none()
             if existing and not update_existing:
-                # We return it but maybe don't re-save. 
-                # For the sake of bulk import, we'll return the existing one.
-                return {"product": existing, "related_urls": []}
+                await session.refresh(existing, attribute_names=["tags"])
+                has_category_tag = any(
+                    (getattr(tag, "slug", "") or "") in _CATEGORY_TAG_SLUGS
+                    for tag in (existing.tags or [])
+                )
+                if has_category_tag:
+                    # Keep fast path for already healthy records.
+                    return {"product": existing, "related_urls": []}
+
+                # Self-heal path: if product exists but lacks catalog category tags,
+                # force update flow to refresh derived tags/specs.
+                logger.info(
+                    "Reimporting existing product %s because category tags are missing",
+                    existing.id,
+                )
+                update_existing = True
 
             parser = self.get_parser(url)
             if not parser:
@@ -311,6 +325,18 @@ class ImporterService:
                 existing.power_cooling = metrics.get('power_cooling', existing.power_cooling)
                 existing.specs = normalized_specs
                 existing.source_url = url
+
+                # Preserve manual tags, but append newly inferred auto-tags.
+                await session.refresh(existing, attribute_names=["tags"])
+                merged_tags: dict[str, Tag] = {}
+                for tag in (existing.tags or []):
+                    key = getattr(tag, "slug", None) or f"id:{getattr(tag, 'id', None)}"
+                    merged_tags[key] = tag
+                for tag in tag_objects:
+                    key = getattr(tag, "slug", None) or f"id:{getattr(tag, 'id', None)}"
+                    merged_tags[key] = tag
+                existing.tags = list(merged_tags.values())
+
                 session.add(existing)
                 product = existing
             else:
