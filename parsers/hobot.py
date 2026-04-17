@@ -119,7 +119,12 @@ class HobotParser(BaseParser):
             value_lower = value.lower()
 
             if "инвертор" in key_lower:
-                metrics["is_inverter"] = value_lower.startswith("да") or "инвертор" in value_lower
+                metrics["is_inverter"] = (
+                    value_lower.startswith("да")
+                    or "есть" in value_lower
+                    or value_lower in {"+", "✓", "✔"}
+                    or "инвертор" in value_lower
+                )
 
             if "площад" in key_lower:
                 match = re.search(r"(\d+)", value)

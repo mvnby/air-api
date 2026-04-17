@@ -114,3 +114,67 @@ def test_indoor_type_filter_key_for_semi_industrial():
 
     floor_ceiling = normalize_specs({"Тип внутреннего блока": "напольно-потолочный"})
     assert floor_ceiling["__filter_indoor_type"] == "floor_ceiling"
+
+
+def test_hobot_power_and_controls_keys_are_normalized():
+    specs = normalize_specs(
+        {
+            "Мощность охлаждения, кВт": "2.80",
+            "Мощность обогрева, кВт": "3.63",
+            "Рабочий диапазон температур при охлаждении, °C": "от -15 до +53",
+            "Рабочий диапазон температур при обогреве, °C": "от -20 до +30",
+            "Инверторное управление мощностью": "Есть",
+            "Пульт": "Есть",
+            "Режим осушения воздуха": "есть",
+            "Регулятор скорости вращения вентилятора": "Есть",
+        }
+    )
+
+    assert specs["capacity_cooling_kw"] == "2.80"
+    assert specs["capacity_heating_kw"] == "3.63"
+    assert specs["temp_range_cool"] == "от -15 до +53"
+    assert specs["temp_range_heat"] == "от -20 до +30"
+    assert specs["inverter"] is True
+    assert specs["remote_control"] is True
+    assert specs["dehumidification"] is True
+    assert specs["fan_speed"] is True
+
+
+def test_haierproff_core_keys_are_normalized():
+    specs = normalize_specs(
+        {
+            "Охлаждение, кВт": "5,2",
+            "Нагрев, кВт": "6,0",
+            "Рекомендованная площадь, м 2": "35 - 50",
+            "Марка используемого хладагента": "R32",
+            "Диаметр жидкостной линии, мм": "6,35",
+            "Диаметр газовой линии, мм": "9,52",
+            "Инверторный компрессор": "Да",
+        }
+    )
+
+    assert specs["capacity_cooling_kw"] == "5.2"
+    assert specs["capacity_heating_kw"] == "6.0"
+    assert specs["area_m2"] == "50"
+    assert specs["freon_type"] == "R32"
+    assert specs["pipe_liquid"] == "6.35"
+    assert specs["pipe_gas"] == "9.52"
+    assert specs["inverter"] is True
+
+
+def test_min_nom_max_values_use_nominal_component():
+    specs = normalize_specs(
+        {
+            "Мощность охлаждения (Мин/Ном/Макс), кВт": "0.89 / 2.5 / 3.7",
+            "Мощность нагрева (Мин/Ном/Макс), кВт": "0.89 / 3.3 / 4.1",
+            "Потребление электроэнергии в режиме охлаждения (Мин / Ном / Макс), кВт": "0.20 / 0.656 / 1.4",
+            "Потребление электроэнергии в режиме нагрева (Мин / Ном / Макс), кВт": "0.195 / 0.800 / 1.6",
+            "Тип системы": "Инверторная",
+        }
+    )
+
+    assert specs["capacity_cooling_kw"] == "2.5"
+    assert specs["capacity_heating_kw"] == "3.3"
+    assert specs["power_cons_cooling_kw"] == "0.656"
+    assert specs["power_cons_heating_kw"] == "0.800"
+    assert specs["inverter"] is True

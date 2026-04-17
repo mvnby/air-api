@@ -8,8 +8,10 @@ KEY_MAP = {
     # --- ОСНОВНОЕ ---
     "Тип": "type",
     "Тип кондиционера": "type",
+    "Тип системы": "inverter",
     "Тип внутреннего блока": "indoor_type",
     "Режим работы": "modes",
+    "Режимы работы": "modes",
     "Обслуживаемая площадь": "area_m2",
     "Обслуживаемая площадь, кв.м": "area_m2",
     "Площадь охлаждения": "area_m2",
@@ -21,6 +23,8 @@ KEY_MAP = {
     "Инверторная технология": "inverter",
     "Инверторный": "inverter",
     "Инверторное управление": "inverter",
+    "Инверторное управление мощностью": "inverter",
+    "Инверторный компрессор": "inverter",
     "Бренд": "brand",
     "Марка": "brand",
     "Производитель": "brand",
@@ -35,10 +39,13 @@ KEY_MAP = {
     "Wi-Fi Ready": "wifi_ready",
     "Пульт дистанционного управления": "remote_control",
     "Пульт ДУ": "remote_control",
+    "Пульт": "remote_control",
+    "Пульт управления": "remote_control",
     "Таймер включения/выключения": "timer",
     "Таймер": "timer",
     "Регулировка направления воздушного потока": "airflow_direction",
     "Регулировка скорости вращения вентилятора": "fan_speed",
+    "Регулятор скорости вращения вентилятора": "fan_speed",
     "Авторестарт после пропадания питания": "autorestart",
     "Авторестарт": "autorestart",
     "Турбо-режим": "turbo_mode",
@@ -47,20 +54,39 @@ KEY_MAP = {
     "Ночной режим": "sleep_mode",
     "Осушение воздуха": "dehumidification",
     "Осушение": "dehumidification",
+    "Режим осушения воздуха": "dehumidification",
 
     # --- МОЩНОСТЬ ---
     "Мощность охлаждения": "capacity_cooling_kw",
+    "Мощность охлаждения, кВт": "capacity_cooling_kw",
+    "Мощность охлаждения (Мин/Ном/Макс), кВт": "capacity_cooling_kw",
     "Мощность в режиме охлаждения": "capacity_cooling_kw",
     "Мощность в режиме охлаждения, кВт": "capacity_cooling_kw",
     "Холодопроизводительность": "capacity_cooling_kw",
+    "Охлаждение, кВт": "capacity_cooling_kw",
+    "Охлаждение минимум, кВт": "capacity_cooling_min_kw",
+    "Охлаждение максимум, кВт": "capacity_cooling_max_kw",
     "Мощность обогрева": "capacity_heating_kw",
+    "Мощность обогрева, кВт": "capacity_heating_kw",
+    "Мощность нагрева (Мин/Ном/Макс), кВт": "capacity_heating_kw",
     "Мощность в режиме обогрева": "capacity_heating_kw",
     "Мощность в режиме обогрева, кВт": "capacity_heating_kw",
     "Теплопроизводительность": "capacity_heating_kw",
+    "Нагрев, кВт": "capacity_heating_kw",
+    "Нагрев минимум, кВт": "capacity_heating_min_kw",
+    "Нагрев максимум, кВт": "capacity_heating_max_kw",
     "Потребляемая мощность при охлаждении": "power_cons_cooling_kw",
     "Потребляемая мощность при охлаждении, кВт": "power_cons_cooling_kw",
+    "Потребление электроэнергии в режиме охлаждения (Мин / Ном / Макс), кВт": "power_cons_cooling_kw",
+    "Номинальная потребляемая мощность (охлаждение), кВт": "power_cons_cooling_kw",
+    "Минимальная потребляемая мощность (охлаждение), кВт": "power_cons_cooling_min_kw",
+    "Максимальная потребляемая мощность (охлаждение), кВт": "power_cons_cooling_max_kw",
     "Потребляемая мощность при обогреве": "power_cons_heating_kw",
     "Потребляемая мощность при обогреве, кВт": "power_cons_heating_kw",
+    "Потребление электроэнергии в режиме нагрева (Мин / Ном / Макс), кВт": "power_cons_heating_kw",
+    "Номинальная потребляемая мощность (нагрев), кВт": "power_cons_heating_kw",
+    "Минимальная потребляемая мощность (нагрев), кВт": "power_cons_heating_min_kw",
+    "Максимальная потребляемая мощность (нагрев), кВт": "power_cons_heating_max_kw",
     
     # --- ЭФФЕКТИВНОСТЬ ---
     "Энергоэффективность при охлаждении (EER)": "eer",
@@ -76,12 +102,16 @@ KEY_MAP = {
     "Шум внутреннего блока, дБ": "noise_indoor",
     "Уровень шума внутреннего блока": "noise_indoor",
     "Уровень шума (макс), дБ": "noise_indoor",
+    "Уровень звукового давления [дБ(А)], Выс/Ср/Низ/Сверх": "noise_indoor",
+    "Уровень шума в режиме ОХЛАЖДЕНИЯ (Тих / Низ / Ср /Макс), дБ": "noise_indoor",
+    "Уровень шума в режиме НАГРЕВА (Низ / Ср / Макс), дБ": "noise_indoor",
     "Шум наружного блока": "noise_outdoor",
     "Шум наружного блока, дБ": "noise_outdoor",
     "Шум внешнего блока": "noise_outdoor",
     "Шум внешнего блока, дБ": "noise_outdoor",
     "Уровень шума наружного блока": "noise_outdoor",
     "Уровень шума наружного блока, дБ": "noise_outdoor",
+    "Уровень звукового давления, дБ, А": "noise_outdoor",
     
     # --- ГАБАРИТЫ ВНУТРЕННИЙ ---
     "Ширина внутреннего блока": "width_indoor",
@@ -104,33 +134,50 @@ KEY_MAP = {
     "Максимальная длина коммуникаций": "pipe_max_length",
     "Максимальная длина коммуникаций, м": "pipe_max_length",
     "Макс. длина трассы": "pipe_max_length",
+    "Макс. длина трубопроводов без дополнительной заправки, м": "pipe_max_length",
     "Перепад высот": "pipe_max_height",
     "Перепад высот, м": "pipe_max_height",
+    "Максимальная длина/перепад высот, м": "pipe_max_length",
+    "Максимальная длина/перепад высот, при использовании только в режиме охлаждения, м": "pipe_max_length",
     "Максимальный перепад высот": "multi_max_height_diff",
     "Максимальное количество внутренних блоков": "multi_max_indoor_units",
     "Максимальная суммарная длина магистрали": "multi_max_total_pipe_length",
     "Диаметр жидкостной трубы": "pipe_liquid",
+    "Диаметр жидкостной линии, мм": "pipe_liquid",
     "Диаметр газовой трубы": "pipe_gas",
+    "Диаметр газовой линии, мм": "pipe_gas",
     
     # --- ТЕМПЕРАТУРЫ ---
     "Рабочая температура при охлаждении": "temp_range_cool",
     "Рабочий диапазон температур при охлаждении": "temp_range_cool",
     "Рабочий диапазон температур при охлаждении,°C": "temp_range_cool",
+    "Рабочий диапазон температур при охлаждении, °C": "temp_range_cool",
+    "Охлаждение, °С": "temp_range_cool",
     "Рабочая температура при обогреве": "temp_range_heat",
     "Рабочий диапазон температур при обогреве": "temp_range_heat",
     "Рабочий диапазон температур при обогреве,°C": "temp_range_heat",
+    "Рабочий диапазон температур при обогреве, °C": "temp_range_heat",
+    "Нагрев, °С": "temp_range_heat",
     "Минимальная температура наружного воздуха": "temp_range_heat",
     "Мин. температура (обогрев)": "temp_range_heat",
     
     # --- ПЛОЩАДЬ (с единицами) ---
     "Обслуживаемая площадь до": "area_m2",
     "Обслуживаемая площадь до, м2": "area_m2",
+    "Рекомендуемая максимальная площадь помещения": "area_m2",
+    "Рекомендованная площадь, м 2": "area_m2",
     
     # --- ЭНЕРГОЭФФЕКТИВНОСТЬ (без скобок) ---
     "Энергоэффективность при охлаждении": "energy_class_cooling",
     "Энергоэффективность при обогреве": "energy_class_heating",
+    "Класс эффективности": "energy_class",
+    "Класс энергоэффективности (Холод / Тепло)": "energy_class",
+    "Коэффициент энергоэффективности (EER / COP)": "eer",
+    "Энергоэффективность SEER/EER": "eer",
+    "Энергоэффективность SCOP/COP": "cop",
     
     "Максимальный расход воздуха внутреннего блока": "airflow_max",
+    "Расход воздуха (высокая скорость), м 3 /ч": "airflow_max",
 
     # --- ФИЛЬТРЫ И ДОП. ФУНКЦИИ ---
     "Приток свежего воздуха": "fresh_air",
@@ -145,6 +192,20 @@ KEY_MAP = {
     "Электростатический фильтр": "electrostatic_filter",
     "Обеззараживание ультрафиолетом": "uv_sterilization",
     "Самоочистка": "self_cleaning",
+    "Автоочистка теплообменника": "self_cleaning",
+    "Wi-Fi управление": "wifi_ready",
+    "Марка используемого хладагента": "freon_type",
+    "Производитель компрессора": "compressor_brand",
+    "Номинальный уровень рабочего тока (охлаждение), А": "current_cooling_nominal_a",
+    "Номинальный уровень рабочего тока (нагрев), А": "current_heating_nominal_a",
+    "Дополнительная заправка (г/м)": "refrigerant_additional_g_m",
+    "Вес заправляемого хладагента, г": "refrigerant_charge_g",
+    "Артикулы товара": "sku_list",
+    "Подача питания": "power_supply_location",
+    "Подключение питания": "power_supply_location",
+    "Электропитание, Ф/В/Гц": "power_supply",
+    "Электропитание (Ø / В / Гц)": "power_supply",
+    "Модель": "model",
 }
 
 # Composite dimension keys: "940×1250×340" → split into width/height/depth
@@ -156,6 +217,19 @@ _DIMENSIONS_MAP = {
     "Габариты наружного блока (ШхВхГ), мм": ("width_outdoor", "height_outdoor", "depth_outdoor"),
     "Габариты внешнего блока (ШхВхГ)": ("width_outdoor", "height_outdoor", "depth_outdoor"),
     "Габариты внешнего блока (ШхВхГ), мм": ("width_outdoor", "height_outdoor", "depth_outdoor"),
+    "Габариты мм": ("width_indoor", "height_indoor", "depth_indoor"),
+}
+
+_PREFERRED_NUMERIC_KEYS = {
+    "capacity_cooling_kw",
+    "capacity_heating_kw",
+    "power_cons_cooling_kw",
+    "power_cons_heating_kw",
+    "power_cons_cooling_min_kw",
+    "power_cons_cooling_max_kw",
+    "power_cons_heating_min_kw",
+    "power_cons_heating_max_kw",
+    "area_m2",
 }
 
 
@@ -218,11 +292,36 @@ def clean_value(key: str, val: Any, keep_units: bool = True) -> Any:
         return val
 
     if key in boolean_keys:
+        if key == "inverter":
+            if "инвертор" in val_lower or "inverter" in val_lower:
+                return True
+            if "неинвертор" in val_lower or "on/off" in val_lower or "on off" in val_lower:
+                return False
+        if val_lower in {"+", "✓", "✔"}:
+            return True
         if "да" in val_lower or "есть" in val_lower or "поддерживается" in val_lower:
             return True
         if "нет" in val_lower or "отсутствует" in val_lower:
             return False
         return val # Если там что-то сложное, оставляем как есть
+
+    # Some sources provide ranges like "0.89 / 2.5 / 3.7" (min/nom/max).
+    # Keep nominal values in core numeric fields for consistent UI/filtering.
+    if key in _PREFERRED_NUMERIC_KEYS:
+        numbers = re.findall(r"[-+]?\d+(?:[.,]\d+)?", val)
+        if numbers:
+            normalized = [n.replace(",", ".") for n in numbers]
+            if key in {"capacity_cooling_kw", "capacity_heating_kw", "power_cons_cooling_kw", "power_cons_heating_kw"} and "/" in val:
+                # For min/nom/max triplets pick nominal (middle) value.
+                if len(normalized) >= 3:
+                    return normalized[1]
+            if key == "area_m2" and ("-" in val or "до" in val_lower or "~" in val):
+                # For ranges use upper bound as recommended/max area.
+                try:
+                    return str(max(float(n) for n in normalized)).rstrip("0").rstrip(".")
+                except ValueError:
+                    pass
+            return normalized[0]
 
     # 2. Чистка чисел (Только если keep_units = False)
     if not keep_units:
@@ -368,6 +467,7 @@ def _classify_wifi_value(value: Any) -> str | None:
         "да",
         "есть",
         "✓",
+        "+",
     )
     if any(marker in text for marker in builtin_markers):
         return "builtin"
