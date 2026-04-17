@@ -7,6 +7,7 @@ import type {
   LeadLossPayload,
   LeadQualifyPayload,
   ManagerCatalogCustomerItemResponse,
+  ManagerCustomerBranchItemResponse,
   LeadResponse,
   LeadUpdatePayload,
 } from '../../client';
@@ -47,6 +48,12 @@ const selectedExistingCustomer = ref<ManagerCatalogCustomerItemResponse | null>(
 const createSuggestedCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const selectedQualifyCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const selectedQualifyCustomerDetail = ref<ManagerCatalogCustomerItemResponse | null>(null);
+const qualifyCustomerBranches = ref<ManagerCustomerBranchItemResponse[]>([]);
+const qualifySelectedBranchId = ref<number | null>(null);
+const qualifyBranchesLoading = ref(false);
+const qualifyNewBranchName = ref('');
+const qualifyNewBranchAddress = ref('');
+const qualifyCreatingBranch = ref(false);
 const qualifyOverwriteFields = ref<Record<RequisiteFieldKey, boolean>>({
   inn: false,
   full_legal_name: false,
@@ -208,6 +215,50 @@ const qualifyPreview = computed(() => {
   };
 });
 
+const selectedQualifyBranch = computed(
+  () => qualifyCustomerBranches.value.find((branch) => branch.id === qualifySelectedBranchId.value) || null,
+);
+
+const resetQualifyBranches = () => {
+  qualifyCustomerBranches.value = [];
+  qualifySelectedBranchId.value = null;
+  qualifyNewBranchName.value = '';
+  qualifyNewBranchAddress.value = '';
+  qualifyBranchesLoading.value = false;
+  qualifyCreatingBranch.value = false;
+};
+
+const applyQualifyBranchSelection = (branchId: number | null, syncDeliveryAddress = true) => {
+  qualifySelectedBranchId.value = branchId;
+  if (!syncDeliveryAddress) return;
+  const branch = qualifyCustomerBranches.value.find((item) => item.id === branchId) || null;
+  if (!branch) return;
+  qualifyForm.value.delivery_address = branch.delivery_address;
+};
+
+const hydrateQualifyBranchesFromCustomer = (customer: ManagerCatalogCustomerItemResponse | null, syncDeliveryAddress = false) => {
+  const nextBranches = Array.isArray(customer?.branches) ? customer.branches : [];
+  qualifyCustomerBranches.value = nextBranches;
+
+  if (!nextBranches.length) {
+    qualifySelectedBranchId.value = null;
+    return;
+  }
+
+  const hasCurrent = qualifySelectedBranchId.value
+    ? nextBranches.some((branch) => branch.id === qualifySelectedBranchId.value)
+    : false;
+  if (hasCurrent) return;
+
+  // UX: keep "Без филиала" as default until manager selects branch explicitly.
+  applyQualifyBranchSelection(null, syncDeliveryAddress);
+};
+
+const onQualifyBranchSelect = (event: Event) => {
+  const value = (event.target as HTMLSelectElement).value;
+  applyQualifyBranchSelection(value ? Number(value) : null);
+};
+
 const setToast = (message: string) => {
   toast.value = message;
   window.setTimeout(() => {
@@ -239,6 +290,7 @@ const FIELD_LABELS: Record<string, string> = {
   iban: 'IBAN',
   bic: 'BIC',
   bank_name: 'Название банка',
+  customer_branch_id: 'Филиал клиента',
   delivery_address: 'Адрес доставки/монтажа',
   order_comment: 'Комментарий сделки',
 };
@@ -480,6 +532,7 @@ const openQualifyModal = (lead: LeadResponse, updateUrl = true) => {
   selectedLead.value = lead;
   selectedQualifyCustomer.value = null;
   selectedQualifyCustomerDetail.value = null;
+  resetQualifyBranches();
   clearQualifyCriticalOverwriteConfirm();
   qualifyCustomerLookupQuery.value = '';
   qualifyCustomerLookupResults.value = [];
@@ -569,9 +622,13 @@ const qualifyLead = async () => {
       if (canWriteRequisiteByDefault(key)) return incoming;
       return undefined;
     };
+    const resolvedDeliveryAddress = qualifyForm.value.delivery_address?.trim()
+      || selectedQualifyBranch.value?.delivery_address
+      || undefined;
     const response = await api.qualifyManagerLead(selectedLead.value.id, {
       ...qualifyForm.value,
       customer_id: selectedQualifyCustomer.value?.id || undefined,
+      customer_branch_id: qualifySelectedBranchId.value ?? null,
       name: qualifyForm.value.name || undefined,
       phone: normalizedPhone || undefined,
       email: normalizeEmail(qualifyForm.value.email || '') || undefined,
@@ -581,7 +638,7 @@ const qualifyLead = async () => {
       iban: resolveRequisite('iban'),
       bic: resolveRequisite('bic'),
       bank_name: resolveRequisite('bank_name'),
-      delivery_address: qualifyForm.value.delivery_address || undefined,
+      delivery_address: resolvedDeliveryAddress,
       order_comment: qualifyForm.value.order_comment || undefined,
     });
     lastQualifyResult.value = {
@@ -607,6 +664,7 @@ const qualifyLead = async () => {
       'iban',
       'bic',
       'bank_name',
+      'customer_branch_id',
       'delivery_address',
       'order_comment',
     ]);
@@ -698,11 +756,13 @@ watch(showQualifyModal, (isOpen) => {
     qualifyInnError.value = '';
     qualifyIbanError.value = '';
     clearQualifyCriticalOverwriteConfirm();
+    resetQualifyBranches();
     return;
   }
   if (!isOpen) {
     selectedQualifyCustomerDetail.value = null;
     clearQualifyCriticalOverwriteConfirm();
+    resetQualifyBranches();
     clearLeadIdFromUrl();
     openedByUrlLeadId.value = null;
   }
@@ -737,6 +797,7 @@ const applyCustomerRequisitesToQualifyForm = (customer: ManagerCatalogCustomerIt
 };
 
 const hydrateQualifyRequisitesFromCustomer = async (customerId: number): Promise<boolean> => {
+  qualifyBranchesLoading.value = true;
   try {
     const customer = await api.getManagerCustomerDetail(customerId);
     const previous = selectedQualifyCustomerDetail.value;
@@ -747,10 +808,13 @@ const hydrateQualifyRequisitesFromCustomer = async (customerId: number): Promise
     } else {
       applyCustomerRequisitesToQualifyForm(customer);
     }
+    hydrateQualifyBranchesFromCustomer(customer, !qualifyForm.value.delivery_address?.trim());
     return true;
   } catch (error) {
     console.error(error);
     return false;
+  } finally {
+    qualifyBranchesLoading.value = false;
   }
 };
 
@@ -817,6 +881,7 @@ const handleCustomerUpdated = (event: Event) => {
     selectedQualifyCustomer.value = updated;
     selectedQualifyCustomerDetail.value = updated;
     syncQualifyFormWithUpdatedCustomer(previous, updated);
+    hydrateQualifyBranchesFromCustomer(updated, false);
   }
 };
 
@@ -909,6 +974,7 @@ const findExistingCustomers = async () => {
 const applyCustomerToQualifyForm = (customer: ManagerCatalogCustomerItemResponse) => {
   selectedQualifyCustomer.value = customer;
   selectedQualifyCustomerDetail.value = null;
+  resetQualifyBranches();
   qualifyOverwriteFields.value = {
     inn: false,
     full_legal_name: false,
@@ -927,6 +993,7 @@ const applyCustomerToQualifyForm = (customer: ManagerCatalogCustomerItemResponse
   qualifyForm.value.full_legal_name = mapped.full_legal_name || qualifyForm.value.full_legal_name;
   qualifyForm.value.delivery_address = mapped.delivery_address || qualifyForm.value.delivery_address;
   applyCustomerRequisitesToQualifyForm(customer);
+  hydrateQualifyBranchesFromCustomer(customer, !qualifyForm.value.delivery_address?.trim());
   qualifyCustomerLookupResults.value = [];
   void hydrateQualifyRequisitesFromCustomer(customer.id);
 };
@@ -947,6 +1014,53 @@ const findCustomersForQualify = async () => {
     setToast(`Не удалось найти клиентов: ${getApiErrorMessage(error)}`);
   } finally {
     qualifyCustomerLookupLoading.value = false;
+  }
+};
+
+const createBranchForQualifyCustomer = async () => {
+  const customerId = selectedQualifyCustomer.value?.id;
+  if (!customerId || qualifyCreatingBranch.value) return;
+
+  const deliveryAddress = qualifyNewBranchAddress.value.trim();
+  if (!deliveryAddress) {
+    setToast('Введите адрес филиала');
+    return;
+  }
+
+  qualifyCreatingBranch.value = true;
+  try {
+    const created = await api.createManagerCustomerBranch(customerId, {
+      name: qualifyNewBranchName.value.trim() || undefined,
+      delivery_address: deliveryAddress,
+      is_default: qualifyCustomerBranches.value.length === 0,
+    });
+    qualifyCustomerBranches.value = [
+      created,
+      ...qualifyCustomerBranches.value.filter((branch) => branch.id !== created.id),
+    ];
+    applyQualifyBranchSelection(created.id, true);
+
+    if (selectedQualifyCustomer.value) {
+      selectedQualifyCustomer.value = {
+        ...selectedQualifyCustomer.value,
+        branches: qualifyCustomerBranches.value,
+      };
+    }
+    if (selectedQualifyCustomerDetail.value) {
+      selectedQualifyCustomerDetail.value = {
+        ...selectedQualifyCustomerDetail.value,
+        branches: qualifyCustomerBranches.value,
+      };
+    }
+
+    qualifyNewBranchName.value = '';
+    qualifyNewBranchAddress.value = '';
+    setToast('Филиал создан и выбран');
+  } catch (error) {
+    console.error(error);
+    setToast(`Не удалось создать филиал: ${getApiErrorMessage(error)}`);
+  } finally {
+    qualifyCreatingBranch.value = false;
   }
 };
 
@@ -1438,11 +1552,61 @@ const onQualifyIbanBlur = async () => {
             Открыть клиента
           </button>
         </div>
+        <div v-if="selectedQualifyCustomer" class="mb-3 rounded-lg border border-gray-200 bg-white/70 px-3 py-3">
+          <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Филиал клиента</p>
+          <div class="mt-2 grid gap-2 md:grid-cols-2">
+            <label class="field-label md:col-span-2">
+              <span>Выбор филиала</span>
+              <select
+                :value="qualifySelectedBranchId ?? ''"
+                class="field-input"
+                :disabled="qualifyBranchesLoading"
+                @change="onQualifyBranchSelect"
+              >
+                <option value="">Без филиала</option>
+                <option
+                  v-for="branch in qualifyCustomerBranches"
+                  :key="`qualify-branch-${branch.id}`"
+                  :value="branch.id"
+                >
+                  {{ branch.name || `Филиал #${branch.id}` }} — {{ branch.delivery_address }}
+                </option>
+              </select>
+              <span v-if="qualifyBranchesLoading" class="text-xs text-gray-500">Загрузка филиалов...</span>
+              <span v-else-if="!qualifyCustomerBranches.length" class="text-xs text-gray-500">У клиента нет филиалов</span>
+            </label>
+
+            <input
+              v-model="qualifyNewBranchName"
+              class="field-input"
+              placeholder="Новый филиал (название)"
+            />
+            <input
+              v-model="qualifyNewBranchAddress"
+              class="field-input"
+              placeholder="Новый филиал (адрес)"
+            />
+            <div class="md:col-span-2">
+              <button
+                type="button"
+                class="btn-mini-outline text-xs"
+                :disabled="qualifyCreatingBranch"
+                @click="createBranchForQualifyCustomer"
+              >
+                {{ qualifyCreatingBranch ? 'Создаем филиал...' : 'Создать филиал и выбрать' }}
+              </button>
+            </div>
+          </div>
+        </div>
         <div class="mb-3 rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-xs text-gray-500">
           <p class="font-semibold text-gray-900">Preview квалификации</p>
           <p>
             Клиент:
             <span class="text-gray-900">{{ qualifyPreview.customerLabel }}</span>
+          </p>
+          <p v-if="selectedQualifyBranch">
+            Филиал:
+            <span class="text-gray-900">{{ selectedQualifyBranch.name || `#${selectedQualifyBranch.id}` }} · {{ selectedQualifyBranch.delivery_address }}</span>
           </p>
           <p>
             Тип клиента:

@@ -18,6 +18,10 @@ import type { ManagerBulkSpecsResponse } from '../models/ManagerBulkSpecsRespons
 import type { ManagerCatalogCustomerItemResponse } from '../models/ManagerCatalogCustomerItemResponse';
 import type { ManagerCatalogCustomerListResponse } from '../models/ManagerCatalogCustomerListResponse';
 import type { ManagerCatalogProductListResponse } from '../models/ManagerCatalogProductListResponse';
+import type { ManagerCustomerBranchCreatePayload } from '../models/ManagerCustomerBranchCreatePayload';
+import type { ManagerCustomerBranchItemResponse } from '../models/ManagerCustomerBranchItemResponse';
+import type { ManagerCustomerBranchListResponse } from '../models/ManagerCustomerBranchListResponse';
+import type { ManagerCustomerBranchUpdatePayload } from '../models/ManagerCustomerBranchUpdatePayload';
 import type { ManagerCustomerDocumentListResponse } from '../models/ManagerCustomerDocumentListResponse';
 import type { ManagerCustomerUpdatePayload } from '../models/ManagerCustomerUpdatePayload';
 import type { ManagerMediaBulkAddResponse } from '../models/ManagerMediaBulkAddResponse';
@@ -215,6 +219,100 @@ export class ManagerService {
             url: '/api/manager/customers/{customer_id}/docs',
             path: {
                 'customer_id': customerId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Customer Branches For Manager
+     * @param customerId
+     * @returns ManagerCustomerBranchListResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerCustomerBranches(
+        customerId: number,
+    ): CancelablePromise<ManagerCustomerBranchListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/customers/{customer_id}/branches',
+            path: {
+                'customer_id': customerId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Customer Branch For Manager
+     * @param customerId
+     * @param requestBody
+     * @returns ManagerCustomerBranchItemResponse Successful Response
+     * @throws ApiError
+     */
+    public static createManagerCustomerBranch(
+        customerId: number,
+        requestBody: ManagerCustomerBranchCreatePayload,
+    ): CancelablePromise<ManagerCustomerBranchItemResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/customers/{customer_id}/branches',
+            path: {
+                'customer_id': customerId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Patch Customer Branch For Manager
+     * @param customerId
+     * @param branchId
+     * @param requestBody
+     * @returns ManagerCustomerBranchItemResponse Successful Response
+     * @throws ApiError
+     */
+    public static patchManagerCustomerBranch(
+        customerId: number,
+        branchId: number,
+        requestBody: ManagerCustomerBranchUpdatePayload,
+    ): CancelablePromise<ManagerCustomerBranchItemResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/customers/{customer_id}/branches/{branch_id}',
+            path: {
+                'customer_id': customerId,
+                'branch_id': branchId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Delete Customer Branch For Manager
+     * @param customerId
+     * @param branchId
+     * @returns ManagerActionMessageResponse Successful Response
+     * @throws ApiError
+     */
+    public static deleteManagerCustomerBranch(
+        customerId: number,
+        branchId: number,
+    ): CancelablePromise<ManagerActionMessageResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/customers/{customer_id}/branches/{branch_id}',
+            path: {
+                'customer_id': customerId,
+                'branch_id': branchId,
             },
             errors: {
                 422: `Validation Error`,

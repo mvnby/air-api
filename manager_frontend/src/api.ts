@@ -11,6 +11,8 @@ import {
     AdminService,
     ApiService,
     type ProductUpdate,
+    type ManagerCustomerBranchCreatePayload,
+    type ManagerCustomerBranchUpdatePayload,
     type ManagerCustomerUpdatePayload,
     type ManagerCatalogProductItemResponse as Product,
     type ManagerOrderUpdatePayload,
@@ -344,6 +346,22 @@ export const api = {
 
     async patchManagerCustomer(customerId: number, payload: ManagerCustomerUpdatePayload) {
         return await ManagerService.patchManagerCustomer(customerId, payload);
+    },
+
+    async getManagerCustomerBranches(customerId: number) {
+        return await ManagerService.getManagerCustomerBranches(customerId);
+    },
+
+    async createManagerCustomerBranch(customerId: number, payload: ManagerCustomerBranchCreatePayload) {
+        return await ManagerService.createManagerCustomerBranch(customerId, payload);
+    },
+
+    async patchManagerCustomerBranch(customerId: number, branchId: number, payload: ManagerCustomerBranchUpdatePayload) {
+        return await ManagerService.patchManagerCustomerBranch(customerId, branchId, payload);
+    },
+
+    async deleteManagerCustomerBranch(customerId: number, branchId: number) {
+        return await ManagerService.deleteManagerCustomerBranch(customerId, branchId);
     },
 
     async deleteManagerCustomer(customerId: number) {

@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ManagerCustomerBranchItemResponse } from './ManagerCustomerBranchItemResponse';
 export type ManagerCatalogCustomerItemResponse = {
     id: number;
     name: (string | null);
@@ -22,5 +23,6 @@ export type ManagerCatalogCustomerItemResponse = {
     last_delivery_address?: (string | null);
     created_at: (string | null);
     order_count: number;
+    branches?: Array<ManagerCustomerBranchItemResponse>;
 };
 

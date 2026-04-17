@@ -111,6 +111,7 @@ class Order(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
     customer_id: Optional[int] = Field(default=None, foreign_key="customer.id")
+    customer_branch_id: Optional[int] = Field(default=None, foreign_key="customer_branches.id", index=True)
 
     delivery_address: Optional[str] = None
 
@@ -171,6 +172,7 @@ class Order(SQLModel, table=True):
     contract_date: Optional[datetime] = Field(default_factory=datetime.now, description="Дата заключения договора")
 
     customer: Optional["Customer"] = Relationship(back_populates="orders")
+    customer_branch: Optional["CustomerBranch"] = Relationship(back_populates="orders")
 
     product_links: List[OrderProductLink] = Relationship(
         back_populates="order",

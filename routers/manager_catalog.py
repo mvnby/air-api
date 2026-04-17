@@ -14,6 +14,10 @@ from routers.manager_operation_ids import (
     GET_MANAGER_CUSTOMERS,
     GET_MANAGER_CUSTOMER_DETAIL,
     GET_MANAGER_CUSTOMER_DOCS,
+    GET_MANAGER_CUSTOMER_BRANCHES,
+    CREATE_MANAGER_CUSTOMER_BRANCH,
+    PATCH_MANAGER_CUSTOMER_BRANCH,
+    DELETE_MANAGER_CUSTOMER_BRANCH,
     GET_MANAGER_PRODUCTS,
     PATCH_MANAGER_CUSTOMER,
     DELETE_MANAGER_CUSTOMER,
@@ -30,6 +34,10 @@ from schemas import (
     ManagerCatalogCustomerItemResponse,
     ManagerBulkRoundPriceResponse,
     ManagerCatalogCustomerListResponse,
+    ManagerCustomerBranchCreatePayload,
+    ManagerCustomerBranchItemResponse,
+    ManagerCustomerBranchListResponse,
+    ManagerCustomerBranchUpdatePayload,
     ManagerCustomerDocumentListResponse,
     ManagerCatalogProductListResponse,
     ManagerCustomerUpdatePayload,
@@ -156,6 +164,119 @@ async def get_customer_docs_for_manager(
             for doc in docs
         ]
     }
+
+
+@router.get(
+    "/customers/{customer_id}/branches",
+    response_model=ManagerCustomerBranchListResponse,
+    operation_id=GET_MANAGER_CUSTOMER_BRANCHES,
+)
+async def list_customer_branches_for_manager(
+    customer_id: int,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    data = await ManagerCatalogService.list_customer_branches(session=session, customer_id=customer_id)
+    if data is None:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=GET_MANAGER_CUSTOMER_BRANCHES,
+            error_code=CUSTOMER_NOT_FOUND,
+        )
+    return data
+
+
+@router.post(
+    "/customers/{customer_id}/branches",
+    response_model=ManagerCustomerBranchItemResponse,
+    operation_id=CREATE_MANAGER_CUSTOMER_BRANCH,
+)
+async def create_customer_branch_for_manager(
+    customer_id: int,
+    payload: ManagerCustomerBranchCreatePayload,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        data = await ManagerCatalogService.create_customer_branch(
+            session=session,
+            customer_id=customer_id,
+            payload=payload,
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=CREATE_MANAGER_CUSTOMER_BRANCH,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+    if data is None:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=CREATE_MANAGER_CUSTOMER_BRANCH,
+            error_code=CUSTOMER_NOT_FOUND,
+        )
+    return data
+
+
+@router.patch(
+    "/customers/{customer_id}/branches/{branch_id}",
+    response_model=ManagerCustomerBranchItemResponse,
+    operation_id=PATCH_MANAGER_CUSTOMER_BRANCH,
+)
+async def patch_customer_branch_for_manager(
+    customer_id: int,
+    branch_id: int,
+    payload: ManagerCustomerBranchUpdatePayload,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        data = await ManagerCatalogService.update_customer_branch(
+            session=session,
+            customer_id=customer_id,
+            branch_id=branch_id,
+            payload=payload,
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=PATCH_MANAGER_CUSTOMER_BRANCH,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+    if data is None:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=PATCH_MANAGER_CUSTOMER_BRANCH,
+            error_code=CUSTOMER_NOT_FOUND,
+        )
+    return data
+
+
+@router.delete(
+    "/customers/{customer_id}/branches/{branch_id}",
+    response_model=ManagerActionMessageResponse,
+    operation_id=DELETE_MANAGER_CUSTOMER_BRANCH,
+)
+async def delete_customer_branch_for_manager(
+    customer_id: int,
+    branch_id: int,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    data = await ManagerCatalogService.delete_customer_branch(
+        session=session,
+        customer_id=customer_id,
+        branch_id=branch_id,
+    )
+    if data is None:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=DELETE_MANAGER_CUSTOMER_BRANCH,
+            error_code=CUSTOMER_NOT_FOUND,
+        )
+    return {"message": "Branch deleted"}
 
 
 @router.patch(

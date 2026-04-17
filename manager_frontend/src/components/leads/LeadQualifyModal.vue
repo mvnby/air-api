@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { api } from '../../api';
 import type { LeadsInboxItemResponse } from '../../api';
-import type { ManagerOrderUpdatePayload } from '../../client';
+import type { ManagerCustomerBranchItemResponse, ManagerOrderUpdatePayload } from '../../client';
 import { useBelarusPhoneMask } from '../../composables/useBelarusPhoneMask';
 import { useB2BLookup } from '../../composables/useB2BLookup';
 
@@ -39,6 +39,12 @@ const equipmentClass = ref('');
 const marketingSource = ref('');
 const managerComment = ref(props.lead.comment || '');
 const existingCustomerId = ref<number | null>(null);
+const customerBranches = ref<ManagerCustomerBranchItemResponse[]>([]);
+const selectedBranchId = ref<number | null>(null);
+const branchesLoading = ref(false);
+const newBranchName = ref('');
+const newBranchAddress = ref('');
+const creatingBranch = ref(false);
 
 const { lookupCompany, lookupBank, isEgrLoading, isBankLoading } = useB2BLookup();
 
@@ -46,6 +52,32 @@ const { lookupCompany, lookupBank, isEgrLoading, isBankLoading } = useB2BLookup(
 const searchTimeout = ref<number | null>(null);
 const searchStatus = ref<'idle' | 'searching' | 'found' | 'not_found'>('idle');
 const foundCustomerName = ref('');
+const selectedBranch = computed(() => customerBranches.value.find((branch) => branch.id === selectedBranchId.value) || null);
+
+const resetBranches = () => {
+  customerBranches.value = [];
+  selectedBranchId.value = null;
+  newBranchName.value = '';
+  newBranchAddress.value = '';
+};
+
+const loadBranches = async (customerId: number) => {
+  branchesLoading.value = true;
+  try {
+    const response = await api.getManagerCustomerBranches(customerId);
+    customerBranches.value = response.items || [];
+    const hasCurrent = selectedBranchId.value
+      ? customerBranches.value.some((branch) => branch.id === selectedBranchId.value)
+      : false;
+    // UX: default to "Без филиала" to prevent accidental branch assignment.
+    selectedBranchId.value = hasCurrent ? selectedBranchId.value : null;
+  } catch (error) {
+    console.error('Failed to load customer branches', error);
+    resetBranches();
+  } finally {
+    branchesLoading.value = false;
+  }
+};
 
 const searchCustomer = async () => {
   const query = customerType.value === 'company' 
@@ -54,6 +86,8 @@ const searchCustomer = async () => {
   if (!query || query.length < 5) {
     searchStatus.value = 'idle';
     existingCustomerId.value = null;
+    foundCustomerName.value = '';
+    resetBranches();
     return;
   }
 
@@ -66,17 +100,25 @@ const searchCustomer = async () => {
         existingCustomerId.value = match.id;
         foundCustomerName.value = match.name || match.full_legal_name || 'Неизвестно';
         searchStatus.value = 'found';
+        await loadBranches(match.id);
       } else {
         existingCustomerId.value = null;
         searchStatus.value = 'not_found';
+        foundCustomerName.value = '';
+        resetBranches();
       }
     } else {
       existingCustomerId.value = null;
       searchStatus.value = 'not_found';
+      foundCustomerName.value = '';
+      resetBranches();
     }
   } catch (e) {
     console.error('Customer search failed', e);
     searchStatus.value = 'idle';
+    existingCustomerId.value = null;
+    foundCustomerName.value = '';
+    resetBranches();
   }
 };
 
@@ -111,13 +153,52 @@ const onIbanBlur = async () => {
     }
 };
 
+const createBranchForExistingCustomer = async () => {
+  if (!existingCustomerId.value || creatingBranch.value) return;
+  const deliveryAddress = newBranchAddress.value.trim();
+  if (!deliveryAddress) {
+    alert('Введите адрес филиала');
+    return;
+  }
+  creatingBranch.value = true;
+  try {
+    const created = await api.createManagerCustomerBranch(existingCustomerId.value, {
+      name: newBranchName.value.trim() || undefined,
+      delivery_address: deliveryAddress,
+      is_default: customerBranches.value.length === 0,
+    });
+    customerBranches.value = [created, ...customerBranches.value.filter((branch) => branch.id !== created.id)];
+    selectedBranchId.value = created.id;
+    customerAddress.value = created.delivery_address;
+    customerCity.value = '';
+    newBranchName.value = '';
+    newBranchAddress.value = '';
+  } catch (error) {
+    console.error('Failed to create branch', error);
+    alert('Не удалось создать филиал');
+  } finally {
+    creatingBranch.value = false;
+  }
+};
+
+const onSelectedBranchChange = () => {
+  const branch = selectedBranch.value;
+  if (!branch) return;
+  customerAddress.value = branch.delivery_address;
+  customerCity.value = '';
+};
+
 
 const submitQualify = async () => {
   isLoading.value = true;
   try {
+    const manualDeliveryAddress = [customerCity.value, customerAddress.value].filter(Boolean).join(', ').trim();
+    const resolvedDeliveryAddress = manualDeliveryAddress || selectedBranch.value?.delivery_address || undefined;
     const payload: ManagerOrderUpdatePayload = existingCustomerId.value ? {
       status: 'negotiation',
       customer_id: existingCustomerId.value,
+      customer_branch_id: selectedBranchId.value ?? null,
+      customer_delivery_address: resolvedDeliveryAddress,
       comment: managerComment.value || undefined,
       object_type: objectType.value || undefined,
       service_type: serviceType.value || undefined,
@@ -128,7 +209,7 @@ const submitQualify = async () => {
       customer_type: customerType.value,
       customer_name: customerName.value || undefined,
       customer_phone: unmaskedPhone.value || customerPhone.value || undefined,
-      customer_delivery_address: [customerCity.value, customerAddress.value].filter(Boolean).join(', ') || undefined,
+      customer_delivery_address: manualDeliveryAddress || undefined,
       customer_inn: customerType.value === 'company' ? (companyInn.value || undefined) : undefined,
       customer_full_legal_name: customerType.value === 'company' ? (companyFullLegalName.value || companyName.value || undefined) : undefined,
       customer_legal_address: customerType.value === 'company' ? (companyLegalAddress.value || undefined) : undefined,
@@ -202,6 +283,61 @@ const submitQualify = async () => {
             </a>
           </div>
         </div>
+
+        <section v-if="existingCustomerId" class="space-y-3">
+          <h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+            <span class="material-icons-round text-[14px]">account_tree</span>
+            Филиал клиента
+          </h3>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="md:col-span-2">
+              <label class="block text-xs font-semibold text-slate-500 mb-1">Выбор филиала</label>
+              <select
+                v-model="selectedBranchId"
+                class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 transition-shadow"
+                :disabled="branchesLoading"
+                @change="onSelectedBranchChange"
+              >
+                <option :value="null">Без филиала</option>
+                <option v-for="branch in customerBranches" :key="`branch-${branch.id}`" :value="branch.id">
+                  {{ branch.name || `Филиал #${branch.id}` }} — {{ branch.delivery_address }}
+                </option>
+              </select>
+              <p v-if="branchesLoading" class="mt-1 text-xs text-slate-500">Загрузка филиалов...</p>
+              <p v-else-if="!customerBranches.length" class="mt-1 text-xs text-slate-500">У клиента пока нет филиалов.</p>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-500 mb-1">Новый филиал (название)</label>
+              <input
+                v-model="newBranchName"
+                type="text"
+                class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 transition-shadow"
+                placeholder="Склад / Объект"
+              >
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-500 mb-1">Новый филиал (адрес)</label>
+              <input
+                v-model="newBranchAddress"
+                type="text"
+                class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 transition-shadow"
+                placeholder="Минск, Ленина 1"
+              >
+            </div>
+            <div class="md:col-span-2">
+              <button
+                type="button"
+                class="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors text-sm font-semibold disabled:opacity-50"
+                :disabled="creatingBranch || !existingCustomerId"
+                @click="createBranchForExistingCustomer"
+              >
+                {{ creatingBranch ? 'Создаем филиал...' : 'Создать филиал и выбрать' }}
+              </button>
+            </div>
+          </div>
+        </section>
 
         <!-- 2. Who and Where -->
         <section>

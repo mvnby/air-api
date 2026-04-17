@@ -1,5 +1,5 @@
 from typing import List, Optional, Any, Dict
-from pydantic import BaseModel, ConfigDict, field_validator, computed_field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, computed_field
 from datetime import datetime
 from enum import Enum
 from core.input_validation import (
@@ -307,6 +307,15 @@ class OrderCustomerBrief(BaseModel):
     iban: Optional[str] = None
 
 
+class OrderCustomerBranchBrief(BaseModel):
+    id: int
+    name: Optional[str] = None
+    delivery_address: str
+    contact_name: Optional[str] = None
+    contact_phone: Optional[str] = None
+    is_default: bool = False
+
+
 class OrderProductLineResponse(BaseModel):
     id: int
     product_id: Optional[int] = None
@@ -345,6 +354,7 @@ class ManagerOrderListItemResponse(BaseModel):
     comment: Optional[str] = None
     delivery_address: Optional[str] = None
     customer: Optional[OrderCustomerBrief] = None
+    customer_branch: Optional[OrderCustomerBranchBrief] = None
     installer_id: Optional[int] = None
     installer: Optional[ManagerInstallerResponse] = None
     # New fields
@@ -535,6 +545,7 @@ class ManagerOrderUpdatePayload(BaseModel):
 
     # Customer Details
     customer_id: Optional[int] = None
+    customer_branch_id: Optional[int] = None
     customer_type: Optional[str] = None
     customer_name: Optional[str] = None
     customer_phone: Optional[str] = None
@@ -673,6 +684,7 @@ class LeadUpdatePayload(BaseModel):
 
 class LeadQualifyPayload(BaseModel):
     customer_id: Optional[int] = None
+    customer_branch_id: Optional[int] = None
     name: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
@@ -793,6 +805,72 @@ class ManagerCatalogCustomerItemResponse(BaseModel):
     last_delivery_address: Optional[str] = None
     created_at: Optional[datetime]
     order_count: int
+    branches: List["ManagerCustomerBranchItemResponse"] = Field(default_factory=list)
+
+
+class ManagerCustomerBranchItemResponse(BaseModel):
+    id: int
+    customer_id: int
+    name: Optional[str] = None
+    delivery_address: str
+    contact_name: Optional[str] = None
+    contact_phone: Optional[str] = None
+    is_default: bool = False
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class ManagerCustomerBranchListResponse(BaseModel):
+    items: List[ManagerCustomerBranchItemResponse]
+
+
+class ManagerCustomerBranchCreatePayload(BaseModel):
+    name: Optional[str] = None
+    delivery_address: str
+    contact_name: Optional[str] = None
+    contact_phone: Optional[str] = None
+    is_default: bool = False
+
+    @field_validator("name", "delivery_address", "contact_name")
+    @classmethod
+    def _trim_string_fields(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+    @field_validator("delivery_address")
+    @classmethod
+    def _validate_delivery_address(cls, value: Optional[str]) -> str:
+        if not value:
+            raise ValueError("Адрес филиала обязателен")
+        return value
+
+    @field_validator("contact_phone")
+    @classmethod
+    def _validate_phone(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_phone(value)
+
+
+class ManagerCustomerBranchUpdatePayload(BaseModel):
+    name: Optional[str] = None
+    delivery_address: Optional[str] = None
+    contact_name: Optional[str] = None
+    contact_phone: Optional[str] = None
+    is_default: Optional[bool] = None
+
+    @field_validator("name", "delivery_address", "contact_name")
+    @classmethod
+    def _trim_string_fields(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+    @field_validator("contact_phone")
+    @classmethod
+    def _validate_phone(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_phone(value)
 
 
 class ManagerCatalogCustomerListResponse(BaseModel):

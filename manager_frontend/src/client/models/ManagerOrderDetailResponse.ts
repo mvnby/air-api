@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { ManagerInstallerResponse } from './ManagerInstallerResponse';
 import type { ManagerOrderDocumentItem } from './ManagerOrderDocumentItem';
+import type { OrderCustomerBranchBrief } from './OrderCustomerBranchBrief';
 import type { OrderCustomerBrief } from './OrderCustomerBrief';
 import type { OrderProductLineResponse } from './OrderProductLineResponse';
 import type { OrderServiceLineResponse } from './OrderServiceLineResponse';
@@ -26,6 +27,7 @@ export type ManagerOrderDetailResponse = {
     comment?: (string | null);
     delivery_address?: (string | null);
     customer?: (OrderCustomerBrief | null);
+    customer_branch?: (OrderCustomerBranchBrief | null);
     installer_id?: (number | null);
     installer?: (ManagerInstallerResponse | null);
     equipment_status?: string;

@@ -61,6 +61,10 @@ export type { ManagerCatalogProductItemResponse } from './models/ManagerCatalogP
 export type { ManagerCatalogProductListResponse } from './models/ManagerCatalogProductListResponse';
 export type { ManagerCatalogProductTagResponse } from './models/ManagerCatalogProductTagResponse';
 export type { ManagerCrmHealthReportResponse } from './models/ManagerCrmHealthReportResponse';
+export type { ManagerCustomerBranchCreatePayload } from './models/ManagerCustomerBranchCreatePayload';
+export type { ManagerCustomerBranchItemResponse } from './models/ManagerCustomerBranchItemResponse';
+export type { ManagerCustomerBranchListResponse } from './models/ManagerCustomerBranchListResponse';
+export type { ManagerCustomerBranchUpdatePayload } from './models/ManagerCustomerBranchUpdatePayload';
 export type { ManagerCustomerDocumentItem } from './models/ManagerCustomerDocumentItem';
 export type { ManagerCustomerDocumentListResponse } from './models/ManagerCustomerDocumentListResponse';
 export type { ManagerCustomerUpdatePayload } from './models/ManagerCustomerUpdatePayload';
@@ -105,6 +109,7 @@ export type { ManagerTariffListResponse } from './models/ManagerTariffListRespon
 export type { ManagerTariffResponse } from './models/ManagerTariffResponse';
 export type { ManagerTariffUpdatePayload } from './models/ManagerTariffUpdatePayload';
 export type { Meta } from './models/Meta';
+export type { OrderCustomerBranchBrief } from './models/OrderCustomerBranchBrief';
 export type { OrderCustomerBrief } from './models/OrderCustomerBrief';
 export type { OrderPayload } from './models/OrderPayload';
 export type { OrderProductLineResponse } from './models/OrderProductLineResponse';

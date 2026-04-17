@@ -8,6 +8,7 @@ import DealExecutionTab from './DealExecutionTab.vue';
 import type {
   ManagerOrderDetailResponse,
   ManagerOrderUpdatePayload,
+  ManagerCustomerBranchItemResponse,
   OrderProductLineResponse,
   OrderServiceLineResponse,
   ManagerOrderDocumentItem,
@@ -74,6 +75,12 @@ const customerDeliveryAddress = ref('');
 const addressSuggestions = ref<any[]>([]);
 const addressSuggestActive = ref(false);
 const addressLookupLoading = ref(false);
+const customerBranches = ref<ManagerCustomerBranchItemResponse[]>([]);
+const customerBranchId = ref<number | null>(null);
+const customerBranchesLoading = ref(false);
+const creatingCustomerBranch = ref(false);
+const newBranchName = ref('');
+const newBranchAddress = ref('');
 
 const targetCurrency = ref<PaymentCurrency | null>(null);
 const targetCurrencyAmount = ref<number | null>(null);
@@ -174,6 +181,83 @@ const assignNewCustomer = async (newCustomer: any) => {
     emit('reload', props.order.id); // Reload parent list if necessary
   } catch (error) {
     setToast(`Ошибка смены клиента: ${getApiErrorMessage(error)}`, 'error');
+  }
+};
+
+const resetCustomerBranches = () => {
+  customerBranches.value = [];
+  customerBranchId.value = null;
+  customerBranchesLoading.value = false;
+  creatingCustomerBranch.value = false;
+  newBranchName.value = '';
+  newBranchAddress.value = '';
+};
+
+const loadCustomerBranches = async (customerId: number, preferredBranchId?: number | null) => {
+  customerBranchesLoading.value = true;
+  try {
+    const response = await api.getManagerCustomerBranches(customerId);
+    customerBranches.value = response.items || [];
+    if (!customerBranches.value.length) {
+      customerBranchId.value = null;
+      return;
+    }
+    // Keep "Без филиала" when order explicitly stores null branch.
+    if (preferredBranchId === null) {
+      customerBranchId.value = null;
+      return;
+    }
+    const preferredFromOrder = typeof preferredBranchId === 'number'
+      ? customerBranches.value.find((branch) => branch.id === preferredBranchId)
+      : null;
+    const preferred = preferredFromOrder
+      || customerBranches.value.find((branch) => branch.is_default)
+      || customerBranches.value[0]
+      || null;
+    customerBranchId.value = preferred?.id || null;
+  } catch (error) {
+    console.error('Failed to load customer branches', error);
+    resetCustomerBranches();
+  } finally {
+    customerBranchesLoading.value = false;
+  }
+};
+
+const onCustomerBranchChange = (event: Event) => {
+  const value = (event.target as HTMLSelectElement).value;
+  customerBranchId.value = value ? Number(value) : null;
+  const branch = customerBranches.value.find((item) => item.id === customerBranchId.value) || null;
+  if (branch) {
+    customerDeliveryAddress.value = branch.delivery_address;
+  }
+};
+
+const createCustomerBranch = async () => {
+  const customerId = customer.value?.id;
+  if (!customerId || creatingCustomerBranch.value) return;
+  const deliveryAddress = newBranchAddress.value.trim();
+  if (!deliveryAddress) {
+    setToast('Введите адрес филиала', 'error');
+    return;
+  }
+
+  creatingCustomerBranch.value = true;
+  try {
+    const created = await api.createManagerCustomerBranch(customerId, {
+      name: newBranchName.value.trim() || undefined,
+      delivery_address: deliveryAddress,
+      is_default: customerBranches.value.length === 0,
+    });
+    customerBranches.value = [created, ...customerBranches.value.filter((branch) => branch.id !== created.id)];
+    customerBranchId.value = created.id;
+    customerDeliveryAddress.value = created.delivery_address;
+    newBranchName.value = '';
+    newBranchAddress.value = '';
+    setToast('Филиал создан', 'success');
+  } catch (error) {
+    setToast(`Ошибка создания филиала: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    creatingCustomerBranch.value = false;
   }
 };
 
@@ -665,6 +749,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   isPaid.value = order.is_paid;
   installerId.value = order.installer_id ?? null;
   customerDeliveryAddress.value = order.delivery_address || '';
+  customerBranchId.value = order.customer_branch?.id ?? null;
   measurementRequired.value = order.measurement_required ?? false;
   measurerId.value = order.measurer_id ?? null;
   measurementResult.value = order.measurement_result ?? '';
@@ -720,6 +805,13 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   // Also refresh list to be sure
   loadDocuments(order.id);
   loadContractTemplates();
+
+  const customerId = order.customer?.id;
+  if (customerId) {
+    await loadCustomerBranches(customerId, order.customer_branch?.id ?? null);
+  } else {
+    resetCustomerBranches();
+  }
 
   productLookupById.value = {};
 
@@ -963,6 +1055,7 @@ const handleSave = () => {
     comment: comment.value,
     is_paid: isPaid.value,
     installer_id: installerId.value,
+    customer_branch_id: customerBranchId.value,
     customer_delivery_address: customerDeliveryAddress.value,
     products: productLines.value.map((line) => ({
       product_id: line.product_id || 0,
@@ -1241,6 +1334,52 @@ watch(
               </option>
             </select>
           </label>
+          <div v-if="customer?.id" class="md:col-span-2 rounded-xl border border-blue-100 bg-white p-3 shadow-sm">
+            <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500">Филиал клиента</p>
+            <div class="mt-2 grid gap-2 md:grid-cols-2">
+              <label class="field-label md:col-span-2">
+                Выбор филиала
+                <select
+                  :value="customerBranchId ?? ''"
+                  class="field-input"
+                  :disabled="customerBranchesLoading"
+                  @change="onCustomerBranchChange"
+                >
+                  <option value="">Без филиала</option>
+                  <option
+                    v-for="branch in customerBranches"
+                    :key="`order-branch-${branch.id}`"
+                    :value="branch.id"
+                  >
+                    {{ branch.name || `Филиал #${branch.id}` }} — {{ branch.delivery_address }}
+                  </option>
+                </select>
+                <span v-if="customerBranchesLoading" class="text-xs text-gray-500">Загрузка филиалов...</span>
+                <span v-else-if="!customerBranches.length" class="text-xs text-gray-500">У клиента нет филиалов</span>
+              </label>
+
+              <input
+                v-model="newBranchName"
+                class="field-input"
+                placeholder="Новый филиал (название)"
+              />
+              <input
+                v-model="newBranchAddress"
+                class="field-input"
+                placeholder="Новый филиал (адрес)"
+              />
+              <div class="md:col-span-2">
+                <button
+                  type="button"
+                  class="btn-mini-outline text-xs"
+                  :disabled="creatingCustomerBranch"
+                  @click="createCustomerBranch"
+                >
+                  {{ creatingCustomerBranch ? 'Создаем филиал...' : 'Создать филиал и выбрать' }}
+                </button>
+              </div>
+            </div>
+          </div>
           <label class="field-label md:col-span-2 relative">
             Адрес объекта / доставки
             <input

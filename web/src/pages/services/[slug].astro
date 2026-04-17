@@ -2,43 +2,67 @@
 import Layout from "../../layouts/Layout.astro";
 import ContactForm from "../../components/ContactForm.vue";
 
+type ServicePage = {
+    slug: string;
+    title: string;
+    description?: string | null;
+    image?: string | null;
+};
+
 export async function getStaticPaths() {
+    const seoFallbackServices: ServicePage[] = [
+        {
+            slug: "obslujivanie-kondicionerov",
+            title: "Обслуживание кондиционеров",
+            description: "Профессиональное обслуживание сплит-систем.",
+        },
+        {
+            slug: "montaj-konditionerov",
+            title: "Установка кондиционеров",
+            description: "Профессиональный монтаж и установка.",
+        },
+    ];
+    const seoServiceSlugs = seoFallbackServices.map((service) => service.slug);
+    const resolveApiBase = () => {
+        const raw = (import.meta.env.INTERNAL_API_URL || import.meta.env.PUBLIC_API_URL || "http://localhost:8000/api/v1").replace(/\/$/, "");
+        if (raw.endsWith("/api/v1")) return raw;
+        return `${raw.replace(/\/api\/v1$/, "")}/api/v1`;
+    };
+
+    const fallbackBySlug = new Map(seoFallbackServices.map((service) => [service.slug, service]));
+    const toStaticPath = (service: ServicePage) => ({
+        params: { slug: service.slug },
+        props: { service },
+    });
+
     try {
-        const res = await fetch('http://127.0.0.1:8000/api/v1/content/services');
+        const res = await fetch(`${resolveApiBase()}/content/services`);
         if (!res.ok) {
-            console.error('Failed to fetch services for SSG');
-            return [];
+            console.error("Failed to fetch services for SSG, using fallback list", res.status);
+            return seoFallbackServices.map(toStaticPath);
         }
+
         const data = await res.json();
-        return data.map((service: any) => ({
-            params: { slug: service.slug },
-            props: { service }
-        }));
-    } catch (e) {
-        console.error('Error fetching services:', e);
-        // В случае отсутствия бэкенда во время сборки — fallback пути
-        return [
-            { 
-                params: { slug: 'obslujivanie-kondicionerov' }, 
-                props: { 
-                    service: { 
-                        title: 'Обслуживание кондиционеров', 
-                        description: 'Профессиональное обслуживание сплит-систем.',
-                        slug: 'obslujivanie-kondicionerov' 
-                    } 
-                } 
-            },
-            {
-                params: { slug: 'montaj-konditionerov' },
-                props: {
-                    service: {
-                        title: 'Установка кондиционеров',
-                        description: 'Профессиональный монтаж и установка.',
-                        slug: 'montaj-konditionerov'
-                    }
-                }
+        const bySlug = new Map<string, ServicePage>();
+        if (Array.isArray(data)) {
+            for (const item of data) {
+                if (!item || typeof item !== "object") continue;
+                const slug = typeof item.slug === "string" ? item.slug.trim() : "";
+                const title = typeof item.title === "string" ? item.title.trim() : "";
+                if (!slug || !title || !seoServiceSlugs.includes(slug)) continue;
+                bySlug.set(slug, {
+                    slug,
+                    title,
+                    description: typeof item.description === "string" ? item.description : null,
+                    image: typeof item.image === "string" ? item.image : null,
+                });
             }
-        ];
+        }
+
+        return seoServiceSlugs.map((slug) => toStaticPath(bySlug.get(slug) || fallbackBySlug.get(slug)!));
+    } catch (e) {
+        console.error("Error fetching services for SSG, using fallback list:", e);
+        return seoFallbackServices.map(toStaticPath);
     }
 }
 

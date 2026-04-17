@@ -4,7 +4,7 @@ import pytest
 from sqlmodel import select
 
 from core.config import settings
-from models import Customer, CustomerType, Lead  # noqa: F401 - ensure SQLModel metadata includes lead table
+from models import Customer, CustomerBranch, CustomerType, Lead, Order  # noqa: F401 - ensure SQLModel metadata includes lead table
 
 
 async def _auth_headers(async_client):
@@ -316,6 +316,107 @@ async def test_manager_lead_qualify_with_selected_customer_id_reuses_exact_custo
     assert target.bank_name == "Target Bank"
     assert target.bic == "AKBBBY2X"
     assert target.iban == "BY12AKBB30120000000000000000"
+
+
+@pytest.mark.asyncio
+async def test_manager_lead_qualify_with_selected_branch_sets_order_snapshot(async_client, db):
+    headers = await _auth_headers(async_client)
+
+    customer = Customer(
+        name="Branch Customer",
+        phone="+375299998877",
+        type=CustomerType.company,
+        inn="444444444",
+    )
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    branch = CustomerBranch(
+        customer_id=customer.id,
+        name="Склад Витебск",
+        delivery_address="Витебск, Ленина 10",
+        is_default=True,
+    )
+    db.add(branch)
+    await db.commit()
+    await db.refresh(branch)
+
+    create_resp = await async_client.post(
+        "/api/manager/leads",
+        headers=headers,
+        json={
+            "source": "manager",
+            "name": "Lead with selected branch",
+            "request_text": "Привязка к филиалу",
+        },
+    )
+    assert create_resp.status_code == 200
+    lead_id = create_resp.json()["id"]
+
+    qualify_resp = await async_client.post(
+        f"/api/manager/leads/{lead_id}/qualify",
+        headers=headers,
+        json={
+            "customer_id": customer.id,
+            "customer_branch_id": branch.id,
+            "order_comment": "Использовать адрес филиала",
+        },
+    )
+    assert qualify_resp.status_code == 200
+    payload = qualify_resp.json()
+    assert payload["customer_id"] == customer.id
+
+    order = await db.get(Order, payload["order_id"])
+    assert order is not None
+    assert order.customer_branch_id == branch.id
+    assert order.delivery_address == "Витебск, Ленина 10"
+
+
+@pytest.mark.asyncio
+async def test_manager_lead_qualify_rejects_branch_of_other_customer(async_client, db):
+    headers = await _auth_headers(async_client)
+
+    customer_a = Customer(name="Company A", phone="+375291010101", type=CustomerType.company, inn="555555555")
+    customer_b = Customer(name="Company B", phone="+375292020202", type=CustomerType.company, inn="666666666")
+    db.add(customer_a)
+    db.add(customer_b)
+    await db.commit()
+    await db.refresh(customer_a)
+    await db.refresh(customer_b)
+
+    branch_b = CustomerBranch(
+        customer_id=customer_b.id,
+        name="Филиал B",
+        delivery_address="Минск, Победителей 5",
+        is_default=True,
+    )
+    db.add(branch_b)
+    await db.commit()
+    await db.refresh(branch_b)
+
+    create_resp = await async_client.post(
+        "/api/manager/leads",
+        headers=headers,
+        json={
+            "source": "manager",
+            "name": "Lead invalid selected branch",
+            "request_text": "Проверка mismatch",
+        },
+    )
+    assert create_resp.status_code == 200
+    lead_id = create_resp.json()["id"]
+
+    qualify_resp = await async_client.post(
+        f"/api/manager/leads/{lead_id}/qualify",
+        headers=headers,
+        json={
+            "customer_id": customer_a.id,
+            "customer_branch_id": branch_b.id,
+        },
+    )
+    assert qualify_resp.status_code == 400
+    assert "does not belong" in str(qualify_resp.json()["detail"]["message"]).lower()
 
 
 @pytest.mark.asyncio
