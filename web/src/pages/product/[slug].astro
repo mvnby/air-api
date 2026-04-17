@@ -17,6 +17,10 @@ import { generateBentoCards } from "../../utils/bento-cards";
 
 export async function getStaticPaths() {
     const products = await getProducts();
+    if (!Array.isArray(products) || products.length === 0) {
+        throw new Error("[SSG] Product static paths generation failed: no products returned from API.");
+    }
+
     return products.map((product: any) => ({
         params: { slug: product.slug },
         props: { product },

@@ -3,11 +3,20 @@ const PUBLIC_API_URL = (import.meta.env.PUBLIC_API_URL || 'http://localhost:8000
 
 // Re-export spec formatting utilities
 export { formatSpec, formatAllSpecs, SPEC_DICT } from './spec-dictionary';
+const normalizeApiV1Base = (raw) => {
+    const base = String(raw || "").trim().replace(/\/$/, "");
+    if (!base) return "";
+    if (base.endsWith("/api/v1")) return base;
+    return `${base.replace(/\/api\/v1$/, "")}/api/v1`;
+};
+
+const uniqueNonEmpty = (values) => [...new Set(values.map((v) => String(v || "").trim()).filter(Boolean))];
+
 // Ensure standard formatting (no trailing slash)
 // INTERNAL_URL is used for SSR (Server Side Rendering) inside Docker network
-const INTERNAL_URL = (import.meta.env.INTERNAL_API_URL || 'http://app:8000/api/v1').replace(/\/$/, "");
+const INTERNAL_URL = normalizeApiV1Base(import.meta.env.INTERNAL_API_URL || 'http://app:8000/api/v1');
 // PUBLIC_URL is used for Client-side requests (Browser)
-const CLIENT_URL = (import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/\/$/, "");
+const CLIENT_URL = normalizeApiV1Base(import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1');
 
 // Define API versions relative to the base
 // Use Client-side URL if not in SSR
@@ -67,6 +76,37 @@ async function fetchJson(url, options = {}, returnNullOnError = true) {
     }
 }
 
+function getSsgApiCandidates() {
+    return uniqueNonEmpty([
+        INTERNAL_URL,
+        CLIENT_URL,
+        normalizeApiV1Base(import.meta.env.PUBLIC_API_URL),
+        normalizeApiV1Base(import.meta.env.INTERNAL_API_URL),
+        "http://localhost:8000/api/v1",
+    ]);
+}
+
+async function getCatalogStrictForSsg(params = {}) {
+    const query = buildQuery(params);
+    const candidates = getSsgApiCandidates();
+    const errors = [];
+
+    for (const baseUrl of candidates) {
+        const url = `${baseUrl}/catalog?${query}`;
+        try {
+            const data = await fetchJson(url, {}, false);
+            if (data && Array.isArray(data.items)) {
+                return data;
+            }
+            errors.push(`${url} -> invalid payload`);
+        } catch (error) {
+            errors.push(`${url} -> ${error.message}`);
+        }
+    }
+
+    throw new Error(`[SSG] Failed to fetch catalog. Tried: ${candidates.join(", ")}. Errors: ${errors.join(" | ")}`);
+}
+
 export async function getCatalog(params = {}) {
     const query = buildQuery(params);
     const url = `${API_V1}/catalog?${query}`;
@@ -90,7 +130,13 @@ export async function getFiltersConfig() {
 }
 
 export async function getProducts() {
-    // Fetch all products for SSG (limit 1000 for now)
+    // During SSG we require a strict fetch to avoid silently dropping product routes.
+    if (import.meta.env.SSR) {
+        const data = await getCatalogStrictForSsg({ limit: 1000 });
+        return data && data.items ? data.items : [];
+    }
+
+    // Client-side/runtime usage can stay resilient with soft fallback.
     const data = await getCatalog({ limit: 1000 });
     return data && data.items ? data.items : [];
 }

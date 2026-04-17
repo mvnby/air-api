@@ -67,6 +67,8 @@ export async function getStaticPaths() {
 }
 
 const { service } = Astro.props;
+const stripHtml = (value: string) => value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+const safeDescription = typeof service?.description === "string" ? stripHtml(service.description) : "";
 ---
 
 <Layout
@@ -80,8 +82,8 @@ const { service } = Astro.props;
                 <h1 class="gradient-text hero-title" style="word-break: break-word; hyphens: auto;">{service.title}</h1>
                 <p class="breadcrumbs">Главная / Услуги / {service.title}</p>
                 <div class="hero-desc">
-                    {service.description ? 
-                        <div set:html={service.description} /> 
+                    {safeDescription ? 
+                        <p>{safeDescription}</p>
                         : 
                         <p>Профессиональная климатическая услуга от «Мастера Воздуха» с гарантией качества и надежности.</p>
                     }
