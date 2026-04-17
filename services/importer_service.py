@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from parsers.base import BaseParser
 from parsers.aircond import AircondParser
+from parsers.haierproff import HaierProffParser
 from parsers.hobot import HobotParser
 from parsers.lg24 import Lg24Parser
 from parsers.onliner import OnlinerParser
@@ -113,6 +114,7 @@ class ImporterService:
         # Register available parsers
         self.parsers: List[BaseParser] = [
             AircondParser(),
+            HaierProffParser(),
             Lg24Parser(),
             HobotParser(),
             TvoyKlimatParser(),

@@ -153,6 +153,50 @@ class HobotParser(BaseParser):
         return images
 
     @classmethod
+    async def _choose_best_image_urls(cls, client: httpx.AsyncClient, image_urls: List[str]) -> List[str]:
+        """Prefer original /upload/iblock images over resize_cache where possible."""
+
+        async def exists(url: str) -> bool:
+            try:
+                resp = await client.head(url, timeout=10.0)
+                if resp.status_code == 405:
+                    resp = await client.get(url, timeout=10.0)
+                return resp.status_code == 200
+            except Exception:
+                return False
+
+        result: List[str] = []
+        seen: set[str] = set()
+        for url in image_urls:
+            best_url = url
+            match = re.search(
+                r"/upload/resize_cache/(?:webp/)?resize_cache/iblock/([^/]+)/[^/]+/([^/?#]+)",
+                url,
+                re.IGNORECASE,
+            )
+            if match:
+                folder = match.group(1)
+                filename = match.group(2)
+                filename_stem = filename.rsplit(".", 1)[0]
+                candidates = [
+                    f"{cls.BASE_URL}/upload/iblock/{folder}/{filename_stem}.jpg",
+                    f"{cls.BASE_URL}/upload/iblock/{folder}/{filename_stem}.jpeg",
+                    f"{cls.BASE_URL}/upload/iblock/{folder}/{filename_stem}.png",
+                    f"{cls.BASE_URL}/upload/iblock/{folder}/{filename_stem}.webp",
+                    f"{cls.BASE_URL}/upload/iblock/{folder}/{filename}",
+                ]
+                for candidate in candidates:
+                    if await exists(candidate):
+                        best_url = candidate
+                        break
+
+            if best_url not in seen:
+                seen.add(best_url)
+                result.append(best_url)
+
+        return result
+
+    @classmethod
     def _collect_related_urls(cls, soup: BeautifulSoup, current_url: str) -> List[str]:
         related: List[str] = []
         current_slug = cls._slug_from_url(current_url)
@@ -223,6 +267,13 @@ class HobotParser(BaseParser):
 
         metrics = self._extract_metrics(specs, title)
         images = self._collect_images(soup, str(response.url))
+        if images:
+            async with httpx.AsyncClient(
+                follow_redirects=True,
+                timeout=15.0,
+                headers=self._HEADERS,
+            ) as image_client:
+                images = await self._choose_best_image_urls(image_client, images)
         related_urls = self._collect_related_urls(soup, str(response.url))
 
         return {
