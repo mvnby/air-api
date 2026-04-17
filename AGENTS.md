@@ -158,6 +158,14 @@ Production server intentionally runs from Docker images only (no git checkout in
 3. Manual commands on prod:
    - Report only:
      - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/report_legacy_tag_links.py`
+   - Report CRM branch candidates (orders grouped by customer/address):
+     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/report_customer_branch_candidates.py --min-orders 2 --only-candidates`
+   - CRM branch backfill dry-run (safe default):
+     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/backfill_customer_branches.py --min-orders 2`
+   - CRM branch backfill execute (manual-only):
+     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/backfill_customer_branches.py --min-orders 2 --execute`
+   - CRM branch backfill for one customer (recommended first run):
+     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/backfill_customer_branches.py --customer-id 123 --execute`
    - Normalize:
      - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/normalize_legacy.py`
    - Backfill brand/series:
@@ -170,6 +178,7 @@ Production server intentionally runs from Docker images only (no git checkout in
      - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/cleanup_legacy_tag_links.py --execute`
 4. Policy:
    - Cleanup is manual and explicit only.
+   - CRM branch backfill is manual-only and starts from dry-run.
    - Post-deploy smoke-check must pass (`/health`, `/api/v1/products?limit=5`, `/api/v1/filters/config`) before considering deploy successful.
 
 ## Notes
