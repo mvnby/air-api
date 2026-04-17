@@ -28,6 +28,7 @@ KEY_MAP = {
     "Бренд": "brand",
     "Марка": "brand",
     "Производитель": "brand",
+    "Наличие": "availability",
     "Серия": "series",
     "Линейка": "series",
     "Модельный ряд": "series",
@@ -119,6 +120,8 @@ KEY_MAP = {
     "Глубина внутреннего блока": "depth_indoor",
     "Вес внутреннего блока": "weight_indoor",
     "Вес внутреннего блока, кг": "weight_indoor",
+    "Чистый вес / Вес в упаковке, кг": "weight_indoor",
+    "Внутренний блок без упаковки, кг": "weight_indoor",
     
     # --- ГАБАРИТЫ НАРУЖНЫЙ ---
     "Ширина наружного блока": "width_outdoor",
@@ -128,6 +131,8 @@ KEY_MAP = {
     "Вес наружного блока, кг": "weight_outdoor",
     "Вес внешнего блока": "weight_outdoor",
     "Вес внешнего блока, кг": "weight_outdoor",
+    "Чистый вес / вес в упаковке, кг": "weight_outdoor",
+    "Наружный блок без упаковки, кг": "weight_outdoor",
     
     # --- МОНТАЖ ---
     "Максимальная длина магистрали": "pipe_max_length",
@@ -206,6 +211,9 @@ KEY_MAP = {
     "Электропитание, Ф/В/Гц": "power_supply",
     "Электропитание (Ø / В / Гц)": "power_supply",
     "Модель": "model",
+    "Цена источника": "source_price_rub",
+    "Курс RUB/BYN (импорт)": "source_fx_rub_byn",
+    "Габаритные размеры в упаковке (Ш/Г/В), мм": "dimensions_outdoor_package_mm",
 }
 
 # Composite dimension keys: "940×1250×340" → split into width/height/depth
@@ -218,6 +226,10 @@ _DIMENSIONS_MAP = {
     "Габариты внешнего блока (ШхВхГ)": ("width_outdoor", "height_outdoor", "depth_outdoor"),
     "Габариты внешнего блока (ШхВхГ), мм": ("width_outdoor", "height_outdoor", "depth_outdoor"),
     "Габариты мм": ("width_indoor", "height_indoor", "depth_indoor"),
+    # Haierproff uses width/depth/height order (Ш/Г/В).
+    "Габаритные размеры без упаковки (Ш/Г/В), мм": ("width_outdoor", "depth_outdoor", "height_outdoor"),
+    "Внутренний блок без упаковки (Ш × В × Г), мм": ("width_indoor", "height_indoor", "depth_indoor"),
+    "Наружный блок без упаковки (Ш × В × Г), мм": ("width_outdoor", "height_outdoor", "depth_outdoor"),
 }
 
 _PREFERRED_NUMERIC_KEYS = {
@@ -230,6 +242,10 @@ _PREFERRED_NUMERIC_KEYS = {
     "power_cons_heating_min_kw",
     "power_cons_heating_max_kw",
     "area_m2",
+    "weight_indoor",
+    "weight_outdoor",
+    "source_price_rub",
+    "source_fx_rub_byn",
 }
 
 

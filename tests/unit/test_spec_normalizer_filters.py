@@ -178,3 +178,27 @@ def test_min_nom_max_values_use_nominal_component():
     assert specs["power_cons_cooling_kw"] == "0.656"
     assert specs["power_cons_heating_kw"] == "0.800"
     assert specs["inverter"] is True
+
+
+def test_haier_packaging_weight_and_import_rate_keys_are_normalized():
+    specs = normalize_specs(
+        {
+            "Габаритные размеры без упаковки (Ш/Г/В), мм": "898 × 355 × 643",
+            "Габаритные размеры в упаковке (Ш/Г/В), мм": "940 × 390 × 697",
+            "Чистый вес / Вес в упаковке, кг": "14,9 / 18,9",
+            "Чистый вес / вес в упаковке, кг": "36,5 / 38,5",
+            "Наличие": "В наличии",
+            "Цена источника": "191700 RUB",
+            "Курс RUB/BYN (импорт)": "0.0374",
+        }
+    )
+
+    assert specs["width_outdoor"] == "898"
+    assert specs["depth_outdoor"] == "355"
+    assert specs["height_outdoor"] == "643"
+    assert specs["dimensions_outdoor_package_mm"] == "940 × 390 × 697"
+    assert specs["weight_indoor"] == "14.9"
+    assert specs["weight_outdoor"] == "36.5"
+    assert specs["availability"] == "В наличии"
+    assert specs["source_price_rub"] == "191700"
+    assert specs["source_fx_rub_byn"] == "0.0374"
