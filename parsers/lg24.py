@@ -38,6 +38,15 @@ class Lg24Parser(BaseParser):
         return segments[-1] if segments else "unknown"
 
     @staticmethod
+    def _ensure_brand_prefix(title: str, brand: str = "LG") -> str:
+        normalized = re.sub(r"\s+", " ", (title or "").strip())
+        if not normalized:
+            return brand
+        if re.search(rf"\b{re.escape(brand)}\b", normalized, flags=re.IGNORECASE):
+            return normalized
+        return f"{brand} {normalized}".strip()
+
+    @staticmethod
     def _normalize_model_title(raw_title: str) -> str:
         title = re.sub(r"\s+", " ", (raw_title or "").strip())
         if not title:
@@ -62,7 +71,9 @@ class Lg24Parser(BaseParser):
             flags=re.IGNORECASE,
         )
         title = re.sub(r"\s+", " ", title).strip(" -")
-        return title or "Без названия"
+        if not title:
+            return "Без названия"
+        return Lg24Parser._ensure_brand_prefix(title, brand="LG")
 
     @staticmethod
     def _parse_first_number(value: str) -> float | None:

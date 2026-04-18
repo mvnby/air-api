@@ -103,6 +103,16 @@ def test_lg24_defaults_non_wall_indoor_type_to_poluprom():
     assert inferred["Тип внутреннего блока"] == "кассетный"
 
 
+def test_lg24_title_brand_prefix_added_when_missing():
+    normalized = Lg24Parser._normalize_model_title("Кондиционер Deluxe Pro H12S1D")
+    assert normalized == "LG Deluxe Pro H12S1D"
+
+
+def test_lg24_title_brand_prefix_not_duplicated_when_present():
+    normalized = Lg24Parser._normalize_model_title("Кондиционер LG ECO Smart PC07SQR")
+    assert normalized == "LG ECO Smart PC07SQR"
+
+
 @pytest.mark.asyncio
 async def test_lg24_parse_sets_fixed_lg_brand(monkeypatch):
     html = """
