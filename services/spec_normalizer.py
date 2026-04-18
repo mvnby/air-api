@@ -447,6 +447,49 @@ def _normalize_indoor_type_kind(*values: Any) -> str | None:
     return None
 
 
+def _normalize_system_type(type_value: Any, indoor_type_value: Any) -> str | None:
+    type_text = str(type_value or "").strip().lower().replace("ё", "е")
+    indoor_text = str(indoor_type_value or "").strip().lower().replace("ё", "е")
+    type_text = type_text.replace("—", "-")
+    indoor_text = indoor_text.replace("—", "-")
+    type_text = re.sub(r"\s+", " ", type_text)
+    indoor_text = re.sub(r"\s+", " ", indoor_text)
+    combined = f"{type_text} {indoor_text}".strip()
+    if not combined:
+        return None
+
+    if "наружн" in combined and "блок" in combined:
+        return "наружный блок"
+    if "внутренн" in combined and "блок" in combined:
+        return "внутренний блок"
+    if "мульти" in combined:
+        return "мульти-сплит-система"
+
+    industrial_markers = (
+        "полупром",
+        "полупромышлен",
+        "промышлен",
+        "кассет",
+        "каналь",
+        "колон",
+        "напольно",
+        "подпотолоч",
+        "потолоч",
+        "floor-ceiling",
+        "floor ceiling",
+    )
+    if any(marker in combined for marker in industrial_markers):
+        return "полупромышленный кондиционер"
+
+    if "сплит" in combined or "кондиционер" in combined:
+        return "сплит-система"
+
+    if "настенн" in combined:
+        return "сплит-система"
+
+    return None
+
+
 def _classify_wifi_value(value: Any) -> str | None:
     if isinstance(value, bool):
         return "builtin" if value else "none"
@@ -684,6 +727,13 @@ def normalize_specs(
         if not sys_key or sys_key in new_specs:
             continue
         new_specs[sys_key] = clean_value(sys_key, raw_val, keep_units=keep_units)
+
+    normalized_type = _normalize_system_type(
+        new_specs.get("type"),
+        new_specs.get("indoor_type"),
+    )
+    if normalized_type:
+        new_specs["type"] = normalized_type
 
     current_brand = str(new_specs.get("brand", "")).strip()
     if not current_brand or is_invalid_brand_name(current_brand):

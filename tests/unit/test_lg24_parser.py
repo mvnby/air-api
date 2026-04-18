@@ -86,6 +86,23 @@ def test_lg24_keeps_poluprom_type_when_present_in_breadcrumb():
     assert inferred["Тип внутреннего блока"] == "канальный"
 
 
+def test_lg24_defaults_non_wall_indoor_type_to_poluprom():
+    html = """
+    <nav class="woocommerce-breadcrumb">
+      <a href="/">Главная</a> /
+      <a href="/catalog/cassette">Кассетный блок</a> /
+      UT48R
+    </nav>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    parts = Lg24Parser._extract_breadcrumb_parts(soup)
+    inferred = Lg24Parser._infer_type_specs_from_breadcrumb(parts)
+
+    assert inferred["Тип"] == "полупромышленный кондиционер"
+    assert inferred["Тип внутреннего блока"] == "кассетный"
+
+
 @pytest.mark.asyncio
 async def test_lg24_parse_sets_fixed_lg_brand(monkeypatch):
     html = """

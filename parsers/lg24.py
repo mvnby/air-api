@@ -174,7 +174,11 @@ class Lg24Parser(BaseParser):
             elif "колон" in p:
                 inferred.setdefault("Тип внутреннего блока", "колонный")
         if "Тип внутреннего блока" in inferred and "Тип" not in inferred:
-            inferred["Тип"] = "сплит-система"
+            indoor = inferred.get("Тип внутреннего блока", "")
+            if indoor == "настенный":
+                inferred["Тип"] = "сплит-система"
+            else:
+                inferred["Тип"] = "полупромышленный кондиционер"
         return inferred
 
     @staticmethod

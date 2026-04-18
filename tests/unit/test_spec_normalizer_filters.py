@@ -218,3 +218,24 @@ def test_dynamic_temp_and_pipe_aliases_are_normalized():
     assert specs["temp_range_heat"] == "-18 ~ 18"
     assert specs["pipe_liquid"] == "6.35"
     assert specs["pipe_gas"] == "9.52"
+
+
+def test_type_canonicalization_marks_cassette_split_as_semi_industrial():
+    specs = normalize_specs(
+        {
+            "Тип кондиционера": "4-поточная кассетная сплит-система",
+            "Тип внутреннего блока": "кассетный",
+        }
+    )
+
+    assert specs["type"] == "полупромышленный кондиционер"
+
+
+def test_type_fallback_from_indoor_type_sets_semi_industrial():
+    specs = normalize_specs(
+        {
+            "Тип внутреннего блока": "канальный",
+        }
+    )
+
+    assert specs["type"] == "полупромышленный кондиционер"
