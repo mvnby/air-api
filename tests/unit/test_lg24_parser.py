@@ -1,4 +1,5 @@
 from bs4 import BeautifulSoup
+import pytest
 
 from parsers.lg24 import Lg24Parser
 
@@ -83,3 +84,43 @@ def test_lg24_keeps_poluprom_type_when_present_in_breadcrumb():
 
     assert inferred["Тип"] == "полупромышленный кондиционер"
     assert inferred["Тип внутреннего блока"] == "канальный"
+
+
+@pytest.mark.asyncio
+async def test_lg24_parse_sets_fixed_lg_brand(monkeypatch):
+    html = """
+    <html>
+      <body>
+        <h1 class="product_title">4-поточный кассетный тип Ultra Inverter UT48R/UU48WR</h1>
+        <meta itemprop="price" content="12345" />
+        <section id="tab1">
+          <dl><dt>Мощность охлаждения (Мин/Ном/Макс), кВт</dt><dd>5.0 / 13.4 / 14.0</dd></dl>
+        </section>
+      </body>
+    </html>
+    """
+
+    class _Resp:
+        status_code = 200
+        text = html
+        url = "https://lg24.by/product/ut48r-uu48wr/"
+
+    class _FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url):
+            return _Resp()
+
+    monkeypatch.setattr("parsers.lg24.httpx.AsyncClient", _FakeClient)
+
+    parser = Lg24Parser()
+    parsed = await parser.parse("https://lg24.by/product/ut48r-uu48wr/")
+
+    assert parsed["specs"]["Бренд"] == "LG"

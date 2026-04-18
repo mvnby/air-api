@@ -288,6 +288,9 @@ class Lg24Parser(BaseParser):
         description = description_el.get_text("\n", strip=True) if description_el else ""
 
         specs = self._extract_specs(soup)
+        # lg24.by catalog is LG-only; force canonical brand to avoid
+        # mis-detection from series words in title (e.g. "Ultra").
+        specs.setdefault("Бренд", "LG")
         breadcrumb_parts = self._extract_breadcrumb_parts(soup)
         for key, value in self._infer_type_specs_from_breadcrumb(breadcrumb_parts).items():
             specs.setdefault(key, value)

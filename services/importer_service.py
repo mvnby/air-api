@@ -165,7 +165,12 @@ class ImporterService:
                 return parser
         return None
 
-    async def import_product(self, url: str, update_existing: bool = False) -> dict:
+    async def import_product(
+        self,
+        url: str,
+        update_existing: bool = False,
+        collect_related: bool = False,
+    ) -> dict:
         """
         Orchestrates the import process: find parser -> parse -> save to DB.
         Returns a dict: {'product': Product, 'related_urls': List[str]}
@@ -184,7 +189,21 @@ class ImporterService:
                 )
                 if has_category_tag:
                     # Keep fast path for already healthy records.
-                    return {"product": existing, "related_urls": []}
+                    related_urls: List[str] = []
+                    if collect_related:
+                        parser = self.get_parser(url)
+                        if parser:
+                            try:
+                                parsed = await parser.parse(url)
+                                related_urls = list(parsed.get("related_urls") or [])
+                            except Exception as exc:
+                                logger.warning(
+                                    "Failed to collect related URLs for existing product %s (%s): %s",
+                                    existing.id,
+                                    url,
+                                    exc,
+                                )
+                    return {"product": existing, "related_urls": related_urls}
 
                 # Self-heal path: if product exists but lacks catalog category tags,
                 # force update flow to refresh derived tags/specs.
@@ -409,7 +428,11 @@ class ImporterService:
             if url in processed_urls: continue
             
             try:
-                res = await self.import_product(url, update_existing=update_existing)
+                res = await self.import_product(
+                    url,
+                    update_existing=update_existing,
+                    collect_related=with_related,
+                )
                 product = res["product"]
                 # Only add to 'success' if it's a NEW import (or just count it)
                 # To keep it simple, we count all as success if they are in DB now.
