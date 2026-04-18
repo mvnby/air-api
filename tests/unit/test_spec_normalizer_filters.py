@@ -64,6 +64,14 @@ def test_dynamic_wifi_key_mapping_from_onliner_specs():
     assert specs["__filter_wifi_builtin"] is False
 
 
+def test_wifi_option_value_maps_to_ready():
+    specs = normalize_specs({"Wi-Fi": "Опция"})
+
+    assert specs["wifi_ready"] == "ready"
+    assert specs["__filter_wifi"] is True
+    assert specs["__filter_wifi_builtin"] is False
+
+
 def test_brand_normalization_and_auto_tag_slug_output():
     auto_slugs = []
     specs = normalize_specs(
@@ -108,16 +116,20 @@ def test_multisplit_russian_keys_are_normalized():
 def test_indoor_type_filter_key_for_semi_industrial():
     cassette = normalize_specs({"Тип внутреннего блока": "кассетный"})
     assert cassette["__filter_indoor_type"] == "cassette"
+    assert cassette["indoor_type"] == "кассетный"
 
     duct = normalize_specs({"indoor_type": "Канальный"})
     assert duct["__filter_indoor_type"] == "duct"
+    assert duct["indoor_type"] == "канальный"
 
     floor_ceiling = normalize_specs({"Тип внутреннего блока": "напольно-потолочный"})
     assert floor_ceiling["__filter_indoor_type"] == "floor_ceiling"
+    assert floor_ceiling["indoor_type"] == "напольно-потолочный"
 
     universal = normalize_specs({"Тип внутреннего блока": "универсальный"})
     assert universal["__filter_indoor_type"] == "floor_ceiling"
     assert universal["type"] == "полупромышленный кондиционер"
+    assert universal["indoor_type"] == "напольно-потолочный"
 
 
 def test_hobot_power_and_controls_keys_are_normalized():

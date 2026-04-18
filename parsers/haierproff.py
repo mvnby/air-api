@@ -20,6 +20,11 @@ class HaierProffParser(BaseParser):
         ),
         "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
     }
+    _WIFI_TITLE_MARKERS = ("wi-fi", "wifi", "evo wi-fi", "evo wifi")
+    _WIFI_ICON_MARKERS = (
+        "44cdb19d3e20378d090e233fdcc44d44",  # evo wi-fi icon (png)
+        "4bc4d72914fc0e1db789283629505b2b",  # wifi icon (svg)
+    )
 
     def supports(self, url: str) -> bool:
         return "haierproff.ru" in url and "/catalog/cond/products/" in url
@@ -189,6 +194,44 @@ class HaierProffParser(BaseParser):
                 specs[key] = value
         return specs
 
+    @classmethod
+    def _extract_feature_entries(cls, soup: BeautifulSoup) -> List[Dict[str, str]]:
+        entries: List[Dict[str, str]] = []
+        for item in soup.select(".feature-s-list__item"):
+            img_el = item.select_one(".feature-s__icon img")
+            title_el = item.select_one(".feature-s__title")
+            desc_el = item.select_one(".feature-s__desc")
+            img_src = (img_el.get("src", "") if img_el else "").strip()
+            title = (title_el.get_text(" ", strip=True) if title_el else "").strip()
+            desc = (desc_el.get_text(" ", strip=True) if desc_el else "").strip()
+            entries.append(
+                {
+                    "img": img_src,
+                    "title": title,
+                    "desc": desc,
+                    "text": " ".join(part for part in (title, desc) if part).strip(),
+                }
+            )
+        return entries
+
+    @classmethod
+    def _feature_entries_indicate_wifi(cls, entries: List[Dict[str, str]]) -> bool:
+        for entry in entries:
+            text = str(entry.get("text", "")).lower().replace("ё", "е")
+            if any(marker in text for marker in cls._WIFI_TITLE_MARKERS):
+                return True
+            img_src = str(entry.get("img", "")).lower()
+            if any(marker in img_src for marker in cls._WIFI_ICON_MARKERS):
+                return True
+        return False
+
+    @staticmethod
+    def _should_assume_wifi_option(specs: Dict[str, str]) -> bool:
+        # User rule: if wifi isn't detectable, keep conservative "ready/option"
+        # for non-outdoor units.
+        unit_type = str(specs.get("Тип", "")).lower().replace("ё", "е")
+        return "наруж" not in unit_type
+
     @staticmethod
     def _extract_metrics(specs: Dict[str, str], title: str) -> Dict[str, Any]:
         metrics: Dict[str, Any] = {
@@ -276,7 +319,12 @@ class HaierProffParser(BaseParser):
         parsed_price = self._parse_first_number(price_text)
         price = int(round(parsed_price)) if parsed_price is not None else 0
 
-        features = [item.get_text(" ", strip=True) for item in soup.select(".feature-s-list__item") if item.get_text(" ", strip=True)]
+        feature_entries = self._extract_feature_entries(soup)
+        features = [
+            entry["text"]
+            for entry in feature_entries
+            if entry.get("text")
+        ]
         description_parts = []
         if features:
             description_parts.append("Преимущества: " + ", ".join(features))
@@ -307,6 +355,13 @@ class HaierProffParser(BaseParser):
             if key == "Тип внутреннего блока" and current == "настенный" and incoming != current:
                 specs[key] = value
                 continue
+
+        wifi_present = self._feature_entries_indicate_wifi(feature_entries)
+        if wifi_present:
+            specs.setdefault("Wi-Fi", "Да")
+        elif "Wi-Fi" not in specs and "Wi-Fi Ready" not in specs and self._should_assume_wifi_option(specs):
+            specs["Wi-Fi"] = "Опция"
+
         metrics = self._extract_metrics(specs, title)
         images = self._collect_images(soup, str(response.url))
         related_urls = self._collect_related_urls(soup, str(response.url))

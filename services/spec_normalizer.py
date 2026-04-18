@@ -312,6 +312,28 @@ def clean_value(key: str, val: Any, keep_units: bool = True) -> Any:
             return False
         return val
 
+    if key == "indoor_type":
+        text = val_lower.replace("—", "-")
+        text = re.sub(r"\s+", " ", text)
+        if "каналь" in text:
+            return "канальный"
+        if "кассет" in text:
+            return "кассетный"
+        if (
+            "напольно" in text
+            or "подпотолоч" in text
+            or "потолоч" in text
+            or "универсальн" in text
+            or "floor-ceiling" in text
+            or "floor ceiling" in text
+        ):
+            return "напольно-потолочный"
+        if "колон" in text or "console" in text or "column" in text:
+            return "колонный"
+        if "настенн" in text or "wall" in text:
+            return "настенный"
+        return text
+
     if key in boolean_keys:
         if key == "inverter":
             if "инвертор" in val_lower or "inverter" in val_lower:
@@ -516,6 +538,7 @@ def _classify_wifi_value(value: Any) -> str | None:
         "приобрета",
         "отдельно",
         "опцион",
+        "опци",
         "ready",
         "модул",
         "поддержива",

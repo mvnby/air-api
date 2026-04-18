@@ -28,3 +28,16 @@ def test_haierproff_infers_household_for_wall_from_title_only():
     assert inferred["Тип"] == "Сплит-система"
     assert inferred["Тип внутреннего блока"] == "Настенный"
 
+
+def test_haierproff_detects_wifi_by_feature_title_and_icon():
+    entries = [
+        {"img": "/images/uploads/2023/04/12/resize_cache/46_1/44cdb19d3e20378d090e233fdcc44d44.png", "title": "", "desc": "", "text": ""},
+        {"img": "", "title": "Управление Wi-Fi (Стандартно)", "desc": "", "text": "Управление Wi-Fi (Стандартно)"},
+    ]
+
+    assert HaierProffParser._feature_entries_indicate_wifi(entries) is True
+
+
+def test_haierproff_wifi_fallback_is_option_for_non_outdoor():
+    assert HaierProffParser._should_assume_wifi_option({"Тип": "Сплит-система"}) is True
+    assert HaierProffParser._should_assume_wifi_option({"Тип": "Наружный блок"}) is False
