@@ -204,8 +204,10 @@ def test_haier_packaging_weight_and_import_rate_keys_are_normalized():
     assert specs["weight_indoor"] == "14.9"
     assert specs["weight_outdoor"] == "36.5"
     assert specs["availability"] == "В наличии"
-    assert specs["source_price_rub"] == "191700"
-    assert specs["source_fx_rub_byn"] == "0.0374"
+    assert "source_price_rub" not in specs
+    assert "source_fx_rub_byn" not in specs
+    assert "Цена источника" not in specs
+    assert "Курс RUB/BYN (импорт)" not in specs
 
 
 def test_dynamic_temp_and_pipe_aliases_are_normalized():

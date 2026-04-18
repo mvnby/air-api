@@ -73,11 +73,6 @@ async def _normalize_import_price_to_byn(session, *, data: dict, source_url: str
     converted_price = (source_price * rub_byn_rate).quantize(Decimal("1"))
     data["price"] = int(converted_price)
 
-    specs = dict(data.get("specs") or {})
-    specs["Цена источника"] = f"{int(source_price)} RUB"
-    specs["Курс RUB/BYN (импорт)"] = str(rub_byn_rate)
-    data["specs"] = specs
-
 
 async def _ensure_tag_group(
     session,

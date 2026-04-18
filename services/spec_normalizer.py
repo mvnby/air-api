@@ -213,8 +213,6 @@ KEY_MAP = {
     "Электропитание, Ф/В/Гц": "power_supply",
     "Электропитание (Ø / В / Гц)": "power_supply",
     "Модель": "model",
-    "Цена источника": "source_price_rub",
-    "Курс RUB/BYN (импорт)": "source_fx_rub_byn",
     "Габаритные размеры в упаковке (Ш/Г/В), мм": "dimensions_outdoor_package_mm",
 }
 
@@ -246,8 +244,13 @@ _PREFERRED_NUMERIC_KEYS = {
     "area_m2",
     "weight_indoor",
     "weight_outdoor",
+}
+
+_DROPPED_SPEC_KEYS = {
     "source_price_rub",
     "source_fx_rub_byn",
+    "Цена источника",
+    "Курс RUB/BYN (импорт)",
 }
 
 
@@ -729,6 +732,10 @@ def normalize_specs(
         if not sys_key or sys_key in new_specs:
             continue
         new_specs[sys_key] = clean_value(sys_key, raw_val, keep_units=keep_units)
+
+    # Source price/rate are import internals; never persist in product specs.
+    for dropped_key in _DROPPED_SPEC_KEYS:
+        new_specs.pop(dropped_key, None)
 
     normalized_type = _normalize_system_type(
         new_specs.get("type"),
