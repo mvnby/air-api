@@ -149,8 +149,10 @@ KEY_MAP = {
     "Максимальная суммарная длина магистрали": "multi_max_total_pipe_length",
     "Диаметр жидкостной трубы": "pipe_liquid",
     "Диаметр жидкостной линии, мм": "pipe_liquid",
+    "Диаметр труб жидкого хладагента, мм": "pipe_liquid",
     "Диаметр газовой трубы": "pipe_gas",
     "Диаметр газовой линии, мм": "pipe_gas",
+    "Диаметр труб газообразного хладагента, мм": "pipe_gas",
     
     # --- ТЕМПЕРАТУРЫ ---
     "Рабочая температура при охлаждении": "temp_range_cool",
@@ -497,11 +499,20 @@ def _resolve_dynamic_system_key(key: Any) -> str | None:
         text.replace("‑", "-")
         .replace("–", "-")
         .replace("—", "-")
+        .replace("⁰", "°")
         .replace("_", " ")
     )
     text = re.sub(r"\s+", " ", text)
     if "wifi" in text or "wi-fi" in text or "wi fi" in text:
         return "wifi_ready"
+    if "для работы в режиме охлаждения" in text:
+        return "temp_range_cool"
+    if "для работы в режиме нагрева" in text or "для работы в режиме обогрева" in text:
+        return "temp_range_heat"
+    if "диаметр труб жидкого хладагента" in text:
+        return "pipe_liquid"
+    if "диаметр труб газообразного хладагента" in text:
+        return "pipe_gas"
     return None
 
 

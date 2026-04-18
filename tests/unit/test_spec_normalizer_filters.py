@@ -202,3 +202,19 @@ def test_haier_packaging_weight_and_import_rate_keys_are_normalized():
     assert specs["availability"] == "В наличии"
     assert specs["source_price_rub"] == "191700"
     assert specs["source_fx_rub_byn"] == "0.0374"
+
+
+def test_dynamic_temp_and_pipe_aliases_are_normalized():
+    specs = normalize_specs(
+        {
+            "для работы в режиме охлаждения, ⁰C CТ": "-15 ~ 48",
+            "Для работы в режиме нагрева , ⁰C ВТ": "-18 ~ 18",
+            "Диаметр труб жидкого хладагента, мм": "6.35",
+            "Диаметр труб газообразного хладагента, мм": "9.52",
+        }
+    )
+
+    assert specs["temp_range_cool"] == "-15 ~ 48"
+    assert specs["temp_range_heat"] == "-18 ~ 18"
+    assert specs["pipe_liquid"] == "6.35"
+    assert specs["pipe_gas"] == "9.52"

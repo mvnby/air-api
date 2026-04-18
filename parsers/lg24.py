@@ -20,6 +20,13 @@ class Lg24Parser(BaseParser):
         ),
         "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
     }
+    _DOC_SPEC_KEY_MARKERS = (
+        "руководство",
+        "инструкция",
+        "manual",
+        "user guide",
+        "паспорт",
+    )
 
     def supports(self, url: str) -> bool:
         return "lg24.by" in url
@@ -106,12 +113,69 @@ class Lg24Parser(BaseParser):
     @classmethod
     def _collect_related_urls(cls, soup: BeautifulSoup, current_url: str) -> List[str]:
         related: List[str] = []
-        for link in soup.select(".related.products a[href*='/product/'], ul.products a[href*='/product/']"):
+        # Use explicit product tag list to avoid noisy broad related grids.
+        for link in soup.select("ul.item-tags a[href*='/product/']"):
             href = cls._to_abs_url(link.get("href", ""), current_url)
             if not href or href == current_url or href in related:
                 continue
             related.append(href)
         return related
+
+    @classmethod
+    def _should_skip_spec(cls, key: str, value: str) -> bool:
+        key_l = key.lower().strip()
+        value_l = value.lower().strip()
+        if value_l in {"", "-", "—"}:
+            return True
+        # Until file attachments are supported, documentation rows are noise.
+        if any(marker in key_l for marker in cls._DOC_SPEC_KEY_MARKERS):
+            return True
+        if "скача" in value_l or value_l in {"download"}:
+            if any(marker in key_l for marker in cls._DOC_SPEC_KEY_MARKERS):
+                return True
+        return False
+
+    @staticmethod
+    def _extract_breadcrumb_parts(soup: BeautifulSoup) -> List[str]:
+        breadcrumb = soup.select_one(".woocommerce-breadcrumb")
+        if not breadcrumb:
+            return []
+        parts: List[str] = []
+        for node in breadcrumb.children:
+            text = node.get_text(" ", strip=True) if hasattr(node, "get_text") else str(node).strip()
+            text = re.sub(r"\s+", " ", text).strip()
+            if not text:
+                continue
+            if re.fullmatch(r"[/›»>]+", text):
+                continue
+            parts.append(text)
+        return parts
+
+    @staticmethod
+    def _infer_type_specs_from_breadcrumb(parts: List[str]) -> Dict[str, str]:
+        inferred: Dict[str, str] = {}
+        for part in parts:
+            p = part.lower().strip()
+            if "кондиционеры для дома" in p or "для дома" in p:
+                inferred.setdefault("Тип", "сплит-система")
+            elif "мульти" in p:
+                inferred.setdefault("Тип", "мульти-сплит-система")
+            elif "полупром" in p or "полупромышлен" in p:
+                inferred.setdefault("Тип", "полупромышленный кондиционер")
+
+            if "настенн" in p:
+                inferred.setdefault("Тип внутреннего блока", "настенный")
+            elif "каналь" in p:
+                inferred.setdefault("Тип внутреннего блока", "канальный")
+            elif "кассет" in p:
+                inferred.setdefault("Тип внутреннего блока", "кассетный")
+            elif "напольно" in p or "потолоч" in p:
+                inferred.setdefault("Тип внутреннего блока", "напольно-потолочный")
+            elif "колон" in p:
+                inferred.setdefault("Тип внутреннего блока", "колонный")
+        if "Тип внутреннего блока" in inferred and "Тип" not in inferred:
+            inferred["Тип"] = "сплит-система"
+        return inferred
 
     @staticmethod
     def _extract_specs(soup: BeautifulSoup) -> Dict[str, str]:
@@ -125,7 +189,7 @@ class Lg24Parser(BaseParser):
                 continue
             key = dt.get_text(" ", strip=True).replace("\xa0", " ").rstrip(":")
             value = dd.get_text(" ", strip=True).replace("\xa0", " ")
-            if key and value:
+            if key and value and not Lg24Parser._should_skip_spec(key, value):
                 specs[key] = value
 
         # Fallback source: standard WooCommerce attributes table.
@@ -137,7 +201,7 @@ class Lg24Parser(BaseParser):
                     continue
                 key = th.get_text(" ", strip=True).replace("\xa0", " ").rstrip(":")
                 value = td.get_text(" ", strip=True).replace("\xa0", " ")
-                if key and value:
+                if key and value and not Lg24Parser._should_skip_spec(key, value):
                     specs[key] = value
 
         return specs
@@ -224,6 +288,9 @@ class Lg24Parser(BaseParser):
         description = description_el.get_text("\n", strip=True) if description_el else ""
 
         specs = self._extract_specs(soup)
+        breadcrumb_parts = self._extract_breadcrumb_parts(soup)
+        for key, value in self._infer_type_specs_from_breadcrumb(breadcrumb_parts).items():
+            specs.setdefault(key, value)
         if availability:
             specs.setdefault("Наличие", availability)
 

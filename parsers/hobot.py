@@ -293,8 +293,9 @@ class HobotParser(BaseParser):
                 description = text
 
         specs = self._extract_specs(soup)
-        if availability:
-            specs.setdefault("Наличие", availability)
+        # Presence from source page is decorative and can be stale.
+        # Real stock is synced from price mapping, so don't store it in specs.
+        specs.pop("Наличие", None)
 
         metrics = self._extract_metrics(specs, title)
         images = self._collect_images(soup, str(response.url))
