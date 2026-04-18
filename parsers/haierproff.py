@@ -73,6 +73,50 @@ class HaierProffParser(BaseParser):
         return inferred
 
     @staticmethod
+    def _extract_breadcrumb_parts(soup: BeautifulSoup) -> List[str]:
+        parts: List[str] = []
+        for node in soup.select(".breadcrumbs .breadcrumbs__item"):
+            text = re.sub(r"\s+", " ", node.get_text(" ", strip=True)).strip()
+            if text:
+                parts.append(text)
+        return parts
+
+    @staticmethod
+    def _infer_type_specs_from_breadcrumb_and_title(
+        *,
+        title: str,
+        breadcrumb_parts: List[str],
+    ) -> Dict[str, str]:
+        inferred: Dict[str, str] = {}
+        combined = " ".join([title, *breadcrumb_parts]).lower().replace("ё", "е")
+
+        if "полупром" in combined or "промышлен" in combined:
+            inferred.setdefault("Тип", "Полупромышленный кондиционер")
+        elif "мульти" in combined:
+            inferred.setdefault("Тип", "Мульти-сплит-система")
+
+        if "универсальн" in combined:
+            inferred.setdefault("Тип внутреннего блока", "Напольно-потолочный")
+        elif "кассет" in combined:
+            inferred.setdefault("Тип внутреннего блока", "Кассетный")
+        elif "каналь" in combined:
+            inferred.setdefault("Тип внутреннего блока", "Канальный")
+        elif "колон" in combined:
+            inferred.setdefault("Тип внутреннего блока", "Колонный")
+        elif "напольно" in combined or "потолоч" in combined or "подпотолоч" in combined:
+            inferred.setdefault("Тип внутреннего блока", "Напольно-потолочный")
+        elif "настенн" in combined:
+            inferred.setdefault("Тип внутреннего блока", "Настенный")
+
+        if "Тип внутреннего блока" in inferred and "Тип" not in inferred:
+            if inferred["Тип внутреннего блока"] == "Настенный":
+                inferred["Тип"] = "Сплит-система"
+            else:
+                inferred["Тип"] = "Полупромышленный кондиционер"
+
+        return inferred
+
+    @staticmethod
     def _parse_first_number(value: str) -> float | None:
         if not value:
             return None
@@ -245,6 +289,24 @@ class HaierProffParser(BaseParser):
             specs.setdefault("Серия", series)
         for key, value in self._infer_type_specs_from_url(str(response.url)).items():
             specs.setdefault(key, value)
+        breadcrumb_parts = self._extract_breadcrumb_parts(soup)
+        for key, value in self._infer_type_specs_from_breadcrumb_and_title(
+            title=title,
+            breadcrumb_parts=breadcrumb_parts,
+        ).items():
+            current = str(specs.get(key, "")).strip().lower()
+            incoming = str(value).strip().lower()
+            if not current:
+                specs[key] = value
+                continue
+
+            # Breadcrumb/title inference is usually more specific than URL fallback.
+            if key == "Тип" and current in {"сплит-система", "split-system"} and incoming != current:
+                specs[key] = value
+                continue
+            if key == "Тип внутреннего блока" and current == "настенный" and incoming != current:
+                specs[key] = value
+                continue
         metrics = self._extract_metrics(specs, title)
         images = self._collect_images(soup, str(response.url))
         related_urls = self._collect_related_urls(soup, str(response.url))

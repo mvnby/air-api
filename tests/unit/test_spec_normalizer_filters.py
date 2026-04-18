@@ -115,6 +115,10 @@ def test_indoor_type_filter_key_for_semi_industrial():
     floor_ceiling = normalize_specs({"Тип внутреннего блока": "напольно-потолочный"})
     assert floor_ceiling["__filter_indoor_type"] == "floor_ceiling"
 
+    universal = normalize_specs({"Тип внутреннего блока": "универсальный"})
+    assert universal["__filter_indoor_type"] == "floor_ceiling"
+    assert universal["type"] == "полупромышленный кондиционер"
+
 
 def test_hobot_power_and_controls_keys_are_normalized():
     specs = normalize_specs(

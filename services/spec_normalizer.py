@@ -438,6 +438,7 @@ def _normalize_indoor_type_kind(*values: Any) -> str | None:
             "напольно" in text
             or "подпотолоч" in text
             or "потолоч" in text
+            or "универсальн" in text
             or "floor-ceiling" in text
             or "floor ceiling" in text
         ):
@@ -475,6 +476,7 @@ def _normalize_system_type(type_value: Any, indoor_type_value: Any) -> str | Non
         "напольно",
         "подпотолоч",
         "потолоч",
+        "универсальн",
         "floor-ceiling",
         "floor ceiling",
     )
