@@ -13,6 +13,7 @@ from models.content import GlobalConfig
 
 _RATE_CACHE_VALUE_USD: Optional[Decimal] = None
 _RATE_CACHE_VALUE_EUR: Optional[Decimal] = None
+_RATE_CACHE_VALUE_RUB: Optional[Decimal] = None
 _RATE_CACHE_AT: Optional[datetime] = None
 _RATE_CACHE_TTL = timedelta(minutes=10)
 
@@ -30,6 +31,7 @@ def _parse_decimal(value: str | None) -> Optional[Decimal]:
 class FxRateService:
     NBRB_USD_URL = "https://api.nbrb.by/exrates/rates/USD?parammode=2"
     NBRB_EUR_URL = "https://api.nbrb.by/exrates/rates/EUR?parammode=2"
+    NBRB_RUB_URL = "https://api.nbrb.by/exrates/rates/RUB?parammode=2"
 
     @staticmethod
     async def _get_config(session: AsyncSession, key: str) -> Optional[GlobalConfig]:
@@ -37,8 +39,13 @@ class FxRateService:
         return res.scalar_one_or_none()
 
     @staticmethod
-    async def _get_manual_rate(session: AsyncSession) -> Optional[Decimal]:
+    async def _get_manual_usd_rate(session: AsyncSession) -> Optional[Decimal]:
         cfg = await FxRateService._get_config(session, "fx_rate_usd_byn")
+        return _parse_decimal(cfg.value if cfg else None)
+
+    @staticmethod
+    async def _get_manual_rub_rate(session: AsyncSession) -> Optional[Decimal]:
+        cfg = await FxRateService._get_config(session, "fx_rate_rub_byn")
         return _parse_decimal(cfg.value if cfg else None)
 
     @staticmethod
@@ -61,47 +68,60 @@ class FxRateService:
         return parsed
 
     @staticmethod
-    async def _fetch_nbrb_rates() -> tuple[Optional[Decimal], Optional[Decimal]]:
-        global _RATE_CACHE_VALUE_USD, _RATE_CACHE_VALUE_EUR, _RATE_CACHE_AT
+    def _parse_nbrb_rate_payload(payload: dict | None) -> Optional[Decimal]:
+        data = payload or {}
+        rate_raw = data.get("Cur_OfficialRate")
+        scale_raw = data.get("Cur_Scale", 1)
+        rate = _parse_decimal(str(rate_raw) if rate_raw is not None else None)
+        scale = _parse_decimal(str(scale_raw) if scale_raw is not None else "1")
+        if rate is None or scale is None or scale == 0:
+            return None
+        return (rate / scale).quantize(Decimal("0.0001"))
+
+    @staticmethod
+    async def _fetch_nbrb_rates() -> tuple[Optional[Decimal], Optional[Decimal], Optional[Decimal]]:
+        global _RATE_CACHE_VALUE_USD, _RATE_CACHE_VALUE_EUR, _RATE_CACHE_VALUE_RUB, _RATE_CACHE_AT
 
         now = datetime.now()
         if _RATE_CACHE_AT is not None:
             if now - _RATE_CACHE_AT <= _RATE_CACHE_TTL:
-                return _RATE_CACHE_VALUE_USD, _RATE_CACHE_VALUE_EUR
+                return _RATE_CACHE_VALUE_USD, _RATE_CACHE_VALUE_EUR, _RATE_CACHE_VALUE_RUB
 
         usd_val = None
         eur_val = None
+        rub_val = None
 
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 usd_resp = await client.get(FxRateService.NBRB_USD_URL)
                 if usd_resp.status_code == 200:
-                    data = usd_resp.json()
-                    rate = data.get("Cur_OfficialRate")
-                    usd_val = _parse_decimal(str(rate) if rate is not None else None)
+                    usd_val = FxRateService._parse_nbrb_rate_payload(usd_resp.json())
 
                 eur_resp = await client.get(FxRateService.NBRB_EUR_URL)
                 if eur_resp.status_code == 200:
-                    data = eur_resp.json()
-                    rate = data.get("Cur_OfficialRate")
-                    eur_val = _parse_decimal(str(rate) if rate is not None else None)
+                    eur_val = FxRateService._parse_nbrb_rate_payload(eur_resp.json())
+
+                rub_resp = await client.get(FxRateService.NBRB_RUB_URL)
+                if rub_resp.status_code == 200:
+                    rub_val = FxRateService._parse_nbrb_rate_payload(rub_resp.json())
 
                 _RATE_CACHE_VALUE_USD = usd_val
                 _RATE_CACHE_VALUE_EUR = eur_val
+                _RATE_CACHE_VALUE_RUB = rub_val
                 _RATE_CACHE_AT = now
         except Exception:
             pass
 
-        return usd_val, eur_val
+        return usd_val, eur_val, rub_val
 
     @staticmethod
     async def get_effective_usd_byn_rate(session: AsyncSession) -> Optional[Decimal]:
         source = await FxRateService._get_rate_source(session)
-        manual = await FxRateService._get_manual_rate(session)
+        manual = await FxRateService._get_manual_usd_rate(session)
         if source == "manual":
             return manual
 
-        usd_rate, _ = await FxRateService._fetch_nbrb_rates()
+        usd_rate, _, _ = await FxRateService._fetch_nbrb_rates()
         # Fallback to manual if NBRB temporarily unavailable.
         return usd_rate if usd_rate is not None else manual
 
@@ -112,8 +132,19 @@ class FxRateService:
         if source == "manual":
             return None
 
-        _, eur_rate = await FxRateService._fetch_nbrb_rates()
+        _, eur_rate, _ = await FxRateService._fetch_nbrb_rates()
         return eur_rate
+
+    @staticmethod
+    async def get_effective_rub_byn_rate(session: AsyncSession) -> Optional[Decimal]:
+        source = await FxRateService._get_rate_source(session)
+        manual = await FxRateService._get_manual_rub_rate(session)
+        if source == "manual" and manual is not None:
+            return manual
+
+        _, _, rub_rate = await FxRateService._fetch_nbrb_rates()
+        # Fallback chain: NBRB -> manual.
+        return rub_rate if rub_rate is not None else manual
 
     @staticmethod
     async def get_supplier_usd_byn_rate(session: AsyncSession) -> Optional[Decimal]:

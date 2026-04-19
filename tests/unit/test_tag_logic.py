@@ -43,6 +43,15 @@ def test_detect_category_slug_for_semi_industrial():
     assert slug == "cat-industrial"
 
 
+def test_detect_category_slug_for_universal_block_marker():
+    slug = detect_category_slug(
+        metrics={},
+        specs={"Тип внутреннего блока": "универсальный"},
+        title="Haier AC Universal",
+    )
+    assert slug == "cat-industrial"
+
+
 def test_detect_category_slug_for_multi_inner_block():
     slug = detect_category_slug(
         metrics={},

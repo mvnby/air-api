@@ -241,6 +241,7 @@ def detect_category_slug(
         "подпотолоч",
         "потолоч",
         "напольно",
+        "универсальн",
         "floor-ceiling",
         "floor ceiling",
         "колонн",

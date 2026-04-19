@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal
 from typing import List, Optional
 
 import slugify
@@ -7,11 +8,15 @@ from sqlalchemy.orm import selectinload
 
 from parsers.base import BaseParser
 from parsers.aircond import AircondParser
+from parsers.haierproff import HaierProffParser
+from parsers.hobot import HobotParser
+from parsers.lg24 import Lg24Parser
 from parsers.onliner import OnlinerParser
 from parsers.tvoy_klimat import TvoyKlimatParser
 from core.database import async_session_maker
 from models import Product, ProductImage, Tag, TagGroup
 from services.image_service import ImageService
+from services.fx_rate_service import FxRateService
 from services.spec_normalizer import normalize_specs
 from services.tag_logic import (
     CATEGORY_TAG_TITLES,
@@ -23,6 +28,7 @@ from services.tag_logic import (
 from services.brand_series_service import sync_product_brand_series
 
 logger = logging.getLogger(__name__)
+_CATEGORY_TAG_SLUGS = {"cat-household", "cat-multi", "cat-industrial"}
 
 
 def _augment_auto_slugs_with_wifi_specs(auto_slugs: List[str], specs: dict) -> List[str]:
@@ -37,6 +43,35 @@ def _augment_auto_slugs_with_wifi_specs(auto_slugs: List[str], specs: dict) -> L
     elif wifi_state == "ready" and "wifi-ready" not in result:
         result.append("wifi-ready")
     return result
+
+
+async def _normalize_import_price_to_byn(session, *, data: dict, source_url: str) -> None:
+    """Convert source price to BYN if parser reports foreign currency."""
+    raw_price = data.get("price")
+    if raw_price is None:
+        return
+
+    currency = str(data.get("price_currency") or "BYN").strip().upper()
+    if currency in {"", "BYN"}:
+        return
+
+    try:
+        source_price = Decimal(str(raw_price))
+    except Exception:
+        logger.warning("Price conversion skipped for %s: invalid source price=%r", source_url, raw_price)
+        return
+
+    if currency != "RUB":
+        logger.warning("Price conversion skipped for %s: unsupported currency=%s", source_url, currency)
+        return
+
+    rub_byn_rate = await FxRateService.get_effective_rub_byn_rate(session)
+    if rub_byn_rate is None:
+        logger.warning("Price conversion skipped for %s: RUB/BYN rate unavailable", source_url)
+        return
+
+    converted_price = (source_price * rub_byn_rate).quantize(Decimal("1"))
+    data["price"] = int(converted_price)
 
 
 async def _ensure_tag_group(
@@ -111,6 +146,9 @@ class ImporterService:
         # Register available parsers
         self.parsers: List[BaseParser] = [
             AircondParser(),
+            HaierProffParser(),
+            Lg24Parser(),
+            HobotParser(),
             TvoyKlimatParser(),
             OnlinerParser(),
         ]
@@ -122,7 +160,12 @@ class ImporterService:
                 return parser
         return None
 
-    async def import_product(self, url: str, update_existing: bool = False) -> dict:
+    async def import_product(
+        self,
+        url: str,
+        update_existing: bool = False,
+        collect_related: bool = False,
+    ) -> dict:
         """
         Orchestrates the import process: find parser -> parse -> save to DB.
         Returns a dict: {'product': Product, 'related_urls': List[str]}
@@ -134,15 +177,43 @@ class ImporterService:
             result = await session.execute(stmt)
             existing = result.scalar_one_or_none()
             if existing and not update_existing:
-                # We return it but maybe don't re-save. 
-                # For the sake of bulk import, we'll return the existing one.
-                return {"product": existing, "related_urls": []}
+                await session.refresh(existing, attribute_names=["tags"])
+                has_category_tag = any(
+                    (getattr(tag, "slug", "") or "") in _CATEGORY_TAG_SLUGS
+                    for tag in (existing.tags or [])
+                )
+                if has_category_tag:
+                    # Keep fast path for already healthy records.
+                    related_urls: List[str] = []
+                    if collect_related:
+                        parser = self.get_parser(url)
+                        if parser:
+                            try:
+                                parsed = await parser.parse(url)
+                                related_urls = list(parsed.get("related_urls") or [])
+                            except Exception as exc:
+                                logger.warning(
+                                    "Failed to collect related URLs for existing product %s (%s): %s",
+                                    existing.id,
+                                    url,
+                                    exc,
+                                )
+                    return {"product": existing, "related_urls": related_urls}
+
+                # Self-heal path: if product exists but lacks catalog category tags,
+                # force update flow to refresh derived tags/specs.
+                logger.info(
+                    "Reimporting existing product %s because category tags are missing",
+                    existing.id,
+                )
+                update_existing = True
 
             parser = self.get_parser(url)
             if not parser:
                 raise ValueError("No parser found for this URL")
 
             data = await parser.parse(url)
+            await _normalize_import_price_to_byn(session, data=data, source_url=url)
             
             # Determine publishing status
             is_published = True 
@@ -268,6 +339,18 @@ class ImporterService:
                 existing.power_cooling = metrics.get('power_cooling', existing.power_cooling)
                 existing.specs = normalized_specs
                 existing.source_url = url
+
+                # Preserve manual tags, but append newly inferred auto-tags.
+                await session.refresh(existing, attribute_names=["tags"])
+                merged_tags: dict[str, Tag] = {}
+                for tag in (existing.tags or []):
+                    key = getattr(tag, "slug", None) or f"id:{getattr(tag, 'id', None)}"
+                    merged_tags[key] = tag
+                for tag in tag_objects:
+                    key = getattr(tag, "slug", None) or f"id:{getattr(tag, 'id', None)}"
+                    merged_tags[key] = tag
+                existing.tags = list(merged_tags.values())
+
                 session.add(existing)
                 product = existing
             else:
@@ -340,7 +423,11 @@ class ImporterService:
             if url in processed_urls: continue
             
             try:
-                res = await self.import_product(url, update_existing=update_existing)
+                res = await self.import_product(
+                    url,
+                    update_existing=update_existing,
+                    collect_related=with_related,
+                )
                 product = res["product"]
                 # Only add to 'success' if it's a NEW import (or just count it)
                 # To keep it simple, we count all as success if they are in DB now.

@@ -32,6 +32,12 @@ const hiddenWifiAliasKeys = new Set([
     '__filter_wifi',
     '__filter_wifi_builtin',
 ]);
+const getSelectOptions = (key: string, value: unknown): string[] => {
+    const base = [...(specsTranslations[key]?.options || [])];
+    const current = String(value ?? '').trim();
+    if (current && !base.includes(current)) return [current, ...base];
+    return base;
+};
 
 // Fetch known keys for autocomplete
 const fetchKeys = async () => {
@@ -223,7 +229,7 @@ const save = async () => {
                                     class="w-full h-[38px] border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-gray-100 dark:disabled:bg-slate-800 disabled:text-gray-400 dark:disabled:text-slate-500"
                                 >
                                     <option value="" disabled>{{ operation === 'delete_keys' ? 'Пропускается' : 'Выберите значение' }}</option>
-                                    <option v-for="opt in specsTranslations[row.key]?.options || []" :key="opt" :value="opt">
+                                    <option v-for="opt in getSelectOptions(row.key, row.value)" :key="opt" :value="opt">
                                         {{
                                             row.key === 'wifi_ready'
                                                 ? (opt === 'true' ? 'Да (встроен)' : (opt === 'ready' ? 'Ready (модуль отдельно)' : 'Нет'))

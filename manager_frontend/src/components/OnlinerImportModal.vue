@@ -102,7 +102,7 @@ const handleClose = () => {
               <div>
                 <p class="text-sm font-medium text-slate-200">Спарсить связанные</p>
                 <p class="text-xs text-slate-500 mt-0.5">
-                  Серию для Aircond.by / модификации для Onliner
+                  Серии/модификации для Aircond.by, Onliner и LG24
                 </p>
               </div>
               <!-- Toggle switch -->
