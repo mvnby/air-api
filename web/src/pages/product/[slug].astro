@@ -10,9 +10,8 @@ import FeaturesBentoGrid from "../../components/product/FeaturesBentoGrid.vue";
 import {
     getDimensions,
     getPerformance,
-    getOtherSpecs,
 } from "../../utils/specs";
-import { formatAllSpecs } from "../../utils/spec-dictionary";
+import { formatPublicSpecsGrouped } from "../../utils/spec-dictionary";
 import { generateBentoCards } from "../../utils/bento-cards";
 
 export async function getStaticPaths() {
@@ -57,7 +56,7 @@ const mainImage = uniqueImages[0];
 // Grouped Specs
 const dimensions = getDimensions(specs);
 const performance = getPerformance(specs);
-const otherSpecs = getOtherSpecs(specs);
+const publicSpecGroups = formatPublicSpecsGrouped(specs);
 
 // Generate Bento Cards
 const bentoCards = generateBentoCards(product);
@@ -667,24 +666,50 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                 <!-- Full Specs Spoiler -->
                 <details class="full-specs-spoiler">
                     <summary>
-                        <span>Полные технические характеристики</span>
+                        <span>Основные характеристики</span>
                         <span class="material-icons-round chevron"
                             >expand_more</span
                         >
                     </summary>
                     <div class="specs-content">
-                        <table class="specs-table">
-                            {
-                                formatAllSpecs(specs).map(
-                                    ({ label, value }) => (
-                                        <tr>
-                                            <td class="key">{label}</td>
-                                            <td class="val">{value}</td>
-                                        </tr>
-                                    ),
-                                )
-                            }
-                        </table>
+                        {
+                            publicSpecGroups.length > 0 ? (
+                                <div class="spec-groups">
+                                    {
+                                        publicSpecGroups.map((group) => (
+                                            <section class="public-spec-group">
+                                                <h4 class="spec-group-title">
+                                                    {group.title}
+                                                </h4>
+                                                <table class="specs-table">
+                                                    {
+                                                        group.items.map(
+                                                            ({
+                                                                label,
+                                                                value,
+                                                            }) => (
+                                                                <tr>
+                                                                    <td class="key">
+                                                                        {label}
+                                                                    </td>
+                                                                    <td class="val">
+                                                                        {value}
+                                                                    </td>
+                                                                </tr>
+                                                            ),
+                                                        )
+                                                    }
+                                                </table>
+                                            </section>
+                                        ))
+                                    }
+                                </div>
+                            ) : (
+                                <p class="specs-empty">
+                                    Характеристики скоро появятся.
+                                </p>
+                            )
+                        }
                     </div>
                 </details>
             </div>
@@ -1168,7 +1193,7 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
     /* Spoiler */
     .full-specs-spoiler {
         margin-top: 3rem;
-        border-top: 1px solid #e2e8f0;
+        border-top: 1px solid var(--border);
         padding-top: 1rem;
     }
     .full-specs-spoiler summary {
@@ -1178,7 +1203,7 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
         justify-content: space-between;
         cursor: pointer;
         font-weight: 600;
-        color: #334155;
+        color: var(--text);
         padding: 0.5rem 0;
     }
     .full-specs-spoiler[open] summary .chevron {
@@ -1186,12 +1211,31 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
     }
     .chevron {
         transition: transform 0.3s;
-        color: #94a3b8;
+        color: var(--text-muted);
+    }
+    .spec-groups {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1.25rem;
+        margin-top: 1rem;
+    }
+    .public-spec-group {
+        padding: 0.5rem 0 0;
+    }
+    .spec-group-title {
+        margin: 0 0 0.4rem;
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--text);
+    }
+    .specs-empty {
+        margin: 1rem 0 0;
+        color: var(--text-muted);
     }
 
     .specs-table {
         width: 100%;
-        margin-top: 1rem;
+        margin-top: 0;
         border-collapse: collapse;
     }
     .specs-table td {
