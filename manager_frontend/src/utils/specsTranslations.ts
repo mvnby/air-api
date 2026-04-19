@@ -10,7 +10,7 @@ export const specsTranslations: Record<string, SpecConfig> = {
     series: { label: 'Серия (Линейка)', type: 'text' },
     is_inverter: { label: 'Инвертор', type: 'boolean' },
     wifi_module: { label: 'Wi-Fi', type: 'boolean' },
-    compressor_brand: { label: 'Марка компрессора', type: 'select', options: ['GMCC', 'Toshiba', 'Highly', 'Panasonic', 'Gree'] },
+    compressor_brand: { label: 'Марка компрессора', type: 'select', options: ['GMCC', 'Toshiba', 'Highly', 'Panasonic', 'Gree', 'Mitsubishi'] },
     pipe_liquid: { label: 'Труба жидкостная', type: 'select', options: ['1/4"', '3/8"', '1/2"'] },
     pipe_gas: { label: 'Труба газовая', type: 'select', options: ['3/8"', '1/2"', '5/8"', '3/4"'] },
     capacity_cooling_kw: { label: 'Мощность охлаждения', type: 'number', unit: 'кВт' },

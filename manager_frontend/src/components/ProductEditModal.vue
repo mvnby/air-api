@@ -94,6 +94,12 @@ const newBrandTitle = ref('');
 
 const normalizeText = (value: unknown): string => String(value ?? '').toLowerCase().replace(/ё/g, 'е').trim();
 const normalizeBrandToken = (value: unknown): string => normalizeText(value).replace(/[^a-z0-9а-я]/g, '');
+const getSelectOptions = (key: string, value: unknown): string[] => {
+    const base = [...(specsTranslations[key]?.options || [])];
+    const current = String(value ?? '').trim();
+    if (current && !base.includes(current)) return [current, ...base];
+    return base;
+};
 const INVALID_BRAND_TOKENS = new Set([
     'мультисплитсистема',
     'сплитсистема',
@@ -1568,7 +1574,7 @@ const unlinkSupplierOffer = async (offer: any) => {
                                             class="w-full h-[38px] border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all text-gray-900 dark:text-slate-200 shadow-inner"
                                         >
                                             <option value="" disabled>Выберите значение</option>
-                                            <option v-for="opt in specsTranslations[row.key]?.options || []" :key="opt" :value="opt">
+                                            <option v-for="opt in getSelectOptions(row.key, row.value)" :key="opt" :value="opt">
                                                 {{
                                                     row.key === 'wifi_ready'
                                                         ? (opt === 'true' ? 'Да (встроен)' : (opt === 'ready' ? 'Ready (модуль отдельно)' : 'Нет'))
