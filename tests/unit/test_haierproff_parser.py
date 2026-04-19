@@ -1,3 +1,5 @@
+from bs4 import BeautifulSoup
+
 from parsers.haierproff import HaierProffParser
 
 
@@ -29,6 +31,16 @@ def test_haierproff_infers_household_for_wall_from_title_only():
     assert inferred["Тип внутреннего блока"] == "Настенный"
 
 
+def test_haierproff_defaults_split_system_to_wall_indoor_type():
+    inferred = HaierProffParser._infer_type_specs_from_breadcrumb_and_title(
+        title="Haier HSU-24HQJ103/R3 Quantum On-Off",
+        breadcrumb_parts=["Каталог", "Бытовые сплит-системы"],
+    )
+
+    assert inferred["Тип"] == "Сплит-система"
+    assert inferred["Тип внутреннего блока"] == "Настенный"
+
+
 def test_haierproff_detects_wifi_by_feature_title_and_icon():
     entries = [
         {"img": "/images/uploads/2023/04/12/resize_cache/46_1/44cdb19d3e20378d090e233fdcc44d44.png", "title": "", "desc": "", "text": ""},
@@ -41,3 +53,35 @@ def test_haierproff_detects_wifi_by_feature_title_and_icon():
 def test_haierproff_wifi_fallback_is_option_for_non_outdoor():
     assert HaierProffParser._should_assume_wifi_option({"Тип": "Сплит-система"}) is True
     assert HaierProffParser._should_assume_wifi_option({"Тип": "Наружный блок"}) is False
+
+
+def test_haierproff_extract_specs_keeps_group_prefixed_duplicates():
+    html = """
+    <div class="accordion">
+      <div class="collapse">
+        <div class="collapse__header">Внутренний блок</div>
+        <div class="collapse__content">
+          <div class="spec-l__item">
+            <div class="spec-l__item-label">Габаритные размеры без упаковки (Ш/Г/В), мм</div>
+            <div class="spec-l__item-value">974 × 223 × 318</div>
+          </div>
+        </div>
+      </div>
+      <div class="collapse">
+        <div class="collapse__header">Наружный блок</div>
+        <div class="collapse__content">
+          <div class="spec-l__item">
+            <div class="spec-l__item-label">Габаритные размеры без упаковки (Ш/Г/В), мм</div>
+            <div class="spec-l__item-value">875 × 355 × 642</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    specs = HaierProffParser._extract_specs(soup)
+
+    assert specs["Габаритные размеры без упаковки (Ш/Г/В), мм"] == "974 × 223 × 318"
+    assert specs["Внутренний блок: Габаритные размеры без упаковки (Ш/Г/В), мм"] == "974 × 223 × 318"
+    assert specs["Наружный блок: Габаритные размеры без упаковки (Ш/Г/В), мм"] == "875 × 355 × 642"

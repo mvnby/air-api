@@ -25,6 +25,11 @@ class HaierProffParser(BaseParser):
         "44cdb19d3e20378d090e233fdcc44d44",  # evo wi-fi icon (png)
         "4bc4d72914fc0e1db789283629505b2b",  # wifi icon (svg)
     )
+    _GROUP_PREFIX_SPEC_BLOCKS = (
+        "Внутренний блок",
+        "Наружный блок",
+        "Компрессор",
+    )
 
     def supports(self, url: str) -> bool:
         return "haierproff.ru" in url and "/catalog/cond/products/" in url
@@ -99,6 +104,8 @@ class HaierProffParser(BaseParser):
             inferred.setdefault("Тип", "Полупромышленный кондиционер")
         elif "мульти" in combined:
             inferred.setdefault("Тип", "Мульти-сплит-система")
+        elif "сплит" in combined:
+            inferred.setdefault("Тип", "Сплит-система")
 
         if "универсальн" in combined:
             inferred.setdefault("Тип внутреннего блока", "Напольно-потолочный")
@@ -118,6 +125,9 @@ class HaierProffParser(BaseParser):
                 inferred["Тип"] = "Сплит-система"
             else:
                 inferred["Тип"] = "Полупромышленный кондиционер"
+
+        if inferred.get("Тип") == "Сплит-система" and "Тип внутреннего блока" not in inferred:
+            inferred["Тип внутреннего блока"] = "Настенный"
 
         return inferred
 
@@ -180,9 +190,36 @@ class HaierProffParser(BaseParser):
             related.append(href)
         return related
 
-    @staticmethod
-    def _extract_specs(soup: BeautifulSoup) -> Dict[str, str]:
+    @classmethod
+    def _extract_specs(cls, soup: BeautifulSoup) -> Dict[str, str]:
         specs: Dict[str, str] = {}
+
+        def _store_spec(key: str, value: str, group: str = "") -> None:
+            if not key or not value:
+                return
+            if key not in specs:
+                specs[key] = value
+            elif specs[key] != value and group:
+                specs[f"{group}: {key}"] = value
+
+            if group and any(group.startswith(block) for block in cls._GROUP_PREFIX_SPEC_BLOCKS):
+                specs[f"{group}: {key}"] = value
+
+        collapse_nodes = soup.select(".accordion .collapse")
+        if collapse_nodes:
+            for collapse in collapse_nodes:
+                header = collapse.select_one(":scope > .collapse__header")
+                group = re.sub(r"\s+", " ", header.get_text(" ", strip=True)).strip() if header else ""
+                for row in collapse.select(".spec-l__item"):
+                    key_el = row.select_one(".spec-l__item-label")
+                    val_el = row.select_one(".spec-l__item-value")
+                    if not key_el or not val_el:
+                        continue
+                    key = key_el.get_text(" ", strip=True).replace("\xa0", " ").rstrip(":")
+                    value = val_el.get_text(" ", strip=True).replace("\xa0", " ")
+                    _store_spec(key, value, group=group)
+            return specs
+
         for row in soup.select(".spec-l__item"):
             key_el = row.select_one(".spec-l__item-label")
             val_el = row.select_one(".spec-l__item-value")
@@ -190,8 +227,7 @@ class HaierProffParser(BaseParser):
                 continue
             key = key_el.get_text(" ", strip=True).replace("\xa0", " ").rstrip(":")
             value = val_el.get_text(" ", strip=True).replace("\xa0", " ")
-            if key and value:
-                specs[key] = value
+            _store_spec(key, value)
         return specs
 
     @classmethod

@@ -173,8 +173,8 @@ def test_haierproff_core_keys_are_normalized():
     assert specs["capacity_heating_kw"] == "6.0"
     assert specs["area_m2"] == "50"
     assert specs["freon_type"] == "R32"
-    assert specs["pipe_liquid"] == "6.35"
-    assert specs["pipe_gas"] == "9.52"
+    assert specs["pipe_liquid"] == '1/4"'
+    assert specs["pipe_gas"] == '3/8"'
     assert specs["inverter"] is True
 
 
@@ -199,7 +199,7 @@ def test_min_nom_max_values_use_nominal_component():
 def test_haier_packaging_weight_and_import_rate_keys_are_normalized():
     specs = normalize_specs(
         {
-            "Габаритные размеры без упаковки (Ш/Г/В), мм": "898 × 355 × 643",
+            "Наружный блок: Габаритные размеры без упаковки (Ш/Г/В), мм": "898 × 355 × 643",
             "Габаритные размеры в упаковке (Ш/Г/В), мм": "940 × 390 × 697",
             "Чистый вес / Вес в упаковке, кг": "14,9 / 18,9",
             "Чистый вес / вес в упаковке, кг": "36,5 / 38,5",
@@ -234,8 +234,8 @@ def test_dynamic_temp_and_pipe_aliases_are_normalized():
 
     assert specs["temp_range_cool"] == "-15 ~ 48"
     assert specs["temp_range_heat"] == "-18 ~ 18"
-    assert specs["pipe_liquid"] == "6.35"
-    assert specs["pipe_gas"] == "9.52"
+    assert specs["pipe_liquid"] == '1/4"'
+    assert specs["pipe_gas"] == '3/8"'
 
 
 def test_type_canonicalization_marks_cassette_split_as_semi_industrial():
@@ -257,3 +257,40 @@ def test_type_fallback_from_indoor_type_sets_semi_industrial():
     )
 
     assert specs["type"] == "полупромышленный кондиционер"
+
+
+def test_haier_grouped_indoor_outdoor_dimensions_are_split_correctly():
+    specs = normalize_specs(
+        {
+            "Внутренний блок: Габаритные размеры без упаковки (Ш/Г/В), мм": "974 × 223 × 318",
+            "Наружный блок: Габаритные размеры без упаковки (Ш/Г/В), мм": "875 × 355 × 642",
+        }
+    )
+
+    assert specs["width_indoor"] == "974"
+    assert specs["depth_indoor"] == "223"
+    assert specs["height_indoor"] == "318"
+    assert specs["width_outdoor"] == "875"
+    assert specs["depth_outdoor"] == "355"
+    assert specs["height_outdoor"] == "642"
+
+
+def test_non_inverter_compressor_sets_inverter_false():
+    specs = normalize_specs({"Неинверторный компрессор": "Да"})
+    assert specs["inverter"] is False
+
+
+def test_remote_control_model_implies_remote_control_true():
+    specs = normalize_specs({"Пульт управления": "YR-HE"})
+    assert specs["remote_control"] is True
+
+
+def test_compressor_brand_is_canonicalized_for_select():
+    specs = normalize_specs({"Производитель компрессора": "HIGHLY"})
+    assert specs["compressor_brand"] == "Highly"
+
+
+def test_eer_cop_pair_is_split_into_two_specs():
+    specs = normalize_specs({"EER/COP": "3,21 / 3,61"})
+    assert specs["eer"] == "3.21"
+    assert specs["cop"] == "3.61"

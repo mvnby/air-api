@@ -42,6 +42,7 @@ KEY_MAP = {
     "Пульт ДУ": "remote_control",
     "Пульт": "remote_control",
     "Пульт управления": "remote_control",
+    "Внутренний блок: Пульт управления": "remote_control",
     "Таймер включения/выключения": "timer",
     "Таймер": "timer",
     "Регулировка направления воздушного потока": "airflow_direction",
@@ -92,6 +93,7 @@ KEY_MAP = {
     # --- ЭФФЕКТИВНОСТЬ ---
     "Энергоэффективность при охлаждении (EER)": "eer",
     "EER": "eer",
+    "EER/COP": "eer",
     "Энергоэффективность при обогреве (COP)": "cop",
     "COP": "cop",
     "Класс энергоэффективности": "energy_class",
@@ -113,6 +115,9 @@ KEY_MAP = {
     "Уровень шума наружного блока": "noise_outdoor",
     "Уровень шума наружного блока, дБ": "noise_outdoor",
     "Уровень звукового давления, дБ, А": "noise_outdoor",
+    "Уровень звукового давления (высокая скорость), дБ, А": "noise_outdoor",
+    "Наружный блок: Уровень звукового давления (высокая скорость), дБ, А": "noise_outdoor",
+    "Внутренний блок: Уровень звукового давления [дБ(А)], Выс/Ср/Низ/Сверх": "noise_indoor",
     
     # --- ГАБАРИТЫ ВНУТРЕННИЙ ---
     "Ширина внутреннего блока": "width_indoor",
@@ -121,6 +126,7 @@ KEY_MAP = {
     "Вес внутреннего блока": "weight_indoor",
     "Вес внутреннего блока, кг": "weight_indoor",
     "Чистый вес / Вес в упаковке, кг": "weight_indoor",
+    "Внутренний блок: Чистый вес / Вес в упаковке, кг": "weight_indoor",
     "Внутренний блок без упаковки, кг": "weight_indoor",
     
     # --- ГАБАРИТЫ НАРУЖНЫЙ ---
@@ -132,6 +138,8 @@ KEY_MAP = {
     "Вес внешнего блока": "weight_outdoor",
     "Вес внешнего блока, кг": "weight_outdoor",
     "Чистый вес / вес в упаковке, кг": "weight_outdoor",
+    "Наружный блок: Чистый вес / вес в упаковке, кг": "weight_outdoor",
+    "Наружный блок: Чистый вес / Вес в упаковке, кг": "weight_outdoor",
     "Наружный блок без упаковки, кг": "weight_outdoor",
     
     # --- МОНТАЖ ---
@@ -180,6 +188,7 @@ KEY_MAP = {
     "Класс эффективности": "energy_class",
     "Класс энергоэффективности (Холод / Тепло)": "energy_class",
     "Коэффициент энергоэффективности (EER / COP)": "eer",
+    "EER/COP": "eer",
     "Энергоэффективность SEER/EER": "eer",
     "Энергоэффективность SCOP/COP": "cop",
     
@@ -203,6 +212,9 @@ KEY_MAP = {
     "Wi-Fi управление": "wifi_ready",
     "Марка используемого хладагента": "freon_type",
     "Производитель компрессора": "compressor_brand",
+    "Компрессор: Производитель компрессора": "compressor_brand",
+    "Неинверторный компрессор": "inverter",
+    "Компрессор: Неинверторный компрессор": "inverter",
     "Номинальный уровень рабочего тока (охлаждение), А": "current_cooling_nominal_a",
     "Номинальный уровень рабочего тока (нагрев), А": "current_heating_nominal_a",
     "Дополнительная заправка (г/м)": "refrigerant_additional_g_m",
@@ -213,6 +225,8 @@ KEY_MAP = {
     "Электропитание, Ф/В/Гц": "power_supply",
     "Электропитание (Ø / В / Гц)": "power_supply",
     "Модель": "model",
+    "Внутренний блок: Габаритные размеры в упаковке (Ш/Г/В), мм": "dimensions_indoor_package_mm",
+    "Наружный блок: Габаритные размеры в упаковке (Ш/Г/В), мм": "dimensions_outdoor_package_mm",
     "Габаритные размеры в упаковке (Ш/Г/В), мм": "dimensions_outdoor_package_mm",
 }
 
@@ -227,7 +241,8 @@ _DIMENSIONS_MAP = {
     "Габариты внешнего блока (ШхВхГ), мм": ("width_outdoor", "height_outdoor", "depth_outdoor"),
     "Габариты мм": ("width_indoor", "height_indoor", "depth_indoor"),
     # Haierproff uses width/depth/height order (Ш/Г/В).
-    "Габаритные размеры без упаковки (Ш/Г/В), мм": ("width_outdoor", "depth_outdoor", "height_outdoor"),
+    "Внутренний блок: Габаритные размеры без упаковки (Ш/Г/В), мм": ("width_indoor", "depth_indoor", "height_indoor"),
+    "Наружный блок: Габаритные размеры без упаковки (Ш/Г/В), мм": ("width_outdoor", "depth_outdoor", "height_outdoor"),
     "Внутренний блок без упаковки (Ш × В × Г), мм": ("width_indoor", "height_indoor", "depth_indoor"),
     "Наружный блок без упаковки (Ш × В × Г), мм": ("width_outdoor", "height_outdoor", "depth_outdoor"),
 }
@@ -290,6 +305,45 @@ def clean_value(key: str, val: Any, keep_units: bool = True) -> Any:
         
     val_lower = val.lower().strip()
 
+    if key in {"pipe_liquid", "pipe_gas"}:
+        # Convert common metric diameters to canonical inch fractions for UI/filter selects.
+        normalized = val.replace(",", ".")
+        if "/" in normalized and '"' in normalized:
+            return normalized.strip()
+        match = re.search(r"(\d+(?:\.\d+)?)", normalized)
+        if not match:
+            return val.strip()
+        try:
+            mm = float(match.group(1))
+        except ValueError:
+            return val.strip()
+        mm_to_inch = {
+            6.35: '1/4"',
+            9.52: '3/8"',
+            12.70: '1/2"',
+            15.88: '5/8"',
+            19.05: '3/4"',
+        }
+        nearest = min(mm_to_inch.keys(), key=lambda k: abs(k - mm))
+        if abs(nearest - mm) <= 0.25:
+            return mm_to_inch[nearest]
+        return match.group(1)
+
+    if key == "compressor_brand":
+        text = re.sub(r"\s+", " ", val).strip()
+        lowered = text.lower().replace("ё", "е")
+        canonical = {
+            "gmcc": "GMCC",
+            "toshiba": "Toshiba",
+            "highly": "Highly",
+            "panasonic": "Panasonic",
+            "gree": "Gree",
+        }
+        for token, normalized in canonical.items():
+            if token in lowered:
+                return normalized
+        return text
+
     # 1. Логика для Булевых (Да/Нет)
     # Сюда попадают: inverter, wifi_ready, remote_control и все режимы
     boolean_keys = [
@@ -333,6 +387,12 @@ def clean_value(key: str, val: Any, keep_units: bool = True) -> Any:
         if "настенн" in text or "wall" in text:
             return "настенный"
         return text
+
+    if key == "remote_control":
+        no_markers = ("нет", "отсутств", "нету", "no")
+        if any(marker in val_lower for marker in no_markers):
+            return False
+        return True
 
     if key in boolean_keys:
         if key == "inverter":
@@ -731,13 +791,56 @@ def normalize_specs(
     for rus_key, sys_key in KEY_MAP.items():
         if rus_key in old_specs:
             raw_val = old_specs[rus_key]
-            
+
+            # Explicit split keys with two metrics in one source value.
+            rus_key_l = rus_key.lower().replace("ё", "е")
+            if "eer/cop" in rus_key_l:
+                numbers = re.findall(r"[-+]?\d+(?:[.,]\d+)?", str(raw_val))
+                if numbers:
+                    new_specs["eer"] = numbers[0].replace(",", ".")
+                    if len(numbers) > 1:
+                        new_specs["cop"] = numbers[1].replace(",", ".")
+                if rus_key in new_specs:
+                    del new_specs[rus_key]
+                continue
+            if "seer/eer" in rus_key_l:
+                numbers = re.findall(r"[-+]?\d+(?:[.,]\d+)?", str(raw_val))
+                if numbers:
+                    new_specs["seer"] = numbers[0].replace(",", ".")
+                    if len(numbers) > 1:
+                        new_specs["eer"] = numbers[1].replace(",", ".")
+                if rus_key in new_specs:
+                    del new_specs[rus_key]
+                continue
+            if "scop/cop" in rus_key_l:
+                numbers = re.findall(r"[-+]?\d+(?:[.,]\d+)?", str(raw_val))
+                if numbers:
+                    new_specs["scop"] = numbers[0].replace(",", ".")
+                    if len(numbers) > 1:
+                        new_specs["cop"] = numbers[1].replace(",", ".")
+                if rus_key in new_specs:
+                    del new_specs[rus_key]
+                continue
+
+            # Special rule: source key explicitly states "non-inverter".
+            if "неинвертор" in rus_key_l and sys_key == "inverter":
+                parsed = _parse_bool(raw_val)
+                if parsed is True:
+                    new_specs[sys_key] = False
+                elif parsed is False:
+                    new_specs[sys_key] = True
+                else:
+                    new_specs[sys_key] = clean_value(sys_key, raw_val, keep_units=keep_units)
+                if rus_key in new_specs:
+                    del new_specs[rus_key]
+                continue
+
             # Чистим / Конвертируем
             clean_val = clean_value(sys_key, raw_val, keep_units=keep_units)
-            
+
             # Записываем новый ключ
             new_specs[sys_key] = clean_val
-            
+
             # Удаляем старый (чтобы не было дублей)
             if rus_key in new_specs:
                 del new_specs[rus_key]
