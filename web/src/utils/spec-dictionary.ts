@@ -7,6 +7,8 @@ export interface SpecDefinition {
 
 export const SPEC_DICT: Record<string, SpecDefinition> = {
     // Basic
+    brand: { label: "Бренд" },
+    series: { label: "Серия" },
     release_year: { label: "Год выхода", unit: "г." },
     type: { label: "Тип кондиционера" },
     indoor_type: { label: "Тип внутреннего блока" },
@@ -33,6 +35,11 @@ export const SPEC_DICT: Record<string, SpecDefinition> = {
     area_m2: { label: "Площадь", unit: "м²" },
     power_cons_cooling_kw: { label: "Потр. мощность (охлаждение)", unit: "кВт" },
     power_cons_heating_kw: { label: "Потр. мощность (обогрев)", unit: "кВт" },
+    energy_class: { label: "Класс энергоэффективности" },
+    energy_class_cooling: { label: "Класс энергоэффективности (охлаждение)" },
+    energy_class_heating: { label: "Класс энергоэффективности (обогрев)" },
+    seer: { label: "SEER" },
+    scop: { label: "SCOP" },
     eer: { label: "EER" },
     cop: { label: "COP" },
     airflow_max: { label: "Расход воздуха", unit: "м³/ч" },
@@ -70,6 +77,7 @@ export const SPEC_DICT: Record<string, SpecDefinition> = {
     compressor_brand: { label: "Компрессор", group: "tech" },
     compressor_type: { label: "Тип компрессора", group: "tech" },
     freon_type: { label: "Фреон", group: "tech" },
+    power_supply: { label: "Электропитание", group: "installation" },
 
     // --- ДЛЯ ПРОФИ (Диапазоны) ---
     // Можно вывести, если хочется, или использовать только для фильтров
@@ -96,6 +104,136 @@ export const SPEC_DICT: Record<string, SpecDefinition> = {
     electrostatic_filter: { label: "Электростатический фильтр", type: "boolean", group: "tech" },
     uv_sterilization: { label: "УФ-стерилизация", type: "boolean", group: "tech" },
 };
+
+type PublicSpecGroup = {
+    id: string;
+    title: string;
+    keys: string[];
+};
+
+const PUBLIC_SPEC_GROUPS: PublicSpecGroup[] = [
+    {
+        id: "general",
+        title: "Общие характеристики",
+        keys: ["brand", "series", "type", "indoor_type", "color", "release_year"],
+    },
+    {
+        id: "purpose",
+        title: "Режимы и назначение",
+        keys: ["modes", "area_m2", "min_temp_heat"],
+    },
+    {
+        id: "performance",
+        title: "Производительность и энергоэффективность",
+        keys: [
+            "capacity_cooling_kw",
+            "capacity_heating_kw",
+            "power_cons_cooling_kw",
+            "power_cons_heating_kw",
+            "energy_class",
+            "energy_class_cooling",
+            "energy_class_heating",
+            "seer",
+            "scop",
+            "eer",
+            "cop",
+            "inverter",
+            "airflow_max",
+        ],
+    },
+    {
+        id: "ranges",
+        title: "Рабочие диапазоны",
+        keys: ["temp_range_cool", "temp_range_heat"],
+    },
+    {
+        id: "control",
+        title: "Управление и функции",
+        keys: [
+            "wifi_ready",
+            "remote_control",
+            "timer",
+            "autorestart",
+            "turbo_mode",
+            "sleep_mode",
+            "dehumidification",
+            "self_cleaning",
+            "airflow_direction",
+            "fan_speed",
+            "smart_home_integration",
+            "voice_control",
+        ],
+    },
+    {
+        id: "air_quality",
+        title: "Фильтрация и качество воздуха",
+        keys: [
+            "fresh_air",
+            "bio_filter",
+            "plasma_filter",
+            "ionizer",
+            "carbon_filter",
+            "photocatalytic_filter",
+            "electrostatic_filter",
+            "uv_sterilization",
+        ],
+    },
+    {
+        id: "noise",
+        title: "Шум",
+        keys: ["noise_indoor", "noise_outdoor"],
+    },
+    {
+        id: "installation",
+        title: "Монтаж и магистраль",
+        keys: [
+            "pipe_liquid",
+            "pipe_gas",
+            "pipe_max_length",
+            "pipe_max_height",
+            "freon_type",
+            "compressor_brand",
+            "power_supply_location",
+            "power_supply",
+        ],
+    },
+    {
+        id: "dimensions",
+        title: "Габариты и вес",
+        keys: [
+            "width_indoor",
+            "height_indoor",
+            "depth_indoor",
+            "weight_indoor",
+            "width_outdoor",
+            "height_outdoor",
+            "depth_outdoor",
+            "weight_outdoor",
+        ],
+    },
+];
+
+const HIDE_FALSE_BOOLEAN_KEYS = new Set([
+    "remote_control",
+    "timer",
+    "autorestart",
+    "turbo_mode",
+    "sleep_mode",
+    "dehumidification",
+    "self_cleaning",
+    "airflow_direction",
+    "fan_speed",
+    "smart_home_integration",
+    "voice_control",
+    "fresh_air",
+    "bio_filter",
+    "plasma_filter",
+    "ionizer",
+    "carbon_filter",
+    "photocatalytic_filter",
+    "electrostatic_filter",
+    "uv_sterilization",
+]);
 
 /**
  * Normalize unit string to handle variations (e.g., м2 → м², m2 → м²)
@@ -129,8 +267,26 @@ export function formatSpec(key: string, value: any): { label: string; value: str
 
     // Handle boolean values
     if (spec.type === 'boolean') {
-        const isTrue = value === true || value === 'true' || value === '1';
-        formattedValue = isTrue ? 'Да' : 'Нет';
+        const raw = String(value ?? '').trim().toLowerCase();
+        const isTrue =
+            value === true ||
+            raw === 'true' ||
+            raw === '1' ||
+            raw === 'да' ||
+            raw === 'yes' ||
+            raw === 'есть';
+
+        if (key === 'wifi_ready') {
+            if (isTrue) {
+                formattedValue = 'Да';
+            } else if (raw === 'ready' || raw === 'опция' || raw === 'optional') {
+                formattedValue = 'Опция';
+            } else {
+                formattedValue = 'Нет';
+            }
+        } else {
+            formattedValue = isTrue ? 'Да' : 'Нет';
+        }
 
         // Optional: hide false values by returning null
         // if (!isTrue) return null;
@@ -171,6 +327,33 @@ export function formatSpec(key: string, value: any): { label: string; value: str
         label: spec.label,
         value: formattedValue
     };
+}
+
+export function formatPublicSpecsGrouped(specs: Record<string, any>) {
+    const groups: Array<{
+        id: string;
+        title: string;
+        items: Array<{ key: string; label: string; value: string }>;
+    }> = [];
+
+    for (const group of PUBLIC_SPEC_GROUPS) {
+        const items: Array<{ key: string; label: string; value: string }> = [];
+        for (const key of group.keys) {
+            const formatted = formatSpec(key, specs[key]);
+            if (!formatted) continue;
+            if (HIDE_FALSE_BOOLEAN_KEYS.has(key) && formatted.value === 'Нет') continue;
+            items.push({ key, label: formatted.label, value: formatted.value });
+        }
+        if (items.length > 0) {
+            groups.push({
+                id: group.id,
+                title: group.title,
+                items,
+            });
+        }
+    }
+
+    return groups;
 }
 
 /**
