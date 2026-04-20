@@ -6,6 +6,7 @@ import subprocess
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from core.config import settings
 from core.logger import logger
 from services.google_service import get_google_service
 
@@ -189,6 +190,14 @@ class BackupService:
         """
         Full backup cycle: DB dump + media archive -> upload -> rotate -> cleanup.
         """
+        if not settings.is_production:
+            logger.warning(
+                "Backup upload is disabled for ENVIRONMENT=%s. "
+                "No scheduled/manual backups will be pushed to Google Drive outside production.",
+                settings.ENVIRONMENT,
+            )
+            return False
+
         if not self.backup_folder_id:
             logger.warning("BACKUP_FOLDER_ID not set. Skipping upload.")
             return
