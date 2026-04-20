@@ -356,6 +356,209 @@ export function formatPublicSpecsGrouped(specs: Record<string, any>) {
     return groups;
 }
 
+function capitalizeFirst(text: string): string {
+    if (!text) return text;
+    return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function splitNumericAndUnit(value?: string): { numeric: string; unit: string } | null {
+    if (!value) return null;
+    const trimmed = String(value).trim();
+    const match = trimmed.match(/^(.+?)\s*([A-Za-zА-Яа-я°%²³\/\-\.\(\)]+)\s*$/u);
+    if (!match) return null;
+    const numeric = match[1].trim();
+    const unit = match[2].trim();
+    if (!numeric || !unit) return null;
+    return { numeric, unit };
+}
+
+function toPairMetric(cooling?: string, heating?: string) {
+    if (!cooling && !heating) return null;
+
+    const coolParts = splitNumericAndUnit(cooling);
+    const heatParts = splitNumericAndUnit(heating);
+
+    // Best case: both values and same unit -> unit displayed once
+    if (coolParts && heatParts && coolParts.unit.toLowerCase() === heatParts.unit.toLowerCase()) {
+        return {
+            cooling: coolParts.numeric,
+            heating: heatParts.numeric,
+            unit: coolParts.unit,
+        };
+    }
+
+    // Fallback for partially present or mixed units
+    if (coolParts || heatParts) {
+        return {
+            cooling: coolParts ? coolParts.numeric : cooling || "—",
+            heating: heatParts ? heatParts.numeric : heating || "—",
+            unit: coolParts?.unit || heatParts?.unit || "",
+        };
+    }
+
+    return {
+        cooling: cooling || "—",
+        heating: heating || "—",
+        unit: "",
+    };
+}
+
+function parseMinNoiseDb(value?: string): string | null {
+    if (!value) return null;
+    const cleaned = String(value).replace(",", ".").toLowerCase();
+    const matches = cleaned.match(/-?\d+(?:\.\d+)?/g);
+    if (!matches || matches.length === 0) return null;
+
+    const nums = matches
+        .map((n) => Number(n))
+        .filter((n) => Number.isFinite(n));
+    if (nums.length === 0) return null;
+
+    const min = Math.min(...nums);
+    if (!Number.isFinite(min)) return null;
+    return String(min).replace(".0", "");
+}
+
+function normalizeIndoorTypeForHeadline(indoorType: string): string {
+    const normalized = indoorType.trim().toLowerCase();
+    if (normalized.includes("настенн")) return "Настенная";
+    if (normalized.includes("кассет")) return "Кассетная";
+    if (normalized.includes("каналь")) return "Канальная";
+    if (normalized.includes("колон")) return "Колонная";
+    if (normalized.includes("напольно") || normalized.includes("потолоч")) return "Напольно-потолочная";
+    if (normalized.includes("универс")) return "Универсальная";
+    return capitalizeFirst(indoorType);
+}
+
+type SummaryRow =
+    | {
+          key: "power" | "consumption";
+          kind: "cool_heat";
+          label: string;
+          cooling: string;
+          heating: string;
+          unit: string;
+      }
+      | {
+          key: "noise";
+          kind: "noise";
+          label: string;
+          indoor: string;
+          outdoor: string;
+          unit: string;
+      };
+
+export function buildPublicSpecsSummary(specs: Record<string, any>) {
+    const keys = [
+        "type",
+        "inverter",
+        "area_m2",
+        "capacity_cooling_kw",
+        "capacity_heating_kw",
+        "power_cons_cooling_kw",
+        "power_cons_heating_kw",
+        "temp_range_cool",
+        "temp_range_heat",
+        "airflow_max",
+        "noise_indoor",
+        "noise_outdoor",
+        "wifi_ready",
+        "indoor_type",
+        "freon_type",
+    ];
+
+    const byKey = new Map<string, { key: string; label: string; value: string }>();
+
+    for (const key of keys) {
+        const formatted = formatSpec(key, specs[key]);
+        if (!formatted) continue;
+        if (HIDE_FALSE_BOOLEAN_KEYS.has(key) && formatted.value === "Нет") continue;
+        byKey.set(key, { key, label: formatted.label, value: formatted.value });
+    }
+
+    const type = byKey.get("type")?.value ?? "";
+    const indoorType = byKey.get("indoor_type")?.value ?? "";
+    const inverter = byKey.get("inverter")?.value;
+    const area = byKey.get("area_m2")?.value;
+    const coolPower = byKey.get("capacity_cooling_kw")?.value;
+    const heatPower = byKey.get("capacity_heating_kw")?.value;
+    const coolCons = byKey.get("power_cons_cooling_kw")?.value;
+    const heatCons = byKey.get("power_cons_heating_kw")?.value;
+    const coolRange = byKey.get("temp_range_cool")?.value;
+    const heatRange = byKey.get("temp_range_heat")?.value;
+    const indoorNoiseRaw = byKey.get("noise_indoor")?.value;
+    const outdoorNoiseRaw = byKey.get("noise_outdoor")?.value;
+
+    const compressorType =
+        inverter === "Да" ? "Инвертор" : inverter === "Нет" ? "On-Off" : null;
+
+    const headlineType = type || "сплит-система";
+    const indoorHeadline = indoorType ? normalizeIndoorTypeForHeadline(indoorType) : "";
+    const typeLower = headlineType.toLowerCase();
+    const indoorLower = indoorType.toLowerCase();
+    const withIndoorPrefix =
+        indoorHeadline && !typeLower.includes(indoorLower) ? `${indoorHeadline} ${headlineType}` : headlineType;
+    const headlineSystem = capitalizeFirst(withIndoorPrefix);
+
+    const indoorNoiseMin = parseMinNoiseDb(indoorNoiseRaw);
+    const outdoorNoiseMin = parseMinNoiseDb(outdoorNoiseRaw);
+    let noiseMetric: SummaryRow | null = null;
+    if (indoorNoiseMin || outdoorNoiseMin) {
+        noiseMetric = {
+            key: "noise",
+            kind: "noise",
+            label: "Шум",
+            indoor: indoorNoiseMin || "—",
+            outdoor: outdoorNoiseMin || "—",
+            unit: "дБ",
+        };
+    }
+
+    const performancePair = toPairMetric(coolPower, heatPower);
+    const consumptionPair = toPairMetric(coolCons, heatCons);
+
+    const rows: SummaryRow[] = [];
+    if (performancePair) {
+        rows.push({
+            key: "power",
+            kind: "cool_heat",
+            label: "Мощность",
+            cooling: performancePair.cooling,
+            heating: performancePair.heating,
+            unit: performancePair.unit,
+        });
+    }
+    if (consumptionPair) {
+        rows.push({
+            key: "consumption",
+            kind: "cool_heat",
+            label: "Потребление",
+            cooling: consumptionPair.cooling,
+            heating: consumptionPair.heating,
+            unit: consumptionPair.unit,
+        });
+    }
+    if (noiseMetric) {
+        rows.push(noiseMetric);
+    }
+
+    let temperatureNote: string | null = null;
+    if (coolRange && heatRange) {
+        temperatureNote = `Диапазон температур: ${coolRange} (охлаждение), ${heatRange} (обогрев).`;
+    } else if (coolRange) {
+        temperatureNote = `Диапазон температур (охлаждение): ${coolRange}.`;
+    } else if (heatRange) {
+        temperatureNote = `Диапазон температур (обогрев): ${heatRange}.`;
+    }
+
+    return {
+        headlineBeforeArea: `${headlineSystem}${compressorType ? ` (${compressorType})` : ""}${area ? " для помещений до " : ""}`,
+        headlineArea: area || null,
+        rows,
+        temperatureNote,
+    };
+}
+
 /**
  * Format all specs from a raw specs object
  * @param specs - Raw specs object from API
