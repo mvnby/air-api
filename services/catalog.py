@@ -33,6 +33,7 @@ class CatalogService:
             .options(
                 selectinload(Product.tags).selectinload(Tag.group),
                 selectinload(Product.gallery_images),
+                selectinload(Product.attachments),
             )
             .where(
                 Product.is_published.is_(True),
@@ -44,4 +45,3 @@ class CatalogService:
         )
         result = await session.execute(stmt)
         return list(result.scalars().all())
-
