@@ -1437,6 +1437,40 @@ OnlinerImportPayload = CatalogImportPayload
 OnlinerImportResultResponse = CatalogImportResultResponse
 
 
+# --- BACKUPS (Manager DR) ---
+
+class ManagerBackupItemResponse(BaseModel):
+    id: str
+    name: str
+    kind: str
+    created_at: datetime
+    size_bytes: Optional[int] = None
+    mime_type: Optional[str] = None
+
+
+class ManagerBackupListResponse(BaseModel):
+    items: List[ManagerBackupItemResponse]
+
+
+class ManagerRestoreJobStartResponse(BaseModel):
+    job_id: str
+    status: str
+    stage: str
+
+
+class ManagerRestoreJobStatusResponse(BaseModel):
+    job_id: str
+    file_id: str
+    file_name: str
+    kind: str
+    status: str
+    stage: str
+    error: Optional[str] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    safety_dump_path: Optional[str] = None
+
+
 # --- SETTINGS ---
 
 class ManagerSettingResponse(BaseModel):

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref } from 'vue';
-import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Wrench, Settings, Wallet, ChevronLeft, ChevronRight, Tags, FileSpreadsheet, Link2, Award } from 'lucide-vue-next';
+import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Wrench, Settings, Wallet, ChevronLeft, ChevronRight, Tags, FileSpreadsheet, Link2, Award, Database } from 'lucide-vue-next';
 import { api } from './api';
 
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
@@ -12,6 +12,7 @@ const CalendarDashboard = defineAsyncComponent(() => import('./views/CalendarDas
 const ManagerHomeView = defineAsyncComponent(() => import('./views/ManagerHome.vue'));
 const InstallersView = defineAsyncComponent(() => import('./views/InstallersView.vue'));
 const SettingsView = defineAsyncComponent(() => import('./views/SettingsView.vue'));
+const SettingsBackupView = defineAsyncComponent(() => import('./views/SettingsBackupView.vue'));
 const TariffsView = defineAsyncComponent(() => import('./views/TariffsView.vue'));
 const TagsView = defineAsyncComponent(() => import('./views/TagsView.vue'));
 const BrandsView = defineAsyncComponent(() => import('./views/BrandsView.vue'));
@@ -47,6 +48,7 @@ const navItems = [
   { path: '/manager/suppliers', label: 'Прайсы поставщиков', icon: FileSpreadsheet },
   { path: '/manager/supplier-mapping', label: 'Маппинг прайсов', icon: Link2 },
   { path: '/manager/settings', label: 'Настройки сайта', icon: Settings },
+  { path: '/manager/settings/backup', label: 'DR / Бэкапы', icon: Database },
 ];
 
 const currentView = computed(() => {
@@ -58,6 +60,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/customers/profile')) return 'customer-profile';
   if (path.startsWith('/manager/customers')) return 'customers';
   if (path.startsWith('/manager/installers')) return 'installers';
+  if (path.startsWith('/manager/settings/backup')) return 'settings-backup';
   if (path.startsWith('/manager/settings')) return 'settings';
   if (path.startsWith('/manager/tariffs')) return 'tariffs';
   if (path.startsWith('/manager/tags')) return 'tags';
@@ -314,6 +317,7 @@ onBeforeUnmount(() => {
       <CustomerProfileView v-else-if="currentView === 'customer-profile'" :key="currentLocation" />
       <CustomersView v-else-if="currentView === 'customers'" :key="currentLocation" />
       <InstallersView v-else-if="currentView === 'installers'" :key="currentLocation" />
+      <SettingsBackupView v-else-if="currentView === 'settings-backup'" :key="currentLocation" />
       <SettingsView v-else-if="currentView === 'settings'" :key="currentLocation" />
       <TariffsView v-else-if="currentView === 'tariffs'" :key="currentLocation" />
       <TagsView v-else-if="currentView === 'tags'" :key="currentLocation" />

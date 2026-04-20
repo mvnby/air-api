@@ -21,6 +21,13 @@ const newValue = ref('');
 const newDescription = ref('');
 const creating = ref(false);
 
+const goToBackups = () => {
+    if (window.location.pathname !== '/manager/settings/backup') {
+        window.history.pushState({}, '', '/manager/settings/backup');
+        window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+};
+
 const setToast = (msg: string, type: 'success' | 'error' = 'success') => {
     toast.value = msg;
     toastType.value = type;
@@ -130,6 +137,13 @@ onMounted(() => {
             </div>
             
             <div class="flex items-center gap-2">
+                <button
+                    @click="goToBackups"
+                    class="flex items-center gap-2 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-medium py-2.5 px-4 rounded-lg shadow-sm transition-all text-sm"
+                >
+                    <span class="material-icons-round text-[18px]">warning</span>
+                    DR / Бэкапы
+                </button>
                 <button 
                     @click="showCreateForm = !showCreateForm"
                     class="flex items-center gap-2 bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-medium py-2.5 px-4 rounded-lg shadow-sm transition-all text-sm"

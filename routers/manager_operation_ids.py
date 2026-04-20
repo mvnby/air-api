@@ -77,6 +77,9 @@ GET_FX_RATE = "get_fx_rate"
 SUGGEST_ADDRESS = "suggest_address"
 UPDATE_MANAGER_SETTING = "update_manager_setting"
 CREATE_MANAGER_SETTING = "create_manager_setting"
+LIST_MANAGER_BACKUPS = "list_manager_backups"
+START_MANAGER_BACKUP_RESTORE = "start_manager_backup_restore"
+GET_MANAGER_BACKUP_RESTORE_STATUS = "get_manager_backup_restore_status"
 
 LIST_MANAGER_TARIFFS = "list_manager_tariffs"
 CREATE_MANAGER_TARIFF = "create_manager_tariff"
@@ -180,6 +183,9 @@ ALL_MANAGER_OPERATION_IDS = (
     GET_FX_RATE,
     SUGGEST_ADDRESS,
     UPDATE_MANAGER_SETTING,
+    LIST_MANAGER_BACKUPS,
+    START_MANAGER_BACKUP_RESTORE,
+    GET_MANAGER_BACKUP_RESTORE_STATUS,
     LIST_MANAGER_TARIFFS,
     CREATE_MANAGER_TARIFF,
     UPDATE_MANAGER_TARIFF,
