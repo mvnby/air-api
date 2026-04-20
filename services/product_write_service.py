@@ -9,6 +9,7 @@ from sqlmodel import select
 from crud.product import ProductDAO
 from models import Product, ProductImage, Tag
 from services.brand_series_service import sync_product_brand_series
+from services.product_attachment_service import replace_manuals
 from services.spec_normalizer import normalize_specs
 
 
@@ -46,6 +47,7 @@ class ProductWriteService:
         tag_ids: Optional[List[int]] = None,
     ) -> Optional[Dict[str, Any]]:
         payload = dict(update_data)
+        manuals_payload = payload.pop("manuals", None)
         wifi_tag_slugs: Optional[List[str]] = None
         selected_tags: Optional[List[Tag]] = None
         if tag_ids is not None:
@@ -78,6 +80,13 @@ class ProductWriteService:
         product = await ProductDAO.update_full(session, product_id, payload, tag_ids)
         if not product:
             return None
+
+        if manuals_payload is not None:
+            await replace_manuals(
+                session,
+                product_id=product_id,
+                manuals=manuals_payload,
+            )
 
         explicit_brand_override = "brand_id" in payload
         explicit_brand_id = payload.get("brand_id") if explicit_brand_override else None

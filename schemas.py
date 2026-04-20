@@ -70,6 +70,21 @@ class ProductImageResponse(BaseModel):
     is_installation_photo: bool
 
 
+class ProductManualResponse(BaseModel):
+    id: int
+    kind: str = "manual"
+    title: str
+    url: str
+    source: Optional[str] = None
+
+
+class ProductManualPayload(BaseModel):
+    kind: str = "manual"
+    title: str
+    url: str
+    source: Optional[str] = None
+
+
 class ProductSiblingResponse(BaseModel):
     id: int
     title: str
@@ -89,6 +104,7 @@ class ProductResponse(ProductBase):
     specs: Dict[str, Any] = {}
     images: List[str] = [] # Legacy
     gallery_images: List[ProductImageResponse] = [] # New
+    manuals: List[ProductManualResponse] = []
     series_siblings: List[ProductSiblingResponse] = []
 
 
@@ -746,6 +762,14 @@ class ManagerCatalogProductImageResponse(BaseModel):
     is_installation_photo: bool
 
 
+class ManagerCatalogProductManualResponse(BaseModel):
+    id: int
+    kind: str = "manual"
+    title: str
+    url: str
+    source: Optional[str] = None
+
+
 class ManagerCatalogProductTagResponse(BaseModel):
     id: int
     title: str
@@ -770,6 +794,7 @@ class ManagerCatalogProductItemResponse(BaseModel):
     created_at: datetime
     specs: Dict[str, Any]
     gallery_images: List[ManagerCatalogProductImageResponse]
+    manuals: List[ManagerCatalogProductManualResponse]
     tags: List[ManagerCatalogProductTagResponse]
     min_cost_byn: Optional[float] = None
     recommended_price_byn: Optional[float] = None
@@ -1121,6 +1146,7 @@ class ProductUpdate(BaseModel):
     brand_id: Optional[int] = None
     series_id: Optional[int] = None
     tag_ids: Optional[List[int]] = None
+    manuals: List[ProductManualPayload] = Field(default_factory=list)
 
 
 class SupplierResponse(BaseModel):

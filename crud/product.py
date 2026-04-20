@@ -25,6 +25,7 @@ class ProductDAO:
         stmt = select(Product).where(Product.id == product_id).options(
             selectinload(Product.tags).selectinload(Tag.group),
             selectinload(Product.gallery_images),
+            selectinload(Product.attachments),
         )
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
@@ -34,6 +35,7 @@ class ProductDAO:
         stmt = select(Product).where(Product.slug == slug).options(
             selectinload(Product.tags).selectinload(Tag.group),
             selectinload(Product.gallery_images),
+            selectinload(Product.attachments),
         )
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
@@ -43,6 +45,7 @@ class ProductDAO:
         stmt = select(Product).where(Product.is_published == True).options(
             selectinload(Product.tags).selectinload(Tag.group),
             selectinload(Product.gallery_images),
+            selectinload(Product.attachments),
         )
         result = await session.execute(stmt)
         return list(result.scalars().all())
@@ -52,7 +55,8 @@ class ProductDAO:
         if not product_ids:
             return []
         stmt = select(Product).where(Product.id.in_(product_ids)).options(
-            selectinload(Product.gallery_images)
+            selectinload(Product.gallery_images),
+            selectinload(Product.attachments),
         )
         result = await session.execute(stmt)
         return list(result.scalars().all())
@@ -260,6 +264,7 @@ class ProductDAO:
         stmt = select(Product).options(
             selectinload(Product.tags).selectinload(Tag.group),
             selectinload(Product.gallery_images),
+            selectinload(Product.attachments),
         )
 
         stmt = ProductDAO._apply_common_filters(
@@ -400,6 +405,7 @@ class ProductDAO:
         stmt = select(Product).options(
             selectinload(Product.gallery_images),
             selectinload(Product.tags).selectinload(Tag.group),
+            selectinload(Product.attachments),
         )
         count_stmt = select(func.count(Product.id))
 

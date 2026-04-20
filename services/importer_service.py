@@ -15,8 +15,9 @@ from parsers.onliner import OnlinerParser
 from parsers.tvoy_klimat import TvoyKlimatParser
 from core.database import async_session_maker
 from models import Product, ProductImage, Tag, TagGroup
-from services.image_service import ImageService
 from services.fx_rate_service import FxRateService
+from services.import_media_service import ImportMediaService
+from services.product_attachment_service import replace_manuals
 from services.spec_normalizer import normalize_specs
 from services.tag_logic import (
     CATEGORY_TAG_TITLES,
@@ -317,17 +318,18 @@ class ImporterService:
             # Main Image
             main_image_url = data.get('main_image')
             local_main_image = None
-            if main_image_url and not (existing and update_existing):
-                local_main_image = await ImageService.download_and_save_image(
-                    main_image_url, 'products', slug
+            if main_image_url:
+                local_main_image = await ImportMediaService.resolve_or_download(
+                    session,
+                    source_url=main_image_url,
                 )
             
             # --- Gallery images ---
             # Phase 48: Onliner gallery download disabled (manual via Manager).
-            # Aircond.by returns save_gallery=True → persist to ProductImage.
+            # Other donors may return save_gallery=True → persist to ProductImage.
             save_gallery = data.get("save_gallery", False)
             gallery_image_urls: List[str] = []
-            if save_gallery and not (existing and update_existing):
+            if save_gallery:
                 gallery_image_urls = data.get("images", [])
 
             if existing and update_existing:
@@ -339,6 +341,8 @@ class ImporterService:
                 existing.power_cooling = metrics.get('power_cooling', existing.power_cooling)
                 existing.specs = normalized_specs
                 existing.source_url = url
+                if local_main_image and not existing.main_image:
+                    existing.main_image = local_main_image
 
                 # Preserve manual tags, but append newly inferred auto-tags.
                 await session.refresh(existing, attribute_names=["tags"])
@@ -381,26 +385,42 @@ class ImporterService:
             await session.commit()
             await session.refresh(product)
 
-            # Persist gallery images into ProductImage (aircond.by)
+            if "manuals" in data:
+                await replace_manuals(
+                    session,
+                    product_id=product.id,
+                    manuals=data.get("manuals") or [],
+                )
+
+            # Persist gallery images into ProductImage
             if gallery_image_urls and product.id:
+                existing_gallery_urls = set(
+                    (
+                        await session.execute(
+                            select(ProductImage.url).where(ProductImage.product_id == product.id)
+                        )
+                    ).scalars().all()
+                )
                 for img_url in gallery_image_urls:
                     try:
-                        local_path = await ImageService.download_and_save_image(
-                            img_url, "products", product.slug or slug
+                        local_path = await ImportMediaService.resolve_or_download(
+                            session,
+                            source_url=img_url,
                         )
-                        if local_path:
+                        if local_path and local_path not in existing_gallery_urls:
                             pi = ProductImage(
                                 product_id=product.id,
                                 url=local_path,
                                 is_installation_photo=False,
                             )
                             session.add(pi)
+                            existing_gallery_urls.add(local_path)
                     except Exception as exc:
                         logger.warning(
                             "Gallery image save failed for %s: %s", img_url, exc
                         )
-                if session.new:
-                    await session.commit()
+            if "manuals" in data or gallery_image_urls:
+                await session.commit()
 
             return {"product": product, "related_urls": data.get('related_urls', [])}
 

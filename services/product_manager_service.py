@@ -21,6 +21,20 @@ from models.product_constants import BTU_MAPPING
 
 class ProductManagerService:
     @staticmethod
+    def _serialize_manuals(product: Product) -> List[Dict[str, Any]]:
+        return [
+            {
+                "id": item.id,
+                "kind": item.kind,
+                "title": item.title,
+                "url": item.url,
+                "source": item.source,
+            }
+            for item in (product.attachments or [])
+            if item.kind == "manual"
+        ]
+
+    @staticmethod
     async def smart_search(
         session: AsyncSession,
         q: str,
@@ -48,7 +62,8 @@ class ProductManagerService:
             select(Product)
             .options(
                 selectinload(Product.tags).selectinload(Tag.group),
-                selectinload(Product.gallery_images)
+                selectinload(Product.gallery_images),
+                selectinload(Product.attachments),
             )
             .where(Product.is_published.is_(True))
         )
@@ -93,6 +108,7 @@ class ProductManagerService:
                     }
                     for img in (p.gallery_images or [])
                 ],
+                "manuals": ProductManagerService._serialize_manuals(p),
                 "tags": [
                     {
                         "id": t.id,
@@ -168,6 +184,7 @@ class ProductManagerService:
                         }
                         for img in (p.gallery_images or [])
                     ],
+                    "manuals": ProductManagerService._serialize_manuals(p),
                     "tags": [
                         {
                             "id": t.id,
@@ -228,7 +245,7 @@ class ProductManagerService:
     @staticmethod
     async def delete_for_manager(session: AsyncSession, product_id: int) -> bool:
         from models.order import OrderProductLink
-        from models.product import ProductImage, ProductTagLink
+        from models.product import ProductAttachment, ProductImage, ProductTagLink
         from models.supplier import ProductLocalStock, ProductSupplierMapping
         import sqlalchemy as sa
         
@@ -248,6 +265,9 @@ class ProductManagerService:
         # Delete gallery images
         await session.execute(
             sa.delete(ProductImage).where(ProductImage.product_id == product_id)
+        )
+        await session.execute(
+            sa.delete(ProductAttachment).where(ProductAttachment.product_id == product_id)
         )
         
         # Delete tag links explicitly to avoid async lazy-load issues on relationship mutation.

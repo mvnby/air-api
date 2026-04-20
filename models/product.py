@@ -70,6 +70,7 @@ class Product(SQLModel, table=True):
     main_image: Optional[str] = Field(default=None)
     images: List[str] = Field(default=[], sa_column=Column(JSON))
     gallery_images: List["ProductImage"] = Relationship(back_populates="product")
+    attachments: List["ProductAttachment"] = Relationship(back_populates="product")
 
     tags: List[Tag] = Relationship(back_populates="products", link_model=ProductTagLink)
     order_links: List["OrderProductLink"] = Relationship(back_populates="product")
@@ -114,6 +115,35 @@ class ProductImage(SQLModel, table=True):
     def __str__(self):
         photo_type = "Installation" if self.is_installation_photo else "Gallery"
         return f"{photo_type} photo for product #{self.product_id}"
+
+
+class ProductAttachment(SQLModel, table=True):
+    __tablename__ = "product_attachment"
+    __table_args__ = (
+        UniqueConstraint("product_id", "kind", "url", name="uq_product_attachment_product_kind_url"),
+    )
+    id: Optional[int] = Field(default=None, primary_key=True)
+    product_id: int = Field(foreign_key="product.id", index=True)
+    kind: str = Field(default="manual", index=True)
+    title: str = Field(default="Инструкция")
+    url: str
+    source: Optional[str] = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=datetime.now)
+
+    product: "Product" = Relationship(back_populates="attachments")
+
+    def __str__(self):
+        return f"{self.kind} attachment for product #{self.product_id}"
+
+
+class ImportMediaCache(SQLModel, table=True):
+    __tablename__ = "import_media_cache"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    source_url: str = Field(sa_column=Column(String, unique=True, nullable=False, index=True))
+    local_url: str = Field(nullable=False)
+    content_hash: str = Field(index=True)
+    created_at: datetime = Field(default_factory=datetime.now)
+    last_seen_at: datetime = Field(default_factory=datetime.now)
 
 
 class Favorite(SQLModel, table=True):

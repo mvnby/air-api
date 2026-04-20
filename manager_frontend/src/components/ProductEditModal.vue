@@ -53,6 +53,7 @@ const form = ref<any>({
 });
 
 const specs = ref<{ key: string; value: string }[]>([]);
+const manuals = ref<{ title: string; url: string }[]>([]);
 const selectedTagIds = ref<Set<number>>(new Set());
 const loading = ref(false);
 const formMessage = ref('');
@@ -842,6 +843,12 @@ watch(() => props.modelValue, async (val) => {
             }
             return { key, value: sVal };
         });
+        manuals.value = (((props.product as any).manuals || []) as Array<any>)
+            .map((item) => ({
+                title: String(item?.title || 'Инструкция').trim() || 'Инструкция',
+                url: String(item?.url || '').trim(),
+            }))
+            .filter((item) => Boolean(item.url));
         compatibilityQuery.value = '';
         compatibilityResults.value = [];
         compatibilityInfo.value = '';
@@ -893,6 +900,8 @@ const loadSupplierOffers = async () => {
 
 const addRow = () => specs.value.push({ key: '', value: '' });
 const removeRow = (index: number) => specs.value.splice(index, 1);
+const addManualRow = () => manuals.value.push({ title: 'Инструкция', url: '' });
+const removeManualRow = (index: number) => manuals.value.splice(index, 1);
 
 const close = () => emit('update:modelValue', false);
 
@@ -969,11 +978,24 @@ const save = async () => {
     formMessage.value = '';
     formServerErrors.value = {};
     try {
+        const validManuals = manuals.value
+            .map((item) => ({
+                title: String(item.title || '').trim() || 'Инструкция',
+                url: String(item.url || '').trim(),
+            }))
+            .filter((item) => Boolean(item.url))
+            .map((item) => ({
+                ...item,
+                kind: 'manual',
+                source: 'manager',
+            }));
+
         const updateData = {
             ...form.value,
             brand_id: selectedBrandEntityId.value ?? null,
             specs: validSpecs,
             tag_ids: Array.from(selectedTagIds.value),
+            manuals: validManuals,
         };
         await api.updateProduct(props.product.id, updateData);
         emit('success');
@@ -988,6 +1010,7 @@ const save = async () => {
             'brand_id',
             'specs',
             'tag_ids',
+            'manuals',
         ]);
         formServerErrors.value = parsed.fieldErrors;
         formMessage.value = parsed.message || `Ошибка при сохранении: ${getApiErrorMessage(e)}`;
@@ -1526,6 +1549,39 @@ const unlinkSupplierOffer = async (offer: any) => {
 
                     <!-- Column 2: Specs -->
                     <section class="space-y-5">
+                        <div class="rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 space-y-2">
+                            <div class="flex justify-between items-center">
+                                <h3 class="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-widest">
+                                    Инструкции и файлы
+                                </h3>
+                                <button @click="addManualRow" class="text-xs bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 px-2.5 py-1 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 text-teal-600 dark:text-teal-400 font-bold flex items-center gap-1 transition-colors shadow-sm">
+                                    <Plus class="w-3 h-3" /> Добавить
+                                </button>
+                            </div>
+                            <div class="space-y-2">
+                                <div v-for="(manual, idx) in manuals" :key="`manual-${idx}`" class="grid grid-cols-[160px_1fr_auto] gap-1.5 items-center">
+                                    <input
+                                        v-model="manual.title"
+                                        type="text"
+                                        placeholder="Название"
+                                        class="h-[34px] border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 rounded-lg px-2.5 py-1.5 text-xs"
+                                    />
+                                    <input
+                                        v-model="manual.url"
+                                        type="url"
+                                        placeholder="https://..."
+                                        class="h-[34px] border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 rounded-lg px-2.5 py-1.5 text-xs"
+                                    />
+                                    <button @click="removeManualRow(idx)" class="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
+                                        <Trash2 class="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                                <div v-if="manuals.length === 0" class="text-[11px] text-gray-400 dark:text-slate-500">
+                                    Ссылки на инструкции не добавлены.
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="flex justify-between items-center">
                             <h3 class="text-xs font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
                                  Характеристики

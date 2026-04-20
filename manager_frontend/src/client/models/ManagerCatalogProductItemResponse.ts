@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ManagerCatalogProductImageResponse } from './ManagerCatalogProductImageResponse';
+import type { ManagerCatalogProductManualResponse } from './ManagerCatalogProductManualResponse';
 import type { ManagerCatalogProductTagResponse } from './ManagerCatalogProductTagResponse';
 export type ManagerCatalogProductItemResponse = {
     id: number;
@@ -20,6 +21,7 @@ export type ManagerCatalogProductItemResponse = {
     created_at: string;
     specs: Record<string, any>;
     gallery_images: Array<ManagerCatalogProductImageResponse>;
+    manuals: Array<ManagerCatalogProductManualResponse>;
     tags: Array<ManagerCatalogProductTagResponse>;
     min_cost_byn?: (number | null);
     recommended_price_byn?: (number | null);

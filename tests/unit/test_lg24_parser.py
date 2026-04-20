@@ -50,6 +50,37 @@ def test_lg24_extract_specs_skips_doc_download_rows():
     assert specs["Мощность охлаждения (Мин/Ном/Макс), кВт"] == "0.89 / 2.5 / 3.7"
 
 
+def test_lg24_extract_manuals_from_doc_rows():
+    html = """
+    <html>
+      <body>
+        <section id="tab1">
+          <dl><dt>Руководство пользователя</dt><dd><a href="/manuals/user-guide.pdf">Скачать</a></dd></dl>
+          <dl><dt>Инструкция по монтажу</dt><dd><a href="https://cdn.example.com/mount.pdf">PDF</a></dd></dl>
+        </section>
+      </body>
+    </html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    manuals = Lg24Parser._extract_manuals(soup, "https://lg24.by/product/model-1/")
+
+    assert manuals == [
+        {
+            "kind": "manual",
+            "title": "Руководство пользователя",
+            "url": "https://lg24.by/manuals/user-guide.pdf",
+            "source": "lg24",
+        },
+        {
+            "kind": "manual",
+            "title": "Инструкция по монтажу",
+            "url": "https://cdn.example.com/mount.pdf",
+            "source": "lg24",
+        },
+    ]
+
+
 def test_lg24_infers_type_and_indoor_type_from_breadcrumb():
     html = """
     <nav class="woocommerce-breadcrumb">

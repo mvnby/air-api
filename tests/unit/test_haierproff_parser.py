@@ -85,3 +85,37 @@ def test_haierproff_extract_specs_keeps_group_prefixed_duplicates():
     assert specs["Габаритные размеры без упаковки (Ш/Г/В), мм"] == "974 × 223 × 318"
     assert specs["Внутренний блок: Габаритные размеры без упаковки (Ш/Г/В), мм"] == "974 × 223 × 318"
     assert specs["Наружный блок: Габаритные размеры без упаковки (Ш/Г/В), мм"] == "875 × 355 × 642"
+
+
+def test_haierproff_extract_manuals_from_icon_link_list():
+    html = """
+    <div class="icon-link-l-list">
+      <a class="icon-link-l" href="/lfm_files/35/Flexis/certificate.pdf" target="_blank">
+        <div class="icon-link-l__text">Сертификат соответствия</div>
+      </a>
+      <a class="icon-link-l" href="/lfm_files/shares/Quantum/manual.pdf" target="_blank">
+        <div class="icon-link-l__text">Руководство пользователя</div>
+      </a>
+    </div>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    manuals = HaierProffParser._extract_manuals(
+        soup,
+        "https://haierproff.ru/catalog/cond/products/sample-model",
+    )
+
+    assert manuals == [
+        {
+            "kind": "manual",
+            "title": "Сертификат соответствия",
+            "url": "https://haierproff.ru/lfm_files/35/Flexis/certificate.pdf",
+            "source": "haierproff",
+        },
+        {
+            "kind": "manual",
+            "title": "Руководство пользователя",
+            "url": "https://haierproff.ru/lfm_files/shares/Quantum/manual.pdf",
+            "source": "haierproff",
+        },
+    ]
