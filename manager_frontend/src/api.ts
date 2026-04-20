@@ -10,6 +10,7 @@ import {
     ManagerGoogleAuthService,
     ManagerBackupsService,
     ManagerTariffsService,
+    ManagerServiceEstimatesService,
     AdminService,
     ApiService,
     type ProductUpdate,
@@ -30,6 +31,11 @@ import {
     type ManagerSettingUpdatePayload,
     type ManagerTariffCreatePayload,
     type ManagerTariffUpdatePayload,
+    type ManagerInstallEstimateCalculatePayload,
+    type ManagerInstallEstimateSavePayload,
+    type ManagerServiceEstimateListResponse,
+    type ManagerServiceEstimateResponse,
+    type ManagerInstallEstimateResponse,
     type SupplierCreatePayload,
     type SupplierUpdatePayload,
     type SupplierPriceSourceCreatePayload,
@@ -63,6 +69,13 @@ export type {
     ManagerBackupRunStatusResponse,
     ManagerRestoreJobStartResponse,
     ManagerRestoreJobStatusResponse,
+};
+export type {
+    ManagerInstallEstimateCalculatePayload,
+    ManagerInstallEstimateSavePayload,
+    ManagerServiceEstimateListResponse,
+    ManagerServiceEstimateResponse,
+    ManagerInstallEstimateResponse,
 };
 
 export interface ManagerBrand {
@@ -263,6 +276,24 @@ export const api = {
     async deleteManagerTariff(id: number) {
         return await ManagerTariffsService.deleteManagerTariff(id);
     },
+
+    // Install estimates (issue #260)
+    async calculateManagerInstallEstimate(payload: ManagerInstallEstimateCalculatePayload) {
+        return await ManagerServiceEstimatesService.calculateManagerInstallEstimate(payload);
+    },
+
+    async createManagerServiceEstimate(payload: ManagerInstallEstimateSavePayload) {
+        return await ManagerServiceEstimatesService.createManagerServiceEstimate(payload);
+    },
+
+    async listManagerServiceEstimates(page = 1, limit = 20): Promise<ManagerServiceEstimateListResponse> {
+        return await ManagerServiceEstimatesService.listManagerServiceEstimates(page, limit);
+    },
+
+    async getManagerServiceEstimate(estimateId: number): Promise<ManagerServiceEstimateResponse> {
+        return await ManagerServiceEstimatesService.getManagerServiceEstimate(estimateId);
+    },
+
     // External integrations
     async getCompanyByUnp(unp: string) {
         return await ApiService.publicProxyEgrApiV1ProxyEgrGet(unp);
