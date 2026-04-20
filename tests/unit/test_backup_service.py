@@ -1,4 +1,6 @@
 import pytest
+import tarfile
+from pathlib import Path
 
 from services.backup_service import BackupService
 
@@ -91,3 +93,28 @@ async def test_restore_from_file_async_raises_on_psql_error(monkeypatch):
 
     with pytest.raises(Exception, match="Database restore failed"):
         await service.restore_from_file_async("/tmp/broken_restore.sql")
+
+
+def test_restore_media_from_archive_restores_media_dir(monkeypatch, tmp_path: Path):
+    service = BackupService()
+    service.media_dir = str(tmp_path / "media")
+
+    media_dir = Path(service.media_dir)
+    media_dir.mkdir(parents=True, exist_ok=True)
+    (media_dir / "old.txt").write_text("old", encoding="utf-8")
+
+    source_root = tmp_path / "src"
+    source_media = source_root / "media"
+    source_media.mkdir(parents=True, exist_ok=True)
+    (source_media / "new.txt").write_text("new", encoding="utf-8")
+
+    archive_path = tmp_path / "media_backup_test.tar.gz"
+    with tarfile.open(archive_path, "w:gz") as tar:
+        tar.add(source_media, arcname="media")
+
+    monkeypatch.setattr(service, "create_media_archive", lambda: str(tmp_path / "safety_media.tar.gz"))
+
+    safety_path = service.restore_media_from_archive(str(archive_path))
+    assert safety_path.endswith("safety_media.tar.gz")
+    assert (media_dir / "new.txt").read_text(encoding="utf-8") == "new"
+    assert not (media_dir / "old.txt").exists()

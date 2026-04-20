@@ -1,6 +1,7 @@
 from sqladmin import BaseView, expose
 from starlette.responses import RedirectResponse
 from services.google_service import get_google_service
+from core.logger import logger
 
 class GoogleAuthView(BaseView):
     name = "Google Integration"
@@ -21,6 +22,7 @@ class GoogleAuthView(BaseView):
             url = get_google_service().get_auth_url()
             return RedirectResponse(url=url, status_code=303)
         except Exception as e:
+            logger.exception("Failed to generate Google OAuth URL")
             return await self.templates.TemplateResponse(
                 request,
                 "sqladmin/google_auth.html",

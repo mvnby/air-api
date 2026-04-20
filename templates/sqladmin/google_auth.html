@@ -8,6 +8,19 @@
             </h3>
         </div>
         <div class="card-body">
+            {% if error %}
+            <div class="alert alert-danger" role="alert">
+                <div class="fw-bold mb-1">
+                    <i class="fa-solid fa-circle-exclamation me-2"></i>Ошибка подключения Google
+                </div>
+                <div class="small">{{ error }}</div>
+                <div class="small mt-2">
+                    Для локального запуска проверьте наличие файла
+                    <code>client_secret.json</code> в корне проекта (в контейнере: <code>/app/client_secret.json</code>).
+                </div>
+            </div>
+            {% endif %}
+
             <!-- Status Section -->
             <div class="mb-5">
                 <h4 class="text-uppercase text-muted small fw-bold mb-3">Current Status</h4>

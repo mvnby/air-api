@@ -275,7 +275,9 @@ onMounted(async () => {
     <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Поставщики и прайсы</h1>
     <p v-if="error" class="rounded-lg bg-red-50 border border-red-200 text-red-700 px-3 py-2 text-sm">{{ error }}</p>
     <p class="rounded-lg bg-blue-50 border border-blue-200 text-blue-800 px-3 py-2 text-sm">
-      Для Google API авторизации: <a href="/admin/google_auth" class="underline font-semibold">/admin/google_auth</a>
+      Для Google API авторизации перейдите в
+      <a href="/manager/settings" class="underline font-semibold">Настройки сайта</a>
+      и используйте блок “Google Integration”.
     </p>
 
     <section class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4">

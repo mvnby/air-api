@@ -77,7 +77,12 @@ GET_FX_RATE = "get_fx_rate"
 SUGGEST_ADDRESS = "suggest_address"
 UPDATE_MANAGER_SETTING = "update_manager_setting"
 CREATE_MANAGER_SETTING = "create_manager_setting"
+GET_MANAGER_GOOGLE_AUTH_STATUS = "get_manager_google_auth_status"
+GET_MANAGER_GOOGLE_AUTH_URL = "get_manager_google_auth_url"
+EXCHANGE_MANAGER_GOOGLE_AUTH_CODE = "exchange_manager_google_auth_code"
 LIST_MANAGER_BACKUPS = "list_manager_backups"
+START_MANAGER_BACKUP_RUN = "start_manager_backup_run"
+GET_MANAGER_BACKUP_RUN_STATUS = "get_manager_backup_run_status"
 START_MANAGER_BACKUP_RESTORE = "start_manager_backup_restore"
 GET_MANAGER_BACKUP_RESTORE_STATUS = "get_manager_backup_restore_status"
 
@@ -183,7 +188,12 @@ ALL_MANAGER_OPERATION_IDS = (
     GET_FX_RATE,
     SUGGEST_ADDRESS,
     UPDATE_MANAGER_SETTING,
+    GET_MANAGER_GOOGLE_AUTH_STATUS,
+    GET_MANAGER_GOOGLE_AUTH_URL,
+    EXCHANGE_MANAGER_GOOGLE_AUTH_CODE,
     LIST_MANAGER_BACKUPS,
+    START_MANAGER_BACKUP_RUN,
+    GET_MANAGER_BACKUP_RUN_STATUS,
     START_MANAGER_BACKUP_RESTORE,
     GET_MANAGER_BACKUP_RESTORE_STATUS,
     LIST_MANAGER_TARIFFS,

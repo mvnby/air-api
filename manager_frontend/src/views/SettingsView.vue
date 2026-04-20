@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { api } from '../api';
-import type { ManagerSettingResponse, ManagerSettingUpdatePayload } from '../client';
+import type { ManagerGoogleAuthStatusResponse, ManagerSettingResponse, ManagerSettingUpdatePayload } from '../client';
 import { ManagerSettingsService } from '../client';
 import { getApiErrorMessage } from '../utils/api-errors';
 
@@ -20,6 +20,10 @@ const newKey = ref('');
 const newValue = ref('');
 const newDescription = ref('');
 const creating = ref(false);
+const googleAuthStatus = ref<ManagerGoogleAuthStatusResponse | null>(null);
+const googleAuthLoading = ref(false);
+const googleAuthBusy = ref(false);
+const googleAuthCode = ref('');
 
 const goToBackups = () => {
     if (window.location.pathname !== '/manager/settings/backup') {
@@ -33,6 +37,49 @@ const setToast = (msg: string, type: 'success' | 'error' = 'success') => {
     toastType.value = type;
     window.setTimeout(() => { toast.value = ''; }, 3000);
 }
+
+const loadGoogleAuthStatus = async () => {
+    googleAuthLoading.value = true;
+    try {
+        googleAuthStatus.value = await api.getManagerGoogleAuthStatus();
+    } catch (e) {
+        setToast(getApiErrorMessage(e), 'error');
+    } finally {
+        googleAuthLoading.value = false;
+    }
+};
+
+const openGoogleAuth = async () => {
+    googleAuthBusy.value = true;
+    try {
+        const response = await api.getManagerGoogleAuthUrl();
+        window.open(response.url, '_blank', 'noopener,noreferrer');
+        setToast('Открыли Google Login в новой вкладке');
+    } catch (e) {
+        setToast(getApiErrorMessage(e), 'error');
+    } finally {
+        googleAuthBusy.value = false;
+    }
+};
+
+const exchangeGoogleCode = async () => {
+    const code = googleAuthCode.value.trim();
+    if (!code) {
+        setToast('Введите код от Google', 'error');
+        return;
+    }
+    googleAuthBusy.value = true;
+    try {
+        await api.exchangeManagerGoogleAuthCode(code);
+        googleAuthCode.value = '';
+        setToast('Google интеграция подключена');
+        await loadGoogleAuthStatus();
+    } catch (e) {
+        setToast(getApiErrorMessage(e), 'error');
+    } finally {
+        googleAuthBusy.value = false;
+    }
+};
 
 const loadSettings = async () => {
     loading.value = true;
@@ -110,7 +157,8 @@ const formatDate = (dateStr: string) => {
 };
 
 onMounted(() => {
-    loadSettings();
+    void loadSettings();
+    void loadGoogleAuthStatus();
 });
 </script>
 
@@ -158,6 +206,68 @@ onMounted(() => {
                 >
                     <span class="material-icons-round text-[18px]" :class="{'animate-spin': loading}">refresh</span>
                     Обновить
+                </button>
+            </div>
+        </div>
+
+        <div class="mb-6 bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-gray-200 dark:border-slate-700/60 p-6">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                    <h3 class="text-base font-semibold text-gray-900 dark:text-slate-200 mb-1 flex items-center gap-2">
+                        <span class="material-icons-round text-teal-500 text-[20px]">account_tree</span>
+                        Google Integration
+                    </h3>
+                    <p class="text-xs text-gray-500 dark:text-slate-400">
+                        Авторизация Google API для документов и Google Sheets.
+                    </p>
+                </div>
+                <button
+                    @click="loadGoogleAuthStatus"
+                    class="flex items-center gap-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 active:bg-gray-100 dark:active:bg-slate-600 text-gray-700 dark:text-slate-300 font-medium py-2 px-3 rounded-lg shadow-sm transition-all text-xs"
+                    :disabled="googleAuthLoading || googleAuthBusy"
+                >
+                    <span class="material-icons-round text-[16px]" :class="{ 'animate-spin': googleAuthLoading }">refresh</span>
+                    Проверить
+                </button>
+            </div>
+
+            <div class="mt-4 p-3 rounded-lg border"
+                :class="googleAuthStatus?.valid
+                    ? 'bg-green-50 border-green-200 text-green-800 dark:bg-green-500/10 dark:border-green-500/40 dark:text-green-300'
+                    : 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-500/10 dark:border-amber-500/40 dark:text-amber-300'">
+                <div class="text-sm font-medium">
+                    <span v-if="googleAuthLoading">Проверяем статус...</span>
+                    <span v-else-if="googleAuthStatus?.valid">Подключено</span>
+                    <span v-else>Не подключено / токен истёк</span>
+                </div>
+                <div v-if="googleAuthStatus?.expiry" class="text-xs mt-1 opacity-80">
+                    Действует до: {{ googleAuthStatus.expiry }}
+                </div>
+            </div>
+
+            <div class="mt-4 grid grid-cols-1 md:grid-cols-[auto_1fr_auto] gap-2 items-center">
+                <button
+                    @click="openGoogleAuth"
+                    class="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-all text-sm disabled:opacity-60"
+                    :disabled="googleAuthBusy"
+                >
+                    <span class="material-icons-round text-[18px]">open_in_new</span>
+                    Open Google Login
+                </button>
+                <input
+                    v-model="googleAuthCode"
+                    type="text"
+                    class="w-full bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-teal-500 transition-colors shadow-sm text-sm font-mono"
+                    placeholder="Вставьте код от Google (4/0A...)"
+                    :disabled="googleAuthBusy"
+                />
+                <button
+                    @click="exchangeGoogleCode"
+                    class="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-all text-sm disabled:opacity-60"
+                    :disabled="googleAuthBusy"
+                >
+                    <span class="material-icons-round text-[18px]">check_circle</span>
+                    Подтвердить код
                 </button>
             </div>
         </div>

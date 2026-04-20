@@ -3,6 +3,8 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ManagerBackupListResponse } from '../models/ManagerBackupListResponse';
+import type { ManagerBackupRunStartResponse } from '../models/ManagerBackupRunStartResponse';
+import type { ManagerBackupRunStatusResponse } from '../models/ManagerBackupRunStatusResponse';
 import type { ManagerRestoreJobStartResponse } from '../models/ManagerRestoreJobStartResponse';
 import type { ManagerRestoreJobStatusResponse } from '../models/ManagerRestoreJobStatusResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -18,6 +20,37 @@ export class ManagerBackupsService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/backups',
+        });
+    }
+    /**
+     * Start Manager Backup Run
+     * @returns ManagerBackupRunStartResponse Successful Response
+     * @throws ApiError
+     */
+    public static startManagerBackupRun(): CancelablePromise<ManagerBackupRunStartResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/backups/run',
+        });
+    }
+    /**
+     * Get Manager Backup Run Status
+     * @param jobId
+     * @returns ManagerBackupRunStatusResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerBackupRunStatus(
+        jobId: string,
+    ): CancelablePromise<ManagerBackupRunStatusResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/backups/run/{job_id}',
+            path: {
+                'job_id': jobId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**

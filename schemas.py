@@ -1471,7 +1471,33 @@ class ManagerRestoreJobStatusResponse(BaseModel):
     safety_dump_path: Optional[str] = None
 
 
+class ManagerBackupRunStartResponse(BaseModel):
+    job_id: str
+    status: str
+    stage: str
+
+
+class ManagerBackupRunStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    stage: str
+    error: Optional[str] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+
+
 # --- SETTINGS ---
+
+class ManagerGoogleAuthStatusResponse(BaseModel):
+    exists: bool
+    valid: bool
+    expired: bool
+    expiry: Optional[str] = None
+    scopes: List[str] = []
+
+
+class ManagerGoogleAuthUrlResponse(BaseModel):
+    url: str
 
 class ManagerSettingResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

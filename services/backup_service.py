@@ -3,6 +3,8 @@ import gzip
 import os
 import shutil
 import subprocess
+import tarfile
+import tempfile
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -260,6 +262,57 @@ class BackupService:
         with gzip.open(source_path, "rb") as source_file, open(destination_path, "wb") as destination_file:
             shutil.copyfileobj(source_file, destination_file)
         return destination_path
+
+    @staticmethod
+    def _safe_extract_tar(archive_path: str, destination_dir: str) -> None:
+        destination_abs = os.path.abspath(destination_dir)
+        with tarfile.open(archive_path, "r:*") as tar:
+            for member in tar.getmembers():
+                if member.issym() or member.islnk():
+                    raise Exception(f"Unsupported link in archive: {member.name}")
+                member_path = os.path.abspath(os.path.join(destination_dir, member.name))
+                if os.path.commonpath([destination_abs, member_path]) != destination_abs:
+                    raise Exception(f"Unsafe path in archive: {member.name}")
+            tar.extractall(path=destination_dir)
+
+    def restore_media_from_archive(self, archive_path: str) -> str:
+        """
+        Restores media directory from tar(.gz) archive.
+        Returns path to created safety archive of previous media state (if created).
+        """
+        if not os.path.exists(archive_path):
+            raise Exception(f"Media archive not found: {archive_path}")
+
+        safety_archive = self.create_media_archive()
+        temp_dir = tempfile.mkdtemp(prefix="media_restore_", dir=BACKUP_DIR)
+
+        try:
+            self._safe_extract_tar(archive_path, temp_dir)
+
+            extracted_media_dir = os.path.join(temp_dir, "media")
+            if os.path.isdir(extracted_media_dir):
+                restore_source = extracted_media_dir
+            else:
+                # Fallback for archives with direct files at root.
+                restore_source = temp_dir
+
+            if os.path.exists(self.media_dir):
+                shutil.rmtree(self.media_dir)
+
+            if restore_source == temp_dir:
+                os.makedirs(self.media_dir, exist_ok=True)
+                for item in os.listdir(temp_dir):
+                    item_path = os.path.join(temp_dir, item)
+                    if item_path == self.media_dir:
+                        continue
+                    shutil.move(item_path, os.path.join(self.media_dir, item))
+            else:
+                shutil.move(restore_source, self.media_dir)
+
+            logger.info("Media restored successfully from %s", archive_path)
+            return safety_archive or ""
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
     async def restore_from_file_async(self, filepath: str):
         """
