@@ -11,7 +11,10 @@ import {
     getDimensions,
     getPerformance,
 } from "../../utils/specs";
-import { formatPublicSpecsGrouped } from "../../utils/spec-dictionary";
+import {
+    buildPublicSpecsSummary,
+    formatPublicSpecsGrouped,
+} from "../../utils/spec-dictionary";
 import { generateBentoCards } from "../../utils/bento-cards";
 
 export async function getStaticPaths() {
@@ -57,6 +60,7 @@ const mainImage = uniqueImages[0];
 const dimensions = getDimensions(specs);
 const performance = getPerformance(specs);
 const publicSpecGroups = formatPublicSpecsGrouped(specs);
+const publicSpecsSummary = buildPublicSpecsSummary(specs);
 
 // Generate Bento Cards
 const bentoCards = generateBentoCards(product);
@@ -191,6 +195,92 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                         minskQty={product.minsk_qty}
                         availabilityStatus={product.availability_status}
                     />
+                </div>
+
+                <div class="specs-preview">
+                    <p class="specs-summary-line">
+                        <span class="material-icons-round summary-home-icon">
+                            home
+                        </span>
+                        <span>
+                            {publicSpecsSummary.headlineBeforeArea}
+                            {
+                                publicSpecsSummary.headlineArea && (
+                                    <strong class="headline-area">
+                                        {publicSpecsSummary.headlineArea}
+                                    </strong>
+                                )
+                            }
+                        </span>
+                    </p>
+                    {
+                        publicSpecsSummary.rows.length > 0 && (
+                            <ul class="specs-preview-list compact">
+                                {
+                                    publicSpecsSummary.rows.map((row) => (
+                                            <li class="preview-item" data-key={row.key}>
+                                                <span class="preview-label">
+                                                    {row.label}
+                                                </span>
+                                                {
+                                                    row.kind === "cool_heat" ? (
+                                                        <span class="preview-pair-value">
+                                                            <span class="pair-point">
+                                                                <span class="material-icons-round preview-mini-icon cold">
+                                                                    ac_unit
+                                                                </span>
+                                                                <strong>{row.cooling}</strong>
+                                                            </span>
+                                                            <span class="pair-point">
+                                                                <span class="material-icons-round preview-mini-icon heat">
+                                                                    local_fire_department
+                                                                </span>
+                                                                <strong>{row.heating}</strong>
+                                                            </span>
+                                                            {
+                                                                row.unit && (
+                                                                    <span class="pair-unit">
+                                                                        {row.unit}
+                                                                    </span>
+                                                                )
+                                                            }
+                                                        </span>
+                                                    ) : (
+                                                        <span class="preview-pair-value">
+                                                            <span class="pair-point">
+                                                                <span class="material-icons-round preview-mini-icon noise">
+                                                                    volume_up
+                                                                </span>
+                                                                <strong>{row.indoor}</strong>
+                                                                <span class="pair-note">
+                                                                    (внутр.)
+                                                                </span>
+                                                            </span>
+                                                            <span class="pair-point">
+                                                                <strong>{row.outdoor}</strong>
+                                                                <span class="pair-note">
+                                                                    (наруж.)
+                                                                </span>
+                                                            </span>
+                                                            <span class="pair-unit">
+                                                                {row.unit}
+                                                            </span>
+                                                        </span>
+                                                    )
+                                                }
+                                            </li>
+                                        ))
+                                }
+                            </ul>
+                        )
+                    }
+                    {
+                        publicSpecsSummary.temperatureNote && (
+                            <p class="specs-preview-note">
+                                {publicSpecsSummary.temperatureNote}
+                            </p>
+                        )
+                    }
                 </div>
 
                 <FeaturesBentoGrid client:visible cards={bentoCards} />
@@ -430,8 +520,19 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                                             </svg>
                                             <div class="box-info">
                                                 {dimensions.weightInner && (
-                                                    <span class="weight">
-                                                        {dimensions.weightInner}
+                                                    <span class="weight-chip">
+                                                        <svg
+                                                            class="weight-icon"
+                                                            viewBox="0 0 24 24"
+                                                            aria-hidden="true"
+                                                        >
+                                                            <path d="M9 7a3 3 0 0 1 6 0" />
+                                                            <path d="M6 7h12l2 11H4Z" />
+                                                            <path d="M8.5 11h7" />
+                                                        </svg>
+                                                        <span class="weight-value">
+                                                            {dimensions.weightInner}
+                                                        </span>
                                                     </span>
                                                 )}
                                             </div>
@@ -650,8 +751,19 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                                             </svg>
                                             <div class="box-info">
                                                 {dimensions.weightOuter && (
-                                                    <span class="weight">
-                                                        {dimensions.weightOuter}
+                                                    <span class="weight-chip">
+                                                        <svg
+                                                            class="weight-icon"
+                                                            viewBox="0 0 24 24"
+                                                            aria-hidden="true"
+                                                        >
+                                                            <path d="M9 7a3 3 0 0 1 6 0" />
+                                                            <path d="M6 7h12l2 11H4Z" />
+                                                            <path d="M8.5 11h7" />
+                                                        </svg>
+                                                        <span class="weight-value">
+                                                            {dimensions.weightOuter}
+                                                        </span>
                                                     </span>
                                                 )}
                                             </div>
@@ -666,7 +778,7 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                 <!-- Full Specs Spoiler -->
                 <details class="full-specs-spoiler">
                     <summary>
-                        <span>Основные характеристики</span>
+                        <span>Все характеристики</span>
                         <span class="material-icons-round chevron"
                             >expand_more</span
                         >
@@ -1185,16 +1297,139 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
         fill: var(--accent-light);
         font-family: "Space Grotesk", monospace;
     }
-    .box-info .weight {
-        font-size: 0.85rem;
+    .box-info .weight-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.22rem 0.55rem;
+        border: 1px solid rgba(var(--primary-rgb), 0.2);
+        border-radius: 999px;
+        background: rgba(var(--primary-rgb), 0.04);
+    }
+    .box-info .weight-icon {
+        width: 0.84rem;
+        height: 0.84rem;
+        stroke: currentColor;
+        stroke-width: 1.7;
+        fill: none;
+        opacity: 0.8;
+    }
+    .box-info .weight-value {
+        font-size: 0.9rem;
         color: var(--text-muted);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.01em;
+    }
+
+    .specs-preview {
+        margin-top: 2rem;
+        padding: 1rem;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: rgba(var(--surface-rgb), 0.35);
+    }
+    .specs-summary-line {
+        margin: 0 0 0.85rem;
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        font-size: 1.02rem;
+        line-height: 1.35;
+        font-weight: 600;
+        color: var(--text);
+    }
+    .summary-home-icon {
+        color: var(--text-muted);
+        font-size: 1.05rem;
+        line-height: 1;
+    }
+    .headline-area {
+        font-weight: 800;
+    }
+    .specs-preview-list.compact {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0.5rem;
+    }
+    .preview-item {
+        display: grid;
+        grid-template-columns: minmax(170px, 1fr) minmax(0, 1.4fr);
+        align-items: center;
+        gap: 0.65rem;
+        padding: 0.62rem 0.75rem;
+        border: 1px solid rgba(var(--primary-rgb), 0.16);
+        border-radius: 10px;
+        background: rgba(var(--primary-rgb), 0.03);
+    }
+    .preview-label {
+        color: var(--text-muted);
+        font-size: 0.87rem;
+        font-weight: 500;
+    }
+    .preview-pair-value {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: max-content;
+        justify-content: start;
+        align-items: center;
+        gap: 0.8rem;
+    }
+    .pair-point {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.22rem;
+        color: var(--text);
+    }
+    .pair-point strong {
+        font-size: 1.14rem;
+        line-height: 1.2;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.01em;
+        min-width: 3ch;
+        text-align: right;
+    }
+    .pair-unit {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text-muted);
+    }
+    .pair-note {
+        font-size: 0.83rem;
+        color: var(--text-muted);
+        transform: translateY(1px);
+    }
+    .preview-mini-icon {
+        font-size: 0.9rem;
+        line-height: 1;
+        transform: translateY(-0.5px);
+    }
+    .preview-mini-icon.cold {
+        color: #3b82f6;
+    }
+    .preview-mini-icon.heat {
+        color: #ef4444;
+    }
+    .preview-mini-icon.noise {
+        color: #0ea5e9;
+    }
+    .specs-preview-note {
+        margin: 0.75rem 0 0;
+        padding-top: 0.65rem;
+        border-top: 1px dashed rgba(var(--primary-rgb), 0.2);
+        color: var(--text-muted);
+        font-size: 0.88rem;
+        line-height: 1.45;
     }
 
     /* Spoiler */
     .full-specs-spoiler {
-        margin-top: 3rem;
-        border-top: 1px solid var(--border);
-        padding-top: 1rem;
+        margin-top: 0.85rem;
+        border-top: none;
+        padding-top: 0;
     }
     .full-specs-spoiler summary {
         list-style: none;
@@ -1204,7 +1439,13 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
         cursor: pointer;
         font-weight: 600;
         color: var(--text);
-        padding: 0.5rem 0;
+        padding: 0.8rem 1rem;
+        border: 1px solid rgba(var(--primary-rgb), 0.45);
+        border-radius: 12px;
+        background: rgba(var(--primary-rgb), 0.04);
+    }
+    .full-specs-spoiler[open] summary {
+        border-color: rgba(var(--primary-rgb), 0.7);
     }
     .full-specs-spoiler[open] summary .chevron {
         transform: rotate(180deg);
@@ -1212,6 +1453,9 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
     .chevron {
         transition: transform 0.3s;
         color: var(--text-muted);
+    }
+    .specs-content {
+        margin-top: 0.9rem;
     }
     .spec-groups {
         display: grid;
@@ -1291,6 +1535,21 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
         }
         .spec-card:nth-child(3) {
             grid-column: span 2;
+        }
+        .specs-summary-line {
+            font-size: 0.96rem;
+            align-items: flex-start;
+        }
+        .preview-item {
+            grid-template-columns: minmax(0, 1fr);
+            gap: 0.35rem;
+        }
+        .preview-pair-value {
+            gap: 0.65rem;
+        }
+        .pair-point strong {
+            min-width: 2.8ch;
+            font-size: 1.07rem;
         }
     }
 </style>
