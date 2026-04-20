@@ -221,6 +221,53 @@ class Lg24Parser(BaseParser):
 
         return specs
 
+    @classmethod
+    def _extract_manuals(cls, soup: BeautifulSoup, current_url: str) -> List[Dict[str, str]]:
+        manuals: List[Dict[str, str]] = []
+        seen: set[str] = set()
+
+        def collect_row(key_text: str, value_node) -> None:
+            key = (key_text or "").replace("\xa0", " ").strip().rstrip(":")
+            if not key:
+                return
+            key_l = key.lower()
+            if not any(marker in key_l for marker in cls._DOC_SPEC_KEY_MARKERS):
+                return
+
+            links = value_node.select("a[href]") if value_node else []
+            for link in links:
+                href = cls._to_abs_url(link.get("href", ""), current_url)
+                if not href or href in seen:
+                    continue
+                seen.add(href)
+                manuals.append(
+                    {
+                        "kind": "manual",
+                        "title": key,
+                        "url": href,
+                        "source": "lg24",
+                    }
+                )
+
+        for row in soup.select("section#tab1 dl"):
+            dt = row.find("dt")
+            dd = row.find("dd")
+            if not dt or not dd:
+                continue
+            collect_row(dt.get_text(" ", strip=True), dd)
+
+        if manuals:
+            return manuals
+
+        for row in soup.select("table.woocommerce-product-attributes tr"):
+            th = row.find("th")
+            td = row.find("td")
+            if not th or not td:
+                continue
+            collect_row(th.get_text(" ", strip=True), td)
+
+        return manuals
+
     @staticmethod
     def _extract_metrics(specs: Dict[str, str], title: str) -> Dict[str, Any]:
         metrics: Dict[str, Any] = {
@@ -315,6 +362,7 @@ class Lg24Parser(BaseParser):
         metrics = self._extract_metrics(specs, title)
         images = self._collect_images(soup, str(response.url))
         related_urls = self._collect_related_urls(soup, str(response.url))
+        manuals = self._extract_manuals(soup, str(response.url))
 
         return {
             "title": title,
@@ -329,6 +377,7 @@ class Lg24Parser(BaseParser):
             "specs": specs,
             "metrics": metrics,
             "related_urls": related_urls,
+            "manuals": manuals,
             "availability": availability,
             "in_stock": in_stock,
         }

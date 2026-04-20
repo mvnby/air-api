@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ProductImageResponse } from './ProductImageResponse';
+import type { ProductManualResponse } from './ProductManualResponse';
 import type { ProductSiblingResponse } from './ProductSiblingResponse';
 import type { TagResponse } from './TagResponse';
 export type ProductResponse = {
@@ -24,6 +25,7 @@ export type ProductResponse = {
     specs?: Record<string, any>;
     images?: Array<string>;
     gallery_images?: Array<ProductImageResponse>;
+    manuals?: Array<ProductManualResponse>;
     series_siblings?: Array<ProductSiblingResponse>;
 };
 

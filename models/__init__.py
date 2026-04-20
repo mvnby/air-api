@@ -29,8 +29,10 @@ from .order import (
 )
 from .product import (
     Favorite,
+    ImportMediaCache,
     InstallationRate,
     Product,
+    ProductAttachment,
     ProductImage,
     ProductTagLink,
     Tag,
@@ -56,6 +58,7 @@ __all__ = [
     "Favorite",
     "GlobalConfig",
     "InstallationRate",
+    "ImportMediaCache",
     "Installer",
     "Lead",
     "LeadIntakeSource",
@@ -73,6 +76,7 @@ __all__ = [
     "OrderWorkStage",
     "PaymentCurrency",
     "Product",
+    "ProductAttachment",
     "ProductImage",
     "ProductImage",
     "ProductSeries",

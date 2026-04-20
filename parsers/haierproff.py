@@ -191,6 +191,33 @@ class HaierProffParser(BaseParser):
         return related
 
     @classmethod
+    def _extract_manuals(cls, soup: BeautifulSoup, current_url: str) -> List[Dict[str, str]]:
+        manuals: List[Dict[str, str]] = []
+        seen_urls: set[str] = set()
+
+        for link in soup.select(".icon-link-l-list a.icon-link-l[href]"):
+            href = cls._to_abs_url(link.get("href", ""), current_url)
+            if not href or href in seen_urls:
+                continue
+
+            title_el = link.select_one(".icon-link-l__text")
+            title = re.sub(r"\s+", " ", title_el.get_text(" ", strip=True)).strip() if title_el else ""
+            if not title:
+                title = "Документ"
+
+            seen_urls.add(href)
+            manuals.append(
+                {
+                    "kind": "manual",
+                    "title": title,
+                    "url": href,
+                    "source": "haierproff",
+                }
+            )
+
+        return manuals
+
+    @classmethod
     def _extract_specs(cls, soup: BeautifulSoup) -> Dict[str, str]:
         specs: Dict[str, str] = {}
 
@@ -401,6 +428,7 @@ class HaierProffParser(BaseParser):
         metrics = self._extract_metrics(specs, title)
         images = self._collect_images(soup, str(response.url))
         related_urls = self._collect_related_urls(soup, str(response.url))
+        manuals = self._extract_manuals(soup, str(response.url))
 
         return {
             "title": title,
@@ -416,6 +444,7 @@ class HaierProffParser(BaseParser):
             "specs": specs,
             "metrics": metrics,
             "related_urls": related_urls,
+            "manuals": manuals,
             "availability": "В наличии",
             "in_stock": True,
         }

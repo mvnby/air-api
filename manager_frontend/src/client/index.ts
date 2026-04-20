@@ -59,6 +59,7 @@ export type { ManagerCatalogCustomerListResponse } from './models/ManagerCatalog
 export type { ManagerCatalogProductImageResponse } from './models/ManagerCatalogProductImageResponse';
 export type { ManagerCatalogProductItemResponse } from './models/ManagerCatalogProductItemResponse';
 export type { ManagerCatalogProductListResponse } from './models/ManagerCatalogProductListResponse';
+export type { ManagerCatalogProductManualResponse } from './models/ManagerCatalogProductManualResponse';
 export type { ManagerCatalogProductTagResponse } from './models/ManagerCatalogProductTagResponse';
 export type { ManagerCrmHealthReportResponse } from './models/ManagerCrmHealthReportResponse';
 export type { ManagerCustomerBranchCreatePayload } from './models/ManagerCustomerBranchCreatePayload';
@@ -127,6 +128,8 @@ export type { ProductAvailabilityLeadResponse } from './models/ProductAvailabili
 export type { ProductImageResponse } from './models/ProductImageResponse';
 export type { ProductLocalStockPayload } from './models/ProductLocalStockPayload';
 export type { ProductLocalStockResponse } from './models/ProductLocalStockResponse';
+export type { ProductManualPayload } from './models/ProductManualPayload';
+export type { ProductManualResponse } from './models/ProductManualResponse';
 export type { ProductResponse } from './models/ProductResponse';
 export type { ProductSiblingResponse } from './models/ProductSiblingResponse';
 export type { ProductUpdate } from './models/ProductUpdate';

@@ -42,6 +42,17 @@ def map_product_to_dict(
             }
             for img in gallery
         ]
+        data["manuals"] = [
+            {
+                "id": item.id,
+                "kind": item.kind,
+                "title": item.title,
+                "url": item.url,
+                "source": item.source,
+            }
+            for item in (product.attachments or [])
+            if item.kind == "manual"
+        ]
 
     if sanitize_specs_payload:
         data["specs"] = sanitize_specs(data.get("specs"))

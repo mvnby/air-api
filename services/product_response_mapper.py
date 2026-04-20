@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 from models import Product
 from schemas import (
     ProductImageResponse,
+    ProductManualResponse,
     ProductResponse,
     ProductSiblingResponse,
     TagGroupResponse,
@@ -68,6 +69,18 @@ def map_product_to_response(
         for item in (series_siblings or [])
     ]
 
+    manuals_payload = [
+        ProductManualResponse(
+            id=item.id,
+            kind=item.kind,
+            title=item.title,
+            url=item.url,
+            source=item.source,
+        )
+        for item in (product.attachments or [])
+        if item.kind == "manual"
+    ]
+
     return ProductResponse(
         id=product.id,
         title=product.title,
@@ -87,5 +100,6 @@ def map_product_to_response(
         specs=specs or {},
         images=images or [],
         gallery_images=gallery,
+        manuals=manuals_payload,
         series_siblings=siblings_payload,
     )

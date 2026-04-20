@@ -9654,6 +9654,13 @@
             "type": "array",
             "title": "Gallery Images"
           },
+          "manuals": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCatalogProductManualResponse"
+            },
+            "type": "array",
+            "title": "Manuals"
+          },
           "tags": {
             "items": {
               "$ref": "#/components/schemas/ManagerCatalogProductTagResponse"
@@ -9736,6 +9743,7 @@
           "created_at",
           "specs",
           "gallery_images",
+          "manuals",
           "tags"
         ],
         "title": "ManagerCatalogProductItemResponse"
@@ -9759,6 +9767,45 @@
           "meta"
         ],
         "title": "ManagerCatalogProductListResponse"
+      },
+      "ManagerCatalogProductManualResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "default": "manual"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "url"
+        ],
+        "title": "ManagerCatalogProductManualResponse"
       },
       "ManagerCatalogProductTagResponse": {
         "properties": {
@@ -13677,6 +13724,79 @@
         ],
         "title": "ProductLocalStockResponse"
       },
+      "ProductManualPayload": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "default": "manual"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "url"
+        ],
+        "title": "ProductManualPayload"
+      },
+      "ProductManualResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "default": "manual"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "url"
+        ],
+        "title": "ProductManualResponse"
+      },
       "ProductResponse": {
         "properties": {
           "id": {
@@ -13801,6 +13921,14 @@
             },
             "type": "array",
             "title": "Gallery Images",
+            "default": []
+          },
+          "manuals": {
+            "items": {
+              "$ref": "#/components/schemas/ProductManualResponse"
+            },
+            "type": "array",
+            "title": "Manuals",
             "default": []
           },
           "series_siblings": {
@@ -14001,6 +14129,13 @@
               }
             ],
             "title": "Tag Ids"
+          },
+          "manuals": {
+            "items": {
+              "$ref": "#/components/schemas/ProductManualPayload"
+            },
+            "type": "array",
+            "title": "Manuals"
           }
         },
         "type": "object",
