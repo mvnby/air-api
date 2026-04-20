@@ -13,6 +13,7 @@ interface Props {
         has_wifi?: boolean;
         has_fresh_air?: boolean;
         heating_min?: number;
+        indoor_types?: string[];
     };
     limit?: number;
 }
@@ -32,6 +33,9 @@ const viewAllHref = (() => {
     if (filters.has_wifi != null) viewAllParams.set("has_wifi", String(filters.has_wifi));
     if (filters.has_fresh_air != null) viewAllParams.set("has_fresh_air", String(filters.has_fresh_air));
     if (filters.heating_min != null) viewAllParams.set("heating_min", String(filters.heating_min));
+    if (filters.indoor_types?.length) {
+        filters.indoor_types.forEach((value) => viewAllParams.append("indoor_types", value));
+    }
 
     const query = viewAllParams.toString();
     return query ? `/catalog?${query}` : "/catalog";
@@ -52,6 +56,7 @@ if (vitebskFeatured) {
         has_wifi: filters.has_wifi,
         has_fresh_air: filters.has_fresh_air,
         heating_min: filters.heating_min,
+        indoor_types: filters.indoor_types,
         limit: limit,
         sort: "area_asc",
     });
