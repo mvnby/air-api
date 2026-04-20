@@ -54,6 +54,53 @@ class Service(SQLModel, table=True):
         return f"{self.title} ({self.base_price} руб.)"
 
 
+class ServiceEstimate(SQLModel, table=True):
+    __tablename__ = "service_estimate"
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    customer_id: Optional[int] = Field(default=None, foreign_key="customer.id", index=True)
+    title: str = Field(default="Смета услуг")
+    comment: Optional[str] = Field(default=None)
+
+    service_kind: str = Field(default="install", index=True)
+    currency: str = Field(default="BYN")
+    subtotal: float = Field(default=0.0)
+    discount_amount: float = Field(default=0.0)
+    total: float = Field(default=0.0)
+    calculation_payload: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+
+    status: str = Field(default="draft", index=True)
+    created_by: Optional[str] = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=datetime.now)
+
+    customer: Optional["Customer"] = Relationship()
+    items: List["ServiceEstimateItem"] = Relationship(
+        back_populates="estimate",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin",
+        },
+    )
+
+
+class ServiceEstimateItem(SQLModel, table=True):
+    __tablename__ = "service_estimate_item"
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    estimate_id: int = Field(foreign_key="service_estimate.id", index=True)
+    source_type: str = Field(default="base", index=True)
+    source_id: Optional[int] = Field(default=None)
+    name: str
+
+    qty: float = Field(default=1.0)
+    unit: str = Field(default="шт")
+    unit_price: float = Field(default=0.0)
+    line_total: float = Field(default=0.0)
+    sort_order: int = Field(default=0)
+
+    estimate: ServiceEstimate = Relationship(back_populates="items")
+
+
 class OrderProductLink(SQLModel, table=True):
     __tablename__ = "order_product_link"
     id: Optional[int] = Field(default=None, primary_key=True)

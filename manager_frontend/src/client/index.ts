@@ -73,6 +73,8 @@ export type { ManagerCustomerBranchUpdatePayload } from './models/ManagerCustome
 export type { ManagerCustomerDocumentItem } from './models/ManagerCustomerDocumentItem';
 export type { ManagerCustomerDocumentListResponse } from './models/ManagerCustomerDocumentListResponse';
 export type { ManagerCustomerUpdatePayload } from './models/ManagerCustomerUpdatePayload';
+export type { ManagerEstimateAddonPayload } from './models/ManagerEstimateAddonPayload';
+export type { ManagerEstimateLineResponse } from './models/ManagerEstimateLineResponse';
 export type { ManagerGoogleAuthExchangePayload } from './models/ManagerGoogleAuthExchangePayload';
 export type { ManagerGoogleAuthStatusResponse } from './models/ManagerGoogleAuthStatusResponse';
 export type { ManagerGoogleAuthUrlResponse } from './models/ManagerGoogleAuthUrlResponse';
@@ -80,6 +82,9 @@ export type { ManagerInstallerCreatePayload } from './models/ManagerInstallerCre
 export type { ManagerInstallerListResponse } from './models/ManagerInstallerListResponse';
 export type { ManagerInstallerResponse } from './models/ManagerInstallerResponse';
 export type { ManagerInstallerUpdatePayload } from './models/ManagerInstallerUpdatePayload';
+export type { ManagerInstallEstimateCalculatePayload } from './models/ManagerInstallEstimateCalculatePayload';
+export type { ManagerInstallEstimateResponse } from './models/ManagerInstallEstimateResponse';
+export type { ManagerInstallEstimateSavePayload } from './models/ManagerInstallEstimateSavePayload';
 export type { ManagerMediaBulkAddResponse } from './models/ManagerMediaBulkAddResponse';
 export type { ManagerMediaBulkDeleteResponse } from './models/ManagerMediaBulkDeleteResponse';
 export type { ManagerMediaBulkUploadResponse } from './models/ManagerMediaBulkUploadResponse';
@@ -104,6 +109,8 @@ export type { ManagerOrderServiceLinePayload } from './models/ManagerOrderServic
 export type { ManagerOrderUpdatePayload } from './models/ManagerOrderUpdatePayload';
 export type { ManagerRestoreJobStartResponse } from './models/ManagerRestoreJobStartResponse';
 export type { ManagerRestoreJobStatusResponse } from './models/ManagerRestoreJobStatusResponse';
+export type { ManagerServiceEstimateListResponse } from './models/ManagerServiceEstimateListResponse';
+export type { ManagerServiceEstimateResponse } from './models/ManagerServiceEstimateResponse';
 export type { ManagerSettingCreatePayload } from './models/ManagerSettingCreatePayload';
 export type { ManagerSettingListResponse } from './models/ManagerSettingListResponse';
 export type { ManagerSettingResponse } from './models/ManagerSettingResponse';
@@ -193,6 +200,7 @@ export { ManagerInstallersService } from './services/ManagerInstallersService';
 export { ManagerLeadsService } from './services/ManagerLeadsService';
 export { ManagerLeadsInboxService } from './services/ManagerLeadsInboxService';
 export { ManagerOrdersService } from './services/ManagerOrdersService';
+export { ManagerServiceEstimatesService } from './services/ManagerServiceEstimatesService';
 export { ManagerSettingsService } from './services/ManagerSettingsService';
 export { ManagerTagsService } from './services/ManagerTagsService';
 export { ManagerTariffsService } from './services/ManagerTariffsService';
