@@ -7,6 +7,7 @@ import {
     ManagerDashboardService,
     ManagerInstallersService,
     ManagerSettingsService,
+    ManagerBackupsService,
     ManagerTariffsService,
     AdminService,
     ApiService,
@@ -36,6 +37,9 @@ import {
     type SupplierMappingBulkCreatePayload,
     type SupplierOfferSuggestionsPayload,
     type ProductLocalStockPayload,
+    type ManagerBackupListResponse,
+    type ManagerRestoreJobStartResponse,
+    type ManagerRestoreJobStatusResponse,
 } from './client';
 import { ManagerTagsService } from './client/services/ManagerTagsService';
 import { ManagerLeadsInboxService } from './client/services/ManagerLeadsInboxService';
@@ -47,6 +51,7 @@ export type Segment = 'b2c' | 'b2b';
 export type DashboardView = 'kanban' | 'list';
 export { type Product, type DashboardStatsResponse, type DashboardTouchpoint };
 export type { LeadsInboxItemResponse };
+export type { ManagerBackupListResponse, ManagerRestoreJobStartResponse, ManagerRestoreJobStatusResponse };
 
 export interface ManagerBrand {
     id: number;
@@ -196,6 +201,18 @@ export const api = {
 
     async updateManagerSetting(key: string, payload: ManagerSettingUpdatePayload) {
         return await ManagerSettingsService.updateManagerSetting(key, payload);
+    },
+
+    async listManagerBackups() {
+        return await ManagerBackupsService.listManagerBackups();
+    },
+
+    async startManagerBackupRestore(fileId: string) {
+        return await ManagerBackupsService.startManagerBackupRestore(fileId);
+    },
+
+    async getManagerBackupRestoreStatus(jobId: string) {
+        return await ManagerBackupsService.getManagerBackupRestoreStatus(jobId);
     },
 
     // Tariffs

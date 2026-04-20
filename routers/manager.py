@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from routers import manager_auth
+from routers import manager_backups
 from routers import manager_brands
 from routers import manager_calendar
 from routers import manager_catalog
@@ -19,6 +20,7 @@ from routers import manager_supply
 
 
 router = APIRouter()
+router.include_router(manager_backups.router)
 router.include_router(manager_catalog.router)
 router.include_router(manager_media.router)
 router.include_router(manager_specs.router)
