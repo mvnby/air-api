@@ -2,16 +2,25 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from core.config import settings
 from core.security import get_current_username
 from routers.manager_operation_ids import (
+    GET_MANAGER_BACKUP_RUN_STATUS,
     GET_MANAGER_BACKUP_RESTORE_STATUS,
     LIST_MANAGER_BACKUPS,
+    START_MANAGER_BACKUP_RUN,
     START_MANAGER_BACKUP_RESTORE,
 )
 from schemas import (
     ManagerBackupListResponse,
+    ManagerBackupRunStartResponse,
+    ManagerBackupRunStatusResponse,
     ManagerRestoreJobStartResponse,
     ManagerRestoreJobStatusResponse,
+)
+from services.backup_run_runtime_service import (
+    BackupRunConflictError,
+    backup_run_runtime_service,
 )
 from services.backup_service import backup_service
 from services.backup_restore_runtime_service import (
@@ -37,12 +46,58 @@ async def list_manager_backups():
 
 
 @router.post(
+    "/run",
+    response_model=ManagerBackupRunStartResponse,
+    operation_id=START_MANAGER_BACKUP_RUN,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def start_manager_backup_run():
+    if not settings.is_production:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Manual backup is enabled only in production (current: {settings.ENVIRONMENT})",
+        )
+
+    if backup_restore_runtime_service.has_active_job():
+        raise HTTPException(status_code=409, detail="Restore job is running. Wait until it finishes.")
+
+    try:
+        job = await backup_run_runtime_service.start_backup()
+    except BackupRunConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Failed to start manual backup job")
+        raise HTTPException(status_code=500, detail="Failed to start backup job") from exc
+
+    return ManagerBackupRunStartResponse(
+        job_id=job["job_id"],
+        status=job["status"],
+        stage=job["stage"],
+    )
+
+
+@router.get(
+    "/run/{job_id}",
+    response_model=ManagerBackupRunStatusResponse,
+    operation_id=GET_MANAGER_BACKUP_RUN_STATUS,
+)
+async def get_manager_backup_run_status(job_id: str):
+    job = backup_run_runtime_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Backup job not found")
+    return ManagerBackupRunStatusResponse(**job)
+
+
+@router.post(
     "/restore/{file_id}",
     response_model=ManagerRestoreJobStartResponse,
     operation_id=START_MANAGER_BACKUP_RESTORE,
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def start_manager_backup_restore(file_id: str):
+    if backup_run_runtime_service.has_active_job():
+        raise HTTPException(status_code=409, detail="Backup job is running. Wait until it finishes.")
+
     try:
         job = await backup_restore_runtime_service.start_restore(file_id)
     except RestoreConflictError as exc:

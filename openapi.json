@@ -1913,6 +1913,79 @@
         ]
       }
     },
+    "/api/manager/backups/run": {
+      "post": {
+        "tags": [
+          "manager/backups"
+        ],
+        "summary": "Start Manager Backup Run",
+        "operationId": "start_manager_backup_run",
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerBackupRunStartResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/backups/run/{job_id}": {
+      "get": {
+        "tags": [
+          "manager/backups"
+        ],
+        "summary": "Get Manager Backup Run Status",
+        "operationId": "get_manager_backup_run_status",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerBackupRunStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/backups/restore/{file_id}": {
       "post": {
         "tags": [
@@ -2005,6 +2078,104 @@
             }
           }
         }
+      }
+    },
+    "/api/manager/google-auth/status": {
+      "get": {
+        "tags": [
+          "manager/google-auth"
+        ],
+        "summary": "Get Manager Google Auth Status",
+        "operationId": "get_manager_google_auth_status",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerGoogleAuthStatusResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/google-auth/url": {
+      "get": {
+        "tags": [
+          "manager/google-auth"
+        ],
+        "summary": "Get Manager Google Auth Url",
+        "operationId": "get_manager_google_auth_url",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerGoogleAuthUrlResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/google-auth/exchange": {
+      "post": {
+        "tags": [
+          "manager/google-auth"
+        ],
+        "summary": "Exchange Manager Google Auth Code",
+        "operationId": "exchange_manager_google_auth_code",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerGoogleAuthExchangePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerActionMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       }
     },
     "/api/manager/products/list": {
@@ -9226,6 +9397,87 @@
         ],
         "title": "ManagerBackupListResponse"
       },
+      "ManagerBackupRunStartResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status",
+          "stage"
+        ],
+        "title": "ManagerBackupRunStartResponse"
+      },
+      "ManagerBackupRunStatusResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status",
+          "stage"
+        ],
+        "title": "ManagerBackupRunStatusResponse"
+      },
       "ManagerBrandCreatePayload": {
         "properties": {
           "title": {
@@ -10527,6 +10779,74 @@
         },
         "type": "object",
         "title": "ManagerCustomerUpdatePayload"
+      },
+      "ManagerGoogleAuthExchangePayload": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "title": "ManagerGoogleAuthExchangePayload"
+      },
+      "ManagerGoogleAuthStatusResponse": {
+        "properties": {
+          "exists": {
+            "type": "boolean",
+            "title": "Exists"
+          },
+          "valid": {
+            "type": "boolean",
+            "title": "Valid"
+          },
+          "expired": {
+            "type": "boolean",
+            "title": "Expired"
+          },
+          "expiry": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiry"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "exists",
+          "valid",
+          "expired"
+        ],
+        "title": "ManagerGoogleAuthStatusResponse"
+      },
+      "ManagerGoogleAuthUrlResponse": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "ManagerGoogleAuthUrlResponse"
       },
       "ManagerInstallerCreatePayload": {
         "properties": {

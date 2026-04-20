@@ -50,6 +50,8 @@ export type { ManagerActionMessageResponse } from './models/ManagerActionMessage
 export type { ManagerAuthStatusResponse } from './models/ManagerAuthStatusResponse';
 export type { ManagerBackupItemResponse } from './models/ManagerBackupItemResponse';
 export type { ManagerBackupListResponse } from './models/ManagerBackupListResponse';
+export type { ManagerBackupRunStartResponse } from './models/ManagerBackupRunStartResponse';
+export type { ManagerBackupRunStatusResponse } from './models/ManagerBackupRunStatusResponse';
 export type { ManagerBrandCreatePayload } from './models/ManagerBrandCreatePayload';
 export type { ManagerBrandListResponse } from './models/ManagerBrandListResponse';
 export type { ManagerBrandResponse } from './models/ManagerBrandResponse';
@@ -71,6 +73,9 @@ export type { ManagerCustomerBranchUpdatePayload } from './models/ManagerCustome
 export type { ManagerCustomerDocumentItem } from './models/ManagerCustomerDocumentItem';
 export type { ManagerCustomerDocumentListResponse } from './models/ManagerCustomerDocumentListResponse';
 export type { ManagerCustomerUpdatePayload } from './models/ManagerCustomerUpdatePayload';
+export type { ManagerGoogleAuthExchangePayload } from './models/ManagerGoogleAuthExchangePayload';
+export type { ManagerGoogleAuthStatusResponse } from './models/ManagerGoogleAuthStatusResponse';
+export type { ManagerGoogleAuthUrlResponse } from './models/ManagerGoogleAuthUrlResponse';
 export type { ManagerInstallerCreatePayload } from './models/ManagerInstallerCreatePayload';
 export type { ManagerInstallerListResponse } from './models/ManagerInstallerListResponse';
 export type { ManagerInstallerResponse } from './models/ManagerInstallerResponse';
@@ -183,6 +188,7 @@ export { ManagerCalendarService } from './services/ManagerCalendarService';
 export { ManagerCrmService } from './services/ManagerCrmService';
 export { ManagerDashboardService } from './services/ManagerDashboardService';
 export { ManagerDocsService } from './services/ManagerDocsService';
+export { ManagerGoogleAuthService } from './services/ManagerGoogleAuthService';
 export { ManagerInstallersService } from './services/ManagerInstallersService';
 export { ManagerLeadsService } from './services/ManagerLeadsService';
 export { ManagerLeadsInboxService } from './services/ManagerLeadsInboxService';

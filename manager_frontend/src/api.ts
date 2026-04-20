@@ -7,6 +7,7 @@ import {
     ManagerDashboardService,
     ManagerInstallersService,
     ManagerSettingsService,
+    ManagerGoogleAuthService,
     ManagerBackupsService,
     ManagerTariffsService,
     AdminService,
@@ -37,7 +38,11 @@ import {
     type SupplierMappingBulkCreatePayload,
     type SupplierOfferSuggestionsPayload,
     type ProductLocalStockPayload,
+    type ManagerGoogleAuthStatusResponse,
+    type ManagerGoogleAuthUrlResponse,
     type ManagerBackupListResponse,
+    type ManagerBackupRunStartResponse,
+    type ManagerBackupRunStatusResponse,
     type ManagerRestoreJobStartResponse,
     type ManagerRestoreJobStatusResponse,
 } from './client';
@@ -51,7 +56,14 @@ export type Segment = 'b2c' | 'b2b';
 export type DashboardView = 'kanban' | 'list';
 export { type Product, type DashboardStatsResponse, type DashboardTouchpoint };
 export type { LeadsInboxItemResponse };
-export type { ManagerBackupListResponse, ManagerRestoreJobStartResponse, ManagerRestoreJobStatusResponse };
+export type { ManagerGoogleAuthStatusResponse, ManagerGoogleAuthUrlResponse };
+export type {
+    ManagerBackupListResponse,
+    ManagerBackupRunStartResponse,
+    ManagerBackupRunStatusResponse,
+    ManagerRestoreJobStartResponse,
+    ManagerRestoreJobStatusResponse,
+};
 
 export interface ManagerBrand {
     id: number;
@@ -203,8 +215,28 @@ export const api = {
         return await ManagerSettingsService.updateManagerSetting(key, payload);
     },
 
+    async getManagerGoogleAuthStatus() {
+        return await ManagerGoogleAuthService.getManagerGoogleAuthStatus();
+    },
+
+    async getManagerGoogleAuthUrl() {
+        return await ManagerGoogleAuthService.getManagerGoogleAuthUrl();
+    },
+
+    async exchangeManagerGoogleAuthCode(code: string) {
+        return await ManagerGoogleAuthService.exchangeManagerGoogleAuthCode({ code });
+    },
+
     async listManagerBackups() {
         return await ManagerBackupsService.listManagerBackups();
+    },
+
+    async startManagerBackupRun() {
+        return await ManagerBackupsService.startManagerBackupRun();
+    },
+
+    async getManagerBackupRunStatus(jobId: string) {
+        return await ManagerBackupsService.getManagerBackupRunStatus(jobId);
     },
 
     async startManagerBackupRestore(fileId: string) {

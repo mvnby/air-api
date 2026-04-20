@@ -2,7 +2,11 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import { api } from '../api';
-import type { ManagerBackupItemResponse, ManagerRestoreJobStatusResponse } from '../client';
+import type {
+    ManagerBackupItemResponse,
+    ManagerBackupRunStatusResponse,
+    ManagerRestoreJobStatusResponse,
+} from '../client';
 import { getApiErrorMessage } from '../utils/api-errors';
 
 const backups = ref<ManagerBackupItemResponse[]>([]);
@@ -18,6 +22,14 @@ const restoreModalOpen = ref(false);
 const restoreWord = ref('');
 const selectedBackup = ref<ManagerBackupItemResponse | null>(null);
 const restoreLaunching = ref(false);
+const pairRestoreModalOpen = ref(false);
+const pairRestoreWord = ref('');
+const pairRestoreLaunching = ref(false);
+
+const backupRunLaunching = ref(false);
+const backupRunJob = ref<ManagerBackupRunStatusResponse | null>(null);
+const backupRunPollingJobId = ref<string | null>(null);
+const backupRunPollingHandle = ref<number | null>(null);
 
 const restoreJob = ref<ManagerRestoreJobStatusResponse | null>(null);
 const restorePollingJobId = ref<string | null>(null);
@@ -25,10 +37,13 @@ const restorePollingHandle = ref<number | null>(null);
 
 const STAGE_LABELS: Record<string, string> = {
     queued: 'В очереди',
+    running_backup: 'Создаём backup',
     creating_safety_dump: 'Создаём safety dump',
+    creating_safety_media: 'Создаём safety backup media',
     downloading_backup: 'Скачиваем backup',
     decompressing_backup: 'Распаковка SQL',
     restoring_database: 'Восстанавливаем БД',
+    restoring_media: 'Восстанавливаем media',
     completed: 'Готово',
     failed: 'Ошибка',
 };
@@ -48,9 +63,72 @@ const restoring = computed(() => {
     return status === 'queued' || status === 'running';
 });
 
+const backupRunning = computed(() => {
+    const status = backupRunJob.value?.status;
+    return status === 'queued' || status === 'running';
+});
+
 const filteredBackups = computed(() => {
     if (kindFilter.value === 'all') return backups.value;
     return backups.value.filter((item) => item.kind === kindFilter.value);
+});
+
+type BackupPair = {
+    timestamp: string;
+    db: ManagerBackupItemResponse;
+    media: ManagerBackupItemResponse;
+};
+
+const extractBackupTimestamp = (name: string): string | null => {
+    const match = name.match(/(\d{8}_\d{6})/);
+    return match?.[1] ?? null;
+};
+
+const formatBackupTimestamp = (raw: string): string => {
+    if (!/^\d{8}_\d{6}$/.test(raw)) return raw;
+    const year = raw.slice(0, 4);
+    const month = raw.slice(4, 6);
+    const day = raw.slice(6, 8);
+    const hour = raw.slice(9, 11);
+    const minute = raw.slice(11, 13);
+    const second = raw.slice(13, 15);
+    return `${day}.${month}.${year} ${hour}:${minute}:${second}`;
+};
+
+const latestBackupPair = computed<BackupPair | null>(() => {
+    const byTs = new Map<string, { db?: ManagerBackupItemResponse; media?: ManagerBackupItemResponse }>();
+    for (const item of backups.value) {
+        if (item.kind !== 'db' && item.kind !== 'media') continue;
+        const ts = extractBackupTimestamp(item.name);
+        if (!ts) continue;
+        const entry = byTs.get(ts) ?? {};
+        if (item.kind === 'db') {
+            entry.db = item;
+        } else {
+            entry.media = item;
+        }
+        byTs.set(ts, entry);
+    }
+
+    let best: BackupPair | null = null;
+    for (const [timestamp, entry] of byTs.entries()) {
+        if (!entry.db || !entry.media) continue;
+        if (!best || timestamp > best.timestamp) {
+            best = { timestamp, db: entry.db, media: entry.media };
+        }
+    }
+    return best;
+});
+
+const latestBackupPairLabel = computed(() => {
+    const pair = latestBackupPair.value;
+    if (!pair) return 'Пара DB + Media с одинаковым timestamp не найдена';
+    return `${formatBackupTimestamp(pair.timestamp)} (DB + Media)`;
+});
+
+const backupRunStageLabel = computed(() => {
+    const stage = backupRunJob.value?.stage || '';
+    return STAGE_LABELS[stage] || stage || '—';
 });
 
 const restoreStageLabel = computed(() => {
@@ -94,7 +172,105 @@ const loadBackups = async () => {
     }
 };
 
-const stopPolling = () => {
+const stopBackupRunPolling = () => {
+    if (backupRunPollingHandle.value !== null) {
+        window.clearInterval(backupRunPollingHandle.value);
+        backupRunPollingHandle.value = null;
+    }
+    backupRunPollingJobId.value = null;
+};
+
+const refreshBackupRunStatus = async () => {
+    const jobId = backupRunPollingJobId.value;
+    if (!jobId) return;
+    try {
+        const statusPayload = await api.getManagerBackupRunStatus(jobId);
+        backupRunJob.value = statusPayload;
+        if (statusPayload.status === 'success') {
+            stopBackupRunPolling();
+            setToast('Backup успешно создан и загружен в Google Drive', 'success');
+            await loadBackups();
+        } else if (statusPayload.status === 'failed') {
+            stopBackupRunPolling();
+            setToast(`Backup завершился ошибкой: ${statusPayload.error || 'unknown error'}`, 'error');
+        }
+    } catch (exc) {
+        stopBackupRunPolling();
+        setToast(getApiErrorMessage(exc), 'error');
+    }
+};
+
+const startBackupRunPolling = (jobId: string) => {
+    stopBackupRunPolling();
+    backupRunPollingJobId.value = jobId;
+    void refreshBackupRunStatus();
+    backupRunPollingHandle.value = window.setInterval(() => {
+        void refreshBackupRunStatus();
+    }, 2000);
+};
+
+const startManualBackup = async () => {
+    backupRunLaunching.value = true;
+    try {
+        const startPayload = await api.startManagerBackupRun();
+        backupRunJob.value = {
+            job_id: startPayload.job_id,
+            status: startPayload.status,
+            stage: startPayload.stage,
+            error: null,
+            started_at: null,
+            finished_at: null,
+        };
+        setToast('Backup запущен. Ожидаем завершения...');
+        startBackupRunPolling(startPayload.job_id);
+    } catch (exc) {
+        setToast(getApiErrorMessage(exc), 'error');
+    } finally {
+        backupRunLaunching.value = false;
+    }
+};
+
+const delay = (ms: number) =>
+    new Promise<void>((resolve) => {
+        window.setTimeout(resolve, ms);
+    });
+
+const waitForRestoreCompletion = async (jobId: string): Promise<ManagerRestoreJobStatusResponse> => {
+    while (true) {
+        const statusPayload = await api.getManagerBackupRestoreStatus(jobId);
+        restoreJob.value = statusPayload;
+        if (statusPayload.status === 'success' || statusPayload.status === 'failed') {
+            return statusPayload;
+        }
+        await delay(2000);
+    }
+};
+
+const runSingleRestore = async (
+    item: ManagerBackupItemResponse,
+    stepLabel: string,
+): Promise<ManagerRestoreJobStatusResponse> => {
+    const startPayload = await api.startManagerBackupRestore(item.id);
+    restoreJob.value = {
+        job_id: startPayload.job_id,
+        file_id: item.id,
+        file_name: item.name,
+        kind: item.kind,
+        status: startPayload.status,
+        stage: startPayload.stage,
+        error: null,
+        started_at: null,
+        finished_at: null,
+        safety_dump_path: null,
+    };
+    const finalPayload = await waitForRestoreCompletion(startPayload.job_id);
+    if (finalPayload.status === 'failed') {
+        throw new Error(`${stepLabel}: ${finalPayload.error || 'unknown error'}`);
+    }
+    return finalPayload;
+};
+
+const stopRestorePolling = () => {
     if (restorePollingHandle.value !== null) {
         window.clearInterval(restorePollingHandle.value);
         restorePollingHandle.value = null;
@@ -109,25 +285,73 @@ const refreshRestoreStatus = async () => {
         const statusPayload = await api.getManagerBackupRestoreStatus(jobId);
         restoreJob.value = statusPayload;
         if (statusPayload.status === 'success') {
-            stopPolling();
-            setToast('Восстановление базы завершено успешно', 'success');
+            stopRestorePolling();
+            setToast(
+                statusPayload.kind === 'media'
+                    ? 'Восстановление media завершено успешно'
+                    : 'Восстановление базы завершено успешно',
+                'success',
+            );
         } else if (statusPayload.status === 'failed') {
-            stopPolling();
+            stopRestorePolling();
             setToast(`Восстановление завершилось ошибкой: ${statusPayload.error || 'unknown error'}`, 'error');
         }
     } catch (exc) {
-        stopPolling();
+        stopRestorePolling();
         setToast(getApiErrorMessage(exc), 'error');
     }
 };
 
-const startPolling = (jobId: string) => {
-    stopPolling();
+const startRestorePolling = (jobId: string) => {
+    stopRestorePolling();
     restorePollingJobId.value = jobId;
     void refreshRestoreStatus();
     restorePollingHandle.value = window.setInterval(() => {
         void refreshRestoreStatus();
     }, 2000);
+};
+
+const openPairRestoreModal = () => {
+    if (!latestBackupPair.value) {
+        setToast('Нет полной пары DB + Media для восстановления', 'error');
+        return;
+    }
+    pairRestoreWord.value = '';
+    pairRestoreModalOpen.value = true;
+};
+
+const closePairRestoreModal = () => {
+    pairRestoreModalOpen.value = false;
+    pairRestoreWord.value = '';
+};
+
+const startLatestPairRestore = async () => {
+    const pair = latestBackupPair.value;
+    if (!pair) {
+        setToast('Нет полной пары DB + Media для восстановления', 'error');
+        return;
+    }
+    if (pairRestoreWord.value.trim() !== 'RESTORE') {
+        setToast('Введите RESTORE для подтверждения', 'error');
+        return;
+    }
+
+    pairRestoreLaunching.value = true;
+    stopRestorePolling();
+    closePairRestoreModal();
+    try {
+        setToast(`Запускаем restore DB: ${pair.db.name}`);
+        await runSingleRestore(pair.db, 'Restore DB');
+        setToast(`DB готова. Запускаем restore Media: ${pair.media.name}`);
+        await runSingleRestore(pair.media, 'Restore Media');
+        setToast('Восстановление пары DB + Media завершено успешно', 'success');
+        await loadBackups();
+    } catch (exc) {
+        const msg = exc instanceof Error ? exc.message : getApiErrorMessage(exc);
+        setToast(msg, 'error');
+    } finally {
+        pairRestoreLaunching.value = false;
+    }
 };
 
 const openRestoreModal = (item: ManagerBackupItemResponse) => {
@@ -166,7 +390,7 @@ const startRestore = async () => {
         };
         closeRestoreModal();
         setToast('Восстановление запущено. Не закрывайте manager до завершения.');
-        startPolling(startPayload.job_id);
+        startRestorePolling(startPayload.job_id);
     } catch (exc) {
         setToast(getApiErrorMessage(exc), 'error');
     } finally {
@@ -179,7 +403,9 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-    stopPolling();
+    stopRestorePolling();
+    stopBackupRunPolling();
+    closePairRestoreModal();
 });
 </script>
 
@@ -211,8 +437,47 @@ onBeforeUnmount(() => {
                 Перед восстановлением автоматически создаётся safety dump текущего состояния БД.
             </div>
             <div class="text-xs mt-1 text-red-600 dark:text-red-200/80">
-                DR v1 восстанавливает только базу данных. Медиа-файлы в этот поток не входят.
+                Restore поддерживает DB и Media отдельно. Для DB создаётся safety SQL dump, для Media — safety media-архив.
             </div>
+            <div class="text-xs mt-1 text-red-600 dark:text-red-200/80">
+                Ручной backup доступен только в production окружении.
+            </div>
+        </div>
+
+        <div v-if="backupRunJob" class="mb-6 bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-gray-200 dark:border-slate-700/60 p-4">
+            <div class="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                    <p class="text-sm text-gray-500 dark:text-slate-400">Текущий backup job</p>
+                    <p class="text-sm font-semibold text-gray-900 dark:text-slate-100 break-all">{{ backupRunJob.job_id }}</p>
+                </div>
+                <span
+                    class="px-2.5 py-1 rounded-full text-xs font-semibold"
+                    :class="backupRunJob.status === 'success'
+                        ? 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300'
+                        : backupRunJob.status === 'failed'
+                            ? 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300'
+                            : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'"
+                >
+                    {{ backupRunJob.status }}
+                </span>
+            </div>
+            <div class="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                <div>
+                    <p class="text-gray-500 dark:text-slate-400">Стадия</p>
+                    <p class="font-medium text-gray-900 dark:text-slate-100">{{ backupRunStageLabel }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 dark:text-slate-400">Начало</p>
+                    <p class="font-medium text-gray-900 dark:text-slate-100">{{ formatDate(backupRunJob.started_at || undefined) }}</p>
+                </div>
+                <div>
+                    <p class="text-gray-500 dark:text-slate-400">Окончание</p>
+                    <p class="font-medium text-gray-900 dark:text-slate-100">{{ formatDate(backupRunJob.finished_at || undefined) }}</p>
+                </div>
+            </div>
+            <p v-if="backupRunJob.error" class="mt-3 text-sm text-red-600 dark:text-red-300">
+                Ошибка: {{ backupRunJob.error }}
+            </p>
         </div>
 
         <div v-if="restoreJob" class="mb-6 bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-gray-200 dark:border-slate-700/60 p-4">
@@ -280,12 +545,31 @@ onBeforeUnmount(() => {
                 Media
             </button>
             <button
-                class="ml-auto px-3 py-1.5 rounded-lg text-sm font-medium border bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700"
+                class="ml-auto px-3 py-1.5 rounded-lg text-sm font-medium border bg-teal-600 text-white border-teal-600 hover:bg-teal-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                @click="startManualBackup"
+                :disabled="backupRunLaunching || backupRunning || restoring || pairRestoreLaunching"
+            >
+                {{ backupRunLaunching ? 'Запуск…' : 'Создать backup (DB + Media)' }}
+            </button>
+            <button
+                class="px-3 py-1.5 rounded-lg text-sm font-medium border bg-red-600 text-white border-red-600 hover:bg-red-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                @click="openPairRestoreModal"
+                :disabled="backupRunLaunching || backupRunning || restoring || pairRestoreLaunching || !latestBackupPair"
+            >
+                {{ pairRestoreLaunching ? 'Выполняем…' : 'Restore latest DB + Media' }}
+            </button>
+            <button
+                class="px-3 py-1.5 rounded-lg text-sm font-medium border bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700"
                 @click="loadBackups"
                 :disabled="loading"
             >
                 {{ loading ? 'Обновление…' : 'Обновить список' }}
             </button>
+        </div>
+
+        <div class="mb-4 text-xs text-gray-500 dark:text-slate-400">
+            <span class="font-medium">Последняя полная пара:</span>
+            {{ latestBackupPairLabel }}
         </div>
 
         <div v-if="error" class="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/50 text-red-600 dark:text-red-400 p-4 rounded-xl mb-6">
@@ -331,19 +615,71 @@ onBeforeUnmount(() => {
                         <td class="px-4 py-3 text-right">
                             <button
                                 class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
-                                :class="item.kind === 'db' && !restoring
+                                :class="!(restoring || backupRunning || pairRestoreLaunching)
                                     ? 'bg-red-600 hover:bg-red-500 text-white'
                                     : 'bg-gray-200 dark:bg-slate-700 text-gray-500 dark:text-slate-400 cursor-not-allowed'"
-                                :disabled="item.kind !== 'db' || restoring"
+                                :disabled="restoring || backupRunning || pairRestoreLaunching"
                                 @click="openRestoreModal(item)"
                             >
-                                Restore DB
+                                {{ item.kind === 'media' ? 'Restore Media' : 'Restore DB' }}
                             </button>
                         </td>
                     </tr>
                 </tbody>
             </table>
         </div>
+
+        <Transition name="toast">
+            <div
+                v-if="pairRestoreModalOpen && latestBackupPair"
+                class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+                @click.self="closePairRestoreModal"
+            >
+                <div class="w-full max-w-xl rounded-xl border border-red-500/40 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden">
+                    <div class="px-6 py-4 border-b border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-950/40">
+                        <h3 class="text-lg font-bold text-red-700 dark:text-red-300">Критическое действие</h3>
+                        <p class="mt-1 text-sm text-red-700/80 dark:text-red-300/80">
+                            Будет выполнено последовательное восстановление:
+                            сначала DB, затем Media, из одной пары backup.
+                        </p>
+                    </div>
+                    <div class="px-6 py-4 space-y-4">
+                        <div class="text-sm text-gray-700 dark:text-slate-300">
+                            <p class="font-semibold mb-1">Пара для восстановления:</p>
+                            <p class="break-all"><span class="font-medium">DB:</span> {{ latestBackupPair.db.name }}</p>
+                            <p class="break-all"><span class="font-medium">Media:</span> {{ latestBackupPair.media.name }}</p>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">
+                                Введите <span class="font-bold">RESTORE</span> для подтверждения
+                            </label>
+                            <input
+                                v-model="pairRestoreWord"
+                                type="text"
+                                class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-100 focus:outline-none focus:border-red-500 transition-colors"
+                                :disabled="pairRestoreLaunching"
+                            />
+                        </div>
+                    </div>
+                    <div class="px-6 py-4 border-t border-gray-200 dark:border-slate-700 flex items-center justify-end gap-2">
+                        <button
+                            class="px-3 py-2 rounded-lg text-sm font-medium bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300"
+                            :disabled="pairRestoreLaunching"
+                            @click="closePairRestoreModal"
+                        >
+                            Отмена
+                        </button>
+                        <button
+                            class="px-3 py-2 rounded-lg text-sm font-semibold text-white bg-red-600 hover:bg-red-500 disabled:opacity-50"
+                            :disabled="pairRestoreLaunching"
+                            @click="startLatestPairRestore"
+                        >
+                            {{ pairRestoreLaunching ? 'Запуск...' : 'Подтвердить Restore Pair' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </Transition>
 
         <Transition name="toast">
             <div
@@ -355,7 +691,11 @@ onBeforeUnmount(() => {
                     <div class="px-6 py-4 border-b border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-950/40">
                         <h3 class="text-lg font-bold text-red-700 dark:text-red-300">Критическое действие</h3>
                         <p class="mt-1 text-sm text-red-700/80 dark:text-red-300/80">
-                            Восстановление удалит текущее состояние БД и заменит его выбранным backup.
+                            {{
+                                selectedBackup.kind === 'media'
+                                    ? 'Восстановление заменит текущую папку media содержимым выбранного backup.'
+                                    : 'Восстановление удалит текущее состояние БД и заменит его выбранным backup.'
+                            }}
                         </p>
                     </div>
                     <div class="px-6 py-4 space-y-4">

@@ -2,6 +2,7 @@ import asyncio
 import logging
 from typing import List
 from sqlmodel import select
+from core.config import settings
 from core.database import async_session_maker
 from models import Product
 from datetime import datetime, timedelta
@@ -102,7 +103,14 @@ class SchedulerService:
         asyncio.create_task(self._stalled_deal_loop())
 
         # Run backup loop (once a day)
-        asyncio.create_task(self._backup_loop())
+        if settings.is_production:
+            asyncio.create_task(self._backup_loop())
+        else:
+            logger.warning(
+                "Daily backup loop is disabled for ENVIRONMENT=%s. "
+                "Set ENVIRONMENT=production to enable scheduled Drive backups.",
+                settings.ENVIRONMENT,
+            )
 
         # Run lead archive loop (once a day)
         asyncio.create_task(self._lead_archive_loop())

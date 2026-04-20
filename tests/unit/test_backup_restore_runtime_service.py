@@ -114,3 +114,62 @@ async def test_restore_job_handles_gzip_pipeline(monkeypatch, tmp_path: Path):
     assert final_job["status"] == "success"
     assert called["decompress"] == 1
     assert called["restore_path"] is not None
+
+
+@pytest.mark.asyncio
+async def test_restore_job_handles_media_pipeline(monkeypatch, tmp_path: Path):
+    service = BackupRestoreRuntimeService()
+    called = {"restore_media": 0}
+
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr("services.backup_restore_runtime_service.BACKUP_DIR", str(tmp_path))
+
+    monkeypatch.setattr(
+        "services.backup_restore_runtime_service.backup_service.list_backups",
+        lambda limit=200: [
+            {
+                "id": "media-1",
+                "name": "media_backup_20260101_000000.tar.gz",
+                "kind": "media",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        "services.backup_restore_runtime_service.backup_service.create_media_archive",
+        lambda: str(tmp_path / "safety_media_backup.tar.gz"),
+    )
+
+    def _fake_download(file_id: str, destination_path: str):
+        Path(destination_path).write_bytes(b"fake-archive")
+        return destination_path
+
+    monkeypatch.setattr(
+        "services.backup_restore_runtime_service.backup_service.download_backup_file",
+        _fake_download,
+    )
+
+    def _fake_restore_media(path: str):
+        called["restore_media"] += 1
+        assert path.endswith(".tar.gz")
+        assert Path(path).exists()
+
+    monkeypatch.setattr(
+        "services.backup_restore_runtime_service.backup_service.restore_media_from_archive",
+        _fake_restore_media,
+    )
+
+    started = await service.start_restore("media-1")
+    job_id = started["job_id"]
+
+    final_job = None
+    for _ in range(100):
+        current = service.get_job(job_id)
+        assert current is not None
+        if current["status"] in {"success", "failed"}:
+            final_job = current
+            break
+        await asyncio.sleep(0.01)
+
+    assert final_job is not None
+    assert final_job["status"] == "success"
+    assert called["restore_media"] == 1

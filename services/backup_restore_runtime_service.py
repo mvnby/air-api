@@ -40,6 +40,13 @@ class BackupRestoreRuntimeService:
             job = self._get_job_unsafe(job_id)
             return self._snapshot(job) if job else None
 
+    def has_active_job(self) -> bool:
+        with self._lock:
+            if not self._active_job_id:
+                return False
+            job = self._get_job_unsafe(self._active_job_id)
+            return bool(job and job.get("status") in {"queued", "running"})
+
     def _set_job_fields(self, job_id: str, **updates: Any) -> None:
         with self._lock:
             job = self._get_job_unsafe(job_id)
@@ -58,8 +65,8 @@ class BackupRestoreRuntimeService:
         backup_item = next((item for item in backups if item.get("id") == file_id), None)
         if not backup_item:
             raise BackupNotFoundError("Backup not found")
-        if backup_item.get("kind") != "db":
-            raise UnsupportedBackupTypeError("Only DB backups are supported in DR v1")
+        if backup_item.get("kind") not in {"db", "media"}:
+            raise UnsupportedBackupTypeError("Unsupported backup kind")
 
         with self._lock:
             if self._active_job_id:
@@ -93,29 +100,41 @@ class BackupRestoreRuntimeService:
         if not job:
             return
 
-        job_file_name = job.get("file_name") or f"{job_id}.sql"
+        kind = job.get("kind") or "db"
+        default_ext = "sql" if kind == "db" else "tar.gz"
+        job_file_name = job.get("file_name") or f"{job_id}.{default_ext}"
         temp_dir = tempfile.mkdtemp(prefix=f"restore_{job_id}_", dir=BACKUP_DIR)
         downloaded_path = os.path.join(temp_dir, job_file_name)
         sql_path = downloaded_path
 
         try:
-            self._set_job_fields(job_id, status="running", stage="creating_safety_dump", started_at=datetime.now())
-            safety_dump_path = await asyncio.to_thread(
-                backup_service.create_dump,
-                f"safety_pre_restore_{backup_service.db_name}",
-            )
-            self._set_job_fields(job_id, safety_dump_path=safety_dump_path)
+            self._set_job_fields(job_id, status="running", started_at=datetime.now())
+            if kind == "db":
+                self._set_job_fields(job_id, stage="creating_safety_dump")
+                safety_dump_path = await asyncio.to_thread(
+                    backup_service.create_dump,
+                    f"safety_pre_restore_{backup_service.db_name}",
+                )
+                self._set_job_fields(job_id, safety_dump_path=safety_dump_path)
+            else:
+                self._set_job_fields(job_id, stage="creating_safety_media")
+                safety_media_path = await asyncio.to_thread(backup_service.create_media_archive)
+                self._set_job_fields(job_id, safety_dump_path=safety_media_path)
 
             self._set_job_fields(job_id, stage="downloading_backup")
             await asyncio.to_thread(backup_service.download_backup_file, job["file_id"], downloaded_path)
 
-            if downloaded_path.lower().endswith(".gz"):
-                self._set_job_fields(job_id, stage="decompressing_backup")
-                sql_path = downloaded_path[:-3]
-                await asyncio.to_thread(backup_service.decompress_gzip_file, downloaded_path, sql_path)
+            if kind == "db":
+                if downloaded_path.lower().endswith(".gz"):
+                    self._set_job_fields(job_id, stage="decompressing_backup")
+                    sql_path = downloaded_path[:-3]
+                    await asyncio.to_thread(backup_service.decompress_gzip_file, downloaded_path, sql_path)
 
-            self._set_job_fields(job_id, stage="restoring_database")
-            await backup_service.restore_from_file_async(sql_path)
+                self._set_job_fields(job_id, stage="restoring_database")
+                await backup_service.restore_from_file_async(sql_path)
+            else:
+                self._set_job_fields(job_id, stage="restoring_media")
+                await asyncio.to_thread(backup_service.restore_media_from_archive, downloaded_path)
 
             self._set_job_fields(job_id, status="success", stage="completed", finished_at=datetime.now())
         except Exception as exc:
