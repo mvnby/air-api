@@ -966,14 +966,29 @@ const addServiceLine = () => {
 const loadEstimateOptions = async (customerId?: number | null) => {
   estimateOptionsLoading.value = true;
   try {
-    const response = await api.listManagerServiceEstimates(1, 20, customerId || undefined);
-    estimateOptions.value = response.items;
-    if (!response.items.length) {
+    const normalizedCustomerId = customerId && customerId > 0 ? customerId : undefined;
+    let items: ManagerServiceEstimateResponse[] = [];
+
+    if (normalizedCustomerId) {
+      const customerResponse = await api.listManagerServiceEstimates(1, 20, normalizedCustomerId);
+      items = customerResponse.items;
+      // UX fallback: if customer-bound estimates are absent, show recent global estimates.
+      if (!items.length) {
+        const fallbackResponse = await api.listManagerServiceEstimates(1, 20);
+        items = fallbackResponse.items;
+      }
+    } else {
+      const response = await api.listManagerServiceEstimates(1, 20);
+      items = response.items;
+    }
+
+    estimateOptions.value = items;
+    if (!items.length) {
       selectedEstimateId.value = null;
       return;
     }
-    if (!selectedEstimateId.value || !response.items.some((item) => item.id === selectedEstimateId.value)) {
-      selectedEstimateId.value = response.items[0]!.id;
+    if (!selectedEstimateId.value || !items.some((item) => item.id === selectedEstimateId.value)) {
+      selectedEstimateId.value = items[0]!.id;
     }
   } catch (error) {
     console.warn('Failed to load service estimates', error);
@@ -985,13 +1000,14 @@ const loadEstimateOptions = async (customerId?: number | null) => {
 };
 
 const applyEstimateToServices = async () => {
-  if (!selectedEstimateId.value) {
+  const estimateId = Number(selectedEstimateId.value);
+  if (!Number.isFinite(estimateId) || estimateId <= 0) {
     setToast('Выберите смету для добавления', 'error');
     return;
   }
   importingEstimate.value = true;
   try {
-    const response = await api.getManagerServiceEstimateOrderLines(selectedEstimateId.value, estimateImportMode.value);
+    const response = await api.getManagerServiceEstimateOrderLines(estimateId, estimateImportMode.value);
     if (!response.services.length) {
       setToast('В выбранной смете нет строк', 'error');
       return;
