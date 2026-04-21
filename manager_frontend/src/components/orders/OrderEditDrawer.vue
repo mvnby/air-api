@@ -143,6 +143,7 @@ const estimateOptions = ref<ManagerServiceEstimateResponse[]>([]);
 const estimateOptionsLoading = ref(false);
 const estimateImportMode = ref<'detailed' | 'collapsed'>('detailed');
 const selectedEstimateId = ref<number | null>(null);
+const estimateSearchQuery = ref('');
 const importingEstimate = ref(false);
 const documents = ref<ManagerOrderDocumentItem[]>([]);
 const payments = ref<PaymentResponse[]>([]);
@@ -272,6 +273,15 @@ const isWebsiteOrder = computed(() => props.order?.lead_source === 'site');
 const isB2cCustomer = computed(() => {
   if (!customer.value) return true; // defaults to B2C if unknown
   return customer.value.type !== 'company';
+});
+const filteredEstimateOptions = computed(() => {
+  const query = estimateSearchQuery.value.trim().toLowerCase();
+  if (!query) return estimateOptions.value;
+  return estimateOptions.value.filter((estimate) => {
+    const byTitle = (estimate.title || '').toLowerCase().includes(query);
+    const byId = String(estimate.id).includes(query);
+    return byTitle || byId;
+  });
 });
 const draftKey = computed(() => (props.order ? `manager_order_drawer_draft_${props.order.id}` : ''));
 const hasManualEurRate = computed(() => Boolean(currentFxRate.value?.eur_byn));
@@ -796,7 +806,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
     price: line.price,
     cost: line.cost,
   }));
-  await loadEstimateOptions(order.customer?.id ?? null);
+  await loadEstimateOptions();
 
   // Documents
   documents.value = (order.documents || []).map((d: any) => ({
@@ -963,32 +973,17 @@ const addServiceLine = () => {
   serviceLines.value.push({ title: '', quantity: 1, price: 0, cost: 0, service_id: null });
 };
 
-const loadEstimateOptions = async (customerId?: number | null) => {
+const loadEstimateOptions = async () => {
   estimateOptionsLoading.value = true;
   try {
-    const normalizedCustomerId = customerId && customerId > 0 ? customerId : undefined;
-    let items: ManagerServiceEstimateResponse[] = [];
-
-    if (normalizedCustomerId) {
-      const customerResponse = await api.listManagerServiceEstimates(1, 20, normalizedCustomerId);
-      items = customerResponse.items;
-      // UX fallback: if customer-bound estimates are absent, show recent global estimates.
-      if (!items.length) {
-        const fallbackResponse = await api.listManagerServiceEstimates(1, 20);
-        items = fallbackResponse.items;
-      }
-    } else {
-      const response = await api.listManagerServiceEstimates(1, 20);
-      items = response.items;
-    }
-
-    estimateOptions.value = items;
-    if (!items.length) {
+    const response = await api.listManagerServiceEstimates(1, 10);
+    estimateOptions.value = response.items;
+    if (!response.items.length) {
       selectedEstimateId.value = null;
       return;
     }
-    if (!selectedEstimateId.value || !items.some((item) => item.id === selectedEstimateId.value)) {
-      selectedEstimateId.value = items[0]!.id;
+    if (!selectedEstimateId.value || !response.items.some((item) => item.id === selectedEstimateId.value)) {
+      selectedEstimateId.value = response.items[0]!.id;
     }
   } catch (error) {
     console.warn('Failed to load service estimates', error);
@@ -1598,10 +1593,15 @@ watch(
                 :disabled="estimateOptionsLoading"
               >
                 <option :value="null">Выберите смету</option>
-                <option v-for="estimate in estimateOptions" :key="estimate.id" :value="estimate.id">
+                <option v-for="estimate in filteredEstimateOptions" :key="estimate.id" :value="estimate.id">
                   #{{ estimate.id }} · {{ estimate.title }} · {{ formatMoney(estimate.total) }} {{ estimate.currency }}
                 </option>
               </select>
+              <input
+                v-model="estimateSearchQuery"
+                class="field-input w-[220px]"
+                placeholder="Поиск сметы по ID/названию"
+              />
               <select v-model="estimateImportMode" class="field-input w-[180px]">
                 <option value="detailed">Подробно (по строкам)</option>
                 <option value="collapsed">Схлопнуто (одной строкой)</option>
@@ -1618,14 +1618,14 @@ watch(
                 type="button"
                 class="btn-mini-outline whitespace-nowrap"
                 :disabled="estimateOptionsLoading"
-                @click="loadEstimateOptions(customer?.id ?? null)"
+                @click="loadEstimateOptions"
                 title="Обновить список смет"
               >
                 Обновить
               </button>
             </div>
             <p class="text-xs text-gray-500">
-              Режим «Подробно» добавляет отдельные строки, «Схлопнуто» — одну строку с общим итогом.
+              Показываем 10 последних смет как типовые шаблоны. «Подробно» добавляет отдельные строки, «Схлопнуто» — одну строку с общим итогом.
             </p>
           </div>
           <p v-if="getFieldError('services')" class="mb-2 text-xs text-red-300">{{ getFieldError('services') }}</p>
