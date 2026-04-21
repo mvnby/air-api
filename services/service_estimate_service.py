@@ -1,5 +1,6 @@
 """Business logic for install estimates and estimate snapshots (issue #260 v1)."""
 
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, status
@@ -23,6 +24,19 @@ from schemas import (
 
 
 class ServiceEstimateService:
+    BTU_TO_KW_MAP = {
+        7: 2.1,
+        9: 2.6,
+        12: 3.5,
+        18: 5.3,
+        24: 7.0,
+        30: 8.8,
+        36: 10.5,
+        42: 12.3,
+        48: 14.0,
+        60: 17.6,
+    }
+
     @staticmethod
     def _round_money(value: float) -> float:
         return round(float(value), 2)
@@ -37,6 +51,46 @@ class ServiceEstimateService:
             return str(int(round(number)))
         formatted = f"{number:.2f}"
         return formatted.rstrip("0").rstrip(".")
+
+    @staticmethod
+    def _pluralize_hole(count: int) -> str:
+        mod10 = count % 10
+        mod100 = count % 100
+        if mod10 == 1 and mod100 != 11:
+            return "алмазное отверстие"
+        if 2 <= mod10 <= 4 and not 12 <= mod100 <= 14:
+            return "алмазных отверстия"
+        return "алмазных отверстий"
+
+    @staticmethod
+    def _extract_power_label(power_range: str) -> Optional[str]:
+        raw = (power_range or "").strip()
+        if not raw:
+            return None
+
+        normalized = raw.replace(",", ".").lower()
+        numbers = [float(match) for match in re.findall(r"\d+(?:\.\d+)?", normalized)]
+        if not numbers:
+            return None
+
+        kw_value: Optional[float] = None
+        if "квт" in normalized or "kw" in normalized:
+            kw_value = max(numbers)
+        else:
+            btu_classes = [int(round(num)) for num in numbers]
+            mapped_values = [
+                ServiceEstimateService.BTU_TO_KW_MAP[btu]
+                for btu in btu_classes
+                if btu in ServiceEstimateService.BTU_TO_KW_MAP
+            ]
+            if mapped_values:
+                kw_value = max(mapped_values)
+
+        if kw_value is None:
+            return None
+
+        kw_text = ServiceEstimateService._format_number(kw_value).replace(".", ",")
+        return f"до {kw_text} кВт"
 
     @staticmethod
     async def _resolve_tariff(
@@ -344,20 +398,25 @@ class ServiceEstimateService:
             if item.source_type == "addon"
         ]
 
-        parts: List[str] = []
-        if route_length is not None:
-            parts.append(f"трасса до {ServiceEstimateService._format_number(route_length)} м")
-        if extra_holes > 0:
-            parts.append(f"{extra_holes} доп. отверстия")
-        if addon_names:
-            parts.append(f"допработы: {', '.join(addon_names)}")
-        if quantity > 1:
-            parts.append(f"кол-во комплектов: {quantity}")
+        parts: List[str] = ["включая расходные материалы"]
 
-        base = "Монтаж кондиционера"
-        if parts:
-            return f"{base}; " + "; ".join(parts)
-        return estimate.title or base
+        power_label = ServiceEstimateService._extract_power_label(
+            str(payload.get("power_range") or "")
+        )
+        head = "Стандартный монтаж кондиционера"
+        if power_label:
+            head = f"{head} {power_label}"
+
+        if extra_holes > 0:
+            parts.append(f"{extra_holes} {ServiceEstimateService._pluralize_hole(extra_holes)}")
+        if route_length is not None:
+            parts.append(f"трасса {ServiceEstimateService._format_number(route_length)} м")
+        if addon_names:
+            parts.append(f"доп. работы: {', '.join(addon_names)}")
+        if quantity > 1:
+            parts.append(f"количество комплектов: {quantity}")
+
+        return f"{head}, " + ", ".join(parts)
 
     @staticmethod
     def _map_item_to_detailed_service_line(item: ServiceEstimateItem) -> ManagerOrderServiceLinePayload:

@@ -110,7 +110,8 @@ async def test_create_and_get_install_estimate_snapshot(db):
     assert collapsed.mode == "collapsed"
     assert len(collapsed.services) == 1
     assert collapsed.services[0].price == round(created.total)
-    assert "Монтаж кондиционера" in collapsed.services[0].title
+    assert "Стандартный монтаж кондиционера" in collapsed.services[0].title
+    assert "включая расходные материалы" in collapsed.services[0].title
 
     deleted = await ServiceEstimateService.delete_estimate(db, created.id)
     assert "deleted" in deleted.message.lower()
