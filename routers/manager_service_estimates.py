@@ -6,13 +6,18 @@ from core.security import get_current_username
 from routers.manager_operation_ids import (
     CALCULATE_MANAGER_INSTALL_ESTIMATE,
     CREATE_MANAGER_SERVICE_ESTIMATE,
+    DELETE_MANAGER_SERVICE_ESTIMATE,
     GET_MANAGER_SERVICE_ESTIMATE,
+    GET_MANAGER_SERVICE_ESTIMATE_ORDER_LINES,
     LIST_MANAGER_SERVICE_ESTIMATES,
 )
 from schemas import (
+    ManagerActionMessageResponse,
     ManagerInstallEstimateCalculatePayload,
     ManagerInstallEstimateResponse,
     ManagerInstallEstimateSavePayload,
+    ManagerServiceEstimateOrderLinesMode,
+    ManagerServiceEstimateOrderLinesResponse,
     ManagerServiceEstimateListResponse,
     ManagerServiceEstimateResponse,
 )
@@ -56,9 +61,32 @@ async def create_manager_service_estimate(
 async def list_manager_service_estimates(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
+    customer_id: int | None = Query(None, ge=1),
     session: AsyncSession = Depends(get_session),
 ):
-    return await ServiceEstimateService.list_estimates(session=session, page=page, limit=limit)
+    return await ServiceEstimateService.list_estimates(
+        session=session,
+        page=page,
+        limit=limit,
+        customer_id=customer_id,
+    )
+
+
+@router.get(
+    "/{estimate_id}/order-lines",
+    response_model=ManagerServiceEstimateOrderLinesResponse,
+    operation_id=GET_MANAGER_SERVICE_ESTIMATE_ORDER_LINES,
+)
+async def get_manager_service_estimate_order_lines(
+    estimate_id: int,
+    mode: ManagerServiceEstimateOrderLinesMode = Query(ManagerServiceEstimateOrderLinesMode.detailed),
+    session: AsyncSession = Depends(get_session),
+):
+    return await ServiceEstimateService.get_estimate_order_lines(
+        session=session,
+        estimate_id=estimate_id,
+        mode=mode,
+    )
 
 
 @router.get("/{estimate_id}", response_model=ManagerServiceEstimateResponse, operation_id=GET_MANAGER_SERVICE_ESTIMATE)
@@ -67,3 +95,15 @@ async def get_manager_service_estimate(
     session: AsyncSession = Depends(get_session),
 ):
     return await ServiceEstimateService.get_estimate_by_id(session=session, estimate_id=estimate_id)
+
+
+@router.delete(
+    "/{estimate_id}",
+    response_model=ManagerActionMessageResponse,
+    operation_id=DELETE_MANAGER_SERVICE_ESTIMATE,
+)
+async def delete_manager_service_estimate(
+    estimate_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    return await ServiceEstimateService.delete_estimate(session=session, estimate_id=estimate_id)

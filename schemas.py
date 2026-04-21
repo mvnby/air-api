@@ -1675,3 +1675,15 @@ class ManagerServiceEstimateListResponse(BaseModel):
     total: int
     page: int
     limit: int
+
+
+class ManagerServiceEstimateOrderLinesMode(str, Enum):
+    detailed = "detailed"
+    collapsed = "collapsed"
+
+
+class ManagerServiceEstimateOrderLinesResponse(BaseModel):
+    estimate_id: int
+    mode: ManagerServiceEstimateOrderLinesMode
+    title: str
+    services: List[ManagerOrderServiceLinePayload]

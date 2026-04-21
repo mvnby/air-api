@@ -9,6 +9,7 @@ import type {
   ManagerOrderDetailResponse,
   ManagerOrderUpdatePayload,
   ManagerCustomerBranchItemResponse,
+  ManagerServiceEstimateResponse,
   OrderProductLineResponse,
   OrderServiceLineResponse,
   ManagerOrderDocumentItem,
@@ -138,6 +139,11 @@ const installersList = ref<ManagerInstallerResponse[]>([]);
 
 const productLines = ref<ProductLine[]>([]);
 const serviceLines = ref<ServiceLine[]>([]);
+const estimateOptions = ref<ManagerServiceEstimateResponse[]>([]);
+const estimateOptionsLoading = ref(false);
+const estimateImportMode = ref<'detailed' | 'collapsed'>('detailed');
+const selectedEstimateId = ref<number | null>(null);
+const importingEstimate = ref(false);
 const documents = ref<ManagerOrderDocumentItem[]>([]);
 const payments = ref<PaymentResponse[]>([]);
 const localServerErrors = ref<Record<string, string>>({});
@@ -790,6 +796,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
     price: line.price,
     cost: line.cost,
   }));
+  await loadEstimateOptions(order.customer?.id ?? null);
 
   // Documents
   documents.value = (order.documents || []).map((d: any) => ({
@@ -954,6 +961,60 @@ const addProductLine = () => {
 
 const addServiceLine = () => {
   serviceLines.value.push({ title: '', quantity: 1, price: 0, cost: 0, service_id: null });
+};
+
+const loadEstimateOptions = async (customerId?: number | null) => {
+  estimateOptionsLoading.value = true;
+  try {
+    const response = await api.listManagerServiceEstimates(1, 20, customerId || undefined);
+    estimateOptions.value = response.items;
+    if (!response.items.length) {
+      selectedEstimateId.value = null;
+      return;
+    }
+    if (!selectedEstimateId.value || !response.items.some((item) => item.id === selectedEstimateId.value)) {
+      selectedEstimateId.value = response.items[0]!.id;
+    }
+  } catch (error) {
+    console.warn('Failed to load service estimates', error);
+    estimateOptions.value = [];
+    selectedEstimateId.value = null;
+  } finally {
+    estimateOptionsLoading.value = false;
+  }
+};
+
+const applyEstimateToServices = async () => {
+  if (!selectedEstimateId.value) {
+    setToast('Выберите смету для добавления', 'error');
+    return;
+  }
+  importingEstimate.value = true;
+  try {
+    const response = await api.getManagerServiceEstimateOrderLines(selectedEstimateId.value, estimateImportMode.value);
+    if (!response.services.length) {
+      setToast('В выбранной смете нет строк', 'error');
+      return;
+    }
+
+    const mappedLines: ServiceLine[] = response.services.map((line) => ({
+      service_id: line.service_id ?? null,
+      title: line.title || 'Услуга',
+      quantity: Math.max(1, Number(line.quantity || 1)),
+      price: Number(line.price || 0),
+      cost: Number(line.cost || 0),
+    }));
+    serviceLines.value = [...serviceLines.value, ...mappedLines];
+    setToast(
+      response.mode === 'collapsed'
+        ? `Смета #${response.estimate_id} добавлена одной строкой`
+        : `Смета #${response.estimate_id} добавлена: ${mappedLines.length} строк`
+    );
+  } catch (error) {
+    setToast(`Ошибка импорта сметы: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    importingEstimate.value = false;
+  }
 };
 
 const removeProductLine = (index: number) => {
@@ -1512,6 +1573,44 @@ watch(
           <div class="mb-2 flex items-center justify-between">
             <h4 class="text-md font-semibold text-gray-800">Услуги</h4>
             <button class="btn-mini" @click="addServiceLine">Добавить услугу</button>
+          </div>
+          <div class="mb-3 grid gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
+            <div class="flex flex-wrap items-center gap-2">
+              <select
+                v-model="selectedEstimateId"
+                class="field-input min-w-[220px] flex-1"
+                :disabled="estimateOptionsLoading"
+              >
+                <option :value="null">Выберите смету</option>
+                <option v-for="estimate in estimateOptions" :key="estimate.id" :value="estimate.id">
+                  #{{ estimate.id }} · {{ estimate.title }} · {{ formatMoney(estimate.total) }} {{ estimate.currency }}
+                </option>
+              </select>
+              <select v-model="estimateImportMode" class="field-input w-[180px]">
+                <option value="detailed">Подробно (по строкам)</option>
+                <option value="collapsed">Схлопнуто (одной строкой)</option>
+              </select>
+              <button
+                type="button"
+                class="btn-mini whitespace-nowrap"
+                :disabled="importingEstimate || !selectedEstimateId"
+                @click="applyEstimateToServices"
+              >
+                {{ importingEstimate ? 'Добавляю...' : 'Добавить из сметы' }}
+              </button>
+              <button
+                type="button"
+                class="btn-mini-outline whitespace-nowrap"
+                :disabled="estimateOptionsLoading"
+                @click="loadEstimateOptions(customer?.id ?? null)"
+                title="Обновить список смет"
+              >
+                Обновить
+              </button>
+            </div>
+            <p class="text-xs text-gray-500">
+              Режим «Подробно» добавляет отдельные строки, «Схлопнуто» — одну строку с общим итогом.
+            </p>
           </div>
           <p v-if="getFieldError('services')" class="mb-2 text-xs text-red-300">{{ getFieldError('services') }}</p>
           <div class="space-y-2">

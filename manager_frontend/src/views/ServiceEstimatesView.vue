@@ -54,6 +54,7 @@ const estimates = ref<ManagerServiceEstimateResponse[]>([]);
 
 const detailLoading = ref(false);
 const selectedEstimate = ref<ManagerServiceEstimateResponse | null>(null);
+const deletingEstimateId = ref<number | null>(null);
 
 const selectedTariff = computed(
     () => tariffs.value.find((item) => item.id === estimateForm.value.tariff_id) ?? null
@@ -226,6 +227,26 @@ const saveEstimate = async () => {
         error.value = getApiErrorMessage(e);
     } finally {
         saving.value = false;
+    }
+};
+
+const deleteEstimate = async (estimate: ManagerServiceEstimateResponse) => {
+    const ok = window.confirm(`Удалить смету #${estimate.id}? Это действие нельзя отменить.`);
+    if (!ok) return;
+
+    deletingEstimateId.value = estimate.id;
+    error.value = '';
+    try {
+        await api.deleteManagerServiceEstimate(estimate.id);
+        if (selectedEstimate.value?.id === estimate.id) {
+            selectedEstimate.value = null;
+        }
+        setToast(`Смета #${estimate.id} удалена`);
+        await loadEstimates(listPage.value);
+    } catch (e) {
+        error.value = getApiErrorMessage(e);
+    } finally {
+        deletingEstimateId.value = null;
     }
 };
 
@@ -617,13 +638,22 @@ onMounted(async () => {
                                 {{ formatDateTime(item.created_at) }}
                             </td>
                             <td class="px-3 py-2 text-right">
-                                <button
-                                    class="inline-flex items-center gap-1 rounded-md border border-gray-300 dark:border-slate-600 px-2.5 py-1 text-xs font-medium hover:bg-gray-100 dark:hover:bg-slate-700"
-                                    :disabled="detailLoading"
-                                    @click="openEstimate(item.id)"
-                                >
-                                    Открыть
-                                </button>
+                                <div class="inline-flex items-center gap-2">
+                                    <button
+                                        class="inline-flex items-center gap-1 rounded-md border border-gray-300 dark:border-slate-600 px-2.5 py-1 text-xs font-medium hover:bg-gray-100 dark:hover:bg-slate-700"
+                                        :disabled="detailLoading"
+                                        @click="openEstimate(item.id)"
+                                    >
+                                        Открыть
+                                    </button>
+                                    <button
+                                        class="inline-flex items-center gap-1 rounded-md border border-red-300 text-red-700 dark:text-red-300 px-2.5 py-1 text-xs font-medium hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-60 disabled:cursor-not-allowed"
+                                        :disabled="deletingEstimateId === item.id"
+                                        @click="deleteEstimate(item)"
+                                    >
+                                        {{ deletingEstimateId === item.id ? '...' : 'Удалить' }}
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                         <tr v-if="!estimates.length && !listLoading">

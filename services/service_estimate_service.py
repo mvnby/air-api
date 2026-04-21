@@ -9,10 +9,14 @@ from sqlmodel import select
 from crud.service_estimate import ServiceEstimateDAO
 from models import Customer, InstallationRate, Service, ServiceEstimate, ServiceEstimateItem
 from schemas import (
+    ManagerActionMessageResponse,
     ManagerEstimateLineResponse,
     ManagerInstallEstimateCalculatePayload,
     ManagerInstallEstimateResponse,
     ManagerInstallEstimateSavePayload,
+    ManagerOrderServiceLinePayload,
+    ManagerServiceEstimateOrderLinesMode,
+    ManagerServiceEstimateOrderLinesResponse,
     ManagerServiceEstimateListResponse,
     ManagerServiceEstimateResponse,
 )
@@ -22,6 +26,17 @@ class ServiceEstimateService:
     @staticmethod
     def _round_money(value: float) -> float:
         return round(float(value), 2)
+
+    @staticmethod
+    def _format_number(value: Any) -> str:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return "0"
+        if abs(number - round(number)) < 1e-9:
+            return str(int(round(number)))
+        formatted = f"{number:.2f}"
+        return formatted.rstrip("0").rstrip(".")
 
     @staticmethod
     async def _resolve_tariff(
@@ -299,6 +314,7 @@ class ServiceEstimateService:
         session: AsyncSession,
         page: int = 1,
         limit: int = 20,
+        customer_id: Optional[int] = None,
     ) -> ManagerServiceEstimateListResponse:
         safe_page = max(1, page)
         safe_limit = max(1, min(limit, 100))
@@ -306,6 +322,7 @@ class ServiceEstimateService:
             session=session,
             page=safe_page,
             limit=safe_limit,
+            customer_id=customer_id,
         )
         return ManagerServiceEstimateListResponse(
             items=[ServiceEstimateService._map_estimate_to_response(item) for item in items],
@@ -313,3 +330,102 @@ class ServiceEstimateService:
             page=safe_page,
             limit=safe_limit,
         )
+
+    @staticmethod
+    def _build_collapsed_title(estimate: ServiceEstimate) -> str:
+        payload: Dict[str, Any] = dict(estimate.calculation_payload or {})
+        route_length = payload.get("route_length_m")
+        extra_holes = int(payload.get("extra_holes_count") or 0)
+        quantity = int(payload.get("quantity") or 1)
+
+        addon_names = [
+            item.name
+            for item in sorted(list(estimate.items or []), key=lambda i: i.sort_order)
+            if item.source_type == "addon"
+        ]
+
+        parts: List[str] = []
+        if route_length is not None:
+            parts.append(f"трасса до {ServiceEstimateService._format_number(route_length)} м")
+        if extra_holes > 0:
+            parts.append(f"{extra_holes} доп. отверстия")
+        if addon_names:
+            parts.append(f"допработы: {', '.join(addon_names)}")
+        if quantity > 1:
+            parts.append(f"кол-во комплектов: {quantity}")
+
+        base = "Монтаж кондиционера"
+        if parts:
+            return f"{base}; " + "; ".join(parts)
+        return estimate.title or base
+
+    @staticmethod
+    def _map_item_to_detailed_service_line(item: ServiceEstimateItem) -> ManagerOrderServiceLinePayload:
+        qty_label = ServiceEstimateService._format_number(item.qty)
+        unit_label = (item.unit or "").strip()
+        title = item.name
+        if unit_label and (item.qty != 1 or unit_label not in {"шт", "компл."}):
+            title = f"{item.name} ({qty_label} {unit_label})"
+
+        # Order service rows currently support integer quantity only.
+        # To preserve exact estimate totals (including fractional meters),
+        # each estimate item is materialized as one row with full line_total as price.
+        return ManagerOrderServiceLinePayload(
+            link_id=None,
+            service_id=item.source_id if item.source_type == "addon" else None,
+            title=title,
+            quantity=1,
+            price=max(0, int(round(float(item.line_total or 0.0)))),
+            cost=None,
+        )
+
+    @staticmethod
+    async def get_estimate_order_lines(
+        session: AsyncSession,
+        estimate_id: int,
+        mode: ManagerServiceEstimateOrderLinesMode = ManagerServiceEstimateOrderLinesMode.detailed,
+    ) -> ManagerServiceEstimateOrderLinesResponse:
+        estimate = await ServiceEstimateDAO.get_by_id(session, estimate_id)
+        if estimate is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Estimate #{estimate_id} not found",
+            )
+
+        sorted_items = sorted(list(estimate.items or []), key=lambda item: item.sort_order)
+        if mode == ManagerServiceEstimateOrderLinesMode.collapsed:
+            collapsed_title = ServiceEstimateService._build_collapsed_title(estimate)
+            services = [
+                ManagerOrderServiceLinePayload(
+                    link_id=None,
+                    service_id=None,
+                    title=collapsed_title,
+                    quantity=1,
+                    price=max(0, int(round(float(estimate.total or 0.0)))),
+                    cost=None,
+                )
+            ]
+            return ManagerServiceEstimateOrderLinesResponse(
+                estimate_id=int(estimate.id),
+                mode=mode,
+                title=collapsed_title,
+                services=services,
+            )
+
+        services = [ServiceEstimateService._map_item_to_detailed_service_line(item) for item in sorted_items]
+        return ManagerServiceEstimateOrderLinesResponse(
+            estimate_id=int(estimate.id),
+            mode=mode,
+            title=estimate.title,
+            services=services,
+        )
+
+    @staticmethod
+    async def delete_estimate(session: AsyncSession, estimate_id: int) -> ManagerActionMessageResponse:
+        deleted = await ServiceEstimateDAO.delete_by_id(session=session, estimate_id=estimate_id)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Estimate #{estimate_id} not found",
+            )
+        return ManagerActionMessageResponse(message=f"Estimate #{estimate_id} deleted")

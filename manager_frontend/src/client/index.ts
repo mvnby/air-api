@@ -110,6 +110,8 @@ export type { ManagerOrderUpdatePayload } from './models/ManagerOrderUpdatePaylo
 export type { ManagerRestoreJobStartResponse } from './models/ManagerRestoreJobStartResponse';
 export type { ManagerRestoreJobStatusResponse } from './models/ManagerRestoreJobStatusResponse';
 export type { ManagerServiceEstimateListResponse } from './models/ManagerServiceEstimateListResponse';
+export type { ManagerServiceEstimateOrderLinesMode } from './models/ManagerServiceEstimateOrderLinesMode';
+export type { ManagerServiceEstimateOrderLinesResponse } from './models/ManagerServiceEstimateOrderLinesResponse';
 export type { ManagerServiceEstimateResponse } from './models/ManagerServiceEstimateResponse';
 export type { ManagerSettingCreatePayload } from './models/ManagerSettingCreatePayload';
 export type { ManagerSettingListResponse } from './models/ManagerSettingListResponse';

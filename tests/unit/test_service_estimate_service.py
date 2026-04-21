@@ -1,7 +1,12 @@
 import pytest
 
 from models import InstallationRate, Service
-from schemas import ManagerEstimateAddonPayload, ManagerInstallEstimateCalculatePayload, ManagerInstallEstimateSavePayload
+from schemas import (
+    ManagerEstimateAddonPayload,
+    ManagerInstallEstimateCalculatePayload,
+    ManagerInstallEstimateSavePayload,
+    ManagerServiceEstimateOrderLinesMode,
+)
 from services.service_estimate_service import ServiceEstimateService
 
 
@@ -87,3 +92,28 @@ async def test_create_and_get_install_estimate_snapshot(db):
     listed = await ServiceEstimateService.list_estimates(db, page=1, limit=20)
     assert listed.total == 1
     assert listed.items[0].id == created.id
+
+    detailed = await ServiceEstimateService.get_estimate_order_lines(
+        db,
+        created.id,
+        mode=ManagerServiceEstimateOrderLinesMode.detailed,
+    )
+    assert detailed.estimate_id == created.id
+    assert detailed.mode == "detailed"
+    assert len(detailed.services) >= 1
+
+    collapsed = await ServiceEstimateService.get_estimate_order_lines(
+        db,
+        created.id,
+        mode=ManagerServiceEstimateOrderLinesMode.collapsed,
+    )
+    assert collapsed.mode == "collapsed"
+    assert len(collapsed.services) == 1
+    assert collapsed.services[0].price == round(created.total)
+    assert "Монтаж кондиционера" in collapsed.services[0].title
+
+    deleted = await ServiceEstimateService.delete_estimate(db, created.id)
+    assert "deleted" in deleted.message.lower()
+
+    listed_after_delete = await ServiceEstimateService.list_estimates(db, page=1, limit=20)
+    assert listed_after_delete.total == 0

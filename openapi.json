@@ -6518,6 +6518,23 @@
               "default": 20,
               "title": "Limit"
             }
+          },
+          {
+            "name": "customer_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Customer Id"
+            }
           }
         ],
         "responses": {
@@ -6527,6 +6544,62 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ManagerServiceEstimateListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/service-estimates/{estimate_id}/order-lines": {
+      "get": {
+        "tags": [
+          "manager/service-estimates"
+        ],
+        "summary": "Get Manager Service Estimate Order Lines",
+        "operationId": "get_manager_service_estimate_order_lines",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "estimate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Estimate Id"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ManagerServiceEstimateOrderLinesMode",
+              "default": "detailed"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerServiceEstimateOrderLinesResponse"
                 }
               }
             }
@@ -6574,6 +6647,51 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ManagerServiceEstimateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "manager/service-estimates"
+        ],
+        "summary": "Delete Manager Service Estimate",
+        "operationId": "delete_manager_service_estimate",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "estimate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Estimate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerActionMessageResponse"
                 }
               }
             }
@@ -13433,6 +13551,44 @@
           "limit"
         ],
         "title": "ManagerServiceEstimateListResponse"
+      },
+      "ManagerServiceEstimateOrderLinesMode": {
+        "type": "string",
+        "enum": [
+          "detailed",
+          "collapsed"
+        ],
+        "title": "ManagerServiceEstimateOrderLinesMode"
+      },
+      "ManagerServiceEstimateOrderLinesResponse": {
+        "properties": {
+          "estimate_id": {
+            "type": "integer",
+            "title": "Estimate Id"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ManagerServiceEstimateOrderLinesMode"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "services": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderServiceLinePayload"
+            },
+            "type": "array",
+            "title": "Services"
+          }
+        },
+        "type": "object",
+        "required": [
+          "estimate_id",
+          "mode",
+          "title",
+          "services"
+        ],
+        "title": "ManagerServiceEstimateOrderLinesResponse"
       },
       "ManagerServiceEstimateResponse": {
         "properties": {

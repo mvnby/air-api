@@ -49,21 +49,35 @@ class ServiceEstimateDAO:
         session: AsyncSession,
         page: int = 1,
         limit: int = 20,
+        customer_id: Optional[int] = None,
     ) -> Tuple[List[ServiceEstimate], int]:
         safe_page = max(1, page)
         safe_limit = max(1, min(limit, 100))
         offset = (safe_page - 1) * safe_limit
 
         total_stmt = select(func.count()).select_from(ServiceEstimate)
+        if customer_id is not None:
+            total_stmt = total_stmt.where(ServiceEstimate.customer_id == customer_id)
         total_result = await session.execute(total_stmt)
         total = int(total_result.scalar_one() or 0)
 
+        stmt = select(ServiceEstimate)
+        if customer_id is not None:
+            stmt = stmt.where(ServiceEstimate.customer_id == customer_id)
         stmt = (
-            select(ServiceEstimate)
-            .order_by(ServiceEstimate.created_at.desc())
+            stmt.order_by(ServiceEstimate.created_at.desc())
             .offset(offset)
             .limit(safe_limit)
             .options(selectinload(ServiceEstimate.items))
         )
         result = await session.execute(stmt)
         return list(result.scalars().all()), total
+
+    @staticmethod
+    async def delete_by_id(session: AsyncSession, estimate_id: int) -> bool:
+        estimate = await session.get(ServiceEstimate, estimate_id)
+        if estimate is None:
+            return False
+        await session.delete(estimate)
+        await session.commit()
+        return True

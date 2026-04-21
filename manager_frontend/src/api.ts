@@ -34,6 +34,8 @@ import {
     type ManagerInstallEstimateCalculatePayload,
     type ManagerInstallEstimateSavePayload,
     type ManagerServiceEstimateListResponse,
+    type ManagerServiceEstimateOrderLinesMode,
+    type ManagerServiceEstimateOrderLinesResponse,
     type ManagerServiceEstimateResponse,
     type ManagerInstallEstimateResponse,
     type SupplierCreatePayload,
@@ -74,6 +76,8 @@ export type {
     ManagerInstallEstimateCalculatePayload,
     ManagerInstallEstimateSavePayload,
     ManagerServiceEstimateListResponse,
+    ManagerServiceEstimateOrderLinesMode,
+    ManagerServiceEstimateOrderLinesResponse,
     ManagerServiceEstimateResponse,
     ManagerInstallEstimateResponse,
 };
@@ -286,12 +290,23 @@ export const api = {
         return await ManagerServiceEstimatesService.createManagerServiceEstimate(payload);
     },
 
-    async listManagerServiceEstimates(page = 1, limit = 20): Promise<ManagerServiceEstimateListResponse> {
-        return await ManagerServiceEstimatesService.listManagerServiceEstimates(page, limit);
+    async listManagerServiceEstimates(page = 1, limit = 20, customerId?: number): Promise<ManagerServiceEstimateListResponse> {
+        return await ManagerServiceEstimatesService.listManagerServiceEstimates(page, limit, customerId ?? null);
     },
 
     async getManagerServiceEstimate(estimateId: number): Promise<ManagerServiceEstimateResponse> {
         return await ManagerServiceEstimatesService.getManagerServiceEstimate(estimateId);
+    },
+
+    async getManagerServiceEstimateOrderLines(
+        estimateId: number,
+        mode: ManagerServiceEstimateOrderLinesMode = 'detailed',
+    ): Promise<ManagerServiceEstimateOrderLinesResponse> {
+        return await ManagerServiceEstimatesService.getManagerServiceEstimateOrderLines(estimateId, mode);
+    },
+
+    async deleteManagerServiceEstimate(estimateId: number) {
+        return await ManagerServiceEstimatesService.deleteManagerServiceEstimate(estimateId);
     },
 
     // External integrations
