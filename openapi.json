@@ -6228,6 +6228,39 @@
         ],
         "summary": "List Manager Tariffs",
         "operationId": "list_manager_tariffs",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "service_kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ManagerTariffServiceKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Service Kind"
+            }
+          },
+          {
+            "name": "include_inactive",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Include Inactive"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -6238,13 +6271,18 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       },
       "post": {
         "tags": [
@@ -6252,15 +6290,20 @@
         ],
         "summary": "Create Manager Tariff",
         "operationId": "create_manager_tariff",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ManagerTariffCreatePayload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "201": {
@@ -6283,12 +6326,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/manager/tariffs/{tariff_id}": {
@@ -6366,6 +6404,554 @@
             "schema": {
               "type": "integer",
               "title": "Tariff Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerActionMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/tariffs/{tariff_id}/rules": {
+      "get": {
+        "tags": [
+          "manager/tariffs"
+        ],
+        "summary": "List Manager Tariff Rules",
+        "operationId": "list_manager_tariff_rules",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tariff_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tariff Id"
+            }
+          },
+          {
+            "name": "include_inactive",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Include Inactive"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerTariffRuleListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manager/tariffs"
+        ],
+        "summary": "Create Manager Tariff Rule",
+        "operationId": "create_manager_tariff_rule",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tariff_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tariff Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerTariffRuleCreatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerTariffRuleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/tariffs/{tariff_id}/rules/{rule_id}": {
+      "put": {
+        "tags": [
+          "manager/tariffs"
+        ],
+        "summary": "Update Manager Tariff Rule",
+        "operationId": "update_manager_tariff_rule",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tariff_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tariff Id"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerTariffRuleUpdatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerTariffRuleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "manager/tariffs"
+        ],
+        "summary": "Delete Manager Tariff Rule",
+        "operationId": "delete_manager_tariff_rule",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tariff_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tariff Id"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerActionMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/service-estimates/calculate": {
+      "post": {
+        "tags": [
+          "manager/service-estimates"
+        ],
+        "summary": "Calculate Manager Install Estimate",
+        "operationId": "calculate_manager_install_estimate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerInstallEstimateCalculatePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerInstallEstimateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/service-estimates": {
+      "post": {
+        "tags": [
+          "manager/service-estimates"
+        ],
+        "summary": "Create Manager Service Estimate",
+        "operationId": "create_manager_service_estimate",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerInstallEstimateSavePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerServiceEstimateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "manager/service-estimates"
+        ],
+        "summary": "List Manager Service Estimates",
+        "operationId": "list_manager_service_estimates",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "customer_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Customer Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerServiceEstimateListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/service-estimates/{estimate_id}/order-lines": {
+      "get": {
+        "tags": [
+          "manager/service-estimates"
+        ],
+        "summary": "Get Manager Service Estimate Order Lines",
+        "operationId": "get_manager_service_estimate_order_lines",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "estimate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Estimate Id"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ManagerServiceEstimateOrderLinesMode",
+              "default": "detailed"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerServiceEstimateOrderLinesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/service-estimates/{estimate_id}": {
+      "get": {
+        "tags": [
+          "manager/service-estimates"
+        ],
+        "summary": "Get Manager Service Estimate",
+        "operationId": "get_manager_service_estimate",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "estimate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Estimate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerServiceEstimateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "manager/service-estimates"
+        ],
+        "summary": "Delete Manager Service Estimate",
+        "operationId": "delete_manager_service_estimate",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "estimate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Estimate Id"
             }
           }
         ],
@@ -10780,6 +11366,110 @@
         "type": "object",
         "title": "ManagerCustomerUpdatePayload"
       },
+      "ManagerEstimateLineResponse": {
+        "properties": {
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "rule_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Id"
+          },
+          "rule_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerTariffRuleType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "service_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "qty": {
+            "type": "number",
+            "title": "Qty"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "unit_price": {
+            "type": "number",
+            "title": "Unit Price"
+          },
+          "line_total": {
+            "type": "number",
+            "title": "Line Total"
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_type",
+          "name",
+          "qty",
+          "unit",
+          "unit_price",
+          "line_total"
+        ],
+        "title": "ManagerEstimateLineResponse"
+      },
+      "ManagerEstimateRuleInputPayload": {
+        "properties": {
+          "rule_id": {
+            "type": "integer",
+            "title": "Rule Id"
+          },
+          "qty": {
+            "type": "number",
+            "title": "Qty",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "rule_id"
+        ],
+        "title": "ManagerEstimateRuleInputPayload"
+      },
       "ManagerGoogleAuthExchangePayload": {
         "properties": {
           "code": {
@@ -10847,6 +11537,182 @@
           "url"
         ],
         "title": "ManagerGoogleAuthUrlResponse"
+      },
+      "ManagerInstallEstimateCalculatePayload": {
+        "properties": {
+          "tariff_id": {
+            "type": "integer",
+            "title": "Tariff Id"
+          },
+          "route_length_m": {
+            "type": "number",
+            "title": "Route Length M",
+            "default": 3.0
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity",
+            "default": 1
+          },
+          "extra_holes_count": {
+            "type": "integer",
+            "title": "Extra Holes Count",
+            "default": 0
+          },
+          "rule_inputs": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerEstimateRuleInputPayload"
+            },
+            "type": "array",
+            "title": "Rule Inputs"
+          },
+          "discount_amount": {
+            "type": "number",
+            "title": "Discount Amount",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "tariff_id"
+        ],
+        "title": "ManagerInstallEstimateCalculatePayload"
+      },
+      "ManagerInstallEstimateResponse": {
+        "properties": {
+          "tariff": {
+            "$ref": "#/components/schemas/ManagerTariffBriefResponse"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency",
+            "default": "BYN"
+          },
+          "route_length_m": {
+            "type": "number",
+            "title": "Route Length M"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerEstimateLineResponse"
+            },
+            "type": "array",
+            "title": "Lines"
+          },
+          "rule_lines": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerEstimateLineResponse"
+            },
+            "type": "array",
+            "title": "Rule Lines"
+          },
+          "subtotal": {
+            "type": "number",
+            "title": "Subtotal"
+          },
+          "discount_amount": {
+            "type": "number",
+            "title": "Discount Amount"
+          },
+          "total": {
+            "type": "number",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tariff",
+          "route_length_m",
+          "quantity",
+          "lines",
+          "rule_lines",
+          "subtotal",
+          "discount_amount",
+          "total"
+        ],
+        "title": "ManagerInstallEstimateResponse"
+      },
+      "ManagerInstallEstimateSavePayload": {
+        "properties": {
+          "tariff_id": {
+            "type": "integer",
+            "title": "Tariff Id"
+          },
+          "route_length_m": {
+            "type": "number",
+            "title": "Route Length M",
+            "default": 3.0
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity",
+            "default": 1
+          },
+          "extra_holes_count": {
+            "type": "integer",
+            "title": "Extra Holes Count",
+            "default": 0
+          },
+          "rule_inputs": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerEstimateRuleInputPayload"
+            },
+            "type": "array",
+            "title": "Rule Inputs"
+          },
+          "discount_amount": {
+            "type": "number",
+            "title": "Discount Amount",
+            "default": 0.0
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "draft"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tariff_id"
+        ],
+        "title": "ManagerInstallEstimateSavePayload"
       },
       "ManagerInstallerCreatePayload": {
         "properties": {
@@ -12880,6 +13746,192 @@
         ],
         "title": "ManagerRestoreJobStatusResponse"
       },
+      "ManagerServiceEstimateListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerServiceEstimateResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
+        ],
+        "title": "ManagerServiceEstimateListResponse"
+      },
+      "ManagerServiceEstimateOrderLinesMode": {
+        "type": "string",
+        "enum": [
+          "detailed",
+          "collapsed"
+        ],
+        "title": "ManagerServiceEstimateOrderLinesMode"
+      },
+      "ManagerServiceEstimateOrderLinesResponse": {
+        "properties": {
+          "estimate_id": {
+            "type": "integer",
+            "title": "Estimate Id"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ManagerServiceEstimateOrderLinesMode"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "services": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderServiceLinePayload"
+            },
+            "type": "array",
+            "title": "Services"
+          }
+        },
+        "type": "object",
+        "required": [
+          "estimate_id",
+          "mode",
+          "title",
+          "services"
+        ],
+        "title": "ManagerServiceEstimateOrderLinesResponse"
+      },
+      "ManagerServiceEstimateResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
+          "tariff": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerTariffBriefResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "service_kind": {
+            "type": "string",
+            "title": "Service Kind"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "subtotal": {
+            "type": "number",
+            "title": "Subtotal"
+          },
+          "discount_amount": {
+            "type": "number",
+            "title": "Discount Amount"
+          },
+          "total": {
+            "type": "number",
+            "title": "Total"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerEstimateLineResponse"
+            },
+            "type": "array",
+            "title": "Lines",
+            "default": []
+          },
+          "calculation_payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calculation Payload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "service_kind",
+          "currency",
+          "subtotal",
+          "discount_amount",
+          "total",
+          "status",
+          "created_at"
+        ],
+        "title": "ManagerServiceEstimateResponse"
+      },
       "ManagerSettingCreatePayload": {
         "properties": {
           "key": {
@@ -13274,11 +14326,72 @@
         "type": "object",
         "title": "ManagerTagUpdatePayload"
       },
-      "ManagerTariffCreatePayload": {
+      "ManagerTariffBriefResponse": {
         "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "service_kind": {
+            "$ref": "#/components/schemas/ManagerTariffServiceKind"
+          },
+          "selector_label": {
+            "type": "string",
+            "title": "Selector Label"
+          },
+          "estimate_template": {
+            "type": "string",
+            "title": "Estimate Template"
+          },
           "category": {
             "type": "string",
             "title": "Category"
+          },
+          "power_range": {
+            "type": "string",
+            "title": "Power Range"
+          },
+          "base_price": {
+            "type": "integer",
+            "title": "Base Price"
+          },
+          "included_route_meters": {
+            "type": "number",
+            "title": "Included Route Meters"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "service_kind",
+          "selector_label",
+          "estimate_template",
+          "category",
+          "power_range",
+          "base_price",
+          "included_route_meters"
+        ],
+        "title": "ManagerTariffBriefResponse"
+      },
+      "ManagerTariffCreatePayload": {
+        "properties": {
+          "service_kind": {
+            "$ref": "#/components/schemas/ManagerTariffServiceKind",
+            "default": "installation"
+          },
+          "selector_label": {
+            "type": "string",
+            "title": "Selector Label"
+          },
+          "estimate_template": {
+            "type": "string",
+            "title": "Estimate Template",
+            "default": "\u041c\u043e\u043d\u0442\u0430\u0436 \u043a\u043e\u043d\u0434\u0438\u0446\u0438\u043e\u043d\u0435\u0440\u0430, \u0432\u043a\u043b\u044e\u0447\u0430\u044f \u0440\u0430\u0441\u0445\u043e\u0434\u043d\u044b\u0435 \u043c\u0430\u0442\u0435\u0440\u0438\u0430\u043b\u044b"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category",
+            "default": ""
           },
           "power_range": {
             "type": "string",
@@ -13290,20 +14403,20 @@
             "title": "Base Price",
             "default": 0
           },
-          "extra_pipe_price": {
-            "type": "integer",
-            "title": "Extra Pipe Price",
-            "default": 0
+          "included_route_meters": {
+            "type": "number",
+            "title": "Included Route Meters",
+            "default": 3.0
           },
-          "included_pipe_meters": {
-            "type": "integer",
-            "title": "Included Pipe Meters",
-            "default": 3
-          },
-          "is_fixed": {
+          "is_active": {
             "type": "boolean",
-            "title": "Is Fixed",
+            "title": "Is Active",
             "default": true
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order",
+            "default": 0
           },
           "comment": {
             "anyOf": [
@@ -13319,7 +14432,7 @@
         },
         "type": "object",
         "required": [
-          "category"
+          "selector_label"
         ],
         "title": "ManagerTariffCreatePayload"
       },
@@ -13345,6 +14458,17 @@
             "type": "integer",
             "title": "Id"
           },
+          "service_kind": {
+            "$ref": "#/components/schemas/ManagerTariffServiceKind"
+          },
+          "selector_label": {
+            "type": "string",
+            "title": "Selector Label"
+          },
+          "estimate_template": {
+            "type": "string",
+            "title": "Estimate Template"
+          },
           "category": {
             "type": "string",
             "title": "Category"
@@ -13357,17 +14481,17 @@
             "type": "integer",
             "title": "Base Price"
           },
-          "extra_pipe_price": {
-            "type": "integer",
-            "title": "Extra Pipe Price"
+          "included_route_meters": {
+            "type": "number",
+            "title": "Included Route Meters"
           },
-          "included_pipe_meters": {
-            "type": "integer",
-            "title": "Included Pipe Meters"
-          },
-          "is_fixed": {
+          "is_active": {
             "type": "boolean",
-            "title": "Is Fixed"
+            "title": "Is Active"
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order"
           },
           "comment": {
             "anyOf": [
@@ -13379,23 +14503,329 @@
               }
             ],
             "title": "Comment"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerTariffRuleResponse"
+            },
+            "type": "array",
+            "title": "Rules"
           }
         },
         "type": "object",
         "required": [
           "id",
+          "service_kind",
+          "selector_label",
+          "estimate_template",
           "category",
           "power_range",
           "base_price",
-          "extra_pipe_price",
-          "included_pipe_meters",
-          "is_fixed",
-          "comment"
+          "included_route_meters",
+          "is_active",
+          "sort_order"
         ],
         "title": "ManagerTariffResponse"
       },
+      "ManagerTariffRuleCreatePayload": {
+        "properties": {
+          "rule_type": {
+            "$ref": "#/components/schemas/ManagerTariffRuleType"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "line_template": {
+            "type": "string",
+            "title": "Line Template",
+            "default": "{name}"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit",
+            "default": "\u0448\u0442"
+          },
+          "unit_price": {
+            "type": "number",
+            "title": "Unit Price",
+            "default": 0.0
+          },
+          "is_optional": {
+            "type": "boolean",
+            "title": "Is Optional",
+            "default": false
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order",
+            "default": 0
+          },
+          "service_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rule_type",
+          "name"
+        ],
+        "title": "ManagerTariffRuleCreatePayload"
+      },
+      "ManagerTariffRuleListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerTariffRuleResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ManagerTariffRuleListResponse"
+      },
+      "ManagerTariffRuleResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "tariff_id": {
+            "type": "integer",
+            "title": "Tariff Id"
+          },
+          "rule_type": {
+            "$ref": "#/components/schemas/ManagerTariffRuleType"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "line_template": {
+            "type": "string",
+            "title": "Line Template"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "unit_price": {
+            "type": "number",
+            "title": "Unit Price"
+          },
+          "is_optional": {
+            "type": "boolean",
+            "title": "Is Optional"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order"
+          },
+          "service_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tariff_id",
+          "rule_type",
+          "name",
+          "line_template",
+          "unit",
+          "unit_price",
+          "is_optional",
+          "is_active",
+          "sort_order"
+        ],
+        "title": "ManagerTariffRuleResponse"
+      },
+      "ManagerTariffRuleType": {
+        "type": "string",
+        "enum": [
+          "fixed_once",
+          "per_unit_manual",
+          "per_meter_over_included",
+          "per_hole_manual"
+        ],
+        "title": "ManagerTariffRuleType"
+      },
+      "ManagerTariffRuleUpdatePayload": {
+        "properties": {
+          "rule_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerTariffRuleType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "line_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Template"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "unit_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Price"
+          },
+          "is_optional": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Optional"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
+          },
+          "service_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Id"
+          }
+        },
+        "type": "object",
+        "title": "ManagerTariffRuleUpdatePayload"
+      },
+      "ManagerTariffServiceKind": {
+        "type": "string",
+        "enum": [
+          "installation",
+          "dismantling",
+          "maintenance"
+        ],
+        "title": "ManagerTariffServiceKind"
+      },
       "ManagerTariffUpdatePayload": {
         "properties": {
+          "service_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerTariffServiceKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selector_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selector Label"
+          },
+          "estimate_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimate Template"
+          },
           "category": {
             "anyOf": [
               {
@@ -13429,29 +14859,18 @@
             ],
             "title": "Base Price"
           },
-          "extra_pipe_price": {
+          "included_route_meters": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "number"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Extra Pipe Price"
+            "title": "Included Route Meters"
           },
-          "included_pipe_meters": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Included Pipe Meters"
-          },
-          "is_fixed": {
+          "is_active": {
             "anyOf": [
               {
                 "type": "boolean"
@@ -13460,7 +14879,18 @@
                 "type": "null"
               }
             ],
-            "title": "Is Fixed"
+            "title": "Is Active"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
           },
           "comment": {
             "anyOf": [

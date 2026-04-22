@@ -2,9 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { ManagerTariffRuleResponse } from './ManagerTariffRuleResponse';
 import type { ManagerTariffServiceKind } from './ManagerTariffServiceKind';
-export type ManagerTariffResponse = {
+export type ManagerTariffBriefResponse = {
     id: number;
     service_kind: ManagerTariffServiceKind;
     selector_label: string;
@@ -13,9 +12,5 @@ export type ManagerTariffResponse = {
     power_range: string;
     base_price: number;
     included_route_meters: number;
-    is_active: boolean;
-    sort_order: number;
-    comment?: (string | null);
-    rules?: Array<ManagerTariffRuleResponse>;
 };
 

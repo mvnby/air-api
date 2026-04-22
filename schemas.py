@@ -1524,37 +1524,253 @@ class ManagerSettingListResponse(BaseModel):
 
 # --- TARIFFS ---
 
+class ManagerTariffServiceKind(str, Enum):
+    installation = "installation"
+    dismantling = "dismantling"
+    maintenance = "maintenance"
+
+
+class ManagerTariffRuleType(str, Enum):
+    fixed_once = "fixed_once"
+    per_unit_manual = "per_unit_manual"
+    per_meter_over_included = "per_meter_over_included"
+    per_hole_manual = "per_hole_manual"
+
+
+class ManagerTariffRuleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    tariff_id: int
+    rule_type: ManagerTariffRuleType
+    name: str
+    line_template: str
+    unit: str
+    unit_price: float
+    is_optional: bool
+    is_active: bool
+    sort_order: int
+    service_id: Optional[int] = None
+
+
+class ManagerTariffRuleCreatePayload(BaseModel):
+    rule_type: ManagerTariffRuleType
+    name: str
+    line_template: str = "{name}"
+    unit: str = "шт"
+    unit_price: float = 0.0
+    is_optional: bool = False
+    is_active: bool = True
+    sort_order: int = 0
+    service_id: Optional[int] = None
+
+    @field_validator("unit_price")
+    @classmethod
+    def validate_unit_price(cls, value: float) -> float:
+        if value < 0:
+            raise ValueError("unit_price must be >= 0")
+        return value
+
+
+class ManagerTariffRuleUpdatePayload(BaseModel):
+    rule_type: Optional[ManagerTariffRuleType] = None
+    name: Optional[str] = None
+    line_template: Optional[str] = None
+    unit: Optional[str] = None
+    unit_price: Optional[float] = None
+    is_optional: Optional[bool] = None
+    is_active: Optional[bool] = None
+    sort_order: Optional[int] = None
+    service_id: Optional[int] = None
+
+    @field_validator("unit_price")
+    @classmethod
+    def validate_optional_unit_price(cls, value: Optional[float]) -> Optional[float]:
+        if value is not None and value < 0:
+            raise ValueError("unit_price must be >= 0")
+        return value
+
+
+class ManagerTariffRuleListResponse(BaseModel):
+    items: List[ManagerTariffRuleResponse]
+
+
 class ManagerTariffResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
     id: int
+    service_kind: ManagerTariffServiceKind
+    selector_label: str
+    estimate_template: str
     category: str
     power_range: str
     base_price: int
-    extra_pipe_price: int
-    included_pipe_meters: int
-    is_fixed: bool
-    comment: Optional[str]
+    included_route_meters: float
+    is_active: bool
+    sort_order: int
+    comment: Optional[str] = None
+    rules: List[ManagerTariffRuleResponse] = Field(default_factory=list)
 
 
 class ManagerTariffCreatePayload(BaseModel):
-    category: str
+    service_kind: ManagerTariffServiceKind = ManagerTariffServiceKind.installation
+    selector_label: str
+    estimate_template: str = "Монтаж кондиционера, включая расходные материалы"
+    category: str = ""
     power_range: str = ""
     base_price: int = 0
-    extra_pipe_price: int = 0
-    included_pipe_meters: int = 3
-    is_fixed: bool = True
+    included_route_meters: float = 3.0
+    is_active: bool = True
+    sort_order: int = 0
     comment: Optional[str] = None
 
 
 class ManagerTariffUpdatePayload(BaseModel):
+    service_kind: Optional[ManagerTariffServiceKind] = None
+    selector_label: Optional[str] = None
+    estimate_template: Optional[str] = None
     category: Optional[str] = None
     power_range: Optional[str] = None
     base_price: Optional[int] = None
-    extra_pipe_price: Optional[int] = None
-    included_pipe_meters: Optional[int] = None
-    is_fixed: Optional[bool] = None
+    included_route_meters: Optional[float] = None
+    is_active: Optional[bool] = None
+    sort_order: Optional[int] = None
     comment: Optional[str] = None
 
 
 class ManagerTariffListResponse(BaseModel):
     items: List[ManagerTariffResponse]
+
+
+# --- SERVICE ESTIMATES ---
+
+class ManagerEstimateRuleInputPayload(BaseModel):
+    rule_id: int
+    qty: float = 0.0
+
+    @field_validator("qty")
+    @classmethod
+    def validate_qty(cls, value: float) -> float:
+        if value < 0:
+            raise ValueError("qty must be >= 0")
+        return value
+
+
+class ManagerTariffBriefResponse(BaseModel):
+    id: int
+    service_kind: ManagerTariffServiceKind
+    selector_label: str
+    estimate_template: str
+    category: str
+    power_range: str
+    base_price: int
+    included_route_meters: float
+
+
+class ManagerInstallEstimateCalculatePayload(BaseModel):
+    tariff_id: int
+    route_length_m: float = 3.0
+    quantity: int = 1
+    extra_holes_count: int = 0
+    rule_inputs: List[ManagerEstimateRuleInputPayload] = Field(default_factory=list)
+    discount_amount: float = 0.0
+
+    @field_validator("route_length_m")
+    @classmethod
+    def validate_route_length(cls, value: float) -> float:
+        if value < 0:
+            raise ValueError("route_length_m must be >= 0")
+        return value
+
+    @field_validator("quantity")
+    @classmethod
+    def validate_quantity(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("quantity must be greater than zero")
+        return value
+
+    @field_validator("extra_holes_count")
+    @classmethod
+    def validate_extra_holes_count(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("extra_holes_count must be >= 0")
+        return value
+
+    @field_validator("discount_amount")
+    @classmethod
+    def validate_discount_amount(cls, value: float) -> float:
+        if value < 0:
+            raise ValueError("discount_amount must be >= 0")
+        return value
+
+
+class ManagerInstallEstimateSavePayload(ManagerInstallEstimateCalculatePayload):
+    title: Optional[str] = None
+    comment: Optional[str] = None
+    customer_id: Optional[int] = None
+    status: str = "draft"
+
+
+class ManagerEstimateLineResponse(BaseModel):
+    source_type: str
+    source_id: Optional[int] = None
+    rule_id: Optional[int] = None
+    rule_type: Optional[ManagerTariffRuleType] = None
+    service_id: Optional[int] = None
+    name: str
+    qty: float
+    unit: str
+    unit_price: float
+    line_total: float
+    sort_order: int = 0
+
+
+class ManagerInstallEstimateResponse(BaseModel):
+    tariff: ManagerTariffBriefResponse
+    currency: str = "BYN"
+    route_length_m: float
+    quantity: int
+    lines: List[ManagerEstimateLineResponse]
+    rule_lines: List[ManagerEstimateLineResponse]
+    subtotal: float
+    discount_amount: float
+    total: float
+
+
+class ManagerServiceEstimateResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    customer_id: Optional[int] = None
+    tariff: Optional[ManagerTariffBriefResponse] = None
+    title: str
+    comment: Optional[str] = None
+    service_kind: str
+    currency: str
+    subtotal: float
+    discount_amount: float
+    total: float
+    status: str
+    created_by: Optional[str] = None
+    created_at: datetime
+    lines: List[ManagerEstimateLineResponse] = []
+    calculation_payload: Optional[Dict[str, Any]] = None
+
+
+class ManagerServiceEstimateListResponse(BaseModel):
+    items: List[ManagerServiceEstimateResponse]
+    total: int
+    page: int
+    limit: int
+
+
+class ManagerServiceEstimateOrderLinesMode(str, Enum):
+    detailed = "detailed"
+    collapsed = "collapsed"
+
+
+class ManagerServiceEstimateOrderLinesResponse(BaseModel):
+    estimate_id: int
+    mode: ManagerServiceEstimateOrderLinesMode
+    title: str
+    services: List[ManagerOrderServiceLinePayload]

@@ -10,6 +10,7 @@ import {
     ManagerGoogleAuthService,
     ManagerBackupsService,
     ManagerTariffsService,
+    ManagerServiceEstimatesService,
     AdminService,
     ApiService,
     type ProductUpdate,
@@ -29,7 +30,17 @@ import {
 
     type ManagerSettingUpdatePayload,
     type ManagerTariffCreatePayload,
+    type ManagerTariffRuleCreatePayload,
+    type ManagerTariffRuleUpdatePayload,
+    type ManagerTariffServiceKind,
     type ManagerTariffUpdatePayload,
+    type ManagerInstallEstimateCalculatePayload,
+    type ManagerInstallEstimateSavePayload,
+    type ManagerServiceEstimateListResponse,
+    type ManagerServiceEstimateOrderLinesMode,
+    type ManagerServiceEstimateOrderLinesResponse,
+    type ManagerServiceEstimateResponse,
+    type ManagerInstallEstimateResponse,
     type SupplierCreatePayload,
     type SupplierUpdatePayload,
     type SupplierPriceSourceCreatePayload,
@@ -63,6 +74,15 @@ export type {
     ManagerBackupRunStatusResponse,
     ManagerRestoreJobStartResponse,
     ManagerRestoreJobStatusResponse,
+};
+export type {
+    ManagerInstallEstimateCalculatePayload,
+    ManagerInstallEstimateSavePayload,
+    ManagerServiceEstimateListResponse,
+    ManagerServiceEstimateOrderLinesMode,
+    ManagerServiceEstimateOrderLinesResponse,
+    ManagerServiceEstimateResponse,
+    ManagerInstallEstimateResponse,
 };
 
 export interface ManagerBrand {
@@ -252,6 +272,10 @@ export const api = {
         return await ManagerTariffsService.listManagerTariffs();
     },
 
+    async listManagerTariffsByKind(serviceKind?: ManagerTariffServiceKind, includeInactive = true) {
+        return await ManagerTariffsService.listManagerTariffs(serviceKind ?? null, includeInactive);
+    },
+
     async createManagerTariff(payload: ManagerTariffCreatePayload) {
         return await ManagerTariffsService.createManagerTariff(payload);
     },
@@ -263,6 +287,51 @@ export const api = {
     async deleteManagerTariff(id: number) {
         return await ManagerTariffsService.deleteManagerTariff(id);
     },
+
+    async listManagerTariffRules(tariffId: number, includeInactive = true) {
+        return await ManagerTariffsService.listManagerTariffRules(tariffId, includeInactive);
+    },
+
+    async createManagerTariffRule(tariffId: number, payload: ManagerTariffRuleCreatePayload) {
+        return await ManagerTariffsService.createManagerTariffRule(tariffId, payload);
+    },
+
+    async updateManagerTariffRule(tariffId: number, ruleId: number, payload: ManagerTariffRuleUpdatePayload) {
+        return await ManagerTariffsService.updateManagerTariffRule(tariffId, ruleId, payload);
+    },
+
+    async deleteManagerTariffRule(tariffId: number, ruleId: number) {
+        return await ManagerTariffsService.deleteManagerTariffRule(tariffId, ruleId);
+    },
+
+    // Install estimates (issue #260)
+    async calculateManagerInstallEstimate(payload: ManagerInstallEstimateCalculatePayload) {
+        return await ManagerServiceEstimatesService.calculateManagerInstallEstimate(payload);
+    },
+
+    async createManagerServiceEstimate(payload: ManagerInstallEstimateSavePayload) {
+        return await ManagerServiceEstimatesService.createManagerServiceEstimate(payload);
+    },
+
+    async listManagerServiceEstimates(page = 1, limit = 20, customerId?: number): Promise<ManagerServiceEstimateListResponse> {
+        return await ManagerServiceEstimatesService.listManagerServiceEstimates(page, limit, customerId ?? null);
+    },
+
+    async getManagerServiceEstimate(estimateId: number): Promise<ManagerServiceEstimateResponse> {
+        return await ManagerServiceEstimatesService.getManagerServiceEstimate(estimateId);
+    },
+
+    async getManagerServiceEstimateOrderLines(
+        estimateId: number,
+        mode: ManagerServiceEstimateOrderLinesMode = 'detailed',
+    ): Promise<ManagerServiceEstimateOrderLinesResponse> {
+        return await ManagerServiceEstimatesService.getManagerServiceEstimateOrderLines(estimateId, mode);
+    },
+
+    async deleteManagerServiceEstimate(estimateId: number) {
+        return await ManagerServiceEstimatesService.deleteManagerServiceEstimate(estimateId);
+    },
+
     // External integrations
     async getCompanyByUnp(unp: string) {
         return await ApiService.publicProxyEgrApiV1ProxyEgrGet(unp);
