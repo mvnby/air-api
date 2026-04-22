@@ -1,177 +1,352 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import ProductCard from "../components/ProductCard.astro";
 import ProductGroup from "../components/ProductGroup.astro";
 import FeaturedArticles from "../components/blog/FeaturedArticles.astro";
-import {
-	getInstallationPricingInfo,
-	getGlobalConfig,
-	getProductBySlug,
-	getCatalog,
-} from "../utils/api";
+import { getInstallationPricingInfo } from "../utils/api";
 
 const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
-const config = await getGlobalConfig();
 
-let heroProduct = null;
-if (config && config.hero_product) {
-	heroProduct = await getProductBySlug(config.hero_product);
-}
+const heroServices = [
+	"Подбор и продажа",
+	"Монтаж под ключ",
+	"Обслуживание",
+	"Ремонт",
+];
 
-// Fallback: Try to get a "Hit" product
-if (!heroProduct) {
-	const hits = await getCatalog({ tag_slugs: ["hit"], limit: 1 });
-	if (hits && hits.items && hits.items.length > 0) {
-		heroProduct = hits.items[0];
-	}
-}
+const proofItems = [
+	"Работаем в Витебске",
+	"Бесплатный замер",
+	"Гарантия на монтаж",
+	"Обслуживание после установки",
+];
 
-// Last Resort: Any product (Newest)
-if (!heroProduct) {
-	const any = await getCatalog({ limit: 1 });
-	if (any && any.items && any.items.length > 0) {
-		heroProduct = any.items[0];
-	}
-}
+const serviceCards = [
+	{
+		title: "Подбор и продажа",
+		description:
+			"Подберем модель по площади, бюджету и режиму работы, чтобы не переплачивать за лишние функции.",
+		href: "/catalog",
+		icon: "tune",
+	},
+	{
+		title: "Монтаж кондиционеров",
+		description:
+			"Устанавливаем аккуратно и предсказуемо по срокам, с понятной сметой и гарантией на выполненные работы.",
+		href: "/montaj-konditionerov",
+		icon: "construction",
+	},
+	{
+		title: "Обслуживание",
+		description:
+			"Чистка, дезинфекция и профилактика, чтобы техника сохраняла мощность и не начала шуметь или пахнуть.",
+		href: "/obslujivanie-kondicionerov",
+		icon: "cleaning_services",
+	},
+	{
+		title: "Ремонт",
+		description:
+			"Диагностика и восстановление кондиционеров, если система не охлаждает, шумит или работает нестабильно.",
+		href: "/services/repair",
+		icon: "engineering",
+	},
+];
 
-// No hardcoded fallback. If null, card is hidden.
-const displayProduct = heroProduct;
+const residentialBenefits = [
+	"Тихие модели для спальни, детской и гостиной",
+	"Подбор по площади и реальным условиям помещения",
+	"Модели с обогревом для межсезонья и холодных дней",
+	"Аккуратный монтаж без лишней грязи и сюрпризов",
+];
+
+const businessBenefits = [
+	"Подбор решений для кабинетов, магазинов и небольших офисов",
+	"Стабильная работа в ежедневной эксплуатации",
+	"Обслуживание и профилактика без долгих простоев",
+	"Помощь с выбором нескольких внутренних блоков и схемой монтажа",
+];
+
+const installIncluded = [
+	"Стандартный выезд и оценка монтажа",
+	"Качественные расходники и аккуратная трасса",
+	"Пусконаладка и проверка после установки",
+];
 ---
 
-<Layout title="Главная">
+<Layout
+	title="Главная"
+	description="Кондиционеры в Витебске: подбор, продажа, монтаж, обслуживание и ремонт для дома, офиса и бизнеса."
+>
 	<section class="hero-section">
 		<div class="blob blob-1"></div>
 		<div class="blob blob-2"></div>
+		<div class="hero-noise"></div>
 
-		<div class="container hero-grid">
-			<div class="hero-main">
-				<div class="badge">
-					<span class="dot"></span>
-					Работаем в Витебске
-				</div>
+		<div class="container hero-shell">
+			<div class="hero-copy">
+				<div class="badge hero-badge">Климатические решения в Витебске</div>
 				<h1>
-					Климат под ключ <br />
-					<span class="gradient-text">в Витебске</span>
+					Продажа, монтаж и сервис кондиционеров
+					<span class="gradient-text">для дома и офиса</span>
 				</h1>
-				<p class="hero-p">
-					Подберем, доставим и установим оптимальную сплит-систему для
-					вашего дома или офиса. Гарантия на оборудование и монтаж.
+				<p class="hero-lead">
+					Подбираем сплит-системы под вашу задачу, привозим, устанавливаем
+					и остаемся на сервисе после монтажа. На сайте можно быстро понять,
+					что мы делаем и какое решение подойдет именно вам.
 				</p>
 
+				<div class="hero-service-strip" aria-label="Основные направления">
+					{
+						heroServices.map((item) => (
+							<span class="service-pill">
+								<span class="service-pill-icon material-icons-round" aria-hidden="true">
+									check_circle
+								</span>
+								<span>{item}</span>
+							</span>
+						))
+					}
+				</div>
+
 				<div class="hero-actions">
-					<a href="/catalog" class="btn btn-primary btn-large">
-						Подобрать кондиционер
-						<span class="material-icons-round">arrow_forward</span>
+					<a href="/contacts" class="btn btn-primary btn-large">
+						Получить консультацию
+						<span class="material-icons-round" aria-hidden="true">
+							arrow_forward
+						</span>
 					</a>
-					<a
-						href="/catalog/inverter"
-						class="btn btn-outline btn-large"
-					>
-						Инверторные модели
+					<a href="/catalog" class="btn btn-outline btn-large">
+						Перейти в каталог
 					</a>
 				</div>
 
-				<div class="hero-features">
-					<div class="h-feat">
-						<span class="material-icons-round">check_circle</span>
-						<span>Бесплатный замер</span>
-					</div>
-					<div class="h-feat">
-						<span class="material-icons-round">check_circle</span>
-						<span>Профессиональный монтаж</span>
-					</div>
+				<div class="proof-row" aria-label="Преимущества">
+					{
+						proofItems.map((item) => (
+							<div class="proof-pill">
+								<span
+									class="material-icons-round"
+									aria-hidden="true"
+								>
+									check_circle
+								</span>
+								<span>{item}</span>
+							</div>
+						))
+					}
 				</div>
 			</div>
 
 			<div class="hero-visual">
-				{
-					displayProduct && (
-						<ProductCard product={displayProduct} variant="hero" />
-					)
-				}
+				<div class="hero-visual-main glass">
+					<div class="hero-visual-copy">
+						<p class="eyebrow">Как мы работаем</p>
+						<p class="visual-title">
+							Помогаем выбрать технику, делаем монтаж под ключ и не
+							пропадаем после установки.
+						</p>
+						<ul class="hero-steps">
+							<li>Понимаем задачу и формат помещения</li>
+							<li>Предлагаем подходящие модели и смету</li>
+							<li>Монтируем и берем на дальнейший сервис</li>
+						</ul>
+					</div>
+					<img
+						src="/img/services/installation.png"
+						alt="Монтаж кондиционера"
+						class="hero-image"
+						width="960"
+						height="960"
+						fetchpriority="high"
+					/>
+				</div>
+
+				<div class="hero-metrics" aria-label="Ключевые показатели">
+					<div class="metric-card">
+						<span class="metric-value">500+</span>
+						<span class="metric-label">установленных систем за год</span>
+					</div>
+					<div class="metric-card accent">
+						<span class="metric-value">
+							{minStandardPrice}
+							<span class="price-byn"></span>
+						</span>
+						<span class="metric-label">монтаж под ключ от</span>
+					</div>
+					<div class="metric-card">
+						<span class="metric-value">Витебск</span>
+						<span class="metric-label">и область, частные и офисные объекты</span>
+					</div>
+				</div>
 			</div>
 		</div>
 	</section>
 
-	<section class="container promo-section">
-		<h2 class="section-title">Актуальное</h2>
-		<div class="promo-grid">
-			<div class="promo-main glass card">
-				<div class="promo-text">
-					<h2>Стандартный монтаж «под ключ»</h2>
-					<div class="price-header">
-						<p class="price-tag">{minStandardPrice} <span class="price-byn"></span></p>
-						{
-							minBundlePrice < minStandardPrice && (
-								<p class="bundle-price-badge">
-									<strong>{minBundlePrice} <span class="price-byn"></span></strong> при
-									покупке у нас
-								</p>
-							)
-						}
-					</div>
-					<a href="/montaj-konditionerov" class="btn btn-primary"
-						>Заказать монтаж</a
-					>
-				</div>
-				<img
-					src="/img/services/man_repair_narrow.png"
-					alt="Installation"
-					class="promo-img"
-				/>
-			</div>
+	<section class="container services-section">
+		<div class="section-heading">
+			<p class="section-kicker">Что мы делаем</p>
+			<h2>Закрываем весь путь от выбора кондиционера до обслуживания</h2>
+			<p class="section-lead">
+				Главная задача этой страницы: быстро показать, что мы не просто
+				продаем оборудование, а ведем проект до работающей системы.
+			</p>
+		</div>
 
-			<div class="promo-sub card">
-				<div class="p-sub-text">
-					<h4>Как выбрать кондиционер?</h4>
-					<p>
-						Если вы не знаете, с чего начать выбор кондиционера,
-						рекомендуем изучить наш гид. Мы собрали все на что нужно
-						обратить внимание в первую очередь
+		<div class="services-grid">
+			{
+				serviceCards.map((card) => (
+					<a href={card.href} class="service-card glass">
+						<div class="service-icon" aria-hidden="true">
+							<span class="material-icons-round">{card.icon}</span>
+						</div>
+						<div>
+							<h3>{card.title}</h3>
+							<p>{card.description}</p>
+						</div>
+						<span class="service-link">
+							Подробнее
+							<span class="material-icons-round" aria-hidden="true">
+								arrow_forward
+							</span>
+						</span>
+					</a>
+				))
+			}
+		</div>
+	</section>
+
+	<section class="container audience-section">
+		<div class="section-heading narrow">
+			<p class="section-kicker">Под разные сценарии</p>
+			<h2>Разные задачи, один понятный сервис</h2>
+			<p class="section-lead">
+				Сначала помогаем понять сценарий, затем предлагаем подходящее
+				решение и маршрут действия.
+			</p>
+		</div>
+
+		<div class="audience-grid">
+			<article class="audience-card">
+				<div class="audience-card-top">
+					<p class="audience-label">Для квартиры и дома</p>
+					<h3>Тихий климат, обогрев в межсезонье и понятный подбор под площадь</h3>
+				</div>
+				<ul class="audience-list">
+					{
+						residentialBenefits.map((item) => (
+							<li>{item}</li>
+						))
+					}
+				</ul>
+				<a href="/catalog?area_max=35" class="audience-link">
+					Подобрать для дома
+					<span class="material-icons-round" aria-hidden="true">
+						arrow_forward
+					</span>
+				</a>
+			</article>
+
+			<article class="audience-card audience-card-alt">
+				<div class="audience-card-top">
+					<p class="audience-label">Для офиса и бизнеса</p>
+					<h3>Рабочие решения для кабинетов, магазинов и небольших коммерческих объектов</h3>
+				</div>
+				<ul class="audience-list">
+					{
+						businessBenefits.map((item) => (
+							<li>{item}</li>
+						))
+					}
+				</ul>
+				<a href="/contacts" class="audience-link">
+					Обсудить задачу
+					<span class="material-icons-round" aria-hidden="true">
+						arrow_forward
+					</span>
+				</a>
+			</article>
+		</div>
+	</section>
+
+	<section class="container offer-section">
+		<div class="offer-grid">
+			<div class="offer-main glass">
+				<div class="offer-copy">
+					<p class="section-kicker">Монтаж под ключ</p>
+					<h2>Понятный оффер по монтажу без скрытых сюрпризов</h2>
+					<p class="offer-text">
+						Если оборудование покупаете у нас, стоимость стандартного
+						монтажа начинается от <strong>{minBundlePrice}</strong>
+						<span class="price-byn"></span>. Базовая цена стандартного
+						монтажа отдельно от покупки начинается от
+						<strong> {minStandardPrice}</strong> <span class="price-byn"></span>.
 					</p>
-					<a href="/kak-vybrat-konditsioner" class="link"
-						>Узнать подробнее <span class="material-icons-round"
-							>arrow_forward</span
-						></a
-					>
+					<ul class="offer-list">
+						{
+							installIncluded.map((item) => (
+								<li>{item}</li>
+							))
+						}
+					</ul>
+					<div class="offer-actions">
+						<a href="/montaj-konditionerov" class="btn btn-primary">
+							Заказать монтаж
+						</a>
+						<a href="/contacts" class="btn btn-outline">
+							Уточнить стоимость
+						</a>
+					</div>
 				</div>
-				<div class="p-sub-img">
-					<img src="/img/ac-selection-guide.png" alt="Article" />
+				<div class="offer-media">
+					<img
+						src="/img/services/man_repair_narrow.png"
+						alt="Мастер выполняет монтаж кондиционера"
+						class="offer-image"
+						width="900"
+						height="1200"
+						loading="lazy"
+					/>
 				</div>
 			</div>
 
-			<a
-				href="/obslujivanie-kondicionerov"
-				class="promo-maintenance card group"
-			>
-				<div class="m-bg-icon">
-					<span class="material-icons-round">engineering</span>
-				</div>
-				<div class="m-content">
-					<div class="m-icon-box">
-						<span class="material-icons-round">build_circle</span>
-					</div>
-					<div>
-						<h4>Обслуживание</h4>
-						<p class="m-sub">Ежегодное ТО</p>
-					</div>
-				</div>
-				<div class="m-price-box">
-					<span class="m-from">от</span>
-					<span class="m-val">110 <span class="price-byn"></span></span>
-				</div>
-			</a>
+			<div class="offer-side">
+				<a href="/kak-vybrat-konditsioner" class="guide-card">
+					<p class="section-kicker">Экспертный материал</p>
+					<h3>Как выбрать кондиционер и не переплатить за лишние функции</h3>
+					<p>
+						Подходит, если вы только начинаете разбираться в мощности,
+						обогреве, инверторных моделях и сценариях установки.
+					</p>
+					<span class="service-link">
+						Читать гид
+						<span class="material-icons-round" aria-hidden="true">
+							arrow_forward
+						</span>
+					</span>
+				</a>
 
-			<div class="promo-stat btn-primary">
-				<span class="stat-num">500+</span>
-				<span class="stat-text">Установленных систем за год</span>
+				<a href="/obslujivanie-kondicionerov" class="maintenance-card">
+					<div class="maintenance-copy">
+						<p class="section-kicker">Сервис после установки</p>
+						<h3>Обслуживание от 110 <span class="price-byn"></span></h3>
+						<p>
+							Ежегодная профилактика, чистка и дезинфекция, чтобы
+							кондиционер работал стабильно и без неприятных запахов.
+						</p>
+					</div>
+					<span class="service-link">
+						Заказать обслуживание
+						<span class="material-icons-round" aria-hidden="true">
+							arrow_forward
+						</span>
+					</span>
+				</a>
 			</div>
 		</div>
 	</section>
-	<!-- Requested Faceted Group Example -->
+
 	<div class="container products-section">
 		<ProductGroup
-			title="В наличии в Витебске по хорошим ценам"
+			title="Популярные модели в наличии в Витебске"
 			vitebskFeatured={true}
 			limit={6}
 		/>
@@ -179,10 +354,9 @@ const displayProduct = heroProduct;
 
 	<FeaturedArticles />
 
-	<!-- Requested Faceted Group Example -->
 	<div class="container products-section">
 		<ProductGroup
-			title="Лучшие кондиционеры на 25 м² с обогревом"
+			title="Для квартиры до 25 м² с обогревом"
 			filters={{ area_max: 29, heating_min: -20 }}
 			limit={4}
 		/>
@@ -190,537 +364,1001 @@ const displayProduct = heroProduct;
 </Layout>
 
 <style>
-	.price-tag {
-		font-size: 2rem;
-		font-weight: 800;
-		color: var(--primary);
-		margin-bottom: 0.5rem;
-	}
-
-	.bundle-price-badge {
-		display: inline-block;
-		padding: 0.4rem 1rem;
-		background: var(--success-bg);
-		border: 1px solid var(--success);
-		color: var(--success-text);
-		border-radius: 12px;
-		font-size: 0.9rem;
-		margin-bottom: var(--space-md);
-	}
 	.hero-section {
-		padding: 4rem 0 4em;
+		padding: 3.5rem 0 5rem;
 		position: relative;
 		overflow: hidden;
+	}
+
+	.hero-noise {
+		position: absolute;
+		inset: 0;
+		background:
+			radial-gradient(circle at top left, rgba(45, 212, 191, 0.08), transparent 28%),
+			radial-gradient(circle at bottom right, rgba(0, 127, 128, 0.08), transparent 24%);
+		pointer-events: none;
 	}
 
 	.blob {
 		position: absolute;
 		border-radius: 50%;
-		filter: blur(80px);
+		filter: blur(90px);
 		z-index: -1;
-		opacity: 0.2;
+		opacity: 0.16;
 	}
+
 	.blob-1 {
-		width: 400px;
-		height: 400px;
+		width: 420px;
+		height: 420px;
 		background: var(--primary);
-		top: -100px;
-		right: -100px;
+		top: -120px;
+		right: -80px;
 	}
+
 	.blob-2 {
-		width: 300px;
-		height: 300px;
+		width: 340px;
+		height: 340px;
 		background: #2dd4bf;
-		bottom: 50px;
-		left: -50px;
+		bottom: 40px;
+		left: -70px;
 	}
 
-	.hero-grid {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 5rem;
-		align-items: start;
+		.hero-shell {
+			display: grid;
+			grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+			gap: 3rem;
+			align-items: start;
+		}
+
+	.hero-copy {
+		position: relative;
+		z-index: 1;
+		min-width: 0;
 	}
 
-	.hero-main h1 {
-		font-size: 4rem;
-		line-height: 1.1;
-		margin: 1.5rem 0;
-		font-weight: 800;
+	.hero-badge {
+		margin-bottom: 1.25rem;
 	}
 
-	.hero-p {
-		font-size: 1.25rem;
+		.hero-copy h1 {
+			font-size: clamp(2.8rem, 4.1vw, 4rem);
+			line-height: 0.96;
+			font-weight: 800;
+			letter-spacing: -0.04em;
+			max-width: 11.4ch;
+			text-wrap: balance;
+			overflow-wrap: anywhere;
+			hyphens: auto;
+			margin-bottom: 1.4rem;
+		}
+
+	.hero-copy h1 span {
+		display: block;
+		margin-top: 0.55rem;
+	}
+
+	.hero-lead {
+		font-size: 1.1rem;
+		line-height: 1.7;
+		max-width: 58ch;
 		color: var(--text-muted);
-		margin-bottom: 2.5rem;
-		max-width: 540px;
-		line-height: 1.6;
+		margin-bottom: 1.75rem;
+	}
+
+	.hero-service-strip {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+		margin-bottom: 1.75rem;
+	}
+
+	.service-pill {
+		display: inline-flex;
+		align-items: center;
+		justify-content: flex-start;
+		gap: 0.6rem;
+		padding: 0.78rem 1rem;
+		border-radius: 1rem;
+		background: rgba(var(--surface-rgb), 0.82);
+		border: 1px solid var(--panel-chip-border);
+		font-weight: 700;
+		color: var(--text);
+		box-shadow: var(--panel-glass-shadow);
+		min-width: 0;
+	}
+
+	.service-pill-icon {
+		width: 1.35rem;
+		height: 1.35rem;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 999px;
+		background: rgba(13, 148, 136, 0.14);
+		color: var(--success);
+		font-size: 0.95rem;
+		flex-shrink: 0;
 	}
 
 	.hero-actions {
 		display: flex;
-		gap: 1.5rem;
-		margin-bottom: 3rem;
+		flex-wrap: wrap;
+		gap: 1rem;
+		margin-bottom: 1.75rem;
 	}
 
-	.hero-features {
-		display: flex;
-		gap: 2rem;
+	.proof-row {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.75rem;
+		max-width: 40rem;
 	}
-	.h-feat {
+
+	.proof-pill {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.9rem;
-		font-weight: 500;
-		color: var(--text-muted);
+		gap: 0.65rem;
+		padding: 0.85rem 1rem;
+		border-radius: 1rem;
+		background: rgba(var(--surface-rgb), 0.72);
+		border: 1px solid var(--panel-glass-border);
+		color: var(--text);
+		box-shadow: var(--panel-glass-shadow);
 	}
-	.h-feat .material-icons-round {
-		color: #10b981;
+
+	.proof-pill .material-icons-round {
+		color: var(--success);
+		font-size: 1.15rem;
+		flex-shrink: 0;
 	}
 
 	.hero-visual {
-		position: relative;
-	}
-	.featured-card {
-		background: var(--surface);
-		border-radius: 2rem;
-		overflow: hidden;
-		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
-		border: 1px solid var(--border);
-		position: relative;
-		z-index: 2;
-	}
-	.featured-img {
-		width: 100%;
-		height: 320px;
-		object-fit: cover;
-	}
-	.featured-info {
-		padding: 1.5rem;
-	}
-	.f-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: start;
-		margin-bottom: 1.5rem;
-	}
-	.f-header h3 {
-		font-size: 1.25rem;
-		margin-bottom: 0.25rem;
-	}
-	.f-header p {
-		font-size: 0.85rem;
-		color: var(--text-muted);
-	}
-	.small {
-		padding: 0.2rem 0.6rem;
-		font-size: 0.7rem;
-	}
-
-	.f-footer {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-	}
-	.f-price {
-		font-size: 1.75rem;
-		font-weight: 800;
-	}
-	.add-btn {
-		width: 44px;
-		height: 44px;
-		border-radius: 50%;
-		background: var(--primary);
-		color: white;
-		border: none;
-		cursor: pointer;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		transition: all 0.2s;
-		box-shadow: 0 10px 15px -3px rgba(0, 127, 128, 0.4);
-	}
-	.add-btn:hover {
-		background: var(--primary-dark);
-		transform: scale(1.1);
-	}
-
-	.mini-grid {
 		display: grid;
-		grid-template-columns: 1fr 1fr;
 		gap: 1rem;
-		margin-top: 1.5rem;
-	}
-	.mini-card {
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-		padding: 1rem;
-		border-radius: 1.25rem;
-	}
-	.icon {
-		width: 40px;
-		height: 40px;
-		border-radius: 50%;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-	.ac {
-		background: #e0f2fe;
-		color: #0369a1;
-	}
-	.wifi {
-		background: #f0fdf4;
-		color: #15803d;
-	}
-	.m-label {
-		display: block;
-		font-size: 0.75rem;
-		color: var(--text-muted);
-	}
-	.m-val {
-		font-weight: 700;
-		font-size: 0.9rem;
 	}
 
-	.promo-section {
+	.hero-visual-main {
+		padding: 1.35rem;
+		border-radius: 2rem;
+		background: var(--panel-glass-bg);
+		border: 1px solid var(--panel-glass-border);
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(180px, 0.85fr);
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.hero-visual-copy {
+		display: grid;
+		gap: 1rem;
+	}
+
+	.eyebrow,
+	.section-kicker {
+		font-size: 0.78rem;
+		font-weight: 800;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--primary);
+	}
+
+	.visual-title {
+		font-family: "Space Grotesk", sans-serif;
+		font-size: 1.4rem;
+		line-height: 1.25;
+		font-weight: 700;
+		text-wrap: balance;
+	}
+
+	.hero-steps {
+		display: grid;
+		gap: 0.75rem;
+		color: var(--text-muted);
+	}
+
+	.hero-steps li {
+		position: relative;
+		padding-left: 1.2rem;
+	}
+
+	.hero-steps li::before {
+		content: "";
+		position: absolute;
+		top: 0.7rem;
+		left: 0;
+		width: 0.45rem;
+		height: 0.45rem;
+		border-radius: 999px;
+		background: var(--primary);
+	}
+
+	.hero-image {
+		width: 100%;
+		height: auto;
+		max-height: 320px;
+		object-fit: contain;
+		filter: drop-shadow(0 18px 40px rgba(15, 23, 42, 0.22));
+	}
+
+	.hero-metrics {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 1rem;
+	}
+
+	.metric-card {
+		padding: 1.2rem;
+		border-radius: 1.4rem;
+		background: rgba(var(--surface-rgb), 0.82);
+		border: 1px solid var(--panel-glass-border);
+		box-shadow: var(--panel-glass-shadow);
+		display: grid;
+		gap: 0.35rem;
+	}
+
+	.metric-card.accent {
+		background: var(--panel-active-gradient);
+		color: var(--panel-active-text);
+	}
+
+	.metric-card.accent .metric-label {
+		color: #d7f7ef;
+	}
+
+	.metric-value {
+		font-family: "Space Grotesk", sans-serif;
+		font-size: 1.65rem;
+		font-weight: 800;
+		line-height: 1.05;
+		text-wrap: balance;
+	}
+
+	.metric-label {
+		font-size: 0.9rem;
+		line-height: 1.5;
+		color: var(--text-muted);
+	}
+
+	.section-heading {
+		display: grid;
+		gap: 0.9rem;
+		max-width: 52rem;
+		margin-bottom: 2rem;
+	}
+
+	.section-heading.narrow {
+		max-width: 46rem;
+	}
+
+	.section-heading h2 {
+		font-size: clamp(2rem, 3vw, 3rem);
+		line-height: 1.03;
+		font-weight: 800;
+		text-wrap: balance;
+	}
+
+	.section-lead {
+		color: var(--text-muted);
+		font-size: 1rem;
+		line-height: 1.7;
+		max-width: 62ch;
+	}
+
+	.services-section,
+	.audience-section,
+	.offer-section,
+	.products-section {
 		margin-bottom: 6rem;
 	}
-	.section-title {
-		font-size: 2.25rem;
-		margin-bottom: 2rem;
-		font-weight: 800;
-	}
 
-	.promo-grid {
+	.services-grid {
 		display: grid;
-		grid-template-columns: 2fr 1fr 1fr;
-		grid-template-rows: 1fr 1fr;
-		gap: 1.5rem;
-		height: 480px;
-	}
-	.promo-main {
-		grid-row: span 2;
-		display: flex;
-		flex-direction: column;
-		justify-content: space-between;
-		position: relative;
-		overflow: hidden;
-	}
-	.promo-text {
-		position: relative;
-		z-index: 2;
-		max-width: 300px;
-		display: flex;
-		flex-direction: column;
-		gap: 1.5rem;
-		height: 100%;
-	}
-	.promo-text h3 {
-		font-size: 2.5rem;
-	}
-	.promo-img {
-		position: absolute;
-		bottom: 0;
-		right: -1rem;
-		width: auto;
-		height: 95%;
-		max-width: 45%;
-		object-fit: contain;
-		transform-origin: bottom right;
-		transition: transform 0.4s;
-	}
-	.promo-main:hover .promo-img {
-		transform: scale(1.05);
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 1rem;
 	}
 
-	.promo-sub {
-		grid-column: span 2;
-		display: flex;
-		gap: 2rem;
-		align-items: center;
+	.service-card {
+		display: grid;
+		gap: 1.15rem;
+		padding: 1.5rem;
+		border-radius: 1.6rem;
+		background: var(--panel-glass-bg);
+		border: 1px solid var(--panel-glass-border);
+		box-shadow: var(--panel-glass-shadow);
+		text-decoration: none;
+		color: inherit;
+		transition:
+			transform 0.25s ease,
+			border-color 0.25s ease,
+			box-shadow 0.25s ease;
 	}
-	.p-sub-text {
-		flex: 1;
+
+	.service-card:hover {
+		transform: translateY(-4px);
+		border-color: var(--panel-chip-hover-border);
+		box-shadow: 0 20px 28px -24px rgba(15, 23, 42, 0.42);
 	}
-	.p-sub-text h4 {
-		font-size: 1.25rem;
-		margin-bottom: 0.5rem;
-	}
-	.p-sub-text p {
-		font-size: 0.9rem;
-		color: var(--text-muted);
-		margin-bottom: 1rem;
-	}
-	.link {
-		font-weight: 600;
-		color: var(--primary);
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-	.p-sub-img {
-		width: 140px;
-		height: 140px;
+
+	.service-icon {
+		width: 3rem;
+		height: 3rem;
 		border-radius: 1rem;
-		overflow: hidden;
-		flex-shrink: 0;
-	}
-	.p-sub-img img {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--panel-active-gradient-alt);
+		color: var(--panel-active-text);
 	}
 
-	/* Maintenance Block Styles */
-	.promo-maintenance {
+	.service-card h3 {
+		font-size: 1.15rem;
+		margin-bottom: 0.65rem;
+	}
+
+	.service-card p {
+		color: var(--text-muted);
+		line-height: 1.6;
+	}
+
+	.service-link,
+	.audience-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		font-weight: 700;
+		color: var(--primary);
+		transition:
+			color 0.2s ease,
+			gap 0.2s ease;
+	}
+
+	.service-link:hover,
+	.audience-link:hover {
+		gap: 0.7rem;
+		color: var(--primary-dark);
+	}
+
+	.audience-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 1.25rem;
+	}
+
+	.audience-card {
+		padding: 2rem;
+		border-radius: 2rem;
+		background: linear-gradient(
+			160deg,
+			rgba(var(--surface-rgb), 0.92),
+			rgba(var(--surface-rgb), 0.72)
+		);
+		border: 1px solid var(--panel-glass-border);
+		box-shadow: var(--panel-glass-shadow);
+		display: grid;
+		gap: 1.35rem;
+	}
+
+	.audience-card-alt {
+		background:
+			radial-gradient(circle at top right, rgba(45, 212, 191, 0.18), transparent 35%),
+			linear-gradient(
+				160deg,
+				rgba(var(--surface-rgb), 0.92),
+				rgba(var(--surface-rgb), 0.72)
+			);
+	}
+
+	.audience-card-top {
+		display: grid;
+		gap: 0.7rem;
+	}
+
+	.audience-label {
+		font-size: 0.88rem;
+		font-weight: 700;
+		color: var(--primary);
+	}
+
+	.audience-card h3 {
+		font-size: 1.45rem;
+		line-height: 1.2;
+		text-wrap: balance;
+	}
+
+	.audience-list {
+		display: grid;
+		gap: 0.9rem;
+	}
+
+	.audience-list li {
+		position: relative;
+		padding-left: 1.25rem;
+		color: var(--text-muted);
+	}
+
+	.audience-list li::before {
+		content: "";
+		position: absolute;
+		top: 0.62rem;
+		left: 0;
+		width: 0.45rem;
+		height: 0.45rem;
+		border-radius: 999px;
+		background: var(--primary);
+	}
+
+	.offer-grid {
+		display: grid;
+		grid-template-columns: minmax(0, 1.3fr) minmax(300px, 0.7fr);
+		gap: 1.25rem;
+	}
+
+	.offer-main {
+		padding: 0;
+		overflow: hidden;
+		border-radius: 2rem;
+		background: var(--panel-glass-bg);
+		border: 1px solid var(--panel-glass-border);
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(220px, 0.72fr);
+	}
+
+	.offer-copy {
+		padding: 2rem;
+		display: grid;
+		gap: 1rem;
+	}
+
+	.offer-copy h2 {
+		font-size: clamp(2rem, 2.8vw, 2.8rem);
+		line-height: 1.04;
+		text-wrap: balance;
+	}
+
+	.offer-text {
+		color: var(--text-muted);
+		line-height: 1.7;
+	}
+
+	.offer-list {
+		display: grid;
+		gap: 0.8rem;
+	}
+
+	.offer-list li {
+		position: relative;
+		padding-left: 1.25rem;
+		color: var(--text);
+	}
+
+	.offer-list li::before {
+		content: "";
+		position: absolute;
+		top: 0.68rem;
+		left: 0;
+		width: 0.45rem;
+		height: 0.45rem;
+		border-radius: 999px;
+		background: var(--primary);
+	}
+
+	.offer-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.9rem;
+	}
+
+	.offer-media {
+		position: relative;
+		display: flex;
+		align-items: flex-end;
+		justify-content: center;
+		padding: 1.2rem 1.2rem 0;
+		background:
+			radial-gradient(circle at center, rgba(45, 212, 191, 0.12), transparent 55%),
+			rgba(var(--surface-rgb), 0.24);
+	}
+
+	.offer-image {
+		width: 100%;
+		max-width: 320px;
+		height: auto;
+		object-fit: contain;
+	}
+
+	.offer-side {
+		display: grid;
+		gap: 1.25rem;
+	}
+
+	.guide-card,
+	.maintenance-card {
+		padding: 1.6rem;
+		border-radius: 1.8rem;
 		background: var(--surface);
 		border: 1px solid var(--border);
 		text-decoration: none;
 		color: inherit;
-		display: flex;
-		flex-direction: column;
-		justify-content: center;
-		padding: 1.5rem;
-		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-		position: relative;
-		overflow: hidden;
-	}
-	.promo-maintenance:hover {
-		transform: translateY(-4px);
-		box-shadow: 0 10px 20px -5px rgba(16, 185, 129, 0.15);
-		border-color: var(--primary);
-	}
-	.m-bg-icon {
-		position: absolute;
-		bottom: -20px;
-		right: -20px;
-		color: var(--primary);
-		opacity: 0.05;
-		transform: rotate(-15deg);
-		pointer-events: none;
-		transition: transform 0.5s;
-		z-index: 1;
-	}
-	.m-bg-icon .material-icons-round {
-		font-size: 8rem;
-	}
-	.promo-maintenance:hover .m-bg-icon {
-		transform: rotate(0deg) scale(1.1);
-		opacity: 0.1;
-	}
-	.m-content {
-		display: flex;
-		align-items: flex-start;
+		display: grid;
 		gap: 1rem;
-		position: relative;
-		z-index: 2;
-	}
-	.m-content h4 {
-		font-size: 1.2rem;
-		margin-bottom: 0.25rem;
-		font-weight: 700;
-	}
-	.m-icon-box {
-		width: 40px;
-		height: 40px;
-		border-radius: 10px;
-		background: var(--success-bg);
-		color: var(--success-text);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-	.m-sub {
-		font-size: 0.85rem;
-		color: var(--text-muted);
-	}
-	.m-price-box {
-		padding: 0.5rem 1rem;
-		border-radius: 10px;
-		display: flex;
-		align-items: baseline;
-		gap: 0.3rem;
-		width: fit-content;
-	}
-	.m-from {
-		font-size: 1.8rem;
-		color: var(--text-muted);
-	}
-	.m-val {
-		font-weight: 800;
-		color: var(--primary);
-		font-size: 2.5rem;
+		transition:
+			transform 0.25s ease,
+			border-color 0.25s ease,
+			box-shadow 0.25s ease;
 	}
 
-	.promo-stat {
-		border-radius: 1.5rem;
-		display: flex;
-		flex-direction: column;
-		justify-content: center;
-		align-items: center;
-		text-align: center;
-		padding: 1.5rem;
+	.guide-card:hover,
+	.maintenance-card:hover {
+		transform: translateY(-4px);
+		border-color: var(--panel-chip-hover-border);
+		box-shadow: 0 20px 28px -24px rgba(15, 23, 42, 0.42);
 	}
-	.stat-num {
-		font-size: 3rem;
-		font-weight: 800;
-		line-height: 1;
-		margin-bottom: 0.5rem;
+
+	.guide-card h3,
+	.maintenance-card h3 {
+		font-size: 1.35rem;
+		line-height: 1.25;
+		text-wrap: balance;
 	}
-	.stat-text {
-		font-size: 0.85rem;
-		font-weight: 600;
-		opacity: 0.9;
+
+	.guide-card p,
+	.maintenance-card p {
+		color: var(--text-muted);
+		line-height: 1.6;
+	}
+
+	.maintenance-card {
+		background: linear-gradient(
+			155deg,
+			rgba(var(--surface-rgb), 0.98),
+			rgba(var(--surface-rgb), 0.88)
+		);
 	}
 
 	.products-section {
-		margin-bottom: 8rem;
-	}
-	.section-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-end;
-		margin-bottom: 3rem;
-	}
-	.section-subtitle {
-		color: var(--text-muted);
-		margin-top: 0.5rem;
-	}
-	.filter-chips {
-		display: flex;
-		gap: 0.75rem;
-	}
-	.chip {
-		padding: 0.6rem 1.25rem;
-		border-radius: 12px;
-		border: 1px solid var(--border);
-		background: var(--surface);
-		color: var(--text-muted);
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.chip.active {
-		background: var(--text);
-		color: white;
-		border-color: var(--text);
+		margin-bottom: 5rem;
 	}
 
-	.product-grid {
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: 2rem;
-	}
-	.p-img-box {
-		background: var(--bg);
-		border-radius: 1.5rem;
-		height: 220px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 2rem;
-		position: relative;
-		margin-bottom: 1.5rem;
-	}
-	.p-img-box img {
-		max-width: 100%;
-		max-height: 100%;
-		transition: transform 0.4s;
-	}
-	.product-item:hover .p-img-box img {
-		transform: scale(1.1);
-	}
-	.p-tag {
-		position: absolute;
-		top: 1rem;
-		left: 1rem;
-		padding: 0.25rem 0.6rem;
-		border-radius: 6px;
-		font-size: 0.7rem;
-		font-weight: 800;
-	}
-	.in-stock {
-		background: #dcfce7;
-		color: #166534;
-	}
-	.wifi {
-		background: #e0f2fe;
-		color: #0369a1;
-	}
-	.hit {
-		background: #fef3c7;
-		color: #92400e;
+	:global(.dark) .eyebrow,
+	:global(.dark) .section-kicker,
+	:global(.dark) .service-link,
+	:global(.dark) .audience-link,
+	:global(.dark) .metric-card.accent .metric-value {
+		color: #99f6e4;
 	}
 
-	.product-item h3 {
-		margin-bottom: 0.5rem;
-		font-size: 1.25rem;
-	}
-	.p-desc {
-		color: var(--text-muted);
-		font-size: 0.9rem;
-		margin-bottom: 1.5rem;
+	:global(.dark) .service-link:hover,
+	:global(.dark) .audience-link:hover {
+		color: #ccfbf1;
 	}
 
-	.show-all {
-		margin-top: 4rem;
-		display: flex;
-		justify-content: center;
+	:global(.dark) .proof-pill,
+	:global(.dark) .metric-card,
+	:global(.dark) .audience-card,
+	:global(.dark) .guide-card,
+	:global(.dark) .maintenance-card {
+		box-shadow: 0 22px 40px -34px rgba(2, 8, 23, 0.95);
 	}
 
-	@media (max-width: 1100px) {
-		.promo-grid {
-			grid-template-columns: 1fr 1fr;
-			height: auto;
+	@media (max-width: 1500px) {
+		.hero-shell {
+			grid-template-columns: minmax(0, 1fr) minmax(300px, 0.82fr);
+			gap: 2rem;
 		}
-		.promo-main {
-			grid-column: span 2;
-			height: 350px;
+
+		.hero-copy h1 {
+			font-size: clamp(2.45rem, 3.6vw, 3.45rem);
+			max-width: 12.4ch;
 		}
-		.product-grid {
-			grid-template-columns: 1fr 1fr;
+
+		.hero-lead {
+			max-width: 46ch;
+		}
+
+		.hero-service-strip {
+			gap: 0.6rem;
+			margin-bottom: 1.35rem;
+		}
+
+		.service-pill {
+			padding: 0.62rem 0.88rem;
+			font-size: 0.95rem;
+		}
+
+		.hero-actions {
+			gap: 0.8rem;
+			margin-bottom: 1.4rem;
+		}
+
+		.hero-actions .btn {
+			padding: 0.9rem 1.35rem;
+			font-size: 1rem;
+		}
+
+		.proof-row {
+			gap: 0.6rem;
+			max-width: 34rem;
+		}
+
+		.proof-pill {
+			padding: 0.72rem 0.88rem;
+			font-size: 0.92rem;
+		}
+
+		.hero-visual-main {
+			padding: 1.2rem;
+			border-radius: 1.7rem;
+			grid-template-columns: minmax(0, 1.08fr) minmax(160px, 0.72fr);
+		}
+
+		.visual-title {
+			font-size: 1.2rem;
+		}
+
+		.hero-steps {
+			gap: 0.65rem;
+			font-size: 0.98rem;
+		}
+
+		.hero-image {
+			max-height: 280px;
+		}
+
+		.hero-metrics {
+			gap: 0.75rem;
+		}
+
+		.metric-card {
+			padding: 1rem;
+		}
+
+		.metric-value {
+			font-size: 1.45rem;
+		}
+
+		.metric-label {
+			font-size: 0.84rem;
 		}
 	}
 
-	@media (max-width: 768px) {
-		.hero-grid {
+	@media (max-width: 1360px) {
+		.services-section,
+		.audience-section,
+		.offer-section,
+		.products-section {
+			margin-bottom: 5.25rem;
+		}
+
+		.services-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 1.1rem;
+		}
+
+		.service-card {
+			padding: 1.35rem;
+			gap: 1rem;
+		}
+
+		.service-card h3 {
+			font-size: 1.08rem;
+			margin-bottom: 0.55rem;
+		}
+
+		.audience-grid {
+			gap: 1.1rem;
+		}
+
+		.audience-card {
+			padding: 1.7rem;
+			gap: 1.15rem;
+		}
+
+		.audience-card h3 {
+			font-size: 1.32rem;
+		}
+
+		.audience-list {
+			gap: 0.8rem;
+		}
+
+		.offer-grid {
+			grid-template-columns: minmax(0, 1.18fr) minmax(280px, 0.82fr);
+			gap: 1.1rem;
+		}
+
+		.offer-main {
+			grid-template-columns: minmax(0, 1fr) minmax(200px, 0.62fr);
+		}
+
+		.offer-copy {
+			padding: 1.75rem;
+			gap: 0.9rem;
+		}
+
+		.offer-copy h2 {
+			font-size: clamp(1.75rem, 2.35vw, 2.35rem);
+		}
+
+		.offer-actions {
+			gap: 0.75rem;
+		}
+
+		.offer-actions .btn {
+			padding: 0.9rem 1.15rem;
+		}
+
+		.offer-media {
+			padding: 1rem 1rem 0;
+		}
+
+		.offer-image {
+			max-width: 270px;
+		}
+
+		.offer-side {
+			gap: 1.1rem;
+		}
+
+		.guide-card,
+		.maintenance-card {
+			padding: 1.35rem;
+			gap: 0.85rem;
+		}
+
+		.guide-card h3,
+		.maintenance-card h3 {
+			font-size: 1.22rem;
+		}
+	}
+
+	@media (max-width: 1180px) {
+		.hero-shell,
+		.offer-grid {
 			grid-template-columns: 1fr;
-			text-align: center;
-			gap: 3rem;
 		}
-		.hero-main h1 {
-			font-size: 3rem;
+
+		.services-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
+
+		.hero-copy h1 {
+			max-width: 11.5ch;
+		}
+
+		.hero-service-strip {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 0.75rem;
+		}
+
+		.service-pill {
+			width: 100%;
+			min-width: 0;
+			padding: 0.72rem 0.9rem;
+		}
+
+		.hero-actions {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 0.75rem;
+			align-items: stretch;
+		}
+
+		.hero-actions .btn {
+			width: 100%;
+			padding: 0.95rem 1rem;
+		}
+
+		.proof-row {
+			max-width: none;
+		}
+
+		.hero-visual-main {
+			grid-template-columns: 1fr;
+		}
+
+		.hero-image {
+			max-height: 220px;
+		}
+
+		.hero-metrics {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+
+		.offer-main {
+			grid-template-columns: minmax(0, 1.06fr) minmax(240px, 0.7fr);
+		}
+
+		.offer-side {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			align-items: start;
+		}
+	}
+
+	@media (max-width: 1080px) and (min-width: 901px) {
+		.hero-section {
+			padding: 3rem 0 4.5rem;
+		}
+
+		.hero-copy {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) minmax(240px, 0.7fr);
+			column-gap: 1rem;
+			align-items: start;
+		}
+
+		.hero-badge,
+		.hero-copy h1,
+		.hero-lead,
 		.hero-actions,
-		.hero-features {
-			justify-content: center;
-			flex-direction: column;
-			align-items: center;
+		.proof-row {
+			grid-column: 1;
 		}
+
+		.hero-copy h1 {
+			font-size: clamp(2.4rem, 5.2vw, 3.2rem);
+			max-width: 13.1ch;
+		}
+
+		.hero-lead {
+			max-width: 36ch;
+			margin-bottom: 1.35rem;
+		}
+
+		.hero-service-strip {
+			grid-column: 2;
+			grid-row: 2 / span 3;
+			display: grid;
+			grid-template-columns: 1fr;
+			gap: 0.6rem;
+			align-self: start;
+			margin-top: 0.55rem;
+			margin-bottom: 0;
+			max-width: none;
+		}
+
+		.service-pill {
+			padding: 0.74rem 0.92rem;
+			font-size: 0.97rem;
+		}
+
+		.hero-actions {
+			margin-bottom: 1.35rem;
+		}
+
+		.proof-row {
+			max-width: none;
+		}
+
+		.hero-visual-main {
+			grid-template-columns: minmax(0, 1.08fr) minmax(210px, 0.8fr);
+			align-items: center;
+			padding: 1.15rem 1.15rem 1rem;
+		}
+
+		.hero-visual-copy {
+			gap: 0.85rem;
+		}
+
+		.visual-title {
+			font-size: 1.24rem;
+			max-width: 18ch;
+		}
+
+		.hero-steps {
+			gap: 0.6rem;
+			max-width: 30ch;
+		}
+
+		.hero-image {
+			max-height: 235px;
+			justify-self: end;
+		}
+
+		.metric-card {
+			padding: 1rem;
+		}
+
+		.metric-value {
+			font-size: 1.5rem;
+		}
+
+		.metric-label {
+			font-size: 0.85rem;
+		}
+	}
+
+	@media (max-width: 980px) {
+		.offer-main,
+		.offer-side {
+			grid-template-columns: 1fr;
+		}
+
+		.offer-copy {
+			padding: 1.6rem;
+		}
+
+		.offer-media {
+			padding-top: 0.4rem;
+		}
+
+		.offer-image {
+			max-width: 240px;
+		}
+	}
+
+	@media (max-width: 900px) {
+		.proof-row,
+		.hero-metrics,
+		.audience-grid,
+		.services-grid {
+			grid-template-columns: 1fr;
+		}
+	}
+
+		@media (max-width: 768px) {
+			.hero-section {
+				padding: 2rem 0 4rem;
+			}
+
+		.blob {
+			display: none;
+		}
+
+		.hero-shell {
+			gap: 2rem;
+		}
+
+		.hero-copy {
+			text-align: left;
+		}
+
+			.hero-copy h1 {
+				font-size: clamp(2.1rem, 8.8vw, 2.85rem);
+				max-width: 11.2ch;
+				line-height: 0.98;
+				letter-spacing: -0.045em;
+			}
+
+		.hero-service-strip {
+			display: grid;
+			grid-template-columns: 1fr;
+		}
+
+		.service-pill {
+			width: 100%;
+			min-width: 0;
+		}
+
+		.hero-lead {
+			font-size: 1rem;
+		}
+
 		.hero-actions .btn {
 			width: 100%;
 		}
-		.hero-p {
-			margin-left: auto;
-			margin-right: auto;
+
+		.hero-visual-main,
+		.audience-card,
+		.offer-copy,
+		.guide-card,
+		.maintenance-card {
+			padding: 1.35rem;
 		}
-		.promo-grid {
-			grid-template-columns: 1fr;
+
+		.offer-media {
+			padding: 0 1rem;
 		}
-		.promo-main,
-		.promo-sub {
-			grid-column: span 1;
+
+			.metric-card {
+				padding: 1rem;
+			}
 		}
-		.section-header {
-			flex-direction: column;
-			align-items: flex-start;
-			gap: 1.5rem;
+
+		@media (max-width: 480px) {
+			.hero-copy h1 {
+				font-size: clamp(2rem, 8vw, 2.55rem);
+				max-width: 17ch;
+			}
 		}
-		.product-grid {
-			grid-template-columns: 1fr;
-		}
-	}
-</style>
+	</style>

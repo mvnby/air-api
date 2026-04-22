@@ -96,7 +96,7 @@ watch(isOpen, (val) => {
   display: none;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 980px) {
   .mobile-menu-wrapper {
     display: block;
   }

@@ -449,7 +449,7 @@ const submitNotifyLead = async () => {
             </div>
 
             <button type="submit" class="submit-btn" :disabled="notifySubmitting">
-              <span v-if="notifySubmitting">Отправка...</span>
+              <span v-if="notifySubmitting">Отправка…</span>
               <span v-else>Отправить</span>
             </button>
           </form>
@@ -497,7 +497,9 @@ const submitNotifyLead = async () => {
     font-size: 1.75rem;
     font-weight: 800;
     color: var(--text);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+      color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+      transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .pulse-primary {
@@ -522,9 +524,9 @@ const submitNotifyLead = async () => {
   }
 
   .availability-note.vitebsk {
-    color: var(--primary);
-    background: rgba(0, 127, 128, 0.12);
-    border-color: rgba(0, 127, 128, 0.28);
+    color: #0f766e;
+    background: rgba(15, 118, 110, 0.12);
+    border-color: rgba(15, 118, 110, 0.32);
   }
 
   .availability-note.minsk {
@@ -533,19 +535,19 @@ const submitNotifyLead = async () => {
     border-color: rgba(3, 105, 161, 0.22);
   }
 
-  :global(.dark) .availability-note {
+  :global(.dark .availability-note) {
     color: rgba(241, 245, 249, 0.82);
     background: rgba(148, 163, 184, 0.14);
     border-color: rgba(148, 163, 184, 0.24);
   }
 
-  :global(.dark) .availability-note.vitebsk {
-    color: #5eead4;
-    background: rgba(0, 127, 128, 0.18);
-    border-color: rgba(94, 234, 212, 0.28);
+  :global(.dark .availability-note.vitebsk) {
+    color: #f0fdfa;
+    background: #115e59;
+    border-color: rgba(94, 234, 212, 0.55);
   }
 
-  :global(.dark) .availability-note.minsk {
+  :global(.dark .availability-note.minsk) {
     color: #7dd3fc;
     background: rgba(3, 105, 161, 0.16);
     border-color: rgba(125, 211, 252, 0.22);
@@ -556,13 +558,13 @@ const submitNotifyLead = async () => {
     position: absolute;
     top: -12px;
     right: -24px;
-    background: #f97316; /* Orange 500 */
-    color: white;
+    background: #c2410c;
+    color: #fff7ed;
     font-size: 0.75rem;
     font-weight: 800;
     padding: 2px 8px;
     border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
+    box-shadow: 0 4px 12px rgba(194, 65, 12, 0.32);
     z-index: 5;
     transform: rotate(6deg);
   }
@@ -582,16 +584,19 @@ const submitNotifyLead = async () => {
     padding: 0.75rem 1rem;
     border-radius: 1rem;
     cursor: pointer;
-    transition: all 0.2s;
+    transition:
+      border-color 0.2s ease,
+      background-color 0.2s ease,
+      transform 0.2s ease;
   }
   
   .installation-toggle:hover {
     border-color: var(--primary);
-    background: rgba(var(--primary-rgb), 0.05);
+    background: rgba(0, 127, 128, 0.06);
   }
 
   .installation-toggle.active {
-    background: var(--primary-bg);
+    background: rgba(0, 127, 128, 0.1);
     border-color: var(--primary);
   }
 
@@ -629,7 +634,9 @@ const submitNotifyLead = async () => {
     border-radius: 50%;
     top: 3px;
     left: 3px;
-    transition: all 0.3s;
+    transition:
+      left 0.3s ease,
+      background-color 0.3s ease;
   }
 
   .active .toggle-switch {
@@ -664,9 +671,13 @@ const submitNotifyLead = async () => {
   }
 
   .discount-price {
-      color: var(--primary);
+      color: #0f766e;
       font-weight: 800;
       font-size: 0.95rem;
+  }
+
+  :global(.dark .discount-price) {
+      color: #99f6e4;
   }
 
   .line-through { text-decoration: line-through; }
@@ -689,7 +700,12 @@ const submitNotifyLead = async () => {
       font-weight: 700;
       font-size: 1rem;
       cursor: pointer;
-      transition: all 0.2s;
+      transition:
+        background-color 0.2s ease,
+        color 0.2s ease,
+        transform 0.2s ease,
+        box-shadow 0.2s ease,
+        border-color 0.2s ease;
       border: none;
       font-family: inherit;
       width: 100%;
@@ -699,13 +715,13 @@ const submitNotifyLead = async () => {
   .btn-action.primary {
       background: var(--primary);
       color: white;
-      box-shadow: 0 4px 15px rgba(var(--primary-rgb), 0.3);
+      box-shadow: 0 4px 15px rgba(0, 127, 128, 0.3);
   }
 
   .btn-action.primary:hover {
       background: var(--primary-dark);
       transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(var(--primary-rgb), 0.4);
+      box-shadow: 0 6px 20px rgba(0, 127, 128, 0.4);
   }
 
   .btn-action.notify {
@@ -778,7 +794,8 @@ const submitNotifyLead = async () => {
     width: min(100%, 420px);
     border-radius: 1.5rem;
     padding: 1.5rem;
-    background: rgba(255, 255, 255, 0.96);
+    background: var(--panel-glass-bg);
+    border: 1px solid var(--panel-glass-border);
     box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
   }
 
@@ -841,7 +858,7 @@ const submitNotifyLead = async () => {
   .form-input:focus {
     outline: none;
     border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.12);
+    box-shadow: 0 0 0 3px rgba(0, 127, 128, 0.12);
   }
 
   .err-msg {
