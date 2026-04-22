@@ -117,7 +117,13 @@ const showAreaBadge = !!product.area;
   variant === "default" && (
     <div class="product-item card group">
       <a href={`/product/${product.slug}`} class="p-img-box">
-        <img src={resolveImageUrl(product.main_image)} alt={product.title} />
+        <img
+          src={resolveImageUrl(product.main_image)}
+          alt={product.title}
+          width="640"
+          height="480"
+          loading="lazy"
+        />
 
         {/* Top Left: Functionality Badges + Inverter (if it replaces the old spot) */}
         <div class="p-badge-list">
@@ -154,7 +160,7 @@ const showAreaBadge = !!product.area;
       </a>
       <div class="p-info">
         <a href={`/product/${product.slug}`} class="p-title-link">
-          <h4>{product.title}</h4>
+          <p class="p-title">{product.title}</p>
         </a>
 
         {/* Feature Tags moved here (under title) */}
@@ -196,6 +202,9 @@ const showAreaBadge = !!product.area;
         src={resolveImageUrl(product.main_image)}
         alt={product.title}
         class="featured-img"
+        width="960"
+        height="720"
+        loading="eager"
       />
       <div class="featured-info">
         <div class="f-header">
@@ -209,7 +218,7 @@ const showAreaBadge = !!product.area;
               </span>
             )}
           </div>
-          <h3>{product.title}</h3>
+          <p class="f-title">{product.title}</p>
 
           <p class="f-desc" title={product.description}>
             {product.description || "Инверторная сплит-система"}
@@ -252,10 +261,16 @@ const showAreaBadge = !!product.area;
   variant === "minimal" && (
     <a href={`/product/${product.slug}`} class="minimal-card card">
       <div class="m-img-box">
-        <img src={resolveImageUrl(product.main_image)} alt={product.title} />
+        <img
+          src={resolveImageUrl(product.main_image)}
+          alt={product.title}
+          width="128"
+          height="128"
+          loading="lazy"
+        />
       </div>
       <div class="m-info">
-        <h4>{product.title}</h4>
+        <p class="m-title">{product.title}</p>
         <div class="m-footer">
           <span class="final-price small">{formatPrice(product.price)} <span class="price-byn"></span></span>
           <button class="add-btn micro plain js-track-cart">
@@ -348,7 +363,7 @@ const showAreaBadge = !!product.area;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--panel-pill-bg);
     z-index: 2;
   }
 
@@ -408,7 +423,7 @@ const showAreaBadge = !!product.area;
     margin-bottom: 0.5rem;
     display: block;
   }
-  .p-info h4 {
+  .p-title {
     font-size: 1.125rem;
     margin-bottom: 1.5rem;
     line-height: 1.4;
@@ -428,9 +443,13 @@ const showAreaBadge = !!product.area;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--surface, #fff);
+    background: var(--surface);
     cursor: pointer;
-    transition: all 0.2s;
+    transition:
+      background-color 0.2s ease,
+      color 0.2s ease,
+      border-color 0.2s ease,
+      transform 0.2s ease;
     color: var(--primary);
   }
   .add-btn.micro.plain {
@@ -502,7 +521,7 @@ const showAreaBadge = !!product.area;
     font-weight: 600;
   }
 
-  .f-header h3 {
+  .f-title {
     font-size: 1.35rem; /* Slightly larger */
     line-height: 1.25;
     font-weight: 800;
@@ -542,7 +561,10 @@ const showAreaBadge = !!product.area;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+      background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+      transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 10px 20px -3px rgba(0, 127, 128, 0.4);
   }
   .add-btn.large:hover {
@@ -565,7 +587,10 @@ const showAreaBadge = !!product.area;
     color: inherit;
     background: var(--surface);
     border: 1px solid var(--border, transparent);
-    transition: all 0.2s;
+    transition:
+      transform 0.2s ease,
+      border-color 0.2s ease,
+      box-shadow 0.2s ease;
   }
   .minimal-card:hover {
     background: var(--surface);
@@ -595,7 +620,7 @@ const showAreaBadge = !!product.area;
     flex-direction: column;
     justify-content: center;
   }
-  .m-info h4 {
+  .m-title {
     font-size: 0.95rem;
     margin-bottom: 0.25rem;
     line-height: 1.2;

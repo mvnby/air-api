@@ -263,7 +263,9 @@ ul {
     height: 80px;
     display: flex;
     align-items: center;
-    transition: all 0.3s ease;
+    transition:
+        background-color 0.3s ease,
+        border-color 0.3s ease;
 }
 
 .dark .sticky-nav {
@@ -275,12 +277,14 @@ ul {
     justify-content: space-between;
     align-items: center;
     width: 100%;
+    gap: 1.5rem;
 }
 
 .logo-group {
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    min-width: 0;
 }
 
 .logo-img-wrapper {
@@ -317,6 +321,7 @@ ul {
 .logo-text {
     display: flex;
     flex-direction: column;
+    min-width: 0;
 }
 
 .logo-title {
@@ -335,12 +340,14 @@ ul {
     font-size: 0.75rem;
     color: var(--text-muted);
     font-weight: 500;
+    white-space: nowrap;
 }
 
 .nav-links {
     display: flex;
     gap: 2rem;
     align-items: center;
+    min-width: 0;
 }
 
 .nav-links a {
@@ -424,6 +431,7 @@ ul {
     display: flex;
     align-items: center;
     gap: 1rem;
+    flex-shrink: 0;
 }
 
 .icon-btn {
@@ -468,8 +476,104 @@ ul {
     border-radius: 12px;
 }
 
+.call-btn .btn-text {
+    white-space: nowrap;
+}
+
 .call-btn .material-icons-round {
     font-size: 1.1rem;
+}
+
+@media (max-width: 1320px) {
+    .sticky-nav {
+        height: 76px;
+    }
+
+    .nav-container {
+        gap: 1rem;
+    }
+
+    .logo-group {
+        gap: 0.6rem;
+    }
+
+    .logo-img-wrapper {
+        height: 44px;
+    }
+
+    .logo-title {
+        font-size: 1rem;
+    }
+
+    .logo-subtitle {
+        font-size: 0.68rem;
+    }
+
+    .nav-links {
+        gap: 1.35rem;
+    }
+
+    .nav-links a,
+    .nav-dropdown-trigger {
+        font-size: 0.95rem;
+    }
+
+    .nav-actions {
+        gap: 0.75rem;
+    }
+
+    .call-btn {
+        padding: 0.55rem 1rem;
+    }
+}
+
+@media (max-width: 1080px) {
+    .sticky-nav {
+        height: 72px;
+    }
+
+    .logo-subtitle {
+        display: none;
+    }
+
+    .nav-links {
+        gap: 1rem;
+    }
+
+    .nav-links a,
+    .nav-dropdown-trigger {
+        font-size: 0.92rem;
+    }
+
+    .call-btn {
+        width: 46px;
+        height: 46px;
+        padding: 0;
+        justify-content: center;
+        border-radius: 14px;
+    }
+
+    .call-btn .btn-text {
+        display: none;
+    }
+}
+
+@media (max-width: 980px) {
+    .nav-links {
+        display: none;
+    }
+
+    .nav-container {
+        gap: 0.75rem;
+    }
+
+    .logo-title {
+        font-size: 0.95rem;
+    }
+
+    .nav-actions {
+        gap: 0.55rem;
+    }
 }
 
 /* Footer Styles */
@@ -566,7 +670,19 @@ ul {
     .container {
         padding: 0 1rem;
     }
-    
+
+    .nav-actions {
+        gap: 0.5rem;
+    }
+
+    .call-btn {
+        display: none;
+    }
+
+    .icon-btn {
+        padding: 0.45rem;
+    }
+
     .footer {
         padding: 3rem 0 2rem;
         margin-top: 3rem;
