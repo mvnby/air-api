@@ -3,9 +3,11 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ManagerEstimateLineResponse } from './ManagerEstimateLineResponse';
+import type { ManagerTariffBriefResponse } from './ManagerTariffBriefResponse';
 export type ManagerServiceEstimateResponse = {
     id: number;
     customer_id?: (number | null);
+    tariff?: (ManagerTariffBriefResponse | null);
     title: string;
     comment?: (string | null);
     service_kind: string;

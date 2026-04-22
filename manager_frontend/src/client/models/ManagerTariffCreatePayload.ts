@@ -2,13 +2,17 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ManagerTariffServiceKind } from './ManagerTariffServiceKind';
 export type ManagerTariffCreatePayload = {
-    category: string;
+    service_kind?: ManagerTariffServiceKind;
+    selector_label: string;
+    estimate_template?: string;
+    category?: string;
     power_range?: string;
     base_price?: number;
-    extra_pipe_price?: number;
-    included_pipe_meters?: number;
-    is_fixed?: boolean;
+    included_route_meters?: number;
+    is_active?: boolean;
+    sort_order?: number;
     comment?: (string | null);
 };
 

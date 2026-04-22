@@ -1,8 +1,8 @@
 import pytest
 
-from models import InstallationRate, Service
+from models import Service, ServiceTariff, ServiceTariffRule
 from schemas import (
-    ManagerEstimateAddonPayload,
+    ManagerEstimateRuleInputPayload,
     ManagerInstallEstimateCalculatePayload,
     ManagerInstallEstimateSavePayload,
     ManagerServiceEstimateOrderLinesMode,
@@ -11,62 +11,121 @@ from services.service_estimate_service import ServiceEstimateService
 
 
 @pytest.mark.asyncio
-async def test_calculate_install_estimate_with_modifiers_and_addons(db):
-    tariff = InstallationRate(
-        category="Wall",
-        power_range="12",
-        base_price=500,
-        extra_pipe_price=40,
-        included_pipe_meters=3,
-        is_fixed=True,
-    )
-    addon_service = Service(
+async def test_calculate_install_estimate_with_rules(db):
+    linked_service = Service(
         title="Установка дренажной помпы",
         slug="drain-pump",
         category="installation_option",
         base_price=180,
         is_active=True,
     )
-    db.add(tariff)
-    db.add(addon_service)
+    db.add(linked_service)
     await db.commit()
-    await db.refresh(tariff)
-    await db.refresh(addon_service)
+    await db.refresh(linked_service)
 
-    payload = ManagerInstallEstimateCalculatePayload(
+    tariff = ServiceTariff(
+        service_kind="installation",
+        selector_label="Монтаж настенного до 3.5 кВт",
+        estimate_template="Монтаж сплит-системы настенного типа мощностью до 3,5 кВт, включая расходные материалы",
         category="Wall",
         power_range="12",
+        base_price=500,
+        included_route_meters=3.0,
+    )
+    db.add(tariff)
+    await db.commit()
+    await db.refresh(tariff)
+
+    db.add(
+        ServiceTariffRule(
+            tariff_id=tariff.id,
+            rule_type="per_meter_over_included",
+            name="Дополнительная трасса",
+            line_template="доп. трасса {qty} {unit}",
+            unit="м",
+            unit_price=40,
+            is_optional=False,
+            is_active=True,
+            sort_order=10,
+        )
+    )
+    db.add(
+        ServiceTariffRule(
+            tariff_id=tariff.id,
+            rule_type="per_hole_manual",
+            name="Дополнительные отверстия",
+            line_template="{extra_holes_count} доп. отверстий",
+            unit="шт",
+            unit_price=70,
+            is_optional=False,
+            is_active=True,
+            sort_order=20,
+        )
+    )
+    addon_rule = ServiceTariffRule(
+        tariff_id=tariff.id,
+        rule_type="per_unit_manual",
+        name="Дренажная помпа",
+        line_template="{name} ({qty} {unit})",
+        unit="шт",
+        unit_price=180,
+        service_id=linked_service.id,
+        is_optional=True,
+        is_active=True,
+        sort_order=30,
+    )
+    db.add(addon_rule)
+    await db.commit()
+    await db.refresh(addon_rule)
+
+    payload = ManagerInstallEstimateCalculatePayload(
+        tariff_id=tariff.id,
         route_length_m=6,
         quantity=1,
         extra_holes_count=1,
-        extra_hole_price=70,
-        addons=[ManagerEstimateAddonPayload(slug="drain-pump", qty=1)],
+        rule_inputs=[ManagerEstimateRuleInputPayload(rule_id=addon_rule.id, qty=1)],
         discount_amount=50,
     )
 
     result = await ServiceEstimateService.calculate_install_estimate(db, payload)
 
-    assert result.tariff_id == tariff.id
-    assert result.extra_pipe_meters == 3
+    assert result.tariff.id == tariff.id
     assert result.subtotal == 870
     assert result.discount_amount == 50
     assert result.total == 820
-    assert [line.source_type for line in result.lines] == ["base", "modifier", "modifier", "addon"]
+    assert [line.source_type for line in result.lines] == ["base", "rule", "rule", "rule"]
+    assert result.rule_lines[-1].service_id == linked_service.id
 
 
 @pytest.mark.asyncio
 async def test_create_and_get_install_estimate_snapshot(db):
-    tariff = InstallationRate(
+    tariff = ServiceTariff(
+        service_kind="installation",
+        selector_label="Монтаж настенного 07-09",
+        estimate_template="Стандартный монтаж кондиционера, включая расходные материалы",
         category="Wall",
         power_range="07-09",
         base_price=450,
-        extra_pipe_price=35,
-        included_pipe_meters=3,
-        is_fixed=True,
+        included_route_meters=3.0,
     )
     db.add(tariff)
     await db.commit()
     await db.refresh(tariff)
+
+    meter_rule = ServiceTariffRule(
+        tariff_id=tariff.id,
+        rule_type="per_meter_over_included",
+        name="Доп. трасса",
+        line_template="трасса {qty} {unit}",
+        unit="м",
+        unit_price=35,
+        is_optional=False,
+        is_active=True,
+        sort_order=10,
+    )
+    db.add(meter_rule)
+    await db.commit()
+    await db.refresh(meter_rule)
 
     payload = ManagerInstallEstimateSavePayload(
         tariff_id=tariff.id,
@@ -88,6 +147,8 @@ async def test_create_and_get_install_estimate_snapshot(db):
     assert created.created_by == "admin"
     assert created.total == fetched.total
     assert len(created.lines) == len(fetched.lines)
+    assert created.tariff is not None
+    assert created.tariff.id == tariff.id
 
     listed = await ServiceEstimateService.list_estimates(db, page=1, limit=20)
     assert listed.total == 1
@@ -110,8 +171,7 @@ async def test_create_and_get_install_estimate_snapshot(db):
     assert collapsed.mode == "collapsed"
     assert len(collapsed.services) == 1
     assert collapsed.services[0].price == round(created.total)
-    assert "Стандартный монтаж кондиционера" in collapsed.services[0].title
-    assert "включая расходные материалы" in collapsed.services[0].title
+    assert "включая расходные материалы" in collapsed.services[0].title.lower()
 
     deleted = await ServiceEstimateService.delete_estimate(db, created.id)
     assert "deleted" in deleted.message.lower()

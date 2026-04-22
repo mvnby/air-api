@@ -2,8 +2,4 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type ManagerEstimateAddonPayload = {
-    slug: string;
-    qty?: number;
-};
-
+export type ManagerTariffServiceKind = 'installation' | 'dismantling' | 'maintenance';

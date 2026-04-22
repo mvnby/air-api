@@ -2,13 +2,17 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ManagerTariffServiceKind } from './ManagerTariffServiceKind';
 export type ManagerTariffUpdatePayload = {
+    service_kind?: (ManagerTariffServiceKind | null);
+    selector_label?: (string | null);
+    estimate_template?: (string | null);
     category?: (string | null);
     power_range?: (string | null);
     base_price?: (number | null);
-    extra_pipe_price?: (number | null);
-    included_pipe_meters?: (number | null);
-    is_fixed?: (boolean | null);
+    included_route_meters?: (number | null);
+    is_active?: (boolean | null);
+    sort_order?: (number | null);
     comment?: (string | null);
 };
 

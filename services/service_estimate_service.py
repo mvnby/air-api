@@ -1,14 +1,13 @@
-"""Business logic for install estimates and estimate snapshots (issue #260 v1)."""
+"""Business logic for service estimates based on parent/child tariff model."""
 
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 
 from crud.service_estimate import ServiceEstimateDAO
-from models import Customer, InstallationRate, Service, ServiceEstimate, ServiceEstimateItem
+from models import Customer, ServiceEstimate, ServiceEstimateItem, ServiceTariff, ServiceTariffRule
 from schemas import (
     ManagerActionMessageResponse,
     ManagerEstimateLineResponse,
@@ -20,7 +19,11 @@ from schemas import (
     ManagerServiceEstimateOrderLinesResponse,
     ManagerServiceEstimateListResponse,
     ManagerServiceEstimateResponse,
+    ManagerTariffBriefResponse,
+    ManagerTariffRuleType,
+    ManagerTariffServiceKind,
 )
+from services.tariffs_service import TariffsService
 
 
 class ServiceEstimateService:
@@ -88,181 +91,205 @@ class ServiceEstimateService:
 
         if kw_value is None:
             return None
-
         kw_text = ServiceEstimateService._format_number(kw_value).replace(".", ",")
         return f"до {kw_text} кВт"
 
     @staticmethod
+    def _render_line_template(
+        line_template: str,
+        *,
+        name: str,
+        qty: float,
+        unit: str,
+        unit_price: float,
+        route_length_m: float,
+        included_route_meters: float,
+        extra_route_meters: float,
+        extra_holes_count: int,
+        quantity: int,
+    ) -> str:
+        safe_context = {
+            "name": name,
+            "qty": ServiceEstimateService._format_number(qty),
+            "unit": unit,
+            "unit_price": ServiceEstimateService._format_number(unit_price),
+            "route_length_m": ServiceEstimateService._format_number(route_length_m),
+            "included_route_meters": ServiceEstimateService._format_number(included_route_meters),
+            "extra_route_meters": ServiceEstimateService._format_number(extra_route_meters),
+            "extra_holes_count": str(int(extra_holes_count)),
+            "quantity": str(int(quantity)),
+        }
+        try:
+            rendered = str(line_template or "").format(**safe_context).strip()
+            return rendered or name
+        except Exception:
+            return name
+
+    @staticmethod
+    def _map_tariff_brief(tariff: ServiceTariff) -> ManagerTariffBriefResponse:
+        try:
+            service_kind = ManagerTariffServiceKind(str(tariff.service_kind or "installation"))
+        except ValueError:
+            service_kind = ManagerTariffServiceKind.installation
+        return ManagerTariffBriefResponse(
+            id=int(tariff.id),
+            service_kind=service_kind,
+            selector_label=tariff.selector_label,
+            estimate_template=tariff.estimate_template,
+            category=tariff.category,
+            power_range=tariff.power_range,
+            base_price=int(tariff.base_price or 0),
+            included_route_meters=float(tariff.included_route_meters or 0),
+        )
+
+    @staticmethod
     async def _resolve_tariff(
         session: AsyncSession, payload: ManagerInstallEstimateCalculatePayload
-    ) -> InstallationRate:
-        if payload.tariff_id is not None:
-            tariff = await session.get(InstallationRate, payload.tariff_id)
-            if tariff is None:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Tariff #{payload.tariff_id} not found",
-                )
-            return tariff
+    ) -> ServiceTariff:
+        return await TariffsService.get_tariff_by_id(session, payload.tariff_id)
 
-        category = (payload.category or "").strip()
-        if not category:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Either tariff_id or category must be provided",
-            )
+    @staticmethod
+    def _rule_inputs_map(payload: ManagerInstallEstimateCalculatePayload) -> Dict[int, float]:
+        result: Dict[int, float] = {}
+        for item in payload.rule_inputs:
+            result[int(item.rule_id)] = float(item.qty or 0)
+        return result
 
-        target_power_range = (payload.power_range or "").strip()
-        if target_power_range:
-            stmt = (
-                select(InstallationRate)
-                .where(InstallationRate.category == category)
-                .where(InstallationRate.power_range == target_power_range)
-                .limit(1)
-            )
-            exact_result = await session.execute(stmt)
-            exact_tariff = exact_result.scalars().first()
-            if exact_tariff is not None:
-                return exact_tariff
-
-        fallback_stmt = (
-            select(InstallationRate)
-            .where(InstallationRate.category == category)
-            .order_by(InstallationRate.id)
-            .limit(1)
+    @staticmethod
+    def _build_base_line(tariff: ServiceTariff, quantity: int, sort_order: int) -> ManagerEstimateLineResponse:
+        qty = float(quantity)
+        unit_price = float(tariff.base_price or 0)
+        return ManagerEstimateLineResponse(
+            source_type="base",
+            source_id=int(tariff.id),
+            rule_id=None,
+            rule_type=None,
+            service_id=None,
+            name=tariff.selector_label or "Базовая услуга",
+            qty=qty,
+            unit="компл.",
+            unit_price=ServiceEstimateService._round_money(unit_price),
+            line_total=ServiceEstimateService._round_money(qty * unit_price),
+            sort_order=sort_order,
         )
-        fallback_result = await session.execute(fallback_stmt)
-        fallback_tariff = fallback_result.scalars().first()
-        if fallback_tariff is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Tariff not found for category='{category}'",
-            )
-        return fallback_tariff
+
+    @staticmethod
+    def _rule_default_qty(rule: ServiceTariffRule) -> float:
+        if rule.rule_type == ManagerTariffRuleType.fixed_once.value:
+            return 0.0 if rule.is_optional else 1.0
+        if rule.rule_type == ManagerTariffRuleType.per_unit_manual.value:
+            return 0.0 if rule.is_optional else 1.0
+        return 0.0
+
+    @staticmethod
+    def _build_rule_line(
+        rule: ServiceTariffRule,
+        *,
+        tariff: ServiceTariff,
+        payload: ManagerInstallEstimateCalculatePayload,
+        quantity: int,
+        rule_input_qty: Optional[float],
+        sort_order: int,
+    ) -> Optional[ManagerEstimateLineResponse]:
+        route_length = float(payload.route_length_m or 0.0)
+        included_route = float(tariff.included_route_meters or 0.0)
+        extra_route = max(route_length - included_route, 0.0)
+        extra_holes = int(payload.extra_holes_count or 0)
+        unit_price = float(rule.unit_price or 0.0)
+
+        qty = 0.0
+        if rule.rule_type == ManagerTariffRuleType.per_meter_over_included.value:
+            qty = extra_route * float(quantity)
+        elif rule.rule_type == ManagerTariffRuleType.per_hole_manual.value:
+            qty = float(extra_holes) * float(quantity)
+        elif rule.rule_type == ManagerTariffRuleType.per_unit_manual.value:
+            base_qty = rule_input_qty if rule_input_qty is not None else ServiceEstimateService._rule_default_qty(rule)
+            qty = float(base_qty) * float(quantity)
+        elif rule.rule_type == ManagerTariffRuleType.fixed_once.value:
+            qty = float(rule_input_qty if rule_input_qty is not None else ServiceEstimateService._rule_default_qty(rule))
+        else:
+            return None
+
+        if qty <= 0:
+            return None
+
+        line_total = qty * unit_price
+        name = ServiceEstimateService._render_line_template(
+            rule.line_template,
+            name=rule.name,
+            qty=qty,
+            unit=rule.unit,
+            unit_price=unit_price,
+            route_length_m=route_length,
+            included_route_meters=included_route,
+            extra_route_meters=extra_route,
+            extra_holes_count=extra_holes,
+            quantity=quantity,
+        )
+        return ManagerEstimateLineResponse(
+            source_type="rule",
+            source_id=int(rule.id),
+            rule_id=int(rule.id),
+            rule_type=ManagerTariffRuleType(rule.rule_type),
+            service_id=rule.service_id,
+            name=name,
+            qty=ServiceEstimateService._round_money(qty),
+            unit=rule.unit,
+            unit_price=ServiceEstimateService._round_money(unit_price),
+            line_total=ServiceEstimateService._round_money(line_total),
+            sort_order=sort_order,
+        )
 
     @staticmethod
     async def _build_lines(
-        session: AsyncSession,
         payload: ManagerInstallEstimateCalculatePayload,
-        tariff: InstallationRate,
-    ) -> Tuple[List[ManagerEstimateLineResponse], float]:
+        tariff: ServiceTariff,
+    ) -> List[ManagerEstimateLineResponse]:
         lines: List[ManagerEstimateLineResponse] = []
         sort_order = 0
-        quantity = float(payload.quantity)
+        quantity = int(payload.quantity)
 
-        base_unit_price = float(tariff.base_price or 0)
-        base_line_total = base_unit_price * quantity
-        lines.append(
-            ManagerEstimateLineResponse(
-                source_type="base",
-                source_id=tariff.id,
-                name=f"Базовый монтаж ({tariff.category} {tariff.power_range or 'all'})",
-                qty=quantity,
-                unit="компл.",
-                unit_price=ServiceEstimateService._round_money(base_unit_price),
-                line_total=ServiceEstimateService._round_money(base_line_total),
-                sort_order=sort_order,
-            )
-        )
+        lines.append(ServiceEstimateService._build_base_line(tariff, quantity, sort_order))
         sort_order += 1
 
-        included_meters = float(tariff.included_pipe_meters or 0)
-        extra_pipe_meters = max(float(payload.route_length_m) - included_meters, 0.0)
-        extra_pipe_unit_price = float(tariff.extra_pipe_price or 0)
-        if extra_pipe_meters > 0 and extra_pipe_unit_price > 0:
-            extra_pipe_qty = extra_pipe_meters * quantity
-            extra_pipe_total = extra_pipe_qty * extra_pipe_unit_price
-            lines.append(
-                ManagerEstimateLineResponse(
-                    source_type="modifier",
-                    source_id=tariff.id,
-                    name=f"Доп. трасса свыше {int(included_meters)} м",
-                    qty=ServiceEstimateService._round_money(extra_pipe_qty),
-                    unit="м",
-                    unit_price=ServiceEstimateService._round_money(extra_pipe_unit_price),
-                    line_total=ServiceEstimateService._round_money(extra_pipe_total),
-                    sort_order=sort_order,
-                )
+        rule_inputs = ServiceEstimateService._rule_inputs_map(payload)
+        sorted_rules = sorted(
+            [rule for rule in list(tariff.rules or []) if rule.is_active],
+            key=lambda item: (item.sort_order, item.id or 0),
+        )
+        for rule in sorted_rules:
+            rule_line = ServiceEstimateService._build_rule_line(
+                rule,
+                tariff=tariff,
+                payload=payload,
+                quantity=quantity,
+                rule_input_qty=rule_inputs.get(int(rule.id)),
+                sort_order=sort_order,
             )
+            if rule_line is None:
+                continue
+            lines.append(rule_line)
             sort_order += 1
-
-        extra_hole_price = float(payload.extra_hole_price or 0)
-        if payload.extra_holes_count > 0 and extra_hole_price > 0:
-            extra_holes_qty = float(payload.extra_holes_count) * quantity
-            extra_holes_total = extra_holes_qty * extra_hole_price
-            lines.append(
-                ManagerEstimateLineResponse(
-                    source_type="modifier",
-                    source_id=None,
-                    name="Дополнительные отверстия",
-                    qty=ServiceEstimateService._round_money(extra_holes_qty),
-                    unit="шт",
-                    unit_price=ServiceEstimateService._round_money(extra_hole_price),
-                    line_total=ServiceEstimateService._round_money(extra_holes_total),
-                    sort_order=sort_order,
-                )
-            )
-            sort_order += 1
-
-        if payload.addons:
-            addon_slugs = [a.slug for a in payload.addons]
-            addon_stmt = (
-                select(Service)
-                .where(Service.slug.in_(addon_slugs))
-                .where(Service.is_active == True)  # noqa: E712
-            )
-            addon_result = await session.execute(addon_stmt)
-            addon_services = {svc.slug: svc for svc in addon_result.scalars().all()}
-
-            missing_slugs = sorted({slug for slug in addon_slugs if slug not in addon_services})
-            if missing_slugs:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Unknown add-on slugs: {', '.join(missing_slugs)}",
-                )
-
-            for addon in payload.addons:
-                service = addon_services[addon.slug]
-                addon_qty = float(addon.qty) * quantity
-                addon_price = float(service.base_price or 0)
-                addon_total = addon_qty * addon_price
-                lines.append(
-                    ManagerEstimateLineResponse(
-                        source_type="addon",
-                        source_id=service.id,
-                        name=service.title,
-                        qty=ServiceEstimateService._round_money(addon_qty),
-                        unit="шт",
-                        unit_price=ServiceEstimateService._round_money(addon_price),
-                        line_total=ServiceEstimateService._round_money(addon_total),
-                        sort_order=sort_order,
-                    )
-                )
-                sort_order += 1
-
-        return lines, ServiceEstimateService._round_money(extra_pipe_meters)
+        return lines
 
     @staticmethod
     async def calculate_install_estimate(
         session: AsyncSession, payload: ManagerInstallEstimateCalculatePayload
     ) -> ManagerInstallEstimateResponse:
         tariff = await ServiceEstimateService._resolve_tariff(session, payload)
-        lines, extra_pipe_meters = await ServiceEstimateService._build_lines(session, payload, tariff)
-
-        subtotal = ServiceEstimateService._round_money(sum(float(line.line_total) for line in lines))
-        discount_amount = ServiceEstimateService._round_money(min(float(payload.discount_amount), subtotal))
+        lines = await ServiceEstimateService._build_lines(payload, tariff)
+        subtotal = ServiceEstimateService._round_money(sum(float(line.line_total or 0.0) for line in lines))
+        discount_amount = ServiceEstimateService._round_money(min(float(payload.discount_amount or 0.0), subtotal))
         total = ServiceEstimateService._round_money(max(subtotal - discount_amount, 0.0))
+        rule_lines = [line for line in lines if line.source_type == "rule"]
 
         return ManagerInstallEstimateResponse(
-            tariff_id=int(tariff.id),
-            category=tariff.category,
-            power_range=tariff.power_range,
+            tariff=ServiceEstimateService._map_tariff_brief(tariff),
             currency="BYN",
             route_length_m=float(payload.route_length_m),
-            included_pipe_meters=int(tariff.included_pipe_meters or 0),
-            extra_pipe_meters=extra_pipe_meters,
             quantity=int(payload.quantity),
             lines=lines,
+            rule_lines=rule_lines,
             subtotal=subtotal,
             discount_amount=discount_amount,
             total=total,
@@ -271,22 +298,39 @@ class ServiceEstimateService:
     @staticmethod
     def _map_estimate_to_response(estimate: ServiceEstimate) -> ManagerServiceEstimateResponse:
         line_items = sorted(list(estimate.items or []), key=lambda item: item.sort_order)
-        lines = [
-            ManagerEstimateLineResponse(
-                source_type=item.source_type,
-                source_id=item.source_id,
-                name=item.name,
-                qty=float(item.qty),
-                unit=item.unit,
-                unit_price=float(item.unit_price),
-                line_total=float(item.line_total),
-                sort_order=item.sort_order,
+        rules_by_id: Dict[int, ServiceTariffRule] = {}
+        if estimate.tariff and estimate.tariff.rules:
+            rules_by_id = {int(rule.id): rule for rule in estimate.tariff.rules if rule.id is not None}
+
+        lines: List[ManagerEstimateLineResponse] = []
+        for item in line_items:
+            rule_id: Optional[int] = None
+            rule_type: Optional[ManagerTariffRuleType] = None
+            if item.source_type == "rule" and item.source_id is not None:
+                rule_id = int(item.source_id)
+                mapped_rule = rules_by_id.get(rule_id)
+                if mapped_rule and mapped_rule.rule_type:
+                    rule_type = ManagerTariffRuleType(mapped_rule.rule_type)
+            lines.append(
+                ManagerEstimateLineResponse(
+                    source_type=item.source_type,
+                    source_id=item.source_id,
+                    rule_id=rule_id,
+                    rule_type=rule_type,
+                    service_id=item.service_id,
+                    name=item.name,
+                    qty=float(item.qty),
+                    unit=item.unit,
+                    unit_price=float(item.unit_price),
+                    line_total=float(item.line_total),
+                    sort_order=item.sort_order,
+                )
             )
-            for item in line_items
-        ]
+
         return ManagerServiceEstimateResponse(
             id=int(estimate.id),
             customer_id=estimate.customer_id,
+            tariff=ServiceEstimateService._map_tariff_brief(estimate.tariff) if estimate.tariff else None,
             title=estimate.title,
             comment=estimate.comment,
             service_kind=estimate.service_kind,
@@ -316,16 +360,13 @@ class ServiceEstimateService:
                 )
 
         calculation = await ServiceEstimateService.calculate_install_estimate(session, payload)
-        default_title = (
-            f"Смета монтажа: {calculation.category}"
-            + (f" / {calculation.power_range}" if calculation.power_range else "")
-        )
-
+        default_title = f"Смета: {calculation.tariff.selector_label}"
         estimate = ServiceEstimate(
             customer_id=payload.customer_id,
+            tariff_id=calculation.tariff.id,
             title=(payload.title or default_title).strip(),
             comment=payload.comment,
-            service_kind="install",
+            service_kind=calculation.tariff.service_kind.value,
             currency=calculation.currency,
             subtotal=calculation.subtotal,
             discount_amount=calculation.discount_amount,
@@ -338,6 +379,7 @@ class ServiceEstimateService:
             ServiceEstimateItem(
                 source_type=line.source_type,
                 source_id=line.source_id,
+                service_id=line.service_id,
                 name=line.name,
                 qty=line.qty,
                 unit=line.unit,
@@ -352,9 +394,7 @@ class ServiceEstimateService:
         return ServiceEstimateService._map_estimate_to_response(saved)
 
     @staticmethod
-    async def get_estimate_by_id(
-        session: AsyncSession, estimate_id: int
-    ) -> ManagerServiceEstimateResponse:
+    async def get_estimate_by_id(session: AsyncSession, estimate_id: int) -> ManagerServiceEstimateResponse:
         estimate = await ServiceEstimateDAO.get_by_id(session, estimate_id)
         if estimate is None:
             raise HTTPException(
@@ -386,23 +426,28 @@ class ServiceEstimateService:
         )
 
     @staticmethod
-    def _build_collapsed_title(estimate: ServiceEstimate) -> str:
+    def _build_collapsed_title_from_new_model(estimate: ServiceEstimate) -> str:
+        if not estimate.tariff:
+            return estimate.title
+        head = (estimate.tariff.estimate_template or "").strip() or estimate.title
+        rule_parts = [
+            (item.name or "").strip()
+            for item in sorted(list(estimate.items or []), key=lambda i: i.sort_order)
+            if item.source_type == "rule" and (item.name or "").strip()
+        ]
+        if not rule_parts:
+            return head
+        return f"{head}; " + "; ".join(rule_parts)
+
+    @staticmethod
+    def _build_legacy_collapsed_title(estimate: ServiceEstimate) -> str:
         payload: Dict[str, Any] = dict(estimate.calculation_payload or {})
         route_length = payload.get("route_length_m")
         extra_holes = int(payload.get("extra_holes_count") or 0)
         quantity = int(payload.get("quantity") or 1)
 
-        addon_names = [
-            item.name
-            for item in sorted(list(estimate.items or []), key=lambda i: i.sort_order)
-            if item.source_type == "addon"
-        ]
-
         parts: List[str] = ["включая расходные материалы"]
-
-        power_label = ServiceEstimateService._extract_power_label(
-            str(payload.get("power_range") or "")
-        )
+        power_label = ServiceEstimateService._extract_power_label(str(payload.get("power_range") or ""))
         head = "Стандартный монтаж кондиционера"
         if power_label:
             head = f"{head} {power_label}"
@@ -411,11 +456,8 @@ class ServiceEstimateService:
             parts.append(f"{extra_holes} {ServiceEstimateService._pluralize_hole(extra_holes)}")
         if route_length is not None:
             parts.append(f"трасса {ServiceEstimateService._format_number(route_length)} м")
-        if addon_names:
-            parts.append(f"доп. работы: {', '.join(addon_names)}")
         if quantity > 1:
             parts.append(f"количество комплектов: {quantity}")
-
         return f"{head}, " + ", ".join(parts)
 
     @staticmethod
@@ -426,12 +468,9 @@ class ServiceEstimateService:
         if unit_label and (item.qty != 1 or unit_label not in {"шт", "компл."}):
             title = f"{item.name} ({qty_label} {unit_label})"
 
-        # Order service rows currently support integer quantity only.
-        # To preserve exact estimate totals (including fractional meters),
-        # each estimate item is materialized as one row with full line_total as price.
         return ManagerOrderServiceLinePayload(
             link_id=None,
-            service_id=item.source_id if item.source_type == "addon" else None,
+            service_id=item.service_id,
             title=title,
             quantity=1,
             price=max(0, int(round(float(item.line_total or 0.0)))),
@@ -453,7 +492,11 @@ class ServiceEstimateService:
 
         sorted_items = sorted(list(estimate.items or []), key=lambda item: item.sort_order)
         if mode == ManagerServiceEstimateOrderLinesMode.collapsed:
-            collapsed_title = ServiceEstimateService._build_collapsed_title(estimate)
+            if estimate.tariff_id:
+                collapsed_title = ServiceEstimateService._build_collapsed_title_from_new_model(estimate)
+            else:
+                collapsed_title = ServiceEstimateService._build_legacy_collapsed_title(estimate)
+
             services = [
                 ManagerOrderServiceLinePayload(
                     link_id=None,

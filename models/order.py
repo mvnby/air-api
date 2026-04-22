@@ -54,15 +54,75 @@ class Service(SQLModel, table=True):
         return f"{self.title} ({self.base_price} руб.)"
 
 
+class ServiceTariff(SQLModel, table=True):
+    __tablename__ = "service_tariff"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    service_kind: str = Field(default="installation", index=True)
+    selector_label: str = Field(index=True)
+    estimate_template: str = Field(default="Монтаж кондиционера, включая расходные материалы")
+    category: str = Field(default="", index=True)
+    power_range: str = Field(default="", index=True)
+
+    base_price: int = Field(default=0)
+    included_route_meters: float = Field(default=3.0)
+
+    is_active: bool = Field(default=True, index=True)
+    sort_order: int = Field(default=0, index=True)
+    comment: Optional[str] = Field(default=None)
+
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: Optional[datetime] = Field(
+        default_factory=datetime.now,
+        sa_column_kwargs={"onupdate": datetime.now},
+    )
+
+    rules: List["ServiceTariffRule"] = Relationship(
+        back_populates="tariff",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin",
+        },
+    )
+
+
+class ServiceTariffRule(SQLModel, table=True):
+    __tablename__ = "service_tariff_rule"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tariff_id: int = Field(foreign_key="service_tariff.id", index=True)
+
+    rule_type: str = Field(default="per_unit_manual", index=True)
+    name: str = Field(index=True)
+    line_template: str = Field(default="{name}")
+    unit: str = Field(default="шт")
+    unit_price: float = Field(default=0.0)
+
+    is_optional: bool = Field(default=False, index=True)
+    is_active: bool = Field(default=True, index=True)
+    sort_order: int = Field(default=0, index=True)
+    service_id: Optional[int] = Field(default=None, foreign_key="service.id", index=True)
+
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: Optional[datetime] = Field(
+        default_factory=datetime.now,
+        sa_column_kwargs={"onupdate": datetime.now},
+    )
+
+    tariff: "ServiceTariff" = Relationship(back_populates="rules")
+    service: Optional["Service"] = Relationship()
+
+
 class ServiceEstimate(SQLModel, table=True):
     __tablename__ = "service_estimate"
     id: Optional[int] = Field(default=None, primary_key=True)
 
     customer_id: Optional[int] = Field(default=None, foreign_key="customer.id", index=True)
+    tariff_id: Optional[int] = Field(default=None, foreign_key="service_tariff.id", index=True)
     title: str = Field(default="Смета услуг")
     comment: Optional[str] = Field(default=None)
 
-    service_kind: str = Field(default="install", index=True)
+    service_kind: str = Field(default="installation", index=True)
     currency: str = Field(default="BYN")
     subtotal: float = Field(default=0.0)
     discount_amount: float = Field(default=0.0)
@@ -74,6 +134,7 @@ class ServiceEstimate(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.now)
 
     customer: Optional["Customer"] = Relationship()
+    tariff: Optional["ServiceTariff"] = Relationship()
     items: List["ServiceEstimateItem"] = Relationship(
         back_populates="estimate",
         sa_relationship_kwargs={
@@ -90,6 +151,7 @@ class ServiceEstimateItem(SQLModel, table=True):
     estimate_id: int = Field(foreign_key="service_estimate.id", index=True)
     source_type: str = Field(default="base", index=True)
     source_id: Optional[int] = Field(default=None)
+    service_id: Optional[int] = Field(default=None, foreign_key="service.id", index=True)
     name: str
 
     qty: float = Field(default=1.0)

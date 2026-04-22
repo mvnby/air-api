@@ -30,6 +30,9 @@ import {
 
     type ManagerSettingUpdatePayload,
     type ManagerTariffCreatePayload,
+    type ManagerTariffRuleCreatePayload,
+    type ManagerTariffRuleUpdatePayload,
+    type ManagerTariffServiceKind,
     type ManagerTariffUpdatePayload,
     type ManagerInstallEstimateCalculatePayload,
     type ManagerInstallEstimateSavePayload,
@@ -269,6 +272,10 @@ export const api = {
         return await ManagerTariffsService.listManagerTariffs();
     },
 
+    async listManagerTariffsByKind(serviceKind?: ManagerTariffServiceKind, includeInactive = true) {
+        return await ManagerTariffsService.listManagerTariffs(serviceKind ?? null, includeInactive);
+    },
+
     async createManagerTariff(payload: ManagerTariffCreatePayload) {
         return await ManagerTariffsService.createManagerTariff(payload);
     },
@@ -279,6 +286,22 @@ export const api = {
 
     async deleteManagerTariff(id: number) {
         return await ManagerTariffsService.deleteManagerTariff(id);
+    },
+
+    async listManagerTariffRules(tariffId: number, includeInactive = true) {
+        return await ManagerTariffsService.listManagerTariffRules(tariffId, includeInactive);
+    },
+
+    async createManagerTariffRule(tariffId: number, payload: ManagerTariffRuleCreatePayload) {
+        return await ManagerTariffsService.createManagerTariffRule(tariffId, payload);
+    },
+
+    async updateManagerTariffRule(tariffId: number, ruleId: number, payload: ManagerTariffRuleUpdatePayload) {
+        return await ManagerTariffsService.updateManagerTariffRule(tariffId, ruleId, payload);
+    },
+
+    async deleteManagerTariffRule(tariffId: number, ruleId: number) {
+        return await ManagerTariffsService.deleteManagerTariffRule(tariffId, ruleId);
     },
 
     // Install estimates (issue #260)

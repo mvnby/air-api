@@ -2,16 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { ManagerEstimateAddonPayload } from './ManagerEstimateAddonPayload';
+import type { ManagerEstimateRuleInputPayload } from './ManagerEstimateRuleInputPayload';
 export type ManagerInstallEstimateCalculatePayload = {
-    tariff_id?: (number | null);
-    category?: (string | null);
-    power_range?: (string | null);
+    tariff_id: number;
     route_length_m?: number;
     quantity?: number;
     extra_holes_count?: number;
-    extra_hole_price?: number;
-    addons?: Array<ManagerEstimateAddonPayload>;
+    rule_inputs?: Array<ManagerEstimateRuleInputPayload>;
     discount_amount?: number;
 };
 

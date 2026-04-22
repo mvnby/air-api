@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from models import ServiceEstimate, ServiceEstimateItem
+from models import ServiceEstimate, ServiceEstimateItem, ServiceTariff
 
 
 class ServiceEstimateDAO:
@@ -29,7 +29,10 @@ class ServiceEstimateDAO:
         stmt = (
             select(ServiceEstimate)
             .where(ServiceEstimate.id == estimate.id)
-            .options(selectinload(ServiceEstimate.items))
+            .options(
+                selectinload(ServiceEstimate.items),
+                selectinload(ServiceEstimate.tariff).selectinload(ServiceTariff.rules),
+            )
         )
         result = await session.execute(stmt)
         return result.scalar_one()
@@ -39,7 +42,10 @@ class ServiceEstimateDAO:
         stmt = (
             select(ServiceEstimate)
             .where(ServiceEstimate.id == estimate_id)
-            .options(selectinload(ServiceEstimate.items))
+            .options(
+                selectinload(ServiceEstimate.items),
+                selectinload(ServiceEstimate.tariff).selectinload(ServiceTariff.rules),
+            )
         )
         result = await session.execute(stmt)
         return result.scalars().first()
@@ -68,7 +74,10 @@ class ServiceEstimateDAO:
             stmt.order_by(ServiceEstimate.created_at.desc())
             .offset(offset)
             .limit(safe_limit)
-            .options(selectinload(ServiceEstimate.items))
+            .options(
+                selectinload(ServiceEstimate.items),
+                selectinload(ServiceEstimate.tariff).selectinload(ServiceTariff.rules),
+            )
         )
         result = await session.execute(stmt)
         return list(result.scalars().all()), total
