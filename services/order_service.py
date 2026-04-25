@@ -1367,6 +1367,7 @@ class OrderService:
             linked_contract = await session.get(CustomerContract, order.customer_contract_id)
             if linked_contract and int(linked_contract.customer_id) != int(order.customer_id or 0):
                 order.customer_contract_id = None
+                order.customer_contract = None
 
         if "customer_branch_id" in fields_set:
             if payload.customer_branch_id is None:
@@ -1384,6 +1385,7 @@ class OrderService:
         if "customer_contract_id" in fields_set:
             if payload.customer_contract_id is None:
                 order.customer_contract_id = None
+                order.customer_contract = None
             else:
                 if order.customer_id is None:
                     raise ValueError("Cannot set customer contract without customer")
@@ -1395,6 +1397,7 @@ class OrderService:
                 if contract.status != CustomerContractService.ACTIVE_STATUS:
                     raise ValueError("Customer contract is not active")
                 order.customer_contract_id = int(contract.id)
+                order.customer_contract = contract
 
         customer_field_map = {
             "customer_name": "name",
