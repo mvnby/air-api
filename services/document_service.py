@@ -268,17 +268,17 @@ class DocumentService:
             order = order_result.scalars().first()
             if not order:
                 raise ValueError("Order not found")
+            contract_query = select(OrderDocument).where(
+                OrderDocument.order_id == order_id,
+                OrderDocument.doc_type == "contract"
+            )
+            result = await session.execute(contract_query)
+            has_one_time_contract = result.scalars().first() is not None
             if order.customer and order.customer.type == CustomerType.company:
-                if not order.customer_contract_id:
-                    raise ValueError("Невозможно создать акт/накладную: выберите открытый договор клиента")
-            else:
-                contract_query = select(OrderDocument).where(
-                    OrderDocument.order_id == order_id,
-                    OrderDocument.doc_type == "contract"
-                )
-                result = await session.execute(contract_query)
-                if not result.scalars().first():
-                    raise ValueError("Невозможно создать акт/накладную: отсутствует договор")
+                if not order.customer_contract_id and not has_one_time_contract:
+                    raise ValueError("Невозможно создать акт/накладную: выберите открытый договор клиента или создайте договор заказа")
+            elif not has_one_time_contract:
+                raise ValueError("Невозможно создать акт/накладную: отсутствует договор")
 
         # 1. Получаем template_id (используем переданный или дефолтный)
         if not template_id:

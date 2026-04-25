@@ -293,6 +293,25 @@ async def test_manager_order_contract_selection_and_act_guard(async_client, db, 
 
     monkeypatch.setattr(document_service, "get_google_service", lambda: _FakeGoogleService())
 
+    one_time_order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    db.add(one_time_order)
+    await db.commit()
+    await db.refresh(one_time_order)
+    db.add(
+        OrderDocument(
+            order_id=one_time_order.id,
+            doc_type="contract",
+            number="Д-2026-999",
+            google_file_id="one-time-contract",
+            google_edit_url="https://docs.google.com/document/d/one-time-contract/edit",
+        )
+    )
+    await db.commit()
+
+    one_time_act = await async_client.post(f"/api/manager/orders/{one_time_order.id}/documents/act", headers=headers)
+    assert one_time_act.status_code == 200
+    assert captured_replacements[-1]["{{act_number}}"] == "1"
+
     first_act = await async_client.post(f"/api/manager/orders/{order.id}/documents/act", headers=headers)
     assert first_act.status_code == 200
     assert captured_replacements[-1]["{{act_number}}"] == "1"
