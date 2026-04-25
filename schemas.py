@@ -426,7 +426,7 @@ class ManagerOrderListItemResponse(BaseModel):
     @computed_field
     @property
     def ready_for_execution(self) -> bool:
-        return self.proposal_status == "approved"
+        return self.status == "execution" or self.proposal_status == "approved"
 
     # Financials
     total_payments: float = 0.0

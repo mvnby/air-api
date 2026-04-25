@@ -408,7 +408,8 @@ const handleFileUpload = async (event: Event) => {
 };
 
 const isCompanyOrder = computed(() => props.order?.customer?.type === 'company' || !!props.order?.customer?.inn);
-const hasContract = computed(() => isCompanyOrder.value ? !!selectedCustomerContractId.value : documents.value.some(d => d.doc_type === 'contract'));
+const hasOrderContract = computed(() => documents.value.some(d => d.doc_type === 'contract'));
+const hasContract = computed(() => (isCompanyOrder.value ? !!selectedCustomerContractId.value : false) || hasOrderContract.value);
 
 const DOCUMENT_TYPES = [
   { type: 'contract', label: 'Договор' },
@@ -1141,10 +1142,6 @@ const handleSave = () => {
       localFormError.value = 'Требуется замер: заполните результат замера';
       return;
     }
-    if (proposalStatus.value !== 'approved') {
-      localFormError.value = 'Проект должен быть согласован с клиентом';
-      return;
-    }
   }
 
   if (enableCurrency.value) {
@@ -1195,7 +1192,7 @@ const handleSave = () => {
     measurement_required: measurementRequired.value,
     measurer_id: measurerId.value,
     measurement_result: measurementResult.value,
-    proposal_status: proposalStatus.value,
+    proposal_status: status.value === 'execution' ? 'approved' : proposalStatus.value,
     target_currency: enableCurrency.value ? (targetCurrency.value || null) : null,
     target_currency_amount: enableCurrency.value && targetCurrencyAmount.value ? Number(String(targetCurrencyAmount.value).replace(',', '.')) : null,
   };
@@ -1814,7 +1811,7 @@ watch(
               Создать открытый договор
             </button>
           </div>
-          <p v-else-if="!selectedCustomerContractId" class="mt-2 text-xs text-amber-600 dark:text-amber-400">Для актов и накладных нужно выбрать открытый договор.</p>
+          <p v-else-if="!selectedCustomerContractId && !hasOrderContract" class="mt-2 text-xs text-amber-600 dark:text-amber-400">Для актов и накладных нужен открытый договор или разовый договор заказа.</p>
         </div>
 
         <div v-if="documents.length" class="space-y-3 mt-3">

@@ -161,7 +161,8 @@ const DOCUMENT_TYPES = [
 ];
 
 const isCompanyOrder = computed(() => props.order.customer?.type === 'company' || !!props.order.customer?.inn);
-const hasContract = computed(() => isCompanyOrder.value ? !!selectedCustomerContractId.value : documents.value.some(d => d.doc_type === 'contract'));
+const hasOrderContract = computed(() => documents.value.some(d => d.doc_type === 'contract'));
+const hasContract = computed(() => (isCompanyOrder.value ? !!selectedCustomerContractId.value : false) || hasOrderContract.value);
 const datedDocumentTypes = new Set(['contract', 'act', 'tn2', 'ttn1']);
 const getDocumentDateForType = (type: string) => (
   datedDocumentTypes.has(type) && documentDate.value ? `${documentDate.value}T00:00:00` : undefined
@@ -523,7 +524,7 @@ watch(() => props.order.id, () => {
                 Создать открытый договор
               </button>
             </div>
-            <p v-else-if="!selectedCustomerContractId" class="mt-2 text-xs text-amber-600 dark:text-amber-400">Для актов и накладных нужно выбрать открытый договор.</p>
+            <p v-else-if="!selectedCustomerContractId && !hasOrderContract" class="mt-2 text-xs text-amber-600 dark:text-amber-400">Для актов и накладных нужен открытый договор или разовый договор заказа.</p>
           </div>
 
           <div v-if="documents.length" class="space-y-3">
