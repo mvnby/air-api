@@ -332,6 +332,16 @@ class OrderCustomerBranchBrief(BaseModel):
     is_default: bool = False
 
 
+class OrderCustomerContractBrief(BaseModel):
+    id: int
+    customer_id: int
+    number: str
+    valid_from: datetime
+    valid_until: datetime
+    status: str
+    edit_url: Optional[str] = None
+
+
 class OrderProductLineResponse(BaseModel):
     id: int
     product_id: Optional[int] = None
@@ -371,6 +381,8 @@ class ManagerOrderListItemResponse(BaseModel):
     delivery_address: Optional[str] = None
     customer: Optional[OrderCustomerBrief] = None
     customer_branch: Optional[OrderCustomerBranchBrief] = None
+    customer_contract_id: Optional[int] = None
+    customer_contract: Optional[OrderCustomerContractBrief] = None
     installer_id: Optional[int] = None
     installer: Optional[ManagerInstallerResponse] = None
     # New fields
@@ -562,6 +574,7 @@ class ManagerOrderUpdatePayload(BaseModel):
     # Customer Details
     customer_id: Optional[int] = None
     customer_branch_id: Optional[int] = None
+    customer_contract_id: Optional[int] = None
     customer_type: Optional[str] = None
     customer_name: Optional[str] = None
     customer_phone: Optional[str] = None
@@ -847,6 +860,38 @@ class ManagerCustomerBranchItemResponse(BaseModel):
 
 class ManagerCustomerBranchListResponse(BaseModel):
     items: List[ManagerCustomerBranchItemResponse]
+
+
+class ManagerCustomerContractItemResponse(BaseModel):
+    id: int
+    customer_id: int
+    number: str
+    valid_from: datetime
+    valid_until: datetime
+    status: str
+    template_id: Optional[str] = None
+    edit_url: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class ManagerCustomerContractListResponse(BaseModel):
+    items: List[ManagerCustomerContractItemResponse]
+
+
+class ManagerCustomerContractCreatePayload(BaseModel):
+    number: Optional[str] = None
+    template_id: Optional[str] = None
+    contract_date: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
+
+
+class ManagerCustomerContractUpdatePayload(BaseModel):
+    number: Optional[str] = None
+    template_id: Optional[str] = None
+    contract_date: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
+    status: Optional[str] = None
 
 
 class ManagerCustomerBranchCreatePayload(BaseModel):
@@ -1382,10 +1427,21 @@ class DashboardTouchpoint(BaseModel):
     next_followup_date: datetime
     title: Optional[str] = None
 
+
+class DashboardContractExpiry(BaseModel):
+    contract_id: int
+    customer_id: int
+    customer_name: str
+    number: str
+    valid_until: datetime
+    edit_url: Optional[str] = None
+
+
 class DashboardStatsResponse(BaseModel):
     total_amount: float
     new_leads_count: int
     upcoming_touchpoints: List[DashboardTouchpoint]
+    expiring_contracts: List[DashboardContractExpiry] = []
 
 
 # --- LEADS INBOX ---

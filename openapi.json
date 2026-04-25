@@ -4708,6 +4708,24 @@
               "title": "Template Id"
             },
             "description": "Google Drive template file ID"
+          },
+          {
+            "name": "contract_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Document/contract date as ISO datetime",
+              "title": "Contract Date"
+            },
+            "description": "Document/contract date as ISO datetime"
           }
         ],
         "responses": {
@@ -5496,6 +5514,230 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ManagerCrmHealthReportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/customers/{customer_id}/contracts": {
+      "get": {
+        "tags": [
+          "manager-contracts"
+        ],
+        "summary": "Get Manager Customer Contracts",
+        "operationId": "get_manager_customer_contracts",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Customer Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerCustomerContractListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manager-contracts"
+        ],
+        "summary": "Create Manager Customer Contract",
+        "operationId": "create_manager_customer_contract",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Customer Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerCustomerContractCreatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerCustomerContractItemResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/customers/{customer_id}/contracts/{contract_id}": {
+      "patch": {
+        "tags": [
+          "manager-contracts"
+        ],
+        "summary": "Patch Manager Customer Contract",
+        "operationId": "patch_manager_customer_contract",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Customer Id"
+            }
+          },
+          {
+            "name": "contract_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Contract Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerCustomerContractUpdatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerCustomerContractItemResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/customers/{customer_id}/contracts/{contract_id}/archive": {
+      "post": {
+        "tags": [
+          "manager-contracts"
+        ],
+        "summary": "Archive Manager Customer Contract",
+        "operationId": "archive_manager_customer_contract",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Customer Id"
+            }
+          },
+          {
+            "name": "contract_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Contract Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerActionMessageResponse"
                 }
               }
             }
@@ -8887,6 +9129,51 @@
         ],
         "title": "CustomerPayload"
       },
+      "DashboardContractExpiry": {
+        "properties": {
+          "contract_id": {
+            "type": "integer",
+            "title": "Contract Id"
+          },
+          "customer_id": {
+            "type": "integer",
+            "title": "Customer Id"
+          },
+          "customer_name": {
+            "type": "string",
+            "title": "Customer Name"
+          },
+          "number": {
+            "type": "string",
+            "title": "Number"
+          },
+          "valid_until": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Valid Until"
+          },
+          "edit_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edit Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "contract_id",
+          "customer_id",
+          "customer_name",
+          "number",
+          "valid_until"
+        ],
+        "title": "DashboardContractExpiry"
+      },
       "DashboardStatsResponse": {
         "properties": {
           "total_amount": {
@@ -8903,6 +9190,14 @@
             },
             "type": "array",
             "title": "Upcoming Touchpoints"
+          },
+          "expiring_contracts": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardContractExpiry"
+            },
+            "type": "array",
+            "title": "Expiring Contracts",
+            "default": []
           }
         },
         "type": "object",
@@ -11140,6 +11435,217 @@
         "type": "object",
         "title": "ManagerCustomerBranchUpdatePayload"
       },
+      "ManagerCustomerContractCreatePayload": {
+        "properties": {
+          "number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Number"
+          },
+          "template_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Id"
+          },
+          "contract_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Date"
+          },
+          "valid_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Until"
+          }
+        },
+        "type": "object",
+        "title": "ManagerCustomerContractCreatePayload"
+      },
+      "ManagerCustomerContractItemResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "customer_id": {
+            "type": "integer",
+            "title": "Customer Id"
+          },
+          "number": {
+            "type": "string",
+            "title": "Number"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Valid From"
+          },
+          "valid_until": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Valid Until"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "template_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Id"
+          },
+          "edit_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edit Url"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "customer_id",
+          "number",
+          "valid_from",
+          "valid_until",
+          "status",
+          "created_at"
+        ],
+        "title": "ManagerCustomerContractItemResponse"
+      },
+      "ManagerCustomerContractListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCustomerContractItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ManagerCustomerContractListResponse"
+      },
+      "ManagerCustomerContractUpdatePayload": {
+        "properties": {
+          "number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Number"
+          },
+          "template_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Id"
+          },
+          "contract_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Date"
+          },
+          "valid_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Until"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "title": "ManagerCustomerContractUpdatePayload"
+      },
       "ManagerCustomerDocumentItem": {
         "properties": {
           "id": {
@@ -12423,6 +12929,27 @@
               }
             ]
           },
+          "customer_contract_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Contract Id"
+          },
+          "customer_contract": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderCustomerContractBrief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "installer_id": {
             "anyOf": [
               {
@@ -12854,6 +13381,27 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/OrderCustomerBranchBrief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "customer_contract_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Contract Id"
+          },
+          "customer_contract": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderCustomerContractBrief"
               },
               {
                 "type": "null"
@@ -13419,6 +13967,17 @@
               }
             ],
             "title": "Customer Branch Id"
+          },
+          "customer_contract_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Contract Id"
           },
           "customer_type": {
             "anyOf": [
@@ -15095,6 +15654,57 @@
           "phone"
         ],
         "title": "OrderCustomerBrief"
+      },
+      "OrderCustomerContractBrief": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "customer_id": {
+            "type": "integer",
+            "title": "Customer Id"
+          },
+          "number": {
+            "type": "string",
+            "title": "Number"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Valid From"
+          },
+          "valid_until": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Valid Until"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "edit_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edit Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "customer_id",
+          "number",
+          "valid_from",
+          "valid_until",
+          "status"
+        ],
+        "title": "OrderCustomerContractBrief"
       },
       "OrderPayload": {
         "properties": {

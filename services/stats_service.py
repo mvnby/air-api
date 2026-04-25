@@ -4,9 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from models.order import Order
-from models.customer import Customer
+from models.customer import Customer, CustomerContract
 from models.common import OrderStatus
-from schemas import DashboardStatsResponse, DashboardTouchpoint
+from schemas import DashboardContractExpiry, DashboardStatsResponse, DashboardTouchpoint
 
 class StatsService:
     @staticmethod
@@ -63,8 +63,33 @@ class StatsService:
                 )
             )
 
+        contracts_stmt = (
+            select(CustomerContract)
+            .options(selectinload(CustomerContract.customer))
+            .where(
+                CustomerContract.status == "active",
+                CustomerContract.valid_until <= end_of_window,
+            )
+            .order_by(CustomerContract.valid_until.asc())
+            .limit(10)
+        )
+        contracts_result = await session.execute(contracts_stmt)
+        contracts = contracts_result.scalars().all()
+        expiring_contracts = [
+            DashboardContractExpiry(
+                contract_id=int(contract.id or 0),
+                customer_id=int(contract.customer_id),
+                customer_name=contract.customer.name if contract.customer else f"Клиент #{contract.customer_id}",
+                number=contract.number,
+                valid_until=contract.valid_until,
+                edit_url=contract.google_edit_url,
+            )
+            for contract in contracts
+        ]
+
         return DashboardStatsResponse(
             total_amount=float(total_amount),
             new_leads_count=new_leads_count,
-            upcoming_touchpoints=touchpoints
+            upcoming_touchpoints=touchpoints,
+            expiring_contracts=expiring_contracts,
         )

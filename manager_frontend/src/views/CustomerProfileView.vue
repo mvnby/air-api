@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { ArrowLeft, Building2, Mail, Phone, Plus, ReceiptText, Save, UserRound, X } from 'lucide-vue-next';
 import CreateOrderModal from '../components/CreateOrderModal.vue';
 import { api } from '../api';
-import { ManagerService, type ManagerCatalogCustomerItemResponse, type ManagerCustomerDocumentItem } from '../client';
+import { ManagerContractsService, ManagerService, type ManagerCatalogCustomerItemResponse, type ManagerCustomerContractItemResponse, type ManagerCustomerDocumentItem } from '../client';
 import { useBelarusPhoneMask } from '../composables/useBelarusPhoneMask';
 import { useB2BLookup } from '../composables/useB2BLookup';
 import { dispatchCustomerUpdated } from '../utils/customer-events';
@@ -49,6 +49,11 @@ const serverErrors = ref<Record<string, string>>({});
 
 const documents = ref<ManagerCustomerDocumentItem[]>([]);
 const docsLoading = ref(false);
+const contracts = ref<ManagerCustomerContractItemResponse[]>([]);
+const contractsLoading = ref(false);
+const contractSaving = ref(false);
+const showContractForm = ref(false);
+const OPEN_CONTRACT_TEMPLATE_ID = '1x-pL1j9g-NzLSpPTLVYXSsmutGExPgfDqzi2VLq9thI';
 
 const phoneError = ref('');
 const emailError = ref('');
@@ -93,12 +98,34 @@ const customerId = computed(() => {
 });
 
 const returnTo = computed(() => new URLSearchParams(window.location.search).get('returnTo') || '');
+const shouldOpenContractForm = computed(() => new URLSearchParams(window.location.search).get('openContract') === '1');
 const backLabel = computed(() => (returnTo.value ? 'Назад' : 'К списку клиентов'));
 
 const formatDate = (iso?: string | null) => {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('ru-RU');
 };
+
+const formatDateOnly = (iso?: string | null) => {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('ru-RU');
+};
+
+const toInputDate = (date: Date) => date.toISOString().slice(0, 10);
+
+const buildDefaultContractForm = () => {
+  const start = new Date();
+  const end = new Date(start);
+  end.setFullYear(end.getFullYear() + 1);
+  return {
+    number: '',
+    contract_date: toInputDate(start),
+    valid_until: toInputDate(end),
+    template_id: OPEN_CONTRACT_TEMPLATE_ID,
+  };
+};
+
+const contractForm = ref(buildDefaultContractForm());
 
 const setToast = (message: string) => {
   toast.value = message;
@@ -180,6 +207,9 @@ const loadCustomer = async () => {
   try {
     customer.value = await api.getManagerCustomerDetail(customerId.value);
     resetFormFromCustomer();
+    if (shouldOpenContractForm.value && customer.value?.type === 'company') {
+      openContractForm();
+    }
   } catch (e) {
     console.error(e);
     error.value = `Не удалось загрузить карточку клиента: ${getApiErrorMessage(e)}`;
@@ -199,6 +229,66 @@ const loadCustomerDocs = async () => {
     console.error('Failed to load customer docs', e);
   } finally {
     docsLoading.value = false;
+  }
+};
+
+const loadCustomerContracts = async () => {
+  if (!customerId.value) return;
+  contractsLoading.value = true;
+  try {
+    const res = await ManagerContractsService.getManagerCustomerContracts(customerId.value);
+    contracts.value = res.items;
+  } catch (e) {
+    console.error('Failed to load customer contracts', e);
+  } finally {
+    contractsLoading.value = false;
+  }
+};
+
+const openContractForm = () => {
+  contractForm.value = buildDefaultContractForm();
+  showContractForm.value = true;
+};
+
+const syncContractValidUntil = () => {
+  if (!contractForm.value.contract_date) return;
+  const start = new Date(`${contractForm.value.contract_date}T00:00:00`);
+  if (Number.isNaN(start.getTime())) return;
+  const end = new Date(start);
+  end.setFullYear(end.getFullYear() + 1);
+  contractForm.value.valid_until = toInputDate(end);
+};
+
+const createContract = async () => {
+  if (!customerId.value) return;
+  contractSaving.value = true;
+  try {
+    const payload = {
+      number: contractForm.value.number.trim() || null,
+      template_id: contractForm.value.template_id.trim() || OPEN_CONTRACT_TEMPLATE_ID,
+      contract_date: contractForm.value.contract_date ? `${contractForm.value.contract_date}T00:00:00` : null,
+      valid_until: contractForm.value.valid_until ? `${contractForm.value.valid_until}T00:00:00` : null,
+    };
+    await ManagerContractsService.createManagerCustomerContract(customerId.value, payload);
+    showContractForm.value = false;
+    await loadCustomerContracts();
+    setToast('Договор создан');
+  } catch (e) {
+    setToast(`Не удалось создать договор: ${getApiErrorMessage(e)}`);
+  } finally {
+    contractSaving.value = false;
+  }
+};
+
+const archiveContract = async (contract: ManagerCustomerContractItemResponse) => {
+  if (!customerId.value) return;
+  if (!confirm(`Архивировать договор ${contract.number}?`)) return;
+  try {
+    await ManagerContractsService.archiveManagerCustomerContract(customerId.value, contract.id);
+    await loadCustomerContracts();
+    setToast('Договор архивирован');
+  } catch (e) {
+    setToast(`Не удалось архивировать договор: ${getApiErrorMessage(e)}`);
   }
 };
 
@@ -383,11 +473,13 @@ const deleteCustomer = async () => {
 watch(customerId, () => {
   void loadCustomer();
   void loadCustomerDocs();
+  void loadCustomerContracts();
 });
 
 onMounted(() => {
   void loadCustomer();
   void loadCustomerDocs();
+  void loadCustomerContracts();
 });
 </script>
 
@@ -527,6 +619,69 @@ onMounted(() => {
               </div>
             </template>
           </article>
+        </section>
+
+        <section v-if="!editMode && isCompany" class="mt-8 mb-6">
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 class="flex items-center gap-2 text-lg font-bold">
+              <span class="material-icons-round text-teal-500">contract</span>
+              Открытые договоры
+              <span v-if="contracts.length" class="flex h-6 min-w-6 items-center justify-center rounded-full bg-teal-500/20 px-2 text-xs text-teal-400">{{ contracts.length }}</span>
+            </h2>
+            <button class="btn-mini" type="button" @click="openContractForm">
+              Создать договор
+            </button>
+          </div>
+
+          <form v-if="showContractForm" class="mb-4 rounded-2xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-4" @submit.prevent="createContract">
+            <div class="grid gap-3 md:grid-cols-4">
+              <input v-model="contractForm.number" class="field-input" type="text" placeholder="Номер, если уже известен" />
+              <input v-model="contractForm.contract_date" class="field-input" type="date" @change="syncContractValidUntil" />
+              <input v-model="contractForm.valid_until" class="field-input" type="date" />
+              <input v-model="contractForm.template_id" class="field-input" type="text" placeholder="Template ID" />
+            </div>
+            <div class="mt-3 flex justify-end gap-2">
+              <button class="btn-mini-outline" type="button" @click="showContractForm = false">Отмена</button>
+              <button class="btn-mini" type="submit" :disabled="contractSaving">
+                {{ contractSaving ? 'Создаем...' : 'Создать' }}
+              </button>
+            </div>
+          </form>
+
+          <div v-if="contractsLoading" class="text-sm text-[var(--mv-text-muted)] p-5 border border-dashed border-[var(--mv-border)] rounded-2xl">
+            Загрузка договоров...
+          </div>
+          <div v-else-if="contracts.length" class="space-y-3">
+            <div v-for="contract in contracts" :key="contract.id" class="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 text-slate-700 shadow-sm dark:border-slate-700/50 dark:bg-[#1e293b] dark:text-slate-300">
+              <div class="flex items-center gap-4">
+                <div class="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-teal-600 dark:bg-slate-800 dark:text-teal-400">
+                  <span class="material-icons-round text-2xl">article</span>
+                </div>
+                <div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <p class="text-[15px] font-semibold leading-none text-slate-900 dark:text-white">{{ contract.number }}</p>
+                    <span class="rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider" :class="contract.status === 'active' ? 'bg-teal-500/10 text-teal-700 dark:text-teal-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'">
+                      {{ contract.status === 'active' ? 'активен' : 'архив' }}
+                    </span>
+                  </div>
+                  <p class="mt-2 text-[13px] leading-none text-slate-500 dark:text-slate-400">
+                    {{ formatDateOnly(contract.valid_from) }} - {{ formatDateOnly(contract.valid_until) }}
+                  </p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <a v-if="contract.edit_url" :href="contract.edit_url" target="_blank" class="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white" title="Открыть договор">
+                  <span class="material-icons-round text-[20px]">open_in_new</span>
+                </a>
+                <button v-if="contract.status === 'active'" class="flex h-10 w-10 items-center justify-center rounded-lg text-amber-400 hover:bg-amber-500/10 hover:text-amber-300 transition-colors" type="button" title="Архивировать" @click="archiveContract(contract)">
+                  <span class="material-icons-round text-[20px]">archive</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-sm text-[var(--mv-text-muted)] italic py-5 text-center rounded-2xl border border-dashed border-[var(--mv-border)]">
+            Открытые договоры пока не созданы
+          </div>
         </section>
 
         <section v-if="!editMode" class="mt-8 mb-6">

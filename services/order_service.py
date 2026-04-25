@@ -8,7 +8,8 @@ from sqlalchemy.orm import selectinload
 
 from crud.order import OrderDAO
 from crud.product import ProductDAO
-from models import Order, OrderProductLink, OrderServiceLink, Customer, CustomerBranch, CustomerType, OrderStatus, PaymentCurrency, Product, LeadSource, Service, OrderInstaller, OrderWorkStage
+from models import Order, OrderProductLink, OrderServiceLink, Customer, CustomerBranch, CustomerContract, CustomerType, OrderStatus, PaymentCurrency, Product, LeadSource, Service, OrderInstaller, OrderWorkStage
+from services.customer_contract_service import CustomerContractService
 from services.product_supply_metrics_service import ProductSupplyMetricsService
 
 logger = logging.getLogger(__name__)
@@ -1003,6 +1004,7 @@ class OrderService:
             "is_paid": bool(order.is_paid),
             "comment": order.comment,
             "delivery_address": order.delivery_address,
+            "customer_contract_id": order.customer_contract_id,
             "closing_result": order.closing_result,
             "reject_reason": order.reject_reason,
             "is_on_hold": bool(order.is_on_hold),
@@ -1019,6 +1021,7 @@ class OrderService:
             "target_currency_payments": float(order.target_currency_payments) if order.target_currency_payments is not None else 0.0,
             "customer": OrderService._map_customer_brief(order.customer),
             "customer_branch": OrderService._map_customer_branch_brief(order.customer_branch),
+            "customer_contract": CustomerContractService.to_order_brief(order.customer_contract),
             "installer_id": order.installers[0].installer_id if getattr(order, "installers", None) else None,
             "installer": {
                 "id": order.installers[0].installer.id,
@@ -1088,6 +1091,7 @@ class OrderService:
             .options(
                 selectinload(Order.customer),
                 selectinload(Order.customer_branch),
+                selectinload(Order.customer_contract),
                 selectinload(Order.product_links).selectinload(OrderProductLink.product),
                 selectinload(Order.service_links).selectinload(OrderServiceLink.service),
                 selectinload(Order.installers).selectinload(OrderInstaller.installer),
@@ -1166,6 +1170,7 @@ class OrderService:
             .options(
                 selectinload(Order.customer),
                 selectinload(Order.customer_branch),
+                selectinload(Order.customer_contract),
                 selectinload(Order.product_links).selectinload(OrderProductLink.product),
                 selectinload(Order.service_links).selectinload(OrderServiceLink.service),
                 selectinload(Order.installers).selectinload(OrderInstaller.installer),
@@ -1358,6 +1363,10 @@ class OrderService:
             linked_branch = await session.get(CustomerBranch, order.customer_branch_id)
             if linked_branch and int(linked_branch.customer_id) != int(order.customer_id or 0):
                 order.customer_branch_id = None
+        if customer_id_changed and "customer_contract_id" not in fields_set and order.customer_contract_id is not None:
+            linked_contract = await session.get(CustomerContract, order.customer_contract_id)
+            if linked_contract and int(linked_contract.customer_id) != int(order.customer_id or 0):
+                order.customer_contract_id = None
 
         if "customer_branch_id" in fields_set:
             if payload.customer_branch_id is None:
@@ -1371,6 +1380,21 @@ class OrderService:
                 if int(branch.customer_id) != int(order.customer_id):
                     raise ValueError("Customer branch does not belong to selected customer")
                 order.customer_branch_id = int(branch.id)
+
+        if "customer_contract_id" in fields_set:
+            if payload.customer_contract_id is None:
+                order.customer_contract_id = None
+            else:
+                if order.customer_id is None:
+                    raise ValueError("Cannot set customer contract without customer")
+                contract = await session.get(CustomerContract, payload.customer_contract_id)
+                if not contract:
+                    raise ValueError("Customer contract not found")
+                if int(contract.customer_id) != int(order.customer_id):
+                    raise ValueError("Customer contract does not belong to selected customer")
+                if contract.status != CustomerContractService.ACTIVE_STATUS:
+                    raise ValueError("Customer contract is not active")
+                order.customer_contract_id = int(contract.id)
 
         customer_field_map = {
             "customer_name": "name",

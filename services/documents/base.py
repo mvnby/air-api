@@ -39,6 +39,7 @@ class BaseDocumentStrategy(ABC):
     async def fetch_order(self) -> None:
         query = select(Order).where(Order.id == self.order_id).options(
             selectinload(Order.customer),
+            selectinload(Order.customer_contract),
             selectinload(Order.product_links).selectinload(OrderProductLink.product),
             selectinload(Order.service_links).selectinload(OrderServiceLink.service)
         )
@@ -82,16 +83,22 @@ class BaseDocumentStrategy(ABC):
         except Exception:
             return str(amount)
 
-    async def _prepare_base_variables(self, doc_number: Optional[str] = None, doc_type: Optional[str] = None) -> Dict[str, str]:
+    async def _prepare_base_variables(
+        self,
+        doc_number: Optional[str] = None,
+        doc_type: Optional[str] = None,
+        document_date: Optional[datetime] = None,
+    ) -> Dict[str, str]:
         if not self.order:
             raise ValueError("Order not fetched")
             
         order = self.order
         c = order.customer
+        effective_date = document_date or datetime.now()
 
         replacements = {
             "{{order_id}}": str(order.id),
-            "{{date}}": datetime.now().strftime("%d.%m.%Y"),
+            "{{date}}": effective_date.strftime("%d.%m.%Y"),
             "{{total_amount}}": f"{order.total_amount:.2f}",
             "{{total_amount_in_words}}": self._amount_in_words(order.total_amount), 
             
@@ -110,12 +117,27 @@ class BaseDocumentStrategy(ABC):
             
             # Contract info - will be populated after fetching contract document
             "{{contract_name}}": "-",
-            "{{contract_date}}": order.contract_date.strftime("%d.%m.%Y") if order.contract_date else "-"
+            "{{contract_number}}": "-",
+            "{{contract_date}}": order.contract_date.strftime("%d.%m.%Y") if order.contract_date else "-",
+            "{{contract_valid_from}}": order.contract_date.strftime("%d.%m.%Y") if order.contract_date else "-",
+            "{{contract_valid_until}}": "-",
+            "{{act_number}}": "1",
+            "{{act_sequence_number}}": "1",
         }
-        
+
+        if getattr(order, "customer_contract", None):
+            contract = order.customer_contract
+            replacements["{{contract_name}}"] = contract.number
+            replacements["{{contract_number}}"] = contract.number
+            replacements["{{contract_date}}"] = contract.valid_from.strftime("%d.%m.%Y") if contract.valid_from else "-"
+            replacements["{{contract_valid_from}}"] = contract.valid_from.strftime("%d.%m.%Y") if contract.valid_from else "-"
+            replacements["{{contract_valid_until}}"] = contract.valid_until.strftime("%d.%m.%Y") if contract.valid_until else "-"
         # If we're generating a contract and have doc_number, use it for contract_name
-        if doc_type == "contract" and doc_number:
+        elif doc_type == "contract" and doc_number:
             replacements["{{contract_name}}"] = doc_number
+            replacements["{{contract_number}}"] = doc_number
+            replacements["{{contract_date}}"] = effective_date.strftime("%d.%m.%Y")
+            replacements["{{contract_valid_from}}"] = effective_date.strftime("%d.%m.%Y")
         else:
             # Fetch contract document if exists to get contract number
             from models import OrderDocument
@@ -129,15 +151,20 @@ class BaseDocumentStrategy(ABC):
             
             if contract_doc:
                 replacements["{{contract_name}}"] = contract_doc.number
+                replacements["{{contract_number}}"] = contract_doc.number
                 # If contract exists and order.contract_date is not set, use contract document date
                 if not order.contract_date:
                     replacements["{{contract_date}}"] = contract_doc.date.strftime("%d.%m.%Y")
+                    replacements["{{contract_valid_from}}"] = contract_doc.date.strftime("%d.%m.%Y")
 
         # Technical Meta
         if order.technical_meta and isinstance(order.technical_meta, dict):
             for key, value in order.technical_meta.items():
                 replacements[f"{{{{meta_{key}}}}}"] = str(value)
 
+        return self._append_customer_variables(replacements, c)
+
+    def _append_customer_variables(self, replacements: Dict[str, str], c: Any) -> Dict[str, str]:
         # Customer Real Data
         if c:
             if c.type == CustomerType.company and c.full_legal_name:
@@ -162,5 +189,5 @@ class BaseDocumentStrategy(ABC):
         return replacements
 
     @abstractmethod
-    async def generate(self, doc_type: str) -> str:
+    async def generate(self, doc_type: str, **kwargs) -> str:
         pass

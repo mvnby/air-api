@@ -1,10 +1,12 @@
 import json
 from datetime import datetime
 from typing import Optional, List
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
+from sqlalchemy.orm import selectinload
 
-from models import OrderDocument, Order, GlobalConfig
+from models import CustomerType, OrderDocument, Order, GlobalConfig
 from services.google_service import get_google_service
 from services.documents.base import TEMPLATES, DOC_NAMES, BaseDocumentStrategy
 from services.documents.factory import DocumentFactory
@@ -51,6 +53,7 @@ class DocumentService:
         order_id: int,
         doc_type: str = "contract",
         template_id: Optional[str] = None,
+        contract_date: Optional[datetime] = None,
     ) -> OrderDocument:
         """
         Создает документ или возвращает существующий.
@@ -77,7 +80,13 @@ class DocumentService:
             return existing_doc
         
         # 2. Создаем новый документ
-        return await DocumentService._create_new_document(session, order_id, doc_type, template_id=template_id)
+        return await DocumentService._create_new_document(
+            session,
+            order_id,
+            doc_type,
+            template_id=template_id,
+            contract_date=contract_date,
+        )
 
     @staticmethod
     async def generate_manager_order_document(
@@ -85,6 +94,7 @@ class DocumentService:
         order_id: int,
         doc_type: str,
         template_id: Optional[str] = None,
+        contract_date: Optional[datetime] = None,
     ) -> dict:
         if doc_type not in DocumentService.ALLOWED_DOC_TYPES:
             raise ValueError(f"Unsupported document type: {doc_type}")
@@ -94,6 +104,7 @@ class DocumentService:
             order_id=order_id,
             doc_type=doc_type,
             template_id=template_id,
+            contract_date=contract_date,
         )
         return {
             "doc_id": doc.id,
@@ -244,17 +255,30 @@ class DocumentService:
         order_id: int,
         doc_type: str,
         template_id: Optional[str] = None,
+        contract_date: Optional[datetime] = None,
     ) -> OrderDocument:
         """Создает новый документ в Google Drive и сохраняет в БД"""
         
         if doc_type in ["act", "tn2", "ttn1"]:
-            contract_query = select(OrderDocument).where(
-                OrderDocument.order_id == order_id,
-                OrderDocument.doc_type == "contract"
+            order_result = await session.execute(
+                select(Order)
+                .where(Order.id == order_id)
+                .options(selectinload(Order.customer), selectinload(Order.customer_contract))
             )
-            result = await session.execute(contract_query)
-            if not result.scalars().first():
-                raise ValueError("Невозможно создать акт/накладную: отсутствует договор")
+            order = order_result.scalars().first()
+            if not order:
+                raise ValueError("Order not found")
+            if order.customer and order.customer.type == CustomerType.company:
+                if not order.customer_contract_id:
+                    raise ValueError("Невозможно создать акт/накладную: выберите открытый договор клиента")
+            else:
+                contract_query = select(OrderDocument).where(
+                    OrderDocument.order_id == order_id,
+                    OrderDocument.doc_type == "contract"
+                )
+                result = await session.execute(contract_query)
+                if not result.scalars().first():
+                    raise ValueError("Невозможно создать акт/накладную: отсутствует договор")
 
         # 1. Получаем template_id (используем переданный или дефолтный)
         if not template_id:
@@ -263,7 +287,10 @@ class DocumentService:
             raise ValueError(f"Unknown document type: {doc_type}")
         
         # 2. Генерируем номер документа
-        doc_number = await DocumentService._get_next_number(session, doc_type)
+        effective_doc_date = contract_date or datetime.now()
+        if effective_doc_date.tzinfo is not None:
+            effective_doc_date = effective_doc_date.replace(tzinfo=None)
+        doc_number = await DocumentService._get_next_number(session, doc_type, base_date=effective_doc_date)
         
         # 3. Формируем название документа
         doc_name = DOC_NAMES.get(doc_type, doc_type.upper())
@@ -272,7 +299,18 @@ class DocumentService:
         # 4. Получаем стратегию для подготовки данных
         strategy = DocumentFactory.get_strategy(doc_type, session, order_id)
         await strategy.fetch_order()
-        replacements = await strategy._prepare_base_variables(doc_number=doc_number, doc_type=doc_type)
+        if doc_type == "contract" and strategy.order:
+            strategy.order.contract_date = effective_doc_date
+            session.add(strategy.order)
+        replacements = await strategy._prepare_base_variables(
+            doc_number=doc_number,
+            doc_type=doc_type,
+            document_date=effective_doc_date,
+        )
+        if doc_type == "act":
+            act_number = await DocumentService._get_act_number_for_order_contract(session, strategy.order)
+            replacements["{{act_number}}"] = str(act_number)
+            replacements["{{act_sequence_number}}"] = str(act_number)
         
         # Добавляем номер документа в замены
         replacements["{{doc_number}}"] = doc_number
@@ -290,7 +328,12 @@ class DocumentService:
             from services.documents.logistics import LogisticsSheetStrategy
             if isinstance(strategy, LogisticsSheetStrategy):
                 # Используем старый метод generate для Sheets
-                edit_url = await strategy.generate(doc_type)
+                edit_url = await strategy.generate(
+                    doc_type,
+                    template_id=template_id,
+                    doc_number=doc_number,
+                    document_date=effective_doc_date,
+                )
                 
                 # Извлекаем file_id из URL
                 # URL формат: https://docs.google.com/spreadsheets/d/{file_id}/edit
@@ -328,7 +371,7 @@ class DocumentService:
             order_id=order_id,
             doc_type=doc_type,
             number=doc_number,
-            date=datetime.now(),
+            date=effective_doc_date,
             google_file_id=file_id,
             google_edit_url=edit_url
         )
@@ -348,12 +391,12 @@ class DocumentService:
         return new_doc
     
     @staticmethod
-    async def _get_next_number(session: AsyncSession, doc_type: str) -> str:
+    async def _get_next_number(session: AsyncSession, doc_type: str, base_date: Optional[datetime] = None) -> str:
         """
         Генерирует следующий номер документа.
         Формат: Д-2024-001 (для договоров), КП-2024-001 (для КП), и т.д.
         """
-        current_year = datetime.now().year
+        current_year = (base_date or datetime.now()).year
         
         # Получаем последний документ этого типа за текущий год
         query = select(OrderDocument).where(
@@ -391,6 +434,23 @@ class DocumentService:
             next_num = 1
         
         return f"{prefix}-{current_year}-{next_num:03d}"
+
+    @staticmethod
+    async def _get_act_number_for_order_contract(session: AsyncSession, order: Optional[Order]) -> int:
+        if not order or not order.customer_contract_id:
+            return 1
+
+        query = (
+            select(func.count(OrderDocument.id))
+            .join(Order, OrderDocument.order_id == Order.id)
+            .where(
+                OrderDocument.doc_type == "act",
+                Order.customer_contract_id == order.customer_contract_id,
+            )
+        )
+        result = await session.execute(query)
+        existing_count = int(result.scalar_one() or 0)
+        return existing_count + 1
     
     @staticmethod
     def _amount_in_words(amount: float) -> str:

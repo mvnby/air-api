@@ -221,6 +221,7 @@ class Order(SQLModel, table=True):
 
     customer_id: Optional[int] = Field(default=None, foreign_key="customer.id")
     customer_branch_id: Optional[int] = Field(default=None, foreign_key="customer_branches.id", index=True)
+    customer_contract_id: Optional[int] = Field(default=None, foreign_key="customer_contract.id", index=True)
 
     delivery_address: Optional[str] = None
 
@@ -282,6 +283,7 @@ class Order(SQLModel, table=True):
 
     customer: Optional["Customer"] = Relationship(back_populates="orders")
     customer_branch: Optional["CustomerBranch"] = Relationship(back_populates="orders")
+    customer_contract: Optional["CustomerContract"] = Relationship(back_populates="orders")
 
     product_links: List[OrderProductLink] = Relationship(
         back_populates="order",

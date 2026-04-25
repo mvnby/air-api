@@ -131,15 +131,21 @@ async def generate_manager_order_document(
     order_id: int,
     doc_type: str,
     template_id: Optional[str] = Query(None, description="Google Drive template file ID"),
+    contract_date: Optional[str] = Query(None, description="Document/contract date as ISO datetime"),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
 ):
     try:
+        parsed_contract_date = None
+        if contract_date:
+            from datetime import datetime
+            parsed_contract_date = datetime.fromisoformat(contract_date.replace("Z", "+00:00"))
         return await DocumentService.generate_manager_order_document(
             session=session,
             order_id=order_id,
             doc_type=doc_type,
             template_id=template_id,
+            contract_date=parsed_contract_date,
         )
     except ValueError as exc:
         raise manager_http_error(

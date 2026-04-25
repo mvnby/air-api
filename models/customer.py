@@ -33,6 +33,13 @@ class Customer(SQLModel, table=True):
     is_archived: bool = Field(default=False, index=True)
 
     orders: List["Order"] = Relationship(back_populates="customer")
+    contracts: List["CustomerContract"] = Relationship(
+        back_populates="customer",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin",
+        },
+    )
     branches: List["CustomerBranch"] = Relationship(
         back_populates="customer",
         sa_relationship_kwargs={
@@ -43,6 +50,31 @@ class Customer(SQLModel, table=True):
 
     def __str__(self):
         return self.name
+
+
+class CustomerContract(SQLModel, table=True):
+    __tablename__ = "customer_contract"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    customer_id: int = Field(foreign_key="customer.id", index=True)
+
+    number: str = Field(index=True)
+    valid_from: datetime = Field(default_factory=datetime.now, index=True)
+    valid_until: datetime = Field(index=True)
+    status: str = Field(default="active", sa_column=Column(String, index=True))
+
+    template_id: Optional[str] = None
+    google_file_id: Optional[str] = None
+    google_edit_url: Optional[str] = None
+
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
+
+    customer: Optional["Customer"] = Relationship(back_populates="contracts")
+    orders: List["Order"] = Relationship(back_populates="customer_contract")
+
+    def __str__(self):
+        return f"Договор {self.number}"
 
 
 class CustomerBranch(SQLModel, table=True):

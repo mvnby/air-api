@@ -54,6 +54,10 @@ const formatDate = (dateStr: string) => {
   const d = new Date(dateStr);
   return d.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' });
 };
+
+const openCustomer = (customerId: number) => {
+  navigate(`/manager/customers/profile?customerId=${customerId}&returnTo=${encodeURIComponent('/manager')}`);
+};
 </script>
 
 
@@ -106,6 +110,34 @@ const formatDate = (dateStr: string) => {
           <div class="text-3xl font-bold text-teal-600 dark:text-[#007f80]">
             {{ stats.new_leads_count }}
           </div>
+        </div>
+      </div>
+    </section>
+
+    <section v-if="stats && stats.expiring_contracts?.length" class="mb-10">
+      <h2 class="text-xl font-semibold mb-4 text-slate-800 dark:text-gray-300">Договоры к продлению</h2>
+      <div class="flex flex-col gap-3">
+        <div
+          v-for="contract in stats.expiring_contracts"
+          :key="contract.contract_id"
+          class="bg-white dark:bg-[#1e293b] p-4 rounded-xl flex items-center justify-between border border-amber-200 dark:border-amber-500/30 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-sm"
+        >
+          <button class="text-left" type="button" @click="openCustomer(contract.customer_id)">
+            <div class="font-medium text-slate-800 dark:text-gray-200 mb-1">
+              {{ contract.customer_name }} · {{ contract.number }}
+            </div>
+            <div class="text-sm text-amber-600 dark:text-amber-400 flex items-center gap-1">
+              <span class="material-icons-round text-[16px]">event_busy</span>
+              до {{ formatDate(contract.valid_until) }}
+            </div>
+          </button>
+          <a
+            v-if="contract.edit_url"
+            :href="contract.edit_url"
+            target="_blank"
+            class="material-icons-round text-slate-400 dark:text-gray-500 hover:text-teal-500"
+            title="Открыть договор"
+          >open_in_new</a>
         </div>
       </div>
     </section>

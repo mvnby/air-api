@@ -27,6 +27,7 @@ export type { CatalogImportResultResponse } from './models/CatalogImportResultRe
 export type { CatalogResponse } from './models/CatalogResponse';
 export type { CommonGalleryImageResponse } from './models/CommonGalleryImageResponse';
 export type { CustomerPayload } from './models/CustomerPayload';
+export type { DashboardContractExpiry } from './models/DashboardContractExpiry';
 export type { DashboardStatsResponse } from './models/DashboardStatsResponse';
 export type { DashboardTouchpoint } from './models/DashboardTouchpoint';
 export type { DocumentTemplateItem } from './models/DocumentTemplateItem';
@@ -70,6 +71,10 @@ export type { ManagerCustomerBranchCreatePayload } from './models/ManagerCustome
 export type { ManagerCustomerBranchItemResponse } from './models/ManagerCustomerBranchItemResponse';
 export type { ManagerCustomerBranchListResponse } from './models/ManagerCustomerBranchListResponse';
 export type { ManagerCustomerBranchUpdatePayload } from './models/ManagerCustomerBranchUpdatePayload';
+export type { ManagerCustomerContractCreatePayload } from './models/ManagerCustomerContractCreatePayload';
+export type { ManagerCustomerContractItemResponse } from './models/ManagerCustomerContractItemResponse';
+export type { ManagerCustomerContractListResponse } from './models/ManagerCustomerContractListResponse';
+export type { ManagerCustomerContractUpdatePayload } from './models/ManagerCustomerContractUpdatePayload';
 export type { ManagerCustomerDocumentItem } from './models/ManagerCustomerDocumentItem';
 export type { ManagerCustomerDocumentListResponse } from './models/ManagerCustomerDocumentListResponse';
 export type { ManagerCustomerUpdatePayload } from './models/ManagerCustomerUpdatePayload';
@@ -137,6 +142,7 @@ export type { ManagerTariffUpdatePayload } from './models/ManagerTariffUpdatePay
 export type { Meta } from './models/Meta';
 export type { OrderCustomerBranchBrief } from './models/OrderCustomerBranchBrief';
 export type { OrderCustomerBrief } from './models/OrderCustomerBrief';
+export type { OrderCustomerContractBrief } from './models/OrderCustomerContractBrief';
 export type { OrderPayload } from './models/OrderPayload';
 export type { OrderProductLineResponse } from './models/OrderProductLineResponse';
 export type { OrderResponse } from './models/OrderResponse';
@@ -201,6 +207,7 @@ export { ManagerService } from './services/ManagerService';
 export { ManagerBackupsService } from './services/ManagerBackupsService';
 export { ManagerBrandsService } from './services/ManagerBrandsService';
 export { ManagerCalendarService } from './services/ManagerCalendarService';
+export { ManagerContractsService } from './services/ManagerContractsService';
 export { ManagerCrmService } from './services/ManagerCrmService';
 export { ManagerDashboardService } from './services/ManagerDashboardService';
 export { ManagerDocsService } from './services/ManagerDocsService';
