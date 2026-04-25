@@ -11,7 +11,7 @@ from .common import (
     PaymentCurrency,
     PaymentType,
 )
-from .customer import Customer, CustomerBranch, Lead
+from .customer import Customer, CustomerBranch, CustomerContract, Lead
 from .brand import Brand, ProductSeries
 from .cart import Cart, CartItem
 from .content import Article, GlobalConfig
@@ -58,6 +58,7 @@ __all__ = [
     "Brand",
     "Customer",
     "CustomerBranch",
+    "CustomerContract",
     "CustomerType",
     "Favorite",
     "GlobalConfig",

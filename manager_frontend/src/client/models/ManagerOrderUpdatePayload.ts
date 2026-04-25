@@ -28,6 +28,7 @@ export type ManagerOrderUpdatePayload = {
     standard_install_kit_issued?: (boolean | null);
     customer_id?: (number | null);
     customer_branch_id?: (number | null);
+    customer_contract_id?: (number | null);
     customer_type?: (string | null);
     customer_name?: (string | null);
     customer_phone?: (string | null);

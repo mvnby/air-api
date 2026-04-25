@@ -1,8 +1,9 @@
 import pytest
+from datetime import datetime, timedelta
 from sqlmodel import select
 
 from core.config import settings
-from models import Customer, CustomerBranch, CustomerType, Order, OrderStatus
+from models import Customer, CustomerBranch, CustomerContract, CustomerType, Order, OrderStatus
 
 
 async def _auth_headers(async_client):
@@ -202,6 +203,67 @@ async def test_manager_customer_branch_crud(async_client, db):
 
     branch_after = await db.get(CustomerBranch, branch_id)
     assert branch_after is None
+
+
+@pytest.mark.asyncio
+async def test_manager_customer_contract_create_and_dashboard_notice(async_client, db, monkeypatch):
+    headers = await _auth_headers(async_client)
+    captured = {}
+
+    class FakeGoogleService:
+        def copy_template(self, template_id, title):
+            captured["template_id"] = template_id
+            captured["title"] = title
+            return {"file_id": "fake-file-id", "edit_url": "https://docs.google.com/document/d/fake-file-id/edit"}
+
+        def replace_placeholders(self, file_id, replacements):
+            captured["file_id"] = file_id
+            captured["replacements"] = replacements
+
+    monkeypatch.setattr("services.customer_contract_service.get_google_service", lambda: FakeGoogleService())
+
+    customer = Customer(
+        name="ООО Договор",
+        phone="+375291223344",
+        type=CustomerType.company,
+        inn="123456789",
+        full_legal_name="ООО Договор",
+        legal_address="Минск, Победителей 1",
+    )
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    create_resp = await async_client.post(
+        f"/api/manager/customers/{customer.id}/contracts",
+        headers=headers,
+        json={
+            "contract_date": "2026-01-15T00:00:00",
+            "valid_until": "2027-01-15T00:00:00",
+        },
+    )
+    assert create_resp.status_code == 200
+    created = create_resp.json()
+    assert created["number"].startswith("ОД-2026-")
+    assert created["status"] == "active"
+    assert created["edit_url"].endswith("/edit")
+    assert captured["template_id"] == "1x-pL1j9g-NzLSpPTLVYXSsmutGExPgfDqzi2VLq9thI"
+    assert captured["replacements"]["{{contract_valid_until}}"] == "15.01.2027"
+    assert captured["replacements"]["{{contract_number}}"] == created["number"]
+
+    list_resp = await async_client.get(f"/api/manager/customers/{customer.id}/contracts", headers=headers)
+    assert list_resp.status_code == 200
+    assert list_resp.json()["items"][0]["number"] == created["number"]
+
+    contract = await db.get(CustomerContract, created["id"])
+    contract.valid_until = datetime.now() + timedelta(days=7)
+    db.add(contract)
+    await db.commit()
+
+    dashboard_resp = await async_client.get("/api/manager/dashboard/stats", headers=headers)
+    assert dashboard_resp.status_code == 200
+    notices = dashboard_resp.json()["expiring_contracts"]
+    assert any(item["contract_id"] == created["id"] for item in notices)
 
 
 @pytest.mark.asyncio

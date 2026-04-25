@@ -8,6 +8,7 @@ import DealExecutionTab from './DealExecutionTab.vue';
 import type {
   ManagerOrderDetailResponse,
   ManagerOrderUpdatePayload,
+  ManagerCustomerContractItemResponse,
   ManagerCustomerBranchItemResponse,
   ManagerServiceEstimateResponse,
   OrderProductLineResponse,
@@ -18,7 +19,7 @@ import type {
   PaymentCurrency,
   FxRateResponse,
 } from '../../client';
-import { ManagerDocsService, ManagerOrdersService, ManagerSettingsService } from '../../client';
+import { ManagerDocsService, ManagerOrdersService, ManagerContractsService, ManagerSettingsService } from '../../client';
 import { formatMoney } from './order-utils';
 import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../../utils/datetime';
 
@@ -406,7 +407,8 @@ const handleFileUpload = async (event: Event) => {
   }
 };
 
-const hasContract = computed(() => documents.value.some(d => d.doc_type === 'contract'));
+const isCompanyOrder = computed(() => props.order?.customer?.type === 'company' || !!props.order?.customer?.inn);
+const hasContract = computed(() => isCompanyOrder.value ? !!selectedCustomerContractId.value : documents.value.some(d => d.doc_type === 'contract'));
 
 const DOCUMENT_TYPES = [
   { type: 'contract', label: 'Договор' },
@@ -419,6 +421,13 @@ const DOCUMENT_TYPES = [
 
 const contractTemplates = ref<{id: string; name: string}[]>([]);
 const selectedContractTemplateId = ref<string>('');
+const documentDate = ref(new Date().toISOString().slice(0, 10));
+const customerContracts = ref<ManagerCustomerContractItemResponse[]>([]);
+const selectedCustomerContractId = ref<number | null>(null);
+const datedDocumentTypes = new Set(['contract', 'act', 'tn2', 'ttn1']);
+const getDocumentDateForType = (type: string) => (
+  datedDocumentTypes.has(type) && documentDate.value ? `${documentDate.value}T00:00:00` : undefined
+);
 
 const loadContractTemplates = async () => {
   try {
@@ -441,11 +450,47 @@ const loadDocuments = async (orderId: number) => {
   }
 };
 
-const generateDocument = async (type: string, templateId?: string) => {
+const loadCustomerContracts = async (customerId?: number, selectedId?: number | null) => {
+  if (!customerId) {
+    customerContracts.value = [];
+    selectedCustomerContractId.value = null;
+    return;
+  }
+  try {
+    const res = await ManagerContractsService.getManagerCustomerContracts(customerId);
+    customerContracts.value = res.items.filter((contract) => contract.status === 'active');
+    selectedCustomerContractId.value = selectedId || null;
+  } catch (error) {
+    console.error('Failed to load customer contracts', error);
+  }
+};
+
+const openCustomerProfileForContract = () => {
+  const customerId = props.order?.customer?.id;
+  if (!customerId) return;
+  const currentPath = `${window.location.pathname}${window.location.search}`;
+  const target = `/manager/customers/profile?customerId=${customerId}&openContract=1&returnTo=${encodeURIComponent(currentPath)}`;
+  window.history.pushState({}, '', target);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+};
+
+const updateCustomerContract = async () => {
+  if (!props.order?.id) return;
+  try {
+    await ManagerOrdersService.patchManagerOrder(props.order.id, {
+      customer_contract_id: selectedCustomerContractId.value,
+    });
+    emit('reload', props.order.id);
+  } catch (error) {
+    setToast(`Ошибка выбора договора: ${getApiErrorMessage(error)}`, 'error');
+  }
+};
+
+const generateDocument = async (type: string, templateId?: string, documentDate?: string) => {
   if (!props.order?.id) return;
   isGeneratingDoc.value = true;
   try {
-    const res = await ManagerOrdersService.generateManagerOrderDocument(props.order.id, type, templateId);
+    const res = await ManagerOrdersService.generateManagerOrderDocument(props.order.id, type, templateId, documentDate);
     window.open(res.edit_url, '_blank');
     await loadDocuments(props.order.id);
     setToast('Документ создан', 'success');
@@ -822,12 +867,15 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   // Also refresh list to be sure
   loadDocuments(order.id);
   loadContractTemplates();
+  selectedCustomerContractId.value = order.customer_contract_id || null;
 
   const customerId = order.customer?.id;
   if (customerId) {
     await loadCustomerBranches(customerId, order.customer_branch?.id ?? null);
+    await loadCustomerContracts(customerId, order.customer_contract_id ?? null);
   } else {
     resetCustomerBranches();
+    await loadCustomerContracts(undefined, null);
   }
 
   productLookupById.value = {};
@@ -1703,27 +1751,36 @@ watch(
 
             <div
                v-if="docDropdownOpen"
-               class="absolute right-[100px] top-full z-10 mt-2 w-56 rounded-xl border border-slate-700 bg-slate-800 p-1 shadow-lg"
+               class="absolute right-[100px] top-full z-10 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-1 text-slate-800 shadow-xl dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
             >
               <!-- Contract template selector -->
-              <div v-if="contractTemplates.length > 1" class="px-3 py-2 border-b border-slate-700">
-                <label class="text-[11px] uppercase tracking-wide text-slate-400 mb-1 block">Шаблон договора</label>
+              <div v-if="contractTemplates.length > 1" class="border-b border-slate-200 px-3 py-2 dark:border-slate-700">
+                <label class="mb-1 block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Шаблон договора</label>
                 <select
                   v-model="selectedContractTemplateId"
-                  class="w-full rounded-lg border border-slate-600 bg-slate-700 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/50"
+                  class="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
                   style="border-radius: 12px"
                 >
                   <option v-for="t in contractTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
                 </select>
               </div>
+              <div class="border-b border-slate-200 px-3 py-2 dark:border-slate-700">
+                <label class="mb-1 block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Дата документа</label>
+                <input
+                  v-model="documentDate"
+                  type="date"
+                  class="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
+                  style="border-radius: 12px"
+                />
+              </div>
 
               <button
                 v-for="dtype in DOCUMENT_TYPES"
                 :key="dtype.type"
-                class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-700 disabled:opacity-50 disabled:hover:bg-transparent"
+                class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:text-slate-400 disabled:opacity-70 disabled:hover:bg-transparent dark:text-slate-200 dark:hover:bg-slate-700 dark:disabled:text-slate-500"
                 :disabled="(dtype.type === 'act' || dtype.type === 'ttn1' || dtype.type === 'tn2') && !hasContract"
                 :title="(dtype.type === 'act' || dtype.type === 'ttn1' || dtype.type === 'tn2') && !hasContract ? 'Сначала создайте договор' : ''"
-                @click="generateDocument(dtype.type, dtype.type === 'contract' ? selectedContractTemplateId || undefined : undefined); docDropdownOpen = false"
+                @click="generateDocument(dtype.type, dtype.type === 'contract' ? selectedContractTemplateId || undefined : undefined, getDocumentDateForType(dtype.type)); docDropdownOpen = false"
               >
                 {{ dtype.label }}
                 <span v-if="(dtype.type === 'act' || dtype.type === 'ttn1' || dtype.type === 'tn2') && !hasContract" class="material-icons-round text-[16px] text-amber-500">lock</span>
@@ -1732,22 +1789,50 @@ watch(
           </div>
         </div>
 
+        <div v-if="isCompanyOrder" class="mb-3 rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-slate-700/50 dark:bg-slate-900/40 dark:shadow-none">
+          <label class="mb-1 block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Открытый договор клиента</label>
+          <select
+            v-model="selectedCustomerContractId"
+            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+            @change="updateCustomerContract"
+          >
+            <option :value="null">Выберите договор</option>
+            <option v-for="contract in customerContracts" :key="contract.id" :value="contract.id">
+              {{ contract.number }} · до {{ new Date(contract.valid_until).toLocaleDateString('ru-RU') }}
+            </option>
+          </select>
+          <div
+            v-if="customerContracts.length === 0"
+            class="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300"
+          >
+            <span>У клиента нет открытых договоров.</span>
+            <button
+              type="button"
+              class="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500/50"
+              @click="openCustomerProfileForContract"
+            >
+              Создать открытый договор
+            </button>
+          </div>
+          <p v-else-if="!selectedCustomerContractId" class="mt-2 text-xs text-amber-600 dark:text-amber-400">Для актов и накладных нужно выбрать открытый договор.</p>
+        </div>
+
         <div v-if="documents.length" class="space-y-3 mt-3">
-            <div v-for="doc in documents" :key="doc.id" class="flex items-center justify-between rounded-xl border border-slate-700/50 bg-[#1e293b] p-3 text-slate-300">
+            <div v-for="doc in documents" :key="doc.id" class="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3 text-slate-700 shadow-sm dark:border-slate-700/50 dark:bg-[#1e293b] dark:text-slate-300 dark:shadow-none">
                 <div class="flex items-center gap-3">
-                    <div class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 text-teal-400">
+                    <div class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-teal-600 dark:bg-slate-800 dark:text-teal-400">
                       <span class="material-icons-round text-xl">description</span>
                     </div>
                     <div>
-                        <p class="text-sm font-medium text-white">{{ doc.number || doc.doc_type }}</p>
-                        <p class="text-xs text-slate-400">{{ new Date(doc.date).toLocaleDateString() }} · <span class="uppercase">{{ doc.doc_type }}</span></p>
+                        <p class="text-sm font-medium text-slate-900 dark:text-white">{{ doc.number || doc.doc_type }}</p>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">{{ new Date(doc.date).toLocaleDateString() }} · <span class="uppercase">{{ doc.doc_type }}</span></p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    <a :href="doc.edit_url" target="_blank" class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white" title="Редактировать">
+                    <a :href="doc.edit_url" target="_blank" class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white" title="Редактировать">
                         <span class="material-icons-round text-[18px]">edit</span>
                     </a>
-                    <button class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white disabled:opacity-50" :disabled="processingDocId === doc.id" @click="downloadDocument(doc)" title="Скачать PDF">
+                    <button class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white" :disabled="processingDocId === doc.id" @click="downloadDocument(doc)" title="Скачать PDF">
                         <span class="material-icons-round text-[18px]">download</span>
                     </button>
                     <button class="flex h-8 w-8 items-center justify-center rounded-lg text-red-400 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50" :disabled="processingDocId === doc.id" @click="deleteDocument(doc.id)" title="Удалить">
@@ -1756,7 +1841,7 @@ watch(
                 </div>
             </div>
         </div>
-        <div v-else class="text-sm text-slate-500 italic py-3 text-center rounded-xl border border-dashed border-slate-700">
+        <div v-else class="rounded-xl border border-dashed border-slate-300 py-3 text-center text-sm italic text-slate-500 dark:border-slate-700">
             Нет сформированных документов
         </div>
       </section>

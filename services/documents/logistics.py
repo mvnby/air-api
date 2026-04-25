@@ -1,4 +1,5 @@
-from typing import List, Dict, Tuple
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple
 from num2words import num2words
 
 from services.google_service import get_google_service
@@ -7,12 +8,23 @@ from services.documents.base import BaseDocumentStrategy, TEMPLATES, DOC_NAMES
 class LogisticsSheetStrategy(BaseDocumentStrategy):
     """Strategy for TN-2 and TTN-1 using Google Sheets API."""
 
-    async def generate(self, doc_type: str) -> str:
+    async def generate(
+        self,
+        doc_type: str,
+        *,
+        template_id: Optional[str] = None,
+        doc_number: Optional[str] = None,
+        document_date: Optional[datetime] = None,
+    ) -> str:
         await self.fetch_order()
         if not self.order: return "Order not found"
 
-        template_id = TEMPLATES.get(doc_type)
-        replacements = await self._prepare_base_variables(doc_number=None, doc_type=doc_type)
+        template_id = template_id or TEMPLATES.get(doc_type)
+        replacements = await self._prepare_base_variables(
+            doc_number=doc_number,
+            doc_type=doc_type,
+            document_date=document_date,
+        )
         
         # Add TTN specific empty placeholders if TTN-1
         if doc_type == "ttn1":
@@ -29,7 +41,7 @@ class LogisticsSheetStrategy(BaseDocumentStrategy):
         # Enriched Replacements with Totals
         replacements.update(totals)
         
-        doc_title = f"{DOC_NAMES.get(doc_type, 'Док')} #{self.order.id} {replacements.get('{{client_name}}', '')}"
+        doc_title = f"{DOC_NAMES.get(doc_type, 'Док')} {doc_number or f'#{self.order.id}'} {replacements.get('{{client_name}}', '')}"
         
         # Config Map
         config = self._get_sheet_config(doc_type)

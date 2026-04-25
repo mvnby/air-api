@@ -6,6 +6,7 @@ from core.config import settings
 from models import (
     Customer,
     CustomerBranch,
+    CustomerContract,
     CustomerType,
     Installer,
     Order,
@@ -208,6 +209,77 @@ async def test_manager_order_patch_customer_branch_validation(async_client, db):
 
 
 @pytest.mark.asyncio
+async def test_manager_order_contract_selection_and_act_guard(async_client, db, monkeypatch):
+    customer = Customer(name="Contract Customer", phone="+375296001122", type=CustomerType.company, inn="123456789")
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    contract = CustomerContract(
+        customer_id=customer.id,
+        number="ОД-2026-777",
+        valid_from=datetime(2026, 1, 1),
+        valid_until=datetime(2026, 12, 31),
+        status="active",
+        google_file_id="fake",
+        google_edit_url="https://docs.google.com/document/d/fake/edit",
+    )
+    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    db.add(contract)
+    db.add(order)
+    await db.commit()
+    await db.refresh(contract)
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+
+    blocked = await async_client.post(f"/api/manager/orders/{order.id}/documents/act", headers=headers)
+    assert blocked.status_code == 400
+    assert "выберите открытый договор" in blocked.json()["detail"]["message"].lower()
+
+    patch_resp = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        headers=headers,
+        json={"customer_contract_id": contract.id},
+    )
+    assert patch_resp.status_code == 200
+    patched = patch_resp.json()
+    assert patched["customer_contract_id"] == contract.id
+    assert patched["customer_contract"]["number"] == "ОД-2026-777"
+
+    captured_replacements = []
+
+    class _FakeGoogleService:
+        def copy_template(self, template_id, title):
+            return {
+                "file_id": f"fake-{len(captured_replacements) + 1}",
+                "edit_url": f"https://docs.google.com/document/d/fake-{len(captured_replacements) + 1}/edit",
+            }
+
+        def replace_placeholders(self, file_id, replacements):
+            captured_replacements.append(dict(replacements))
+
+    from services import document_service
+
+    monkeypatch.setattr(document_service, "get_google_service", lambda: _FakeGoogleService())
+
+    first_act = await async_client.post(f"/api/manager/orders/{order.id}/documents/act", headers=headers)
+    assert first_act.status_code == 200
+    assert captured_replacements[-1]["{{act_number}}"] == "1"
+    assert captured_replacements[-1]["{{act_sequence_number}}"] == "1"
+
+    second_order = Order(customer_id=customer.id, customer_contract_id=contract.id, status=OrderStatus.NEW_LEAD)
+    db.add(second_order)
+    await db.commit()
+    await db.refresh(second_order)
+
+    second_act = await async_client.post(f"/api/manager/orders/{second_order.id}/documents/act", headers=headers)
+    assert second_act.status_code == 200
+    assert captured_replacements[-1]["{{act_number}}"] == "2"
+    assert captured_replacements[-1]["{{act_sequence_number}}"] == "2"
+
+
+@pytest.mark.asyncio
 async def test_manager_order_switch_customer_clears_incompatible_branch(async_client, db):
     c1 = Customer(name="Switch C1", phone="+375295533333", type=CustomerType.individual)
     c2 = Customer(name="Switch C2", phone="+375295544444", type=CustomerType.individual)
@@ -317,8 +389,11 @@ async def test_manager_order_generate_document(async_client, db, monkeypatch):
         doc_type = "contract"
         google_edit_url = "https://docs.google.com/fake"
 
-    async def _fake_create_or_get_document(session, order_id, doc_type, template_id=None):
+    captured = {}
+
+    async def _fake_create_or_get_document(session, order_id, doc_type, template_id=None, contract_date=None):
         _ = (session, order_id, doc_type, template_id)
+        captured["contract_date"] = contract_date
         return _FakeDoc()
 
     from services import document_service
@@ -326,11 +401,15 @@ async def test_manager_order_generate_document(async_client, db, monkeypatch):
     monkeypatch.setattr(document_service.DocumentService, "create_or_get_document", _fake_create_or_get_document)
 
     headers = await _auth_headers(async_client)
-    response = await async_client.post(f"/api/manager/orders/{order.id}/documents/contract", headers=headers)
+    response = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/contract?contract_date=2026-04-20T00:00:00",
+        headers=headers,
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["doc_type"] == "contract"
     assert data["edit_url"].startswith("https://docs.google.com")
+    assert captured["contract_date"] == datetime(2026, 4, 20)
 
 
 @pytest.mark.asyncio

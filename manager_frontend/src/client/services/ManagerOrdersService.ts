@@ -141,6 +141,7 @@ export class ManagerOrdersService {
      * @param orderId
      * @param docType
      * @param templateId Google Drive template file ID
+     * @param contractDate Document/contract date as ISO datetime
      * @returns ManagerOrderDocumentResponse Successful Response
      * @throws ApiError
      */
@@ -148,6 +149,7 @@ export class ManagerOrdersService {
         orderId: number,
         docType: string,
         templateId?: (string | null),
+        contractDate?: (string | null),
     ): CancelablePromise<ManagerOrderDocumentResponse> {
         return __request(OpenAPI, {
             method: 'POST',
@@ -158,6 +160,7 @@ export class ManagerOrdersService {
             },
             query: {
                 'template_id': templateId,
+                'contract_date': contractDate,
             },
             errors: {
                 422: `Validation Error`,

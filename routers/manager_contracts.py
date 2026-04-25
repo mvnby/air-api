@@ -1,0 +1,137 @@
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.database import get_session
+from core.manager_api_errors import manager_http_error
+from core.manager_error_codes import BAD_REQUEST, CUSTOMER_NOT_FOUND
+from core.security import get_current_username
+from routers.manager_operation_ids import (
+    ARCHIVE_MANAGER_CUSTOMER_CONTRACT,
+    CREATE_MANAGER_CUSTOMER_CONTRACT,
+    GET_MANAGER_CUSTOMER_CONTRACTS,
+    PATCH_MANAGER_CUSTOMER_CONTRACT,
+)
+from schemas import (
+    ManagerActionMessageResponse,
+    ManagerCustomerContractCreatePayload,
+    ManagerCustomerContractItemResponse,
+    ManagerCustomerContractListResponse,
+    ManagerCustomerContractUpdatePayload,
+)
+from services.customer_contract_service import CustomerContractService
+
+
+router = APIRouter(prefix="/api/manager/customers", tags=["manager-contracts"])
+
+
+@router.get(
+    "/{customer_id}/contracts",
+    response_model=ManagerCustomerContractListResponse,
+    operation_id=GET_MANAGER_CUSTOMER_CONTRACTS,
+)
+async def get_manager_customer_contracts(
+    customer_id: int,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    data = await CustomerContractService.list_for_customer(session, customer_id)
+    if data is None:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=GET_MANAGER_CUSTOMER_CONTRACTS,
+            error_code=CUSTOMER_NOT_FOUND,
+        )
+    return data
+
+
+@router.post(
+    "/{customer_id}/contracts",
+    response_model=ManagerCustomerContractItemResponse,
+    operation_id=CREATE_MANAGER_CUSTOMER_CONTRACT,
+)
+async def create_manager_customer_contract(
+    customer_id: int,
+    payload: ManagerCustomerContractCreatePayload,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        data = await CustomerContractService.create_for_customer(
+            session,
+            customer_id=customer_id,
+            payload=payload.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=CREATE_MANAGER_CUSTOMER_CONTRACT,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+    if data is None:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=CREATE_MANAGER_CUSTOMER_CONTRACT,
+            error_code=CUSTOMER_NOT_FOUND,
+        )
+    return data
+
+
+@router.patch(
+    "/{customer_id}/contracts/{contract_id}",
+    response_model=ManagerCustomerContractItemResponse,
+    operation_id=PATCH_MANAGER_CUSTOMER_CONTRACT,
+)
+async def patch_manager_customer_contract(
+    customer_id: int,
+    contract_id: int,
+    payload: ManagerCustomerContractUpdatePayload,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        data = await CustomerContractService.update_for_customer(
+            session,
+            customer_id=customer_id,
+            contract_id=contract_id,
+            payload=payload.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=PATCH_MANAGER_CUSTOMER_CONTRACT,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+    if data is None:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=PATCH_MANAGER_CUSTOMER_CONTRACT,
+            error_code=CUSTOMER_NOT_FOUND,
+        )
+    return data
+
+
+@router.post(
+    "/{customer_id}/contracts/{contract_id}/archive",
+    response_model=ManagerActionMessageResponse,
+    operation_id=ARCHIVE_MANAGER_CUSTOMER_CONTRACT,
+)
+async def archive_manager_customer_contract(
+    customer_id: int,
+    contract_id: int,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    ok = await CustomerContractService.archive_for_customer(
+        session,
+        customer_id=customer_id,
+        contract_id=contract_id,
+    )
+    if ok is None:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=ARCHIVE_MANAGER_CUSTOMER_CONTRACT,
+            error_code=CUSTOMER_NOT_FOUND,
+        )
+    return {"message": "Contract archived"}

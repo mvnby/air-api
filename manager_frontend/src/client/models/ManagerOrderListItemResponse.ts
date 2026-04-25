@@ -5,6 +5,7 @@
 import type { ManagerInstallerResponse } from './ManagerInstallerResponse';
 import type { OrderCustomerBranchBrief } from './OrderCustomerBranchBrief';
 import type { OrderCustomerBrief } from './OrderCustomerBrief';
+import type { OrderCustomerContractBrief } from './OrderCustomerContractBrief';
 import type { PaymentCurrency } from './PaymentCurrency';
 export type ManagerOrderListItemResponse = {
     id: number;
@@ -23,6 +24,8 @@ export type ManagerOrderListItemResponse = {
     delivery_address?: (string | null);
     customer?: (OrderCustomerBrief | null);
     customer_branch?: (OrderCustomerBranchBrief | null);
+    customer_contract_id?: (number | null);
+    customer_contract?: (OrderCustomerContractBrief | null);
     installer_id?: (number | null);
     installer?: (ManagerInstallerResponse | null);
     equipment_status?: string;

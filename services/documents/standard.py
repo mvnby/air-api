@@ -1,20 +1,32 @@
-from typing import Any, List
+from datetime import datetime
+from typing import Any, List, Optional
 from services.google_service import get_google_service
 from services.documents.base import BaseDocumentStrategy, TEMPLATES, DOC_NAMES
 
 class GoogleDocStrategy(BaseDocumentStrategy):
     """Base for documents using Google Docs API."""
     
-    async def generate(self, doc_type: str) -> str:
+    async def generate(
+        self,
+        doc_type: str,
+        *,
+        template_id: Optional[str] = None,
+        doc_number: Optional[str] = None,
+        document_date: Optional[datetime] = None,
+    ) -> str:
         await self.fetch_order()
         if not self.order:
             return "Error: Order not found"
 
-        template_id = TEMPLATES.get(doc_type)
+        template_id = template_id or TEMPLATES.get(doc_type)
         if not template_id:
             return f"Error: Template for {doc_type} not found"
 
-        replacements = await self._prepare_base_variables(doc_number=None, doc_type=doc_type)
+        replacements = await self._prepare_base_variables(
+            doc_number=doc_number,
+            doc_type=doc_type,
+            document_date=document_date,
+        )
         table_rows = self._prepare_table_data()
         
         # Additional Replacements specific to doc logic
