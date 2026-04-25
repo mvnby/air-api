@@ -1298,6 +1298,8 @@ class OrderService:
             order.proposal_status = payload.proposal_status
         if "proposal_sent_at" in fields_set:
             order.proposal_sent_at = OrderService._normalize_naive_datetime(payload.proposal_sent_at)
+        if order.status == OrderStatus.EXECUTION and order.proposal_status != "approved":
+            order.proposal_status = "approved"
         
         # Equipment & Installation
         if "equipment_status" in fields_set and payload.equipment_status is not None:

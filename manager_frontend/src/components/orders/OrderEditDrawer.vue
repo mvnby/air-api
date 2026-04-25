@@ -1141,10 +1141,6 @@ const handleSave = () => {
       localFormError.value = 'Требуется замер: заполните результат замера';
       return;
     }
-    if (proposalStatus.value !== 'approved') {
-      localFormError.value = 'Проект должен быть согласован с клиентом';
-      return;
-    }
   }
 
   if (enableCurrency.value) {
@@ -1195,7 +1191,7 @@ const handleSave = () => {
     measurement_required: measurementRequired.value,
     measurer_id: measurerId.value,
     measurement_result: measurementResult.value,
-    proposal_status: proposalStatus.value,
+    proposal_status: status.value === 'execution' ? 'approved' : proposalStatus.value,
     target_currency: enableCurrency.value ? (targetCurrency.value || null) : null,
     target_currency_amount: enableCurrency.value && targetCurrencyAmount.value ? Number(String(targetCurrencyAmount.value).replace(',', '.')) : null,
   };

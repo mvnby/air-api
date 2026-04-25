@@ -165,6 +165,36 @@ async def test_manager_order_patch_scalar_fields(async_client, db):
 
 
 @pytest.mark.asyncio
+async def test_manager_order_execution_auto_approves_proposal(async_client, db):
+    customer = Customer(name="Execution", phone="+375295555556", type=CustomerType.individual)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(
+        customer_id=customer.id,
+        status=OrderStatus.NEGOTIATION,
+        proposal_status="draft",
+        total_amount=100,
+    )
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={"status": "execution", "proposal_status": "draft"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "execution"
+    assert data["proposal_status"] == "approved"
+    assert data["ready_for_execution"] is True
+
+
+@pytest.mark.asyncio
 async def test_manager_order_patch_customer_branch_validation(async_client, db):
     c1 = Customer(name="Branch C1", phone="+375295511111", type=CustomerType.individual)
     c2 = Customer(name="Branch C2", phone="+375295522222", type=CustomerType.individual)
