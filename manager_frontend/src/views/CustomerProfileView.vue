@@ -52,7 +52,9 @@ const docsLoading = ref(false);
 const contracts = ref<ManagerCustomerContractItemResponse[]>([]);
 const contractsLoading = ref(false);
 const contractSaving = ref(false);
+const contractUploadSaving = ref(false);
 const showContractForm = ref(false);
+const showContractUploadForm = ref(false);
 const OPEN_CONTRACT_TEMPLATE_ID = '1x-pL1j9g-NzLSpPTLVYXSsmutGExPgfDqzi2VLq9thI';
 
 const phoneError = ref('');
@@ -126,6 +128,12 @@ const buildDefaultContractForm = () => {
 };
 
 const contractForm = ref(buildDefaultContractForm());
+const contractUploadForm = ref({
+  number: '',
+  contract_date: buildDefaultContractForm().contract_date,
+  valid_until: buildDefaultContractForm().valid_until,
+  file: null as File | null,
+});
 
 const setToast = (message: string) => {
   toast.value = message;
@@ -247,7 +255,20 @@ const loadCustomerContracts = async () => {
 
 const openContractForm = () => {
   contractForm.value = buildDefaultContractForm();
+  showContractUploadForm.value = false;
   showContractForm.value = true;
+};
+
+const openContractUploadForm = () => {
+  const defaults = buildDefaultContractForm();
+  contractUploadForm.value = {
+    number: '',
+    contract_date: defaults.contract_date,
+    valid_until: defaults.valid_until,
+    file: null,
+  };
+  showContractForm.value = false;
+  showContractUploadForm.value = true;
 };
 
 const syncContractValidUntil = () => {
@@ -257,6 +278,20 @@ const syncContractValidUntil = () => {
   const end = new Date(start);
   end.setFullYear(end.getFullYear() + 1);
   contractForm.value.valid_until = toInputDate(end);
+};
+
+const syncUploadContractValidUntil = () => {
+  if (!contractUploadForm.value.contract_date) return;
+  const start = new Date(`${contractUploadForm.value.contract_date}T00:00:00`);
+  if (Number.isNaN(start.getTime())) return;
+  const end = new Date(start);
+  end.setFullYear(end.getFullYear() + 1);
+  contractUploadForm.value.valid_until = toInputDate(end);
+};
+
+const onContractUploadFileChange = (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  contractUploadForm.value.file = input.files?.[0] || null;
 };
 
 const createContract = async () => {
@@ -280,6 +315,34 @@ const createContract = async () => {
   }
 };
 
+const uploadContract = async () => {
+  if (!customerId.value) return;
+  if (!contractUploadForm.value.number.trim()) {
+    setToast('Укажите номер договора');
+    return;
+  }
+  if (!contractUploadForm.value.file) {
+    setToast('Выберите файл договора');
+    return;
+  }
+  contractUploadSaving.value = true;
+  try {
+    await ManagerContractsService.uploadManagerCustomerContract(customerId.value, {
+      number: contractUploadForm.value.number.trim(),
+      contract_date: `${contractUploadForm.value.contract_date}T00:00:00`,
+      valid_until: `${contractUploadForm.value.valid_until}T00:00:00`,
+      file: contractUploadForm.value.file,
+    });
+    showContractUploadForm.value = false;
+    await loadCustomerContracts();
+    setToast('Договор загружен');
+  } catch (e) {
+    setToast(`Не удалось загрузить договор: ${getApiErrorMessage(e)}`);
+  } finally {
+    contractUploadSaving.value = false;
+  }
+};
+
 const archiveContract = async (contract: ManagerCustomerContractItemResponse) => {
   if (!customerId.value) return;
   if (!confirm(`Архивировать договор ${contract.number}?`)) return;
@@ -289,6 +352,18 @@ const archiveContract = async (contract: ManagerCustomerContractItemResponse) =>
     setToast('Договор архивирован');
   } catch (e) {
     setToast(`Не удалось архивировать договор: ${getApiErrorMessage(e)}`);
+  }
+};
+
+const deleteContract = async (contract: ManagerCustomerContractItemResponse) => {
+  if (!customerId.value) return;
+  if (!confirm(`Удалить договор ${contract.number} из базы и Google Drive?`)) return;
+  try {
+    await ManagerContractsService.deleteManagerCustomerContract(customerId.value, contract.id);
+    await loadCustomerContracts();
+    setToast('Договор удален');
+  } catch (e) {
+    setToast(`Не удалось удалить договор: ${getApiErrorMessage(e)}`);
   }
 };
 
@@ -628,9 +703,14 @@ onMounted(() => {
               Открытые договоры
               <span v-if="contracts.length" class="flex h-6 min-w-6 items-center justify-center rounded-full bg-teal-500/20 px-2 text-xs text-teal-400">{{ contracts.length }}</span>
             </h2>
-            <button class="btn-mini" type="button" @click="openContractForm">
-              Создать договор
-            </button>
+            <div class="flex flex-wrap gap-2">
+              <button class="btn-mini-outline" type="button" @click="openContractUploadForm">
+                Загрузить договор
+              </button>
+              <button class="btn-mini" type="button" @click="openContractForm">
+                Создать договор
+              </button>
+            </div>
           </div>
 
           <form v-if="showContractForm" class="mb-4 rounded-2xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-4" @submit.prevent="createContract">
@@ -644,6 +724,21 @@ onMounted(() => {
               <button class="btn-mini-outline" type="button" @click="showContractForm = false">Отмена</button>
               <button class="btn-mini" type="submit" :disabled="contractSaving">
                 {{ contractSaving ? 'Создаем...' : 'Создать' }}
+              </button>
+            </div>
+          </form>
+
+          <form v-if="showContractUploadForm" class="mb-4 rounded-2xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-4" @submit.prevent="uploadContract">
+            <div class="grid gap-3 md:grid-cols-4">
+              <input v-model="contractUploadForm.number" class="field-input" type="text" placeholder="Номер договора" required />
+              <input v-model="contractUploadForm.contract_date" class="field-input" type="date" required @change="syncUploadContractValidUntil" />
+              <input v-model="contractUploadForm.valid_until" class="field-input" type="date" required />
+              <input class="field-input" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required @change="onContractUploadFileChange" />
+            </div>
+            <div class="mt-3 flex justify-end gap-2">
+              <button class="btn-mini-outline" type="button" @click="showContractUploadForm = false">Отмена</button>
+              <button class="btn-mini" type="submit" :disabled="contractUploadSaving">
+                {{ contractUploadSaving ? 'Загружаем...' : 'Загрузить' }}
               </button>
             </div>
           </form>
@@ -675,6 +770,9 @@ onMounted(() => {
                 </a>
                 <button v-if="contract.status === 'active'" class="flex h-10 w-10 items-center justify-center rounded-lg text-amber-400 hover:bg-amber-500/10 hover:text-amber-300 transition-colors" type="button" title="Архивировать" @click="archiveContract(contract)">
                   <span class="material-icons-round text-[20px]">archive</span>
+                </button>
+                <button class="flex h-10 w-10 items-center justify-center rounded-lg text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300" type="button" title="Удалить" @click="deleteContract(contract)">
+                  <span class="material-icons-round text-[20px]">delete</span>
                 </button>
               </div>
             </div>

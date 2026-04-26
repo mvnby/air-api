@@ -267,6 +267,76 @@ async def test_manager_customer_contract_create_and_dashboard_notice(async_clien
 
 
 @pytest.mark.asyncio
+async def test_manager_customer_contract_upload_and_delete(async_client, db, monkeypatch):
+    headers = await _auth_headers(async_client)
+    captured = {"deleted": []}
+
+    class FakeGoogleService:
+        def upload_file(self, file_path, filename, mime_type, folder_id=None):
+            captured["filename"] = filename
+            captured["mime_type"] = mime_type
+            captured["folder_id"] = folder_id
+            with open(file_path, "rb") as fh:
+                captured["content"] = fh.read()
+            return "uploaded-contract-file"
+
+        def delete_file(self, file_id):
+            captured["deleted"].append(file_id)
+
+    monkeypatch.setattr("services.customer_contract_service.get_google_service", lambda: FakeGoogleService())
+
+    customer = Customer(
+        name="ООО Загруженный",
+        phone="+375291223355",
+        type=CustomerType.company,
+        inn="123456789",
+    )
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    upload_resp = await async_client.post(
+        f"/api/manager/customers/{customer.id}/contracts/upload",
+        headers=headers,
+        data={
+            "number": "EXT-2026-001",
+            "contract_date": "2026-02-10T00:00:00",
+            "valid_until": "2027-02-10T00:00:00",
+        },
+        files={"file": ("external-contract.pdf", b"%PDF-contract", "application/pdf")},
+    )
+    assert upload_resp.status_code == 200
+    uploaded = upload_resp.json()
+    assert uploaded["number"] == "EXT-2026-001"
+    assert uploaded["status"] == "active"
+    assert uploaded["edit_url"].endswith("/view?usp=sharing")
+    assert "EXT-2026-001" in captured["filename"]
+    assert captured["mime_type"] == "application/pdf"
+    assert captured["content"] == b"%PDF-contract"
+
+    linked_order = Order(
+        customer_id=customer.id,
+        customer_contract_id=uploaded["id"],
+        status=OrderStatus.NEW_LEAD,
+    )
+    db.add(linked_order)
+    await db.commit()
+    await db.refresh(linked_order)
+
+    delete_resp = await async_client.delete(
+        f"/api/manager/customers/{customer.id}/contracts/{uploaded['id']}",
+        headers=headers,
+    )
+    assert delete_resp.status_code == 200
+    assert delete_resp.json()["message"] == "Contract deleted"
+    assert captured["deleted"] == ["uploaded-contract-file"]
+    assert await db.get(CustomerContract, uploaded["id"]) is None
+
+    await db.refresh(linked_order)
+    assert linked_order.customer_contract_id is None
+
+
+@pytest.mark.asyncio
 async def test_manager_customer_delete_blocked_if_has_orders(async_client, db):
     headers = await _auth_headers(async_client)
     customer = Customer(name="Delete Blocked", phone="+375299001122", type=CustomerType.individual)

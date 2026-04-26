@@ -1,10 +1,11 @@
 from datetime import datetime
 from typing import Any, Dict, Optional
 
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import Customer, CustomerContract, CustomerType
+from models import Customer, CustomerContract, CustomerType, Order
 from services.google_service import get_google_service
 
 
@@ -156,6 +157,69 @@ class CustomerContractService:
         return CustomerContractService._to_item(contract)
 
     @staticmethod
+    async def upload_for_customer(
+        session: AsyncSession,
+        *,
+        customer_id: int,
+        number: str,
+        contract_date: datetime,
+        valid_until: datetime,
+        file: "Any",
+    ) -> Optional[Dict[str, Any]]:
+        import os
+        import tempfile
+
+        customer = await session.get(Customer, customer_id)
+        if not customer:
+            return None
+        if customer.type != CustomerType.company:
+            raise ValueError("Открытые договоры доступны только для юрлиц")
+
+        cleaned_number = str(number or "").strip()
+        if not cleaned_number:
+            raise ValueError("Номер договора обязателен")
+
+        valid_from = CustomerContractService._normalize_naive_datetime(contract_date) or datetime.now()
+        valid_until_value = CustomerContractService._normalize_naive_datetime(valid_until)
+        if not valid_until_value:
+            raise ValueError("Дата окончания договора обязательна")
+
+        original_filename = file.filename or f"open-contract-{cleaned_number}.pdf"
+        _, suffix = os.path.splitext(original_filename)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix or ".pdf") as tmp:
+            content = await file.read()
+            tmp.write(content)
+            tmp_path = tmp.name
+
+        try:
+            from services.google_service import DESTINATION_FOLDER_ID
+
+            title = f"Открытый договор {cleaned_number} {customer.name}{suffix or ''}"
+            file_id = get_google_service().upload_file(
+                file_path=tmp_path,
+                filename=title,
+                mime_type=file.content_type or "application/octet-stream",
+                folder_id=DESTINATION_FOLDER_ID,
+            )
+            contract = CustomerContract(
+                customer_id=customer_id,
+                number=cleaned_number,
+                valid_from=valid_from,
+                valid_until=valid_until_value,
+                status=CustomerContractService.ACTIVE_STATUS,
+                template_id=None,
+                google_file_id=file_id,
+                google_edit_url=f"https://drive.google.com/file/d/{file_id}/view?usp=sharing",
+            )
+            session.add(contract)
+            await session.commit()
+            await session.refresh(contract)
+            return CustomerContractService._to_item(contract)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    @staticmethod
     async def update_for_customer(
         session: AsyncSession,
         *,
@@ -207,3 +271,24 @@ class CustomerContractService:
             payload={"status": CustomerContractService.ARCHIVED_STATUS},
         )
         return None if data is None else True
+
+    @staticmethod
+    async def delete_for_customer(session: AsyncSession, *, customer_id: int, contract_id: int) -> Optional[bool]:
+        contract = await session.get(CustomerContract, contract_id)
+        if not contract or int(contract.customer_id) != int(customer_id):
+            return None
+
+        if contract.google_file_id:
+            try:
+                get_google_service().delete_file(contract.google_file_id)
+            except Exception as exc:
+                print(f"Error deleting customer contract file from Drive: {exc}")
+
+        await session.execute(
+            update(Order)
+            .where(Order.customer_contract_id == contract_id)
+            .values(customer_contract_id=None)
+        )
+        await session.delete(contract)
+        await session.commit()
+        return True
