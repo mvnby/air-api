@@ -293,6 +293,16 @@ async def test_manager_order_contract_selection_and_act_guard(async_client, db, 
 
     monkeypatch.setattr(document_service, "get_google_service", lambda: _FakeGoogleService())
 
+    one_time_contract_with_open_selected = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/contract",
+        headers=headers,
+        params={"contract_date": "2026-04-26T00:00:00"},
+    )
+    assert one_time_contract_with_open_selected.status_code == 200
+    assert captured_replacements[-1]["{{contract_number}}"].startswith("Д-2026-")
+    assert captured_replacements[-1]["{{contract_number}}"] != "ОД-2026-777"
+    assert captured_replacements[-1]["{{contract_date}}"] == "26.04.2026"
+
     one_time_order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
     db.add(one_time_order)
     await db.commit()
