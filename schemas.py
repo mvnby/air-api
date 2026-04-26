@@ -843,6 +843,7 @@ class ManagerCatalogCustomerItemResponse(BaseModel):
     last_delivery_address: Optional[str] = None
     created_at: Optional[datetime]
     order_count: int
+    is_favorite: bool = False
     branches: List["ManagerCustomerBranchItemResponse"] = Field(default_factory=list)
 
 
@@ -964,6 +965,7 @@ class ManagerCustomerUpdatePayload(BaseModel):
     signer_position: Optional[str] = None
     signer_name: Optional[str] = None
     acting_basis: Optional[str] = None
+    is_favorite: Optional[bool] = None
 
     @field_validator("name")
     @classmethod

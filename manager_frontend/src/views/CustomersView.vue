@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
-import { Search, Users, ChevronLeft, ChevronRight, Phone, Mail, Building, Plus } from 'lucide-vue-next';
+import { Search, Users, ChevronLeft, ChevronRight, Phone, Mail, Building, Plus, Star } from 'lucide-vue-next';
 import { api } from '../api';
 import type { ManagerCatalogCustomerItemResponse } from '../client';
 import { CUSTOMER_UPDATED_EVENT, type CustomerUpdatedEventPayload } from '../utils/customer-events';
@@ -15,14 +15,49 @@ const onlyWithOrders = ref(false);
 const page = ref(1);
 const meta = ref({ total: 0, pages: 1, limit: 20 });
 const recentlyUpdated = ref<Record<number, number>>({});
+const favoriteSaving = ref<Record<number, boolean>>({});
 const cleanupTimers = new Map<number, number>();
 const toast = ref('');
 const showCreateOrder = ref(false);
 const createOrderCustomer = ref<{ id: number; name: string } | null>(null);
 
+function sortCustomerItems(items: ManagerCatalogCustomerItemResponse[]) {
+  return [...items].sort((a, b) => {
+    const favoriteDiff = Number(Boolean(b.is_favorite)) - Number(Boolean(a.is_favorite));
+    if (favoriteDiff !== 0) return favoriteDiff;
+    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+  });
+}
+
 function openCreateOrder(customer: ManagerCatalogCustomerItemResponse) {
   createOrderCustomer.value = { id: customer.id, name: customer.full_legal_name || customer.name || `Клиент #${customer.id}` };
   showCreateOrder.value = true;
+}
+
+async function toggleFavorite(customer: ManagerCatalogCustomerItemResponse) {
+  if (favoriteSaving.value[customer.id]) return;
+
+  const nextFavorite = !customer.is_favorite;
+  favoriteSaving.value = { ...favoriteSaving.value, [customer.id]: true };
+  customers.value = sortCustomerItems(customers.value.map((item) => (
+    item.id === customer.id ? { ...item, is_favorite: nextFavorite } : item
+  )));
+
+  try {
+    const updated = await api.patchManagerCustomer(customer.id, { is_favorite: nextFavorite });
+    customers.value = sortCustomerItems(customers.value.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
+    setToast(nextFavorite ? 'Клиент добавлен в избранное' : 'Клиент убран из избранного');
+  } catch (e) {
+    console.error('Failed to toggle customer favorite', e);
+    customers.value = sortCustomerItems(customers.value.map((item) => (
+      item.id === customer.id ? { ...item, is_favorite: !nextFavorite } : item
+    )));
+    setToast('Не удалось обновить избранное');
+  } finally {
+    const nextSaving = { ...favoriteSaving.value };
+    delete nextSaving[customer.id];
+    favoriteSaving.value = nextSaving;
+  }
 }
 
 function onOrderCreated(orderId: number) {
@@ -55,7 +90,7 @@ async function loadCustomers() {
       typeFilter.value || undefined,
       onlyWithOrders.value,
     );
-    customers.value = data.items;
+    customers.value = sortCustomerItems(data.items);
     meta.value = data.meta;
   } catch (e) {
     console.error('Failed to load customers', e);
@@ -262,6 +297,15 @@ onUnmounted(() => {
           </div>
           <div class="footer-actions">
             <div class="date-added">{{ formatDate(customer.created_at) }}</div>
+            <button
+              class="favorite-btn"
+              :class="{ active: customer.is_favorite }"
+              :disabled="favoriteSaving[customer.id]"
+              :title="customer.is_favorite ? 'Убрать из избранного' : 'Добавить в избранное'"
+              @click="toggleFavorite(customer)"
+            >
+              <Star :size="15" :fill="customer.is_favorite ? 'currentColor' : 'none'" />
+            </button>
             <button class="open-btn" @click="openCreateOrder(customer)" title="Создать заказ">
               <Plus :size="14" />
             </button>
@@ -552,6 +596,32 @@ onUnmounted(() => {
   background: var(--mv-bg);
 }
 
+.favorite-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--mv-border);
+  background: var(--mv-surface);
+  border-radius: 8px;
+  color: var(--mv-text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.favorite-btn:hover:not(:disabled),
+.favorite-btn.active {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+}
+
+.favorite-btn:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .drawer-overlay {
   position: fixed;
   inset: 0;
@@ -731,6 +801,7 @@ onUnmounted(() => {
 
 :global(.dark) .customers-view .open-btn,
 :global(.dark) .customers-view .icon-btn,
+:global(.dark) .customers-view .favorite-btn,
 :global(.dark) .customers-view .page-btn {
   background: #0f172a;
   border-color: #334155;
@@ -740,6 +811,13 @@ onUnmounted(() => {
 :global(.dark) .customers-view .open-btn:hover,
 :global(.dark) .customers-view .icon-btn:hover {
   background: #253246;
+}
+
+:global(.dark) .customers-view .favorite-btn:hover:not(:disabled),
+:global(.dark) .customers-view .favorite-btn.active {
+  border-color: rgba(251, 191, 36, 0.55);
+  background: rgba(251, 191, 36, 0.14);
+  color: #fbbf24;
 }
 
 /* :global(.dark) .customers-view .view-header h1 {
@@ -801,6 +879,7 @@ onUnmounted(() => {
 
 :global(.dark) .customers-view .open-btn,
 :global(.dark) .customers-view .icon-btn,
+:global(.dark) .customers-view .favorite-btn,
 :global(.dark) .customers-view .page-btn {
   background: #0f172a;
   border-color: #334155;

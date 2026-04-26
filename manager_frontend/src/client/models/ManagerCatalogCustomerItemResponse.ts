@@ -23,6 +23,7 @@ export type ManagerCatalogCustomerItemResponse = {
     last_delivery_address?: (string | null);
     created_at: (string | null);
     order_count: number;
+    is_favorite?: boolean;
     branches?: Array<ManagerCustomerBranchItemResponse>;
 };
 
