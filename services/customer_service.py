@@ -58,6 +58,7 @@ class CustomerService:
             "created_at": customer.created_at.isoformat() if customer.created_at else None,
             "order_count": order_count,
             "is_archived": customer.is_archived,
+            "is_favorite": customer.is_favorite,
             "branches": branches or [],
         }
 
@@ -259,6 +260,9 @@ class CustomerService:
         if "type" in payload and payload["type"]:
             customer.type = CustomerType(str(payload["type"]).strip().lower())
 
+        if "is_favorite" in payload and payload["is_favorite"] is not None:
+            customer.is_favorite = bool(payload["is_favorite"])
+
         for field in optional_text_fields:
             if field not in payload:
                 continue
@@ -311,7 +315,7 @@ class CustomerService:
             stmt = stmt.where(Customer.type == customer_type)
             count_stmt = count_stmt.where(Customer.type == customer_type)
 
-        stmt = stmt.order_by(Customer.created_at.desc())
+        stmt = stmt.order_by(Customer.is_favorite.desc(), Customer.created_at.desc())
         stmt = stmt.offset((page - 1) * limit).limit(limit)
 
         result = await session.execute(stmt)

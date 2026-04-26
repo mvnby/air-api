@@ -123,6 +123,62 @@ async def test_manager_customer_patch_updates_requisites(async_client, db):
 
 
 @pytest.mark.asyncio
+async def test_manager_customer_favorite_patch_and_sort(async_client, db):
+    headers = await _auth_headers(async_client)
+
+    regular_customer = Customer(
+        name="ООО Обычный клиент",
+        phone="+375291110000",
+        type=CustomerType.company,
+        created_at=datetime(2026, 1, 10, 10, 0, 0),
+    )
+    favorite_customer = Customer(
+        name="ООО Частый клиент",
+        phone="+375291110001",
+        type=CustomerType.company,
+        created_at=datetime(2026, 1, 1, 10, 0, 0),
+    )
+    db.add(regular_customer)
+    db.add(favorite_customer)
+    await db.commit()
+    await db.refresh(regular_customer)
+    await db.refresh(favorite_customer)
+
+    db.add(
+        Order(
+            customer_id=regular_customer.id,
+            status=OrderStatus.NEW_LEAD,
+            title="Обычная сделка",
+        )
+    )
+    db.add(
+        Order(
+            customer_id=favorite_customer.id,
+            status=OrderStatus.NEW_LEAD,
+            title="Частая сделка",
+        )
+    )
+    await db.commit()
+
+    patch_resp = await async_client.patch(
+        f"/api/manager/customers/{favorite_customer.id}",
+        headers=headers,
+        json={"is_favorite": True},
+    )
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["is_favorite"] is True
+
+    list_resp = await async_client.get(
+        "/api/manager/customers?only_with_orders=true&limit=10",
+        headers=headers,
+    )
+    assert list_resp.status_code == 200
+    items = list_resp.json()["items"]
+    assert items[0]["id"] == favorite_customer.id
+    assert items[0]["is_favorite"] is True
+
+
+@pytest.mark.asyncio
 async def test_manager_customer_patch_rejects_invalid_iban(async_client, db):
     headers = await _auth_headers(async_client)
 

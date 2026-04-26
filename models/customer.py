@@ -31,6 +31,7 @@ class Customer(SQLModel, table=True):
 
     created_at: datetime = Field(default_factory=datetime.now)
     is_archived: bool = Field(default=False, index=True)
+    is_favorite: bool = Field(default=False, index=True)
 
     orders: List["Order"] = Relationship(back_populates="customer")
     contracts: List["CustomerContract"] = Relationship(

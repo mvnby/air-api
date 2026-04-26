@@ -10938,6 +10938,11 @@
             "type": "integer",
             "title": "Order Count"
           },
+          "is_favorite": {
+            "type": "boolean",
+            "title": "Is Favorite",
+            "default": false
+          },
           "branches": {
             "items": {
               "$ref": "#/components/schemas/ManagerCustomerBranchItemResponse"
@@ -12009,6 +12014,17 @@
               }
             ],
             "title": "Acting Basis"
+          },
+          "is_favorite": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Favorite"
           }
         },
         "type": "object",

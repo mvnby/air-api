@@ -18,5 +18,6 @@ export type ManagerCustomerUpdatePayload = {
     signer_position?: (string | null);
     signer_name?: (string | null);
     acting_basis?: (string | null);
+    is_favorite?: (boolean | null);
 };
 
