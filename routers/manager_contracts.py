@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
@@ -8,8 +10,10 @@ from core.security import get_current_username
 from routers.manager_operation_ids import (
     ARCHIVE_MANAGER_CUSTOMER_CONTRACT,
     CREATE_MANAGER_CUSTOMER_CONTRACT,
+    DELETE_MANAGER_CUSTOMER_CONTRACT,
     GET_MANAGER_CUSTOMER_CONTRACTS,
     PATCH_MANAGER_CUSTOMER_CONTRACT,
+    UPLOAD_MANAGER_CUSTOMER_CONTRACT,
 )
 from schemas import (
     ManagerActionMessageResponse,
@@ -77,6 +81,45 @@ async def create_manager_customer_contract(
     return data
 
 
+@router.post(
+    "/{customer_id}/contracts/upload",
+    response_model=ManagerCustomerContractItemResponse,
+    operation_id=UPLOAD_MANAGER_CUSTOMER_CONTRACT,
+)
+async def upload_manager_customer_contract(
+    customer_id: int,
+    number: str = Form(...),
+    contract_date: datetime = Form(...),
+    valid_until: datetime = Form(...),
+    file: UploadFile = File(...),
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        data = await CustomerContractService.upload_for_customer(
+            session,
+            customer_id=customer_id,
+            number=number,
+            contract_date=contract_date,
+            valid_until=valid_until,
+            file=file,
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=UPLOAD_MANAGER_CUSTOMER_CONTRACT,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+    if data is None:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=UPLOAD_MANAGER_CUSTOMER_CONTRACT,
+            error_code=CUSTOMER_NOT_FOUND,
+        )
+    return data
+
+
 @router.patch(
     "/{customer_id}/contracts/{contract_id}",
     response_model=ManagerCustomerContractItemResponse,
@@ -135,3 +178,28 @@ async def archive_manager_customer_contract(
             error_code=CUSTOMER_NOT_FOUND,
         )
     return {"message": "Contract archived"}
+
+
+@router.delete(
+    "/{customer_id}/contracts/{contract_id}",
+    response_model=ManagerActionMessageResponse,
+    operation_id=DELETE_MANAGER_CUSTOMER_CONTRACT,
+)
+async def delete_manager_customer_contract(
+    customer_id: int,
+    contract_id: int,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    ok = await CustomerContractService.delete_for_customer(
+        session,
+        customer_id=customer_id,
+        contract_id=contract_id,
+    )
+    if ok is None:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=DELETE_MANAGER_CUSTOMER_CONTRACT,
+            error_code=CUSTOMER_NOT_FOUND,
+        )
+    return {"message": "Contract deleted"}

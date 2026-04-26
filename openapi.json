@@ -5633,6 +5633,63 @@
         }
       }
     },
+    "/api/manager/customers/{customer_id}/contracts/upload": {
+      "post": {
+        "tags": [
+          "manager-contracts"
+        ],
+        "summary": "Upload Manager Customer Contract",
+        "operationId": "upload_manager_customer_contract",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Customer Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_manager_customer_contract"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerCustomerContractItemResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/customers/{customer_id}/contracts/{contract_id}": {
       "patch": {
         "tags": [
@@ -5682,6 +5739,60 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ManagerCustomerContractItemResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "manager-contracts"
+        ],
+        "summary": "Delete Manager Customer Contract",
+        "operationId": "delete_manager_customer_contract",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Customer Id"
+            }
+          },
+          {
+            "name": "contract_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Contract Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerActionMessageResponse"
                 }
               }
             }
@@ -8649,6 +8760,37 @@
           "files"
         ],
         "title": "Body_upload_local_images"
+      },
+      "Body_upload_manager_customer_contract": {
+        "properties": {
+          "number": {
+            "type": "string",
+            "title": "Number"
+          },
+          "contract_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Contract Date"
+          },
+          "valid_until": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Valid Until"
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "number",
+          "contract_date",
+          "valid_until",
+          "file"
+        ],
+        "title": "Body_upload_manager_customer_contract"
       },
       "Body_upload_manager_order_document": {
         "properties": {

@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { Body_upload_manager_customer_contract } from '../models/Body_upload_manager_customer_contract';
 import type { ManagerActionMessageResponse } from '../models/ManagerActionMessageResponse';
 import type { ManagerCustomerContractCreatePayload } from '../models/ManagerCustomerContractCreatePayload';
 import type { ManagerCustomerContractItemResponse } from '../models/ManagerCustomerContractItemResponse';
@@ -56,6 +57,30 @@ export class ManagerContractsService {
         });
     }
     /**
+     * Upload Manager Customer Contract
+     * @param customerId
+     * @param formData
+     * @returns ManagerCustomerContractItemResponse Successful Response
+     * @throws ApiError
+     */
+    public static uploadManagerCustomerContract(
+        customerId: number,
+        formData: Body_upload_manager_customer_contract,
+    ): CancelablePromise<ManagerCustomerContractItemResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/customers/{customer_id}/contracts/upload',
+            path: {
+                'customer_id': customerId,
+            },
+            formData: formData,
+            mediaType: 'multipart/form-data',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Patch Manager Customer Contract
      * @param customerId
      * @param contractId
@@ -77,6 +102,29 @@ export class ManagerContractsService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Delete Manager Customer Contract
+     * @param customerId
+     * @param contractId
+     * @returns ManagerActionMessageResponse Successful Response
+     * @throws ApiError
+     */
+    public static deleteManagerCustomerContract(
+        customerId: number,
+        contractId: number,
+    ): CancelablePromise<ManagerActionMessageResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/customers/{customer_id}/contracts/{contract_id}',
+            path: {
+                'customer_id': customerId,
+                'contract_id': contractId,
+            },
             errors: {
                 422: `Validation Error`,
             },

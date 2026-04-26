@@ -125,19 +125,20 @@ class BaseDocumentStrategy(ABC):
             "{{act_sequence_number}}": "1",
         }
 
-        if getattr(order, "customer_contract", None):
+        # A one-time contract document must always use its own generated number/date,
+        # even when the order currently points at a reusable customer contract.
+        if doc_type == "contract" and doc_number:
+            replacements["{{contract_name}}"] = doc_number
+            replacements["{{contract_number}}"] = doc_number
+            replacements["{{contract_date}}"] = effective_date.strftime("%d.%m.%Y")
+            replacements["{{contract_valid_from}}"] = effective_date.strftime("%d.%m.%Y")
+        elif getattr(order, "customer_contract", None):
             contract = order.customer_contract
             replacements["{{contract_name}}"] = contract.number
             replacements["{{contract_number}}"] = contract.number
             replacements["{{contract_date}}"] = contract.valid_from.strftime("%d.%m.%Y") if contract.valid_from else "-"
             replacements["{{contract_valid_from}}"] = contract.valid_from.strftime("%d.%m.%Y") if contract.valid_from else "-"
             replacements["{{contract_valid_until}}"] = contract.valid_until.strftime("%d.%m.%Y") if contract.valid_until else "-"
-        # If we're generating a contract and have doc_number, use it for contract_name
-        elif doc_type == "contract" and doc_number:
-            replacements["{{contract_name}}"] = doc_number
-            replacements["{{contract_number}}"] = doc_number
-            replacements["{{contract_date}}"] = effective_date.strftime("%d.%m.%Y")
-            replacements["{{contract_valid_from}}"] = effective_date.strftime("%d.%m.%Y")
         else:
             # Fetch contract document if exists to get contract number
             from models import OrderDocument

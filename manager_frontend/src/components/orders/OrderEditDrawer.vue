@@ -425,10 +425,26 @@ const selectedContractTemplateId = ref<string>('');
 const documentDate = ref(new Date().toISOString().slice(0, 10));
 const customerContracts = ref<ManagerCustomerContractItemResponse[]>([]);
 const selectedCustomerContractId = ref<number | null>(null);
+const ONE_TIME_CONTRACT_VALUE = 'one-time-contract';
 const datedDocumentTypes = new Set(['contract', 'act', 'tn2', 'ttn1']);
 const getDocumentDateForType = (type: string) => (
   datedDocumentTypes.has(type) && documentDate.value ? `${documentDate.value}T00:00:00` : undefined
 );
+const oneTimeContractDocument = computed(() => (
+  [...documents.value]
+    .filter((doc) => doc.doc_type === 'contract')
+    .sort((a, b) => b.id - a.id)[0] || null
+));
+const selectedContractBinding = computed({
+  get: () => {
+    if (selectedCustomerContractId.value) return `open:${selectedCustomerContractId.value}`;
+    if (oneTimeContractDocument.value) return ONE_TIME_CONTRACT_VALUE;
+    return '';
+  },
+  set: (value: string) => {
+    void updateContractBinding(value);
+  },
+});
 
 const loadContractTemplates = async () => {
   try {
@@ -475,11 +491,14 @@ const openCustomerProfileForContract = () => {
   window.dispatchEvent(new PopStateEvent('popstate'));
 };
 
-const updateCustomerContract = async () => {
+const updateContractBinding = async (value: string) => {
   if (!props.order?.id) return;
+  const nextCustomerContractId = value.startsWith('open:') ? Number(value.slice(5)) : null;
+  if (nextCustomerContractId !== null && Number.isNaN(nextCustomerContractId)) return;
   try {
+    selectedCustomerContractId.value = nextCustomerContractId;
     await ManagerOrdersService.patchManagerOrder(props.order.id, {
-      customer_contract_id: selectedCustomerContractId.value,
+      customer_contract_id: nextCustomerContractId,
     });
     emit('reload', props.order.id);
   } catch (error) {
@@ -487,10 +506,21 @@ const updateCustomerContract = async () => {
   }
 };
 
+const useOneTimeContractForClosingDocs = async () => {
+  if (!props.order?.id || !selectedCustomerContractId.value) return;
+  selectedCustomerContractId.value = null;
+  await ManagerOrdersService.patchManagerOrder(props.order.id, {
+    customer_contract_id: null,
+  });
+};
+
 const generateDocument = async (type: string, templateId?: string, documentDate?: string) => {
   if (!props.order?.id) return;
   isGeneratingDoc.value = true;
   try {
+    if (type === 'contract' && isCompanyOrder.value) {
+      await useOneTimeContractForClosingDocs();
+    }
     const res = await ManagerOrdersService.generateManagerOrderDocument(props.order.id, type, templateId, documentDate);
     window.open(res.edit_url, '_blank');
     await loadDocuments(props.order.id);
@@ -1787,17 +1817,20 @@ watch(
         </div>
 
         <div v-if="isCompanyOrder" class="mb-3 rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-slate-700/50 dark:bg-slate-900/40 dark:shadow-none">
-          <label class="mb-1 block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Открытый договор клиента</label>
+          <label class="mb-1 block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Договор для актов и накладных</label>
           <select
-            v-model="selectedCustomerContractId"
+            v-model="selectedContractBinding"
             class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-            @change="updateCustomerContract"
           >
-            <option :value="null">Выберите договор</option>
-            <option v-for="contract in customerContracts" :key="contract.id" :value="contract.id">
-              {{ contract.number }} · до {{ new Date(contract.valid_until).toLocaleDateString('ru-RU') }}
+            <option value="">Выберите договор</option>
+            <option v-if="oneTimeContractDocument" :value="ONE_TIME_CONTRACT_VALUE">
+              Разовый договор заказа · {{ oneTimeContractDocument.number }}
+            </option>
+            <option v-for="contract in customerContracts" :key="contract.id" :value="`open:${contract.id}`">
+              Открытый договор · {{ contract.number }} · до {{ new Date(contract.valid_until).toLocaleDateString('ru-RU') }}
             </option>
           </select>
+          <p v-if="oneTimeContractDocument && customerContracts.length" class="mt-2 text-xs text-slate-500 dark:text-slate-400">Выберите, куда ссылать закрывающие документы: на разовый договор заказа или на открытый договор клиента.</p>
           <div
             v-if="customerContracts.length === 0"
             class="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300"
