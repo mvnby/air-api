@@ -48,7 +48,7 @@ async def generate_product_description(
 async def get_catalog(
     page: int = 1,
     limit: int = 20,
-    sort: str = "newest",
+    sort: str = "recommended",
     min_price: Optional[int] = None,
     max_price: Optional[int] = None,
     area_min: Optional[int] = None,

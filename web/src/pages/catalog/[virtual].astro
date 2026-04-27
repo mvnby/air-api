@@ -4,6 +4,7 @@ import CatalogApp from "../../components/CatalogApp.vue";
 import type { VirtualCategoryConfig } from "../../config/virtual-categories";
 import { VIRTUAL_CATEGORIES } from "../../config/virtual-categories";
 import { getCatalog } from "../../utils/api";
+import { buildCatalogItemListSchema } from "../../utils/catalog-seo";
 import { buildCatalogQueryFromVirtual } from "../../utils/virtual-category";
 
 export async function getStaticPaths() {
@@ -14,11 +15,15 @@ export async function getStaticPaths() {
 }
 
 interface Product {
+    id?: number;
     title: string;
     price: number;
     slug: string;
     main_image?: string;
     description?: string;
+    vitebsk_qty?: number;
+    minsk_qty?: number;
+    availability_status?: string | null;
     is_inverter?: boolean;
     area?: number;
     badges?: Array<{ text: string; class?: string }>;
@@ -45,9 +50,21 @@ if (!category) {
 
 const query = buildCatalogQueryFromVirtual(category);
 const data = await getCatalog(query);
+const popularData = await getCatalog({
+    ...query,
+    page: 1,
+    limit: 80,
+    sort: "recommended",
+});
 const products = (data.items || []) as Product[];
+const popularProducts = (popularData.items || []) as Product[];
 const meta = data.meta || { total: 0, page: 1, limit: 20, pages: 1 };
 const robotsValue = category.indexable === false ? "noindex,follow" : undefined;
+const catalogSchema = buildCatalogItemListSchema(products, Astro.url.origin);
+const initialCategorySlug =
+    category.filters.tag_slugs?.find((slug) =>
+        ["cat-household", "cat-multi", "cat-industrial"].includes(slug),
+    ) || "cat-household";
 ---
 
 <Layout
@@ -56,14 +73,18 @@ const robotsValue = category.indexable === false ? "noindex,follow" : undefined;
     canonical={`/catalog/${category.slug}`}
     robots={robotsValue}
 >
+    <script type="application/ld+json" set:html={JSON.stringify(catalogSchema)} />
     <div class="container catalog-page">
         <CatalogApp
             client:load
             initialProducts={products}
             initialMeta={meta}
+            initialPopularProducts={popularProducts}
+            initialFilters={category.filters}
             forcedTitle={category.h1}
             forcedDescription={category.intro || category.seoDescription}
             lockedInitialFilters={category.filters}
+            initialCategorySlug={initialCategorySlug}
         />
     </div>
 </Layout>

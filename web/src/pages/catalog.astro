@@ -2,6 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 import CatalogApp from "../components/CatalogApp.vue";
 import { getCatalog } from "../utils/api";
+import { buildCatalogItemListSchema } from "../utils/catalog-seo";
 import { matchVirtualCategoryByFilters } from "../utils/virtual-category";
 import {
     VIRTUAL_CATEGORIES,
@@ -11,8 +12,9 @@ import {
 const { searchParams } = Astro.url;
 const hasQueryParams = Array.from(searchParams.keys()).length > 0;
 const page = searchParams.get("page") || "1";
-const sortRaw = searchParams.get("sort") || "newest";
+const sortRaw = searchParams.get("sort") || "recommended";
 const allowedSorts: CatalogSort[] = [
+    "recommended",
     "newest",
     "price_asc",
     "price_desc",
@@ -21,7 +23,7 @@ const allowedSorts: CatalogSort[] = [
 ];
 const sort: CatalogSort = allowedSorts.includes(sortRaw as CatalogSort)
     ? (sortRaw as CatalogSort)
-    : "newest";
+    : "recommended";
 const tagSlugsRaw = searchParams.getAll("tag_slugs");
 const isInverterRaw = searchParams.get("is_inverter");
 const hasWifiRaw = searchParams.get("has_wifi");
@@ -62,6 +64,8 @@ const parsedIndoorTypes = indoorTypesRaw
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
 const hasIndustrialCategory = tag_slugs.includes("cat-industrial");
+const initialCategorySlug =
+    tag_slugs.find((slug) => categorySlugs.has(slug)) || "cat-household";
 
 let canonicalPath = "/catalog";
 let robotsValue: string | undefined;
@@ -85,6 +89,7 @@ if (hasQueryParams) {
 }
 
 interface Product {
+    id?: number;
     title: string;
     price: number;
     slug: string;
@@ -108,7 +113,7 @@ interface Product {
     }>;
 }
 
-const data = await getCatalog({
+const catalogParams = {
     page,
     limit: 20,
     sort,
@@ -122,9 +127,30 @@ const data = await getCatalog({
         hasIndustrialCategory && parsedIndoorTypes.length > 0
             ? parsedIndoorTypes
             : undefined,
+};
+const data = await getCatalog(catalogParams);
+const popularData = await getCatalog({
+    ...catalogParams,
+    page: 1,
+    limit: 80,
+    sort: "recommended",
 });
 const products = (data.items || []) as Product[];
+const popularProducts = (popularData.items || []) as Product[];
 const meta = data.meta || { total: 0, page: 1, limit: 20, pages: 1 };
+const catalogSchema = buildCatalogItemListSchema(products, Astro.url.origin);
+const initialFilters = {
+    sort,
+    area_min: parsedAreaMin ?? null,
+    area_max: parsedAreaMax ?? null,
+    is_inverter: parsedIsInverter ?? null,
+    has_wifi: parsedHasWifi ?? null,
+    heating_min: parsedHeatingMin ?? null,
+    indoor_types:
+        hasIndustrialCategory && parsedIndoorTypes.length > 0
+            ? parsedIndoorTypes
+            : [],
+};
 ---
 
 <Layout
@@ -132,8 +158,16 @@ const meta = data.meta || { total: 0, page: 1, limit: 20, pages: 1 };
     canonical={canonicalPath}
     robots={robotsValue}
 >
+    <script type="application/ld+json" set:html={JSON.stringify(catalogSchema)} />
     <div class="container catalog-page">
-        <CatalogApp client:load initialProducts={products} initialMeta={meta} />
+        <CatalogApp
+            client:load
+            initialProducts={products}
+            initialMeta={meta}
+            initialPopularProducts={popularProducts}
+            initialFilters={initialFilters}
+            initialCategorySlug={initialCategorySlug}
+        />
     </div>
     <script is:inline define:vars={{ virtualCategories: VIRTUAL_CATEGORIES }}>
         (() => {
@@ -153,17 +187,19 @@ const meta = data.meta || { total: 0, page: 1, limit: 20, pages: 1 };
                 return tags;
             };
 
-            const normalizeTags = (tags) => [...new Set(tags)].sort();
+            const technicalDefaultTags = new Set(["cat-household"]);
+            const normalizeTags = (tags) => [...new Set(tags.filter((tag) => !technicalDefaultTags.has(tag)))].sort();
 
-            const sortRaw = sp.get("sort") || "newest";
+            const sortRaw = sp.get("sort") || "recommended";
             const allowedSorts = [
+                "recommended",
                 "newest",
                 "price_asc",
                 "price_desc",
                 "area_asc",
                 "area_desc",
             ];
-            const sort = allowedSorts.includes(sortRaw) ? sortRaw : "newest";
+            const sort = allowedSorts.includes(sortRaw) ? sortRaw : "recommended";
 
             const toNumber = (value) => {
                 if (!value) return undefined;
@@ -200,7 +236,7 @@ const meta = data.meta || { total: 0, page: 1, limit: 20, pages: 1 };
 
             const matched = virtualCategories.find((category) => {
                 const normalizedCategory = {
-                    sort: category.filters.sort || "newest",
+                    sort: category.filters.sort || "recommended",
                     tag_slugs: normalizeTags(category.filters.tag_slugs || []),
                     is_inverter:
                         typeof category.filters.is_inverter === "boolean"

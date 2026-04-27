@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import func, select
 
-from models import Product, Tag, TagGroup
+from models import Brand, Product, Tag, TagGroup
 from services.tag_logic import is_invalid_brand_name, is_invalid_brand_slug
 
 
@@ -48,11 +48,12 @@ class ProductFilterService:
         area_min, area_max = area_q.one()
 
         brands_stmt = (
-            select(Tag)
-            .join(TagGroup, Tag.group_id == TagGroup.id)
-            .where(Tag.is_public == True)
-            .where(TagGroup.slug == "brand")
-            .order_by(Tag.sort_order, Tag.title)
+            select(Brand)
+            .join(Product, Product.brand_id == Brand.id)
+            .where(Brand.is_published == True)
+            .where(Product.is_published == True)
+            .group_by(Brand.id)
+            .order_by(Brand.sort_order, Brand.title)
         )
         expert_stmt = (
             select(Tag)
@@ -64,15 +65,15 @@ class ProductFilterService:
 
         brands = list((await session.execute(brands_stmt)).scalars().all())
         brands = [
-            t
-            for t in brands
-            if not is_invalid_brand_name(t.title) and not is_invalid_brand_slug(t.slug)
+            brand
+            for brand in brands
+            if not is_invalid_brand_name(brand.title) and not is_invalid_brand_slug(brand.slug)
         ]
         expert_tags = list((await session.execute(expert_stmt)).scalars().all())
 
         return {
             "price": {"min": price_min, "max": price_max},
             "area": {"min": area_min, "max": area_max},
-            "brands": [{"id": t.id, "title": t.title, "slug": t.slug} for t in brands],
+            "brands": [{"id": brand.id, "title": brand.title, "slug": brand.slug} for brand in brands],
             "expert_tags": [{"id": t.id, "title": t.title, "slug": t.slug} for t in expert_tags],
         }

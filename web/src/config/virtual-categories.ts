@@ -1,4 +1,5 @@
 export type CatalogSort =
+    | "recommended"
     | "newest"
     | "price_asc"
     | "price_desc"
@@ -32,8 +33,9 @@ export const VIRTUAL_CATEGORIES: VirtualCategoryConfig[] = [
         h1: "Инверторные кондиционеры в Витебске",
         intro: "Подбор инверторных сплит-систем с монтажом и гарантией в Витебске.",
         filters: {
+            tag_slugs: ["cat-household"],
             is_inverter: true,
-            sort: "newest",
+            sort: "recommended",
         },
         indexable: true,
     },
@@ -45,8 +47,9 @@ export const VIRTUAL_CATEGORIES: VirtualCategoryConfig[] = [
         h1: "Кондиционеры с Wi-Fi в Витебске",
         intro: "Подберем сплит-системы с управлением через приложение и голосовые ассистенты.",
         filters: {
+            tag_slugs: ["cat-household"],
             has_wifi: true,
-            sort: "newest",
+            sort: "recommended",
         },
         indexable: true,
     },
@@ -58,8 +61,9 @@ export const VIRTUAL_CATEGORIES: VirtualCategoryConfig[] = [
         h1: "Кондиционеры для обогрева зимой в Витебске",
         intro: "Модели для межсезонья и зимней эксплуатации с профессиональным монтажом.",
         filters: {
+            tag_slugs: ["cat-household"],
             heating_min: -20,
-            sort: "newest",
+            sort: "recommended",
         },
         indexable: true,
     },
@@ -71,8 +75,22 @@ export const VIRTUAL_CATEGORIES: VirtualCategoryConfig[] = [
         h1: "Тихие кондиционеры в Витебске",
         intro: "Подбор малошумных моделей для комфортного сна и работы.",
         filters: {
-            tag_slugs: ["noise-silent"],
-            sort: "newest",
+            tag_slugs: ["cat-household", "noise-silent"],
+            sort: "recommended",
+        },
+        indexable: true,
+    },
+    {
+        slug: "do-25m2",
+        seoTitle: "Купить кондиционер до 25 м² в Витебске",
+        seoDescription:
+            "Кондиционеры для комнат до 25 м² в Витебске: модели для спальни, детской и небольшой гостиной.",
+        h1: "Кондиционеры до 25 м² в Витебске",
+        intro: "Подбор компактных сплит-систем для квартирных комнат с доставкой и монтажом.",
+        filters: {
+            tag_slugs: ["cat-household"],
+            area_max: 25,
+            sort: "recommended",
         },
         indexable: true,
     },
@@ -84,9 +102,9 @@ export const VIRTUAL_CATEGORIES: VirtualCategoryConfig[] = [
         h1: "Кондиционеры до 35 м² в Витебске",
         intro: "Подбор сплит-систем для квартир, спален и небольших офисов до 35 м².",
         filters: {
-            area_min: 30,
-            area_max: 39,
-            sort: "newest",
+            tag_slugs: ["cat-household"],
+            area_max: 35,
+            sort: "recommended",
         },
         indexable: true,
     },
@@ -98,9 +116,9 @@ export const VIRTUAL_CATEGORIES: VirtualCategoryConfig[] = [
         h1: "Кондиционеры до 50 м² в Витебске",
         intro: "Подбор кондиционеров для гостиных, студий и офисов площадью до 50 м².",
         filters: {
-            area_min: 40,
-            area_max: 59,
-            sort: "newest",
+            tag_slugs: ["cat-household"],
+            area_max: 50,
+            sort: "recommended",
         },
         indexable: true,
     },
@@ -112,9 +130,9 @@ export const VIRTUAL_CATEGORIES: VirtualCategoryConfig[] = [
         h1: "Кондиционеры до 70 м² в Витебске",
         intro: "Решения для просторных помещений и коммерческих зон до 70 м².",
         filters: {
-            area_min: 60,
+            tag_slugs: ["cat-household"],
             area_max: 70,
-            sort: "newest",
+            sort: "recommended",
         },
         indexable: true,
     },

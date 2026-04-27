@@ -1,6 +1,8 @@
 import pytest
 from httpx import AsyncClient
-from models import Product
+from datetime import datetime, timedelta
+from models import Brand, Product
+from crud.supplier import ProductLocalStockDAO
 from services.spec_normalizer import normalize_specs
 
 @pytest.fixture
@@ -52,6 +54,73 @@ async def test_product_not_found(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_catalog_default_sort_uses_recommendation_score(async_client: AsyncClient, db):
+    now = datetime.now()
+    apartment = Product(
+        title="Apartment in stock",
+        slug="apartment-in-stock",
+        price=1500,
+        area=25,
+        is_published=True,
+        created_at=now - timedelta(days=3),
+    )
+    mid_area = Product(
+        title="Mid area in stock",
+        slug="mid-area-in-stock",
+        price=1700,
+        area=35,
+        is_published=True,
+        created_at=now - timedelta(days=2),
+    )
+    large_area = Product(
+        title="Large area in stock",
+        slug="large-area-in-stock",
+        price=2200,
+        area=50,
+        is_published=True,
+        created_at=now - timedelta(days=1),
+    )
+    unavailable_new = Product(
+        title="Unavailable new",
+        slug="unavailable-new",
+        price=1200,
+        area=20,
+        is_published=True,
+        created_at=now,
+    )
+    db.add_all([apartment, mid_area, large_area, unavailable_new])
+    await db.commit()
+
+    for product in (apartment, mid_area, large_area):
+        await ProductLocalStockDAO.upsert(
+            session=db,
+            product_id=product.id,
+            qty=1,
+            updated_by="test",
+            warehouse_code="vitebsk",
+        )
+
+    response = await async_client.get("/api/v1/products?limit=4")
+    assert response.status_code == 200
+    slugs = [item["slug"] for item in response.json()["items"]]
+    assert slugs == [
+        "apartment-in-stock",
+        "mid-area-in-stock",
+        "large-area-in-stock",
+        "unavailable-new",
+    ]
+
+    response = await async_client.get("/api/v1/products?limit=4&area_max=50")
+    assert response.status_code == 200
+    slugs = [item["slug"] for item in response.json()["items"]]
+    assert slugs[:3] == [
+        "large-area-in-stock",
+        "mid-area-in-stock",
+        "apartment-in-stock",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_catalog_filters_by_wifi_and_heating(async_client: AsyncClient, db):
     good = Product(
         title="Good",
@@ -82,6 +151,35 @@ async def test_catalog_filters_by_wifi_and_heating(async_client: AsyncClient, db
     assert "good" in slugs
     assert "weak" not in slugs
     assert all(not key.startswith("__") for key in payload["items"][0]["specs"].keys())
+
+
+@pytest.mark.asyncio
+async def test_catalog_filters_by_brand_entity_slug(async_client: AsyncClient, db):
+    mdv = Brand(title="MDV", slug="mdv", is_published=True, sort_order=10)
+    haier = Brand(title="Haier", slug="haier", is_published=True, sort_order=40)
+    db.add_all([mdv, haier])
+    await db.flush()
+
+    db.add_all(
+        [
+            Product(title="MDV product", slug="mdv-product", price=1000, area=25, brand_id=mdv.id, is_published=True),
+            Product(
+                title="Haier product",
+                slug="haier-product",
+                price=1000,
+                area=25,
+                brand_id=haier.id,
+                is_published=True,
+            ),
+        ]
+    )
+    await db.commit()
+
+    response = await async_client.get("/api/v1/products?tag_slugs=mdv")
+    assert response.status_code == 200
+    slugs = [item["slug"] for item in response.json()["items"]]
+    assert "mdv-product" in slugs
+    assert "haier-product" not in slugs
 
 
 @pytest.mark.asyncio
