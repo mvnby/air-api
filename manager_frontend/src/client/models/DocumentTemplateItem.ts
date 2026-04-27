@@ -5,5 +5,6 @@
 export type DocumentTemplateItem = {
     id: string;
     name: string;
+    document_role_type?: string;
 };
 

@@ -10,6 +10,7 @@ from crud.order import OrderDAO
 from crud.product import ProductDAO
 from models import Order, OrderProductLink, OrderServiceLink, Customer, CustomerBranch, CustomerContract, CustomerType, OrderStatus, PaymentCurrency, Product, LeadSource, Service, OrderInstaller, OrderWorkStage
 from services.customer_contract_service import CustomerContractService
+from services.document_role_service import DocumentRoleService
 from services.product_supply_metrics_service import ProductSupplyMetricsService
 
 logger = logging.getLogger(__name__)
@@ -1005,6 +1006,10 @@ class OrderService:
             "comment": order.comment,
             "delivery_address": order.delivery_address,
             "customer_contract_id": order.customer_contract_id,
+            "document_role_type": (
+                order.document_role_type.value if hasattr(order.document_role_type, "value") else order.document_role_type
+            ),
+            "effective_document_role_type": DocumentRoleService.effective_role_type(order),
             "closing_result": order.closing_result,
             "reject_reason": order.reject_reason,
             "is_on_hold": bool(order.is_on_hold),
@@ -1279,6 +1284,8 @@ class OrderService:
             order.is_paid = payload.is_paid
         if "customer_delivery_address" in fields_set:
             order.delivery_address = payload.customer_delivery_address
+        if "document_role_type" in fields_set:
+            order.document_role_type = DocumentRoleService.nullable_role_type(payload.document_role_type)
         # New fields
         if "closing_result" in fields_set:
             order.closing_result = payload.closing_result

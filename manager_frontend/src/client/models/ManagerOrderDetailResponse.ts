@@ -31,6 +31,8 @@ export type ManagerOrderDetailResponse = {
     customer_branch?: (OrderCustomerBranchBrief | null);
     customer_contract_id?: (number | null);
     customer_contract?: (OrderCustomerContractBrief | null);
+    document_role_type?: (string | null);
+    effective_document_role_type?: string;
     installer_id?: (number | null);
     installer?: (ManagerInstallerResponse | null);
     equipment_status?: string;

@@ -10,6 +10,7 @@ export type ManagerCustomerContractItemResponse = {
     valid_until: string;
     status: string;
     template_id?: (string | null);
+    document_role_type?: string;
     edit_url?: (string | null);
     created_at: string;
     updated_at?: (string | null);

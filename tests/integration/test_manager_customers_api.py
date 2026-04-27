@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from sqlmodel import select
 
 from core.config import settings
-from models import Customer, CustomerBranch, CustomerContract, CustomerType, Order, OrderStatus
+from models import Customer, CustomerBranch, CustomerContract, CustomerType, GlobalConfig, Order, OrderStatus
 
 
 async def _auth_headers(async_client):
@@ -287,6 +287,13 @@ async def test_manager_customer_contract_create_and_dashboard_notice(async_clien
         legal_address="Минск, Победителей 1",
     )
     db.add(customer)
+    db.add(
+        GlobalConfig(
+            key="contract_templates",
+            value='[{"id":"service-template","name":"Сервис","document_role_type":"executor_customer"}]',
+            description="Contract templates",
+        )
+    )
     await db.commit()
     await db.refresh(customer)
 
@@ -296,6 +303,7 @@ async def test_manager_customer_contract_create_and_dashboard_notice(async_clien
         json={
             "contract_date": "2026-01-15T00:00:00",
             "valid_until": "2027-01-15T00:00:00",
+            "template_id": "service-template",
         },
     )
     assert create_resp.status_code == 200
@@ -303,9 +311,10 @@ async def test_manager_customer_contract_create_and_dashboard_notice(async_clien
     assert created["number"].startswith("ОД-2026-")
     assert created["status"] == "active"
     assert created["edit_url"].endswith("/edit")
-    assert captured["template_id"] == "1x-pL1j9g-NzLSpPTLVYXSsmutGExPgfDqzi2VLq9thI"
+    assert captured["template_id"] == "service-template"
     assert captured["replacements"]["{{contract_valid_until}}"] == "15.01.2027"
     assert captured["replacements"]["{{contract_number}}"] == created["number"]
+    assert created["document_role_type"] == "executor_customer"
 
     list_resp = await async_client.get(f"/api/manager/customers/{customer.id}/contracts", headers=headers)
     assert list_resp.status_code == 200

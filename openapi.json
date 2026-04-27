@@ -8777,6 +8777,17 @@
             "format": "date-time",
             "title": "Valid Until"
           },
+          "document_role_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role Type"
+          },
           "file": {
             "type": "string",
             "format": "binary",
@@ -9405,6 +9416,11 @@
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "document_role_type": {
+            "type": "string",
+            "title": "Document Role Type",
+            "default": "seller_buyer"
           }
         },
         "type": "object",
@@ -11606,6 +11622,17 @@
             ],
             "title": "Template Id"
           },
+          "document_role_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role Type"
+          },
           "contract_date": {
             "anyOf": [
               {
@@ -11672,6 +11699,11 @@
               }
             ],
             "title": "Template Id"
+          },
+          "document_role_type": {
+            "type": "string",
+            "title": "Document Role Type",
+            "default": "seller_buyer"
           },
           "edit_url": {
             "anyOf": [
@@ -11753,6 +11785,17 @@
               }
             ],
             "title": "Template Id"
+          },
+          "document_role_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role Type"
           },
           "contract_date": {
             "anyOf": [
@@ -13108,6 +13151,22 @@
               }
             ]
           },
+          "document_role_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role Type"
+          },
+          "effective_document_role_type": {
+            "type": "string",
+            "title": "Effective Document Role Type",
+            "default": "seller_buyer"
+          },
           "installer_id": {
             "anyOf": [
               {
@@ -13565,6 +13624,22 @@
                 "type": "null"
               }
             ]
+          },
+          "document_role_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role Type"
+          },
+          "effective_document_role_type": {
+            "type": "string",
+            "title": "Effective Document Role Type",
+            "default": "seller_buyer"
           },
           "installer_id": {
             "anyOf": [
@@ -14136,6 +14211,17 @@
               }
             ],
             "title": "Customer Contract Id"
+          },
+          "document_role_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role Type"
           },
           "customer_type": {
             "anyOf": [
@@ -15840,6 +15926,17 @@
           "status": {
             "type": "string",
             "title": "Status"
+          },
+          "document_role_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role Type"
           },
           "edit_url": {
             "anyOf": [

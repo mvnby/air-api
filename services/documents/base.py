@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from num2words import num2words
 
 from models import Order, OrderProductLink, OrderServiceLink, CustomerType
+from services.document_role_service import DocumentRoleService
 
 # Template IDs
 TEMPLATES = {
@@ -39,6 +40,7 @@ class BaseDocumentStrategy(ABC):
     async def fetch_order(self) -> None:
         query = select(Order).where(Order.id == self.order_id).options(
             selectinload(Order.customer),
+            selectinload(Order.customer_branch),
             selectinload(Order.customer_contract),
             selectinload(Order.product_links).selectinload(OrderProductLink.product),
             selectinload(Order.service_links).selectinload(OrderServiceLink.service)
@@ -101,6 +103,7 @@ class BaseDocumentStrategy(ABC):
             "{{date}}": effective_date.strftime("%d.%m.%Y"),
             "{{total_amount}}": f"{order.total_amount:.2f}",
             "{{total_amount_in_words}}": self._amount_in_words(order.total_amount), 
+            "{{object_address}}": order.delivery_address or (order.customer_branch.delivery_address if order.customer_branch else "") or "",
             
             # Defaults
             "{{client_name}}": "Клиент",
@@ -123,6 +126,7 @@ class BaseDocumentStrategy(ABC):
             "{{contract_valid_until}}": "-",
             "{{act_number}}": "1",
             "{{act_sequence_number}}": "1",
+            "{{document_role_type}}": DocumentRoleService.effective_role_type(order),
         }
 
         # A one-time contract document must always use its own generated number/date,

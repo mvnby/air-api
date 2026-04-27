@@ -10,6 +10,7 @@ from models import CustomerType, OrderDocument, Order, GlobalConfig
 from services.google_service import get_google_service
 from services.documents.base import TEMPLATES, DOC_NAMES, BaseDocumentStrategy
 from services.documents.factory import DocumentFactory
+from services.document_role_service import DocumentRoleService
 
 
 class DocumentService:
@@ -38,14 +39,48 @@ class DocumentService:
                 if config and config.value:
                     items = json.loads(config.value)
                     if isinstance(items, list) and len(items) > 0:
-                        return items
+                        normalized_items = []
+                        for item in items:
+                            if not isinstance(item, dict):
+                                continue
+                            normalized_item = DocumentService._normalize_template_item(item)
+                            if normalized_item:
+                                normalized_items.append(normalized_item)
+                        if normalized_items:
+                            return normalized_items
             except Exception:
                 pass
 
         # Fallback: единственный шаблон по умолчанию
         if default_id:
-            return [{"id": default_id, "name": f"{default_name} (по умолчанию)"}]
+            return [{
+                "id": default_id,
+                "name": f"{default_name} (по умолчанию)",
+                "document_role_type": DocumentRoleService.normalize_role_type(None),
+            }]
         return []
+
+    @staticmethod
+    def _normalize_template_item(item: dict) -> dict:
+        template_id = str(item.get("id") or "").strip()
+        name = str(item.get("name") or "").strip() or template_id
+        if not template_id:
+            return {}
+        return {
+            "id": template_id,
+            "name": name,
+            "document_role_type": DocumentRoleService.normalize_role_type(item.get("document_role_type")),
+        }
+
+    @staticmethod
+    async def _get_contract_template_role_type(session: AsyncSession, template_id: Optional[str]) -> str:
+        if not template_id:
+            return DocumentRoleService.normalize_role_type(None)
+        templates = await DocumentService.get_available_templates(session, "contract")
+        for template in templates:
+            if template.get("id") == template_id:
+                return DocumentRoleService.normalize_role_type(template.get("document_role_type"))
+        return DocumentRoleService.normalize_role_type(None)
     
     @staticmethod
     async def create_or_get_document(
@@ -300,6 +335,8 @@ class DocumentService:
         strategy = DocumentFactory.get_strategy(doc_type, session, order_id)
         await strategy.fetch_order()
         if doc_type == "contract" and strategy.order:
+            if not strategy.order.document_role_type:
+                strategy.order.document_role_type = await DocumentService._get_contract_template_role_type(session, template_id)
             strategy.order.contract_date = effective_doc_date
             session.add(strategy.order)
         replacements = await strategy._prepare_base_variables(
@@ -354,6 +391,12 @@ class DocumentService:
             
             # 6. Заменяем плейсхолдеры в документе
             get_google_service().replace_placeholders(file_id, replacements)
+            if doc_type in {"act", "invoice"} and strategy.order:
+                role_replacements = DocumentRoleService.build_word_replacements(
+                    DocumentRoleService.effective_role_type(strategy.order)
+                )
+                if role_replacements:
+                    get_google_service().replace_placeholders(file_id, role_replacements)
             
             # 7. Заполняем таблицу (если есть данные)
             table_data = strategy._prepare_table_data() if hasattr(strategy, '_prepare_table_data') else []
@@ -382,7 +425,8 @@ class DocumentService:
             order = await session.get(Order, order_id)
             if order and order.status in ["new_lead", "measurement"]:
                 from models.common import OrderStatus
-                order.status = OrderStatus.PROPOSAL
+                order.status = OrderStatus.NEGOTIATION
+                order.proposal_status = "sent"
                 session.add(order)
 
         await session.commit()

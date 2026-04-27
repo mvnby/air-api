@@ -13,6 +13,18 @@ const toastType = ref<'success' | 'error'>('success');
 
 // A set to keep track of which settings are currently being saved
 const savingKeys = ref<Set<string>>(new Set());
+type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
+interface ContractTemplateForm {
+    id: string;
+    name: string;
+    document_role_type: DocumentRoleType;
+}
+const DOCUMENT_ROLE_OPTIONS: Array<{ value: DocumentRoleType; label: string }> = [
+    { value: 'seller_buyer', label: 'Продавец / Покупатель' },
+    { value: 'executor_customer', label: 'Исполнитель / Заказчик' },
+    { value: 'contractor_customer', label: 'Подрядчик / Заказчик' },
+];
+const contractTemplateDrafts = ref<Record<string, ContractTemplateForm[]>>({});
 
 // Create form
 const showCreateForm = ref(false);
@@ -87,11 +99,70 @@ const loadSettings = async () => {
     try {
         const res = await api.listManagerSettings();
         settings.value = res.items;
+        contractTemplateDrafts.value = Object.fromEntries(
+            res.items
+                .filter((setting) => setting.key === 'contract_templates')
+                .map((setting) => [setting.key, parseContractTemplates(setting.value)]),
+        );
     } catch (e) {
         error.value = getApiErrorMessage(e);
     } finally {
         loading.value = false;
     }
+};
+
+const normalizeRoleType = (value: unknown): DocumentRoleType => {
+    const raw = String(value || '').trim();
+    if (raw === 'executor_customer' || raw === 'contractor_customer') return raw;
+    return 'seller_buyer';
+};
+
+const parseContractTemplates = (raw: string): ContractTemplateForm[] => {
+    try {
+        const items = JSON.parse(raw || '[]');
+        if (!Array.isArray(items)) return [];
+        return items
+            .filter((item) => item && typeof item === 'object')
+            .map((item) => ({
+                id: String(item.id || '').trim(),
+                name: String(item.name || '').trim(),
+                document_role_type: normalizeRoleType(item.document_role_type),
+            }))
+            .filter((item) => item.id || item.name);
+    } catch {
+        return [];
+    }
+};
+
+const ensureContractTemplateDraft = (setting: ManagerSettingResponse) => {
+    if (!contractTemplateDrafts.value[setting.key]) {
+        contractTemplateDrafts.value[setting.key] = parseContractTemplates(setting.value);
+    }
+    return contractTemplateDrafts.value[setting.key] ?? [];
+};
+
+const addContractTemplateRow = (setting: ManagerSettingResponse) => {
+    ensureContractTemplateDraft(setting).push({
+        id: '',
+        name: '',
+        document_role_type: 'seller_buyer',
+    });
+};
+
+const removeContractTemplateRow = (setting: ManagerSettingResponse, index: number) => {
+    ensureContractTemplateDraft(setting).splice(index, 1);
+};
+
+const saveContractTemplates = async (setting: ManagerSettingResponse) => {
+    const rows = ensureContractTemplateDraft(setting)
+        .map((row) => ({
+            id: row.id.trim(),
+            name: row.name.trim(),
+            document_role_type: normalizeRoleType(row.document_role_type),
+        }))
+        .filter((row) => row.id && row.name);
+    setting.value = JSON.stringify(rows, null, 2);
+    await saveSetting(setting);
 };
 
 const saveSetting = async (setting: ManagerSettingResponse) => {
@@ -346,7 +417,63 @@ onMounted(() => {
                     </div>
                 </div>
                 
-                <div class="flex-1 w-full space-y-3">
+                <div v-if="setting.key === 'contract_templates'" class="flex-[2] w-full space-y-3">
+                    <div class="flex items-center justify-between gap-3">
+                        <label class="block text-xs font-medium text-gray-500 dark:text-slate-400">Шаблоны договоров</label>
+                        <button
+                            type="button"
+                            class="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 dark:bg-teal-500/10 dark:text-teal-300 dark:hover:bg-teal-500/20 rounded-lg"
+                            @click="addContractTemplateRow(setting)"
+                        >
+                            <span class="material-icons-round text-[16px]">add</span>
+                            Добавить шаблон
+                        </button>
+                    </div>
+                    <div class="space-y-2">
+                        <div
+                            v-for="(template, index) in ensureContractTemplateDraft(setting)"
+                            :key="`${setting.key}-${index}`"
+                            class="grid grid-cols-1 gap-2 md:grid-cols-[1fr_1.4fr_220px_auto] md:items-center"
+                        >
+                            <input
+                                v-model="template.name"
+                                type="text"
+                                class="w-full bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-teal-500 transition-colors shadow-sm text-sm"
+                                placeholder="Название для менеджера"
+                                :disabled="savingKeys.has(setting.key)"
+                            />
+                            <input
+                                v-model="template.id"
+                                type="text"
+                                class="w-full bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-teal-500 transition-colors shadow-sm text-sm font-mono"
+                                placeholder="Google Template ID"
+                                :disabled="savingKeys.has(setting.key)"
+                            />
+                            <select
+                                v-model="template.document_role_type"
+                                class="w-full bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-teal-500 transition-colors shadow-sm text-sm"
+                                :disabled="savingKeys.has(setting.key)"
+                            >
+                                <option v-for="option in DOCUMENT_ROLE_OPTIONS" :key="option.value" :value="option.value">
+                                    {{ option.label }}
+                                </option>
+                            </select>
+                            <button
+                                type="button"
+                                class="flex h-10 w-10 items-center justify-center rounded-lg text-red-500 transition-colors hover:bg-red-500/10"
+                                title="Удалить шаблон"
+                                :disabled="savingKeys.has(setting.key)"
+                                @click="removeContractTemplateRow(setting, index)"
+                            >
+                                <span class="material-icons-round text-[20px]">delete</span>
+                            </button>
+                        </div>
+                    </div>
+                    <p v-if="!ensureContractTemplateDraft(setting).length" class="text-sm text-gray-500 dark:text-slate-400">
+                        Шаблоны еще не добавлены.
+                    </p>
+                </div>
+                <div v-else class="flex-1 w-full space-y-3">
                     <div>
                         <label class="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Значение</label>
                         <input
@@ -370,7 +497,7 @@ onMounted(() => {
                 
                 <div class="md:w-32 flex-shrink-0 flex justify-end w-full md:block">
                     <button
-                        @click="saveSetting(setting)"
+                        @click="setting.key === 'contract_templates' ? saveContractTemplates(setting) : saveSetting(setting)"
                         class="w-full flex justify-center items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-teal-600 hover:bg-teal-500 active:bg-teal-700 transition-colors rounded-lg disabled:opacity-50 shadow-sm"
                         :disabled="savingKeys.has(setting.key)"
                     >

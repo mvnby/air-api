@@ -73,6 +73,12 @@ class PaymentCurrency(str, Enum):
     EUR = "EUR"
 
 
+class DocumentRoleType(str, Enum):
+    SELLER_BUYER = "seller_buyer"
+    EXECUTOR_CUSTOMER = "executor_customer"
+    CONTRACTOR_CUSTOMER = "contractor_customer"
+
+
 class OrderStageStatus(str, Enum):
     PLANNED = "planned"
     IN_PROGRESS = "in_progress"

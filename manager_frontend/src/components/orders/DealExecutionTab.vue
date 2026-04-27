@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { ManagerOrdersService, ManagerDocsService, ManagerContractsService } from '../../client';
-import type { ManagerCustomerContractItemResponse, ManagerOrderDetailResponse, ManagerOrderDocumentItem } from '../../client';
+import type { DocumentTemplateItem, ManagerCustomerContractItemResponse, ManagerOrderDetailResponse, ManagerOrderDocumentItem } from '../../client';
 import { formatMoney } from './order-utils';
 import DateTimeField from '../ui/DateTimeField.vue';
 import { getApiErrorMessage } from '../../utils/api-errors';
@@ -148,11 +148,27 @@ const docDropdownOpen = ref(false);
 const isUploadingDoc = ref(false);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 
-const contractTemplates = ref<{id: string; name: string}[]>([]);
+type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
+const DOCUMENT_ROLE_OPTIONS: Array<{ value: DocumentRoleType; label: string }> = [
+  { value: 'seller_buyer', label: 'Продавец / Покупатель' },
+  { value: 'executor_customer', label: 'Исполнитель / Заказчик' },
+  { value: 'contractor_customer', label: 'Подрядчик / Заказчик' },
+];
+const normalizeRoleType = (value: unknown): DocumentRoleType => {
+  const raw = String(value || '').trim();
+  if (raw === 'executor_customer' || raw === 'contractor_customer') return raw;
+  return 'seller_buyer';
+};
+const getRoleLabel = (value?: string | null) => (
+  DOCUMENT_ROLE_OPTIONS.find((option) => option.value === normalizeRoleType(value))?.label || 'Продавец / Покупатель'
+);
+
+const contractTemplates = ref<DocumentTemplateItem[]>([]);
 const selectedContractTemplateId = ref<string>('');
 const documentDate = ref(new Date().toISOString().slice(0, 10));
 const customerContracts = ref<ManagerCustomerContractItemResponse[]>([]);
 const selectedCustomerContractId = ref<number | null>(props.order.customer_contract_id || null);
+const selectedDocumentRoleType = ref<string | null>(props.order.document_role_type || null);
 const ONE_TIME_CONTRACT_VALUE = 'one-time-contract';
 
 const DOCUMENT_TYPES = [
@@ -184,6 +200,22 @@ const selectedContractBinding = computed({
   },
   set: (value: string) => {
     void updateContractBinding(value);
+  },
+});
+const selectedContractTemplate = computed(() => contractTemplates.value.find((template) => template.id === selectedContractTemplateId.value) || null);
+const selectedOpenContract = computed(() => (
+  customerContracts.value.find((contract) => contract.id === selectedCustomerContractId.value) || null
+));
+const inheritedDocumentRoleType = computed(() => normalizeRoleType(
+  selectedDocumentRoleType.value
+    || selectedOpenContract.value?.document_role_type
+    || selectedContractTemplate.value?.document_role_type
+    || props.order.effective_document_role_type
+));
+const selectedDocumentRoleBinding = computed({
+  get: () => selectedDocumentRoleType.value || '',
+  set: (value: string) => {
+    void updateDocumentRoleBinding(value);
   },
 });
 
@@ -222,6 +254,19 @@ const updateContractBinding = async (value: string) => {
     emit('refresh');
   } catch (error) {
     setToast(`Ошибка выбора договора: ${getApiErrorMessage(error)}`, 'error');
+  }
+};
+
+const updateDocumentRoleBinding = async (value: string) => {
+  const nextRole = value ? normalizeRoleType(value) : null;
+  try {
+    selectedDocumentRoleType.value = nextRole;
+    await ManagerOrdersService.patchManagerOrder(props.order.id, {
+      document_role_type: nextRole,
+    });
+    emit('refresh');
+  } catch (error) {
+    setToast(`Ошибка выбора ролей: ${getApiErrorMessage(error)}`, 'error');
   }
 };
 
@@ -329,6 +374,7 @@ watch(() => props.order.id, () => {
   loadContractTemplates();
   loadCustomerContracts();
   selectedCustomerContractId.value = props.order.customer_contract_id || null;
+  selectedDocumentRoleType.value = props.order.document_role_type || null;
 }, { immediate: true });
 </script>
 
@@ -558,6 +604,19 @@ watch(() => props.order.id, () => {
               </button>
             </div>
             <p v-else-if="!selectedCustomerContractId && !hasOrderContract" class="mt-2 text-xs text-amber-600 dark:text-amber-400">Для актов и накладных нужен открытый договор или разовый договор заказа.</p>
+          </div>
+
+          <div class="mb-3 rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-slate-700/50 dark:bg-slate-900/40 dark:shadow-none">
+            <label class="mb-1 block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Роли сторон в актах и счетах</label>
+            <select
+              v-model="selectedDocumentRoleBinding"
+              class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+            >
+              <option value="">По договору / шаблону · {{ getRoleLabel(inheritedDocumentRoleType) }}</option>
+              <option v-for="option in DOCUMENT_ROLE_OPTIONS" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
           </div>
 
           <div v-if="documents.length" class="space-y-3">

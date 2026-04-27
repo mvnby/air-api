@@ -142,7 +142,11 @@ async def get_doc_templates(
     items = await DocumentService.get_available_templates(session, doc_type)
     return {
         "items": [
-            DocumentTemplateItem(id=t["id"], name=t["name"])
+            DocumentTemplateItem(
+                id=t["id"],
+                name=t["name"],
+                document_role_type=t.get("document_role_type"),
+            )
             for t in items
         ]
     }

@@ -4,7 +4,7 @@ from typing import List, Optional
 from sqlalchemy import Column, String
 from sqlmodel import Field, Relationship, SQLModel
 
-from .common import CustomerType, LeadIntakeSource, LeadLossReason, LeadSegmentHint, LeadStatus
+from .common import CustomerType, DocumentRoleType, LeadIntakeSource, LeadLossReason, LeadSegmentHint, LeadStatus
 
 
 class Customer(SQLModel, table=True):
@@ -65,6 +65,7 @@ class CustomerContract(SQLModel, table=True):
     status: str = Field(default="active", sa_column=Column(String, index=True))
 
     template_id: Optional[str] = None
+    document_role_type: Optional[DocumentRoleType] = Field(default=None, sa_column=Column(String, nullable=True))
     google_file_id: Optional[str] = None
     google_edit_url: Optional[str] = None
 
