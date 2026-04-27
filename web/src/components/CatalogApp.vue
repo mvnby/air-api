@@ -5,6 +5,8 @@ import { getCatalog, getFiltersConfig } from '../utils/api';
 import { getBrandConfig } from '../utils/brands';
 
 const BASE_LIMIT = 20;
+const POPULAR_LIMIT = 80;
+const CATALOG_DEFAULT_SORT = 'recommended';
 const CATEGORY_SLUG_LIST = ['cat-household', 'cat-multi', 'cat-industrial'];
 const POWER_PRESETS = [
   { key: 'area-20', title: 'до 20 м²', min: null, max: 20 },
@@ -30,6 +32,14 @@ const props = defineProps({
     type: Object,
     default: () => ({ total: 0, page: 1, limit: BASE_LIMIT, pages: 1 })
   },
+  initialPopularProducts: {
+    type: Array,
+    default: () => []
+  },
+  initialFilters: {
+    type: Object,
+    default: () => ({})
+  },
   forcedTitle: {
     type: String,
     default: ''
@@ -41,29 +51,37 @@ const props = defineProps({
   lockedInitialFilters: {
     type: Object,
     default: null
+  },
+  initialCategorySlug: {
+    type: String,
+    default: 'cat-household'
   }
 });
 
+const initialActiveTags = Array.isArray(props.lockedInitialFilters?.tag_slugs)
+  ? [...props.lockedInitialFilters.tag_slugs]
+  : [props.initialCategorySlug || 'cat-household'];
 const products = ref(props.initialProducts || []);
+const popularProducts = ref(props.initialPopularProducts || []);
 const meta = ref(props.initialMeta || { total: 0, page: 1, limit: BASE_LIMIT, pages: 1 });
 
 const loadingInitial = ref(false);
 const loadingMore = ref(false);
 const loadingBrands = ref(false);
 
-const activeTags = ref([]);
+const activeTags = ref([...new Set(initialActiveTags)]);
 const searchQuery = ref('');
-const sort = ref('newest');
+const sort = ref(props.initialFilters?.sort || CATALOG_DEFAULT_SORT);
 const mobileSearchOpen = ref(false);
 const advancedFiltersOpen = ref(false);
 
-const currentAreaMin = ref(null);
-const currentAreaMax = ref(null);
-const currentIsInverter = ref(null);
-const currentHasWifi = ref(null);
-const currentHasFreshAir = ref(null);
-const currentHeatingMin = ref(null);
-const currentIndoorTypes = ref([]);
+const currentAreaMin = ref(props.initialFilters?.area_min ?? null);
+const currentAreaMax = ref(props.initialFilters?.area_max ?? null);
+const currentIsInverter = ref(props.initialFilters?.is_inverter ?? null);
+const currentHasWifi = ref(props.initialFilters?.has_wifi ?? null);
+const currentHasFreshAir = ref(props.initialFilters?.has_fresh_air ?? null);
+const currentHeatingMin = ref(props.initialFilters?.heating_min ?? null);
+const currentIndoorTypes = ref([...(props.initialFilters?.indoor_types || [])]);
 const selectedOutdoorSlug = ref('');
 const selectedIndoorQuantities = ref({});
 
@@ -77,6 +95,12 @@ const activeBrandSlug = computed(() => activeTags.value.find((slug) => knownBran
 const isHouseholdCategory = computed(() => activeCategorySlug.value === 'cat-household');
 const isIndustrialCategory = computed(() => activeCategorySlug.value === 'cat-industrial');
 const isMultiCategory = computed(() => activeCategorySlug.value === 'cat-multi');
+
+const isCatalogAvailable = (product) => {
+  const status = String(product?.availability_status || '');
+  const qty = Number(product?.vitebsk_qty || 0) + Number(product?.minsk_qty || 0);
+  return qty > 0 || status === 'in_stock_now' || status === 'available_2_3_days';
+};
 
 const getSpecValue = (product, keys = []) => {
   if (!product) return null;
@@ -218,6 +242,72 @@ const getProductBrand = (product) => {
   const brandTag = (product?.tags || []).find((tag) => (tag.group?.slug || tag.group_slug) === 'brand');
   return brandTag?.title || '';
 };
+
+const getProductBrandSlug = (product) => {
+  const brandTag = (product?.tags || []).find((tag) => (tag.group?.slug || tag.group_slug) === 'brand');
+  if (brandTag?.slug) return String(brandTag.slug).trim().toLowerCase();
+  const brandTitle = getProductBrand(product);
+  const matched = availableBrands.value.find((brand) => isSameBrand(brand.title, brandTitle));
+  return matched?.slug || normalizeBrand(brandTitle);
+};
+
+const brandPriorityIndex = (brandSlug) => {
+  const configuredIndex = availableBrands.value.findIndex((brand) => brand.slug === brandSlug);
+  return configuredIndex >= 0 ? configuredIndex : availableBrands.value.length + 50;
+};
+
+const popularAreaLimit = computed(() => {
+  const selectedMax = Number(currentAreaMax.value || 0);
+  return selectedMax > 0 ? selectedMax : 35;
+});
+
+const diversifyPopularModels = (items, limit = 8) => {
+  const candidates = items.filter((product) => (
+    isCatalogAvailable(product) && Number(product?.area || 0) <= popularAreaLimit.value
+  ));
+  const groups = new Map();
+  candidates.forEach((product) => {
+    const brandSlug = getProductBrandSlug(product) || 'unknown';
+    const compressor = product?.is_inverter ? 'inverter' : 'onoff';
+    const key = `${brandSlug}:${compressor}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        brandSlug,
+        compressor,
+        items: [],
+      });
+    }
+    groups.get(key).items.push(product);
+  });
+
+  const compressorOrder = { onoff: 0, inverter: 1 };
+  const orderedGroups = [...groups.values()].sort((a, b) => (
+    brandPriorityIndex(a.brandSlug) - brandPriorityIndex(b.brandSlug)
+    || (compressorOrder[a.compressor] ?? 9) - (compressorOrder[b.compressor] ?? 9)
+    || a.brandSlug.localeCompare(b.brandSlug, 'ru')
+  ));
+
+  const result = [];
+  let cursor = 0;
+  while (result.length < limit && orderedGroups.some((group) => cursor < group.items.length)) {
+    orderedGroups.forEach((group) => {
+      if (result.length < limit && group.items[cursor]) {
+        result.push(group.items[cursor]);
+      }
+    });
+    cursor += 1;
+  }
+  return result;
+};
+
+const popularModels = computed(() => diversifyPopularModels(popularProducts.value, 8));
+
+const showPopularModels = computed(() => (
+  isHouseholdCategory.value
+  && !loadingInitial.value
+  && popularModels.value.length >= 3
+));
 
 const getCoolingKw = (product) => parseNumber(getSpecValue(product, ['capacity_cooling_kw', 'Мощность охлаждения']));
 const getIndoorCapacityClass = (product) => {
@@ -475,7 +565,7 @@ const activePowerPresetKey = computed(() => {
 });
 
 const hasActiveAdvancedFilters = computed(() => (
-  sort.value !== 'newest'
+  sort.value !== CATALOG_DEFAULT_SORT
   || currentIsInverter.value !== null
   || currentHasWifi.value !== null
   || currentHasFreshAir.value !== null
@@ -522,7 +612,7 @@ const getParamsFromUrl = () => {
 
   return {
     page: Number.parseInt(sp.get('page') || '1', 10) || 1,
-    sort: sp.get('sort') || 'newest',
+    sort: sp.get('sort') || CATALOG_DEFAULT_SORT,
     q: sp.get('q') || '',
     tag_slugs: tags,
     area_min: sp.get('area_min') || null,
@@ -577,8 +667,9 @@ const applyLockedFilters = (params) => {
 };
 
 const syncStateFromUrl = () => {
-  const params = getParamsFromUrl();
-  if (!params) return;
+  const rawParams = getParamsFromUrl();
+  if (!rawParams) return;
+  const params = applyLockedFilters(rawParams);
 
   activeTags.value = [...params.tag_slugs];
   searchQuery.value = params.q;
@@ -621,6 +712,13 @@ const buildApiParams = (page = 1) => {
   return applyLockedFilters(base);
 };
 
+const buildPopularApiParams = () => ({
+  ...buildApiParams(1),
+  page: 1,
+  limit: POPULAR_LIMIT,
+  sort: CATALOG_DEFAULT_SORT,
+});
+
 const syncUrlFromState = (page = 1, { replace = false } = {}) => {
   if (typeof window === 'undefined') return;
 
@@ -631,7 +729,7 @@ const syncUrlFromState = (page = 1, { replace = false } = {}) => {
     sp.set('tag_slugs', params.tag_slugs.join(','));
   }
   if (page > 1) sp.set('page', String(page));
-  if (params.sort && params.sort !== 'newest') sp.set('sort', params.sort);
+  if (params.sort && params.sort !== CATALOG_DEFAULT_SORT) sp.set('sort', params.sort);
   if (params.q) sp.set('q', params.q);
 
   if (params.area_min !== undefined) sp.set('area_min', String(params.area_min));
@@ -662,7 +760,12 @@ const fetchProducts = async ({ page = 1, append = false } = {}) => {
 
   try {
     const apiParams = buildApiParams(page);
-    const data = await getCatalog(apiParams);
+    const [data, popularData] = append
+      ? [await getCatalog(apiParams), null]
+      : await Promise.all([
+        getCatalog(apiParams),
+        getCatalog(buildPopularApiParams()),
+      ]);
 
     const incomingItems = data.items || [];
     if (append) {
@@ -677,6 +780,7 @@ const fetchProducts = async ({ page = 1, append = false } = {}) => {
       products.value = merged;
     } else {
       products.value = incomingItems;
+      popularProducts.value = popularData?.items || incomingItems;
     }
 
     syncMultiSelectionState();
@@ -854,7 +958,7 @@ const setHeatingMin = async (value) => {
 };
 
 const resetAdvancedFilters = async () => {
-  sort.value = 'newest';
+  sort.value = CATALOG_DEFAULT_SORT;
   currentIsInverter.value = null;
   currentHasWifi.value = null;
   currentHasFreshAir.value = null;
@@ -956,38 +1060,6 @@ onMounted(async () => {
         Как выбрать тип полупромышленного кондиционера
       </a>
     </header>
-
-    <section class="glass-panel brand-panel">
-      <div class="section-head">
-        <div class="section-label">Бренд</div>
-        <div v-if="loadingBrands" class="label-hint">Обновляем список...</div>
-      </div>
-      <div class="brand-strip">
-        <button
-          class="brand-pill"
-          :class="{ active: activeBrandSlug === null }"
-          @click="toggleBrand('__all__')"
-        >
-          Все бренды
-        </button>
-
-        <button
-          v-for="brand in availableBrands"
-          :key="brand.slug"
-          class="brand-pill"
-          :class="{ active: activeBrandSlug === brand.slug }"
-          @click="toggleBrand(brand.slug)"
-        >
-          <img
-            v-if="getBrandConfig(brand.slug).logo"
-            :src="getBrandConfig(brand.slug).logo"
-            :alt="brand.title"
-            class="brand-pill-logo"
-          />
-          <span>{{ brand.title }}</span>
-        </button>
-      </div>
-    </section>
 
     <section v-if="isHouseholdCategory" class="glass-panel quick-power-panel">
       <div class="section-label">Мощность</div>
@@ -1144,8 +1216,41 @@ onMounted(async () => {
     <transition name="fade-up">
       <section v-if="advancedFiltersOpen" class="glass-panel advanced-panel">
         <div class="advanced-row">
+          <div class="section-head">
+            <div class="control-label">Бренд</div>
+            <div v-if="loadingBrands" class="label-hint">Обновляем список...</div>
+          </div>
+          <div class="brand-strip">
+            <button
+              class="brand-pill"
+              :class="{ active: activeBrandSlug === null }"
+              @click="toggleBrand('__all__')"
+            >
+              Все бренды
+            </button>
+
+            <button
+              v-for="brand in availableBrands"
+              :key="brand.slug"
+              class="brand-pill"
+              :class="{ active: activeBrandSlug === brand.slug }"
+              @click="toggleBrand(brand.slug)"
+            >
+              <img
+                v-if="getBrandConfig(brand.slug).logo"
+                :src="getBrandConfig(brand.slug).logo"
+                :alt="brand.title"
+                class="brand-pill-logo"
+              />
+              <span>{{ brand.title }}</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="advanced-row">
           <label class="control-label" for="catalog-sort">Сортировка</label>
           <select id="catalog-sort" v-model="sort" class="filters-select" @change="onSortChange">
+            <option value="recommended">Рекомендуемые</option>
             <option value="newest">Сначала новые</option>
             <option value="price_asc">Сначала дешевле</option>
             <option value="price_desc">Сначала дороже</option>
@@ -1217,14 +1322,33 @@ onMounted(async () => {
     </div>
 
     <div v-else-if="products.length > 0" class="catalog-content">
-      <transition-group name="fade-up" tag="div" class="grid">
-        <ProductCard
-          v-for="product in products"
-          :key="product.id"
-          :product="product"
-          :showInstallation="true"
-        />
-      </transition-group>
+      <section v-if="showPopularModels" class="popular-section" aria-labelledby="popular-models-title">
+        <div class="catalog-section-head">
+          <h2 id="popular-models-title">Популярные модели</h2>
+        </div>
+        <transition-group name="fade-up" tag="div" class="grid popular-grid">
+          <ProductCard
+            v-for="product in popularModels"
+            :key="`popular-${product.id}`"
+            :product="product"
+            :showInstallation="true"
+          />
+        </transition-group>
+      </section>
+
+      <section class="all-products-section" aria-labelledby="all-products-title">
+        <div class="catalog-section-head">
+          <h2 id="all-products-title">Все модели</h2>
+        </div>
+        <transition-group name="fade-up" tag="div" class="grid">
+          <ProductCard
+            v-for="product in products"
+            :key="product.id"
+            :product="product"
+            :showInstallation="true"
+          />
+        </transition-group>
+      </section>
 
       <div v-if="loadingMore" class="grid skeleton-grid skeleton-grid-more">
         <div v-for="i in 4" :key="`skeleton-more-${i}`" class="skeleton-card" />
@@ -1242,6 +1366,24 @@ onMounted(async () => {
       <h3>Товары не найдены</h3>
       <p>Попробуйте выбрать другой бренд или категорию.</p>
     </div>
+
+    <section class="catalog-seo-block">
+      <h2>Как выбрать кондиционер для квартиры</h2>
+      <p>
+        Для жилых комнат чаще всего подходят настенные сплит-системы до 25–35 м²: они закрывают типовые спальни,
+        детские и гостиные без переплаты за лишнюю мощность. При выборе стоит учитывать площадь, солнечную сторону,
+        высоту потолков и теплопритоки от техники.
+      </p>
+      <p>
+        Если кондиционер нужен для ежедневного использования, обратите внимание на инверторные модели, уровень шума
+        внутреннего блока и наличие сервисной поддержки. Для больших помещений и коммерческих объектов лучше выбирать
+        модель с запасом по производительности и заранее продумать место установки.
+      </p>
+      <p>
+        В каталоге MVN собраны кондиционеры для квартир, домов и офисов в Витебске. Умная сортировка поднимает выше
+        доступные модели подходящей мощности, чтобы быстрее найти практичный вариант с монтажом.
+      </p>
+    </section>
   </div>
 </template>
 
@@ -1729,6 +1871,32 @@ onMounted(async () => {
   gap: 1.4rem;
 }
 
+.popular-section,
+.all-products-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.catalog-section-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.catalog-section-head h2,
+.catalog-seo-block h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
+.popular-grid {
+  padding-bottom: 0.15rem;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -1809,6 +1977,19 @@ onMounted(async () => {
   font-size: 4rem;
   color: var(--text-muted);
   opacity: 0.55;
+}
+
+.catalog-seo-block {
+  margin-top: 2.2rem;
+  padding-top: 1.6rem;
+  border-top: 1px solid var(--panel-glass-border);
+  color: var(--text-muted);
+}
+
+.catalog-seo-block p {
+  max-width: 880px;
+  margin: 0.75rem 0 0;
+  line-height: 1.7;
 }
 
 @media (max-width: 980px) {

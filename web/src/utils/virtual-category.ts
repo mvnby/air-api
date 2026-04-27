@@ -26,8 +26,8 @@ interface NormalizedFilters {
     area_max?: number;
 }
 
-const DEFAULT_SORT: CatalogSort = "newest";
-const TECHNICAL_DEFAULT_TAGS = new Set<string>();
+const DEFAULT_SORT: CatalogSort = "recommended";
+const TECHNICAL_DEFAULT_TAGS = new Set<string>(["cat-household"]);
 
 function normalizeTags(tags: string[] = []): string[] {
     const clean = tags

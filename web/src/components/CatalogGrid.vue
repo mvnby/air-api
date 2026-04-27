@@ -64,7 +64,7 @@ const fetchProducts = async () => {
         tag_slugs: tags,
         page: params.page || 1,
         limit: 12,
-        sort: params.sort || 'newest'
+        sort: params.sort || 'recommended'
     };
     
     // Remove legacy params if they exist in URL but handled via tags now

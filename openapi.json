@@ -1127,7 +1127,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "default": "newest",
+              "default": "recommended",
               "title": "Sort"
             }
           },
@@ -1377,7 +1377,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "default": "newest",
+              "default": "recommended",
               "title": "Sort"
             }
           },

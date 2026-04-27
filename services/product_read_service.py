@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from crud.product import ProductDAO
-from models import Product
+from models import Brand, Product
 from services.product_dict_mapper import map_product_to_dict
 from services.product_filter_service import ProductFilterService
 from services.product_series_service import ProductSeriesService
@@ -54,7 +54,7 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
         *,
         page: int = 1,
         limit: int = 20,
-        sort: str = "newest",
+        sort: str = "recommended",
         min_price: Optional[int] = None,
         max_price: Optional[int] = None,
         area_min: Optional[int] = None,
@@ -68,8 +68,16 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
         search: Optional[str] = None,
     ) -> Dict[str, Any]:
         faceted_tag_ids = None
+        brand_slugs = []
+        facet_slugs = tag_slugs or []
         if tag_slugs:
-            faceted_tag_ids = await ProductReadService.resolve_slugs_to_grouped_ids(session, tag_slugs)
+            brand_rows = (
+                await session.execute(select(Brand.slug).where(Brand.slug.in_(tag_slugs)))
+            ).scalars().all()
+            brand_slugs = [slug for slug in brand_rows if slug]
+            brand_slug_set = set(brand_slugs)
+            facet_slugs = [slug for slug in tag_slugs if slug not in brand_slug_set]
+            faceted_tag_ids = await ProductReadService.resolve_slugs_to_grouped_ids(session, facet_slugs)
 
         items = await ProductDAO.get_filtered(
             session,
@@ -83,6 +91,7 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
             indoor_types=indoor_types,
             is_inverter=is_inverter,
             tag_slugs=None,
+            brand_slugs=brand_slugs,
             faceted_tag_ids=faceted_tag_ids,
             sort=sort,
             page=page,
@@ -102,6 +111,7 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
             indoor_types=indoor_types,
             is_inverter=is_inverter,
             tag_slugs=None,
+            brand_slugs=brand_slugs,
             faceted_tag_ids=faceted_tag_ids,
             is_published=True,
             search_query=search,

@@ -5,18 +5,29 @@ All methods accept AsyncSession as first argument for DI/transaction control.
 """
 from typing import Optional, List, Dict, Any
 
-from sqlalchemy import Integer, Boolean, String, cast, func, and_, or_, exists
+from sqlalchemy import Integer, Boolean, String, case, cast, func, and_, or_, exists
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from models import Product, Tag, TagGroup, ProductTagLink
+from models import Brand, Product, Tag, TagGroup, ProductTagLink
 from models.product_constants import BTU_MAPPING
+from models.supplier import ProductLocalStock, ProductSupplierMapping, SupplierOffer
 
 
 ALLOWED_FILTER_GROUP_SLUGS = {"brand", "series", "expert-badge", "type", "category"}
 ALLOWED_INDOOR_TYPE_FILTERS = {"duct", "cassette", "floor_ceiling", "column"}
+CATALOG_RANKING_WEIGHTS = {
+    "availability": 100,
+    "out_of_stock": -100,
+    "area_to_25": 50,
+    "area_to_35": 30,
+    "area_large": 10,
+    "analytics_clicks": 0,
+    "analytics_cart_adds": 0,
+    "analytics_views": 0,
+}
 
 
 class ProductDAO:
@@ -96,6 +107,7 @@ class ProductDAO:
         has_fresh_air: Optional[bool] = None,
         indoor_types: Optional[List[str]] = None,
         tag_slugs: Optional[List[str]] = None,
+        brand_slugs: Optional[List[str]] = None,
         is_published: Optional[bool] = True,
     ):
         if is_published is not None:
@@ -197,6 +209,16 @@ class ProductDAO:
                 # Backcompat: unknown/legacy slugs should be ignored (not zero-result).
                 stmt = stmt.where(or_(~exists(group_slug_exists), Product.id.in_(group_subq)))
 
+        if brand_slugs:
+            normalized_brand_slugs = [
+                slug.strip().lower()
+                for slug in brand_slugs
+                if slug and slug.strip()
+            ]
+            if normalized_brand_slugs:
+                brand_subq = select(Brand.id).where(Brand.slug.in_(normalized_brand_slugs))
+                stmt = stmt.where(Product.brand_id.in_(brand_subq))
+
         return stmt
 
     @staticmethod
@@ -241,6 +263,111 @@ class ProductDAO:
         return stmt
 
     @staticmethod
+    def _catalog_recommendation_score_expr(area_max: Optional[int] = None):
+        local_stock_exists = exists(
+            select(ProductLocalStock.id).where(
+                ProductLocalStock.product_id == Product.id,
+                ProductLocalStock.qty > 0,
+            )
+        )
+        supplier_stock_exists = exists(
+            select(ProductSupplierMapping.id)
+            .join(
+                SupplierOffer,
+                and_(
+                    ProductSupplierMapping.supplier_id == SupplierOffer.supplier_id,
+                    ProductSupplierMapping.external_id == SupplierOffer.external_id,
+                ),
+            )
+            .where(
+                ProductSupplierMapping.product_id == Product.id,
+                ProductSupplierMapping.is_active.is_(True),
+                SupplierOffer.is_active.is_(True),
+                SupplierOffer.qty > 0,
+            )
+        )
+
+        availability_score = case(
+            (
+                or_(local_stock_exists, supplier_stock_exists),
+                CATALOG_RANKING_WEIGHTS["availability"],
+            ),
+            else_=CATALOG_RANKING_WEIGHTS["out_of_stock"],
+        )
+        area_threshold = int(area_max) if area_max else None
+        if area_threshold and area_threshold > 35:
+            if area_threshold <= 50:
+                area_score = case(
+                    (
+                        and_(Product.area > 35, Product.area <= area_threshold),
+                        CATALOG_RANKING_WEIGHTS["area_to_25"],
+                    ),
+                    (
+                        and_(Product.area > 25, Product.area <= 35),
+                        CATALOG_RANKING_WEIGHTS["area_to_35"],
+                    ),
+                    (Product.area <= 25, CATALOG_RANKING_WEIGHTS["area_large"]),
+                    else_=0,
+                )
+            elif area_threshold <= 70:
+                area_score = case(
+                    (
+                        and_(Product.area > 50, Product.area <= area_threshold),
+                        CATALOG_RANKING_WEIGHTS["area_to_25"],
+                    ),
+                    (
+                        and_(Product.area > 35, Product.area <= 50),
+                        CATALOG_RANKING_WEIGHTS["area_to_35"],
+                    ),
+                    (
+                        and_(Product.area > 25, Product.area <= 35),
+                        CATALOG_RANKING_WEIGHTS["area_large"],
+                    ),
+                    (Product.area <= 25, 5),
+                    else_=0,
+                )
+            else:
+                area_score = case(
+                    (
+                        and_(Product.area > 70, Product.area <= area_threshold),
+                        CATALOG_RANKING_WEIGHTS["area_to_25"],
+                    ),
+                    (
+                        and_(Product.area > 50, Product.area <= 70),
+                        CATALOG_RANKING_WEIGHTS["area_to_35"],
+                    ),
+                    (Product.area <= 50, CATALOG_RANKING_WEIGHTS["area_large"]),
+                    else_=0,
+                )
+        elif area_threshold and area_threshold > 25:
+            area_score = case(
+                (
+                    and_(Product.area > 25, Product.area <= area_threshold),
+                    CATALOG_RANKING_WEIGHTS["area_to_25"],
+                ),
+                (Product.area <= 25, CATALOG_RANKING_WEIGHTS["area_to_35"]),
+                else_=0,
+            )
+        else:
+            area_score = case(
+                (Product.area <= 25, CATALOG_RANKING_WEIGHTS["area_to_25"]),
+                (Product.area <= 35, CATALOG_RANKING_WEIGHTS["area_to_35"]),
+                (Product.area > 35, CATALOG_RANKING_WEIGHTS["area_large"]),
+                else_=0,
+            )
+
+        return availability_score + area_score
+
+    @staticmethod
+    def _catalog_brand_priority_expr():
+        brand_sort_order = (
+            select(Brand.sort_order)
+            .where(Brand.id == Product.brand_id)
+            .scalar_subquery()
+        )
+        return func.coalesce(brand_sort_order, 999)
+
+    @staticmethod
     async def get_filtered(
         session: AsyncSession,
         *,
@@ -254,8 +381,9 @@ class ProductDAO:
         has_fresh_air: Optional[bool] = None,
         indoor_types: Optional[List[str]] = None,
         tag_slugs: Optional[List[str]] = None,
+        brand_slugs: Optional[List[str]] = None,
         is_published: Optional[bool] = True,
-        sort: str = "newest",
+        sort: str = "recommended",
         page: int = 1,
         limit: int = 20,
         faceted_tag_ids: Optional[dict[int, list[int]]] = None,
@@ -280,6 +408,7 @@ class ProductDAO:
             has_fresh_air=has_fresh_air,
             indoor_types=indoor_types,
             tag_slugs=tag_slugs,
+            brand_slugs=brand_slugs,
             is_published=is_published,
         )
         if search_query:
@@ -294,8 +423,15 @@ class ProductDAO:
             stmt = stmt.order_by(Product.area.asc())
         elif sort == "area_desc":
             stmt = stmt.order_by(Product.area.desc())
+        elif sort == "newest":
+            stmt = stmt.order_by(Product.created_at.desc(), Product.id.desc())
         else:
-            stmt = stmt.order_by(Product.created_at.desc())
+            stmt = stmt.order_by(
+                ProductDAO._catalog_recommendation_score_expr(area_max=area_max).desc(),
+                ProductDAO._catalog_brand_priority_expr().asc(),
+                Product.created_at.desc(),
+                Product.id.desc(),
+            )
 
         offset = (page - 1) * limit
         stmt = stmt.offset(offset).limit(limit)
@@ -316,6 +452,7 @@ class ProductDAO:
         has_fresh_air: Optional[bool] = None,
         indoor_types: Optional[List[str]] = None,
         tag_slugs: Optional[List[str]] = None,
+        brand_slugs: Optional[List[str]] = None,
         is_published: Optional[bool] = True,
         faceted_tag_ids: Optional[dict[int, list[int]]] = None,
         search_query: Optional[str] = None,
@@ -334,6 +471,7 @@ class ProductDAO:
             has_fresh_air=has_fresh_air,
             indoor_types=indoor_types,
             tag_slugs=tag_slugs,
+            brand_slugs=brand_slugs,
             is_published=is_published,
         )
         stmt = ProductDAO._apply_faceted_filters(stmt, faceted_tag_ids)

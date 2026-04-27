@@ -302,7 +302,7 @@ export class ApiService {
     public static getProductsV1(
         page: number = 1,
         limit: number = 20,
-        sort: string = 'newest',
+        sort: string = 'recommended',
         minPrice?: (number | null),
         maxPrice?: (number | null),
         areaMin?: (number | null),
@@ -361,7 +361,7 @@ export class ApiService {
     public static getProducts(
         page: number = 1,
         limit: number = 20,
-        sort: string = 'newest',
+        sort: string = 'recommended',
         minPrice?: (number | null),
         maxPrice?: (number | null),
         areaMin?: (number | null),
