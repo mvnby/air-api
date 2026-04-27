@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from schemas import (
     BulkRoundRequest,
@@ -179,7 +179,12 @@ class ManagerCatalogService:
         q: str,
         limit: int = 40,
         is_inverter: Optional[bool] = None,
+        area_min: Optional[int] = None,
+        area_max: Optional[int] = None,
+        heating_min: Optional[int] = None,
         has_wifi: Optional[bool] = None,
+        has_fresh_air: Optional[bool] = None,
+        brand_slugs: Optional[List[str]] = None,
         category_slug: Optional[str] = None,
     ):
         return await ProductManagerService.smart_search(
@@ -187,6 +192,11 @@ class ManagerCatalogService:
             q=q,
             limit=limit,
             is_inverter=is_inverter,
+            area_min=area_min,
+            area_max=area_max,
+            heating_min=heating_min,
             has_wifi=has_wifi,
+            has_fresh_air=has_fresh_air,
+            brand_slugs=brand_slugs,
             category_slug=category_slug,
         )
