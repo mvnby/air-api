@@ -72,6 +72,10 @@ export class ManagerService {
      * @param areaMin
      * @param areaMax
      * @param isInverter
+     * @param heatingMin
+     * @param hasWifi
+     * @param hasFreshAir
+     * @param brandSlugs Brand slugs to include
      * @param categorySlug Category tag slug: cat-household/cat-multi/cat-industrial
      * @param sort
      * @returns ManagerCatalogProductListResponse Successful Response
@@ -85,8 +89,12 @@ export class ManagerService {
         areaMin?: (number | null),
         areaMax?: (number | null),
         isInverter?: (boolean | null),
+        heatingMin?: (number | null),
+        hasWifi?: (boolean | null),
+        hasFreshAir?: (boolean | null),
+        brandSlugs?: (Array<string> | null),
         categorySlug?: (string | null),
-        sort: string = 'newest',
+        sort: string = 'recommended',
     ): CancelablePromise<ManagerCatalogProductListResponse> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -99,6 +107,10 @@ export class ManagerService {
                 'area_min': areaMin,
                 'area_max': areaMax,
                 'is_inverter': isInverter,
+                'heating_min': heatingMin,
+                'has_wifi': hasWifi,
+                'has_fresh_air': hasFreshAir,
+                'brand_slugs': brandSlugs,
                 'category_slug': categorySlug,
                 'sort': sort,
             },
@@ -406,7 +418,12 @@ export class ManagerService {
      * @param q Free-text search query, e.g. 'mdv loft 18'
      * @param limit
      * @param isInverter
+     * @param areaMin
+     * @param areaMax
+     * @param heatingMin
      * @param hasWifi
+     * @param hasFreshAir
+     * @param brandSlugs Brand slugs to include
      * @param categorySlug Category tag slug: cat-household/cat-multi/cat-industrial
      * @returns ManagerCatalogProductListResponse Successful Response
      * @throws ApiError
@@ -415,7 +432,12 @@ export class ManagerService {
         q: string,
         limit: number = 40,
         isInverter?: (boolean | null),
+        areaMin?: (number | null),
+        areaMax?: (number | null),
+        heatingMin?: (number | null),
         hasWifi?: (boolean | null),
+        hasFreshAir?: (boolean | null),
+        brandSlugs?: (Array<string> | null),
         categorySlug?: (string | null),
     ): CancelablePromise<ManagerCatalogProductListResponse> {
         return __request(OpenAPI, {
@@ -425,7 +447,12 @@ export class ManagerService {
                 'q': q,
                 'limit': limit,
                 'is_inverter': isInverter,
+                'area_min': areaMin,
+                'area_max': areaMax,
+                'heating_min': heatingMin,
                 'has_wifi': hasWifi,
+                'has_fresh_air': hasFreshAir,
+                'brand_slugs': brandSlugs,
                 'category_slug': categorySlug,
             },
             errors: {

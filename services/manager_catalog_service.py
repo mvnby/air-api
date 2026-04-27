@@ -25,6 +25,10 @@ class ManagerCatalogService:
         area_min: Optional[int],
         area_max: Optional[int],
         is_inverter: Optional[bool],
+        heating_min: Optional[int],
+        has_wifi: Optional[bool],
+        has_fresh_air: Optional[bool],
+        brand_slugs: Optional[list[str]],
         category_slug: Optional[str],
         sort: str,
     ) -> Dict[str, Any]:
@@ -37,6 +41,10 @@ class ManagerCatalogService:
             area_min=area_min,
             area_max=area_max,
             is_inverter=is_inverter,
+            heating_min=heating_min,
+            has_wifi=has_wifi,
+            has_fresh_air=has_fresh_air,
+            brand_slugs=brand_slugs,
             category_slug=category_slug,
             sort=sort,
         )

@@ -2296,6 +2296,75 @@
             }
           },
           {
+            "name": "heating_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Heating Min"
+            }
+          },
+          {
+            "name": "has_wifi",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Wifi"
+            }
+          },
+          {
+            "name": "has_fresh_air",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Fresh Air"
+            }
+          },
+          {
+            "name": "brand_slugs",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Brand slugs to include",
+              "title": "Brand Slugs"
+            },
+            "description": "Brand slugs to include"
+          },
+          {
             "name": "category_slug",
             "in": "query",
             "required": false,
@@ -2319,7 +2388,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "default": "newest",
+              "default": "recommended",
               "title": "Sort"
             }
           }
@@ -3100,6 +3169,54 @@
             }
           },
           {
+            "name": "area_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Area Min"
+            }
+          },
+          {
+            "name": "area_max",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Area Max"
+            }
+          },
+          {
+            "name": "heating_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Heating Min"
+            }
+          },
+          {
             "name": "has_wifi",
             "in": "query",
             "required": false,
@@ -3114,6 +3231,43 @@
               ],
               "title": "Has Wifi"
             }
+          },
+          {
+            "name": "has_fresh_air",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Fresh Air"
+            }
+          },
+          {
+            "name": "brand_slugs",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Brand slugs to include",
+              "title": "Brand Slugs"
+            },
+            "description": "Brand slugs to include"
           },
           {
             "name": "category_slug",

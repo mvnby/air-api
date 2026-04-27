@@ -2,7 +2,8 @@ import pytest
 from sqlmodel import select
 
 from core.config import settings
-from models import Product, ProductTagLink, Tag, TagGroup
+from crud.supplier import ProductLocalStockDAO
+from models import Brand, Product, ProductTagLink, Tag, TagGroup
 
 
 async def _auth_headers(async_client):
@@ -116,3 +117,160 @@ async def test_manager_products_smart_search_respects_category_slug(async_client
     ids = {item["id"] for item in items}
     assert p_multi.id in ids
     assert p_house.id not in ids
+
+
+@pytest.mark.asyncio
+async def test_manager_products_recommended_sort_boosts_favorites(async_client, db):
+    headers = await _auth_headers(async_client)
+
+    household_tag = await _get_or_create_category_tag(db, "cat-household", "Бытовые")
+    favorite_tag = (await db.execute(select(Tag).where(Tag.slug == "manager-favorite"))).scalar_one_or_none()
+    if favorite_tag is None:
+        favorite_group = TagGroup(
+            title="Метки менеджера",
+            slug="manager-flags-test",
+            color="warning",
+            is_public=False,
+            allow_multiple=True,
+        )
+        db.add(favorite_group)
+        await db.commit()
+        await db.refresh(favorite_group)
+        favorite_tag = Tag(
+            title="Избранное",
+            slug="manager-favorite",
+            group_id=favorite_group.id,
+            is_public=False,
+            is_filter=False,
+        )
+        db.add(favorite_tag)
+        await db.commit()
+        await db.refresh(favorite_tag)
+
+    marker = "UNITFAV789"
+    regular = Product(
+        title=f"{marker} Regular",
+        slug=f"{marker.lower()}-regular",
+        price=1000,
+        area=25,
+        is_published=True,
+    )
+    favorite = Product(
+        title=f"{marker} Favorite",
+        slug=f"{marker.lower()}-favorite",
+        price=1100,
+        area=35,
+        is_published=True,
+    )
+    db.add_all([regular, favorite])
+    await db.commit()
+    await db.refresh(regular)
+    await db.refresh(favorite)
+
+    db.add_all(
+        [
+            ProductTagLink(product_id=regular.id, tag_id=household_tag.id),
+            ProductTagLink(product_id=favorite.id, tag_id=household_tag.id),
+            ProductTagLink(product_id=favorite.id, tag_id=favorite_tag.id),
+        ]
+    )
+    await db.commit()
+
+    for product in (regular, favorite):
+        await ProductLocalStockDAO.upsert(
+            session=db,
+            product_id=product.id,
+            qty=1,
+            updated_by="test",
+            warehouse_code="vitebsk",
+        )
+
+    resp = await async_client.get(
+        "/api/manager/products/list",
+        headers=headers,
+        params={
+            "search": marker,
+            "category_slug": "cat-household",
+            "sort": "recommended",
+            "limit": 10,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    slugs = [item["slug"] for item in resp.json()["items"]]
+    assert slugs[:2] == [favorite.slug, regular.slug]
+
+
+@pytest.mark.asyncio
+async def test_manager_products_list_supports_catalog_style_filters(async_client, db):
+    headers = await _auth_headers(async_client)
+
+    household_tag = await _get_or_create_category_tag(db, "cat-household", "Бытовые")
+    mdv = Brand(title="MDV Filter", slug="mdv-filter", is_published=True, sort_order=0)
+    haier = Brand(title="Haier Filter", slug="haier-filter", is_published=True, sort_order=2)
+    db.add_all([mdv, haier])
+    await db.commit()
+    await db.refresh(mdv)
+    await db.refresh(haier)
+
+    marker = "UNITFILTER321"
+    matched = Product(
+        title=f"{marker} MDV On-Off WiFi Fresh",
+        slug=f"{marker.lower()}-matched",
+        price=1000,
+        area=25,
+        is_inverter=False,
+        brand_id=mdv.id,
+        is_published=True,
+        specs={"__filter_wifi": True, "fresh_air": True, "__filter_min_heat": -25},
+    )
+    wrong_brand = Product(
+        title=f"{marker} Haier On-Off WiFi Fresh",
+        slug=f"{marker.lower()}-wrong-brand",
+        price=1000,
+        area=25,
+        is_inverter=False,
+        brand_id=haier.id,
+        is_published=True,
+        specs={"__filter_wifi": True, "fresh_air": True, "__filter_min_heat": -25},
+    )
+    wrong_compressor = Product(
+        title=f"{marker} MDV Inverter WiFi Fresh",
+        slug=f"{marker.lower()}-wrong-compressor",
+        price=1000,
+        area=25,
+        is_inverter=True,
+        brand_id=mdv.id,
+        is_published=True,
+        specs={"__filter_wifi": True, "fresh_air": True, "__filter_min_heat": -25},
+    )
+    db.add_all([matched, wrong_brand, wrong_compressor])
+    await db.commit()
+    for product in (matched, wrong_brand, wrong_compressor):
+        await db.refresh(product)
+
+    db.add_all(
+        [
+            ProductTagLink(product_id=matched.id, tag_id=household_tag.id),
+            ProductTagLink(product_id=wrong_brand.id, tag_id=household_tag.id),
+            ProductTagLink(product_id=wrong_compressor.id, tag_id=household_tag.id),
+        ]
+    )
+    await db.commit()
+
+    resp = await async_client.get(
+        "/api/manager/products/list",
+        headers=headers,
+        params={
+            "search": marker,
+            "category_slug": "cat-household",
+            "brand_slugs": ["mdv-filter"],
+            "is_inverter": "false",
+            "has_wifi": "true",
+            "has_fresh_air": "true",
+            "heating_min": -20,
+            "limit": 10,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    slugs = [item["slug"] for item in resp.json()["items"]]
+    assert slugs == [matched.slug]

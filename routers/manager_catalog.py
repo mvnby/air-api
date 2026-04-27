@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -69,8 +69,12 @@ async def list_products_for_manager(
     area_min: Optional[int] = Query(None),
     area_max: Optional[int] = Query(None),
     is_inverter: Optional[bool] = Query(None),
+    heating_min: Optional[int] = Query(None),
+    has_wifi: Optional[bool] = Query(None),
+    has_fresh_air: Optional[bool] = Query(None),
+    brand_slugs: Optional[List[str]] = Query(None, description="Brand slugs to include"),
     category_slug: Optional[str] = Query(None, description="Category tag slug: cat-household/cat-multi/cat-industrial"),
-    sort: str = Query("newest"),
+    sort: str = Query("recommended"),
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
@@ -87,6 +91,10 @@ async def list_products_for_manager(
         area_min=area_min,
         area_max=area_max,
         is_inverter=is_inverter,
+        heating_min=heating_min,
+        has_wifi=has_wifi,
+        has_fresh_air=has_fresh_air,
+        brand_slugs=brand_slugs,
         category_slug=category_slug,
         sort=sort,
     )
@@ -440,7 +448,12 @@ async def smart_search_products(
     q: str = Query(..., min_length=1, description="Free-text search query, e.g. 'mdv loft 18'"),
     limit: int = Query(40, ge=1, le=100),
     is_inverter: Optional[bool] = Query(None),
+    area_min: Optional[int] = Query(None),
+    area_max: Optional[int] = Query(None),
+    heating_min: Optional[int] = Query(None),
     has_wifi: Optional[bool] = Query(None),
+    has_fresh_air: Optional[bool] = Query(None),
+    brand_slugs: Optional[List[str]] = Query(None, description="Brand slugs to include"),
     category_slug: Optional[str] = Query(None, description="Category tag slug: cat-household/cat-multi/cat-industrial"),
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
@@ -457,7 +470,12 @@ async def smart_search_products(
         q=q,
         limit=limit,
         is_inverter=is_inverter,
+        area_min=area_min,
+        area_max=area_max,
+        heating_min=heating_min,
         has_wifi=has_wifi,
+        has_fresh_air=has_fresh_air,
+        brand_slugs=brand_slugs,
         category_slug=category_slug,
     )
 

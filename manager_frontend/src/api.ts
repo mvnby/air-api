@@ -115,6 +115,15 @@ export interface ManagerBrandUpdatePayload {
     sort_order?: number | null;
 }
 
+export interface ManagerProductFilterOptions {
+    heatingMin?: number;
+    hasWifi?: boolean;
+    hasFreshAir?: boolean;
+    brandSlugs?: string[];
+    areaMin?: number;
+    areaMax?: number;
+}
+
 export const api = {
     async login(username: string, password: string) {
         return await LoginService.loginAccessToken({ username, password });
@@ -439,7 +448,8 @@ export const api = {
         areaMax?: number,
         isInverter?: boolean,
         categorySlug?: string,
-        sort = 'newest',
+        sort = 'recommended',
+        filters: ManagerProductFilterOptions = {},
     ) {
         return await ManagerService.getManagerProducts(
             page,
@@ -449,6 +459,10 @@ export const api = {
             areaMin ?? undefined,
             areaMax ?? undefined,
             isInverter ?? undefined,
+            filters.heatingMin ?? undefined,
+            filters.hasWifi ?? undefined,
+            filters.hasFreshAir ?? undefined,
+            filters.brandSlugs ?? undefined,
             categorySlug ?? undefined,
             sort,
         );
@@ -502,6 +516,26 @@ export const api = {
         return await ManagerService.getAllTags();
     },
 
+    async createTagGroup(payload: {
+        title: string;
+        slug?: string;
+        is_public?: boolean;
+        color?: string;
+        allow_multiple?: boolean;
+    }) {
+        return await ManagerTagsService.createManagerTagGroup(payload);
+    },
+
+    async createTag(payload: {
+        group_id: number;
+        title: string;
+        slug?: string;
+        is_public?: boolean;
+        is_filter?: boolean;
+    }) {
+        return await ManagerTagsService.createManagerTag(payload);
+    },
+
     async searchProducts(q: string) {
         return await ApiService.adminSearchProductsApiAdminProductsSearchGet(q);
     },
@@ -512,8 +546,20 @@ export const api = {
         isInverter?: boolean,
         hasWifi?: boolean,
         categorySlug?: string,
+        filters: ManagerProductFilterOptions = {},
     ): Promise<Product[]> {
-        const res = await ManagerService.smartSearchProducts(q, limit, isInverter, hasWifi, categorySlug);
+        const res = await ManagerService.smartSearchProducts(
+            q,
+            limit,
+            isInverter,
+            filters.areaMin ?? undefined,
+            filters.areaMax ?? undefined,
+            filters.heatingMin ?? undefined,
+            hasWifi ?? filters.hasWifi ?? undefined,
+            filters.hasFreshAir ?? undefined,
+            filters.brandSlugs ?? undefined,
+            categorySlug,
+        );
         return res.items;
     },
 

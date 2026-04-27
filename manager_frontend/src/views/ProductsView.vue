@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue';
 import { watchDebounced } from '@vueuse/core';
-import { api, type Product } from '../api';
-import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images, Settings, ArrowLeft, LayoutGrid, List, Package, Link2, ExternalLink } from 'lucide-vue-next';
+import { api, type ManagerBrand, type Product } from '../api';
+import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images, Settings, ArrowLeft, LayoutGrid, List, Package, Link2, ExternalLink, Star, SlidersHorizontal, X } from 'lucide-vue-next';
 import BulkSpecsModal from '../components/BulkSpecsModal.vue';
 import BulkCompatibilityModal from '../components/BulkCompatibilityModal.vue';
 import ProductEditModal from '../components/ProductEditModal.vue';
@@ -131,8 +131,20 @@ const searchQuery = ref('');
 const areaMin = ref<number | undefined>();
 const areaMax = ref<number | undefined>();
 const isInverter = ref<boolean | undefined>();
+const heatingMin = ref<number | undefined>();
+const hasWifi = ref<boolean | undefined>();
+const hasFreshAir = ref<boolean | undefined>();
+const selectedBrandSlug = ref<string | null>(null);
+const brands = ref<ManagerBrand[]>([]);
+const loadingBrands = ref(false);
+const filtersOpen = ref(false);
 const viewType = ref<'grid' | 'table'>('grid');
 const SMART_SEARCH_LIMIT = 100;
+const sortMode = ref<'recommended' | 'newest' | 'price_asc' | 'price_desc' | 'title'>('recommended');
+const FAVORITE_TAG_SLUG = 'manager-favorite';
+const FAVORITE_TAG_TITLE = 'Избранное';
+const FAVORITE_TAG_GROUP_SLUG = 'manager-flags';
+const FAVORITE_TAG_GROUP_TITLE = 'Метки менеджера';
 const hasSearchQuery = computed(() => searchQuery.value.trim().length > 0);
 const categorySlug = ref<'cat-household' | 'cat-multi' | 'cat-industrial'>('cat-household');
 const CATEGORY_FILTER_TABS: Array<{ slug: 'cat-household' | 'cat-multi' | 'cat-industrial'; title: string }> = [
@@ -140,18 +152,176 @@ const CATEGORY_FILTER_TABS: Array<{ slug: 'cat-household' | 'cat-multi' | 'cat-i
     { slug: 'cat-multi', title: 'Мульти-сплит' },
     { slug: 'cat-industrial', title: 'Полупром' },
 ];
+const favoriteTagId = ref<number | null>(null);
+const favoriteUpdatingIds = ref<Set<number>>(new Set());
+const availableBrands = computed(() => (
+    [...brands.value]
+        .filter((brand) => brand.products_count > 0)
+        .sort((left, right) => (left.sort_order - right.sort_order) || left.title.localeCompare(right.title))
+));
+const hasAdvancedFilters = computed(() => (
+    areaMin.value !== undefined
+    || areaMax.value !== undefined
+    || isInverter.value !== undefined
+    || heatingMin.value !== undefined
+    || hasWifi.value !== undefined
+    || hasFreshAir.value !== undefined
+    || selectedBrandSlug.value !== null
+    || sortMode.value !== 'recommended'
+));
 
 const applyFilters = () => {
     page.value = 1;
     loadProducts();
 };
 
-const setCategoryFilter = (slug: 'cat-household' | 'cat-multi' | 'cat-industrial') => {
-    if (categorySlug.value === slug) return;
-    categorySlug.value = slug;
+const onCategoryChange = () => {
     selectedProductIds.value.clear();
     page.value = 1;
     loadProducts();
+};
+
+const resetFilters = () => {
+    searchQuery.value = '';
+    areaMin.value = undefined;
+    areaMax.value = undefined;
+    isInverter.value = undefined;
+    heatingMin.value = undefined;
+    hasWifi.value = undefined;
+    hasFreshAir.value = undefined;
+    selectedBrandSlug.value = null;
+    sortMode.value = 'recommended';
+    categorySlug.value = 'cat-household';
+    selectedProductIds.value.clear();
+    page.value = 1;
+    loadProducts();
+};
+
+const getManagerProductFilters = () => ({
+    heatingMin: heatingMin.value,
+    hasWifi: hasWifi.value,
+    hasFreshAir: hasFreshAir.value,
+    brandSlugs: selectedBrandSlug.value ? [selectedBrandSlug.value] : undefined,
+    areaMin: areaMin.value,
+    areaMax: areaMax.value,
+});
+
+const toggleBrand = (slug: string | null) => {
+    selectedBrandSlug.value = selectedBrandSlug.value === slug ? null : slug;
+    applyFilters();
+};
+
+const setCompressorFilter = (value: boolean) => {
+    isInverter.value = isInverter.value === value ? undefined : value;
+    applyFilters();
+};
+
+const toggleWifiFilter = () => {
+    hasWifi.value = hasWifi.value === true ? undefined : true;
+    applyFilters();
+};
+
+const toggleFreshAirFilter = () => {
+    hasFreshAir.value = hasFreshAir.value === true ? undefined : true;
+    applyFilters();
+};
+
+const setHeatingFilter = (value: number) => {
+    heatingMin.value = heatingMin.value === value ? undefined : value;
+    applyFilters();
+};
+
+const filterChipClass = (active: boolean) => (
+    active
+        ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
+        : 'bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-200 border-gray-300 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
+);
+
+const loadBrands = async () => {
+    loadingBrands.value = true;
+    try {
+        const response = await api.listManagerBrands();
+        brands.value = response.items || [];
+    } catch (e) {
+        setToast(`Ошибка загрузки брендов: ${getApiErrorMessage(e)}`);
+        console.error(e);
+    } finally {
+        loadingBrands.value = false;
+    }
+};
+
+const isFavoriteProduct = (product: Product) => (
+    ((product as any).tags || []).some((tag: any) => tag.slug === FAVORITE_TAG_SLUG)
+);
+
+const setFavoriteUpdating = (productId: number, isUpdating: boolean) => {
+    const next = new Set(favoriteUpdatingIds.value);
+    if (isUpdating) {
+        next.add(productId);
+    } else {
+        next.delete(productId);
+    }
+    favoriteUpdatingIds.value = next;
+};
+
+const ensureFavoriteTag = async () => {
+    if (favoriteTagId.value) return favoriteTagId.value;
+
+    let groups = await api.getAllTags();
+    let group = groups.find((item: any) => item.slug === FAVORITE_TAG_GROUP_SLUG);
+    if (!group) {
+        group = await api.createTagGroup({
+            title: FAVORITE_TAG_GROUP_TITLE,
+            slug: FAVORITE_TAG_GROUP_SLUG,
+            is_public: false,
+            color: 'warning',
+            allow_multiple: true,
+        });
+        groups = await api.getAllTags();
+        group = groups.find((item: any) => item.slug === FAVORITE_TAG_GROUP_SLUG) || group;
+    }
+
+    let tag = (group.tags || []).find((item: any) => item.slug === FAVORITE_TAG_SLUG);
+    if (!tag) {
+        tag = await api.createTag({
+            group_id: group.id,
+            title: FAVORITE_TAG_TITLE,
+            slug: FAVORITE_TAG_SLUG,
+            is_public: false,
+            is_filter: false,
+        });
+    }
+
+    favoriteTagId.value = tag.id;
+    return tag.id;
+};
+
+const toggleFavoriteProduct = async (product: Product) => {
+    if (favoriteUpdatingIds.value.has(product.id)) return;
+    setFavoriteUpdating(product.id, true);
+
+    try {
+        const tagId = await ensureFavoriteTag();
+        const currentIds = new Set<number>(
+            ((product as any).tags || [])
+                .map((tag: any) => Number(tag.id))
+                .filter((tagId: number) => Number.isFinite(tagId)),
+        );
+        if (isFavoriteProduct(product)) {
+            currentIds.delete(tagId);
+        } else {
+            currentIds.add(tagId);
+        }
+        const willBeFavorite = !isFavoriteProduct(product);
+        await api.updateProduct(product.id, { tag_ids: Array.from(currentIds) });
+        setToast(willBeFavorite ? 'Товар добавлен в избранные' : 'Товар убран из избранных');
+        await loadProducts();
+    } catch (e) {
+        setToast(`Ошибка избранного: ${getApiErrorMessage(e)}`);
+        console.error(e);
+    } finally {
+        setFavoriteUpdating(product.id, false);
+    }
 };
 
 
@@ -272,6 +442,12 @@ watch(showModal, (val) => {
   }
 });
 
+watch(filtersOpen, (isOpen) => {
+    if (isOpen && brands.value.length === 0 && !loadingBrands.value) {
+        loadBrands();
+    }
+});
+
 const loadProducts = async () => {
   loading.value = true;
   page.value = 1;
@@ -280,17 +456,12 @@ const loadProducts = async () => {
       const smartResults = await api.smartSearchProducts(
           searchQuery.value.trim(),
           SMART_SEARCH_LIMIT,
-          undefined,
-          undefined,
+          isInverter.value,
+          hasWifi.value,
           categorySlug.value,
+          getManagerProductFilters(),
       );
-      const filtered = smartResults.filter((product) => {
-        if (areaMin.value !== undefined && product.area < areaMin.value) return false;
-        if (areaMax.value !== undefined && product.area > areaMax.value) return false;
-        if (isInverter.value !== undefined && product.is_inverter !== isInverter.value) return false;
-        return true;
-      });
-      products.value = filtered;
+      products.value = smartResults;
       hasMore.value = false;
     } else {
       const data = await api.getManagerProducts(
@@ -302,6 +473,8 @@ const loadProducts = async () => {
           areaMax.value,
           isInverter.value,
           categorySlug.value,
+          sortMode.value,
+          getManagerProductFilters(),
       );
       products.value = data.items ? data.items : (Array.isArray(data) ? data : []);
       hasMore.value = products.value.length >= limit;
@@ -341,6 +514,8 @@ const loadMore = async () => {
             areaMax.value, 
             isInverter.value,
             categorySlug.value,
+            sortMode.value,
+            getManagerProductFilters(),
         );
         const newItems = data.items ? data.items : (Array.isArray(data) ? data : []);
         if (newItems.length < limit) {
@@ -627,6 +802,7 @@ onMounted(() => {
             searchQuery.value = String(pendingEditProductId.value);
         }
     }
+    loadBrands();
     loadProducts();
 
     const observer = new IntersectionObserver((entries) => {
@@ -676,8 +852,8 @@ watchDebounced(
 <template>
   <div class="p-6">
     <!-- Header -->
-    <header class="mb-6 flex justify-between items-center">
-      <div class="flex items-center gap-4">
+    <header class="mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+      <div class="flex flex-wrap items-center gap-4">
           <button
             v-if="pendingReturnTo"
             @click="navigateBackFromProducts"
@@ -690,6 +866,22 @@ watchDebounced(
             <span class="material-icons-round text-teal-600 dark:text-teal-400">inventory_2</span>
             Товары
           </h1>
+
+          <div class="flex items-center gap-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 shadow-sm">
+            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400" for="manager-product-category">
+              Категория
+            </label>
+            <select
+              id="manager-product-category"
+              v-model="categorySlug"
+              class="min-w-[150px] bg-transparent text-sm font-semibold text-gray-900 dark:text-slate-100 outline-none"
+              @change="onCategoryChange"
+            >
+              <option v-for="tab in CATEGORY_FILTER_TABS" :key="tab.slug" :value="tab.slug">
+                {{ tab.title }}
+              </option>
+            </select>
+          </div>
           
           <div class="flex bg-gray-100 dark:bg-slate-800 p-1 rounded-lg ml-2">
             <button 
@@ -733,7 +925,7 @@ watchDebounced(
               <button @click="selectedProductIds.clear()" class="text-xs text-teal-600 hover:text-teal-800 underline ml-1">Сбросить</button>
           </div>
       </div>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap gap-2">
           <button @click="toggleSelectAll" class="px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center gap-2 text-gray-700 dark:text-slate-200 text-sm transition-colors">
               <CheckSquare v-if="allSelected" class="w-4 h-4 text-teal-600" />
               <Square v-else class="w-4 h-4 text-gray-400" />
@@ -763,70 +955,189 @@ watchDebounced(
       </Transition>
 
     <!-- Filters -->
-    <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 mb-6 flex flex-wrap gap-4 items-end">
-        <div class="w-full">
-            <label class="block text-xs font-medium text-gray-500 mb-1">Категория каталога</label>
+    <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 mb-6 space-y-4">
+        <div class="flex flex-col gap-3 lg:flex-row lg:items-end">
+            <div class="flex-1 min-w-[240px]">
+                <label class="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Поиск по модели</label>
+                <div class="relative">
+                    <Search class="w-4 h-4 text-gray-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                        v-model="searchQuery"
+                        @keyup.enter="applyFilters"
+                        placeholder="Например: ARTCOOL..."
+                        class="w-full pl-9 pr-4 py-2.5 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none shadow-inner"
+                    />
+                </div>
+            </div>
+
             <div class="flex flex-wrap gap-2">
                 <button
-                    v-for="tab in CATEGORY_FILTER_TABS"
-                    :key="tab.slug"
                     type="button"
-                    class="px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors"
-                    :class="categorySlug === tab.slug
+                    class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-semibold transition-colors"
+                    :class="filtersOpen
                         ? 'bg-teal-600 text-white border-teal-600'
-                        : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-200 border-gray-300 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'"
-                    @click="setCategoryFilter(tab.slug)"
+                        : 'bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-200 border-gray-300 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'"
+                    @click="filtersOpen = !filtersOpen"
                 >
-                    {{ tab.title }}
+                    <SlidersHorizontal class="w-4 h-4" />
+                    Фильтры
+                    <span
+                        v-if="hasAdvancedFilters"
+                        class="inline-flex h-2 w-2 rounded-full"
+                        :class="filtersOpen ? 'bg-white' : 'bg-teal-500'"
+                    ></span>
+                </button>
+                <button
+                    type="button"
+                    class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+                    @click="resetFilters"
+                >
+                    <X class="w-4 h-4" />
+                    Сбросить фильтры
                 </button>
             </div>
         </div>
 
-        <div class="flex-1 min-w-[200px]">
-            <label class="block text-xs font-medium text-gray-500 mb-1">Поиск по модели</label>
-            <div class="relative">
-                <Search class="w-4 h-4 text-gray-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input 
-                    v-model="searchQuery" 
-                    @keyup.enter="applyFilters"
-                    placeholder="Например: ARTCOOL..." 
-                    class="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none shadow-inner"
-                />
+        <Transition name="fade">
+            <div v-if="filtersOpen" class="space-y-4 border-t border-gray-100 dark:border-slate-700 pt-4">
+                <div>
+                    <div class="mb-2 flex items-center gap-2">
+                        <span class="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Бренд</span>
+                        <span v-if="loadingBrands" class="text-xs text-gray-400 dark:text-slate-500">обновляем...</span>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            class="rounded-lg border px-3 py-2 text-sm font-semibold transition-colors"
+                            :class="filterChipClass(selectedBrandSlug === null)"
+                            @click="toggleBrand(null)"
+                        >
+                            Все бренды
+                        </button>
+                        <button
+                            v-for="brand in availableBrands"
+                            :key="brand.slug"
+                            type="button"
+                            class="rounded-lg border px-3 py-2 text-sm font-semibold transition-colors"
+                            :class="filterChipClass(selectedBrandSlug === brand.slug)"
+                            @click="toggleBrand(brand.slug)"
+                        >
+                            {{ brand.title }}
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid gap-4 lg:grid-cols-[minmax(220px,320px)_1fr] lg:items-end">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2" for="manager-products-sort">
+                            Сортировка
+                        </label>
+                        <select
+                            id="manager-products-sort"
+                            v-model="sortMode"
+                            class="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none shadow-inner"
+                            @change="applyFilters"
+                        >
+                            <option value="recommended">Рекомендуемые</option>
+                            <option value="price_asc">Сначала дешевле</option>
+                            <option value="price_desc">Сначала дороже</option>
+                            <option value="newest">Сначала новые</option>
+                            <option value="title">По названию</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid gap-4 lg:grid-cols-[minmax(220px,320px)_1fr]">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2">Площадь (м²)</label>
+                        <div class="flex gap-2 items-center">
+                            <input
+                                v-model.number="areaMin"
+                                type="number"
+                                placeholder="От"
+                                class="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none shadow-inner"
+                            />
+                            <span class="text-gray-400">-</span>
+                            <input
+                                v-model.number="areaMax"
+                                type="number"
+                                placeholder="До"
+                                class="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none shadow-inner"
+                            />
+                            <button
+                                type="button"
+                                @click="applyFilters"
+                                class="px-4 py-2.5 bg-teal-600 dark:bg-teal-600 text-white rounded-lg hover:bg-teal-700 dark:hover:bg-teal-700 font-medium text-sm transition-colors shadow-sm"
+                            >
+                                OK
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid gap-4 md:grid-cols-3">
+                        <div>
+                            <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Тип компрессора</div>
+                            <div class="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    class="rounded-lg border px-3 py-2 text-sm font-semibold transition-colors"
+                                    :class="filterChipClass(isInverter === true)"
+                                    @click="setCompressorFilter(true)"
+                                >
+                                    Инвертор
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded-lg border px-3 py-2 text-sm font-semibold transition-colors"
+                                    :class="filterChipClass(isInverter === false)"
+                                    @click="setCompressorFilter(false)"
+                                >
+                                    On/Off
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Дополнительно</div>
+                            <div class="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    class="rounded-lg border px-3 py-2 text-sm font-semibold transition-colors"
+                                    :class="filterChipClass(hasWifi === true)"
+                                    @click="toggleWifiFilter"
+                                >
+                                    Wi-Fi
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded-lg border px-3 py-2 text-sm font-semibold transition-colors"
+                                    :class="filterChipClass(hasFreshAir === true)"
+                                    @click="toggleFreshAirFilter"
+                                >
+                                    Приток воздуха
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Обогрев</div>
+                            <div class="flex flex-wrap gap-2">
+                                <button
+                                    v-for="value in [-15, -20, -25, -30]"
+                                    :key="value"
+                                    type="button"
+                                    class="rounded-lg border px-3 py-2 text-sm font-semibold transition-colors"
+                                    :class="filterChipClass(heatingMin === value)"
+                                    @click="setHeatingFilter(value)"
+                                >
+                                    до {{ value }}°C
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div>
-
-        <div class="w-[180px]">
-             <label class="block text-xs font-medium text-gray-500 mb-1">Площадь (м²)</label>
-             <div class="flex gap-2 items-center">
-                 <input 
-                    v-model.number="areaMin"
-                    type="number" 
-                    placeholder="От" 
-                    class="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none shadow-inner"
-                 />
-                 <span class="text-gray-400">-</span>
-                 <input 
-                    v-model.number="areaMax"
-                    type="number" 
-                    placeholder="До" 
-                    class="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none shadow-inner"
-                 />
-             </div>
-        </div>
-
-        <div class="flex items-center gap-2 pb-2">
-            <label class="flex items-center gap-2 cursor-pointer bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors select-none">
-                <input type="checkbox" v-model="isInverter" class="w-4 h-4 text-teal-600 dark:text-teal-500 bg-white dark:bg-slate-900 border-gray-300 dark:border-slate-700 rounded focus:ring-teal-500" />
-                <span class="text-sm text-gray-700 dark:text-slate-300">Только инвертор</span>
-            </label>
-        </div>
-
-        <button 
-            @click="applyFilters"
-            class="px-6 py-2 bg-teal-600 dark:bg-teal-600 text-white rounded-lg hover:bg-teal-700 dark:hover:bg-teal-700 font-medium text-sm transition-colors shadow-sm"
-        >
-            Применить
-        </button>
+        </Transition>
     </div>
     
     <!-- Product Grid -->
@@ -851,6 +1162,19 @@ watchDebounced(
                      <Square v-else class="w-5 h-5 text-gray-400" />
                  </button>
              </div>
+             <div class="absolute top-2.5 right-2.5 z-20">
+                 <button
+                    @click.stop="toggleFavoriteProduct(product)"
+                    :disabled="favoriteUpdatingIds.has(product.id)"
+                    class="bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-md shadow-sm hover:bg-white dark:hover:bg-slate-700 p-1 transition-colors disabled:opacity-50"
+                    :title="isFavoriteProduct(product) ? 'Убрать из избранных' : 'В избранное'"
+                 >
+                    <Star
+                        class="w-5 h-5"
+                        :class="isFavoriteProduct(product) ? 'fill-amber-400 text-amber-500' : 'text-gray-400 hover:text-amber-500'"
+                    />
+                 </button>
+             </div>
             <div class="aspect-video bg-gray-100 dark:bg-slate-700 relative">
                 <img v-if="product.main_image" :src="getImageUrl(product.main_image)" class="w-full h-full object-cover" />
                 <div v-else class="w-full h-full flex items-center justify-center text-gray-300">
@@ -862,7 +1186,7 @@ watchDebounced(
                     <button
                       @click.stop="deleteProduct(product)"
                       :disabled="isDeletingProduct === product.id"
-                      class="absolute top-2.5 right-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-red-600/90 text-white shadow-sm transition-colors hover:bg-red-700 disabled:opacity-50"
+                      class="absolute top-2.5 right-11 flex h-7 w-7 items-center justify-center rounded-full bg-red-600/90 text-white shadow-sm transition-colors hover:bg-red-700 disabled:opacity-50"
                       title="Удалить"
                     >
                       <span class="material-icons-round text-[16px] leading-none">close</span>
@@ -999,6 +1323,15 @@ watchDebounced(
               </td>
               <td class="p-4 text-right">
                 <div class="flex justify-end gap-2 text-gray-400">
+                  <button
+                    @click="toggleFavoriteProduct(product)"
+                    :disabled="favoriteUpdatingIds.has(product.id)"
+                    class="p-2 transition-colors disabled:opacity-50"
+                    :class="isFavoriteProduct(product) ? 'text-amber-500 hover:text-amber-600' : 'hover:text-amber-500'"
+                    :title="isFavoriteProduct(product) ? 'Убрать из избранных' : 'В избранное'"
+                  >
+                    <Star class="w-4 h-4" :class="{ 'fill-amber-400': isFavoriteProduct(product) }" />
+                  </button>
                   <button @click="copyPublicProductLink(product)" class="p-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" :title="product.slug ? 'Скопировать ссылку на сайт' : 'У товара нет публичного slug'" :disabled="!product.slug">
                     <Link2 class="w-4 h-4" />
                   </button>

@@ -21,6 +21,7 @@ ALLOWED_INDOOR_TYPE_FILTERS = {"duct", "cassette", "floor_ceiling", "column"}
 CATALOG_RANKING_WEIGHTS = {
     "availability": 100,
     "out_of_stock": -100,
+    "manager_favorite": 80,
     "area_to_25": 50,
     "area_to_35": 30,
     "area_large": 10,
@@ -264,6 +265,14 @@ class ProductDAO:
 
     @staticmethod
     def _catalog_recommendation_score_expr(area_max: Optional[int] = None):
+        favorite_tag_exists = exists(
+            select(ProductTagLink.product_id)
+            .join(Tag, ProductTagLink.tag_id == Tag.id)
+            .where(
+                ProductTagLink.product_id == Product.id,
+                Tag.slug == "manager-favorite",
+            )
+        )
         local_stock_exists = exists(
             select(ProductLocalStock.id).where(
                 ProductLocalStock.product_id == Product.id,
@@ -293,6 +302,10 @@ class ProductDAO:
                 CATALOG_RANKING_WEIGHTS["availability"],
             ),
             else_=CATALOG_RANKING_WEIGHTS["out_of_stock"],
+        )
+        favorite_score = case(
+            (favorite_tag_exists, CATALOG_RANKING_WEIGHTS["manager_favorite"]),
+            else_=0,
         )
         area_threshold = int(area_max) if area_max else None
         if area_threshold and area_threshold > 35:
@@ -356,7 +369,7 @@ class ProductDAO:
                 else_=0,
             )
 
-        return availability_score + area_score
+        return availability_score + favorite_score + area_score
 
     @staticmethod
     def _catalog_brand_priority_expr():
@@ -537,8 +550,12 @@ class ProductDAO:
         area_min: Optional[int] = None,
         area_max: Optional[int] = None,
         is_inverter: Optional[bool] = None,
+        heating_min: Optional[int] = None,
+        has_wifi: Optional[bool] = None,
+        has_fresh_air: Optional[bool] = None,
+        brand_slugs: Optional[List[str]] = None,
         category_slug: Optional[str] = None,
-        sort: str = "newest",
+        sort: str = "recommended",
     ) -> tuple[List[Product], int]:
         stmt = select(Product).options(
             selectinload(Product.gallery_images),
@@ -547,38 +564,31 @@ class ProductDAO:
         )
         count_stmt = select(func.count(Product.id))
 
-        if is_published is not None:
-            stmt = stmt.where(Product.is_published == is_published)
-            count_stmt = count_stmt.where(Product.is_published == is_published)
-
-        if area_min is not None:
-            stmt = stmt.where(Product.area >= area_min)
-            count_stmt = count_stmt.where(Product.area >= area_min)
-
-        if area_max is not None:
-            stmt = stmt.where(Product.area <= area_max)
-            count_stmt = count_stmt.where(Product.area <= area_max)
-
-        if is_inverter is not None:
-            stmt = stmt.where(Product.is_inverter == is_inverter)
-            count_stmt = count_stmt.where(Product.is_inverter == is_inverter)
+        common_filter_kwargs = {
+            "area_min": area_min,
+            "area_max": area_max,
+            "heating_min": heating_min,
+            "has_wifi": has_wifi,
+            "has_fresh_air": has_fresh_air,
+            "is_inverter": is_inverter,
+            "tag_slugs": [category_slug] if category_slug else None,
+            "brand_slugs": brand_slugs,
+            "is_published": is_published,
+        }
+        stmt = ProductDAO._apply_common_filters(
+            session=session,
+            stmt=stmt,
+            **common_filter_kwargs,
+        )
+        count_stmt = ProductDAO._apply_common_filters(
+            session=session,
+            stmt=count_stmt,
+            **common_filter_kwargs,
+        )
 
         if search:
             stmt = stmt.where(Product.title.ilike(f"%{search}%"))
             count_stmt = count_stmt.where(Product.title.ilike(f"%{search}%"))
-
-        if category_slug:
-            normalized_category = str(category_slug).strip().lower()
-            if normalized_category:
-                category_subq = (
-                    select(ProductTagLink.product_id)
-                    .join(Tag, ProductTagLink.tag_id == Tag.id)
-                    .join(TagGroup, Tag.group_id == TagGroup.id)
-                    .where(TagGroup.slug == "category")
-                    .where(Tag.slug == normalized_category)
-                )
-                stmt = stmt.where(Product.id.in_(category_subq))
-                count_stmt = count_stmt.where(Product.id.in_(category_subq))
 
         if sort == "price_asc":
             stmt = stmt.order_by(Product.price.asc())
@@ -586,6 +596,13 @@ class ProductDAO:
             stmt = stmt.order_by(Product.price.desc())
         elif sort == "title":
             stmt = stmt.order_by(Product.title.asc())
+        elif sort == "recommended":
+            stmt = stmt.order_by(
+                ProductDAO._catalog_recommendation_score_expr(area_max=area_max).desc(),
+                ProductDAO._catalog_brand_priority_expr().asc(),
+                Product.created_at.desc(),
+                Product.id.desc(),
+            )
         else:
             stmt = stmt.order_by(Product.id.desc())
 
