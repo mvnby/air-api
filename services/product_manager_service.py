@@ -40,7 +40,12 @@ class ProductManagerService:
         q: str,
         limit: int = 40,
         is_inverter: Optional[bool] = None,
+        area_min: Optional[int] = None,
+        area_max: Optional[int] = None,
+        heating_min: Optional[int] = None,
         has_wifi: Optional[bool] = None,
+        has_fresh_air: Optional[bool] = None,
+        brand_slugs: Optional[List[str]] = None,
         category_slug: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Parse a free-text query and return matching products.
@@ -73,9 +78,14 @@ class ProductManagerService:
         stmt = ProductDAO._apply_common_filters(
             session=session,
             stmt=stmt,
+            area_min=area_min,
+            area_max=area_max,
+            heating_min=heating_min,
             is_inverter=is_inverter,
             has_wifi=has_wifi,
+            has_fresh_air=has_fresh_air,
             tag_slugs=[category_slug] if category_slug else None,
+            brand_slugs=brand_slugs,
             is_published=None,
         )
 
@@ -150,11 +160,28 @@ class ProductManagerService:
         area_min: Optional[int] = None,
         area_max: Optional[int] = None,
         is_inverter: Optional[bool] = None,
+        heating_min: Optional[int] = None,
+        has_wifi: Optional[bool] = None,
+        has_fresh_air: Optional[bool] = None,
+        brand_slugs: Optional[List[str]] = None,
         category_slug: Optional[str] = None,
-        sort: str = "newest",
+        sort: str = "recommended",
     ) -> Dict[str, Any]:
         items, total = await ProductDAO.get_for_manager(
-            session, page, limit, search, is_published, area_min, area_max, is_inverter, category_slug, sort
+            session,
+            page=page,
+            limit=limit,
+            search=search,
+            is_published=is_published,
+            area_min=area_min,
+            area_max=area_max,
+            is_inverter=is_inverter,
+            heating_min=heating_min,
+            has_wifi=has_wifi,
+            has_fresh_air=has_fresh_air,
+            brand_slugs=brand_slugs,
+            category_slug=category_slug,
+            sort=sort,
         )
         supply_metrics = await ProductSupplyMetricsService.compute_for_products(session, list(items))
 
