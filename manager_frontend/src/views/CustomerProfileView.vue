@@ -53,6 +53,8 @@ const contracts = ref<ManagerCustomerContractItemResponse[]>([]);
 const contractsLoading = ref(false);
 const contractSaving = ref(false);
 const contractUploadSaving = ref(false);
+const contractRoleSavingId = ref<number | null>(null);
+const contractRoleErrors = ref<Record<number, string>>({});
 const showContractForm = ref(false);
 const showContractUploadForm = ref(false);
 const OPEN_CONTRACT_TEMPLATE_ID = '1x-pL1j9g-NzLSpPTLVYXSsmutGExPgfDqzi2VLq9thI';
@@ -69,10 +71,6 @@ const normalizeRoleType = (value: unknown): DocumentRoleType => {
   if (raw === 'executor_customer' || raw === 'contractor_customer') return raw;
   return 'seller_buyer';
 };
-
-const getRoleLabel = (value?: string | null) => (
-  DOCUMENT_ROLE_OPTIONS.find((option) => option.value === normalizeRoleType(value))?.label || 'Продавец / Покупатель'
-);
 
 const phoneError = ref('');
 const emailError = ref('');
@@ -378,6 +376,40 @@ const uploadContract = async () => {
   } finally {
     contractUploadSaving.value = false;
   }
+};
+
+const updateContractRole = async (contract: ManagerCustomerContractItemResponse, roleType: string) => {
+  if (!customerId.value) return;
+  const nextRole = normalizeRoleType(roleType);
+  const previousRole = normalizeRoleType(contract.document_role_type);
+  if (nextRole === previousRole) return;
+
+  contract.document_role_type = nextRole;
+  contractRoleSavingId.value = contract.id;
+  contractRoleErrors.value = { ...contractRoleErrors.value, [contract.id]: '' };
+  try {
+    const updated = await ManagerContractsService.patchManagerCustomerContract(
+      customerId.value,
+      contract.id,
+      { document_role_type: nextRole },
+    );
+    contracts.value = contracts.value.map((item) => (item.id === contract.id ? updated : item));
+    setToast('Роли договора обновлены');
+  } catch (e) {
+    contract.document_role_type = previousRole;
+    const message = `Не удалось сохранить роли: ${getApiErrorMessage(e)}`;
+    contractRoleErrors.value = { ...contractRoleErrors.value, [contract.id]: message };
+    setToast(message);
+  } finally {
+    if (contractRoleSavingId.value === contract.id) {
+      contractRoleSavingId.value = null;
+    }
+  }
+};
+
+const onContractRoleChange = (contract: ManagerCustomerContractItemResponse, event: Event) => {
+  const select = event.target as HTMLSelectElement;
+  void updateContractRole(contract, select.value);
 };
 
 const archiveContract = async (contract: ManagerCustomerContractItemResponse) => {
@@ -816,8 +848,27 @@ onMounted(() => {
                   <p class="mt-2 text-[13px] leading-none text-slate-500 dark:text-slate-400">
                     {{ formatDateOnly(contract.valid_from) }} - {{ formatDateOnly(contract.valid_until) }}
                   </p>
-                  <p class="mt-2 text-[12px] leading-none text-slate-500 dark:text-slate-400">
-                    Роли: {{ getRoleLabel(contract.document_role_type) }}
+                  <div class="mt-2 flex flex-wrap items-center gap-2">
+                    <label class="text-[12px] leading-none text-slate-500 dark:text-slate-400" :for="`contract-role-${contract.id}`">
+                      Роли:
+                    </label>
+                    <select
+                      :id="`contract-role-${contract.id}`"
+                      class="field-input max-w-[260px] py-1 text-[12px]"
+                      :disabled="contractRoleSavingId === contract.id"
+                      :value="normalizeRoleType(contract.document_role_type)"
+                      @change="onContractRoleChange(contract, $event)"
+                    >
+                      <option v-for="option in DOCUMENT_ROLE_OPTIONS" :key="option.value" :value="option.value">
+                        {{ option.label }}
+                      </option>
+                    </select>
+                    <span v-if="contractRoleSavingId === contract.id" class="text-[12px] text-slate-500 dark:text-slate-400">
+                      Сохраняем...
+                    </span>
+                  </div>
+                  <p v-if="contractRoleErrors[contract.id]" class="mt-1 text-[12px] text-red-500">
+                    {{ contractRoleErrors[contract.id] }}
                   </p>
                 </div>
               </div>
