@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -5,7 +6,8 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import Customer, CustomerContract, CustomerType, Order
+from models import Customer, CustomerContract, CustomerType, GlobalConfig, Order
+from services.document_role_service import DocumentRoleService
 from services.google_service import get_google_service
 
 
@@ -43,6 +45,7 @@ class CustomerContractService:
             "valid_until": contract.valid_until,
             "status": contract.status,
             "template_id": contract.template_id,
+            "document_role_type": DocumentRoleService.normalize_role_type(contract.document_role_type),
             "edit_url": contract.google_edit_url,
             "created_at": contract.created_at,
             "updated_at": contract.updated_at,
@@ -59,6 +62,7 @@ class CustomerContractService:
             "valid_from": contract.valid_from,
             "valid_until": contract.valid_until,
             "status": contract.status,
+            "document_role_type": DocumentRoleService.normalize_role_type(contract.document_role_type),
             "edit_url": contract.google_edit_url,
         }
 
@@ -83,6 +87,7 @@ class CustomerContractService:
             "{{contract_date}}": CustomerContractService._format_date(contract.valid_from),
             "{{contract_valid_from}}": CustomerContractService._format_date(contract.valid_from),
             "{{contract_valid_until}}": CustomerContractService._format_date(contract.valid_until),
+            "{{document_role_type}}": DocumentRoleService.normalize_role_type(contract.document_role_type),
         }
 
     @staticmethod
@@ -116,6 +121,23 @@ class CustomerContractService:
         return f"ОД-{year}-{next_num:03d}"
 
     @staticmethod
+    async def _get_template_role_type(session: AsyncSession, template_id: Optional[str]) -> str:
+        if not template_id:
+            return DocumentRoleService.normalize_role_type(None)
+        try:
+            result = await session.execute(select(GlobalConfig).where(GlobalConfig.key == "contract_templates"))
+            config = result.scalars().first()
+            items = json.loads(config.value) if config and config.value else []
+        except Exception:
+            return DocumentRoleService.normalize_role_type(None)
+        if not isinstance(items, list):
+            return DocumentRoleService.normalize_role_type(None)
+        for item in items:
+            if isinstance(item, dict) and str(item.get("id") or "").strip() == template_id:
+                return DocumentRoleService.normalize_role_type(item.get("document_role_type"))
+        return DocumentRoleService.normalize_role_type(None)
+
+    @staticmethod
     async def create_for_customer(
         session: AsyncSession,
         *,
@@ -132,6 +154,9 @@ class CustomerContractService:
         valid_until = CustomerContractService._normalize_naive_datetime(payload.get("valid_until")) or CustomerContractService._default_valid_until(contract_date)
         number = str(payload.get("number") or "").strip() or await CustomerContractService._get_next_number(session, contract_date)
         template_id = str(payload.get("template_id") or "").strip() or OPEN_SERVICE_CONTRACT_TEMPLATE_ID
+        document_role_type = DocumentRoleService.normalize_role_type(
+            payload.get("document_role_type") or await CustomerContractService._get_template_role_type(session, template_id)
+        )
 
         contract = CustomerContract(
             customer_id=customer_id,
@@ -140,6 +165,7 @@ class CustomerContractService:
             valid_until=valid_until,
             status=CustomerContractService.ACTIVE_STATUS,
             template_id=template_id,
+            document_role_type=document_role_type,
         )
 
         title = f"Открытый договор {number} {customer.name}"
@@ -164,6 +190,7 @@ class CustomerContractService:
         number: str,
         contract_date: datetime,
         valid_until: datetime,
+        document_role_type: Optional[str] = None,
         file: "Any",
     ) -> Optional[Dict[str, Any]]:
         import os
@@ -208,6 +235,7 @@ class CustomerContractService:
                 valid_until=valid_until_value,
                 status=CustomerContractService.ACTIVE_STATUS,
                 template_id=None,
+                document_role_type=DocumentRoleService.normalize_role_type(document_role_type),
                 google_file_id=file_id,
                 google_edit_url=f"https://drive.google.com/file/d/{file_id}/view?usp=sharing",
             )
@@ -239,6 +267,8 @@ class CustomerContractService:
         if "template_id" in payload:
             template_id = str(payload.get("template_id") or "").strip()
             contract.template_id = template_id or None
+        if "document_role_type" in payload:
+            contract.document_role_type = DocumentRoleService.normalize_role_type(payload.get("document_role_type"))
         if "contract_date" in payload and payload.get("contract_date") is not None:
             contract.valid_from = CustomerContractService._normalize_naive_datetime(payload.get("contract_date"))
         if "valid_until" in payload and payload.get("valid_until") is not None:
@@ -249,7 +279,7 @@ class CustomerContractService:
                 raise ValueError("Некорректный статус договора")
             contract.status = status
 
-        if contract.google_file_id and any(field in payload for field in {"number", "contract_date", "valid_until"}):
+        if contract.google_file_id and any(field in payload for field in {"number", "contract_date", "valid_until", "document_role_type"}):
             customer = await session.get(Customer, customer_id)
             if customer:
                 get_google_service().replace_placeholders(

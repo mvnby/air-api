@@ -1,5 +1,6 @@
 from .common import (
     CustomerType,
+    DocumentRoleType,
     LeadIntakeSource,
     LeadLossReason,
     LeadSegmentHint,
@@ -60,6 +61,7 @@ __all__ = [
     "CustomerBranch",
     "CustomerContract",
     "CustomerType",
+    "DocumentRoleType",
     "Favorite",
     "GlobalConfig",
     "InstallationRate",

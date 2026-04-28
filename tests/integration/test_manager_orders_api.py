@@ -8,6 +8,7 @@ from models import (
     CustomerBranch,
     CustomerContract,
     CustomerType,
+    GlobalConfig,
     Installer,
     Order,
     OrderDocument,
@@ -105,7 +106,7 @@ async def test_manager_order_detail_uses_snapshot_prices(async_client, db):
     await db.refresh(customer)
     await db.refresh(product)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD, delivery_address="Минск, объект 1")
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -254,7 +255,7 @@ async def test_manager_order_contract_selection_and_act_guard(async_client, db, 
         google_file_id="fake",
         google_edit_url="https://docs.google.com/document/d/fake/edit",
     )
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD, delivery_address="Минск, объект 1")
     db.add(contract)
     db.add(order)
     await db.commit()
@@ -326,6 +327,7 @@ async def test_manager_order_contract_selection_and_act_guard(async_client, db, 
     assert first_act.status_code == 200
     assert captured_replacements[-1]["{{act_number}}"] == "1"
     assert captured_replacements[-1]["{{act_sequence_number}}"] == "1"
+    assert captured_replacements[-1]["{{object_address}}"] == "Минск, объект 1"
 
     second_order = Order(customer_id=customer.id, customer_contract_id=contract.id, status=OrderStatus.NEW_LEAD)
     db.add(second_order)
@@ -336,6 +338,98 @@ async def test_manager_order_contract_selection_and_act_guard(async_client, db, 
     assert second_act.status_code == 200
     assert captured_replacements[-1]["{{act_number}}"] == "2"
     assert captured_replacements[-1]["{{act_sequence_number}}"] == "2"
+
+
+@pytest.mark.asyncio
+async def test_manager_document_roles_from_template_contract_and_order_override(async_client, db, monkeypatch):
+    headers = await _auth_headers(async_client)
+    db.add(
+        GlobalConfig(
+            key="contract_templates",
+            value='[{"id":"tpl-service","name":"Услуги","document_role_type":"executor_customer"},{"id":"tpl-old","name":"Старый"}]',
+            description="Contract templates",
+        )
+    )
+    customer = Customer(name="Role Customer", phone="+375296009988", type=CustomerType.company, inn="123456789")
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    templates_resp = await async_client.get("/api/manager/docs/templates/contract", headers=headers)
+    assert templates_resp.status_code == 200
+    templates = templates_resp.json()["items"]
+    assert next(item for item in templates if item["id"] == "tpl-service")["document_role_type"] == "executor_customer"
+    assert next(item for item in templates if item["id"] == "tpl-old")["document_role_type"] == "seller_buyer"
+
+    captured_replacements = []
+
+    class _FakeGoogleService:
+        def copy_template(self, template_id, title):
+            return {
+                "file_id": f"role-fake-{len(captured_replacements) + 1}",
+                "edit_url": f"https://docs.google.com/document/d/role-fake-{len(captured_replacements) + 1}/edit",
+            }
+
+        def replace_placeholders(self, file_id, replacements):
+            captured_replacements.append(dict(replacements))
+
+    from services import document_service
+
+    monkeypatch.setattr(document_service, "get_google_service", lambda: _FakeGoogleService())
+
+    one_time_order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD, delivery_address="Витебск, объект")
+    db.add(one_time_order)
+    await db.commit()
+    await db.refresh(one_time_order)
+
+    contract_resp = await async_client.post(
+        f"/api/manager/orders/{one_time_order.id}/documents/contract",
+        headers=headers,
+        params={"template_id": "tpl-service", "contract_date": "2026-04-27T00:00:00"},
+    )
+    assert contract_resp.status_code == 200
+    assert all("продавцом" not in replacements for replacements in captured_replacements)
+    refreshed_order = await db.get(Order, one_time_order.id)
+    assert refreshed_order.document_role_type == "executor_customer"
+
+    act_resp = await async_client.post(f"/api/manager/orders/{one_time_order.id}/documents/act", headers=headers)
+    assert act_resp.status_code == 200
+    assert captured_replacements[-2]["{{object_address}}"] == "Витебск, объект"
+    assert captured_replacements[-1]["продавцом"] == "исполнителем"
+    assert captured_replacements[-1]["покупателя"] == "заказчика"
+
+    contract = CustomerContract(
+        customer_id=customer.id,
+        number="ОД-2026-555",
+        valid_from=datetime(2026, 1, 1),
+        valid_until=datetime(2026, 12, 31),
+        status="active",
+        document_role_type="executor_customer",
+        google_file_id="fake-contract",
+        google_edit_url="https://docs.google.com/document/d/fake-contract/edit",
+    )
+    override_order = Order(
+        customer_id=customer.id,
+        customer_contract_id=None,
+        status=OrderStatus.NEW_LEAD,
+        document_role_type="contractor_customer",
+    )
+    db.add(contract)
+    db.add(override_order)
+    await db.commit()
+    await db.refresh(contract)
+    override_order.customer_contract_id = contract.id
+    db.add(override_order)
+    await db.commit()
+    await db.refresh(override_order)
+
+    invoice_resp = await async_client.post(f"/api/manager/orders/{override_order.id}/documents/invoice", headers=headers)
+    assert invoice_resp.status_code == 200, invoice_resp.text
+    assert captured_replacements[-1]["продавцом"] == "подрядчиком"
+
+    offer_resp = await async_client.post(f"/api/manager/orders/{override_order.id}/documents/offer", headers=headers)
+    assert offer_resp.status_code == 200
+    assert "продавцом" not in captured_replacements[-1]
 
 
 @pytest.mark.asyncio

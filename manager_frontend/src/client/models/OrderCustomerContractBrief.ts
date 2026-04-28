@@ -9,6 +9,7 @@ export type OrderCustomerContractBrief = {
     valid_from: string;
     valid_until: string;
     status: string;
+    document_role_type?: (string | null);
     edit_url?: (string | null);
 };
 

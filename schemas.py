@@ -339,6 +339,7 @@ class OrderCustomerContractBrief(BaseModel):
     valid_from: datetime
     valid_until: datetime
     status: str
+    document_role_type: Optional[str] = None
     edit_url: Optional[str] = None
 
 
@@ -383,6 +384,8 @@ class ManagerOrderListItemResponse(BaseModel):
     customer_branch: Optional[OrderCustomerBranchBrief] = None
     customer_contract_id: Optional[int] = None
     customer_contract: Optional[OrderCustomerContractBrief] = None
+    document_role_type: Optional[str] = None
+    effective_document_role_type: str = "seller_buyer"
     installer_id: Optional[int] = None
     installer: Optional[ManagerInstallerResponse] = None
     # New fields
@@ -575,6 +578,7 @@ class ManagerOrderUpdatePayload(BaseModel):
     customer_id: Optional[int] = None
     customer_branch_id: Optional[int] = None
     customer_contract_id: Optional[int] = None
+    document_role_type: Optional[str] = None
     customer_type: Optional[str] = None
     customer_name: Optional[str] = None
     customer_phone: Optional[str] = None
@@ -622,6 +626,7 @@ class ManagerOrderDocumentResponse(BaseModel):
 class DocumentTemplateItem(BaseModel):
     id: str
     name: str
+    document_role_type: str = "seller_buyer"
 
 
 class DocumentTemplateListResponse(BaseModel):
@@ -871,6 +876,7 @@ class ManagerCustomerContractItemResponse(BaseModel):
     valid_until: datetime
     status: str
     template_id: Optional[str] = None
+    document_role_type: str = "seller_buyer"
     edit_url: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -883,6 +889,7 @@ class ManagerCustomerContractListResponse(BaseModel):
 class ManagerCustomerContractCreatePayload(BaseModel):
     number: Optional[str] = None
     template_id: Optional[str] = None
+    document_role_type: Optional[str] = None
     contract_date: Optional[datetime] = None
     valid_until: Optional[datetime] = None
 
@@ -890,6 +897,7 @@ class ManagerCustomerContractCreatePayload(BaseModel):
 class ManagerCustomerContractUpdatePayload(BaseModel):
     number: Optional[str] = None
     template_id: Optional[str] = None
+    document_role_type: Optional[str] = None
     contract_date: Optional[datetime] = None
     valid_until: Optional[datetime] = None
     status: Optional[str] = None

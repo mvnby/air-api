@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import BigInteger, Column, JSON, String
 from sqlmodel import Field, Relationship, SQLModel
 
-from .common import ClosingResult, EquipmentStatus, LeadSource, OrderStageStatus, OrderStatus, PaymentCurrency, PaymentType
+from .common import ClosingResult, DocumentRoleType, EquipmentStatus, LeadSource, OrderStageStatus, OrderStatus, PaymentCurrency, PaymentType
 
 class Installer(SQLModel, table=True):
     __tablename__ = "installers"
@@ -224,6 +224,7 @@ class Order(SQLModel, table=True):
     customer_contract_id: Optional[int] = Field(default=None, foreign_key="customer_contract.id", index=True)
 
     delivery_address: Optional[str] = None
+    document_role_type: Optional[DocumentRoleType] = Field(default=None, sa_column=Column(String, nullable=True))
 
     user_id: Optional[int] = Field(default=None, index=True)
 

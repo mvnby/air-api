@@ -29,6 +29,7 @@ export type ManagerOrderUpdatePayload = {
     customer_id?: (number | null);
     customer_branch_id?: (number | null);
     customer_contract_id?: (number | null);
+    document_role_type?: (string | null);
     customer_type?: (string | null);
     customer_name?: (string | null);
     customer_phone?: (string | null);

@@ -91,6 +91,7 @@ async def upload_manager_customer_contract(
     number: str = Form(...),
     contract_date: datetime = Form(...),
     valid_until: datetime = Form(...),
+    document_role_type: str | None = Form(None),
     file: UploadFile = File(...),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
@@ -102,6 +103,7 @@ async def upload_manager_customer_contract(
             number=number,
             contract_date=contract_date,
             valid_until=valid_until,
+            document_role_type=document_role_type,
             file=file,
         )
     except ValueError as exc:

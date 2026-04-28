@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { ArrowLeft, Building2, Mail, Phone, Plus, ReceiptText, Save, UserRound, X } from 'lucide-vue-next';
 import CreateOrderModal from '../components/CreateOrderModal.vue';
 import { api } from '../api';
-import { ManagerContractsService, ManagerService, type ManagerCatalogCustomerItemResponse, type ManagerCustomerContractItemResponse, type ManagerCustomerDocumentItem } from '../client';
+import { ManagerContractsService, ManagerDocsService, ManagerService, type DocumentTemplateItem, type ManagerCatalogCustomerItemResponse, type ManagerCustomerContractItemResponse, type ManagerCustomerDocumentItem } from '../client';
 import { useBelarusPhoneMask } from '../composables/useBelarusPhoneMask';
 import { useB2BLookup } from '../composables/useB2BLookup';
 import { dispatchCustomerUpdated } from '../utils/customer-events';
@@ -56,6 +56,23 @@ const contractUploadSaving = ref(false);
 const showContractForm = ref(false);
 const showContractUploadForm = ref(false);
 const OPEN_CONTRACT_TEMPLATE_ID = '1x-pL1j9g-NzLSpPTLVYXSsmutGExPgfDqzi2VLq9thI';
+type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
+const DOCUMENT_ROLE_OPTIONS: Array<{ value: DocumentRoleType; label: string }> = [
+  { value: 'seller_buyer', label: 'Продавец / Покупатель' },
+  { value: 'executor_customer', label: 'Исполнитель / Заказчик' },
+  { value: 'contractor_customer', label: 'Подрядчик / Заказчик' },
+];
+const contractTemplates = ref<DocumentTemplateItem[]>([]);
+
+const normalizeRoleType = (value: unknown): DocumentRoleType => {
+  const raw = String(value || '').trim();
+  if (raw === 'executor_customer' || raw === 'contractor_customer') return raw;
+  return 'seller_buyer';
+};
+
+const getRoleLabel = (value?: string | null) => (
+  DOCUMENT_ROLE_OPTIONS.find((option) => option.value === normalizeRoleType(value))?.label || 'Продавец / Покупатель'
+);
 
 const phoneError = ref('');
 const emailError = ref('');
@@ -119,11 +136,13 @@ const buildDefaultContractForm = () => {
   const start = new Date();
   const end = new Date(start);
   end.setFullYear(end.getFullYear() + 1);
+  const defaultTemplate = contractTemplates.value[0];
   return {
     number: '',
     contract_date: toInputDate(start),
     valid_until: toInputDate(end),
-    template_id: OPEN_CONTRACT_TEMPLATE_ID,
+    template_id: defaultTemplate?.id || OPEN_CONTRACT_TEMPLATE_ID,
+    document_role_type: normalizeRoleType(defaultTemplate?.document_role_type),
   };
 };
 
@@ -132,6 +151,7 @@ const contractUploadForm = ref({
   number: '',
   contract_date: buildDefaultContractForm().contract_date,
   valid_until: buildDefaultContractForm().valid_until,
+  document_role_type: buildDefaultContractForm().document_role_type,
   file: null as File | null,
 });
 
@@ -253,6 +273,20 @@ const loadCustomerContracts = async () => {
   }
 };
 
+const loadContractTemplates = async () => {
+  try {
+    const res = await ManagerDocsService.getDocTemplates('contract');
+    contractTemplates.value = res.items;
+  } catch (e) {
+    console.warn('Failed to load contract templates', e);
+  }
+};
+
+const syncContractRoleFromTemplate = () => {
+  const template = contractTemplates.value.find((item) => item.id === contractForm.value.template_id);
+  contractForm.value.document_role_type = normalizeRoleType(template?.document_role_type);
+};
+
 const openContractForm = () => {
   contractForm.value = buildDefaultContractForm();
   showContractUploadForm.value = false;
@@ -265,6 +299,7 @@ const openContractUploadForm = () => {
     number: '',
     contract_date: defaults.contract_date,
     valid_until: defaults.valid_until,
+    document_role_type: defaults.document_role_type,
     file: null,
   };
   showContractForm.value = false;
@@ -301,6 +336,7 @@ const createContract = async () => {
     const payload = {
       number: contractForm.value.number.trim() || null,
       template_id: contractForm.value.template_id.trim() || OPEN_CONTRACT_TEMPLATE_ID,
+      document_role_type: contractForm.value.document_role_type,
       contract_date: contractForm.value.contract_date ? `${contractForm.value.contract_date}T00:00:00` : null,
       valid_until: contractForm.value.valid_until ? `${contractForm.value.valid_until}T00:00:00` : null,
     };
@@ -331,6 +367,7 @@ const uploadContract = async () => {
       number: contractUploadForm.value.number.trim(),
       contract_date: `${contractUploadForm.value.contract_date}T00:00:00`,
       valid_until: `${contractUploadForm.value.valid_until}T00:00:00`,
+      document_role_type: contractUploadForm.value.document_role_type,
       file: contractUploadForm.value.file,
     });
     showContractUploadForm.value = false;
@@ -549,12 +586,14 @@ watch(customerId, () => {
   void loadCustomer();
   void loadCustomerDocs();
   void loadCustomerContracts();
+  void loadContractTemplates();
 });
 
 onMounted(() => {
   void loadCustomer();
   void loadCustomerDocs();
   void loadCustomerContracts();
+  void loadContractTemplates();
 });
 </script>
 
@@ -718,7 +757,17 @@ onMounted(() => {
               <input v-model="contractForm.number" class="field-input" type="text" placeholder="Номер, если уже известен" />
               <input v-model="contractForm.contract_date" class="field-input" type="date" @change="syncContractValidUntil" />
               <input v-model="contractForm.valid_until" class="field-input" type="date" />
-              <input v-model="contractForm.template_id" class="field-input" type="text" placeholder="Template ID" />
+              <select v-model="contractForm.template_id" class="field-input" @change="syncContractRoleFromTemplate">
+                <option v-for="template in contractTemplates" :key="template.id" :value="template.id">
+                  {{ template.name }}
+                </option>
+                <option v-if="!contractTemplates.length" :value="OPEN_CONTRACT_TEMPLATE_ID">Договор по умолчанию</option>
+              </select>
+              <select v-model="contractForm.document_role_type" class="field-input md:col-span-2">
+                <option v-for="option in DOCUMENT_ROLE_OPTIONS" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
             </div>
             <div class="mt-3 flex justify-end gap-2">
               <button class="btn-mini-outline" type="button" @click="showContractForm = false">Отмена</button>
@@ -733,6 +782,11 @@ onMounted(() => {
               <input v-model="contractUploadForm.number" class="field-input" type="text" placeholder="Номер договора" required />
               <input v-model="contractUploadForm.contract_date" class="field-input" type="date" required @change="syncUploadContractValidUntil" />
               <input v-model="contractUploadForm.valid_until" class="field-input" type="date" required />
+              <select v-model="contractUploadForm.document_role_type" class="field-input">
+                <option v-for="option in DOCUMENT_ROLE_OPTIONS" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
               <input class="field-input" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required @change="onContractUploadFileChange" />
             </div>
             <div class="mt-3 flex justify-end gap-2">
@@ -761,6 +815,9 @@ onMounted(() => {
                   </div>
                   <p class="mt-2 text-[13px] leading-none text-slate-500 dark:text-slate-400">
                     {{ formatDateOnly(contract.valid_from) }} - {{ formatDateOnly(contract.valid_until) }}
+                  </p>
+                  <p class="mt-2 text-[12px] leading-none text-slate-500 dark:text-slate-400">
+                    Роли: {{ getRoleLabel(contract.document_role_type) }}
                   </p>
                 </div>
               </div>
