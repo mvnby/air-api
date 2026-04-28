@@ -6,6 +6,7 @@ export type Body_upload_manager_customer_contract = {
     number: string;
     contract_date: string;
     valid_until: string;
+    template_id?: (string | null);
     document_role_type?: (string | null);
     file: Blob;
 };

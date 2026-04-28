@@ -290,9 +290,9 @@ const loadDocuments = async () => {
 const loadContractTemplates = async () => {
   try {
     const res = await ManagerDocsService.getDocTemplates('contract');
-    contractTemplates.value = res.items;
-    if (res.items.length > 0 && res.items[0]) {
-      selectedContractTemplateId.value = res.items[0].id;
+    contractTemplates.value = res.items.filter((template) => !template.is_open_contract);
+    if (contractTemplates.value.length > 0 && contractTemplates.value[0]) {
+      selectedContractTemplateId.value = contractTemplates.value[0].id;
     }
   } catch (e) {
     console.warn('Failed to load contract templates', e);

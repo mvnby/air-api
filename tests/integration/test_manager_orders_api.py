@@ -346,7 +346,7 @@ async def test_manager_document_roles_from_template_contract_and_order_override(
     db.add(
         GlobalConfig(
             key="contract_templates",
-            value='[{"id":"tpl-service","name":"Услуги","document_role_type":"executor_customer"},{"id":"tpl-old","name":"Старый"}]',
+            value='[{"id":"tpl-service","name":"Услуги","document_role_type":"executor_customer","is_open_contract":true},{"id":"tpl-old","name":"Старый"}]',
             description="Contract templates",
         )
     )
@@ -359,7 +359,9 @@ async def test_manager_document_roles_from_template_contract_and_order_override(
     assert templates_resp.status_code == 200
     templates = templates_resp.json()["items"]
     assert next(item for item in templates if item["id"] == "tpl-service")["document_role_type"] == "executor_customer"
+    assert next(item for item in templates if item["id"] == "tpl-service")["is_open_contract"] is True
     assert next(item for item in templates if item["id"] == "tpl-old")["document_role_type"] == "seller_buyer"
+    assert next(item for item in templates if item["id"] == "tpl-old")["is_open_contract"] is False
 
     captured_replacements = []
 
