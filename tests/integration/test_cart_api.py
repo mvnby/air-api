@@ -58,3 +58,7 @@ async def test_checkout_flow(async_client: AsyncClient, cart_product):
     # 2000 * 2 + 250 * 2 = 4000 + 500 = 4500
     expected_total = (cart_product.price * 2) + (250 * 2)
     assert data["total_amount"] == expected_total
+    assert "margin" not in data
+    assert "total_cost" not in data
+    assert "technical_meta" not in data
+    assert "cost" not in data

@@ -189,6 +189,51 @@ class OrderService:
         return order
 
     @staticmethod
+    async def create_manager_order(session: AsyncSession, payload: Any) -> Optional[Dict[str, Any]]:
+        source_enum = LeadSource(payload.source) if payload.source else LeadSource.MANAGER
+        initial_status = (
+            OrderStatus.NEGOTIATION
+            if payload.customer_id or payload.service_type == "maintenance"
+            else OrderStatus.NEW_LEAD
+        )
+
+        order = await OrderService.create_from_website(
+            session=session,
+            customer_name=payload.name or "Новый клиент",
+            customer_phone=payload.phone or "",
+            customer_email=None,
+            customer_address=payload.address,
+            items=[],
+            lead_source=source_enum,
+            initial_status=initial_status,
+            comment=payload.request_text,
+            customer_id=payload.customer_id,
+            customer_type=payload.customer_type,
+            customer_inn=payload.customer_inn,
+            customer_full_legal_name=payload.customer_full_legal_name,
+        )
+
+        changed = False
+        if payload.service_type == "maintenance" and payload.target_date:
+            order.installation_date = OrderService._normalize_naive_datetime(payload.target_date)
+            changed = True
+
+        if payload.service_type:
+            from sqlalchemy.orm.attributes import flag_modified
+
+            order.technical_meta = dict(order.technical_meta or {})
+            order.technical_meta["service_type"] = payload.service_type
+            flag_modified(order, "technical_meta")
+            changed = True
+
+        if changed:
+            session.add(order)
+            await session.commit()
+            await session.refresh(order)
+
+        return await OrderService.get_order_detail_for_manager(session, int(order.id))
+
+    @staticmethod
     async def create_from_website(
         session: AsyncSession,
         customer_name: str,
@@ -952,6 +997,23 @@ class OrderService:
         return await OrderDAO.update_status(session, order_id, new_status)
 
     @staticmethod
+    async def update_status_from_admin(
+        session: AsyncSession,
+        order_id: int,
+        new_status: str,
+    ) -> Dict[str, Any]:
+        try:
+            status_enum = OrderStatus(new_status)
+        except ValueError:
+            return {"success": False, "error": f"Invalid status: {new_status}"}
+
+        try:
+            success = await OrderService.update_status(session, order_id, status_enum)
+            return {"success": success}
+        except Exception as exc:
+            return {"success": False, "error": str(exc)}
+
+    @staticmethod
     def _map_customer_brief(customer: Optional[Customer]) -> Optional[Dict[str, Any]]:
         if not customer:
             return None
@@ -1040,7 +1102,7 @@ class OrderService:
     @staticmethod
     def _map_product_line(link: OrderProductLink) -> Dict[str, Any]:
         product_title = link.product.title if link.product else f"Товар #{link.product_id}"
-        line_total = (link.price + (link.installation_price or 0)) * link.quantity
+        line_total = link.price * link.quantity
         return {
             "id": link.id,
             "product_id": link.product_id,
@@ -1657,7 +1719,12 @@ class OrderService:
         return count, count > 0
 
     @staticmethod
-    async def get_leads_inbox(session: AsyncSession, scope: str = "active"):
+    async def get_leads_inbox(
+        session: AsyncSession,
+        scope: str = "active",
+        page: int = 1,
+        limit: int = 50,
+    ):
         """Return triage inbox items based on scope.
 
         scope="active"  → new_lead + assessment
@@ -1667,17 +1734,23 @@ class OrderService:
         from schemas import LeadsInboxItemResponse, LeadsInboxListResponse
         from sqlalchemy import case as sa_case
 
+        page = max(1, int(page or 1))
+        limit = min(100, max(1, int(limit or 50)))
         stmt = select(Order).options(selectinload(Order.customer))
+        count_stmt = select(func.count(Order.id))
 
         if scope == "archive":
             # Archived leads are just closed/lost leads
-            stmt = stmt.where(
+            scope_filters = (
                 Order.status == OrderStatus.CLOSED,
                 Order.closing_result == "lost"
             )
         else:
             active_statuses = [OrderStatus.NEW_LEAD]
-            stmt = stmt.where(Order.status.in_(active_statuses))
+            scope_filters = (Order.status.in_(active_statuses),)
+
+        stmt = stmt.where(*scope_filters)
+        count_stmt = count_stmt.where(*scope_filters)
 
         if scope == "active":
             # new_lead orders float to top, then newest first
@@ -1689,6 +1762,10 @@ class OrderService:
         else:
             stmt = stmt.order_by(Order.created_at.desc())
 
+        total_result = await session.execute(count_stmt)
+        total = int(total_result.scalar() or 0)
+
+        stmt = stmt.offset((page - 1) * limit).limit(limit)
         result = await session.execute(stmt)
         orders: list[Order] = list(result.scalars().all())
 
@@ -1721,7 +1798,7 @@ class OrderService:
             for order in orders
         ]
 
-        return LeadsInboxListResponse(items=items, total=len(items))
+        return LeadsInboxListResponse(items=items, total=total)
 
     @staticmethod
     async def delete_order(session: AsyncSession, order_id: int) -> bool:

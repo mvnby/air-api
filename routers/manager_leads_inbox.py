@@ -31,6 +31,8 @@ async def get_leads_counter(
 @router.get("/inbox", response_model=LeadsInboxListResponse, operation_id=GET_MANAGER_LEADS_INBOX)
 async def get_leads_inbox(
     scope: str = Query("active", pattern="^(active|archive)$"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=100),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
 ) -> LeadsInboxListResponse:
@@ -39,4 +41,4 @@ async def get_leads_inbox(
     scope=active  → new_lead + assessment, sorted by is_new DESC then created_at DESC.
     scope=archive → canceled.
     """
-    return await OrderService.get_leads_inbox(session, scope=scope)
+    return await OrderService.get_leads_inbox(session, scope=scope, page=page, limit=limit)
