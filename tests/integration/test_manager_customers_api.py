@@ -290,7 +290,7 @@ async def test_manager_customer_contract_create_and_dashboard_notice(async_clien
     db.add(
         GlobalConfig(
             key="contract_templates",
-            value='[{"id":"service-template","name":"Сервис","document_role_type":"executor_customer"}]',
+            value='[{"id":"service-template","name":"Сервис","document_role_type":"executor_customer","is_open_contract":true}]',
             description="Contract templates",
         )
     )

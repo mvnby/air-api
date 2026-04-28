@@ -57,8 +57,17 @@ class DocumentService:
                 "id": default_id,
                 "name": f"{default_name} (по умолчанию)",
                 "document_role_type": DocumentRoleService.normalize_role_type(None),
+                "is_open_contract": False,
             }]
         return []
+
+    @staticmethod
+    def _normalize_template_bool(value: object) -> bool:
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return False
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
     @staticmethod
     def _normalize_template_item(item: dict) -> dict:
@@ -70,6 +79,7 @@ class DocumentService:
             "id": template_id,
             "name": name,
             "document_role_type": DocumentRoleService.normalize_role_type(item.get("document_role_type")),
+            "is_open_contract": DocumentService._normalize_template_bool(item.get("is_open_contract")),
         }
 
     @staticmethod

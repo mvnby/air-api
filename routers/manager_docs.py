@@ -146,6 +146,7 @@ async def get_doc_templates(
                 id=t["id"],
                 name=t["name"],
                 document_role_type=t.get("document_role_type"),
+                is_open_contract=bool(t.get("is_open_contract")),
             )
             for t in items
         ]
