@@ -3,6 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy import and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -57,15 +58,20 @@ class ProductSupplyMetricsService:
             }
 
         keys = {(m.supplier_id, m.external_id) for m in mappings}
+        offer_clauses = [
+            and_(
+                SupplierOffer.supplier_id == supplier_id,
+                SupplierOffer.external_id == external_id,
+            )
+            for supplier_id, external_id in keys
+        ]
         offers_res = await session.execute(
             select(SupplierOffer).where(
                 SupplierOffer.is_active.is_(True),
-                SupplierOffer.supplier_id.in_([k[0] for k in keys]),
+                or_(*offer_clauses),
             )
         )
-        offers = [
-            o for o in offers_res.scalars().all() if (o.supplier_id, o.external_id) in keys
-        ]
+        offers = list(offers_res.scalars().all())
         offer_map = {(o.supplier_id, o.external_id): o for o in offers}
 
         source_res = await session.execute(

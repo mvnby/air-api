@@ -41,51 +41,7 @@ async def create_manager_order(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        from models import LeadSource, OrderStatus
-        source_enum = LeadSource(payload.source) if payload.source else LeadSource.MANAGER
-        # Orders from customer card (customer_id provided) or maintenance skip new_lead
-        if payload.customer_id or payload.service_type == "maintenance":
-            initial_status = OrderStatus.NEGOTIATION
-        else:
-            initial_status = OrderStatus.NEW_LEAD
-        order = await OrderService.create_from_website(
-            session=session,
-            customer_name=payload.name or "Новый клиент",
-            customer_phone=payload.phone or "",
-            customer_email=None,
-            customer_address=payload.address,
-            items=[],
-            lead_source=source_enum,
-            initial_status=initial_status,
-            comment=payload.request_text,
-            customer_id=payload.customer_id,
-            customer_type=payload.customer_type,
-            customer_inn=payload.customer_inn,
-            customer_full_legal_name=payload.customer_full_legal_name,
-        )
-        # Apply target_date if maintenance
-        if payload.service_type == "maintenance" and payload.target_date:
-            raw_order_date = await session.get(type(order), order.id)
-            if raw_order_date is not None:
-                raw_order_date.installation_date = payload.target_date.replace(tzinfo=None)
-                session.add(raw_order_date)
-                await session.commit()
-                await session.refresh(raw_order_date)
-                order = raw_order_date
-        # Save optional service_type into technical_meta
-        if payload.service_type:
-            from sqlalchemy.orm import Session
-            from sqlalchemy.orm.attributes import flag_modified
-            raw_order = await session.get(type(order), order.id)
-            if raw_order is not None:
-                raw_order.technical_meta = dict(raw_order.technical_meta or {})
-                raw_order.technical_meta["service_type"] = payload.service_type
-                flag_modified(raw_order, "technical_meta")
-                session.add(raw_order)
-                await session.commit()
-                await session.refresh(raw_order)
-                order = raw_order
-        data = await OrderService.get_order_detail_for_manager(session, order.id)
+        data = await OrderService.create_manager_order(session=session, payload=payload)
     except ValueError as exc:
         raise manager_http_error(
             status_code=400,

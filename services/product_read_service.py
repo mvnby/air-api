@@ -33,7 +33,7 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
 
     @staticmethod
     async def get_public_spec_keys(session: AsyncSession) -> Dict[str, Any]:
-        stmt = select(Product.specs)
+        stmt = select(Product.specs).where(Product.is_published.is_(True))
         result = await session.execute(stmt)
         all_specs = result.scalars().all()
 

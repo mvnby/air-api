@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import List
+from typing import Any, Dict, List
 from sqlmodel import select
 from core.config import settings
 from core.database import async_session_maker
@@ -57,38 +57,68 @@ class SchedulerService:
             if mode == 1:
                 # Только товары с тегом "hit" (Хит продаж)
                 from models import Tag
-                stmt = select(Product).join(Product.tags).where(Tag.slug == "hit", Product.source_url != None)
+                stmt = (
+                    select(
+                        Product.id.label("id"),
+                        Product.title.label("title"),
+                        Product.source_url.label("source_url"),
+                        Product.price.label("price"),
+                    )
+                    .join(Product.tags)
+                    .where(Tag.slug == "hit", Product.source_url != None)
+                )
             else:
                 # Все товары с URL
-                stmt = select(Product).where(Product.source_url != None)
-            
-            result = await session.execute(stmt)
-            products = result.scalars().unique().all()
-            
-            updated_count = 0
-            for product in products:
-                try:
-                    logger.info(f"Checking price for: {product.title}")
-                    data = await self.parser.parse(product.source_url)
-                    new_price = data.get('price')
-                    
-                    if new_price and new_price != product.price:
-                        logger.info(f"Price updated for {product.title}: {product.price} -> {new_price}")
-                        product.old_price = product.price
-                        product.price = new_price
-                        session.add(product)
-                        updated_count += 1
-                    
-                    # Sleep to avoid rate limiting
-                    await asyncio.sleep(2)
-                except Exception as e:
-                    logger.error(f"Error updating price for {product.title}: {e}")
+                stmt = select(
+                    Product.id.label("id"),
+                    Product.title.label("title"),
+                    Product.source_url.label("source_url"),
+                    Product.price.label("price"),
+                ).where(Product.source_url != None)
 
-            if updated_count > 0:
-                await session.commit()
-                logger.info(f"Finished price update. {updated_count} products updated.")
-            else:
-                logger.info("Finished price update. No changes found.")
+            result = await session.execute(stmt)
+            product_rows = [dict(row) for row in result.mappings().unique().all()]
+
+        updates: List[Dict[str, Any]] = []
+        for product in product_rows:
+            try:
+                logger.info(f"Checking price for: {product['title']}")
+                data = await self.parser.parse(product["source_url"])
+                new_price = data.get("price")
+
+                if new_price and new_price != product["price"]:
+                    logger.info(
+                        f"Price updated for {product['title']}: {product['price']} -> {new_price}"
+                    )
+                    updates.append(
+                        {
+                            "id": product["id"],
+                            "old_price": product["price"],
+                            "new_price": new_price,
+                        }
+                    )
+
+                # Sleep to avoid rate limiting
+                await asyncio.sleep(2)
+            except Exception as e:
+                logger.error(f"Error updating price for {product['title']}: {e}")
+
+        if updates:
+            updated_count = 0
+            async with async_session_maker() as session:
+                for item in updates:
+                    product = await session.get(Product, item["id"])
+                    if not product:
+                        continue
+                    product.old_price = item["old_price"]
+                    product.price = item["new_price"]
+                    session.add(product)
+                    updated_count += 1
+                if updated_count:
+                    await session.commit()
+            logger.info(f"Finished price update. {updated_count} products updated.")
+        else:
+            logger.info("Finished price update. No changes found.")
 
     async def start_loop(self, interval_hours: int = 6):
         """

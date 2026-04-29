@@ -28,17 +28,23 @@ export class ManagerLeadsInboxService {
      * scope=active  → new_lead + assessment, sorted by is_new DESC then created_at DESC.
      * scope=archive → canceled.
      * @param scope
+     * @param page
+     * @param limit
      * @returns LeadsInboxListResponse Successful Response
      * @throws ApiError
      */
     public static getManagerLeadsInbox(
         scope: string = 'active',
+        page: number = 1,
+        limit: number = 50,
     ): CancelablePromise<LeadsInboxListResponse> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/leads/inbox',
             query: {
                 'scope': scope,
+                'page': page,
+                'limit': limit,
             },
             errors: {
                 422: `Validation Error`,

@@ -1,7 +1,7 @@
 import pytest
 from sqlmodel import select
 from services.order_service import OrderService
-from models import Product, OrderProductLink, LeadSource, OrderStatus
+from models import Product, OrderProductLink, OrderServiceLink, LeadSource, OrderStatus
 
 async def test_snapshot_pricing(db):
     # 1. Create test product
@@ -43,13 +43,17 @@ async def test_snapshot_pricing(db):
     result = await db.execute(stmt)
     link = result.scalar_one()
     
-    # 4. Verify total calculation
-    expected_total = (link.price + link.installation_price) * link.quantity
+    service_result = await db.execute(select(OrderServiceLink).where(OrderServiceLink.order_id == order.id))
+    service_link = service_result.scalar_one()
+
+    # 4. Verify total calculation uses product/service snapshots.
+    expected_total = (link.price * link.quantity) + (service_link.price * service_link.quantity)
     
     assert link.is_installation_included is True
     assert link.installation_price == 260
     assert link.installation_details is not None
     assert link.installation_details.get("source") == "web_calculator"
+    assert service_link.price == 260
     assert order.total_amount == expected_total
 
 async def test_order_without_installation(db):
@@ -124,3 +128,37 @@ async def test_create_from_website_supports_negotiation_status_and_preserves_che
     assert link.product_id == product.id
     assert link.is_installation_included is True
     assert link.installation_price == 300
+
+
+async def test_order_detail_does_not_double_count_installation_in_product_line(db):
+    product = Product(id=65, title="Line Total Product", slug="line-total-product", price=2000, area=25)
+    db.add(product)
+    await db.commit()
+    await db.refresh(product)
+
+    order = await OrderService.create_from_website(
+        session=db,
+        customer_name="Клиент детализации",
+        customer_phone="+375447770012",
+        customer_email=None,
+        customer_address="г. Минск",
+        items=[
+            {
+                "product_id": product.id,
+                "quantity": 2,
+                "with_installation": True,
+                "installation_price": 300,
+                "installation_meta": {"source": "checkout"},
+            }
+        ],
+        lead_source=LeadSource.SITE,
+        initial_status=OrderStatus.NEGOTIATION,
+        comment=None,
+    )
+
+    detail = await OrderService.get_order_detail_for_manager(db, order.id)
+
+    assert detail["total_amount"] == 4600
+    assert detail["product_lines"][0]["installation_price"] == 300
+    assert detail["product_lines"][0]["line_total"] == 4000
+    assert detail["service_lines"][0]["line_total"] == 600

@@ -119,10 +119,15 @@ class SupplierSyncService:
             if not supplier or not supplier.spreadsheet_id:
                 raise ValueError("Supplier spreadsheet is not configured")
 
+            spreadsheet_id = supplier.spreadsheet_id
+            sheet_name = source.sheet_name
+            range_a1 = source.range_a1
+            await session.commit()
+
             values = get_google_service().read_sheet_values(
-                spreadsheet_id=supplier.spreadsheet_id,
-                sheet_name=source.sheet_name,
-                range_a1=source.range_a1,
+                spreadsheet_id=spreadsheet_id,
+                sheet_name=sheet_name,
+                range_a1=range_a1,
             )
 
             # Do not hard-skip first row; rely on logical row validation instead.
