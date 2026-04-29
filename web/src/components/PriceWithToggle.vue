@@ -22,7 +22,10 @@ const props = defineProps({
   area: { type: Number, default: 0 },
   vitebskQty: { type: Number, default: 0 },
   minskQty: { type: Number, default: 0 },
-  availabilityStatus: { type: String, default: null }
+  availabilityStatus: { type: String, default: null },
+  installationRates: { type: Array, default: null },
+  installDiscount: { type: Number, default: null },
+  refreshProductOnMount: { type: Boolean, default: true }
 });
 
 const isInstalled = ref(false);
@@ -48,13 +51,17 @@ const liveMinskQty = ref(Number(props.minskQty) || 0);
 
 onMounted(async () => {
     try {
+        const shouldUseProvidedRates = Array.isArray(props.installationRates) && props.installationRates.length > 0;
+        const shouldUseProvidedDiscount = props.installDiscount !== null && props.installDiscount !== undefined;
         const [ratesData, configData, freshProduct] = await Promise.all([
-            getInstallationRates(),
-            getGlobalConfig(),
-            props.productId ? getProductById(props.productId) : Promise.resolve(null)
+            shouldUseProvidedRates ? Promise.resolve(props.installationRates) : getInstallationRates(),
+            shouldUseProvidedDiscount ? Promise.resolve(null) : getGlobalConfig(),
+            props.refreshProductOnMount && props.productId ? getProductById(props.productId) : Promise.resolve(null)
         ]);
         rates.value = ratesData || [];
-        if (configData && configData.install_discount) {
+        if (shouldUseProvidedDiscount) {
+            discount.value = Number(props.installDiscount) || 0;
+        } else if (configData && configData.install_discount) {
             discount.value = parseInt(configData.install_discount, 10) || 0;
         }
         if (freshProduct && freshProduct.price !== undefined) {

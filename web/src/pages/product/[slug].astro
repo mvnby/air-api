@@ -72,7 +72,7 @@ const publicSpecsSummary = buildPublicSpecsSummary(specs);
 const bentoCards = generateBentoCards(product);
 
 const publicTags = (product.tags || []).filter((t: any) => t.is_public);
----
+	---
 
 <Layout
     title={product.title}
@@ -200,6 +200,7 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
                         vitebskQty={product.vitebsk_qty}
                         minskQty={product.minsk_qty}
                         availabilityStatus={product.availability_status}
+                        refreshProductOnMount={false}
                     />
                 </div>
 

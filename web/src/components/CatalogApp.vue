@@ -55,6 +55,10 @@ const props = defineProps({
   initialCategorySlug: {
     type: String,
     default: 'cat-household'
+  },
+  initialBrands: {
+    type: Array,
+    default: () => []
   }
 });
 
@@ -68,6 +72,7 @@ const meta = ref(props.initialMeta || { total: 0, page: 1, limit: BASE_LIMIT, pa
 const loadingInitial = ref(false);
 const loadingMore = ref(false);
 const loadingBrands = ref(false);
+const dynamicActive = ref(false);
 
 const activeTags = ref([...new Set(initialActiveTags)]);
 const searchQuery = ref('');
@@ -85,7 +90,10 @@ const currentIndoorTypes = ref([...(props.initialFilters?.indoor_types || [])]);
 const selectedOutdoorSlug = ref('');
 const selectedIndoorQuantities = ref({});
 
-const availableBrands = ref([]);
+const availableBrands = ref((props.initialBrands || []).map((brand) => ({
+  ...brand,
+  sort_order: brand.sort_order ?? 999,
+})));
 let searchDebounceTimeout = null;
 
 const lockedFilters = computed(() => props.lockedInitialFilters || null);
@@ -693,6 +701,29 @@ const syncStateFromUrl = () => {
   }
 };
 
+const hasUrlQueryParams = () => {
+  if (typeof window === 'undefined') return false;
+  return Array.from(new URLSearchParams(window.location.search).keys()).length > 0;
+};
+
+const getUrlPage = () => {
+  if (typeof window === 'undefined') return 1;
+  const parsed = Number.parseInt(new URLSearchParams(window.location.search).get('page') || '1', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+};
+
+const syncStaticHeaderFromState = () => {
+  if (typeof document === 'undefined') return;
+
+  const header = document.querySelector('.catalog-page > .catalog-header');
+  if (!header) return;
+
+  const title = header.querySelector('h1');
+  const description = header.querySelector('.header-description');
+  if (title) title.textContent = pageTitle.value;
+  if (description) description.textContent = pageDescription.value;
+};
+
 const buildApiParams = (page = 1) => {
   const base = {
     page,
@@ -751,7 +782,13 @@ const syncUrlFromState = (page = 1, { replace = false } = {}) => {
   }
 };
 
+const activateDynamicResults = () => {
+  dynamicActive.value = true;
+};
+
 const fetchProducts = async ({ page = 1, append = false } = {}) => {
+  activateDynamicResults();
+  syncStaticHeaderFromState();
   if (append) {
     loadingMore.value = true;
   } else {
@@ -822,6 +859,10 @@ const updateBrandsFallbackFromProducts = () => {
 };
 
 const loadBrands = async () => {
+  if (availableBrands.value.length > 0) {
+    updateBrandsFallbackFromProducts();
+    return;
+  }
   loadingBrands.value = true;
   try {
     const filters = await getFiltersConfig();
@@ -987,59 +1028,20 @@ const onSearchInput = () => {
 
 onMounted(async () => {
   syncStateFromUrl();
+  syncStaticHeaderFromState();
   await loadBrands();
-
-  const currentMetaLimit = Number(props.initialMeta?.limit || BASE_LIMIT);
-  const urlPage = Number(getParamsFromUrl()?.page || 1);
-  const hasUrlQuery = typeof window !== 'undefined'
-    ? Array.from(new URLSearchParams(window.location.search).keys()).length > 0
-    : false;
-
-  if (
-    hasUrlQuery
-    || !props.initialProducts?.length
-    || currentMetaLimit !== BASE_LIMIT
-    || urlPage > 1
-  ) {
-    await fetchProducts({ page: Math.max(1, urlPage), append: false });
-  }
   syncMultiSelectionState();
+  if (hasUrlQueryParams()) {
+    await fetchProducts({ page: getUrlPage(), append: false });
+  }
 });
 </script>
 
 <template>
   <div class="catalog-shell">
-    <header class="catalog-header">
-      <div class="header-top">
-        <div class="breadcrumb">
-          <a href="/">Главная</a>
-          <span class="sep">/</span>
-          <span>Каталог</span>
-        </div>
-
-        <div class="search-input-wrapper header-search catalog-desktop-only">
-          <span class="material-icons-round search-icon">search</span>
-          <input
-            v-model="searchQuery"
-            type="text"
-            class="search-input"
-            placeholder="Поиск по модели, бренду, характеристике"
-            @input="onSearchInput"
-          />
-        </div>
-
-        <button
-          class="search-toggle catalog-mobile-only"
-          :class="{ active: mobileSearchOpen }"
-          @click="mobileSearchOpen = !mobileSearchOpen"
-          aria-label="Открыть поиск"
-          type="button"
-        >
-          <span class="material-icons-round">{{ mobileSearchOpen ? 'close' : 'search' }}</span>
-        </button>
-      </div>
-
-      <div v-if="mobileSearchOpen" class="search-input-wrapper header-search catalog-mobile-only mobile-search">
+    <section class="catalog-controls" aria-label="Фильтры каталога">
+      <div class="controls-top">
+        <div class="search-input-wrapper header-search">
         <span class="material-icons-round search-icon">search</span>
         <input
           v-model="searchQuery"
@@ -1049,17 +1051,15 @@ onMounted(async () => {
           @input="onSearchInput"
         />
       </div>
-
-      <h1 class="gradient-text">{{ pageTitle }}</h1>
-      <p class="header-description">{{ pageDescription }}</p>
-      <a
-        v-if="isIndustrialCategory"
-        :href="semiGuideUrl"
-        class="semi-guide-link"
-      >
-        Как выбрать тип полупромышленного кондиционера
-      </a>
-    </header>
+        <a
+          v-if="isIndustrialCategory"
+          :href="semiGuideUrl"
+          class="semi-guide-link"
+        >
+          Как выбрать тип полупромышленного кондиционера
+        </a>
+      </div>
+    </section>
 
     <section v-if="isHouseholdCategory" class="glass-panel quick-power-panel">
       <div class="section-label">Мощность</div>
@@ -1317,11 +1317,21 @@ onMounted(async () => {
       </section>
     </transition>
 
-    <div v-if="loadingInitial" class="grid skeleton-grid">
+    <div v-if="!dynamicActive" class="catalog-static-slot">
+      <slot />
+    </div>
+
+    <div v-if="!dynamicActive && hasMore" class="load-more-wrap">
+      <button class="load-more-btn" :disabled="loadingMore" @click="loadMore">
+        {{ loadingMore ? 'Загружаем...' : 'Показать еще' }}
+      </button>
+    </div>
+
+    <div v-if="dynamicActive && loadingInitial" class="grid skeleton-grid">
       <div v-for="i in 8" :key="`skeleton-${i}`" class="skeleton-card" />
     </div>
 
-    <div v-else-if="products.length > 0" class="catalog-content">
+    <div v-else-if="dynamicActive && products.length > 0" class="catalog-content">
       <section v-if="showPopularModels" class="popular-section" aria-labelledby="popular-models-title">
         <div class="catalog-section-head">
           <h2 id="popular-models-title">Популярные модели</h2>
@@ -1332,6 +1342,7 @@ onMounted(async () => {
             :key="`popular-${product.id}`"
             :product="product"
             :showInstallation="true"
+            :refreshProductOnMount="false"
           />
         </transition-group>
       </section>
@@ -1346,6 +1357,7 @@ onMounted(async () => {
             :key="product.id"
             :product="product"
             :showInstallation="true"
+            :refreshProductOnMount="false"
           />
         </transition-group>
       </section>
@@ -1361,35 +1373,29 @@ onMounted(async () => {
       </div>
     </div>
 
-    <div v-else class="empty-status card">
+    <div v-else-if="dynamicActive" class="empty-status card">
       <span class="material-icons-round large">search_off</span>
       <h3>Товары не найдены</h3>
       <p>Попробуйте выбрать другой бренд или категорию.</p>
     </div>
-
-    <section class="catalog-seo-block">
-      <h2>Как выбрать кондиционер для квартиры</h2>
-      <p>
-        Для жилых комнат чаще всего подходят настенные сплит-системы до 25–35 м²: они закрывают типовые спальни,
-        детские и гостиные без переплаты за лишнюю мощность. При выборе стоит учитывать площадь, солнечную сторону,
-        высоту потолков и теплопритоки от техники.
-      </p>
-      <p>
-        Если кондиционер нужен для ежедневного использования, обратите внимание на инверторные модели, уровень шума
-        внутреннего блока и наличие сервисной поддержки. Для больших помещений и коммерческих объектов лучше выбирать
-        модель с запасом по производительности и заранее продумать место установки.
-      </p>
-      <p>
-        В каталоге MVN собраны кондиционеры для квартир, домов и офисов в Витебске. Умная сортировка поднимает выше
-        доступные модели подходящей мощности, чтобы быстрее найти практичный вариант с монтажом.
-      </p>
-    </section>
   </div>
 </template>
 
 <style scoped>
 .catalog-header {
   margin-bottom: 1.5rem;
+}
+
+.catalog-controls {
+  margin-bottom: 1rem;
+}
+
+.controls-top {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-content: space-between;
+  flex-wrap: wrap;
 }
 
 .header-top {
@@ -1432,7 +1438,7 @@ onMounted(async () => {
 
 .header-search {
   width: min(620px, 58vw);
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .search-toggle {
@@ -1999,6 +2005,10 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
+  .controls-top {
+    align-items: stretch;
+  }
+
   .header-top {
     align-items: center;
     margin-bottom: 0.8rem;
@@ -2010,6 +2020,10 @@ onMounted(async () => {
 
   .catalog-mobile-only {
     display: flex !important;
+  }
+
+  .header-search {
+    width: 100%;
   }
 
   .breadcrumb {

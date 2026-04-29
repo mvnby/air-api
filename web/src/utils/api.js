@@ -182,9 +182,18 @@ export async function refreshProductPrices(ids) {
     return results.filter(Boolean);
 }
 
+let _globalConfigPromise = null;
+
 export async function getGlobalConfig() {
-    const data = await fetchJson(`${API_V1}/config`);
-    return data || {};
+    if (!_globalConfigPromise) {
+        _globalConfigPromise = fetchJson(`${API_V1}/config`)
+            .catch(err => {
+                console.error('[API] Failed to fetch global config:', err);
+                _globalConfigPromise = null;
+                return {};
+            });
+    }
+    return _globalConfigPromise.then(res => res || {});
 }
 
 /**
