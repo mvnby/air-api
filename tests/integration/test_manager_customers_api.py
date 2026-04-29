@@ -370,14 +370,14 @@ async def test_manager_customer_contract_upload_and_delete(async_client, db, mon
     upload_resp = await async_client.post(
         f"/api/manager/customers/{customer.id}/contracts/upload",
         headers=headers,
-            data={
-                "number": "EXT-2026-001",
-                "contract_date": "2026-02-10T00:00:00",
-                "valid_until": "2027-02-10T00:00:00",
-                "template_id": "uploaded-template",
-            },
-            files={"file": ("external-contract.pdf", b"%PDF-contract", "application/pdf")},
-        )
+        data={
+            "number": "EXT-2026-001",
+            "contract_date": "2026-02-10T00:00:00",
+            "valid_until": "2027-02-10T00:00:00",
+            "template_id": "uploaded-template",
+        },
+        files={"file": ("external-contract.pdf", b"%PDF-contract", "application/pdf")},
+    )
     assert upload_resp.status_code == 200
     uploaded = upload_resp.json()
     assert uploaded["number"] == "EXT-2026-001"
