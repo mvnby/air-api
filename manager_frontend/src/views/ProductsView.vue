@@ -156,7 +156,7 @@ const favoriteTagId = ref<number | null>(null);
 const favoriteUpdatingIds = ref<Set<number>>(new Set());
 const availableBrands = computed(() => (
     [...brands.value]
-        .filter((brand) => brand.products_count > 0)
+        .filter((brand) => (brand.products_count ?? 0) > 0)
         .sort((left, right) => (left.sort_order - right.sort_order) || left.title.localeCompare(right.title))
 ));
 const hasAdvancedFilters = computed(() => (
@@ -394,6 +394,7 @@ const openBulkImageModal = async () => {
 const handleBulkSuccess = async () => {
     await loadProducts();
     selectedProductIds.value.clear();
+    setToast('Характеристики обновлены');
 };
 
 const handleFileSelect = async (e: Event) => {

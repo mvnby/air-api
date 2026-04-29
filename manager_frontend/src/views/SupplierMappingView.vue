@@ -5,6 +5,7 @@ import { getApiErrorMessage } from '../utils/api-errors';
 
 const loading = ref(false);
 const error = ref('');
+const toast = ref('');
 const unmapped = ref<any[]>([]);
 const suppliers = ref<any[]>([]);
 const sources = ref<any[]>([]);
@@ -20,6 +21,13 @@ const inlineSearchQuery = ref<Record<string, string>>({});
 const inlineCandidates = ref<Record<string, any[]>>({});
 
 const keyOf = (offer: any) => `${offer.supplier_id}:${offer.external_id}`;
+
+const setToast = (message: string) => {
+  toast.value = message;
+  window.setTimeout(() => {
+    if (toast.value === message) toast.value = '';
+  }, 3000);
+};
 
 const filteredSources = computed(() =>
   sources.value.filter((s) => !supplierFilterId.value || String(s.supplier_id) === supplierFilterId.value),
@@ -120,6 +128,7 @@ const saveInline = async (offer: any) => {
     });
     unmapped.value = unmapped.value.filter((x) => keyOf(x) !== key);
     expandedKey.value = null;
+    setToast('Маппинг сохранен');
   } catch (e) {
     error.value = getApiErrorMessage(e);
   }
@@ -139,7 +148,10 @@ const applyBulk = async () => {
     })
     .filter((x) => x.enabled && x.product_id)
     .map((x) => ({ supplier_id: x.supplier_id, external_id: x.external_id, product_id: Number(x.product_id) }));
-  if (!items.length) return;
+  if (!items.length) {
+    setToast('Нет выбранных маппингов');
+    return;
+  }
 
   applyLoading.value = true;
   try {
@@ -147,6 +159,7 @@ const applyBulk = async () => {
     const applied = new Set(items.map((i) => `${i.supplier_id}:${i.external_id}`));
     unmapped.value = unmapped.value.filter((o) => !applied.has(keyOf(o)));
     expandedKey.value = null;
+    setToast(`Маппинги применены: ${items.length}`);
   } catch (e) {
     error.value = getApiErrorMessage(e);
   } finally {
@@ -174,6 +187,12 @@ onMounted(async () => {
 
 <template>
   <div class="max-w-7xl mx-auto p-6 space-y-4">
+    <Transition name="fade">
+      <div v-if="toast" class="fixed top-6 right-6 z-[100] rounded-xl bg-teal-600 px-6 py-3 font-medium text-white shadow-2xl">
+        {{ toast }}
+      </div>
+    </Transition>
+
     <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Маппинг прайсов</h1>
     <p v-if="error" class="rounded-lg bg-red-50 border border-red-200 text-red-700 px-3 py-2 text-sm">{{ error }}</p>
 

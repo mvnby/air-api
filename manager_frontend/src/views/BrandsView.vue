@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { api, type ManagerBrand } from '../api';
+import { getApiErrorMessage } from '../utils/api-errors';
 
 type BrandForm = {
     title: string;
@@ -16,6 +17,7 @@ const loading = ref(true);
 const saving = ref(false);
 const query = ref('');
 const error = ref('');
+const toast = ref('');
 const modalOpen = ref(false);
 const editingBrand = ref<ManagerBrand | null>(null);
 const form = ref<BrandForm>({
@@ -49,16 +51,11 @@ const resetForm = () => {
     };
 };
 
-const parseErrorMessage = (err: unknown): string => {
-    const text = String((err as any)?.message || '').trim();
-    if (!text) return 'Не удалось выполнить операцию.';
-    try {
-        const parsed = JSON.parse(text);
-        if (parsed?.detail) return String(parsed.detail);
-    } catch {
-        // ignore
-    }
-    return text;
+const setToast = (message: string) => {
+    toast.value = message;
+    window.setTimeout(() => {
+        if (toast.value === message) toast.value = '';
+    }, 3000);
 };
 
 const fetchBrands = async () => {
@@ -68,7 +65,7 @@ const fetchBrands = async () => {
         const res = await api.listManagerBrands();
         brands.value = [...(res.items || [])];
     } catch (err) {
-        error.value = parseErrorMessage(err);
+        error.value = getApiErrorMessage(err);
     } finally {
         loading.value = false;
     }
@@ -111,6 +108,7 @@ const saveBrand = async () => {
     saving.value = true;
     error.value = '';
     try {
+        const wasEditing = Boolean(editingBrand.value?.id);
         const payload = {
             title,
             slug: String(form.value.slug || '').trim() || undefined,
@@ -126,8 +124,9 @@ const saveBrand = async () => {
         }
         await fetchBrands();
         closeModal();
+        setToast(wasEditing ? 'Бренд обновлен' : 'Бренд создан');
     } catch (err) {
-        error.value = parseErrorMessage(err);
+        error.value = getApiErrorMessage(err);
     } finally {
         saving.value = false;
     }
@@ -139,8 +138,9 @@ const deleteBrand = async (brand: ManagerBrand) => {
     try {
         await api.deleteManagerBrand(brand.id);
         await fetchBrands();
+        setToast('Бренд удален');
     } catch (err) {
-        error.value = parseErrorMessage(err);
+        error.value = getApiErrorMessage(err);
     }
 };
 
@@ -151,6 +151,12 @@ onMounted(() => {
 
 <template>
     <div class="space-y-5">
+        <Transition name="fade">
+            <div v-if="toast" class="fixed top-6 right-6 z-[100] rounded-xl bg-teal-600 px-6 py-3 font-medium text-white shadow-2xl">
+                {{ toast }}
+            </div>
+        </Transition>
+
         <div class="flex items-center justify-between">
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Бренды</h1>
             <button
@@ -240,7 +246,7 @@ onMounted(() => {
                                     <button
                                         type="button"
                                         class="px-2.5 py-1 rounded border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 disabled:opacity-50"
-                                        :disabled="brand.products_count > 0"
+                                        :disabled="(brand.products_count ?? 0) > 0"
                                         @click="deleteBrand(brand)"
                                     >
                                         Удалить

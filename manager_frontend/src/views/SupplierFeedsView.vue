@@ -6,6 +6,7 @@ import { CheckCircle2, CircleAlert, Pencil, RefreshCw, Trash2 } from 'lucide-vue
 
 const loading = ref(false);
 const error = ref('');
+const toast = ref('');
 const suppliers = ref<any[]>([]);
 const sources = ref<any[]>([]);
 const supplierSheets = ref<any[]>([]);
@@ -45,6 +46,13 @@ const currencyMode = ref<'BYN' | 'USD' | 'EUR' | 'COLUMN'>('USD');
 const currencyColumn = ref('D');
 
 const activeSupplier = computed(() => suppliers.value.find((s) => s.id === Number(sourceForm.value.supplier_id)));
+
+const setToast = (message: string) => {
+  toast.value = message;
+  window.setTimeout(() => {
+    if (toast.value === message) toast.value = '';
+  }, 3000);
+};
 
 const extractRangeFromUrl = (value: string): string => {
   const raw = (value || '').trim();
@@ -115,6 +123,7 @@ const loadData = async () => {
 const createSupplier = async () => {
   savingSupplier.value = true;
   try {
+    const wasEditing = Boolean(editingSupplierId.value);
     if (editingSupplierId.value) {
       await api.patchSupplier(editingSupplierId.value, supplierForm.value);
     } else {
@@ -123,6 +132,7 @@ const createSupplier = async () => {
     supplierForm.value = { name: '', priority: 100, spreadsheet_id_or_url: '', is_active: true };
     editingSupplierId.value = null;
     await loadData();
+    setToast(wasEditing ? 'Поставщик обновлен' : 'Поставщик создан');
   } catch (e) {
     error.value = getApiErrorMessage(e);
   } finally {
@@ -153,6 +163,7 @@ const deleteSupplier = async (supplierId: number) => {
     if (editingSupplierId.value === supplierId) cancelEditSupplier();
     if (sourceForm.value.supplier_id === supplierId) resetSourceForm();
     await loadData();
+    setToast('Поставщик удален');
   } catch (e) {
     error.value = getApiErrorMessage(e);
   } finally {
@@ -163,6 +174,7 @@ const deleteSupplier = async (supplierId: number) => {
 const saveSource = async () => {
   savingSource.value = true;
   try {
+    const wasEditing = Boolean(editingSourceId.value);
     const normalizedCurrency =
       currencyMode.value === 'COLUMN'
         ? (currencyColumn.value || '').trim().toUpperCase()
@@ -185,6 +197,7 @@ const saveSource = async () => {
     }
     resetSourceForm();
     await loadData();
+    setToast(wasEditing ? 'Источник обновлен' : 'Источник создан');
   } catch (e) {
     error.value = getApiErrorMessage(e);
   } finally {
@@ -223,6 +236,7 @@ const deleteSource = async (sourceId: number) => {
     await api.deleteSupplierSource(sourceId);
     if (editingSourceId.value === sourceId) resetSourceForm();
     await loadData();
+    setToast('Источник удален');
   } catch (e) {
     error.value = getApiErrorMessage(e);
   } finally {
@@ -236,6 +250,8 @@ const syncSource = async (sourceId: number) => {
     const result = await api.syncSupplierSource(sourceId);
     if (result.status !== 'success') {
       error.value = result.error || 'Sync завершился с ошибкой';
+    } else {
+      setToast('Синхронизация источника завершена');
     }
     await loadData();
   } catch (e) {
@@ -250,6 +266,7 @@ const syncAll = async () => {
   try {
     await api.syncAllSupplierSources();
     await loadData();
+    setToast('Синхронизация всех источников запущена');
   } catch (e) {
     error.value = getApiErrorMessage(e);
   } finally {
@@ -272,6 +289,12 @@ onMounted(async () => {
 
 <template>
   <div class="max-w-7xl mx-auto p-6 space-y-6">
+    <Transition name="fade">
+      <div v-if="toast" class="fixed top-6 right-6 z-[100] rounded-xl bg-teal-600 px-6 py-3 font-medium text-white shadow-2xl">
+        {{ toast }}
+      </div>
+    </Transition>
+
     <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Поставщики и прайсы</h1>
     <p v-if="error" class="rounded-lg bg-red-50 border border-red-200 text-red-700 px-3 py-2 text-sm">{{ error }}</p>
     <p class="rounded-lg bg-blue-50 border border-blue-200 text-blue-800 px-3 py-2 text-sm">

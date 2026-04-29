@@ -11,6 +11,8 @@ import {
     ManagerBackupsService,
     ManagerTariffsService,
     ManagerServiceEstimatesService,
+    ManagerBrandsService,
+    SystemService,
     AdminService,
     ApiService,
     type ProductUpdate,
@@ -56,6 +58,9 @@ import {
     type ManagerBackupRunStatusResponse,
     type ManagerRestoreJobStartResponse,
     type ManagerRestoreJobStatusResponse,
+    type ManagerBrandResponse,
+    type ManagerBrandCreatePayload,
+    type ManagerBrandUpdatePayload,
 } from './client';
 import { ManagerTagsService } from './client/services/ManagerTagsService';
 import { ManagerLeadsInboxService } from './client/services/ManagerLeadsInboxService';
@@ -85,35 +90,13 @@ export type {
     ManagerInstallEstimateResponse,
 };
 
-export interface ManagerBrand {
-    id: number;
-    title: string;
-    slug: string;
-    logo_url?: string | null;
-    description?: string | null;
-    is_published: boolean;
-    sort_order: number;
-    created_at: string;
-    products_count: number;
-}
+type ManagerBrand = ManagerBrandResponse;
 
-export interface ManagerBrandCreatePayload {
-    title: string;
-    slug?: string | null;
-    logo_url?: string | null;
-    description?: string | null;
-    is_published?: boolean;
-    sort_order?: number;
-}
-
-export interface ManagerBrandUpdatePayload {
-    title?: string | null;
-    slug?: string | null;
-    logo_url?: string | null;
-    description?: string | null;
-    is_published?: boolean | null;
-    sort_order?: number | null;
-}
+export type {
+    ManagerBrand,
+    ManagerBrandCreatePayload,
+    ManagerBrandUpdatePayload,
+};
 
 export interface ManagerProductFilterOptions {
     heatingMin?: number;
@@ -576,15 +559,7 @@ export const api = {
     },
 
     async deleteSupplier(supplierId: number) {
-        const res = await fetch(`/api/manager/suppliers/${supplierId}`, {
-            method: 'DELETE',
-            credentials: 'include',
-        });
-        if (!res.ok) {
-            const body = await res.text();
-            throw new Error(body || `HTTP ${res.status}`);
-        }
-        return await res.json();
+        return await ManagerService.deleteSupplier(supplierId);
     },
 
     async listSupplierSources() {
@@ -600,15 +575,7 @@ export const api = {
     },
 
     async deleteSupplierSource(sourceId: number) {
-        const res = await fetch(`/api/manager/supplier-sources/${sourceId}`, {
-            method: 'DELETE',
-            credentials: 'include',
-        });
-        if (!res.ok) {
-            const body = await res.text();
-            throw new Error(body || `HTTP ${res.status}`);
-        }
-        return await res.json();
+        return await ManagerService.deleteSupplierSource(sourceId);
     },
 
     async syncSupplierSource(sourceId: number) {
@@ -620,19 +587,7 @@ export const api = {
     },
 
     async listUnmappedSupplierOffers(page = 1, limit = 50, supplierId?: number, sourceId?: number) {
-        const params = new URLSearchParams();
-        params.set('page', String(page));
-        params.set('limit', String(limit));
-        if (supplierId) params.set('supplier_id', String(supplierId));
-        if (sourceId) params.set('source_id', String(sourceId));
-        const res = await fetch(`/api/manager/supplier-offers/unmapped?${params.toString()}`, {
-            credentials: 'include',
-        });
-        if (!res.ok) {
-            const body = await res.text();
-            throw new Error(body || `HTTP ${res.status}`);
-        }
-        return await res.json();
+        return await ManagerService.listUnmappedSupplierOffers(page, limit, supplierId ?? null, sourceId ?? null);
     },
 
     async createSupplierMapping(payload: SupplierMappingCreatePayload) {
@@ -680,19 +635,7 @@ export const api = {
     },
 
     async rebuildWeb() {
-        // Manually implement the request for the new endpoint
-        const response = await fetch('/api/system/rebuild-web', {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-            },
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-            throw new Error(error.detail || 'Failed to trigger rebuild');
-        }
-        return await response.json();
+        return await SystemService.triggerRebuildWebApiSystemRebuildWebPost();
     },
 
     async importProducts(urls: string[], withRelated: boolean, updateExisting: boolean): Promise<{
@@ -742,52 +685,28 @@ export const api = {
     },
 
     async listManagerBrands(): Promise<{ items: ManagerBrand[] }> {
-        const res = await fetch('/api/manager/brands', { credentials: 'include' });
-        if (!res.ok) {
-            const body = await res.text();
-            throw new Error(body || `HTTP ${res.status}`);
-        }
-        return await res.json();
+        const response = await ManagerBrandsService.listManagerBrands();
+        return {
+            ...response,
+            items: (response.items || []).map((brand) => ({
+                ...brand,
+                products_count: brand.products_count ?? 0,
+            })),
+        };
     },
 
     async createManagerBrand(payload: ManagerBrandCreatePayload): Promise<ManagerBrand> {
-        const res = await fetch('/api/manager/brands', {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-            const body = await res.text();
-            throw new Error(body || `HTTP ${res.status}`);
-        }
-        return await res.json();
+        const brand = await ManagerBrandsService.createManagerBrand(payload);
+        return { ...brand, products_count: brand.products_count ?? 0 };
     },
 
     async updateManagerBrand(brandId: number, payload: ManagerBrandUpdatePayload): Promise<ManagerBrand> {
-        const res = await fetch(`/api/manager/brands/${brandId}`, {
-            method: 'PUT',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-            const body = await res.text();
-            throw new Error(body || `HTTP ${res.status}`);
-        }
-        return await res.json();
+        const brand = await ManagerBrandsService.updateManagerBrand(brandId, payload);
+        return { ...brand, products_count: brand.products_count ?? 0 };
     },
 
     async deleteManagerBrand(brandId: number): Promise<{ message: string }> {
-        const res = await fetch(`/api/manager/brands/${brandId}`, {
-            method: 'DELETE',
-            credentials: 'include',
-        });
-        if (!res.ok) {
-            const body = await res.text();
-            throw new Error(body || `HTTP ${res.status}`);
-        }
-        return await res.json();
+        return await ManagerBrandsService.deleteManagerBrand(brandId);
     },
     // Leads Inbox (Order-based triage)
     async getLeadsCounter() {
