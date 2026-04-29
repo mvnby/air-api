@@ -31,6 +31,9 @@ interface Props {
   variant?: "default" | "hero" | "small" | "minimal";
   showInstallation?: boolean;
   baseInstallationPrice?: number;
+  installationRates?: any[] | null;
+  installDiscount?: number | null;
+  refreshProductOnMount?: boolean;
 }
 
 const {
@@ -38,7 +41,19 @@ const {
   variant = "default",
   showInstallation = false,
   baseInstallationPrice = 360,
+  installationRates = null,
+  installDiscount = null,
+  refreshProductOnMount = false,
 } = Astro.props;
+
+const pricingProps = {
+  ...(Array.isArray(installationRates) && installationRates.length > 0
+    ? { installationRates }
+    : {}),
+  ...(installDiscount !== null && installDiscount !== undefined
+    ? { installDiscount }
+    : {}),
+};
 
 const formatPrice = (price: number) => price.toLocaleString();
 
@@ -188,6 +203,8 @@ const showAreaBadge = !!product.area;
             vitebskQty={product.vitebsk_qty}
             minskQty={product.minsk_qty}
             availabilityStatus={product.availability_status}
+            refreshProductOnMount={refreshProductOnMount}
+            {...pricingProps}
           />
         </div>
       </div>
@@ -250,6 +267,8 @@ const showAreaBadge = !!product.area;
             vitebskQty={product.vitebsk_qty}
             minskQty={product.minsk_qty}
             availabilityStatus={product.availability_status}
+            refreshProductOnMount={refreshProductOnMount}
+            {...pricingProps}
           />
         </div>
       </div>

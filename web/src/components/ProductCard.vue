@@ -19,6 +19,18 @@ const props = defineProps({
   baseInstallationPrice: {
     type: Number,
     default: 360
+  },
+  installationRates: {
+    type: Array,
+    default: null
+  },
+  installDiscount: {
+    type: Number,
+    default: null
+  },
+  refreshProductOnMount: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -149,6 +161,9 @@ const showAreaBadge = computed(() => Boolean(props.product.area));
           :vitebskQty="product.vitebsk_qty"
           :minskQty="product.minsk_qty"
           :availabilityStatus="product.availability_status"
+          :installationRates="installationRates"
+          :installDiscount="installDiscount"
+          :refreshProductOnMount="refreshProductOnMount"
         />
     </div>
   </div>

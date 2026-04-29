@@ -1,7 +1,8 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import CatalogApp from "../components/CatalogApp.vue";
-import { getCatalog } from "../utils/api";
+import ProductCard from "../components/ProductCard.astro";
+import { getCatalog, getFiltersConfig } from "../utils/api";
 import { buildCatalogItemListSchema } from "../utils/catalog-seo";
 import { matchVirtualCategoryByFilters } from "../utils/virtual-category";
 import {
@@ -137,8 +138,32 @@ const popularData = await getCatalog({
 });
 const products = (data.items || []) as Product[];
 const popularProducts = (popularData.items || []) as Product[];
+const filtersConfig = await getFiltersConfig();
 const meta = data.meta || { total: 0, page: 1, limit: 20, pages: 1 };
 const catalogSchema = buildCatalogItemListSchema(products, Astro.url.origin);
+const isCatalogAvailable = (product: Product) => {
+    const status = String(product?.availability_status || "");
+    const qty = Number(product?.vitebsk_qty || 0) + Number(product?.minsk_qty || 0);
+    return qty > 0 || status === "in_stock_now" || status === "available_2_3_days";
+};
+const pageTitle =
+    initialCategorySlug === "cat-multi"
+        ? "Мульти-сплит системы"
+        : initialCategorySlug === "cat-industrial"
+          ? "Полупромышленные кондиционеры"
+          : "Бытовые кондиционеры";
+const pageDescription =
+    initialCategorySlug === "cat-multi"
+        ? "Системы с одним наружным блоком и несколькими внутренними для гибкого зонирования."
+        : initialCategorySlug === "cat-industrial"
+          ? "Кассетные, канальные и напольно-потолочные решения для коммерческих и сложных объектов."
+          : "Настенные сплит-системы для квартиры и дома с удобной фильтрацией по брендам.";
+const staticPopularProducts =
+    initialCategorySlug === "cat-household"
+        ? popularProducts
+              .filter((product) => isCatalogAvailable(product) && Number(product.area || 0) <= Number(parsedAreaMax || 35))
+              .slice(0, 8)
+        : [];
 const initialFilters = {
     sort,
     area_min: parsedAreaMin ?? null,
@@ -159,15 +184,138 @@ const initialFilters = {
     robots={robotsValue}
 >
     <script type="application/ld+json" set:html={JSON.stringify(catalogSchema)} />
+    <script is:inline>
+        (() => {
+            if (typeof window === "undefined") return;
+
+            const sp = new URLSearchParams(window.location.search);
+            if (Array.from(sp.keys()).length === 0) return;
+
+            const tags = sp
+                .getAll("tag_slugs")
+                .flatMap((raw) => raw.split(","))
+                .map((tag) => tag.trim())
+                .filter(Boolean);
+            const category = tags.find((tag) =>
+                ["cat-household", "cat-multi", "cat-industrial"].includes(tag),
+            );
+            const copy = {
+                "cat-multi": {
+                    title: "Мульти-сплит системы",
+                    description:
+                        "Системы с одним наружным блоком и несколькими внутренними для гибкого зонирования.",
+                },
+                "cat-industrial": {
+                    title: "Полупромышленные кондиционеры",
+                    description:
+                        "Кассетные, канальные и напольно-потолочные решения для коммерческих и сложных объектов.",
+                },
+            }[category || ""];
+
+            if (!copy) return;
+            document.documentElement.classList.add("catalog-query-mode");
+
+            const applyCopy = () => {
+                const header = document.querySelector(".catalog-page > .catalog-header");
+                if (!header) return;
+                const title = header.querySelector("h1");
+                const description = header.querySelector(".header-description");
+                if (title) title.textContent = copy.title;
+                if (description) description.textContent = copy.description;
+            };
+
+            if (document.readyState === "loading") {
+                document.addEventListener("DOMContentLoaded", applyCopy, { once: true });
+            } else {
+                applyCopy();
+            }
+        })();
+    </script>
     <div class="container catalog-page">
+        <header class="catalog-header">
+            <div class="breadcrumb">
+                <a href="/">Главная</a>
+                <span class="sep">/</span>
+                <span>Каталог</span>
+            </div>
+            <h1 class="gradient-text">{pageTitle}</h1>
+            <p class="header-description">{pageDescription}</p>
+        </header>
         <CatalogApp
-            client:load
+            client:idle
             initialProducts={products}
             initialMeta={meta}
             initialPopularProducts={popularProducts}
             initialFilters={initialFilters}
             initialCategorySlug={initialCategorySlug}
-        />
+            initialBrands={filtersConfig?.brands || []}
+        >
+            <div class="catalog-static-content">
+                {
+                    staticPopularProducts.length >= 3 && (
+                        <section class="catalog-section popular-section" aria-labelledby="static-popular-models-title">
+                            <div class="catalog-section-head">
+                                <h2 id="static-popular-models-title">Популярные модели</h2>
+                            </div>
+                            <div class="catalog-grid popular-grid">
+                                {staticPopularProducts.map((product) => (
+                                    <ProductCard
+                                        product={product}
+                                        variant="default"
+                                        showInstallation={true}
+                                        refreshProductOnMount={false}
+                                    />
+                                ))}
+                            </div>
+                        </section>
+                    )
+                }
+
+                {
+                    products.length > 0 ? (
+                        <section class="catalog-section all-products-section" aria-labelledby="static-all-products-title">
+                            <div class="catalog-section-head">
+                                <h2 id="static-all-products-title">Все модели</h2>
+                            </div>
+                            <div class="catalog-grid">
+                                {products.map((product) => (
+                                    <ProductCard
+                                        product={product}
+                                        variant="default"
+                                        showInstallation={true}
+                                        refreshProductOnMount={false}
+                                    />
+                                ))}
+                            </div>
+                        </section>
+                    ) : (
+                        <div class="empty-status card">
+                            <span class="material-icons-round large">search_off</span>
+                            <h3>Товары не найдены</h3>
+                            <p>Попробуйте выбрать другой бренд или категорию.</p>
+                        </div>
+                    )
+                }
+
+                <section class="catalog-seo-block">
+                    <h2>Как выбрать кондиционер для квартиры</h2>
+                    <p>
+                        Для жилых комнат чаще всего подходят настенные сплит-системы до 25–35 м²: они закрывают типовые спальни,
+                        детские и гостиные без переплаты за лишнюю мощность. При выборе стоит учитывать площадь, солнечную сторону,
+                        высоту потолков и теплопритоки от техники.
+                    </p>
+                    <p>
+                        Если кондиционер нужен для ежедневного использования, обратите внимание на инверторные модели, уровень шума
+                        внутреннего блока и наличие сервисной поддержки. Для больших помещений и коммерческих объектов лучше выбирать
+                        модель с запасом по производительности и заранее продумать место установки.
+                    </p>
+                    <p>
+                        В каталоге MVN собраны кондиционеры для квартир, домов и офисов в Витебске. Умная сортировка поднимает выше
+                        доступные модели подходящей мощности, чтобы быстрее найти практичный вариант с монтажом.
+                    </p>
+                </section>
+            </div>
+        </CatalogApp>
     </div>
     <script is:inline define:vars={{ virtualCategories: VIRTUAL_CATEGORIES }}>
         (() => {
@@ -325,6 +473,67 @@ const initialFilters = {
         margin-bottom: 0.5rem;
         font-weight: 800;
         line-height: 1.1;
+    }
+    .header-description {
+        max-width: 760px;
+        color: var(--text-muted);
+        margin: 0;
+        line-height: 1.65;
+    }
+    .catalog-static-content,
+    .catalog-section {
+        display: flex;
+        flex-direction: column;
+        gap: 1.4rem;
+    }
+    :global(html.catalog-query-mode .catalog-static-slot) {
+        display: none;
+    }
+    .catalog-section + .catalog-section {
+        margin-top: 1.4rem;
+    }
+    .catalog-section-head {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+    .catalog-section-head h2,
+    .catalog-seo-block h2 {
+        margin: 0;
+        color: var(--text);
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.35rem;
+        line-height: 1.2;
+    }
+    .catalog-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1.3rem;
+    }
+    .empty-status {
+        text-align: center;
+        padding: 4rem 1rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    .large {
+        font-size: 4rem;
+        color: var(--text-muted);
+        opacity: 0.55;
+    }
+    .catalog-seo-block {
+        margin-top: 2.2rem;
+        padding-top: 1.6rem;
+        border-top: 1px solid var(--panel-glass-border);
+        color: var(--text-muted);
+    }
+    .catalog-seo-block p {
+        max-width: 880px;
+        margin: 0.75rem 0 0;
+        line-height: 1.7;
     }
     .count {
         font-weight: 700;

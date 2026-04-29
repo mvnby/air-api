@@ -1,9 +1,10 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import CatalogApp from "../../components/CatalogApp.vue";
+import ProductCard from "../../components/ProductCard.astro";
 import type { VirtualCategoryConfig } from "../../config/virtual-categories";
 import { VIRTUAL_CATEGORIES } from "../../config/virtual-categories";
-import { getCatalog } from "../../utils/api";
+import { getCatalog, getFiltersConfig } from "../../utils/api";
 import { buildCatalogItemListSchema } from "../../utils/catalog-seo";
 import { buildCatalogQueryFromVirtual } from "../../utils/virtual-category";
 
@@ -58,6 +59,7 @@ const popularData = await getCatalog({
 });
 const products = (data.items || []) as Product[];
 const popularProducts = (popularData.items || []) as Product[];
+const filtersConfig = await getFiltersConfig();
 const meta = data.meta || { total: 0, page: 1, limit: 20, pages: 1 };
 const robotsValue = category.indexable === false ? "noindex,follow" : undefined;
 const catalogSchema = buildCatalogItemListSchema(products, Astro.url.origin);
@@ -65,6 +67,17 @@ const initialCategorySlug =
     category.filters.tag_slugs?.find((slug) =>
         ["cat-household", "cat-multi", "cat-industrial"].includes(slug),
     ) || "cat-household";
+const isCatalogAvailable = (product: Product) => {
+    const status = String(product?.availability_status || "");
+    const qty = Number(product?.vitebsk_qty || 0) + Number(product?.minsk_qty || 0);
+    return qty > 0 || status === "in_stock_now" || status === "available_2_3_days";
+};
+const staticPopularProducts =
+    initialCategorySlug === "cat-household"
+        ? popularProducts
+              .filter((product) => isCatalogAvailable(product) && Number(product.area || 0) <= Number(category.filters.area_max || 35))
+              .slice(0, 8)
+        : [];
 ---
 
 <Layout
@@ -75,8 +88,19 @@ const initialCategorySlug =
 >
     <script type="application/ld+json" set:html={JSON.stringify(catalogSchema)} />
     <div class="container catalog-page">
+        <header class="catalog-header">
+            <div class="breadcrumb">
+                <a href="/">Главная</a>
+                <span class="sep">/</span>
+                <a href="/catalog">Каталог</a>
+                <span class="sep">/</span>
+                <span>{category.h1}</span>
+            </div>
+            <h1 class="gradient-text">{category.h1}</h1>
+            <p class="header-description">{category.intro || category.seoDescription}</p>
+        </header>
         <CatalogApp
-            client:load
+            client:idle
             initialProducts={products}
             initialMeta={meta}
             initialPopularProducts={popularProducts}
@@ -85,7 +109,65 @@ const initialCategorySlug =
             forcedDescription={category.intro || category.seoDescription}
             lockedInitialFilters={category.filters}
             initialCategorySlug={initialCategorySlug}
-        />
+            initialBrands={filtersConfig?.brands || []}
+        >
+            <div class="catalog-static-content">
+                {
+                    staticPopularProducts.length >= 3 && (
+                        <section class="catalog-section popular-section" aria-labelledby="static-popular-models-title">
+                            <div class="catalog-section-head">
+                                <h2 id="static-popular-models-title">Популярные модели</h2>
+                            </div>
+                            <div class="catalog-grid popular-grid">
+                                {staticPopularProducts.map((product) => (
+                                    <ProductCard
+                                        product={product}
+                                        variant="default"
+                                        showInstallation={true}
+                                        refreshProductOnMount={false}
+                                    />
+                                ))}
+                            </div>
+                        </section>
+                    )
+                }
+
+                {
+                    products.length > 0 ? (
+                        <section class="catalog-section all-products-section" aria-labelledby="static-all-products-title">
+                            <div class="catalog-section-head">
+                                <h2 id="static-all-products-title">Все модели</h2>
+                            </div>
+                            <div class="catalog-grid">
+                                {products.map((product) => (
+                                    <ProductCard
+                                        product={product}
+                                        variant="default"
+                                        showInstallation={true}
+                                        refreshProductOnMount={false}
+                                    />
+                                ))}
+                            </div>
+                        </section>
+                    ) : (
+                        <div class="empty-status card">
+                            <span class="material-icons-round large">search_off</span>
+                            <h3>Товары не найдены</h3>
+                            <p>Попробуйте выбрать другой бренд или категорию.</p>
+                        </div>
+                    )
+                }
+
+                <section class="catalog-seo-block">
+                    <h2>{category.h1}: выбор и монтаж в Витебске</h2>
+                    <p>{category.intro || category.seoDescription}</p>
+                    <p>
+                        В каталоге можно сравнить модели по мощности, типу компрессора, наличию Wi-Fi, режимам обогрева
+                        и доступности. Для точного подбора учитывайте площадь помещения, теплопритоки и место установки.
+                    </p>
+                </section>
+            </div>
+        </CatalogApp>
     </div>
 </Layout>
 
@@ -94,5 +176,88 @@ const initialCategorySlug =
         padding: 2rem 1.5rem;
         max-width: 1400px;
         margin: 0 auto;
+    }
+    .catalog-header {
+        margin-bottom: 2rem;
+    }
+    .breadcrumb {
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 500;
+        flex-wrap: wrap;
+    }
+    .breadcrumb a:hover {
+        color: var(--primary);
+    }
+    .sep {
+        opacity: 0.5;
+    }
+    .catalog-header h1 {
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+        font-weight: 800;
+        line-height: 1.1;
+    }
+    .header-description {
+        max-width: 760px;
+        color: var(--text-muted);
+        margin: 0;
+        line-height: 1.65;
+    }
+    .catalog-static-content,
+    .catalog-section {
+        display: flex;
+        flex-direction: column;
+        gap: 1.4rem;
+    }
+    .catalog-section + .catalog-section {
+        margin-top: 1.4rem;
+    }
+    .catalog-section-head {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+    .catalog-section-head h2,
+    .catalog-seo-block h2 {
+        margin: 0;
+        color: var(--text);
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.35rem;
+        line-height: 1.2;
+    }
+    .catalog-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1.3rem;
+    }
+    .empty-status {
+        text-align: center;
+        padding: 4rem 1rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    .large {
+        font-size: 4rem;
+        color: var(--text-muted);
+        opacity: 0.55;
+    }
+    .catalog-seo-block {
+        margin-top: 2.2rem;
+        padding-top: 1.6rem;
+        border-top: 1px solid var(--panel-glass-border);
+        color: var(--text-muted);
+    }
+    .catalog-seo-block p {
+        max-width: 880px;
+        margin: 0.75rem 0 0;
+        line-height: 1.7;
     }
 </style>
