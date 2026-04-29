@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref } from 'vue';
 import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Wrench, Settings, Wallet, ChevronLeft, ChevronRight, Tags, FileSpreadsheet, Link2, Award, Database, Calculator } from 'lucide-vue-next';
 import { api } from './api';
+import { getApiErrorMessage } from './utils/api-errors';
 
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
 const CustomersView = defineAsyncComponent(() => import('./views/CustomersView.vue'));
@@ -31,6 +32,8 @@ const isMobileNavOpen = ref(false);
 const isDesktopNavCollapsed = ref(false);
 const theme = ref<'light' | 'dark'>('light');
 const leadsCount = ref(0);
+const toast = ref('');
+const toastType = ref<'success' | 'error'>('success');
 
 const currentLocation = ref(`${window.location.pathname}${window.location.search}`);
 const THEME_STORAGE_KEY = 'manager_theme';
@@ -103,6 +106,14 @@ const toggleTheme = () => {
   applyTheme(theme.value === 'light' ? 'dark' : 'light');
 };
 
+const setToast = (message: string, type: 'success' | 'error' = 'success') => {
+  toast.value = message;
+  toastType.value = type;
+  window.setTimeout(() => {
+    if (toast.value === message) toast.value = '';
+  }, 3000);
+};
+
 const handleLogin = async () => {
   loginLoading.value = true;
   loginError.value = '';
@@ -122,9 +133,9 @@ const handleRebuild = async () => {
   rebuildLoading.value = true;
   try {
     const result = await api.rebuildWeb();
-    alert(result.message || 'Сборка запущена! Сайт обновится через пару минут.');
-  } catch (err: any) {
-    alert('Ошибка при запуске сборки: ' + err.message);
+    setToast(String(result.message || 'Сборка запущена. Сайт обновится через пару минут.'));
+  } catch (err) {
+    setToast(`Ошибка при запуске сборки: ${getApiErrorMessage(err)}`, 'error');
   } finally {
     rebuildLoading.value = false;
   }
@@ -330,5 +341,15 @@ onBeforeUnmount(() => {
       <SupplierMappingView v-else-if="currentView === 'supplier-mapping'" :key="currentLocation" />
       <ProductsView v-else :key="currentLocation" />
     </main>
+
+    <Transition name="fade">
+      <div
+        v-if="toast"
+        class="fixed top-6 right-6 z-[100] rounded-xl px-6 py-3 font-medium text-white shadow-2xl"
+        :class="toastType === 'success' ? 'bg-teal-600' : 'bg-red-600'"
+      >
+        {{ toast }}
+      </div>
+    </Transition>
   </div>
 </template>

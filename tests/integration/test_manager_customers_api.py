@@ -290,7 +290,7 @@ async def test_manager_customer_contract_create_and_dashboard_notice(async_clien
     db.add(
         GlobalConfig(
             key="contract_templates",
-            value='[{"id":"service-template","name":"Сервис","document_role_type":"executor_customer"}]',
+            value='[{"id":"service-template","name":"Сервис","document_role_type":"executor_customer","is_open_contract":true}]',
             description="Contract templates",
         )
     )
@@ -357,23 +357,33 @@ async def test_manager_customer_contract_upload_and_delete(async_client, db, mon
         inn="123456789",
     )
     db.add(customer)
+    db.add(
+        GlobalConfig(
+            key="contract_templates",
+            value='[{"id":"uploaded-template","name":"Загрузка","document_role_type":"executor_customer","is_open_contract":true}]',
+            description="Contract templates",
+        )
+    )
     await db.commit()
     await db.refresh(customer)
 
     upload_resp = await async_client.post(
         f"/api/manager/customers/{customer.id}/contracts/upload",
         headers=headers,
-        data={
-            "number": "EXT-2026-001",
-            "contract_date": "2026-02-10T00:00:00",
-            "valid_until": "2027-02-10T00:00:00",
-        },
-        files={"file": ("external-contract.pdf", b"%PDF-contract", "application/pdf")},
-    )
+            data={
+                "number": "EXT-2026-001",
+                "contract_date": "2026-02-10T00:00:00",
+                "valid_until": "2027-02-10T00:00:00",
+                "template_id": "uploaded-template",
+            },
+            files={"file": ("external-contract.pdf", b"%PDF-contract", "application/pdf")},
+        )
     assert upload_resp.status_code == 200
     uploaded = upload_resp.json()
     assert uploaded["number"] == "EXT-2026-001"
     assert uploaded["status"] == "active"
+    assert uploaded["template_id"] == "uploaded-template"
+    assert uploaded["document_role_type"] == "executor_customer"
     assert uploaded["edit_url"].endswith("/view?usp=sharing")
     assert "EXT-2026-001" in captured["filename"]
     assert captured["mime_type"] == "application/pdf"

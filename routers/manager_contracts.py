@@ -91,6 +91,7 @@ async def upload_manager_customer_contract(
     number: str = Form(...),
     contract_date: datetime = Form(...),
     valid_until: datetime = Form(...),
+    template_id: str | None = Form(None),
     document_role_type: str | None = Form(None),
     file: UploadFile = File(...),
     _: str = Depends(get_current_username),
@@ -103,6 +104,7 @@ async def upload_manager_customer_contract(
             number=number,
             contract_date=contract_date,
             valid_until=valid_until,
+            template_id=template_id,
             document_role_type=document_role_type,
             file=file,
         )

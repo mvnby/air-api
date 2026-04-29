@@ -8954,6 +8954,17 @@
             "format": "date-time",
             "title": "Valid Until"
           },
+          "template_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Id"
+          },
           "document_role_type": {
             "anyOf": [
               {
@@ -9598,6 +9609,11 @@
             "type": "string",
             "title": "Document Role Type",
             "default": "seller_buyer"
+          },
+          "is_open_contract": {
+            "type": "boolean",
+            "title": "Is Open Contract",
+            "default": false
           }
         },
         "type": "object",

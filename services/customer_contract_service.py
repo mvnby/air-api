@@ -122,20 +122,57 @@ class CustomerContractService:
 
     @staticmethod
     async def _get_template_role_type(session: AsyncSession, template_id: Optional[str]) -> str:
-        if not template_id:
-            return DocumentRoleService.normalize_role_type(None)
+        template = await CustomerContractService._get_contract_template(session, template_id)
+        if template:
+            return DocumentRoleService.normalize_role_type(template.get("document_role_type"))
+        return DocumentRoleService.normalize_role_type(None)
+
+    @staticmethod
+    async def _get_contract_templates(session: AsyncSession) -> list[dict]:
         try:
             result = await session.execute(select(GlobalConfig).where(GlobalConfig.key == "contract_templates"))
             config = result.scalars().first()
             items = json.loads(config.value) if config and config.value else []
         except Exception:
-            return DocumentRoleService.normalize_role_type(None)
+            return []
         if not isinstance(items, list):
-            return DocumentRoleService.normalize_role_type(None)
+            return []
+
+        from services.document_service import DocumentService
+
+        templates = []
         for item in items:
-            if isinstance(item, dict) and str(item.get("id") or "").strip() == template_id:
-                return DocumentRoleService.normalize_role_type(item.get("document_role_type"))
-        return DocumentRoleService.normalize_role_type(None)
+            if not isinstance(item, dict):
+                continue
+            normalized = DocumentService._normalize_template_item(item)
+            if normalized:
+                templates.append(normalized)
+        return templates
+
+    @staticmethod
+    async def _get_contract_template(session: AsyncSession, template_id: Optional[str]) -> Optional[dict]:
+        cleaned_id = str(template_id or "").strip()
+        if not cleaned_id:
+            return None
+        templates = await CustomerContractService._get_contract_templates(session)
+        return next((template for template in templates if template.get("id") == cleaned_id), None)
+
+    @staticmethod
+    async def _resolve_open_contract_template(session: AsyncSession, template_id: Optional[str]) -> dict:
+        templates = await CustomerContractService._get_contract_templates(session)
+        cleaned_id = str(template_id or "").strip()
+        if cleaned_id:
+            template = next((item for item in templates if item.get("id") == cleaned_id), None)
+            if not template:
+                raise ValueError("Шаблон договора не найден")
+            if not template.get("is_open_contract"):
+                raise ValueError("Выберите шаблон, отмеченный как открытый договор")
+            return template
+
+        template = next((item for item in templates if item.get("is_open_contract")), None)
+        if not template:
+            raise ValueError("В настройках нет шаблонов, отмеченных как открытый договор")
+        return template
 
     @staticmethod
     async def create_for_customer(
@@ -153,10 +190,9 @@ class CustomerContractService:
         contract_date = CustomerContractService._normalize_naive_datetime(payload.get("contract_date")) or datetime.now()
         valid_until = CustomerContractService._normalize_naive_datetime(payload.get("valid_until")) or CustomerContractService._default_valid_until(contract_date)
         number = str(payload.get("number") or "").strip() or await CustomerContractService._get_next_number(session, contract_date)
-        template_id = str(payload.get("template_id") or "").strip() or OPEN_SERVICE_CONTRACT_TEMPLATE_ID
-        document_role_type = DocumentRoleService.normalize_role_type(
-            payload.get("document_role_type") or await CustomerContractService._get_template_role_type(session, template_id)
-        )
+        template = await CustomerContractService._resolve_open_contract_template(session, payload.get("template_id"))
+        template_id = str(template.get("id") or "").strip()
+        document_role_type = DocumentRoleService.normalize_role_type(template.get("document_role_type"))
 
         contract = CustomerContract(
             customer_id=customer_id,
@@ -190,6 +226,7 @@ class CustomerContractService:
         number: str,
         contract_date: datetime,
         valid_until: datetime,
+        template_id: Optional[str] = None,
         document_role_type: Optional[str] = None,
         file: "Any",
     ) -> Optional[Dict[str, Any]]:
@@ -210,6 +247,11 @@ class CustomerContractService:
         valid_until_value = CustomerContractService._normalize_naive_datetime(valid_until)
         if not valid_until_value:
             raise ValueError("Дата окончания договора обязательна")
+
+        template = await CustomerContractService._resolve_open_contract_template(session, template_id)
+        resolved_role_type = DocumentRoleService.normalize_role_type(
+            document_role_type or template.get("document_role_type")
+        )
 
         original_filename = file.filename or f"open-contract-{cleaned_number}.pdf"
         _, suffix = os.path.splitext(original_filename)
@@ -234,8 +276,8 @@ class CustomerContractService:
                 valid_from=valid_from,
                 valid_until=valid_until_value,
                 status=CustomerContractService.ACTIVE_STATUS,
-                template_id=None,
-                document_role_type=DocumentRoleService.normalize_role_type(document_role_type),
+                template_id=str(template.get("id") or "").strip() or None,
+                document_role_type=resolved_role_type,
                 google_file_id=file_id,
                 google_edit_url=f"https://drive.google.com/file/d/{file_id}/view?usp=sharing",
             )

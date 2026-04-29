@@ -627,6 +627,7 @@ class DocumentTemplateItem(BaseModel):
     id: str
     name: str
     document_role_type: str = "seller_buyer"
+    is_open_contract: bool = False
 
 
 class DocumentTemplateListResponse(BaseModel):

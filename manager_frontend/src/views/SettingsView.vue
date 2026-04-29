@@ -18,6 +18,7 @@ interface ContractTemplateForm {
     id: string;
     name: string;
     document_role_type: DocumentRoleType;
+    is_open_contract: boolean;
 }
 const DOCUMENT_ROLE_OPTIONS: Array<{ value: DocumentRoleType; label: string }> = [
     { value: 'seller_buyer', label: 'Продавец / Покупатель' },
@@ -127,6 +128,7 @@ const parseContractTemplates = (raw: string): ContractTemplateForm[] => {
                 id: String(item.id || '').trim(),
                 name: String(item.name || '').trim(),
                 document_role_type: normalizeRoleType(item.document_role_type),
+                is_open_contract: item.is_open_contract === true,
             }))
             .filter((item) => item.id || item.name);
     } catch {
@@ -146,6 +148,7 @@ const addContractTemplateRow = (setting: ManagerSettingResponse) => {
         id: '',
         name: '',
         document_role_type: 'seller_buyer',
+        is_open_contract: false,
     });
 };
 
@@ -159,6 +162,7 @@ const saveContractTemplates = async (setting: ManagerSettingResponse) => {
             id: row.id.trim(),
             name: row.name.trim(),
             document_role_type: normalizeRoleType(row.document_role_type),
+            is_open_contract: row.is_open_contract === true,
         }))
         .filter((row) => row.id && row.name);
     setting.value = JSON.stringify(rows, null, 2);
@@ -433,7 +437,7 @@ onMounted(() => {
                         <div
                             v-for="(template, index) in ensureContractTemplateDraft(setting)"
                             :key="`${setting.key}-${index}`"
-                            class="grid grid-cols-1 gap-2 md:grid-cols-[1fr_1.4fr_220px_auto] md:items-center"
+                            class="grid grid-cols-1 gap-2 md:grid-cols-[1fr_1.4fr_220px_150px_auto] md:items-center"
                         >
                             <input
                                 v-model="template.name"
@@ -458,6 +462,15 @@ onMounted(() => {
                                     {{ option.label }}
                                 </option>
                             </select>
+                            <label class="flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200">
+                                <input
+                                    v-model="template.is_open_contract"
+                                    type="checkbox"
+                                    class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                                    :disabled="savingKeys.has(setting.key)"
+                                />
+                                <span>Открытый</span>
+                            </label>
                             <button
                                 type="button"
                                 class="flex h-10 w-10 items-center justify-center rounded-lg text-red-500 transition-colors hover:bg-red-500/10"
