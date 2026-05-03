@@ -22,6 +22,14 @@ def test_service_display_order_title_hides_legacy_site_title():
     assert OrderService._display_order_title(order) == "Монтаж магазина"
 
 
+def test_service_json_text_search_variants_include_escaped_cyrillic():
+    assert OrderService._json_text_search_variants("адрес") == [
+        "адрес",
+        "\\u0430\\u0434\\u0440\\u0435\\u0441",
+        "\\\\u0430\\\\u0434\\\\u0440\\\\u0435\\\\u0441",
+    ]
+
+
 @pytest.mark.asyncio
 async def test_service_get_orders_for_manager_segment_and_search(db):
     c1 = Customer(name="Alice", phone="+375291111111", type=CustomerType.individual)

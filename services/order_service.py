@@ -1,4 +1,5 @@
 import logging
+import json
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,6 +71,21 @@ class OrderService:
             return "Продажа + монтаж" if has_installation else "Продажа"
 
         return None
+
+    @staticmethod
+    def _json_text_search_variants(raw: str) -> List[str]:
+        text = str(raw or "").strip()
+        if not text:
+            return []
+
+        variants = [text]
+        escaped = json.dumps(text, ensure_ascii=True)[1:-1]
+        if escaped and escaped not in variants:
+            variants.append(escaped)
+            like_escaped = escaped.replace("\\", "\\\\")
+            if like_escaped not in variants:
+                variants.append(like_escaped)
+        return variants
 
     @staticmethod
     def _normalize_manager_labels(raw_labels: Any) -> List[str]:
@@ -1279,15 +1295,22 @@ class OrderService:
             except ValueError as exc:
                 raise ValueError(f"Invalid status: {status}") from exc
 
-        if search:
-            like = f"%{search.strip()}%"
+        if search and search.strip():
+            search_text = search.strip()
+            like = f"%{search_text}%"
+            technical_meta_search = or_(
+                *[
+                    cast(Order.technical_meta, String).ilike(f"%{variant}%")
+                    for variant in OrderService._json_text_search_variants(search_text)
+                ]
+            )
             search_clause = or_(
                 Customer.name.ilike(like),
                 Customer.phone.ilike(like),
                 Customer.full_legal_name.ilike(like),
                 Customer.inn.ilike(like),
                 Order.title.ilike(like),
-                cast(Order.technical_meta, String).ilike(like),
+                technical_meta_search,
                 cast(Order.id, String).ilike(like),
             )
             base_stmt = base_stmt.where(search_clause)
