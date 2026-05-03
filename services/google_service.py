@@ -1,4 +1,4 @@
-import os.path
+import os
 import logging
 import re
 from typing import Dict, Any, List, Optional
@@ -21,10 +21,11 @@ SCOPES = [
 TOKEN_FILE = 'token.json'
 CLIENT_SECRET_FILE = 'client_secret.json'
 DESTINATION_FOLDER_ID = '1kLK6Vque3V5iPV1i1HjeH_su-TmyCzQt' 
-DEFAULT_OAUTH_REDIRECT_URI = os.getenv(
-    "GOOGLE_OAUTH_REDIRECT_URI",
-    "http://127.0.0.1:8000/api/manager/google-auth/callback",
-)
+DEFAULT_OAUTH_REDIRECT_URI = "http://127.0.0.1:8000/api/manager/google-auth/callback"
+
+
+def get_default_oauth_redirect_uri() -> str:
+    return os.getenv("GOOGLE_OAUTH_REDIRECT_URI", DEFAULT_OAUTH_REDIRECT_URI)
 
 class GoogleDocsService:
     def __init__(self):
@@ -48,10 +49,11 @@ class GoogleDocsService:
                 status["expiry"] = self.creds.expiry.strftime("%Y-%m-%d %H:%M:%S")
         return status
 
-    def get_auth_url(self, redirect_uri: str = DEFAULT_OAUTH_REDIRECT_URI) -> str:
+    def get_auth_url(self, redirect_uri: Optional[str] = None) -> str:
         """Generates the OAuth2 URL for the user to visit."""
         if not os.path.exists(CLIENT_SECRET_FILE):
              raise Exception(f"Client Secret file '{CLIENT_SECRET_FILE}' not found!")
+        redirect_uri = redirect_uri or get_default_oauth_redirect_uri()
         
         flow = Flow.from_client_secrets_file(
             CLIENT_SECRET_FILE,
@@ -65,10 +67,11 @@ class GoogleDocsService:
         )
         return auth_url
 
-    def finish_auth(self, code: str, redirect_uri: str = DEFAULT_OAUTH_REDIRECT_URI):
+    def finish_auth(self, code: str, redirect_uri: Optional[str] = None):
         """Exchanges auth code for token and saves it."""
         if not os.path.exists(CLIENT_SECRET_FILE):
              raise Exception(f"Client Secret file '{CLIENT_SECRET_FILE}' not found!")
+        redirect_uri = redirect_uri or get_default_oauth_redirect_uri()
              
         flow = Flow.from_client_secrets_file(
             CLIENT_SECRET_FILE,

@@ -1,6 +1,9 @@
 from html import escape
 
-from fastapi import APIRouter, Depends, HTTPException
+import os
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -24,16 +27,24 @@ router = APIRouter(
 )
 
 
+def _google_oauth_redirect_uri(request: Request) -> str:
+    configured = os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "").strip()
+    if configured:
+        return configured
+    return str(request.url_for("manager_google_auth_callback"))
+
+
 @router.get("/status", response_model=ManagerGoogleAuthStatusResponse, operation_id=GET_MANAGER_GOOGLE_AUTH_STATUS)
 async def get_manager_google_auth_status(_: str = Depends(get_current_username)):
-    status_payload = get_google_service().get_token_status()
+    status_payload = await run_in_threadpool(lambda: get_google_service().get_token_status())
     return ManagerGoogleAuthStatusResponse(**status_payload)
 
 
 @router.get("/url", response_model=ManagerGoogleAuthUrlResponse, operation_id=GET_MANAGER_GOOGLE_AUTH_URL)
-async def get_manager_google_auth_url(_: str = Depends(get_current_username)):
+async def get_manager_google_auth_url(request: Request, _: str = Depends(get_current_username)):
     try:
-        url = get_google_service().get_auth_url()
+        redirect_uri = _google_oauth_redirect_uri(request)
+        url = await run_in_threadpool(lambda: get_google_service().get_auth_url(redirect_uri))
         return ManagerGoogleAuthUrlResponse(url=url)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -42,6 +53,7 @@ async def get_manager_google_auth_url(_: str = Depends(get_current_username)):
 @router.post("/exchange", response_model=ManagerActionMessageResponse, operation_id=EXCHANGE_MANAGER_GOOGLE_AUTH_CODE)
 async def exchange_manager_google_auth_code(
     payload: ManagerGoogleAuthExchangePayload,
+    request: Request,
     _: str = Depends(get_current_username),
 ):
     code = (payload.code or "").strip()
@@ -49,7 +61,8 @@ async def exchange_manager_google_auth_code(
         raise HTTPException(status_code=400, detail="Google auth code is required")
 
     try:
-        get_google_service().finish_auth(code)
+        redirect_uri = _google_oauth_redirect_uri(request)
+        await run_in_threadpool(lambda: get_google_service().finish_auth(code, redirect_uri))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -57,7 +70,7 @@ async def exchange_manager_google_auth_code(
 
 
 @router.get("/callback", include_in_schema=False)
-async def manager_google_auth_callback(code: str = "", error: str = ""):
+async def manager_google_auth_callback(request: Request, code: str = "", error: str = ""):
     if error:
         return HTMLResponse(
             content=f"""
@@ -84,7 +97,8 @@ async def manager_google_auth_callback(code: str = "", error: str = ""):
         )
 
     try:
-        get_google_service().finish_auth(code)
+        redirect_uri = _google_oauth_redirect_uri(request)
+        await run_in_threadpool(lambda: get_google_service().finish_auth(code, redirect_uri))
     except Exception as exc:
         return HTMLResponse(
             content=f"""
