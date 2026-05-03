@@ -5,6 +5,7 @@ import { api } from '../../api';
 import DateTimeField from '../ui/DateTimeField.vue';
 import CustomerSummaryCard from '../customers/CustomerSummaryCard.vue';
 import DealExecutionTab from './DealExecutionTab.vue';
+import OrderDrawerSection from './OrderDrawerSection.vue';
 import type {
   ManagerOrderDetailResponse,
   ManagerOrderUpdatePayload,
@@ -154,6 +155,14 @@ const importingEstimate = ref(false);
 const documents = ref<ManagerOrderDocumentItem[]>([]);
 const payments = ref<PaymentResponse[]>([]);
 const localServerErrors = ref<Record<string, string>>({});
+
+const createDefaultDrawerSections = () => ({
+  website: false,
+  planningDetails: false,
+  branchDetails: false,
+  documents: false,
+});
+const expandedDrawerSections = ref(createDefaultDrawerSections());
 
 const localFormError = ref('');
 const showCustomerModal = ref(false);
@@ -429,6 +438,36 @@ const handleFileUpload = async (event: Event) => {
 const isCompanyOrder = computed(() => props.order?.customer?.type === 'company' || !!props.order?.customer?.inn);
 const hasOrderContract = computed(() => documents.value.some(d => d.doc_type === 'contract'));
 const hasContract = computed(() => (isCompanyOrder.value ? !!selectedCustomerContractId.value : false) || hasOrderContract.value);
+const websiteOrderSummary = computed(() => {
+  const lines = websiteProductSummaryLines.value.length + websiteServiceSummaryLines.value.length;
+  const parts = [];
+  const createdAt = formatDateTime(props.order?.created_at);
+  if (createdAt) parts.push(`создан ${createdAt}`);
+  parts.push(`${lines} поз.`);
+  if (customerDeliveryAddress.value) parts.push(customerDeliveryAddress.value);
+  return parts.join(' · ');
+});
+const planningSummary = computed(() => {
+  const parts = [];
+  parts.push(measurementRequired.value ? 'замер нужен' : 'без замера');
+  if (assessmentDate.value) parts.push(`замер ${formatDateTime(assessmentDate.value)}`);
+  if (installationDate.value) parts.push(`монтаж ${formatDateTime(installationDate.value)}`);
+  if (customerDeliveryAddress.value) parts.push(customerDeliveryAddress.value);
+  return parts.join(' · ');
+});
+const planningDetailsSummary = computed(() => {
+  const parts = [];
+  if (measurerId.value) parts.push('замерщик назначен');
+  if (measurementResult.value.trim()) parts.push('есть результат замера');
+  if (customerBranchId.value) parts.push('выбран филиал');
+  if (newBranchAddress.value.trim()) parts.push('готовится новый филиал');
+  return parts.join(' · ') || 'дополнительные поля не заполнены';
+});
+const documentSectionSummary = computed(() => {
+  const contractText = hasContract.value ? 'договор есть' : 'без договора';
+  return `${documents.value.length} док. · ${contractText}`;
+});
+const documentSectionHasError = computed(() => isCompanyOrder.value && !selectedCustomerContractId.value && !hasOrderContract.value);
 
 const DOCUMENT_TYPES = [
   { type: 'contract', label: 'Договор' },
@@ -897,6 +936,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   if (!order) return;
   localServerErrors.value = {};
   localFormError.value = '';
+  expandedDrawerSections.value = createDefaultDrawerSections();
   status.value = order.status;
   orderTitle.value = order.title ?? '';
   managerLabels.value = [...(order.manager_labels ?? [])];
@@ -1361,11 +1401,11 @@ watch(
       </div>
     </Transition>
     <div class="flex-1 bg-black/60" @click="closeDrawer" />
-    <aside class="h-full w-full max-w-3xl overflow-y-auto bg-white p-6 text-gray-900 border-l border-gray-200 shadow-2xl">
-      <header class="mb-4 flex items-start justify-between border-b border-gray-100 pb-4">
-        <div class="flex-1">
-          <div class="flex items-center gap-3 mb-1">
-            <h2 class="text-xl font-semibold font-['Space_Grotesk'] text-gray-900">№{{ order?.id }} {{ orderTitle || customer?.full_legal_name || customer?.name || 'Без имени' }}</h2>
+    <aside class="h-full w-full min-w-0 max-w-3xl overflow-y-auto bg-white p-4 text-gray-900 shadow-2xl sm:p-6 md:border-l md:border-gray-200">
+      <header class="mb-4 flex flex-col gap-3 border-b border-gray-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div class="min-w-0 flex-1">
+          <div class="mb-1 flex flex-wrap items-center gap-2 sm:gap-3">
+            <h2 class="min-w-0 break-words text-lg font-semibold text-gray-900 sm:text-xl font-['Space_Grotesk']">№{{ order?.id }} {{ orderTitle || customer?.full_legal_name || customer?.name || 'Без имени' }}</h2>
             <span
               v-if="isWebsiteOrder"
               class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700"
@@ -1389,7 +1429,7 @@ watch(
           </div>
         </div>
 
-        <div class="flex items-start gap-2 ml-4">
+        <div class="flex items-start gap-2 sm:ml-4">
           <button v-if="order" type="button" @click="toggleHold" class="text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors" :class="order.is_on_hold ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'">
             {{ order.is_on_hold ? 'Вернуть в работу' : 'Отложить' }}
           </button>
@@ -1450,7 +1490,13 @@ watch(
         </div>
       </section>
 
-      <section v-if="isWebsiteOrder" class="mb-6 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-teal-50 p-4 shadow-sm">
+      <OrderDrawerSection
+        v-if="isWebsiteOrder"
+        v-model:expanded="expandedDrawerSections.website"
+        title="Входящий заказ с сайта"
+        :summary="websiteOrderSummary"
+        tone="emerald"
+      >
         <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
             <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700">Входящий заказ с сайта</p>
@@ -1549,13 +1595,16 @@ watch(
             <p class="mt-2 whitespace-pre-line text-sm text-gray-800">{{ comment }}</p>
           </div>
         </div>
-      </section>
+      </OrderDrawerSection>
 
 
 
       <!-- Планирование (Measurement & Logistics) -->
       <section v-if="status === 'negotiation'" class="mt-6 rounded-2xl bg-blue-50/30 border border-blue-100 p-4">
-        <h3 class="text-lg font-semibold font-['Space_Grotesk'] mb-4 text-blue-900 border-b border-blue-100 pb-2">Планирование (Замер и Монтаж)</h3>
+        <div class="mb-4 border-b border-blue-100 pb-2">
+          <h3 class="text-lg font-semibold text-blue-900 font-['Space_Grotesk']">Планирование</h3>
+          <p class="mt-1 truncate text-xs text-blue-700/70">{{ planningSummary }}</p>
+        </div>
 
         <label class="flex items-center gap-2 cursor-pointer mb-4">
           <input type="checkbox" v-model="measurementRequired" class="w-5 h-5 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
@@ -1566,26 +1615,38 @@ watch(
           Замер не требуется. Можно планировать монтаж сразу.
         </div>
 
-        <div v-if="measurementRequired" class="grid gap-3 md:grid-cols-2 mb-4 bg-white p-4 rounded-xl border border-blue-100 shadow-sm">
+        <div v-if="measurementRequired" class="mb-4 rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
           <DateTimeField v-model="assessmentDate" label="Дата и время замера" :error="getFieldError('measurement_date')" />
-          <label class="field-label">
-            Замерщик
-            <select v-model="measurerId" class="field-input">
-              <option :value="null">Не назначен</option>
-              <option v-for="inst in installersList" :key="inst.id" :value="inst.id">
-                {{ inst.name }} {{ !inst.is_active ? '(в архиве)' : '' }}
-              </option>
-            </select>
-          </label>
-          <label class="field-label md:col-span-2">
-            Результат замера
-            <textarea
-              v-model="measurementResult"
-              class="field-input min-h-[60px]"
-              placeholder="Резюме после выезда (длины трасс, доп. работы)..."
-            />
-          </label>
         </div>
+
+        <OrderDrawerSection
+          v-model:expanded="expandedDrawerSections.planningDetails"
+          title="Дополнительные параметры планирования"
+          :summary="planningDetailsSummary"
+          tone="blue"
+          :has-error="Boolean(getFieldError('measurement_date') || getFieldError('installation_date') || getFieldError('customer_delivery_address'))"
+        >
+          <div v-if="measurementRequired" class="grid gap-3 md:grid-cols-2">
+            <label class="field-label">
+              Замерщик
+              <select v-model="measurerId" class="field-input">
+                <option :value="null">Не назначен</option>
+                <option v-for="inst in installersList" :key="inst.id" :value="inst.id">
+                  {{ inst.name }} {{ !inst.is_active ? '(в архиве)' : '' }}
+                </option>
+              </select>
+            </label>
+            <label class="field-label md:col-span-2">
+              Результат замера
+              <textarea
+                v-model="measurementResult"
+                class="field-input min-h-[60px]"
+                placeholder="Резюме после выезда (длины трасс, доп. работы)..."
+              />
+            </label>
+          </div>
+          <p v-else class="text-sm text-gray-500">Дополнительные поля замера появятся, если включить выезд на замер.</p>
+        </OrderDrawerSection>
 
         <div class="grid gap-3 md:grid-cols-2">
           <DateTimeField v-model="installationDate" label="Дата монтажа" :error="getFieldError('installation_date')" />
@@ -1598,8 +1659,14 @@ watch(
               </option>
             </select>
           </label>
-          <div v-if="customer?.id" class="md:col-span-2 rounded-xl border border-blue-100 bg-white p-3 shadow-sm">
-            <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500">Филиал клиента</p>
+          <OrderDrawerSection
+            v-if="customer?.id"
+            v-model:expanded="expandedDrawerSections.branchDetails"
+            class="md:col-span-2"
+            title="Филиал клиента"
+            :summary="customerBranchId ? 'филиал выбран' : 'без филиала'"
+            tone="blue"
+          >
             <div class="mt-2 grid gap-2 md:grid-cols-2">
               <label class="field-label md:col-span-2">
                 Выбор филиала
@@ -1643,7 +1710,7 @@ watch(
                 </button>
               </div>
             </div>
-          </div>
+          </OrderDrawerSection>
           <label class="field-label md:col-span-2 relative">
             Адрес объекта / доставки
             <input
@@ -1687,12 +1754,12 @@ watch(
 
 
       <!-- Смета -->
-      <div class="mt-8 rounded-2xl bg-gray-50/50 border border-gray-200 p-4">
-        <h3 class="text-xl font-bold font-['Space_Grotesk'] text-gray-900 border-b border-gray-200 pb-2 mb-4">Смета: Оборудование и услуги</h3>
+      <div class="mt-6 rounded-2xl border border-gray-200 bg-gray-50/50 p-3 sm:p-4">
+        <h3 class="mb-4 border-b border-gray-200 pb-2 text-lg font-bold text-gray-900 sm:text-xl font-['Space_Grotesk']">Смета: Оборудование и услуги</h3>
 
         <section class="mt-2">
-          <div class="mb-2 flex items-center justify-between">
-            <div class="flex items-center gap-3">
+          <div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex flex-wrap items-center gap-3">
               <h4 class="text-md font-semibold text-gray-800">Товары</h4>
               <div class="flex items-center gap-2">
                 <label class="flex items-center gap-1 text-xs text-gray-600 bg-white border border-gray-200 px-2 py-1 rounded shadow-sm cursor-pointer hover:bg-gray-50 transition-colors">
@@ -1704,7 +1771,7 @@ watch(
           <button class="btn-mini" @click="addProductLine">Добавить товар</button>
         </div>
         <p v-if="getFieldError('products')" class="mb-2 text-xs text-red-300">{{ getFieldError('products') }}</p>
-        <div class="mb-2 grid grid-cols-12 gap-2 px-2 text-[11px] uppercase tracking-[0.08em] text-gray-500">
+        <div class="mb-2 hidden grid-cols-12 gap-2 px-2 text-[11px] uppercase tracking-[0.08em] text-gray-500 md:grid">
           <div class="col-span-5">Товар</div>
           <div class="col-span-2">Цена</div>
           <div class="col-span-2">Себест.</div>
@@ -1712,8 +1779,8 @@ watch(
           <div class="col-span-1">Действия</div>
         </div>
         <div class="space-y-2">
-          <div v-for="(line, index) in productLines" :key="`product-${index}`" class="grid grid-cols-12 gap-2 rounded-xl border border-gray-200 bg-white p-2">
-            <div class="col-span-5">
+          <div v-for="(line, index) in productLines" :key="`product-${index}`" class="grid grid-cols-1 gap-2 rounded-xl border border-gray-200 bg-white p-2 md:grid-cols-12">
+            <div class="md:col-span-5">
               <input
                 v-model="line.product_query"
                 class="field-input"
@@ -1752,19 +1819,19 @@ watch(
                 </button>
               </div>
             </div>
-            <input v-model.number="line.price" type="number" min="0" class="field-input col-span-2" placeholder="Цена" />
-            <input v-model.number="line.cost" type="number" min="0" class="field-input col-span-2" placeholder="Себест." />
-            <div class="col-span-2 flex flex-col gap-1">
+            <input v-model.number="line.price" type="number" min="0" class="field-input md:col-span-2" placeholder="Цена" />
+            <input v-model.number="line.cost" type="number" min="0" class="field-input md:col-span-2" placeholder="Себест." />
+            <div class="flex flex-col gap-1 md:col-span-2">
               <input v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="Кол-во" />
               <p class="px-1 text-xs text-gray-500">Σ {{ formatMoney(lineTotal(line)) }}</p>
             </div>
-            <div class="col-span-1 flex flex-col gap-1">
-              <button class="btn-mini-outline px-0" type="button" :disabled="!line.product_id" @click="openSelectedProduct(index)">↗</button>
-              <button class="btn-mini-outline px-0" type="button" @click="removeProductLine(index)">×</button>
+            <div class="flex gap-2 md:col-span-1 md:flex-col md:gap-1">
+              <button class="btn-mini-outline flex-1 px-0" type="button" :disabled="!line.product_id" @click="openSelectedProduct(index)">↗</button>
+              <button class="btn-mini-outline flex-1 px-0" type="button" @click="removeProductLine(index)">×</button>
             </div>
             <p
               v-if="isPriceDifferentFromCatalog(line)"
-              class="col-span-12 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-700"
+              class="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-700 md:col-span-12"
             >
               Цена строки отличается от каталожной ({{ formatMoney(currentCatalogPrice(line.product_id) || 0) }}).
             </p>
@@ -1773,15 +1840,15 @@ watch(
       </section>
 
         <section class="mt-6">
-          <div class="mb-2 flex items-center justify-between">
+          <div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h4 class="text-md font-semibold text-gray-800">Услуги</h4>
             <button class="btn-mini" @click="addServiceLine">Добавить услугу</button>
           </div>
           <div class="mb-3 grid gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
-            <div class="flex flex-wrap items-center gap-2">
+            <div class="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
               <select
                 v-model="selectedEstimateId"
-                class="field-input min-w-[220px] flex-1"
+                class="field-input min-w-0 flex-1"
                 :disabled="estimateOptionsLoading"
               >
                 <option :value="null">Выберите смету</option>
@@ -1791,10 +1858,10 @@ watch(
               </select>
               <input
                 v-model="estimateSearchQuery"
-                class="field-input w-[220px]"
+                class="field-input w-full lg:w-[220px]"
                 placeholder="Поиск сметы по ID/названию"
               />
-              <select v-model="estimateImportMode" class="field-input w-[180px]">
+              <select v-model="estimateImportMode" class="field-input w-full lg:w-[180px]">
                 <option value="detailed">Подробно (по строкам)</option>
                 <option value="collapsed">Схлопнуто (одной строкой)</option>
               </select>
@@ -1822,20 +1889,25 @@ watch(
           </div>
           <p v-if="getFieldError('services')" class="mb-2 text-xs text-red-300">{{ getFieldError('services') }}</p>
           <div class="space-y-2">
-            <div v-for="(line, index) in serviceLines" :key="`service-${index}`" class="grid grid-cols-12 gap-2 rounded-xl border border-gray-200 bg-white p-2">
-              <input v-model="line.title" class="field-input col-span-5" placeholder="Название услуги" />
-              <input v-model.number="line.price" type="number" min="0" class="field-input col-span-2" placeholder="Цена" />
-              <input v-model.number="line.cost" type="number" min="0" class="field-input col-span-2" placeholder="Себест." />
-              <input v-model.number="line.quantity" type="number" min="1" class="field-input col-span-2" placeholder="Кол-во" />
-              <button class="btn-mini-outline col-span-1" @click="removeServiceLine(index)">×</button>
+            <div v-for="(line, index) in serviceLines" :key="`service-${index}`" class="grid grid-cols-1 gap-2 rounded-xl border border-gray-200 bg-white p-2 md:grid-cols-12">
+              <input v-model="line.title" class="field-input md:col-span-5" placeholder="Название услуги" />
+              <input v-model.number="line.price" type="number" min="0" class="field-input md:col-span-2" placeholder="Цена" />
+              <input v-model.number="line.cost" type="number" min="0" class="field-input md:col-span-2" placeholder="Себест." />
+              <input v-model.number="line.quantity" type="number" min="1" class="field-input md:col-span-2" placeholder="Кол-во" />
+              <button class="btn-mini-outline md:col-span-1" @click="removeServiceLine(index)">×</button>
             </div>
           </div>
         </section>
       </div>
 
       <!-- Экшн-зона (Proposal & Docs) -->
-      <section class="mt-8 rounded-2xl bg-amber-50/30 border border-amber-100 p-4">
-        <h3 class="text-lg font-semibold font-['Space_Grotesk'] text-amber-900 mb-4 border-b border-amber-200 pb-2">Согласование</h3>
+      <OrderDrawerSection
+        v-model:expanded="expandedDrawerSections.documents"
+        title="Согласование и документы"
+        :summary="documentSectionSummary"
+        tone="amber"
+        :has-error="documentSectionHasError"
+      >
 
         <div v-if="status === 'negotiation'" class="mb-6">
           <label class="field-label mb-3">
@@ -2004,7 +2076,7 @@ watch(
         <div v-else class="rounded-xl border border-dashed border-slate-300 py-3 text-center text-sm italic text-slate-500 dark:border-slate-700">
             Нет сформированных документов
         </div>
-      </section>
+      </OrderDrawerSection>
 
 
       <DealExecutionTab
@@ -2016,8 +2088,8 @@ watch(
       />
 
       <!-- Оплаты и Валюта (Объединенный блок) -->
-      <section v-if="order && status !== 'execution'" class="mt-6 p-5 rounded-2xl border border-slate-200 bg-slate-50 shadow-sm">
-        <div class="flex items-center justify-between mb-4">
+      <section v-if="order && status !== 'execution'" class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-3 shadow-sm sm:p-5">
+        <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h3 class="text-lg flex gap-2 items-center font-semibold font-['Space_Grotesk'] text-slate-800">
                 <span class="material-icons-round text-teal-600">account_balance_wallet</span> Оплаты
             </h3>
@@ -2028,9 +2100,9 @@ watch(
         </div>
 
         <!-- Поля валюты (показываются если включен чекбокс) -->
-        <div v-if="enableCurrency" class="mb-5 p-4 rounded-xl border border-blue-100 bg-blue-50/30">
-            <div class="flex gap-4 items-end mb-4">
-                <label class="field-label !mb-0 text-xs w-1/3">Валюта
+        <div v-if="enableCurrency" class="mb-5 rounded-xl border border-blue-100 bg-blue-50/30 p-3 sm:p-4">
+            <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
+                <label class="field-label !mb-0 text-xs sm:w-1/3">Валюта
                     <select v-model="targetCurrency" class="field-input mt-1">
                         <option value="USD">USD ($)</option>
                         <option value="EUR" :disabled="!hasManualEurRate">EUR (€)</option>
@@ -2048,12 +2120,12 @@ watch(
                 EUR недоступен при ручном источнике курса. Переключите источник курса на NBRB.
             </p>
 
-            <div class="flex items-center justify-between border-t border-blue-100 pt-3">
-                 <div class="w-1/2">
+            <div class="flex flex-col gap-3 border-t border-blue-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                 <div class="sm:w-1/2">
                     <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Внесено оплат ({{ targetCurrency || 'USD' }})</p>
                     <p class="text-xl font-bold text-gray-800">{{ calculatedTargetCurrencyPayments.toFixed(2) }}</p>
                  </div>
-                 <div class="text-right">
+                 <div class="sm:text-right">
                     <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Остаток долга ({{ targetCurrency || 'USD' }})</p>
                     <p class="text-2xl font-bold" :class="targetCurrencyBalanceDue > 0 ? 'text-red-500' : 'text-blue-600'">
                         {{ targetCurrencyBalanceDue.toFixed(2) }}
@@ -2070,21 +2142,21 @@ watch(
             </p>
         </div>
 
-        <div class="flex items-end gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm mt-3">
+        <div class="mt-3 flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-end">
             <label class="flex-1 field-label !mb-0 text-xs">Внести платеж ({{ enableCurrency ? (targetCurrency || 'USD') : 'BYN' }})
                 <input v-model.number="newPaymentAmount" type="number" step="0.01" min="0" class="field-input mt-1 shadow-sm" placeholder="0.00" />
             </label>
-            <label class="w-1/3 field-label !mb-0 text-xs">Тип
+            <label class="field-label !mb-0 text-xs sm:w-1/3">Тип
                 <select v-model="newPaymentType" class="field-input mt-1 shadow-sm">
                     <option value="prepayment">Аванс</option>
                     <option value="postpayment">Доплата</option>
                 </select>
             </label>
-            <button class="btn-mini h-[38px] w-[100px]" :disabled="!newPaymentAmount || isAddingPayment" @click="addPayment">Внести</button>
+            <button class="btn-mini h-[38px] w-full sm:w-[100px]" :disabled="!newPaymentAmount || isAddingPayment" @click="addPayment">Внести</button>
         </div>
 
         <div class="mt-4 space-y-2 max-h-32 overflow-y-auto pr-1">
-            <div v-for="p in payments" :key="p.id" class="flex justify-between items-center text-xs py-2 px-3 rounded-lg bg-white border border-slate-100 shadow-sm">
+            <div v-for="p in payments" :key="p.id" class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 bg-white px-3 py-2 text-xs shadow-sm">
                 <span class="text-slate-500">{{ new Date(p.date).toLocaleDateString() }}</span>
                 <span class="font-bold text-slate-800" :class="p.currency !== 'BYN' ? 'text-blue-600' : ''">
                     <template v-if="p.currency !== 'BYN'">{{ p.amount.toFixed(2) }} {{ p.currency }}</template>
@@ -2105,32 +2177,32 @@ watch(
         </div>
       </section>
 
-      <section class="mt-6 rounded-2xl bg-gray-100 p-4">
+      <section class="mt-6 rounded-2xl bg-gray-100 p-3 sm:p-4">
         <div v-if="summaryFinancials.isCurrencyMode" class="space-y-2">
-            <div class="flex justify-between items-center">
+            <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <p class="text-sm text-gray-600">Оплачено:</p>
               <p class="text-sm font-semibold text-teal-600">
                 {{ summaryFinancials.paidInTarget }} {{ summaryFinancials.currSymbol }}
                 <span class="text-xs text-gray-400 font-normal ml-1">({{ summaryFinancials.paidInByn }} руб.)</span>
               </p>
             </div>
-            <div class="flex justify-between items-center border-b border-gray-200 pb-2">
+            <div class="flex flex-col gap-1 border-b border-gray-200 pb-2 sm:flex-row sm:items-center sm:justify-between">
               <p class="text-sm text-gray-600">Остаток:</p>
               <p class="text-sm font-semibold" :class="summaryFinancials.balanceInTarget > 0 ? 'text-red-500' : 'text-gray-900'">
                 {{ summaryFinancials.balanceInTarget }} {{ summaryFinancials.currSymbol }}
                 <span class="text-xs text-gray-400 font-normal ml-1">({{ summaryFinancials.balanceInByn }} руб.)</span>
               </p>
             </div>
-            <div class="flex justify-between items-center pt-1">
+            <div class="flex flex-col gap-1 pt-1 sm:flex-row sm:items-center sm:justify-between">
               <p class="text-sm font-medium text-gray-700">Итого: {{ summaryFinancials.totalInTarget }} {{ summaryFinancials.currSymbol }}</p>
               <p class="text-sm text-gray-500">Конвертация (~{{ summaryFinancials.dealRate.toFixed(4) }})</p>
             </div>
-            <div class="flex justify-between items-center">
+            <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <p class="text-sm text-gray-700">Всего BYN: {{ summaryFinancials.totalInByn }} руб.</p>
               <p class="text-sm text-gray-600">Маржа: <span class="font-semibold text-teal-700">{{ summaryFinancials.totalInByn - (productLines.reduce((s,l)=>s+l.cost*l.quantity,0) + serviceLines.reduce((s,l)=>s+l.cost*l.quantity,0)) }} руб.</span></p>
             </div>
         </div>
-        <div v-else class="grid grid-cols-2 gap-4">
+        <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2">
            <div>
             <p class="text-sm text-gray-600">Оплачено: <span class="font-semibold text-teal-600">{{ formatMoney(totalPaymentsPreview) }}</span></p>
             <p class="text-sm text-gray-600">Остаток: <span class="font-semibold" :class="balanceDuePreview > 0 ? 'text-red-500' : 'text-gray-900'">{{ formatMoney(balanceDuePreview) }}</span></p>
@@ -2140,13 +2212,13 @@ watch(
         </div>
       </section>
 
-      <footer class="mt-6 flex justify-between gap-2 border-t border-gray-100 pt-4">
+      <footer class="mt-6 flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <button class="btn-mini hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-gray-400 bg-white border border-gray-200 transition-colors" :disabled="saving || isDeleting" @click="deleteOrder" title="Безвозвратное удаление">
             {{ isDeleting ? 'Удаление...' : 'Удалить заказ' }}
           </button>
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-col gap-2 sm:flex-row">
           <button class="btn-mini-outline" :disabled="saving || isDeleting" @click="closeDrawer">Отмена</button>
           <button class="btn-mini" :disabled="saving || isDeleting" @click="handleSave">
             {{ saving ? 'Сохраняем...' : 'Сохранить' }}
