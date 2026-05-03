@@ -7,6 +7,8 @@ import type { ManagerOrderServiceLinePayload } from './ManagerOrderServiceLinePa
 import type { PaymentCurrency } from './PaymentCurrency';
 export type ManagerOrderUpdatePayload = {
     status?: (string | null);
+    title?: (string | null);
+    manager_labels?: (Array<string> | null);
     next_followup_date?: (string | null);
     measurement_date?: (string | null);
     installation_date?: (string | null);

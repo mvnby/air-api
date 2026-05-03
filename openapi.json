@@ -13212,6 +13212,24 @@
             ],
             "title": "Lead Source"
           },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "manager_labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Manager Labels"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -13686,6 +13704,24 @@
             ],
             "title": "Lead Source"
           },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "manager_labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Manager Labels"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -14159,6 +14195,31 @@
               }
             ],
             "title": "Status"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "manager_labels": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manager Labels"
           },
           "next_followup_date": {
             "anyOf": [

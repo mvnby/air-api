@@ -19,6 +19,14 @@ const toggleSort = (key: string) => {
   if (props.sort === `${key}_desc`) emit('update:sort', `${key}_asc`);
   else emit('update:sort', `${key}_desc`);
 };
+
+const customerName = (order: ManagerOrderListItemResponse) => (
+  props.segment === 'b2b'
+    ? (order.customer?.full_legal_name || order.customer?.name || '—')
+    : (order.customer?.name || '—')
+);
+
+const displayTitle = (order: ManagerOrderListItemResponse) => order.title?.trim() || `#${order.id}`;
 </script>
 
 <template>
@@ -53,14 +61,26 @@ const toggleSort = (key: string) => {
           class="border-t border-gray-100"
           :class="isOverdue(order) ? 'bg-red-50' : ''"
         >
-          <td class="px-3 py-3 font-semibold">#{{ order.id }}</td>
+          <td class="px-3 py-3">
+            <p class="max-w-[260px] truncate font-semibold text-gray-900">{{ displayTitle(order) }}</p>
+            <p v-if="order.title?.trim()" class="max-w-[260px] truncate text-xs text-gray-500">#{{ order.id }} · {{ customerName(order) }}</p>
+            <div v-if="order.manager_labels?.length" class="mt-1 flex max-w-[260px] flex-wrap gap-1">
+              <span
+                v-for="label in order.manager_labels"
+                :key="label"
+                class="rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-teal-800"
+              >
+                {{ label }}
+              </span>
+            </div>
+          </td>
           <td class="px-3 py-3">
             <template v-if="segment === 'b2b'">
-              <p>{{ order.customer?.full_legal_name || order.customer?.name || '—' }}</p>
+              <p>{{ customerName(order) }}</p>
               <p class="text-xs text-gray-500">УНП: {{ order.customer?.inn || '—' }}</p>
             </template>
             <template v-else>
-              <p>{{ order.customer?.name || '—' }}</p>
+              <p>{{ customerName(order) }}</p>
               <p class="text-xs text-gray-500">{{ formatPhone(order.customer?.phone) }}</p>
             </template>
           </td>

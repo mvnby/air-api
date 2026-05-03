@@ -6,6 +6,22 @@ from schemas import ManagerOrderUpdatePayload
 from services.order_service import OrderService
 
 
+def test_service_default_order_title_inference():
+    assert OrderService._build_default_order_title(service_type="maintenance", comment="что угодно") == "Обслуживание"
+    assert OrderService._build_default_order_title(comment="Нужен монтаж с закладкой трассы") == "Монтаж"
+    assert OrderService._build_default_order_title(comment="Купить кондиционер") == "Продажа"
+    assert OrderService._build_default_order_title(items=[{"product_id": 1, "with_installation": True}]) == "Продажа + монтаж"
+    assert OrderService._build_default_order_title(items=[{"product_id": 1}]) == "Продажа"
+
+
+def test_service_display_order_title_hides_legacy_site_title():
+    order = Order(title="Заказ с сайта от 03.05 12:00")
+    assert OrderService._display_order_title(order) is None
+
+    order.title = "Монтаж магазина"
+    assert OrderService._display_order_title(order) == "Монтаж магазина"
+
+
 @pytest.mark.asyncio
 async def test_service_get_orders_for_manager_segment_and_search(db):
     c1 = Customer(name="Alice", phone="+375291111111", type=CustomerType.individual)
@@ -27,6 +43,32 @@ async def test_service_get_orders_for_manager_segment_and_search(db):
     b2b = await OrderService.get_orders_for_manager(db, "b2b", page=1, limit=20, search="999000111")
     assert len(b2b["items"]) == 1
     assert b2b["items"][0]["customer"]["name"] == "Acme LLC"
+
+
+@pytest.mark.asyncio
+async def test_service_get_orders_for_manager_title_and_labels(db):
+    customer = Customer(name="Labels", phone="+375291111112", type=CustomerType.individual)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    db.add(
+        Order(
+            customer_id=customer.id,
+            status=OrderStatus.NEW_LEAD,
+            title="Монтаж магазина в Дубровно",
+            technical_meta={"manager_labels": ["срочно", "уточнить оплату"]},
+        )
+    )
+    await db.commit()
+
+    by_title = await OrderService.get_orders_for_manager(db, "b2c", page=1, limit=20, search="Дубровно")
+    assert len(by_title["items"]) == 1
+    assert by_title["items"][0]["title"] == "Монтаж магазина в Дубровно"
+    assert by_title["items"][0]["manager_labels"] == ["срочно", "уточнить оплату"]
+
+    by_label = await OrderService.get_orders_for_manager(db, "b2c", page=1, limit=20, search="оплату")
+    assert len(by_label["items"]) == 1
 
 
 @pytest.mark.asyncio
@@ -86,6 +128,38 @@ async def test_service_update_order_for_manager_line_sync(db):
     assert data["status"] == "negotiation"
     assert len(data["product_lines"]) == 1
     assert data["total_amount"] == 2800
+
+
+@pytest.mark.asyncio
+async def test_service_update_order_for_manager_title_and_labels(db):
+    customer = Customer(name="Meta", phone="+375294444445", type=CustomerType.individual)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    payload = ManagerOrderUpdatePayload(
+        title="  Монтаж   магазина  ",
+        manager_labels=[" срочно ", "Срочно", "", "ждём оплату"],
+    )
+
+    data = await OrderService.update_order_for_manager(db, order.id, payload)
+    assert data is not None
+    assert data["title"] == "Монтаж магазина"
+    assert data["manager_labels"] == ["срочно", "ждём оплату"]
+
+    cleared = await OrderService.update_order_for_manager(
+        db,
+        order.id,
+        ManagerOrderUpdatePayload(title="", manager_labels=[]),
+    )
+    assert cleared is not None
+    assert cleared["title"] is None
+    assert cleared["manager_labels"] == []
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { ManagerOrderListItemResponse } from '../../client';
 import { STATUS_LABELS, formatDate, formatMoney, formatPhone, isOverdue } from './order-utils';
 
@@ -16,6 +17,15 @@ const emit = defineEmits<{
 const onDragStart = () => {
   emit('dragStart', { orderId: props.order.id, oldStatus: props.order.status });
 };
+
+const customerName = computed(() => props.order.customer?.name || `Заказ #${props.order.id}`);
+const displayTitle = computed(() => props.order.title?.trim() || customerName.value);
+const secondaryLine = computed(() => {
+  const parts = [];
+  if (props.order.title?.trim()) parts.push(customerName.value);
+  if (props.order.delivery_address) parts.push(props.order.delivery_address);
+  return parts.join(' · ');
+});
 </script>
 
 <template>
@@ -26,12 +36,23 @@ const onDragStart = () => {
     @dragstart="onDragStart"
   >
     <header class="mb-3 flex items-start justify-between gap-3">
-      <div>
-        <p class="text-lg font-semibold text-gray-900 dark:text-white">{{ order.customer?.name || `Заказ #${order.id}` }}</p>
+      <div class="min-w-0">
+        <p class="truncate text-lg font-semibold text-gray-900 dark:text-white">{{ displayTitle }}</p>
+        <p v-if="secondaryLine" class="mt-0.5 break-words text-sm text-gray-500 dark:text-slate-400">{{ secondaryLine }}</p>
         <p class="text-sm text-gray-500 dark:text-slate-400">{{ formatPhone(order.customer?.phone) }}</p>
       </div>
       <span class="rounded-full bg-gray-100 dark:bg-slate-700 px-2 py-1 text-xs text-gray-700 dark:text-slate-300">{{ STATUS_LABELS[order.status] || order.status }}</span>
     </header>
+
+    <div v-if="order.manager_labels?.length" class="mb-3 flex flex-wrap gap-1">
+      <span
+        v-for="label in order.manager_labels"
+        :key="label"
+        class="rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-teal-800"
+      >
+        {{ label }}
+      </span>
+    </div>
 
     <div class="mb-3 flex flex-wrap gap-1">
       <span v-if="order.needs_attention" class="rounded-full bg-red-100 text-red-700 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">🔴 Внимание (замер)</span>
