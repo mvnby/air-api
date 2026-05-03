@@ -166,6 +166,38 @@ async def test_manager_order_patch_scalar_fields(async_client, db):
 
 
 @pytest.mark.asyncio
+async def test_manager_order_patch_title_and_labels_search(async_client, db):
+    customer = Customer(name="Patch Labels", phone="+375295555557", type=CustomerType.individual)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+    payload = {
+        "title": "  Монтаж магазина  ",
+        "manager_labels": [" срочно ", "СРОЧНО", "ждём адрес"],
+    }
+    response = await async_client.patch(f"/api/manager/orders/{order.id}", json=payload, headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["title"] == "Монтаж магазина"
+    assert data["manager_labels"] == ["срочно", "ждём адрес"]
+
+    by_title = await async_client.get("/api/manager/orders?segment=b2c&search=магазина", headers=headers)
+    assert by_title.status_code == 200
+    assert [item["id"] for item in by_title.json()["items"]] == [order.id]
+
+    by_label = await async_client.get("/api/manager/orders?segment=b2c&search=адрес", headers=headers)
+    assert by_label.status_code == 200
+    assert [item["id"] for item in by_label.json()["items"]] == [order.id]
+
+
+@pytest.mark.asyncio
 async def test_manager_order_execution_auto_approves_proposal(async_client, db):
     customer = Customer(name="Execution", phone="+375295555556", type=CustomerType.individual)
     db.add(customer)

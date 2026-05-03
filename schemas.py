@@ -369,6 +369,8 @@ class ManagerOrderListItemResponse(BaseModel):
     id: int
     status: str
     lead_source: Optional[str] = None
+    title: Optional[str] = None
+    manager_labels: List[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: Optional[datetime] = None
     next_followup_date: Optional[datetime] = None
@@ -545,6 +547,8 @@ class ManagerOrderServiceLinePayload(BaseModel):
 
 class ManagerOrderUpdatePayload(BaseModel):
     status: Optional[str] = None
+    title: Optional[str] = None
+    manager_labels: Optional[List[str]] = None
     next_followup_date: Optional[datetime] = None
     measurement_date: Optional[datetime] = None
     installation_date: Optional[datetime] = None

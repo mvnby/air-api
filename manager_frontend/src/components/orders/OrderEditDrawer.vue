@@ -68,6 +68,9 @@ const toast = ref('');
 let productSearchRequestId = 0;
 
 const status = ref('new_lead');
+const orderTitle = ref('');
+const managerLabels = ref<string[]>([]);
+const managerLabelDraft = ref('');
 const nextFollowupDate = ref('');
 const assessmentDate = ref('');
 const installationDate = ref('');
@@ -303,6 +306,20 @@ const setToast = (message: string, type: 'success' | 'error' = 'success') => {
   window.setTimeout(() => {
     if (toast.value === message) toast.value = '';
   }, 3000);
+};
+
+const normalizeManagerLabel = (value: string) => value.trim().replace(/\s+/g, ' ');
+
+const addManagerLabel = () => {
+  const label = normalizeManagerLabel(managerLabelDraft.value);
+  if (!label) return;
+  const exists = managerLabels.value.some((item) => item.toLocaleLowerCase('ru-RU') === label.toLocaleLowerCase('ru-RU'));
+  if (!exists) managerLabels.value.push(label);
+  managerLabelDraft.value = '';
+};
+
+const removeManagerLabel = (label: string) => {
+  managerLabels.value = managerLabels.value.filter((item) => item !== label);
 };
 
 const formatDateTime = (value?: string | null) => {
@@ -881,6 +898,9 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   localServerErrors.value = {};
   localFormError.value = '';
   status.value = order.status;
+  orderTitle.value = order.title ?? '';
+  managerLabels.value = [...(order.manager_labels ?? [])];
+  managerLabelDraft.value = '';
   nextFollowupDate.value = toLocalDateTimeInput(order.next_followup_date);
   assessmentDate.value = toLocalDateTimeInput(order.measurement_date);
   installationDate.value = toLocalDateTimeInput(order.installation_date);
@@ -1244,6 +1264,8 @@ const handleSave = () => {
   clearDraft();
   const payload: ManagerOrderUpdatePayload = {
     status: status.value,
+    title: orderTitle.value,
+    manager_labels: managerLabels.value,
     next_followup_date: fromLocalDateTimeInput(nextFollowupDate.value),
     measurement_date: fromLocalDateTimeInput(assessmentDate.value),
     installation_date: fromLocalDateTimeInput(installationDate.value),
@@ -1343,7 +1365,7 @@ watch(
       <header class="mb-4 flex items-start justify-between border-b border-gray-100 pb-4">
         <div class="flex-1">
           <div class="flex items-center gap-3 mb-1">
-            <h2 class="text-xl font-semibold font-['Space_Grotesk'] text-gray-900">№{{ order?.id }} {{ customer?.full_legal_name || customer?.name || 'Без имени' }}</h2>
+            <h2 class="text-xl font-semibold font-['Space_Grotesk'] text-gray-900">№{{ order?.id }} {{ orderTitle || customer?.full_legal_name || customer?.name || 'Без имени' }}</h2>
             <span
               v-if="isWebsiteOrder"
               class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700"
@@ -1380,6 +1402,53 @@ watch(
       <p v-if="displayFormError" class="mb-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
         {{ displayFormError }}
       </p>
+
+      <section class="mb-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div class="grid gap-3 md:grid-cols-2">
+          <label class="field-label md:col-span-2">
+            Внутреннее название
+            <input
+              v-model="orderTitle"
+              class="field-input"
+              placeholder="Например: Монтаж магазина в Дубровно"
+              maxlength="160"
+            />
+            <span v-if="getFieldError('title')" class="text-xs text-red-300">{{ getFieldError('title') }}</span>
+          </label>
+
+          <div class="md:col-span-2">
+            <p class="mb-1 text-xs font-medium uppercase tracking-[0.08em] text-slate-500">Метки</p>
+            <div class="flex flex-wrap gap-2">
+              <span
+                v-for="label in managerLabels"
+                :key="label"
+                class="inline-flex items-center gap-1 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-800"
+              >
+                {{ label }}
+                <button
+                  type="button"
+                  class="flex h-4 w-4 items-center justify-center rounded-full text-teal-500 hover:bg-teal-100 hover:text-teal-800"
+                  :aria-label="`Удалить метку ${label}`"
+                  @click="removeManagerLabel(label)"
+                >
+                  <span class="material-icons-round text-[14px]">close</span>
+                </button>
+              </span>
+              <span v-if="!managerLabels.length" class="text-sm text-slate-500">Метки не добавлены</span>
+            </div>
+            <div class="mt-2 flex flex-col gap-2 sm:flex-row">
+              <input
+                v-model="managerLabelDraft"
+                class="field-input sm:flex-1"
+                placeholder="срочно, ждём адрес, уточнить оплату"
+                @keydown.enter.prevent="addManagerLabel"
+              />
+              <button type="button" class="btn-mini whitespace-nowrap" @click="addManagerLabel">Добавить метку</button>
+            </div>
+            <span v-if="getFieldError('manager_labels')" class="text-xs text-red-300">{{ getFieldError('manager_labels') }}</span>
+          </div>
+        </div>
+      </section>
 
       <section v-if="isWebsiteOrder" class="mb-6 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-teal-50 p-4 shadow-sm">
         <div class="mb-4 flex flex-wrap items-start justify-between gap-3">

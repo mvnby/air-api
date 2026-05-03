@@ -16,6 +16,8 @@ export type ManagerOrderDetailResponse = {
     id: number;
     status: string;
     lead_source?: (string | null);
+    title?: (string | null);
+    manager_labels?: Array<string>;
     created_at: string;
     updated_at?: (string | null);
     next_followup_date?: (string | null);

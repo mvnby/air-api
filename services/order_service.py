@@ -1,4 +1,5 @@
 import logging
+import json
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,109 @@ from services.product_supply_metrics_service import ProductSupplyMetricsService
 logger = logging.getLogger(__name__)
 
 class OrderService:
+    MANAGER_LABELS_META_KEY = "manager_labels"
+    LEGACY_WEBSITE_TITLE_PREFIX = "Заказ с сайта от "
+    SERVICE_TYPE_TITLE_MAP = {
+        "turnkey": "Продажа + монтаж",
+        "install_only": "Монтаж",
+        "pre_install": "Закладка трассы",
+        "maintenance": "Обслуживание",
+        "repair": "Ремонт",
+        "dismantling": "Демонтаж",
+    }
+
+    @staticmethod
+    def _clean_order_title(raw: Any) -> Optional[str]:
+        title = " ".join(str(raw or "").split())
+        return title or None
+
+    @staticmethod
+    def _display_order_title(order: Order) -> Optional[str]:
+        title = OrderService._clean_order_title(order.title)
+        if title and title.startswith(OrderService.LEGACY_WEBSITE_TITLE_PREFIX):
+            return None
+        return title
+
+    @staticmethod
+    def _build_default_order_title(
+        *,
+        service_type: Optional[str] = None,
+        comment: Optional[str] = None,
+        items: Optional[List[Dict[str, Any]]] = None,
+    ) -> Optional[str]:
+        if service_type:
+            mapped = OrderService.SERVICE_TYPE_TITLE_MAP.get(str(service_type))
+            if mapped:
+                return mapped
+
+        text = str(comment or "").casefold()
+        if any(marker in text for marker in ("обслуж", "сервис", " то ", "техобслуж")):
+            return "Обслуживание"
+        if any(marker in text for marker in ("ремонт", "чинит", "не работает", "ошибк")):
+            return "Ремонт"
+        if "демонтаж" in text:
+            return "Демонтаж"
+        if any(marker in text for marker in ("монтаж", "установ")):
+            return "Монтаж"
+        if any(marker in text for marker in ("заклад", "трасс")):
+            return "Закладка трассы"
+        if any(marker in text for marker in ("куп", "покуп", "продаж", "кондиционер")):
+            return "Продажа"
+
+        if items:
+            has_installation = any(bool(item.get("with_installation")) for item in items)
+            return "Продажа + монтаж" if has_installation else "Продажа"
+
+        return None
+
+    @staticmethod
+    def _json_text_search_variants(raw: str) -> List[str]:
+        text = str(raw or "").strip()
+        if not text:
+            return []
+
+        variants = [text]
+        escaped = json.dumps(text, ensure_ascii=True)[1:-1]
+        if escaped and escaped not in variants:
+            variants.append(escaped)
+            like_escaped = escaped.replace("\\", "\\\\")
+            if like_escaped not in variants:
+                variants.append(like_escaped)
+        return variants
+
+    @staticmethod
+    def _normalize_manager_labels(raw_labels: Any) -> List[str]:
+        if not isinstance(raw_labels, list):
+            return []
+
+        labels: List[str] = []
+        seen: set[str] = set()
+        for raw in raw_labels:
+            label = " ".join(str(raw or "").split())
+            if not label:
+                continue
+            key = label.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            labels.append(label)
+        return labels
+
+    @staticmethod
+    def _get_manager_labels(order: Order) -> List[str]:
+        meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
+        return OrderService._normalize_manager_labels(meta.get(OrderService.MANAGER_LABELS_META_KEY))
+
+    @staticmethod
+    def _set_manager_labels(order: Order, raw_labels: Any) -> None:
+        meta = dict(order.technical_meta or {}) if isinstance(order.technical_meta, dict) else {}
+        labels = OrderService._normalize_manager_labels(raw_labels)
+        if labels:
+            meta[OrderService.MANAGER_LABELS_META_KEY] = labels
+        else:
+            meta.pop(OrderService.MANAGER_LABELS_META_KEY, None)
+        order.technical_meta = meta
+
     @staticmethod
     def _normalize_payment_currency(raw: Any) -> PaymentCurrency:
         if isinstance(raw, PaymentCurrency):
@@ -214,6 +318,14 @@ class OrderService:
         )
 
         changed = False
+        default_title = OrderService._build_default_order_title(
+            service_type=payload.service_type,
+            comment=payload.request_text,
+        )
+        if default_title:
+            order.title = default_title
+            changed = True
+
         if payload.service_type == "maintenance" and payload.target_date:
             order.installation_date = OrderService._normalize_naive_datetime(payload.target_date)
             changed = True
@@ -336,13 +448,14 @@ class OrderService:
             session.add(customer)
 
         # 2. Create order with lead_source
+        default_title = OrderService._build_default_order_title(comment=comment, items=items)
         order = Order(
             customer_id=customer.id,
             delivery_address=customer_address,
             status=initial_status,
             lead_source=lead_source,
             comment=comment,
-            title=f"Заказ с сайта от {datetime.now().strftime('%d.%m %H:%M')}",
+            title=default_title,
             created_at=datetime.now()
         )
         session.add(order)
@@ -1054,6 +1167,8 @@ class OrderService:
                 if order.lead_source and hasattr(order.lead_source, "value")
                 else (str(order.lead_source) if order.lead_source else None)
             ),
+            "title": OrderService._display_order_title(order),
+            "manager_labels": OrderService._get_manager_labels(order),
             "created_at": order.created_at,
             "updated_at": order.updated_at,
             "next_followup_date": order.next_followup_date,
@@ -1180,13 +1295,22 @@ class OrderService:
             except ValueError as exc:
                 raise ValueError(f"Invalid status: {status}") from exc
 
-        if search:
-            like = f"%{search.strip()}%"
+        if search and search.strip():
+            search_text = search.strip()
+            like = f"%{search_text}%"
+            technical_meta_search = or_(
+                *[
+                    cast(Order.technical_meta, String).ilike(f"%{variant}%")
+                    for variant in OrderService._json_text_search_variants(search_text)
+                ]
+            )
             search_clause = or_(
                 Customer.name.ilike(like),
                 Customer.phone.ilike(like),
                 Customer.full_legal_name.ilike(like),
                 Customer.inn.ilike(like),
+                Order.title.ilike(like),
+                technical_meta_search,
                 cast(Order.id, String).ilike(like),
             )
             base_stmt = base_stmt.where(search_clause)
@@ -1334,6 +1458,10 @@ class OrderService:
                 order.status = OrderStatus(payload.status)
             except ValueError as exc:
                 raise ValueError(f"Invalid status: {payload.status}") from exc
+        if "title" in fields_set:
+            order.title = OrderService._clean_order_title(payload.title)
+        if "manager_labels" in fields_set:
+            OrderService._set_manager_labels(order, payload.manager_labels)
         if "next_followup_date" in fields_set:
             order.next_followup_date = OrderService._normalize_naive_datetime(payload.next_followup_date)
         if "measurement_date" in fields_set:

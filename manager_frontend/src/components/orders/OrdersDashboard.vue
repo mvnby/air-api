@@ -220,6 +220,8 @@ const saveOrder = async (payload: { orderId: number; data: ManagerOrderUpdatePay
     console.error(error);
     const parsed = parseApiFieldErrors(error, [
       'status',
+      'title',
+      'manager_labels',
       'next_followup_date',
       'measurement_date',
       'installation_date',
