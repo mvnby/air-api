@@ -10,6 +10,7 @@ defineProps<{
   orders: ManagerOrderListItemResponse[];
   segment: Segment;
   movingOrderIds: number[];
+  expandedOrderId: number | null;
 }>();
 
 const emit = defineEmits<{
@@ -17,6 +18,7 @@ const emit = defineEmits<{
   generate: [payload: { orderId: number; docType: string }];
   dragStart: [payload: { orderId: number; oldStatus: string }];
   dropTo: [status: string];
+  toggleExpanded: [orderId: number];
 }>();
 
 const onDrop = (event: DragEvent, status: string) => {
@@ -27,7 +29,7 @@ const onDrop = (event: DragEvent, status: string) => {
 
 <template>
   <section
-    class="min-h-[220px] w-[320px] md:w-[350px] lg:w-[380px] shrink-0 rounded-[2rem] border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4"
+    class="min-h-[220px] w-[calc(100vw-2rem)] max-w-[320px] shrink-0 rounded-2xl border border-gray-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800 sm:w-[320px] md:w-[350px] md:max-w-[350px] lg:w-[380px] lg:max-w-[380px]"
     @dragover.prevent
     @drop="(event) => onDrop(event, status)"
   >
@@ -42,10 +44,12 @@ const onDrop = (event: DragEvent, status: string) => {
         v-for="order in orders"
         :key="order.id"
         :order="order"
+        :expanded="expandedOrderId === order.id"
         :draggable-disabled="movingOrderIds.includes(order.id)"
         @open="(orderId) => emit('open', orderId)"
         @generate="(payload) => emit('generate', payload)"
         @drag-start="(payload) => emit('dragStart', payload)"
+        @toggle-expanded="(orderId) => emit('toggleExpanded', orderId)"
       />
     </div>
   </section>
