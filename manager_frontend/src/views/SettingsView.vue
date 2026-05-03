@@ -36,7 +36,6 @@ const creating = ref(false);
 const googleAuthStatus = ref<ManagerGoogleAuthStatusResponse | null>(null);
 const googleAuthLoading = ref(false);
 const googleAuthBusy = ref(false);
-const googleAuthCode = ref('');
 
 const goToBackups = () => {
     if (window.location.pathname !== '/manager/settings/backup') {
@@ -68,25 +67,6 @@ const openGoogleAuth = async () => {
         const response = await api.getManagerGoogleAuthUrl();
         window.open(response.url, '_blank', 'noopener,noreferrer');
         setToast('Открыли Google Login в новой вкладке');
-    } catch (e) {
-        setToast(getApiErrorMessage(e), 'error');
-    } finally {
-        googleAuthBusy.value = false;
-    }
-};
-
-const exchangeGoogleCode = async () => {
-    const code = googleAuthCode.value.trim();
-    if (!code) {
-        setToast('Введите код от Google', 'error');
-        return;
-    }
-    googleAuthBusy.value = true;
-    try {
-        await api.exchangeManagerGoogleAuthCode(code);
-        googleAuthCode.value = '';
-        setToast('Google интеграция подключена');
-        await loadGoogleAuthStatus();
     } catch (e) {
         setToast(getApiErrorMessage(e), 'error');
     } finally {
@@ -320,29 +300,14 @@ onMounted(() => {
                 </div>
             </div>
 
-            <div class="mt-4 grid grid-cols-1 md:grid-cols-[auto_1fr_auto] gap-2 items-center">
+            <div class="mt-4 flex flex-wrap items-center gap-2">
                 <button
                     @click="openGoogleAuth"
                     class="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-all text-sm disabled:opacity-60"
                     :disabled="googleAuthBusy"
                 >
                     <span class="material-icons-round text-[18px]">open_in_new</span>
-                    Open Google Login
-                </button>
-                <input
-                    v-model="googleAuthCode"
-                    type="text"
-                    class="w-full bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-teal-500 transition-colors shadow-sm text-sm font-mono"
-                    placeholder="Вставьте код от Google (4/0A...)"
-                    :disabled="googleAuthBusy"
-                />
-                <button
-                    @click="exchangeGoogleCode"
-                    class="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-all text-sm disabled:opacity-60"
-                    :disabled="googleAuthBusy"
-                >
-                    <span class="material-icons-round text-[18px]">check_circle</span>
-                    Подтвердить код
+                    Подключить Google
                 </button>
             </div>
         </div>
