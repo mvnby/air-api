@@ -666,6 +666,15 @@ ul {
     font-size: 0.875rem;
 }
 
+.footer-bottom a {
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.footer-bottom a:hover {
+    color: var(--primary);
+}
+
 @media (max-width: 768px) {
     .container {
         padding: 0 1rem;

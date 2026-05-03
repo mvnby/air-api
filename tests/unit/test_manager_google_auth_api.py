@@ -78,3 +78,17 @@ async def test_google_auth_exchange_requires_code(google_auth_client, monkeypatc
         json={"code": "   "},
     )
     assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_google_auth_callback_exchanges_code(google_auth_client, monkeypatch):
+    called = {"code": None}
+
+    class _Svc:
+        def finish_auth(self, code: str):
+            called["code"] = code
+
+    monkeypatch.setattr("routers.manager_google_auth.get_google_service", lambda: _Svc())
+    response = await google_auth_client.get("/api/manager/google-auth/callback?code=callback-code")
+    assert response.status_code == 200
+    assert called["code"] == "callback-code"
