@@ -18,6 +18,11 @@ const emit = defineEmits<{
 }>();
 
 const dragContext = ref<{ orderId: number; oldStatus: string } | null>(null);
+const expandedOrderId = ref<number | null>(null);
+
+const onToggleExpanded = (orderId: number) => {
+  expandedOrderId.value = expandedOrderId.value === orderId ? null : orderId;
+};
 
 const onDropTo = (newStatus: string) => {
   if (!dragContext.value) return;
@@ -48,10 +53,12 @@ const onDragStart = (payload: { orderId: number; oldStatus: string }) => {
       :orders="groupedOrders[status] || []"
       :segment="segment"
       :moving-order-ids="movingOrderIds"
+      :expanded-order-id="expandedOrderId"
       @open="(orderId) => emit('open', orderId)"
       @generate="(payload) => emit('generate', payload)"
       @drag-start="(payload) => onDragStart(payload)"
       @drop-to="(dropStatus) => onDropTo(dropStatus)"
+      @toggle-expanded="onToggleExpanded"
     />
   </div>
 </template>
