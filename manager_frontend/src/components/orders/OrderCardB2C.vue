@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-vue-next';
 import type { ManagerOrderListItemResponse } from '../../client';
 import { STATUS_LABELS, formatDate, formatMoney, formatPhone, isOverdue } from './order-utils';
+import OrderTitleEditor from './OrderTitleEditor.vue';
 
 const props = defineProps<{
   order: ManagerOrderListItemResponse;
@@ -15,6 +16,7 @@ const emit = defineEmits<{
   generate: [payload: { orderId: number; docType: string }];
   dragStart: [payload: { orderId: number; oldStatus: string }];
   toggleExpanded: [orderId: number];
+  renameOrder: [payload: { orderId: number; title: string | null }];
 }>();
 
 const isDragging = ref(false);
@@ -37,7 +39,6 @@ const onCardClick = () => {
 
 const customerName = computed(() => props.order.customer?.name || `Заказ #${props.order.id}`);
 const hasCustomTitle = computed(() => Boolean(props.order.title?.trim()));
-const displayTitle = computed(() => props.order.title?.trim() || customerName.value);
 const objectLine = computed(() => {
   const parts: string[] = [];
   if (hasCustomTitle.value) parts.push(customerName.value);
@@ -77,7 +78,14 @@ const hasComment = computed(() => Boolean(props.order.comment?.trim()));
     <header class="flex items-start gap-2">
       <div class="min-w-0 flex-1">
         <div class="flex min-w-0 items-center gap-2">
-          <p class="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900 dark:text-white">{{ displayTitle }}</p>
+          <OrderTitleEditor
+            class="min-w-0 flex-1"
+            :order-id="order.id"
+            :title="order.title"
+            :fallback-title="customerName"
+            text-class="text-sm"
+            @rename="(payload) => emit('renameOrder', payload)"
+          />
           <span class="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700 dark:bg-slate-700 dark:text-slate-300">{{ STATUS_LABELS[order.status] || order.status }}</span>
         </div>
         <p v-if="objectLine" class="mt-1 truncate text-xs text-gray-500 dark:text-slate-400">{{ objectLine }}</p>

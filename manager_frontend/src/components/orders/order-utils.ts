@@ -1,4 +1,5 @@
 import type { ManagerOrderListItemResponse } from '../../client';
+import type { Segment } from '../../api';
 
 export const STATUS_ORDER = [
     'negotiation',
@@ -42,4 +43,125 @@ export function isOverdue(order: ManagerOrderListItemResponse): boolean {
     const date = new Date(order.next_followup_date);
     if (Number.isNaN(date.getTime())) return false;
     return date.getTime() < Date.now();
+}
+
+export type CustomerOrderGroup = {
+    id: string;
+    customerId: number;
+    customerName: string;
+    originalCustomerName: string;
+    orders: ManagerOrderListItemResponse[];
+    totalAmount: number;
+    margin: number;
+    statusCounts: Array<{ status: string; count: number }>;
+    addresses: string[];
+    hiddenAddressCount: number;
+    hasOverdue: boolean;
+    needsAttention: boolean;
+};
+
+export type OrderRenderItem =
+    | { type: 'order'; order: ManagerOrderListItemResponse }
+    | { type: 'group'; group: CustomerOrderGroup };
+
+export function getOrderCustomerName(order: ManagerOrderListItemResponse, segment: Segment): string {
+    const customer = order.customer;
+    if (!customer) return `Заказ #${order.id}`;
+
+    if (segment === 'b2b') {
+        return customer.full_legal_name
+            || customer.name
+            || customer.phone
+            || customer.email
+            || `Клиент #${customer.id}`;
+    }
+
+    return customer.name
+        || customer.phone
+        || customer.email
+        || `Клиент #${customer.id}`;
+}
+
+export function formatOrderCount(count: number): string {
+    const mod10 = count % 10;
+    const mod100 = count % 100;
+    if (mod10 === 1 && mod100 !== 11) return `${count} заказ`;
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${count} заказа`;
+    return `${count} заказов`;
+}
+
+export function buildCustomerOrderRenderItems(
+    orders: ManagerOrderListItemResponse[],
+    segment: Segment,
+    groupingEnabled: boolean,
+    customerAliases: Record<number, string> = {},
+): OrderRenderItem[] {
+    if (!groupingEnabled) {
+        return orders.map((order) => ({ type: 'order', order }));
+    }
+
+    const customerCounts = new Map<number, number>();
+    for (const order of orders) {
+        const customerId = order.customer?.id;
+        if (!customerId) continue;
+        customerCounts.set(customerId, (customerCounts.get(customerId) || 0) + 1);
+    }
+
+    const groupedByCustomer = new Map<number, ManagerOrderListItemResponse[]>();
+    const emittedCustomers = new Set<number>();
+    const items: OrderRenderItem[] = [];
+
+    for (const order of orders) {
+        const customerId = order.customer?.id;
+        if (!customerId || (customerCounts.get(customerId) || 0) < 2) {
+            items.push({ type: 'order', order });
+            continue;
+        }
+
+        if (!groupedByCustomer.has(customerId)) {
+            groupedByCustomer.set(customerId, orders.filter((item) => item.customer?.id === customerId));
+        }
+        if (emittedCustomers.has(customerId)) continue;
+
+        emittedCustomers.add(customerId);
+        const groupOrders = groupedByCustomer.get(customerId) || [order];
+        items.push({ type: 'group', group: createCustomerOrderGroup(customerId, groupOrders, segment, customerAliases[customerId]) });
+    }
+
+    return items;
+}
+
+function createCustomerOrderGroup(
+    customerId: number,
+    orders: ManagerOrderListItemResponse[],
+    segment: Segment,
+    alias?: string,
+): CustomerOrderGroup {
+    const firstOrder = orders[0];
+    const statusCounter = new Map<string, number>();
+    const addresses: string[] = [];
+
+    for (const order of orders) {
+        statusCounter.set(order.status, (statusCounter.get(order.status) || 0) + 1);
+        const address = order.delivery_address?.trim();
+        if (address && !addresses.includes(address)) addresses.push(address);
+    }
+
+    const originalCustomerName = firstOrder ? getOrderCustomerName(firstOrder, segment) : `Клиент #${customerId}`;
+    const customerName = alias?.trim() || originalCustomerName;
+
+    return {
+        id: `customer-${customerId}-${orders.map((order) => order.id).join('-')}`,
+        customerId,
+        customerName,
+        originalCustomerName,
+        orders,
+        totalAmount: orders.reduce((sum, order) => sum + order.total_amount, 0),
+        margin: orders.reduce((sum, order) => sum + order.margin, 0),
+        statusCounts: Array.from(statusCounter.entries()).map(([status, count]) => ({ status, count })),
+        addresses: addresses.slice(0, 3),
+        hiddenAddressCount: Math.max(addresses.length - 3, 0),
+        hasOverdue: orders.some(isOverdue),
+        needsAttention: orders.some((order) => order.needs_attention),
+    };
 }

@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import type { ManagerOrderListItemResponse } from '../../client';
+import { computed, ref } from 'vue';
 import type { Segment } from '../../api';
-import { STATUS_LABELS, formatDate, formatMoney, formatPhone, isOverdue } from './order-utils';
+import type { OrderRenderItem } from './order-utils';
+import { STATUS_LABELS, formatMoney, formatOrderCount } from './order-utils';
+import OrderListRow from './OrderListRow.vue';
 
 const props = defineProps<{
-  orders: ManagerOrderListItemResponse[];
+  items: OrderRenderItem[];
   segment: Segment;
   sort?: string;
 }>();
@@ -13,6 +15,7 @@ const emit = defineEmits<{
   open: [orderId: number];
   generate: [payload: { orderId: number; docType: string }];
   'update:sort': [value: string];
+  renameOrder: [payload: { orderId: number; title: string | null }];
 }>();
 
 const toggleSort = (key: string) => {
@@ -20,13 +23,21 @@ const toggleSort = (key: string) => {
   else emit('update:sort', `${key}_desc`);
 };
 
-const customerName = (order: ManagerOrderListItemResponse) => (
-  props.segment === 'b2b'
-    ? (order.customer?.full_legal_name || order.customer?.name || '—')
-    : (order.customer?.name || '—')
+const expandedGroupIds = ref<string[]>([]);
+
+const toggleGroup = (groupId: string) => {
+  expandedGroupIds.value = expandedGroupIds.value.includes(groupId)
+    ? expandedGroupIds.value.filter((id) => id !== groupId)
+    : [...expandedGroupIds.value, groupId];
+};
+
+const groupStatusSummary = (item: OrderRenderItem) => (
+  item.type === 'group'
+    ? item.group.statusCounts.map((status) => `${status.count} ${STATUS_LABELS[status.status] || status.status}`).join(' · ')
+    : ''
 );
 
-const displayTitle = (order: ManagerOrderListItemResponse) => order.title?.trim() || `#${order.id}`;
+const totalOrderCount = computed(() => props.items.reduce((total, item) => total + (item.type === 'group' ? item.group.orders.length : 1), 0));
 </script>
 
 <template>
@@ -55,80 +66,58 @@ const displayTitle = (order: ManagerOrderListItemResponse) => order.title?.trim(
         </tr>
       </thead>
       <tbody>
-        <tr
-          v-for="order in orders"
-          :key="order.id"
-          class="border-t border-gray-100"
-          :class="isOverdue(order) ? 'bg-red-50' : ''"
-        >
-          <td class="px-3 py-3">
-            <p class="max-w-[260px] truncate font-semibold text-gray-900">{{ displayTitle(order) }}</p>
-            <p v-if="order.title?.trim()" class="max-w-[260px] truncate text-xs text-gray-500">#{{ order.id }} · {{ customerName(order) }}</p>
-            <div v-if="order.manager_labels?.length" class="mt-1 flex max-w-[260px] flex-wrap gap-1">
-              <span
-                v-for="label in order.manager_labels"
-                :key="label"
-                class="rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-teal-800"
-              >
-                {{ label }}
-              </span>
-            </div>
-          </td>
-          <td class="px-3 py-3">
-            <template v-if="segment === 'b2b'">
-              <p>{{ customerName(order) }}</p>
-              <p class="text-xs text-gray-500">УНП: {{ order.customer?.inn || '—' }}</p>
-            </template>
-            <template v-else>
-              <p>{{ customerName(order) }}</p>
-              <p class="text-xs text-gray-500">{{ formatPhone(order.customer?.phone) }}</p>
-            </template>
-          </td>
-          <td class="px-3 py-3">
-            <div class="mb-1">{{ STATUS_LABELS[order.status] || order.status }}</div>
-            <div class="flex flex-col gap-1 items-start">
-              <span v-if="order.needs_attention" class="rounded-full bg-red-100 text-red-700 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">🔴 Внимание</span>
-              <span v-if="order.awaiting_measurement" class="rounded-full bg-blue-100 text-blue-700 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">🕒 Замер</span>
-              <span v-if="order.client_thinking" class="rounded-full bg-amber-100 text-amber-700 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">⏳ Думают</span>
-              <span v-if="order.ready_for_execution" class="rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">✅ Согласовано</span>
-            </div>
-          </td>
-          <td class="px-3 py-3">{{ formatDate(order.next_followup_date) }}</td>
-          <td class="px-3 py-3">{{ formatMoney(order.total_amount) }}</td>
-          <td class="px-3 py-3 font-semibold text-teal-700">{{ formatMoney(order.margin) }}</td>
-          <td class="px-3 py-3">
-            <div class="flex flex-wrap gap-2">
-              <button
-                v-if="segment === 'b2b'"
-                class="btn-mini"
-                @click="emit('generate', { orderId: order.id, docType: 'invoice' })"
-              >
-                Счет
-              </button>
-              <button
-                v-if="segment === 'b2b'"
-                class="btn-mini"
-                @click="emit('generate', { orderId: order.id, docType: 'contract' })"
-              >
-                Договор
-              </button>
-              <button
-                v-if="segment === 'b2c'"
-                class="btn-mini"
-                @click="emit('generate', { orderId: order.id, docType: 'work_order' })"
-              >
-                Наряд
-              </button>
-              <button
-                v-if="segment === 'b2c'"
-                class="btn-mini"
-                @click="emit('generate', { orderId: order.id, docType: 'act' })"
-              >
-                Акт
-              </button>
-              <button class="btn-mini-outline" @click="emit('open', order.id)">Открыть</button>
-            </div>
-          </td>
+        <template v-for="item in items" :key="item.type === 'group' ? item.group.id : item.order.id">
+          <template v-if="item.type === 'group'">
+            <tr class="border-t border-gray-100 bg-slate-50">
+              <td class="px-3 py-3">
+                <button type="button" class="flex w-full min-w-0 items-center gap-2 text-left" @click="toggleGroup(item.group.id)">
+                  <span class="material-icons-round text-[18px] text-slate-500">{{ expandedGroupIds.includes(item.group.id) ? 'expand_less' : 'expand_more' }}</span>
+                  <div class="min-w-0">
+                    <p class="max-w-[320px] truncate font-semibold text-gray-900">{{ item.group.customerName }}</p>
+                    <p class="text-xs text-gray-500">{{ formatOrderCount(item.group.orders.length) }} · {{ groupStatusSummary(item) }}</p>
+                  </div>
+                </button>
+              </td>
+              <td class="px-3 py-3">
+                <p class="max-w-[260px] truncate">{{ item.group.addresses.join(' · ') || '—' }}</p>
+                <p class="text-xs text-gray-500">Всего: {{ formatOrderCount(item.group.orders.length) }}</p>
+              </td>
+              <td class="px-3 py-3">
+                <span v-if="item.group.needsAttention" class="rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-700">Внимание</span>
+                <span v-else-if="item.group.hasOverdue" class="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700">Есть просрочка</span>
+                <span v-else class="text-xs text-gray-500">Без срочных флагов</span>
+              </td>
+              <td class="px-3 py-3 text-xs text-gray-500">Группа клиента</td>
+              <td class="px-3 py-3">{{ formatMoney(item.group.totalAmount) }}</td>
+              <td class="px-3 py-3 font-semibold text-teal-700">{{ formatMoney(item.group.margin) }}</td>
+              <td class="px-3 py-3">
+                <button class="btn-mini-outline" type="button" @click="toggleGroup(item.group.id)">
+                  {{ expandedGroupIds.includes(item.group.id) ? 'Скрыть' : 'Показать' }}
+                </button>
+              </td>
+            </tr>
+            <OrderListRow
+              v-for="order in expandedGroupIds.includes(item.group.id) ? item.group.orders : []"
+              :key="`group-${item.group.id}-order-${order.id}`"
+              :order="order"
+              :segment="segment"
+              nested
+              @open="(orderId) => emit('open', orderId)"
+              @generate="(payload) => emit('generate', payload)"
+              @rename-order="(payload) => emit('renameOrder', payload)"
+            />
+          </template>
+          <OrderListRow
+            v-else
+            :order="item.order"
+            :segment="segment"
+            @open="(orderId) => emit('open', orderId)"
+            @generate="(payload) => emit('generate', payload)"
+            @rename-order="(payload) => emit('renameOrder', payload)"
+          />
+        </template>
+        <tr v-if="!totalOrderCount">
+          <td colspan="7" class="px-3 py-8 text-center text-sm text-gray-500">Заказы не найдены</td>
         </tr>
       </tbody>
     </table>

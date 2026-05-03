@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { SlidersHorizontal } from 'lucide-vue-next';
 import type { DashboardView, Segment } from '../../api';
 import { api } from '../../api';
 import type { ManagerOrderDetailResponse, ManagerOrderListItemResponse, ManagerOrderUpdatePayload } from '../../client';
@@ -8,11 +9,13 @@ import OrdersViewToggle from './OrdersViewToggle.vue';
 import OrderKanbanBoard from './OrderKanbanBoard.vue';
 import OrdersListTable from './OrdersListTable.vue';
 import OrderEditDrawer from './OrderEditDrawer.vue';
-import { STATUS_LABELS, STATUS_ORDER } from './order-utils';
+import { STATUS_LABELS, STATUS_ORDER, buildCustomerOrderRenderItems } from './order-utils';
 import { getApiErrorMessage, parseApiFieldErrors } from '../../utils/api-errors';
 
 const ORDERS_SEGMENT_STORAGE_KEY = 'manager_orders_segment';
 const ORDERS_VIEW_STORAGE_KEY = 'manager_orders_view';
+const ORDERS_GROUP_BY_CUSTOMER_STORAGE_KEY = 'manager_orders_group_by_customer_v2';
+const ORDERS_CUSTOMER_ALIASES_STORAGE_KEY = 'manager_orders_customer_aliases';
 
 const segment = ref<Segment>('b2c');
 const view = ref<DashboardView>('kanban');
@@ -41,18 +44,35 @@ const loginLoading = ref(false);
 const loginError = ref('');
 
 const hideOnHold = ref(true);
+const groupByCustomer = ref(true);
+const filtersOpen = ref(false);
+const customerAliases = ref<Record<number, string>>({});
+
+const visibleOrders = computed(() => (
+  hideOnHold.value ? orders.value.filter((order) => !order.is_on_hold) : orders.value
+));
 
 const groupedOrders = computed(() => {
   const groups: Record<string, ManagerOrderListItemResponse[]> = {};
   for (const statusKey of STATUS_ORDER) groups[statusKey] = [];
-  for (const order of orders.value) {
-    if (hideOnHold.value && order.is_on_hold) continue;
+  for (const order of visibleOrders.value) {
     const key = order.status;
     if (!groups[key]) groups[key] = [];
     groups[key].push(order);
   }
   return groups;
 });
+
+const groupedOrderItems = computed(() => {
+  const groups = groupedOrders.value;
+  const items: Record<string, ReturnType<typeof buildCustomerOrderRenderItems>> = {};
+  for (const statusKey of STATUS_ORDER) {
+    items[statusKey] = buildCustomerOrderRenderItems(groups[statusKey] || [], segment.value, groupByCustomer.value, customerAliases.value);
+  }
+  return items;
+});
+
+const listItems = computed(() => buildCustomerOrderRenderItems(visibleOrders.value, segment.value, groupByCustomer.value, customerAliases.value));
 
 const setToast = (message: string) => {
   toast.value = message;
@@ -76,9 +96,11 @@ const restoreSegmentAndView = () => {
   const params = new URLSearchParams(window.location.search);
   const segmentFromUrl = params.get('segment');
   const viewFromUrl = params.get('view');
+  const groupByFromUrl = params.get('groupBy');
 
   const segmentFromStorage = window.localStorage.getItem(ORDERS_SEGMENT_STORAGE_KEY);
   const viewFromStorage = window.localStorage.getItem(ORDERS_VIEW_STORAGE_KEY);
+  const groupByFromStorage = window.localStorage.getItem(ORDERS_GROUP_BY_CUSTOMER_STORAGE_KEY);
 
   const resolvedSegment = segmentFromUrl || segmentFromStorage;
   const resolvedView = viewFromUrl || viewFromStorage;
@@ -89,6 +111,11 @@ const restoreSegmentAndView = () => {
   if (resolvedView === 'kanban' || resolvedView === 'list') {
     view.value = resolvedView as DashboardView;
   }
+  if (groupByFromUrl === 'customer') {
+    groupByCustomer.value = true;
+  } else if (!groupByFromUrl && groupByFromStorage === 'false') {
+    groupByCustomer.value = false;
+  }
 };
 
 const persistSegmentAndView = () => {
@@ -96,6 +123,56 @@ const persistSegmentAndView = () => {
   window.localStorage.setItem(ORDERS_VIEW_STORAGE_KEY, view.value);
   setQueryParam('segment', segment.value);
   setQueryParam('view', view.value);
+};
+
+const persistGrouping = () => {
+  window.localStorage.setItem(ORDERS_GROUP_BY_CUSTOMER_STORAGE_KEY, groupByCustomer.value ? 'true' : 'false');
+  setQueryParam('groupBy', groupByCustomer.value ? 'customer' : '');
+};
+
+const restoreCustomerAliases = () => {
+  try {
+    const raw = window.localStorage.getItem(ORDERS_CUSTOMER_ALIASES_STORAGE_KEY);
+    customerAliases.value = raw ? JSON.parse(raw) : {};
+  } catch {
+    customerAliases.value = {};
+  }
+};
+
+const persistCustomerAliases = () => {
+  window.localStorage.setItem(ORDERS_CUSTOMER_ALIASES_STORAGE_KEY, JSON.stringify(customerAliases.value));
+};
+
+const renameCustomerGroup = (payload: { customerId: number; alias: string | null }) => {
+  const next = { ...customerAliases.value };
+  if (payload.alias) {
+    next[payload.customerId] = payload.alias;
+  } else {
+    delete next[payload.customerId];
+  }
+  customerAliases.value = next;
+  persistCustomerAliases();
+  setToast(payload.alias ? 'Название группы сохранено' : 'Название группы сброшено');
+};
+
+const renameOrderTitle = async (payload: { orderId: number; title: string | null }) => {
+  const nextTitle = payload.title?.trim() || null;
+  const snapshot = orders.value.map((item) => ({ ...item }));
+  const item = orders.value.find((order) => order.id === payload.orderId);
+  const previousSelectedTitle = selectedOrder.value?.id === payload.orderId ? selectedOrder.value.title : undefined;
+
+  if (item) item.title = nextTitle;
+  if (selectedOrder.value?.id === payload.orderId) selectedOrder.value.title = nextTitle;
+
+  try {
+    await api.patchManagerOrder(payload.orderId, { title: nextTitle });
+    setToast(nextTitle ? 'Название заказа сохранено' : 'Название заказа сброшено');
+  } catch (error) {
+    console.error(error);
+    orders.value = snapshot;
+    if (selectedOrder.value?.id === payload.orderId) selectedOrder.value.title = previousSelectedTitle ?? null;
+    setToast(`Не удалось сохранить название: ${getApiErrorMessage(error)}`);
+  }
 };
 
 const loadOrders = async () => {
@@ -145,6 +222,10 @@ watch(
 );
 watch(view, () => {
   persistSegmentAndView();
+});
+watch(groupByCustomer, () => {
+  if (!isHydrated.value) return;
+  persistGrouping();
 });
 watch(search, () => {
   if (!isHydrated.value) return;
@@ -280,6 +361,7 @@ const handleLogin = async () => {
 };
 
 onMounted(async () => {
+  restoreCustomerAliases();
   restoreSegmentAndView();
   const params = new URLSearchParams(window.location.search);
   const searchParam = params.get('search');
@@ -294,6 +376,7 @@ onMounted(async () => {
     }
   }
   persistSegmentAndView();
+  persistGrouping();
   try {
     await loadOrders();
   } finally {
@@ -315,38 +398,53 @@ watch(drawerOpen, (isOpen) => {
 <template>
   <div class="min-h-screen bg-gray-50 text-slate-900">
     <div class="mx-auto max-w-[1400px] px-4 py-6 md:px-8">
-      <header class="mb-5 rounded-[2rem] border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm p-4">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="flex flex-wrap items-center gap-3 md:gap-4">
-            <h1 class="text-xl md:text-2xl font-bold dark:text-white">Заказы</h1>
+      <header class="mb-4 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div class="flex items-center gap-1 pl-14 sm:gap-2 md:pl-0">
+          <div class="flex min-w-0 shrink items-center gap-1 sm:gap-2">
+            <h1 class="shrink-0 text-lg font-bold dark:text-white md:text-xl">Заказы</h1>
             <OrdersTabSwitcher v-model="segment" />
           </div>
-          <div class="flex items-center gap-3 ml-auto">
-            <label v-if="view === 'kanban'" class="hidden sm:inline-flex items-center gap-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-gray-700 dark:text-slate-300 px-3 py-1.5 cursor-pointer text-sm font-medium">
-              <input v-model="hideOnHold" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
-              Скрывать отложенные
-            </label>
+          <div class="ml-auto flex shrink-0 items-center justify-end gap-1 sm:gap-2">
             <OrdersViewToggle v-model="view" />
+            <button
+              type="button"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-700 transition hover:bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 sm:h-9 sm:w-9"
+              :class="filtersOpen ? 'bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300' : ''"
+              :aria-expanded="filtersOpen"
+              aria-label="Опции и фильтры"
+              title="Опции и фильтры"
+              @click="filtersOpen = !filtersOpen"
+            >
+              <SlidersHorizontal class="h-4 w-4" />
+            </button>
           </div>
         </div>
         
-        <div v-if="view === 'list'" class="mt-4 grid gap-3 md:grid-cols-3 lg:grid-cols-4 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-[1rem] border border-gray-100 dark:border-slate-700">
-          <input v-model="search" class="field-input" placeholder="Поиск (клиент, УНП, ID)..." />
-          <select v-model="statusFilter" class="field-input">
-            <option value="">Все статусы</option>
-            <option v-for="statusKey in STATUS_ORDER" :key="statusKey" :value="statusKey">
-              {{ STATUS_LABELS[statusKey] || statusKey }}
-            </option>
-          </select>
-          <label class="inline-flex items-center gap-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 px-3 py-2 cursor-pointer transition hover:bg-gray-50 dark:hover:bg-slate-700">
-            <input v-model="overdueOnly" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
-            <span class="font-medium text-sm">Только просроченные</span>
-          </label>
-          <label class="inline-flex items-center gap-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 px-3 py-2 cursor-pointer transition hover:bg-gray-50 dark:hover:bg-slate-700">
-            <input v-model="hideOnHold" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
-            <span class="font-medium text-sm">Скрывать отложенные</span>
-          </label>
-        </div>
+        <Transition name="fade">
+          <div v-if="filtersOpen" class="mt-3 grid gap-3 rounded-2xl border border-gray-100 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50 md:grid-cols-3 lg:grid-cols-4">
+            <template v-if="view === 'list'">
+              <input v-model="search" class="field-input" placeholder="Поиск (клиент, УНП, ID)..." />
+              <select v-model="statusFilter" class="field-input">
+                <option value="">Все статусы</option>
+                <option v-for="statusKey in STATUS_ORDER" :key="statusKey" :value="statusKey">
+                  {{ STATUS_LABELS[statusKey] || statusKey }}
+                </option>
+              </select>
+              <label class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-gray-700 transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
+                <input v-model="overdueOnly" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+                <span class="text-sm font-medium">Только просроченные</span>
+              </label>
+            </template>
+            <label class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-gray-700 transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
+              <input v-model="groupByCustomer" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+              <span class="text-sm font-medium">Группировать</span>
+            </label>
+            <label class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-gray-700 transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
+              <input v-model="hideOnHold" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+              <span class="text-sm font-medium">Скрывать отложенные</span>
+            </label>
+          </div>
+        </Transition>
       </header>
 
       <!-- Toast -->
@@ -359,22 +457,25 @@ watch(drawerOpen, (isOpen) => {
 
       <OrderKanbanBoard
         v-if="view === 'kanban'"
-        :grouped-orders="groupedOrders"
+        :grouped-items="groupedOrderItems"
         :segment="segment"
         :moving-order-ids="movingOrderIds"
         @open="openOrder"
         @generate="onGenerateDoc"
         @move="onMoveOrder"
+        @rename-customer="renameCustomerGroup"
+        @rename-order="renameOrderTitle"
       />
 
       <OrdersListTable
         v-else
-        :orders="orders"
+        :items="listItems"
         :segment="segment"
         :sort="sort"
         @update:sort="sort = $event"
         @open="openOrder"
         @generate="onGenerateDoc"
+        @rename-order="renameOrderTitle"
       />
     </div>
 
