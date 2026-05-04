@@ -1300,7 +1300,12 @@ const applyEstimateToServices = async () => {
 };
 
 const removeProductLine = (index: number) => {
+  if (!window.confirm('Удалить этот товар из заказа?')) return;
   productLines.value.splice(index, 1);
+  if (activeSuggestionIndex.value === index) {
+    activeSuggestionIndex.value = null;
+    productOptions.value = [];
+  }
 };
 
 const removeServiceLine = (index: number) => {
@@ -1857,75 +1862,104 @@ watch(
                 </label>
               </div>
             </div>
-          <button class="btn-mini" @click="addProductLine">Добавить товар</button>
         </div>
         <p v-if="getFieldError('products')" class="mb-2 text-xs text-red-300">{{ getFieldError('products') }}</p>
-        <div class="mb-2 hidden grid-cols-12 gap-2 px-2 text-[11px] uppercase tracking-[0.08em] text-gray-500 md:grid">
-          <div class="col-span-5">Товар</div>
-          <div class="col-span-2">Цена</div>
-          <div class="col-span-2">Себест.</div>
-          <div class="col-span-2">Кол-во / Сумма</div>
-          <div class="col-span-1">Действия</div>
-        </div>
         <div class="space-y-2">
-          <div v-for="(line, index) in productLines" :key="`product-${index}`" class="grid grid-cols-1 gap-2 rounded-xl border border-gray-200 bg-white p-2 md:grid-cols-12">
-            <div class="md:col-span-5">
-              <input
-                v-model="line.product_query"
-                class="field-input"
-                placeholder="Поиск и выбор товара"
-                @focus="onProductInputFocus(index)"
-                @input="onProductQueryInput(index)"
-                @blur="onProductInputBlur(index)"
-              />
-              <div
-                v-if="!line.product_id && line.product_query.trim().length >= 2 && (productLookupLoading || getProductSuggestions(index).length)"
-                class="mt-1 max-h-56 overflow-auto rounded-[12px] border border-gray-200 bg-white p-1"
-              >
-                <div v-if="productLookupLoading" class="px-3 py-2 text-xs text-gray-500">Поиск товаров...</div>
-                <button
-                  v-for="item in getProductSuggestions(index)"
-                  :key="`product-suggest-${index}-${item.id}`"
-                  type="button"
-                  class="mb-1 block w-full rounded-[12px] px-3 py-2 text-left text-xs text-gray-700 hover:bg-slate-100 dark:hover:bg-slate-800 last:mb-0"
-                  @click="selectProductForLine(index, item)"
-                >
-                  <p class="truncate font-medium text-gray-900 dark:text-slate-100">{{ item.title }}</p>
-                  <p class="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-gray-500 dark:text-slate-300">
-                    <span>{{ formatMoney(item.price) }}</span>
-                    <span>·</span>
-                    <span>{{ item.is_inverter ? 'Инвертор' : 'On/Off' }}</span>
-                    <span>·</span>
-                    <template v-if="item.vitebsk_qty > 0 || item.minsk_qty > 0">
-                      <span v-if="item.vitebsk_qty > 0" class="font-medium text-emerald-600 bg-emerald-50 px-1 rounded">Вит: {{item.vitebsk_qty}}</span>
-                      <span v-if="item.minsk_qty > 0" class="font-medium text-blue-500 bg-blue-50 px-1 rounded">Минск: {{item.minsk_qty}}</span>
-                    </template>
-                    <template v-else>
-                      <span v-if="item.availability_status === 'check_availability'" class="font-medium text-amber-500">Уточнять</span>
-                      <span v-else class="text-gray-400">Нет в наличии</span>
-                    </template>
-                  </p>
-                </button>
-              </div>
-            </div>
-            <input v-model.number="line.price" type="number" min="0" class="field-input md:col-span-2" placeholder="Цена" />
-            <input v-model.number="line.cost" type="number" min="0" class="field-input md:col-span-2" placeholder="Себест." />
-            <div class="flex flex-col gap-1 md:col-span-2">
-              <input v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="Кол-во" />
-              <p class="px-1 text-xs text-gray-500">Σ {{ formatMoney(lineTotal(line)) }}</p>
-            </div>
-            <div class="flex gap-2 md:col-span-1 md:flex-col md:gap-1">
-              <button class="btn-mini-outline flex-1 px-0" type="button" :disabled="!line.product_id" @click="openSelectedProduct(index)">↗</button>
-              <button class="btn-mini-outline flex-1 px-0" type="button" @click="removeProductLine(index)">×</button>
-            </div>
-            <p
-              v-if="isPriceDifferentFromCatalog(line)"
-              class="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-700 md:col-span-12"
+          <div
+            v-for="(line, index) in productLines"
+            :key="`product-${index}`"
+            class="relative rounded-xl border border-gray-200 bg-white p-3 shadow-sm"
+          >
+            <button
+              type="button"
+              class="absolute -right-2 -top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-200 bg-red-50 text-lg font-bold text-red-600 shadow-sm transition-colors hover:bg-red-100"
+              :aria-label="`Удалить товар #${index + 1}`"
+              title="Удалить товар"
+              @click="removeProductLine(index)"
             >
-              Цена строки отличается от каталожной ({{ formatMoney(currentCatalogPrice(line.product_id) || 0) }}).
-            </p>
+              ×
+            </button>
+            <div class="grid grid-cols-6 gap-2 md:grid-cols-12 md:items-start">
+              <label class="relative col-span-6 space-y-1 md:col-span-5">
+                <span class="flex items-center justify-between gap-2 px-1 text-xs font-medium text-gray-500 md:h-6">
+                  <span>Название</span>
+                  <button
+                    v-if="line.product_id"
+                    class="text-xs font-semibold text-teal-700 hover:text-teal-900"
+                    type="button"
+                    @click="openSelectedProduct(index)"
+                  >
+                    Открыть ↗
+                  </button>
+                </span>
+                <textarea
+                  v-model="line.product_query"
+                  class="field-input min-h-[44px] resize-none overflow-hidden text-sm leading-snug focus:min-h-[120px] focus:resize-y focus:overflow-auto sm:text-base"
+                  rows="1"
+                  placeholder="Поиск и выбор товара"
+                  @focus="onProductInputFocus(index)"
+                  @input="onProductQueryInput(index)"
+                  @blur="onProductInputBlur(index)"
+                />
+                <div
+                  v-if="!line.product_id && line.product_query.trim().length >= 2 && (productLookupLoading || getProductSuggestions(index).length)"
+                  class="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-auto rounded-[12px] border border-gray-200 bg-white p-1 shadow-xl"
+                >
+                  <div v-if="productLookupLoading" class="px-3 py-2 text-xs text-gray-500">Поиск товаров...</div>
+                  <button
+                    v-for="item in getProductSuggestions(index)"
+                    :key="`product-suggest-${index}-${item.id}`"
+                    type="button"
+                    class="mb-1 block w-full rounded-[12px] px-3 py-2 text-left text-xs text-gray-700 hover:bg-slate-100 dark:hover:bg-slate-800 last:mb-0"
+                    @mousedown.prevent
+                    @click="selectProductForLine(index, item)"
+                  >
+                    <p class="truncate font-medium text-gray-900 dark:text-slate-100">{{ item.title }}</p>
+                    <p class="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-gray-500 dark:text-slate-300">
+                      <span>{{ formatMoney(item.price) }}</span>
+                      <span>·</span>
+                      <span>{{ item.is_inverter ? 'Инвертор' : 'On/Off' }}</span>
+                      <span>·</span>
+                      <template v-if="item.vitebsk_qty > 0 || item.minsk_qty > 0">
+                        <span v-if="item.vitebsk_qty > 0" class="font-medium text-emerald-600 bg-emerald-50 px-1 rounded">Вит: {{item.vitebsk_qty}}</span>
+                        <span v-if="item.minsk_qty > 0" class="font-medium text-blue-500 bg-blue-50 px-1 rounded">Минск: {{item.minsk_qty}}</span>
+                      </template>
+                      <template v-else>
+                        <span v-if="item.availability_status === 'check_availability'" class="font-medium text-amber-500">Уточнять</span>
+                        <span v-else class="text-gray-400">Нет в наличии</span>
+                      </template>
+                    </p>
+                  </button>
+                </div>
+              </label>
+              <label class="col-span-4 space-y-1 md:col-span-2">
+                <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Цена</span>
+                <input v-model.number="line.price" type="number" min="0" class="field-input" placeholder="0" />
+              </label>
+              <label class="col-span-2 space-y-1 md:col-span-1">
+                <span class="flex h-auto items-center whitespace-nowrap px-1 text-xs font-medium text-gray-500 md:h-6 md:text-[11px]">Кол-во</span>
+                <input v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="1" />
+              </label>
+              <label class="col-span-3 space-y-1 md:col-span-2">
+                <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Себест.</span>
+                <input v-model.number="line.cost" type="number" min="0" class="field-input" placeholder="0" />
+              </label>
+              <div class="col-span-3 space-y-1 md:col-span-2">
+                <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Итого</span>
+                <div class="rounded-lg bg-gray-50 px-3 py-2">
+                  <p class="whitespace-nowrap text-base font-semibold leading-tight text-gray-900">{{ formatMoney(lineTotal(line)) }}</p>
+                </div>
+              </div>
+              <p
+                v-if="isPriceDifferentFromCatalog(line)"
+                class="col-span-6 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-700 md:col-span-12"
+              >
+                Цена строки отличается от каталожной ({{ formatMoney(currentCatalogPrice(line.product_id) || 0) }}).
+              </p>
+            </div>
           </div>
         </div>
+        <button type="button" class="btn-mini mt-3 w-full justify-center" @click="addProductLine">+ товар</button>
       </section>
 
         <section class="mt-6">
@@ -1948,9 +1982,9 @@ watch(
               >
                 ×
               </button>
-              <div class="grid grid-cols-6 gap-2 md:grid-cols-12 md:items-end">
+              <div class="grid grid-cols-6 gap-2 md:grid-cols-12 md:items-start">
                 <label class="relative col-span-6 space-y-1 md:col-span-5">
-                  <span class="px-1 text-xs font-medium text-gray-500">Название</span>
+                  <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Название</span>
                   <textarea
                     v-model="line.title"
                     class="field-input min-h-[64px] resize-none overflow-hidden text-sm leading-snug focus:min-h-[120px] focus:resize-y focus:overflow-auto sm:text-base"
@@ -1984,21 +2018,21 @@ watch(
                   </div>
                 </label>
                 <label class="col-span-4 space-y-1 md:col-span-2">
-                  <span class="px-1 text-xs font-medium text-gray-500">Цена</span>
+                  <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Цена</span>
                   <input v-model.number="line.price" type="number" min="0" class="field-input" placeholder="0" />
                 </label>
                 <label class="col-span-2 space-y-1 md:col-span-1">
-                  <span class="px-1 text-xs font-medium text-gray-500">Кол-во</span>
+                  <span class="flex h-auto items-center whitespace-nowrap px-1 text-xs font-medium text-gray-500 md:h-6 md:text-[11px]">Кол-во</span>
                   <input v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="1" />
                 </label>
                 <label class="col-span-3 space-y-1 md:col-span-2">
-                  <span class="px-1 text-xs font-medium text-gray-500">Себест.</span>
+                  <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Себест.</span>
                   <input v-model.number="line.cost" type="number" min="0" class="field-input" placeholder="0" />
                 </label>
                 <div class="col-span-3 space-y-1 md:col-span-2">
-                  <span class="px-1 text-xs font-medium text-gray-500">Итого</span>
+                  <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Итого</span>
                   <div class="rounded-lg bg-gray-50 px-3 py-2">
-                    <p class="text-lg font-semibold leading-tight text-gray-900">{{ formatMoney(lineTotal(line)) }}</p>
+                    <p class="whitespace-nowrap text-base font-semibold leading-tight text-gray-900">{{ formatMoney(lineTotal(line)) }}</p>
                   </div>
                 </div>
               </div>
