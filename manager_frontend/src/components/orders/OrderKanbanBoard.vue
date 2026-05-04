@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import type { ManagerOrderListItemResponse } from '../../client';
 import type { Segment } from '../../api';
+import type { OrderRenderItem } from './order-utils';
 import OrderColumn from './OrderColumn.vue';
 import { STATUS_LABELS, STATUS_ORDER } from './order-utils';
 
 defineProps<{
-  groupedOrders: Record<string, ManagerOrderListItemResponse[]>;
+  groupedItems: Record<string, OrderRenderItem[]>;
   segment: Segment;
   movingOrderIds: number[];
 }>();
@@ -15,10 +15,13 @@ const emit = defineEmits<{
   open: [orderId: number];
   generate: [payload: { orderId: number; docType: string }];
   move: [payload: { orderId: number; oldStatus: string; newStatus: string }];
+  renameCustomer: [payload: { customerId: number; alias: string | null }];
+  renameOrder: [payload: { orderId: number; title: string | null }];
 }>();
 
 const dragContext = ref<{ orderId: number; oldStatus: string } | null>(null);
 const expandedOrderId = ref<number | null>(null);
+const expandedGroupIds = ref<string[]>([]);
 
 const onToggleExpanded = (orderId: number) => {
   expandedOrderId.value = expandedOrderId.value === orderId ? null : orderId;
@@ -41,6 +44,12 @@ const onDropTo = (newStatus: string) => {
 const onDragStart = (payload: { orderId: number; oldStatus: string }) => {
   dragContext.value = payload;
 };
+
+const onToggleGroup = (groupId: string) => {
+  expandedGroupIds.value = expandedGroupIds.value.includes(groupId)
+    ? expandedGroupIds.value.filter((id) => id !== groupId)
+    : [...expandedGroupIds.value, groupId];
+};
 </script>
 
 <template>
@@ -50,15 +59,19 @@ const onDragStart = (payload: { orderId: number; oldStatus: string }) => {
       :key="status"
       :status="status"
       :label="STATUS_LABELS[status] || status"
-      :orders="groupedOrders[status] || []"
+      :items="groupedItems[status] || []"
       :segment="segment"
       :moving-order-ids="movingOrderIds"
       :expanded-order-id="expandedOrderId"
+      :expanded-group-ids="expandedGroupIds"
       @open="(orderId) => emit('open', orderId)"
       @generate="(payload) => emit('generate', payload)"
       @drag-start="(payload) => onDragStart(payload)"
       @drop-to="(dropStatus) => onDropTo(dropStatus)"
       @toggle-expanded="onToggleExpanded"
+      @toggle-group="onToggleGroup"
+      @rename-customer="(payload) => emit('renameCustomer', payload)"
+      @rename-order="(payload) => emit('renameOrder', payload)"
     />
   </div>
 </template>

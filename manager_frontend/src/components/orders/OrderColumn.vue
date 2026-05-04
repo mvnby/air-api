@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import type { ManagerOrderListItemResponse } from '../../client';
 import type { Segment } from '../../api';
+import type { OrderRenderItem } from './order-utils';
 import OrderCardB2B from './OrderCardB2B.vue';
 import OrderCardB2C from './OrderCardB2C.vue';
+import OrderCustomerGroupCard from './OrderCustomerGroupCard.vue';
 
-defineProps<{
+const props = defineProps<{
   status: string;
   label: string;
-  orders: ManagerOrderListItemResponse[];
+  items: OrderRenderItem[];
   segment: Segment;
   movingOrderIds: number[];
   expandedOrderId: number | null;
+  expandedGroupIds: string[];
 }>();
 
 const emit = defineEmits<{
@@ -19,7 +21,12 @@ const emit = defineEmits<{
   dragStart: [payload: { orderId: number; oldStatus: string }];
   dropTo: [status: string];
   toggleExpanded: [orderId: number];
+  toggleGroup: [groupId: string];
+  renameCustomer: [payload: { customerId: number; alias: string | null }];
+  renameOrder: [payload: { orderId: number; title: string | null }];
 }>();
+
+const orderCount = () => props.items.reduce((total, item) => total + (item.type === 'group' ? item.group.orders.length : 1), 0);
 
 const onDrop = (event: DragEvent, status: string) => {
   event.preventDefault();
@@ -35,22 +42,39 @@ const onDrop = (event: DragEvent, status: string) => {
   >
     <header class="mb-3 flex items-center justify-between">
       <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">{{ label }}</h3>
-      <span class="rounded-full bg-gray-100 dark:bg-slate-700 px-2 py-0.5 text-xs text-gray-700 dark:text-slate-300">{{ orders.length }}</span>
+      <span class="rounded-full bg-gray-100 dark:bg-slate-700 px-2 py-0.5 text-xs text-gray-700 dark:text-slate-300">{{ orderCount() }}</span>
     </header>
 
     <div class="space-y-3">
-      <component
-        :is="segment === 'b2b' ? OrderCardB2B : OrderCardB2C"
-        v-for="order in orders"
-        :key="order.id"
-        :order="order"
-        :expanded="expandedOrderId === order.id"
-        :draggable-disabled="movingOrderIds.includes(order.id)"
-        @open="(orderId) => emit('open', orderId)"
-        @generate="(payload) => emit('generate', payload)"
-        @drag-start="(payload) => emit('dragStart', payload)"
-        @toggle-expanded="(orderId) => emit('toggleExpanded', orderId)"
-      />
+      <template v-for="item in items" :key="item.type === 'group' ? item.group.id : item.order.id">
+        <OrderCustomerGroupCard
+          v-if="item.type === 'group'"
+          :group="item.group"
+          :segment="segment"
+          :expanded="expandedGroupIds.includes(item.group.id)"
+          :moving-order-ids="movingOrderIds"
+          :expanded-order-id="expandedOrderId"
+          @open="(orderId) => emit('open', orderId)"
+          @generate="(payload) => emit('generate', payload)"
+          @drag-start="(payload) => emit('dragStart', payload)"
+          @toggle-expanded="(orderId) => emit('toggleExpanded', orderId)"
+          @toggle-group="(groupId) => emit('toggleGroup', groupId)"
+          @rename-customer="(payload) => emit('renameCustomer', payload)"
+          @rename-order="(payload) => emit('renameOrder', payload)"
+        />
+        <component
+          :is="segment === 'b2b' ? OrderCardB2B : OrderCardB2C"
+          v-else
+          :order="item.order"
+          :expanded="expandedOrderId === item.order.id"
+          :draggable-disabled="movingOrderIds.includes(item.order.id)"
+          @open="(orderId) => emit('open', orderId)"
+          @generate="(payload) => emit('generate', payload)"
+          @drag-start="(payload) => emit('dragStart', payload)"
+          @toggle-expanded="(orderId) => emit('toggleExpanded', orderId)"
+          @rename-order="(payload) => emit('renameOrder', payload)"
+        />
+      </template>
     </div>
   </section>
 </template>
