@@ -6859,6 +6859,82 @@
         }
       }
     },
+    "/api/manager/tariffs/quick-add": {
+      "get": {
+        "tags": [
+          "manager/tariffs"
+        ],
+        "summary": "List Manager Quick Tariffs",
+        "operationId": "list_manager_quick_tariffs",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Q"
+            }
+          },
+          {
+            "name": "service_kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ManagerTariffServiceKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Service Kind"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 10,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerQuickTariffListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/tariffs/{tariff_id}": {
       "put": {
         "tags": [
@@ -14695,6 +14771,64 @@
         },
         "type": "object",
         "title": "ManagerOrderUpdatePayload"
+      },
+      "ManagerQuickTariffListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerQuickTariffResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ManagerQuickTariffListResponse"
+      },
+      "ManagerQuickTariffResponse": {
+        "properties": {
+          "tariff_id": {
+            "type": "integer",
+            "title": "Tariff Id"
+          },
+          "service_kind": {
+            "$ref": "#/components/schemas/ManagerTariffServiceKind"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "price": {
+            "type": "integer",
+            "title": "Price"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category",
+            "default": ""
+          },
+          "power_range": {
+            "type": "string",
+            "title": "Power Range",
+            "default": ""
+          },
+          "included_route_meters": {
+            "type": "number",
+            "title": "Included Route Meters",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "tariff_id",
+          "service_kind",
+          "title",
+          "price"
+        ],
+        "title": "ManagerQuickTariffResponse"
       },
       "ManagerRestoreJobStartResponse": {
         "properties": {

@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ManagerActionMessageResponse } from '../models/ManagerActionMessageResponse';
+import type { ManagerQuickTariffListResponse } from '../models/ManagerQuickTariffListResponse';
 import type { ManagerTariffCreatePayload } from '../models/ManagerTariffCreatePayload';
 import type { ManagerTariffListResponse } from '../models/ManagerTariffListResponse';
 import type { ManagerTariffResponse } from '../models/ManagerTariffResponse';
@@ -53,6 +54,32 @@ export class ManagerTariffsService {
             url: '/api/manager/tariffs',
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Manager Quick Tariffs
+     * @param q
+     * @param serviceKind
+     * @param limit
+     * @returns ManagerQuickTariffListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listManagerQuickTariffs(
+        q: string = '',
+        serviceKind?: (ManagerTariffServiceKind | null),
+        limit: number = 10,
+    ): CancelablePromise<ManagerQuickTariffListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/tariffs/quick-add',
+            query: {
+                'q': q,
+                'service_kind': serviceKind,
+                'limit': limit,
+            },
             errors: {
                 422: `Validation Error`,
             },
