@@ -32,6 +32,8 @@ import {
 
     type ManagerSettingUpdatePayload,
     type ManagerTariffCreatePayload,
+    type ManagerQuickTariffListResponse,
+    type ManagerQuickTariffResponse,
     type ManagerTariffRuleCreatePayload,
     type ManagerTariffRuleUpdatePayload,
     type ManagerTariffServiceKind,
@@ -88,6 +90,10 @@ export type {
     ManagerServiceEstimateOrderLinesResponse,
     ManagerServiceEstimateResponse,
     ManagerInstallEstimateResponse,
+};
+export type {
+    ManagerQuickTariffListResponse,
+    ManagerQuickTariffResponse,
 };
 
 type ManagerBrand = ManagerBrandResponse;
@@ -266,6 +272,10 @@ export const api = {
 
     async listManagerTariffsByKind(serviceKind?: ManagerTariffServiceKind, includeInactive = true) {
         return await ManagerTariffsService.listManagerTariffs(serviceKind ?? null, includeInactive);
+    },
+
+    async listManagerQuickTariffs(q = '', serviceKind?: ManagerTariffServiceKind | null, limit = 10): Promise<ManagerQuickTariffListResponse> {
+        return await ManagerTariffsService.listManagerQuickTariffs(q, serviceKind ?? null, limit);
     },
 
     async createManagerTariff(payload: ManagerTariffCreatePayload) {
