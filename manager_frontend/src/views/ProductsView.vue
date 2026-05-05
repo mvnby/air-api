@@ -1015,10 +1015,10 @@ watchDebounced(
           <button
             @click="showOnlinerImportModal = true"
             class="flex items-center gap-1.5 px-3 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
-            title="Выбор источников"
+            title="Импорт товаров"
           >
             <span class="material-icons-round text-base leading-none">cloud_download</span>
-            Выбор
+            Импорт
           </button>
       </div>
     </header>
@@ -1039,7 +1039,7 @@ watchDebounced(
                     <input
                         v-model="searchQuery"
                         @keyup.enter="applyFilters"
-                        placeholder="Например: ARTCOOL..."
+                        placeholder="Например: lg 12"
                         class="w-full pl-9 pr-4 py-2.5 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none shadow-inner"
                     />
                 </div>
