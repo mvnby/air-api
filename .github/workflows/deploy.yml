@@ -157,6 +157,7 @@ jobs:
 
       - name: Optional Post-Deploy Backend Ops
         id: post_deploy_ops
+        continue-on-error: true
         env:
           RUN_POST_DEPLOY_OPS: ${{ secrets.RUN_POST_DEPLOY_OPS }}
           OPS_MODE: ${{ secrets.OPS_MODE }}
@@ -171,10 +172,10 @@ jobs:
           set -euo pipefail
           SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v"
           : "${RUN_POST_DEPLOY_OPS:=true}"
-          : "${OPS_MODE:=normalize_report}"
-          : "${RUN_NORMALIZE_LEGACY:=true}"
-          : "${RUN_BACKFILL_BRAND_SERIES:=true}"
-          : "${RUN_SAFE_BRAND_CLEANUP:=true}"
+          : "${OPS_MODE:=report_only}"
+          : "${RUN_NORMALIZE_LEGACY:=false}"
+          : "${RUN_BACKFILL_BRAND_SERIES:=false}"
+          : "${RUN_SAFE_BRAND_CLEANUP:=false}"
           : "${RUN_REPORT_LEGACY_LINKS:=true}"
           : "${RUN_CLEANUP_LEGACY_LINKS:=false}"
           : "${DRY_RUN:=true}"
