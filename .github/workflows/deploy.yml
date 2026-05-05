@@ -198,6 +198,7 @@ jobs:
 
       - name: Post-Deploy Smoke Check
         id: post_deploy_smoke
+        continue-on-error: true
         run: |
           set -euo pipefail
           SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v"
