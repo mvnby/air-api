@@ -507,6 +507,14 @@ export const api = {
         return await ManagerService.bulkRoundPrice({ product_ids: productIds });
     },
 
+    async bulkSetPricesToRrc(productIds: number[]) {
+        return await ManagerService.bulkSetRrcPrice({ product_ids: productIds });
+    },
+
+    async bulkDeleteProducts(productIds: number[]) {
+        return await ManagerService.bulkDeleteManagerProducts({ product_ids: productIds });
+    },
+
     async getAllTags() {
         return await ManagerService.getAllTags();
     },

@@ -9,6 +9,8 @@ from core.manager_error_codes import BAD_REQUEST, CUSTOMER_NOT_FOUND, PRODUCT_NO
 from core.security import get_current_username
 from routers.manager_operation_ids import (
     BULK_ROUND_PRICE,
+    BULK_SET_RRC_PRICE,
+    BULK_DELETE_MANAGER_PRODUCTS,
     CATALOG_IMPORT,
     GET_ALL_TAGS,
     GET_MANAGER_CUSTOMERS,
@@ -28,11 +30,14 @@ from routers.manager_operation_ids import (
 )
 from schemas import (
     BulkRoundRequest,
+    BulkProductIdsRequest,
     CatalogImportPayload,
     CatalogImportResultResponse,
     ManagerActionMessageResponse,
     ManagerCatalogCustomerItemResponse,
     ManagerBulkRoundPriceResponse,
+    ManagerBulkSetRrcPriceResponse,
+    ManagerBulkDeleteProductsResponse,
     ManagerCatalogCustomerListResponse,
     ManagerCustomerBranchCreatePayload,
     ManagerCustomerBranchItemResponse,
@@ -424,6 +429,39 @@ async def bulk_round_price(
     Round prices down to the nearest multiple of 50.
     """
     return await ManagerCatalogService.bulk_round_prices(session=session, request=request)
+
+
+@router.post(
+    "/products/bulk-set-rrc-price",
+    response_model=ManagerBulkSetRrcPriceResponse,
+    operation_id=BULK_SET_RRC_PRICE,
+)
+async def bulk_set_rrc_price(
+    request: BulkProductIdsRequest,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    """
+    Set selected product prices to their current recommended retail prices.
+    Products without RRC stay unchanged.
+    """
+    return await ManagerCatalogService.bulk_set_prices_to_rrc(session=session, request=request)
+
+
+@router.post(
+    "/products/bulk-delete",
+    response_model=ManagerBulkDeleteProductsResponse,
+    operation_id=BULK_DELETE_MANAGER_PRODUCTS,
+)
+async def bulk_delete_products(
+    request: BulkProductIdsRequest,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    """
+    Delete explicitly selected products. Products linked to orders are reported as failed.
+    """
+    return await ManagerCatalogService.bulk_delete_products(session=session, request=request)
 
 
 @router.get(

@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 
 from schemas import (
+    BulkProductIdsRequest,
     BulkRoundRequest,
     ManagerCustomerBranchCreatePayload,
     ManagerCustomerBranchUpdatePayload,
@@ -169,6 +170,36 @@ class ManagerCatalogService:
         if not request.product_ids:
             return {"message": "No products selected", "updated_count": 0}
         return await ProductService.bulk_round_prices(session, request.product_ids)
+
+    @staticmethod
+    async def bulk_set_prices_to_rrc(
+        session: AsyncSession,
+        *,
+        request: BulkProductIdsRequest,
+    ) -> Dict[str, Any]:
+        if not request.product_ids:
+            return {
+                "message": "No products selected",
+                "processed_count": 0,
+                "updated_count": 0,
+                "skipped_count": 0,
+            }
+        return await ProductService.bulk_set_prices_to_rrc(session, request.product_ids)
+
+    @staticmethod
+    async def bulk_delete_products(
+        session: AsyncSession,
+        *,
+        request: BulkProductIdsRequest,
+    ) -> Dict[str, Any]:
+        if not request.product_ids:
+            return {
+                "message": "No products selected",
+                "deleted_count": 0,
+                "failed_count": 0,
+                "errors": [],
+            }
+        return await ProductService.bulk_delete_for_manager(session, request.product_ids)
 
     @staticmethod
     async def get_all_tags(session: AsyncSession):

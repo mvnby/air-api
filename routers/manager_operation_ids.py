@@ -22,6 +22,8 @@ DELETE_MANAGER_CUSTOMER = "delete_manager_customer"
 UPDATE_PRODUCT = "update_product"
 DELETE_MANAGER_PRODUCT = "delete_manager_product"
 BULK_ROUND_PRICE = "bulk_round_price"
+BULK_SET_RRC_PRICE = "bulk_set_rrc_price"
+BULK_DELETE_MANAGER_PRODUCTS = "bulk_delete_manager_products"
 GET_ALL_TAGS = "get_all_tags"
 SMART_SEARCH_PRODUCTS = "smart_search_products"
 

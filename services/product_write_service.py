@@ -11,6 +11,7 @@ from models import Product, ProductImage, Tag
 from services.brand_series_service import sync_product_brand_series
 from services.product_attachment_service import replace_manuals
 from services.spec_normalizer import normalize_specs
+from services.product_supply_metrics_service import ProductSupplyMetricsService
 
 
 class ProductWriteService:
@@ -118,6 +119,41 @@ class ProductWriteService:
             await session.commit()
 
         return {"message": "Prices rounded", "updated_count": updated_count}
+
+    @staticmethod
+    async def bulk_set_prices_to_rrc(session: AsyncSession, product_ids: List[int]) -> Dict[str, Any]:
+        products = await ProductDAO.get_by_ids(session, product_ids)
+        metrics = await ProductSupplyMetricsService.compute_for_products(session, products)
+        updated_count = 0
+        skipped_count = 0
+
+        for product in products:
+            recommended_price = metrics.get(product.id, {}).get("recommended_price_byn")
+            if recommended_price is None:
+                skipped_count += 1
+                continue
+
+            new_price = int(round(float(recommended_price)))
+            if new_price <= 0:
+                skipped_count += 1
+                continue
+
+            if product.price != new_price:
+                product.price = new_price
+                session.add(product)
+                updated_count += 1
+
+        if updated_count > 0:
+            await session.commit()
+
+        processed_count = len(products)
+        unchanged_count = processed_count - updated_count - skipped_count
+        return {
+            "message": "Prices set to RRC",
+            "processed_count": processed_count,
+            "updated_count": updated_count,
+            "skipped_count": skipped_count + unchanged_count,
+        }
 
     @staticmethod
     async def add_gallery_images(

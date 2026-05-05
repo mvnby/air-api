@@ -6,6 +6,7 @@ import type { Body_bulk_upload_local_images } from '../models/Body_bulk_upload_l
 import type { Body_upload_local_images } from '../models/Body_upload_local_images';
 import type { BulkGalleryAddRequest } from '../models/BulkGalleryAddRequest';
 import type { BulkGalleryDeleteRequest } from '../models/BulkGalleryDeleteRequest';
+import type { BulkProductIdsRequest } from '../models/BulkProductIdsRequest';
 import type { BulkRoundRequest } from '../models/BulkRoundRequest';
 import type { BulkSpecUpdate } from '../models/BulkSpecUpdate';
 import type { CatalogImportPayload } from '../models/CatalogImportPayload';
@@ -13,7 +14,9 @@ import type { CatalogImportResultResponse } from '../models/CatalogImportResultR
 import type { CommonGalleryImageResponse } from '../models/CommonGalleryImageResponse';
 import type { ManagerActionMessageResponse } from '../models/ManagerActionMessageResponse';
 import type { ManagerAuthStatusResponse } from '../models/ManagerAuthStatusResponse';
+import type { ManagerBulkDeleteProductsResponse } from '../models/ManagerBulkDeleteProductsResponse';
 import type { ManagerBulkRoundPriceResponse } from '../models/ManagerBulkRoundPriceResponse';
+import type { ManagerBulkSetRrcPriceResponse } from '../models/ManagerBulkSetRrcPriceResponse';
 import type { ManagerBulkSpecsResponse } from '../models/ManagerBulkSpecsResponse';
 import type { ManagerCatalogCustomerItemResponse } from '../models/ManagerCatalogCustomerItemResponse';
 import type { ManagerCatalogCustomerListResponse } from '../models/ManagerCatalogCustomerListResponse';
@@ -392,6 +395,47 @@ export class ManagerService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/products/bulk-round-price',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Bulk Set Rrc Price
+     * Set selected product prices to their current recommended retail prices.
+     * Products without RRC stay unchanged.
+     * @param requestBody
+     * @returns ManagerBulkSetRrcPriceResponse Successful Response
+     * @throws ApiError
+     */
+    public static bulkSetRrcPrice(
+        requestBody: BulkProductIdsRequest,
+    ): CancelablePromise<ManagerBulkSetRrcPriceResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/products/bulk-set-rrc-price',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Bulk Delete Products
+     * Delete explicitly selected products. Products linked to orders are reported as failed.
+     * @param requestBody
+     * @returns ManagerBulkDeleteProductsResponse Successful Response
+     * @throws ApiError
+     */
+    public static bulkDeleteManagerProducts(
+        requestBody: BulkProductIdsRequest,
+    ): CancelablePromise<ManagerBulkDeleteProductsResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/products/bulk-delete',
             body: requestBody,
             mediaType: 'application/json',
             errors: {

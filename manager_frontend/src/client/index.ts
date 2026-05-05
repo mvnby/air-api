@@ -18,6 +18,7 @@ export type { Body_upload_manager_customer_contract } from './models/Body_upload
 export type { Body_upload_manager_order_document } from './models/Body_upload_manager_order_document';
 export type { BulkGalleryAddRequest } from './models/BulkGalleryAddRequest';
 export type { BulkGalleryDeleteRequest } from './models/BulkGalleryDeleteRequest';
+export type { BulkProductIdsRequest } from './models/BulkProductIdsRequest';
 export type { BulkRoundRequest } from './models/BulkRoundRequest';
 export type { BulkSpecUpdate } from './models/BulkSpecUpdate';
 export type { CalendarEventResponse } from './models/CalendarEventResponse';
@@ -58,7 +59,10 @@ export type { ManagerBrandCreatePayload } from './models/ManagerBrandCreatePaylo
 export type { ManagerBrandListResponse } from './models/ManagerBrandListResponse';
 export type { ManagerBrandResponse } from './models/ManagerBrandResponse';
 export type { ManagerBrandUpdatePayload } from './models/ManagerBrandUpdatePayload';
+export type { ManagerBulkDeleteProductsError } from './models/ManagerBulkDeleteProductsError';
+export type { ManagerBulkDeleteProductsResponse } from './models/ManagerBulkDeleteProductsResponse';
 export type { ManagerBulkRoundPriceResponse } from './models/ManagerBulkRoundPriceResponse';
+export type { ManagerBulkSetRrcPriceResponse } from './models/ManagerBulkSetRrcPriceResponse';
 export type { ManagerBulkSpecsResponse } from './models/ManagerBulkSpecsResponse';
 export type { ManagerCatalogCustomerItemResponse } from './models/ManagerCatalogCustomerItemResponse';
 export type { ManagerCatalogCustomerListResponse } from './models/ManagerCatalogCustomerListResponse';
