@@ -315,3 +315,29 @@ class ProductManagerService:
         await session.delete(product)
         await session.commit()
         return True
+
+    @staticmethod
+    async def bulk_delete_for_manager(session: AsyncSession, product_ids: List[int]) -> Dict[str, Any]:
+        deleted_count = 0
+        errors: List[Dict[str, Any]] = []
+
+        for product_id in product_ids:
+            try:
+                deleted = await ProductManagerService.delete_for_manager(session, product_id)
+                if deleted:
+                    deleted_count += 1
+                else:
+                    errors.append({"product_id": product_id, "message": "Товар не найден"})
+            except ValueError as exc:
+                errors.append({"product_id": product_id, "message": str(exc)})
+            except Exception as exc:
+                await session.rollback()
+                errors.append({"product_id": product_id, "message": str(exc)})
+
+        failed_count = len(errors)
+        return {
+            "message": "Bulk delete completed",
+            "deleted_count": deleted_count,
+            "failed_count": failed_count,
+            "errors": errors,
+        }

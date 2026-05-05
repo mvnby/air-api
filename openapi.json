@@ -3105,6 +3105,100 @@
         ]
       }
     },
+    "/api/manager/products/bulk-set-rrc-price": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Bulk Set Rrc Price",
+        "description": "Set selected product prices to their current recommended retail prices.\nProducts without RRC stay unchanged.",
+        "operationId": "bulk_set_rrc_price",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkProductIdsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerBulkSetRrcPriceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/products/bulk-delete": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Bulk Delete Products",
+        "description": "Delete explicitly selected products. Products linked to orders are reported as failed.",
+        "operationId": "bulk_delete_manager_products",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkProductIdsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerBulkDeleteProductsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/tags/all": {
       "get": {
         "tags": [
@@ -9171,6 +9265,22 @@
         ],
         "title": "BulkGalleryDeleteRequest"
       },
+      "BulkProductIdsRequest": {
+        "properties": {
+          "product_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Product Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_ids"
+        ],
+        "title": "BulkProductIdsRequest"
+      },
       "BulkRoundRequest": {
         "properties": {
           "product_ids": {
@@ -11018,6 +11128,54 @@
         "type": "object",
         "title": "ManagerBrandUpdatePayload"
       },
+      "ManagerBulkDeleteProductsError": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "message"
+        ],
+        "title": "ManagerBulkDeleteProductsError"
+      },
+      "ManagerBulkDeleteProductsResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "deleted_count": {
+            "type": "integer",
+            "title": "Deleted Count"
+          },
+          "failed_count": {
+            "type": "integer",
+            "title": "Failed Count"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerBulkDeleteProductsError"
+            },
+            "type": "array",
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "deleted_count",
+          "failed_count"
+        ],
+        "title": "ManagerBulkDeleteProductsResponse"
+      },
       "ManagerBulkRoundPriceResponse": {
         "properties": {
           "message": {
@@ -11035,6 +11193,34 @@
           "updated_count"
         ],
         "title": "ManagerBulkRoundPriceResponse"
+      },
+      "ManagerBulkSetRrcPriceResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "processed_count": {
+            "type": "integer",
+            "title": "Processed Count"
+          },
+          "updated_count": {
+            "type": "integer",
+            "title": "Updated Count"
+          },
+          "skipped_count": {
+            "type": "integer",
+            "title": "Skipped Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "processed_count",
+          "updated_count",
+          "skipped_count"
+        ],
+        "title": "ManagerBulkSetRrcPriceResponse"
       },
       "ManagerBulkSpecsResponse": {
         "properties": {

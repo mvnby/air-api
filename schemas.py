@@ -1126,6 +1126,23 @@ class ManagerBulkRoundPriceResponse(ManagerActionMessageResponse):
     updated_count: int
 
 
+class ManagerBulkSetRrcPriceResponse(ManagerActionMessageResponse):
+    processed_count: int
+    updated_count: int
+    skipped_count: int
+
+
+class ManagerBulkDeleteProductsError(BaseModel):
+    product_id: int
+    message: str
+
+
+class ManagerBulkDeleteProductsResponse(ManagerActionMessageResponse):
+    deleted_count: int
+    failed_count: int
+    errors: List[ManagerBulkDeleteProductsError] = Field(default_factory=list)
+
+
 class ManagerBulkSpecsResponse(ManagerActionMessageResponse):
     operation: str
 
@@ -1431,6 +1448,10 @@ class ProductLocalStockResponse(BaseModel):
 
 
 class BulkRoundRequest(BaseModel):
+    product_ids: List[int]
+
+
+class BulkProductIdsRequest(BaseModel):
     product_ids: List[int]
 
 # --- DASHBOARD STATS ---

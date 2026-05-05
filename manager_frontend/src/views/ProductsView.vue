@@ -2,7 +2,7 @@
 import { ref, onMounted, watch, computed } from 'vue';
 import { watchDebounced } from '@vueuse/core';
 import { api, type ManagerBrand, type Product } from '../api';
-import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images, Settings, ArrowLeft, LayoutGrid, List, Package, Link2, ExternalLink, Star, SlidersHorizontal, X } from 'lucide-vue-next';
+import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images, Settings, ArrowLeft, LayoutGrid, List, Package, Link2, ExternalLink, Star, SlidersHorizontal, X, Trash2 } from 'lucide-vue-next';
 import BulkSpecsModal from '../components/BulkSpecsModal.vue';
 import BulkCompatibilityModal from '../components/BulkCompatibilityModal.vue';
 import ProductEditModal from '../components/ProductEditModal.vue';
@@ -113,7 +113,10 @@ const showBulkSpecsModal = ref(false);
 const showBulkCompatibilityModal = ref(false);
 const commonGalleryImages = ref<Array<{ url: string; product_count: number }>>([]);
 const commonGalleryLoading = ref(false);
-const bulkRoundLoading = ref(false);
+const bulkRrcLoading = ref(false);
+const bulkDeleteLoading = ref(false);
+const showBulkDeleteConfirm = ref(false);
+const showBulkActionsMenu = ref(false);
 
 // Price inline editing
 const editingPriceId = ref<number | null>(null);
@@ -364,11 +367,13 @@ const toggleSelectAll = () => {
 
 const openBulkUpdate = () => {
     if (selectedProductIds.value.size === 0) return;
+    showBulkActionsMenu.value = false;
     showBulkSpecsModal.value = true;
 };
 
 const openBulkCompatibility = () => {
     if (selectedProductIds.value.size === 0) return;
+    showBulkActionsMenu.value = false;
     showBulkCompatibilityModal.value = true;
 };
 
@@ -395,6 +400,7 @@ const loadCommonGallery = async () => {
 
 const openBulkImageModal = async () => {
     if (selectedProductIds.value.size === 0) return;
+    showBulkActionsMenu.value = false;
     modalMode.value = 'bulk';
     selectedProduct.value = null;
     imageQuery.value = '';
@@ -577,30 +583,47 @@ const savePrice = async (product: Product) => {
     }
 };
 
-const confirmingRound = ref(false);
-
-const handleBulkRoundPrices = async () => {
+const handleBulkSetRrcPrices = async () => {
     if (selectedProductIds.value.size === 0) return;
-    
-    if (!confirmingRound.value) {
-        confirmingRound.value = true;
-        // Auto-cancel after 4 seconds
-        setTimeout(() => { confirmingRound.value = false; }, 4000);
-        return;
-    }
-    
-    confirmingRound.value = false;
-    bulkRoundLoading.value = true;
+
+    showBulkActionsMenu.value = false;
+    bulkRrcLoading.value = true;
     try {
-        await api.bulkRoundPrices(selectedIdsArray.value);
+        const result = await api.bulkSetPricesToRrc(selectedIdsArray.value);
         await loadProducts();
         selectedProductIds.value.clear();
-        setToast('Цены округлены');
+        setToast(`К РРЦ: обновлено ${result.updated_count}, пропущено ${result.skipped_count}`);
     } catch (e) {
-        setToast(`Ошибка при округлении: ${getApiErrorMessage(e)}`);
+        setToast(`Ошибка при обновлении РРЦ: ${getApiErrorMessage(e)}`);
         console.error(e);
     } finally {
-        bulkRoundLoading.value = false;
+        bulkRrcLoading.value = false;
+    }
+};
+
+const openBulkDeleteConfirm = () => {
+    if (selectedProductIds.value.size === 0) return;
+    showBulkActionsMenu.value = false;
+    showBulkDeleteConfirm.value = true;
+};
+
+const handleBulkDeleteProducts = async () => {
+    if (selectedProductIds.value.size === 0) return;
+
+    bulkDeleteLoading.value = true;
+    try {
+        const result = await api.bulkDeleteProducts(selectedIdsArray.value);
+        await loadProducts();
+        const failedIds = new Set((result.errors || []).map((item) => item.product_id));
+        selectedProductIds.value = failedIds;
+        showBulkDeleteConfirm.value = false;
+        showBulkActionsMenu.value = false;
+        setToast(`Удалено: ${result.deleted_count}; не удалено: ${result.failed_count}`);
+    } catch (e) {
+        setToast(`Ошибка удаления: ${getApiErrorMessage(e)}`);
+        console.error(e);
+    } finally {
+        bulkDeleteLoading.value = false;
     }
 };
 
@@ -869,7 +892,7 @@ watchDebounced(
   <div class="p-6">
     <!-- Header -->
     <header class="mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-      <div class="flex flex-wrap items-center gap-4">
+      <div class="flex flex-wrap items-center gap-3 sm:gap-4">
           <button
             v-if="pendingReturnTo"
             @click="navigateBackFromProducts"
@@ -878,19 +901,17 @@ watchDebounced(
             <ArrowLeft class="w-4 h-4" />
             Назад
           </button>
-          <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
+          <h1 class="pl-20 text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3 sm:pl-0">
             <span class="material-icons-round text-teal-600 dark:text-teal-400">inventory_2</span>
             Товары
           </h1>
 
           <div class="flex items-center gap-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 shadow-sm">
-            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400" for="manager-product-category">
-              Категория
-            </label>
             <select
               id="manager-product-category"
               v-model="categoryFilter"
-              class="min-w-[150px] bg-transparent text-sm font-semibold text-gray-900 dark:text-slate-100 outline-none"
+              aria-label="Категория товаров"
+              class="min-w-[112px] bg-transparent text-sm font-semibold text-gray-900 dark:text-slate-100 outline-none sm:min-w-[150px]"
               @change="onCategoryChange"
             >
               <option v-for="tab in CATEGORY_FILTER_TABS" :key="tab.value" :value="tab.value">
@@ -899,7 +920,7 @@ watchDebounced(
             </select>
           </div>
           
-          <div class="flex bg-gray-100 dark:bg-slate-800 p-1 rounded-lg ml-2">
+          <div class="flex bg-gray-100 dark:bg-slate-800 p-1 rounded-lg">
             <button 
                 @click="viewType = 'grid'"
                 class="p-1.5 rounded-md transition-all"
@@ -916,9 +937,46 @@ watchDebounced(
             >
               <List class="w-4 h-4" />
             </button>
+            <button @click="loadProducts" class="p-1.5 rounded-md text-gray-500 transition-all hover:text-gray-700 dark:hover:text-slate-300" title="Обновить">
+              <RefreshCw class="w-4 h-4" />
+            </button>
           </div>
 
-          <div v-if="selectedProductIds.size > 0" class="flex items-center gap-2 bg-teal-50 dark:bg-teal-900/20 px-4 py-2 rounded-lg border border-teal-100 dark:border-teal-900/30">
+          <div v-if="selectedProductIds.size > 0" class="relative sm:hidden">
+              <button
+                type="button"
+                class="flex items-center gap-2 rounded-lg border border-teal-100 bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-800 dark:border-teal-900/30 dark:bg-teal-900/20 dark:text-teal-300"
+                @click="showBulkActionsMenu = !showBulkActionsMenu"
+              >
+                  {{ selectedProductIds.size }} выбрано
+                  <Settings class="w-4 h-4" />
+              </button>
+              <div
+                v-if="showBulkActionsMenu"
+                class="absolute left-0 top-full z-40 mt-2 w-64 rounded-xl border border-gray-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+              >
+                  <button @click="openBulkImageModal" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 dark:text-slate-200 dark:hover:bg-slate-800">
+                      <Images class="w-4 h-4" /> Изображения
+                  </button>
+                  <button @click="openBulkUpdate" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 dark:text-slate-200 dark:hover:bg-slate-800">
+                      <Edit3 class="w-4 h-4" /> Характеристики
+                  </button>
+                  <button @click="openBulkCompatibility" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 dark:text-slate-200 dark:hover:bg-slate-800">
+                      <Link2 class="w-4 h-4" /> Совместимость
+                  </button>
+                  <button @click="handleBulkSetRrcPrices" :disabled="bulkRrcLoading" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800">
+                      <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': bulkRrcLoading }" /> К РРЦ
+                  </button>
+                  <button @click="openBulkDeleteConfirm" :disabled="bulkDeleteLoading" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-950/40">
+                      <Trash2 class="w-4 h-4" /> Удалить
+                  </button>
+                  <button @click="selectedProductIds.clear(); showBulkActionsMenu = false" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-500 hover:bg-gray-50 dark:text-slate-400 dark:hover:bg-slate-800">
+                      <X class="w-4 h-4" /> Сбросить выбор
+                  </button>
+              </div>
+          </div>
+
+          <div v-if="selectedProductIds.size > 0" class="hidden items-center gap-2 bg-teal-50 dark:bg-teal-900/20 px-4 py-2 rounded-lg border border-teal-100 dark:border-teal-900/30 sm:flex">
               <span class="text-sm font-medium text-teal-800 dark:text-teal-300">{{ selectedProductIds.size }} выбрано</span>
               <button @click="openBulkImageModal" class="flex items-center gap-1 bg-gray-700 text-white px-3 py-1.5 rounded-md text-sm hover:bg-gray-800 transition-colors">
                   <Images class="w-3.5 h-3.5" /> Изображения
@@ -930,13 +988,20 @@ watchDebounced(
                   <Link2 class="w-3.5 h-3.5" /> Совместимость
               </button>
               <button 
-                @click="handleBulkRoundPrices" 
-                :disabled="bulkRoundLoading"
-                class="flex items-center gap-1 px-3 py-1.5 rounded-md text-sm transition-all disabled:opacity-50"
-                :class="confirmingRound ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse ring-2 ring-red-300' : 'bg-amber-600 hover:bg-amber-700 text-white'"
+                @click="handleBulkSetRrcPrices" 
+                :disabled="bulkRrcLoading"
+                class="flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-md text-sm transition-all disabled:opacity-50"
               >
-                  <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': bulkRoundLoading }" />
-                  {{ confirmingRound ? 'Подтвердить?' : 'Округлить цены' }}
+                  <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': bulkRrcLoading }" />
+                  К РРЦ
+              </button>
+              <button
+                @click="openBulkDeleteConfirm"
+                :disabled="bulkDeleteLoading"
+                class="flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-md text-sm transition-all disabled:opacity-50"
+              >
+                  <Trash2 class="w-3.5 h-3.5" />
+                  Удалить
               </button>
               <button @click="selectedProductIds.clear()" class="text-xs text-teal-600 hover:text-teal-800 underline ml-1">Сбросить</button>
           </div>
@@ -947,19 +1012,13 @@ watchDebounced(
               <Square v-else class="w-4 h-4 text-gray-400" />
               Выбрать все
           </button>
-          <button @click="showCleanupModal = true" class="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 text-sm transition-colors">
-              Очистка медиа
-          </button>
           <button
             @click="showOnlinerImportModal = true"
             class="flex items-center gap-1.5 px-3 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
-            title="Импорт из Onliner"
+            title="Импорт товаров"
           >
             <span class="material-icons-round text-base leading-none">cloud_download</span>
-            Onliner
-          </button>
-          <button @click="loadProducts" class="p-2 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 shadow-sm hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors" title="Обновить">
-              <RefreshCw class="w-4 h-4 text-gray-600 dark:text-slate-400" />
+            Импорт
           </button>
       </div>
     </header>
@@ -980,7 +1039,7 @@ watchDebounced(
                     <input
                         v-model="searchQuery"
                         @keyup.enter="applyFilters"
-                        placeholder="Например: ARTCOOL..."
+                        placeholder="Например: lg 12"
                         class="w-full pl-9 pr-4 py-2.5 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none shadow-inner"
                     />
                 </div>
@@ -1578,6 +1637,45 @@ watchDebounced(
         :selected-products="selectedProductsForBulkCompatibility"
         @success="handleBulkSuccess"
     />
+
+    <div
+        v-if="showBulkDeleteConfirm"
+        class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-4"
+        @click.self="showBulkDeleteConfirm = false"
+    >
+        <div class="w-full max-w-md rounded-xl bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900/50 shadow-2xl">
+            <div class="flex items-start gap-3 border-b border-red-100 dark:border-red-900/40 p-5">
+                <div class="mt-0.5 flex h-9 w-9 items-center justify-center rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">
+                    <Trash2 class="h-5 w-5" />
+                </div>
+                <div>
+                    <h3 class="text-base font-semibold text-gray-950 dark:text-slate-100">Удалить выбранные товары?</h3>
+                    <p class="mt-1 text-sm text-gray-600 dark:text-slate-400">
+                        Вы собираетесь удалить {{ selectedProductIds.size }} товар(ов). Товары, связанные с заказами, будут отклонены и останутся в каталоге.
+                    </p>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 p-5">
+                <button
+                    type="button"
+                    class="rounded-lg border border-gray-200 dark:border-slate-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800"
+                    :disabled="bulkDeleteLoading"
+                    @click="showBulkDeleteConfirm = false"
+                >
+                    Отмена
+                </button>
+                <button
+                    type="button"
+                    class="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                    :disabled="bulkDeleteLoading"
+                    @click="handleBulkDeleteProducts"
+                >
+                    <Trash2 class="h-4 w-4" />
+                    {{ bulkDeleteLoading ? 'Удаляем...' : 'Удалить товары' }}
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Individual Edit Modal -->
     <ProductEditModal 
