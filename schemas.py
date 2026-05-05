@@ -1713,6 +1713,20 @@ class ManagerTariffListResponse(BaseModel):
     items: List[ManagerTariffResponse]
 
 
+class ManagerQuickTariffResponse(BaseModel):
+    tariff_id: int
+    service_kind: ManagerTariffServiceKind
+    title: str
+    price: int
+    category: str = ""
+    power_range: str = ""
+    included_route_meters: float = 0.0
+
+
+class ManagerQuickTariffListResponse(BaseModel):
+    items: List[ManagerQuickTariffResponse]
+
+
 # --- SERVICE ESTIMATES ---
 
 class ManagerEstimateRuleInputPayload(BaseModel):

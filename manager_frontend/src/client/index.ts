@@ -113,6 +113,8 @@ export type { ManagerOrderListResponse } from './models/ManagerOrderListResponse
 export type { ManagerOrderProductLinePayload } from './models/ManagerOrderProductLinePayload';
 export type { ManagerOrderServiceLinePayload } from './models/ManagerOrderServiceLinePayload';
 export type { ManagerOrderUpdatePayload } from './models/ManagerOrderUpdatePayload';
+export type { ManagerQuickTariffListResponse } from './models/ManagerQuickTariffListResponse';
+export type { ManagerQuickTariffResponse } from './models/ManagerQuickTariffResponse';
 export type { ManagerRestoreJobStartResponse } from './models/ManagerRestoreJobStartResponse';
 export type { ManagerRestoreJobStatusResponse } from './models/ManagerRestoreJobStatusResponse';
 export type { ManagerServiceEstimateListResponse } from './models/ManagerServiceEstimateListResponse';

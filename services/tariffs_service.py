@@ -1,7 +1,9 @@
 import logging
+import re
 from typing import List, Optional
 
 from fastapi import HTTPException, status
+from sqlalchemy import case, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
@@ -9,6 +11,7 @@ from sqlmodel import select
 from models import ServiceTariff, ServiceTariffRule
 from schemas import (
     ManagerTariffCreatePayload,
+    ManagerQuickTariffResponse,
     ManagerTariffRuleCreatePayload,
     ManagerTariffRuleUpdatePayload,
     ManagerTariffServiceKind,
@@ -19,6 +22,85 @@ logger = logging.getLogger(__name__)
 
 
 class TariffsService:
+    BTU_TO_KW_MAP = {
+        7: 2.1,
+        9: 2.6,
+        12: 3.5,
+        18: 5.3,
+        24: 7.0,
+        30: 8.8,
+        36: 10.5,
+        42: 12.3,
+        48: 14.0,
+        60: 17.6,
+    }
+
+    @staticmethod
+    def _format_number(value: float) -> str:
+        number = float(value)
+        if abs(number - round(number)) < 1e-9:
+            return str(int(round(number)))
+        return f"{number:.2f}".rstrip("0").rstrip(".").replace(".", ",")
+
+    @staticmethod
+    def _extract_power_label(power_range: str) -> Optional[str]:
+        raw = (power_range or "").strip()
+        if not raw:
+            return None
+        normalized = raw.replace(",", ".").lower()
+        numbers = [float(match) for match in re.findall(r"\d+(?:\.\d+)?", normalized)]
+        if not numbers:
+            return None
+
+        kw_value: Optional[float] = None
+        if "квт" in normalized or "kw" in normalized:
+            kw_value = max(numbers)
+        else:
+            mapped = [
+                TariffsService.BTU_TO_KW_MAP[int(round(number))]
+                for number in numbers
+                if int(round(number)) in TariffsService.BTU_TO_KW_MAP
+            ]
+            if mapped:
+                kw_value = max(mapped)
+
+        if kw_value is None:
+            return None
+        return f"до {TariffsService._format_number(kw_value)} кВт"
+
+    @staticmethod
+    def build_quick_add_title(tariff: ServiceTariff) -> str:
+        selector = (tariff.selector_label or "").strip()
+        template = (tariff.estimate_template or "").strip()
+        base = selector or template or "Услуга"
+
+        title = base.rstrip(" .,")
+        normalized_title = title.lower()
+        power_label = TariffsService._extract_power_label(tariff.power_range or "")
+        if power_label and "квт" not in normalized_title and "kw" not in normalized_title and "мощност" not in normalized_title:
+            title = f"{title}, мощностью {power_label}"
+
+        included_route = float(tariff.included_route_meters or 0)
+        if included_route > 0 and "трасс" not in title.lower():
+            title = f"{title}, включая трассу длиной до {TariffsService._format_number(included_route)} м"
+        return title
+
+    @staticmethod
+    def _map_quick_tariff(tariff: ServiceTariff) -> ManagerQuickTariffResponse:
+        try:
+            service_kind = ManagerTariffServiceKind(str(tariff.service_kind or "installation"))
+        except ValueError:
+            service_kind = ManagerTariffServiceKind.installation
+        return ManagerQuickTariffResponse(
+            tariff_id=int(tariff.id),
+            service_kind=service_kind,
+            title=TariffsService.build_quick_add_title(tariff),
+            price=int(tariff.base_price or 0),
+            category=tariff.category or "",
+            power_range=tariff.power_range or "",
+            included_route_meters=float(tariff.included_route_meters or 0),
+        )
+
     @staticmethod
     async def get_all_tariffs(
         session: AsyncSession,
@@ -45,6 +127,49 @@ class TariffsService:
                 key=lambda item: (item.sort_order, item.id or 0),
             )
         return tariffs
+
+    @staticmethod
+    async def list_quick_add_tariffs(
+        session: AsyncSession,
+        service_kind: Optional[ManagerTariffServiceKind] = None,
+        q: str = "",
+        limit: int = 10,
+    ) -> List[ManagerQuickTariffResponse]:
+        stmt = select(ServiceTariff).where(ServiceTariff.is_active == True)  # noqa: E712
+        if service_kind is not None:
+            kind_value = service_kind.value if hasattr(service_kind, "value") else str(service_kind)
+            stmt = stmt.where(ServiceTariff.service_kind == kind_value)
+        query = (q or "").strip()
+        relevance_order = None
+        if query:
+            pattern = f"%{query}%"
+            starts_pattern = f"{query.lower()}%"
+            stmt = stmt.where(
+                or_(
+                    ServiceTariff.selector_label.ilike(pattern),
+                    ServiceTariff.estimate_template.ilike(pattern),
+                    ServiceTariff.category.ilike(pattern),
+                    ServiceTariff.power_range.ilike(pattern),
+                    ServiceTariff.comment.ilike(pattern),
+                )
+            )
+            relevance_order = case(
+                (func.lower(ServiceTariff.selector_label).like(starts_pattern), 0),
+                (func.lower(ServiceTariff.estimate_template).like(starts_pattern), 1),
+                else_=2,
+            )
+        order_by = [
+            ServiceTariff.service_kind,
+            ServiceTariff.sort_order,
+            ServiceTariff.category,
+            ServiceTariff.power_range,
+            ServiceTariff.id,
+        ]
+        if relevance_order is not None:
+            order_by.insert(0, relevance_order)
+        stmt = stmt.order_by(*order_by).limit(max(1, min(int(limit or 10), 50)))
+        result = await session.execute(stmt)
+        return [TariffsService._map_quick_tariff(tariff) for tariff in result.scalars().all()]
 
     @staticmethod
     async def get_tariff_by_id(session: AsyncSession, tariff_id: int) -> ServiceTariff:

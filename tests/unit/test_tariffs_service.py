@@ -1,0 +1,96 @@
+import pytest
+
+from models import ServiceTariff
+from services.tariffs_service import TariffsService
+
+
+def test_build_quick_add_title_enriches_generic_installation_tariff():
+    tariff = ServiceTariff(
+        service_kind="installation",
+        selector_label="Монтаж настенного кондиционера",
+        estimate_template="Монтаж кондиционера, включая расходные материалы",
+        category="Wall",
+        power_range="12",
+        base_price=500,
+        included_route_meters=3,
+    )
+
+    assert TariffsService.build_quick_add_title(tariff) == (
+        "Монтаж настенного кондиционера, мощностью до 3,5 кВт, включая трассу длиной до 3 м"
+    )
+
+
+def test_build_quick_add_title_keeps_specific_template_without_duplicate_route():
+    tariff = ServiceTariff(
+        service_kind="installation",
+        selector_label="Монтаж настенного кондиционера до 3,5 кВт с трассой до 3 м",
+        estimate_template="Монтаж настенного кондиционера до 3,5 кВт с трассой до 3 м",
+        category="Wall",
+        power_range="12",
+        base_price=500,
+        included_route_meters=3,
+    )
+
+    assert TariffsService.build_quick_add_title(tariff) == "Монтаж настенного кондиционера до 3,5 кВт с трассой до 3 м"
+
+
+@pytest.mark.asyncio
+async def test_list_quick_add_tariffs_filters_active_search_and_kind(db):
+    active_installation = ServiceTariff(
+        service_kind="installation",
+        selector_label="Монтаж настенного кондиционера",
+        estimate_template="Монтаж кондиционера, включая расходные материалы",
+        category="Wall",
+        power_range="12",
+        base_price=500,
+        included_route_meters=3,
+        is_active=True,
+        sort_order=20,
+    )
+    active_maintenance = ServiceTariff(
+        service_kind="maintenance",
+        selector_label="Обслуживание бытового кондиционера",
+        estimate_template="Обслуживание бытового кондиционера",
+        category="maintenance",
+        power_range="12",
+        base_price=120,
+        included_route_meters=0,
+        is_active=True,
+        sort_order=10,
+    )
+    active_dismantling = ServiceTariff(
+        service_kind="dismantling",
+        selector_label="Демонтаж настенного кондиционера",
+        estimate_template="Демонтаж настенного кондиционера",
+        category="Wall",
+        power_range="12",
+        base_price=100,
+        included_route_meters=0,
+        is_active=True,
+        sort_order=1,
+    )
+    inactive_installation = ServiceTariff(
+        service_kind="installation",
+        selector_label="Монтаж архивный",
+        estimate_template="Монтаж архивный",
+        category="Wall",
+        power_range="12",
+        base_price=1,
+        included_route_meters=3,
+        is_active=False,
+        sort_order=1,
+    )
+    db.add(active_installation)
+    db.add(active_maintenance)
+    db.add(active_dismantling)
+    db.add(inactive_installation)
+    await db.commit()
+
+    result = await TariffsService.list_quick_add_tariffs(db, q="монт", limit=10)
+
+    assert [item.tariff_id for item in result] == [active_installation.id, active_dismantling.id]
+    assert result[0].price == 500
+    assert "мощностью до 3,5 кВт" in result[0].title
+
+    maintenance = await TariffsService.list_quick_add_tariffs(db, service_kind="maintenance", q="обслуж", limit=10)
+    assert [item.tariff_id for item in maintenance] == [active_maintenance.id]

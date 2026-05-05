@@ -8,6 +8,7 @@ from routers.manager_operation_ids import (
     CREATE_MANAGER_TARIFF_RULE,
     DELETE_MANAGER_TARIFF,
     DELETE_MANAGER_TARIFF_RULE,
+    LIST_MANAGER_QUICK_TARIFFS,
     LIST_MANAGER_TARIFFS,
     LIST_MANAGER_TARIFF_RULES,
     UPDATE_MANAGER_TARIFF,
@@ -15,6 +16,7 @@ from routers.manager_operation_ids import (
 )
 from schemas import (
     ManagerActionMessageResponse,
+    ManagerQuickTariffListResponse,
     ManagerTariffCreatePayload,
     ManagerTariffListResponse,
     ManagerTariffResponse,
@@ -46,6 +48,22 @@ async def list_manager_tariffs(
         include_inactive=include_inactive,
     )
     return ManagerTariffListResponse(items=items)
+
+
+@router.get("/quick-add", response_model=ManagerQuickTariffListResponse, operation_id=LIST_MANAGER_QUICK_TARIFFS)
+async def list_manager_quick_tariffs(
+    q: str = Query(""),
+    service_kind: ManagerTariffServiceKind | None = Query(None),
+    limit: int = Query(10, ge=1, le=50),
+    session: AsyncSession = Depends(get_session),
+):
+    items = await TariffsService.list_quick_add_tariffs(
+        session=session,
+        service_kind=service_kind,
+        q=q,
+        limit=limit,
+    )
+    return ManagerQuickTariffListResponse(items=items)
 
 
 @router.post("", response_model=ManagerTariffResponse, status_code=status.HTTP_201_CREATED, operation_id=CREATE_MANAGER_TARIFF)

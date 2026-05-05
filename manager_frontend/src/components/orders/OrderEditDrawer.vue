@@ -16,6 +16,7 @@ import type {
   OrderServiceLineResponse,
   ManagerOrderDocumentItem,
   ManagerInstallerResponse,
+  ManagerQuickTariffResponse,
   PaymentResponse,
   PaymentCurrency,
   FxRateResponse,
@@ -146,12 +147,17 @@ const installersList = ref<ManagerInstallerResponse[]>([]);
 
 const productLines = ref<ProductLine[]>([]);
 const serviceLines = ref<ServiceLine[]>([]);
+const activeServiceSuggestionIndex = ref<number | null>(null);
+const serviceTariffOptions = ref<ManagerQuickTariffResponse[]>([]);
+const serviceTariffLookupLoading = ref(false);
+let serviceTariffSearchRequestId = 0;
 const estimateOptions = ref<ManagerServiceEstimateResponse[]>([]);
 const estimateOptionsLoading = ref(false);
 const estimateImportMode = ref<'detailed' | 'collapsed'>('detailed');
 const selectedEstimateId = ref<number | null>(null);
 const estimateSearchQuery = ref('');
 const importingEstimate = ref(false);
+const showEstimateImport = ref(false);
 const documents = ref<ManagerOrderDocumentItem[]>([]);
 const payments = ref<PaymentResponse[]>([]);
 const localServerErrors = ref<Record<string, string>>({});
@@ -989,6 +995,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
     price: line.price,
     cost: line.cost,
   }));
+  showEstimateImport.value = false;
   await loadEstimateOptions();
 
   // Documents
@@ -1023,6 +1030,9 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   productOptions.value = [];
   activeSuggestionIndex.value = null;
   productLookupLoading.value = false;
+  serviceTariffOptions.value = [];
+  activeServiceSuggestionIndex.value = null;
+  serviceTariffLookupLoading.value = false;
   restoreDraft();
   syncProductLookupFromLines();
 };
@@ -1160,6 +1170,79 @@ const addServiceLine = () => {
   serviceLines.value.push({ title: '', quantity: 1, price: 0, cost: 0, service_id: null });
 };
 
+const toggleEstimateImport = async () => {
+  showEstimateImport.value = !showEstimateImport.value;
+  if (showEstimateImport.value && !estimateOptions.value.length && !estimateOptionsLoading.value) {
+    await loadEstimateOptions();
+  }
+};
+
+const debouncedLoadServiceTariffOptions = useDebounceFn(async (index: number, q: string, requestId: number) => {
+  try {
+    serviceTariffLookupLoading.value = true;
+    const response = await api.listManagerQuickTariffs(q, null, 10);
+    if (requestId !== serviceTariffSearchRequestId || activeServiceSuggestionIndex.value !== index) return;
+    serviceTariffOptions.value = response.items || [];
+  } catch (error) {
+    setToast(`Ошибка поиска тарифов: ${getApiErrorMessage(error)}`, 'error');
+    if (requestId === serviceTariffSearchRequestId) {
+      serviceTariffOptions.value = [];
+    }
+  } finally {
+    if (requestId === serviceTariffSearchRequestId) {
+      serviceTariffLookupLoading.value = false;
+    }
+  }
+}, 300);
+
+const getServiceTariffSuggestions = (index: number) => {
+  if (activeServiceSuggestionIndex.value !== index) return [];
+  return serviceTariffOptions.value.slice(0, 10);
+};
+
+const onServiceTitleInput = (index: number) => {
+  const row = serviceLines.value[index];
+  if (!row) return;
+  activeServiceSuggestionIndex.value = index;
+  row.service_id = null;
+  const query = row.title.trim();
+  serviceTariffSearchRequestId += 1;
+  if (query.length < 2) {
+    serviceTariffOptions.value = [];
+    serviceTariffLookupLoading.value = false;
+    return;
+  }
+  debouncedLoadServiceTariffOptions(index, query, serviceTariffSearchRequestId);
+};
+
+const onServiceTitleFocus = (index: number) => {
+  activeServiceSuggestionIndex.value = index;
+  const row = serviceLines.value[index];
+  if (row?.title.trim() && row.title.trim().length >= 2) {
+    onServiceTitleInput(index);
+  }
+};
+
+const onServiceTitleBlur = (index: number) => {
+  window.setTimeout(() => {
+    if (activeServiceSuggestionIndex.value === index) {
+      activeServiceSuggestionIndex.value = null;
+    }
+  }, 120);
+};
+
+const selectServiceTariffForLine = (index: number, option: ManagerQuickTariffResponse) => {
+  const row = serviceLines.value[index];
+  if (!row) return;
+  row.service_id = null;
+  row.title = option.title;
+  row.quantity = Math.max(1, Number(row.quantity || 1));
+  row.price = Math.round(Number(option.price || 0));
+  row.cost = 0;
+  activeServiceSuggestionIndex.value = null;
+  serviceTariffOptions.value = [];
+};
+
 const loadEstimateOptions = async () => {
   estimateOptionsLoading.value = true;
   try {
@@ -1203,6 +1286,7 @@ const applyEstimateToServices = async () => {
       cost: Number(line.cost || 0),
     }));
     serviceLines.value = [...serviceLines.value, ...mappedLines];
+    showEstimateImport.value = false;
     setToast(
       response.mode === 'collapsed'
         ? `Смета #${response.estimate_id} добавлена одной строкой`
@@ -1216,11 +1300,21 @@ const applyEstimateToServices = async () => {
 };
 
 const removeProductLine = (index: number) => {
+  if (!window.confirm('Удалить этот товар из заказа?')) return;
   productLines.value.splice(index, 1);
+  if (activeSuggestionIndex.value === index) {
+    activeSuggestionIndex.value = null;
+    productOptions.value = [];
+  }
 };
 
 const removeServiceLine = (index: number) => {
+  if (!window.confirm('Удалить эту услугу из заказа?')) return;
   serviceLines.value.splice(index, 1);
+  if (activeServiceSuggestionIndex.value === index) {
+    activeServiceSuggestionIndex.value = null;
+    serviceTariffOptions.value = [];
+  }
 };
 
 const currentCatalogPrice = (productId: number) => productLookupById.value[productId]?.price ?? null;
@@ -1768,106 +1862,228 @@ watch(
                 </label>
               </div>
             </div>
-          <button class="btn-mini" @click="addProductLine">Добавить товар</button>
         </div>
         <p v-if="getFieldError('products')" class="mb-2 text-xs text-red-300">{{ getFieldError('products') }}</p>
-        <div class="mb-2 hidden grid-cols-12 gap-2 px-2 text-[11px] uppercase tracking-[0.08em] text-gray-500 md:grid">
-          <div class="col-span-5">Товар</div>
-          <div class="col-span-2">Цена</div>
-          <div class="col-span-2">Себест.</div>
-          <div class="col-span-2">Кол-во / Сумма</div>
-          <div class="col-span-1">Действия</div>
-        </div>
         <div class="space-y-2">
-          <div v-for="(line, index) in productLines" :key="`product-${index}`" class="grid grid-cols-1 gap-2 rounded-xl border border-gray-200 bg-white p-2 md:grid-cols-12">
-            <div class="md:col-span-5">
-              <input
-                v-model="line.product_query"
-                class="field-input"
-                placeholder="Поиск и выбор товара"
-                @focus="onProductInputFocus(index)"
-                @input="onProductQueryInput(index)"
-                @blur="onProductInputBlur(index)"
-              />
-              <div
-                v-if="!line.product_id && line.product_query.trim().length >= 2 && (productLookupLoading || getProductSuggestions(index).length)"
-                class="mt-1 max-h-56 overflow-auto rounded-[12px] border border-gray-200 bg-white p-1"
-              >
-                <div v-if="productLookupLoading" class="px-3 py-2 text-xs text-gray-500">Поиск товаров...</div>
-                <button
-                  v-for="item in getProductSuggestions(index)"
-                  :key="`product-suggest-${index}-${item.id}`"
-                  type="button"
-                  class="mb-1 block w-full rounded-[12px] px-3 py-2 text-left text-xs text-gray-700 hover:bg-slate-100 dark:hover:bg-slate-800 last:mb-0"
-                  @click="selectProductForLine(index, item)"
-                >
-                  <p class="truncate font-medium text-gray-900 dark:text-slate-100">{{ item.title }}</p>
-                  <p class="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-gray-500 dark:text-slate-300">
-                    <span>{{ formatMoney(item.price) }}</span>
-                    <span>·</span>
-                    <span>{{ item.is_inverter ? 'Инвертор' : 'On/Off' }}</span>
-                    <span>·</span>
-                    <template v-if="item.vitebsk_qty > 0 || item.minsk_qty > 0">
-                      <span v-if="item.vitebsk_qty > 0" class="font-medium text-emerald-600 bg-emerald-50 px-1 rounded">Вит: {{item.vitebsk_qty}}</span>
-                      <span v-if="item.minsk_qty > 0" class="font-medium text-blue-500 bg-blue-50 px-1 rounded">Минск: {{item.minsk_qty}}</span>
-                    </template>
-                    <template v-else>
-                      <span v-if="item.availability_status === 'check_availability'" class="font-medium text-amber-500">Уточнять</span>
-                      <span v-else class="text-gray-400">Нет в наличии</span>
-                    </template>
-                  </p>
-                </button>
-              </div>
-            </div>
-            <input v-model.number="line.price" type="number" min="0" class="field-input md:col-span-2" placeholder="Цена" />
-            <input v-model.number="line.cost" type="number" min="0" class="field-input md:col-span-2" placeholder="Себест." />
-            <div class="flex flex-col gap-1 md:col-span-2">
-              <input v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="Кол-во" />
-              <p class="px-1 text-xs text-gray-500">Σ {{ formatMoney(lineTotal(line)) }}</p>
-            </div>
-            <div class="flex gap-2 md:col-span-1 md:flex-col md:gap-1">
-              <button class="btn-mini-outline flex-1 px-0" type="button" :disabled="!line.product_id" @click="openSelectedProduct(index)">↗</button>
-              <button class="btn-mini-outline flex-1 px-0" type="button" @click="removeProductLine(index)">×</button>
-            </div>
-            <p
-              v-if="isPriceDifferentFromCatalog(line)"
-              class="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-700 md:col-span-12"
+          <div
+            v-for="(line, index) in productLines"
+            :key="`product-${index}`"
+            class="relative rounded-xl border border-gray-200 bg-white p-3 shadow-sm"
+          >
+            <button
+              type="button"
+              class="absolute -right-2 -top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-200 bg-red-50 text-lg font-bold text-red-600 shadow-sm transition-colors hover:bg-red-100"
+              :aria-label="`Удалить товар #${index + 1}`"
+              title="Удалить товар"
+              @click="removeProductLine(index)"
             >
-              Цена строки отличается от каталожной ({{ formatMoney(currentCatalogPrice(line.product_id) || 0) }}).
-            </p>
+              ×
+            </button>
+            <div class="grid grid-cols-6 gap-2 md:grid-cols-12 md:items-start">
+              <label class="relative col-span-6 space-y-1 md:col-span-5">
+                <span class="flex items-center justify-between gap-2 px-1 text-xs font-medium text-gray-500 md:h-6">
+                  <span>Название</span>
+                  <button
+                    v-if="line.product_id"
+                    class="text-xs font-semibold text-teal-700 hover:text-teal-900"
+                    type="button"
+                    @click="openSelectedProduct(index)"
+                  >
+                    Открыть ↗
+                  </button>
+                </span>
+                <textarea
+                  v-model="line.product_query"
+                  class="field-input min-h-[44px] resize-none overflow-hidden text-sm leading-snug focus:min-h-[120px] focus:resize-y focus:overflow-auto sm:text-base"
+                  rows="1"
+                  placeholder="Поиск и выбор товара"
+                  @focus="onProductInputFocus(index)"
+                  @input="onProductQueryInput(index)"
+                  @blur="onProductInputBlur(index)"
+                />
+                <div
+                  v-if="!line.product_id && line.product_query.trim().length >= 2 && (productLookupLoading || getProductSuggestions(index).length)"
+                  class="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-auto rounded-[12px] border border-gray-200 bg-white p-1 shadow-xl"
+                >
+                  <div v-if="productLookupLoading" class="px-3 py-2 text-xs text-gray-500">Поиск товаров...</div>
+                  <button
+                    v-for="item in getProductSuggestions(index)"
+                    :key="`product-suggest-${index}-${item.id}`"
+                    type="button"
+                    class="mb-1 block w-full rounded-[12px] px-3 py-2 text-left text-xs text-gray-700 hover:bg-slate-100 dark:hover:bg-slate-800 last:mb-0"
+                    @mousedown.prevent
+                    @click="selectProductForLine(index, item)"
+                  >
+                    <p class="truncate font-medium text-gray-900 dark:text-slate-100">{{ item.title }}</p>
+                    <p class="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-gray-500 dark:text-slate-300">
+                      <span>{{ formatMoney(item.price) }}</span>
+                      <span>·</span>
+                      <span>{{ item.is_inverter ? 'Инвертор' : 'On/Off' }}</span>
+                      <span>·</span>
+                      <template v-if="item.vitebsk_qty > 0 || item.minsk_qty > 0">
+                        <span v-if="item.vitebsk_qty > 0" class="font-medium text-emerald-600 bg-emerald-50 px-1 rounded">Вит: {{item.vitebsk_qty}}</span>
+                        <span v-if="item.minsk_qty > 0" class="font-medium text-blue-500 bg-blue-50 px-1 rounded">Минск: {{item.minsk_qty}}</span>
+                      </template>
+                      <template v-else>
+                        <span v-if="item.availability_status === 'check_availability'" class="font-medium text-amber-500">Уточнять</span>
+                        <span v-else class="text-gray-400">Нет в наличии</span>
+                      </template>
+                    </p>
+                  </button>
+                </div>
+              </label>
+              <label class="col-span-4 space-y-1 md:col-span-2">
+                <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Цена</span>
+                <input v-model.number="line.price" type="number" min="0" class="field-input" placeholder="0" />
+              </label>
+              <label class="col-span-2 space-y-1 md:col-span-1">
+                <span class="flex h-auto items-center whitespace-nowrap px-1 text-xs font-medium text-gray-500 md:h-6 md:text-[11px]">Кол-во</span>
+                <input v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="1" />
+              </label>
+              <label class="col-span-3 space-y-1 md:col-span-2">
+                <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Себест.</span>
+                <input v-model.number="line.cost" type="number" min="0" class="field-input" placeholder="0" />
+              </label>
+              <div class="col-span-3 space-y-1 md:col-span-2">
+                <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Итого</span>
+                <div class="rounded-lg bg-gray-50 px-3 py-2">
+                  <p class="whitespace-nowrap text-base font-semibold leading-tight text-gray-900">{{ formatMoney(lineTotal(line)) }}</p>
+                </div>
+              </div>
+              <p
+                v-if="isPriceDifferentFromCatalog(line)"
+                class="col-span-6 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-700 md:col-span-12"
+              >
+                Цена строки отличается от каталожной ({{ formatMoney(currentCatalogPrice(line.product_id) || 0) }}).
+              </p>
+            </div>
           </div>
         </div>
+        <button type="button" class="btn-mini mt-3 w-full justify-center" @click="addProductLine">+ товар</button>
       </section>
 
         <section class="mt-6">
-          <div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div class="mb-2">
             <h4 class="text-md font-semibold text-gray-800">Услуги</h4>
-            <button class="btn-mini" @click="addServiceLine">Добавить услугу</button>
           </div>
-          <div class="mb-3 grid gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
-            <div class="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
-              <select
-                v-model="selectedEstimateId"
-                class="field-input min-w-0 flex-1"
-                :disabled="estimateOptionsLoading"
-              >
-                <option :value="null">Выберите смету</option>
-                <option v-for="estimate in filteredEstimateOptions" :key="estimate.id" :value="estimate.id">
-                  #{{ estimate.id }} · {{ estimate.title }} · {{ formatMoney(estimate.total) }} {{ estimate.currency }}
-                </option>
-              </select>
-              <input
-                v-model="estimateSearchQuery"
-                class="field-input w-full lg:w-[220px]"
-                placeholder="Поиск сметы по ID/названию"
-              />
-              <select v-model="estimateImportMode" class="field-input w-full lg:w-[180px]">
-                <option value="detailed">Подробно (по строкам)</option>
-                <option value="collapsed">Схлопнуто (одной строкой)</option>
-              </select>
+          <p v-if="getFieldError('services')" class="mb-2 text-xs text-red-300">{{ getFieldError('services') }}</p>
+          <div class="space-y-2">
+            <div
+              v-for="(line, index) in serviceLines"
+              :key="`service-${index}`"
+              class="relative rounded-xl border border-gray-200 bg-white p-3 shadow-sm"
+            >
               <button
                 type="button"
-                class="btn-mini whitespace-nowrap"
+                class="absolute -right-2 -top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-200 bg-red-50 text-lg font-bold text-red-600 shadow-sm transition-colors hover:bg-red-100"
+                :aria-label="`Удалить услугу #${index + 1}`"
+                title="Удалить услугу"
+                @click="removeServiceLine(index)"
+              >
+                ×
+              </button>
+              <div class="grid grid-cols-6 gap-2 md:grid-cols-12 md:items-start">
+                <label class="relative col-span-6 space-y-1 md:col-span-5">
+                  <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Название</span>
+                  <textarea
+                    v-model="line.title"
+                    class="field-input min-h-[64px] resize-none overflow-hidden text-sm leading-snug focus:min-h-[120px] focus:resize-y focus:overflow-auto sm:text-base"
+                    rows="2"
+                    placeholder="Название услуги"
+                    @focus="onServiceTitleFocus(index)"
+                    @input="onServiceTitleInput(index)"
+                    @blur="onServiceTitleBlur(index)"
+                  />
+                  <div
+                    v-if="line.title.trim().length >= 2 && activeServiceSuggestionIndex === index && (serviceTariffLookupLoading || getServiceTariffSuggestions(index).length)"
+                    class="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-auto rounded-[12px] border border-gray-200 bg-white p-1 shadow-xl"
+                  >
+                    <div v-if="serviceTariffLookupLoading" class="px-3 py-2 text-xs text-gray-500">Ищем тарифы...</div>
+                    <button
+                      v-for="item in getServiceTariffSuggestions(index)"
+                      :key="`service-tariff-suggest-${index}-${item.tariff_id}`"
+                      type="button"
+                      class="mb-1 block w-full rounded-[12px] px-3 py-2 text-left text-xs text-gray-700 hover:bg-slate-100 last:mb-0"
+                      @mousedown.prevent
+                      @click="selectServiceTariffForLine(index, item)"
+                    >
+                      <p class="line-clamp-2 font-medium text-gray-900">{{ item.title }}</p>
+                      <p class="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-gray-500">
+                        <span>{{ formatMoney(item.price) }}</span>
+                        <span v-if="item.service_kind">· {{ item.service_kind }}</span>
+                        <span v-if="item.category">· {{ item.category }}</span>
+                        <span v-if="item.included_route_meters">· трасса до {{ item.included_route_meters }} м</span>
+                      </p>
+                    </button>
+                  </div>
+                </label>
+                <label class="col-span-4 space-y-1 md:col-span-2">
+                  <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Цена</span>
+                  <input v-model.number="line.price" type="number" min="0" class="field-input" placeholder="0" />
+                </label>
+                <label class="col-span-2 space-y-1 md:col-span-1">
+                  <span class="flex h-auto items-center whitespace-nowrap px-1 text-xs font-medium text-gray-500 md:h-6 md:text-[11px]">Кол-во</span>
+                  <input v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="1" />
+                </label>
+                <label class="col-span-3 space-y-1 md:col-span-2">
+                  <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Себест.</span>
+                  <input v-model.number="line.cost" type="number" min="0" class="field-input" placeholder="0" />
+                </label>
+                <div class="col-span-3 space-y-1 md:col-span-2">
+                  <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Итого</span>
+                  <div class="rounded-lg bg-gray-50 px-3 py-2">
+                    <p class="whitespace-nowrap text-base font-semibold leading-tight text-gray-900">{{ formatMoney(lineTotal(line)) }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="mt-3 grid grid-cols-2 gap-2">
+            <button type="button" class="btn-mini justify-center" @click="addServiceLine">+ услуга</button>
+            <button
+              type="button"
+              class="btn-mini-outline justify-center"
+              :class="showEstimateImport ? 'border-teal-200 bg-teal-50 text-teal-700' : ''"
+              @click="toggleEstimateImport"
+            >
+              Из сметы
+            </button>
+          </div>
+          <div v-if="showEstimateImport" class="mt-3 grid gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
+            <div class="grid gap-2 md:grid-cols-2">
+              <label class="space-y-1 md:col-span-2">
+                <span class="px-1 text-xs font-medium text-gray-500">Смета</span>
+                <select
+                  v-model="selectedEstimateId"
+                  class="field-input min-w-0"
+                  :disabled="estimateOptionsLoading"
+                >
+                  <option :value="null">Выберите смету</option>
+                  <option v-for="estimate in filteredEstimateOptions" :key="estimate.id" :value="estimate.id">
+                    #{{ estimate.id }} · {{ estimate.title }} · {{ formatMoney(estimate.total) }} {{ estimate.currency }}
+                  </option>
+                </select>
+              </label>
+              <label class="space-y-1">
+                <span class="px-1 text-xs font-medium text-gray-500">Поиск</span>
+                <input
+                  v-model="estimateSearchQuery"
+                  class="field-input"
+                  placeholder="ID или название"
+                />
+              </label>
+              <label class="space-y-1">
+                <span class="px-1 text-xs font-medium text-gray-500">Режим</span>
+                <select v-model="estimateImportMode" class="field-input">
+                  <option value="detailed">Подробно (по строкам)</option>
+                  <option value="collapsed">Схлопнуто (одной строкой)</option>
+                </select>
+              </label>
+            </div>
+            <div class="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                class="btn-mini justify-center whitespace-nowrap"
                 :disabled="importingEstimate || !selectedEstimateId"
                 @click="applyEstimateToServices"
               >
@@ -1875,7 +2091,7 @@ watch(
               </button>
               <button
                 type="button"
-                class="btn-mini-outline whitespace-nowrap"
+                class="btn-mini-outline justify-center whitespace-nowrap"
                 :disabled="estimateOptionsLoading"
                 @click="loadEstimateOptions"
                 title="Обновить список смет"
@@ -1886,16 +2102,6 @@ watch(
             <p class="text-xs text-gray-500">
               Показываем 10 последних смет как типовые шаблоны. «Подробно» добавляет отдельные строки, «Схлопнуто» — одну строку с общим итогом.
             </p>
-          </div>
-          <p v-if="getFieldError('services')" class="mb-2 text-xs text-red-300">{{ getFieldError('services') }}</p>
-          <div class="space-y-2">
-            <div v-for="(line, index) in serviceLines" :key="`service-${index}`" class="grid grid-cols-1 gap-2 rounded-xl border border-gray-200 bg-white p-2 md:grid-cols-12">
-              <input v-model="line.title" class="field-input md:col-span-5" placeholder="Название услуги" />
-              <input v-model.number="line.price" type="number" min="0" class="field-input md:col-span-2" placeholder="Цена" />
-              <input v-model.number="line.cost" type="number" min="0" class="field-input md:col-span-2" placeholder="Себест." />
-              <input v-model.number="line.quantity" type="number" min="1" class="field-input md:col-span-2" placeholder="Кол-во" />
-              <button class="btn-mini-outline md:col-span-1" @click="removeServiceLine(index)">×</button>
-            </div>
           </div>
         </section>
       </div>
