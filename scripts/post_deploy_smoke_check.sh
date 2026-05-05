@@ -3,6 +3,8 @@ set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:8000}"
 SMOKE_SUMMARY_FILE="${SMOKE_SUMMARY_FILE:-/tmp/smoke_summary.txt}"
+MAX_RETRIES=${MAX_RETRIES:-20}
+RETRY_DELAY=${RETRY_DELAY:-2}
 
 log() {
   local stage="$1"
@@ -31,13 +33,41 @@ PRODUCTS_URL="${BASE_URL}/api/v1/products?limit=5"
 FILTERS_URL="${BASE_URL}/api/v1/filters/config"
 HEALTH_URL_USED=""
 
-log request "GET ${HEALTH_URL_PRIMARY} (fallback: ${HEALTH_URL_FALLBACK})"
-health_payload="$(curl -fsS "${HEALTH_URL_PRIMARY}" 2>/dev/null || true)"
+# Wait for application to be ready with retry logic
+log wait "Waiting for application to be ready (max ${MAX_RETRIES} attempts, ${RETRY_DELAY}s between retries)..."
+
+health_payload=""
+for attempt in $(seq 1 $MAX_RETRIES); do
+  log attempt "Health check attempt $attempt/$MAX_RETRIES"
+  health_payload="$(curl -fsS "${HEALTH_URL_PRIMARY}" 2>/dev/null || true)"
+  
+  if [[ -n "${health_payload}" ]]; then
+    HEALTH_URL_USED="${HEALTH_URL_PRIMARY}"
+    log success "✅ Got response from ${HEALTH_URL_PRIMARY}"
+    break
+  fi
+  
+  # Try fallback endpoint
+  health_payload="$(curl -fsS "${HEALTH_URL_FALLBACK}" 2>/dev/null || true)"
+  if [[ -n "${health_payload}" ]]; then
+    HEALTH_URL_USED="${HEALTH_URL_FALLBACK}"
+    log success "✅ Got response from ${HEALTH_URL_FALLBACK}"
+    break
+  fi
+  
+  if [ $attempt -lt $MAX_RETRIES ]; then
+    log retry "Waiting ${RETRY_DELAY}s before retry..."
+    sleep $RETRY_DELAY
+  fi
+done
+
+# Check if we got a valid response
 if [[ -z "${health_payload}" ]]; then
-  health_payload="$(curl -fsS "${HEALTH_URL_FALLBACK}")"
-  HEALTH_URL_USED="${HEALTH_URL_FALLBACK}"
-else
-  HEALTH_URL_USED="${HEALTH_URL_PRIMARY}"
+  log error "❌ Failed to connect to health endpoint after $MAX_RETRIES attempts"
+  summary "smoke_status=failed"
+  summary "base_url=${BASE_URL}"
+  summary "failure_reason=no_response_from_health_endpoint"
+  exit 1
 fi
 
 log request "GET ${PRODUCTS_URL}"
