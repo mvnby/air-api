@@ -253,6 +253,16 @@ def detect_category_slug(
     if "настенн" in combined_type:
         return "cat-household"
 
+    household_markers = (
+        "мобильн",
+        "portable",
+        "моноблок",
+        "моноблоч",
+        "monoblock",
+    )
+    if any(marker in combined_type for marker in household_markers):
+        return "cat-household"
+
     if any(marker in combined_type for marker in ("сплит", "split")):
         return "cat-household"
 

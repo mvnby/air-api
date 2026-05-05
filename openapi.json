@@ -2383,6 +2383,28 @@
             "description": "Category tag slug: cat-household/cat-multi/cat-industrial"
           },
           {
+            "name": "category_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "assigned",
+                    "missing"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Catalog category status: assigned/missing",
+              "title": "Category Status"
+            },
+            "description": "Catalog category status: assigned/missing"
+          },
+          {
             "name": "sort",
             "in": "query",
             "required": false,

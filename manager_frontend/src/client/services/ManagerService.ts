@@ -77,6 +77,7 @@ export class ManagerService {
      * @param hasFreshAir
      * @param brandSlugs Brand slugs to include
      * @param categorySlug Category tag slug: cat-household/cat-multi/cat-industrial
+     * @param categoryStatus Catalog category status: assigned/missing
      * @param sort
      * @returns ManagerCatalogProductListResponse Successful Response
      * @throws ApiError
@@ -94,6 +95,7 @@ export class ManagerService {
         hasFreshAir?: (boolean | null),
         brandSlugs?: (Array<string> | null),
         categorySlug?: (string | null),
+        categoryStatus?: ('assigned' | 'missing' | null),
         sort: string = 'recommended',
     ): CancelablePromise<ManagerCatalogProductListResponse> {
         return __request(OpenAPI, {
@@ -112,6 +114,7 @@ export class ManagerService {
                 'has_fresh_air': hasFreshAir,
                 'brand_slugs': brandSlugs,
                 'category_slug': categorySlug,
+                'category_status': categoryStatus,
                 'sort': sort,
             },
             errors: {

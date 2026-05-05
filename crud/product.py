@@ -18,6 +18,7 @@ from models.supplier import ProductLocalStock, ProductSupplierMapping, SupplierO
 
 ALLOWED_FILTER_GROUP_SLUGS = {"brand", "series", "expert-badge", "type", "category"}
 ALLOWED_INDOOR_TYPE_FILTERS = {"duct", "cassette", "floor_ceiling", "column"}
+CATALOG_CATEGORY_SLUGS = {"cat-household", "cat-multi", "cat-industrial"}
 CATALOG_RANKING_WEIGHTS = {
     "availability": 100,
     "out_of_stock": -100,
@@ -231,6 +232,22 @@ class ProductDAO:
                 subq = select(ProductTagLink.product_id).where(ProductTagLink.tag_id.in_(tag_ids))
                 stmt = stmt.where(Product.id.in_(subq))
         return stmt
+
+    @staticmethod
+    def _apply_category_status_filter(stmt, category_status: Optional[str] = None):
+        normalized_status = (category_status or "").strip().lower()
+        if normalized_status != "missing":
+            return stmt
+
+        category_subq = (
+            select(ProductTagLink.product_id)
+            .join(Tag, ProductTagLink.tag_id == Tag.id)
+            .join(TagGroup, Tag.group_id == TagGroup.id)
+            .where(ProductTagLink.product_id == Product.id)
+            .where(TagGroup.slug == "category")
+            .where(Tag.slug.in_(CATALOG_CATEGORY_SLUGS))
+        )
+        return stmt.where(~exists(category_subq))
 
     @staticmethod
     def _apply_smart_search_filter(stmt, query: str):
@@ -555,8 +572,10 @@ class ProductDAO:
         has_fresh_air: Optional[bool] = None,
         brand_slugs: Optional[List[str]] = None,
         category_slug: Optional[str] = None,
+        category_status: Optional[str] = None,
         sort: str = "recommended",
     ) -> tuple[List[Product], int]:
+        normalized_category_status = (category_status or "").strip().lower()
         stmt = select(Product).options(
             selectinload(Product.gallery_images),
             selectinload(Product.tags).selectinload(Tag.group),
@@ -571,7 +590,7 @@ class ProductDAO:
             "has_wifi": has_wifi,
             "has_fresh_air": has_fresh_air,
             "is_inverter": is_inverter,
-            "tag_slugs": [category_slug] if category_slug else None,
+            "tag_slugs": [category_slug] if category_slug and normalized_category_status != "missing" else None,
             "brand_slugs": brand_slugs,
             "is_published": is_published,
         }
@@ -580,11 +599,13 @@ class ProductDAO:
             stmt=stmt,
             **common_filter_kwargs,
         )
+        stmt = ProductDAO._apply_category_status_filter(stmt, normalized_category_status)
         count_stmt = ProductDAO._apply_common_filters(
             session=session,
             stmt=count_stmt,
             **common_filter_kwargs,
         )
+        count_stmt = ProductDAO._apply_category_status_filter(count_stmt, normalized_category_status)
 
         if search:
             stmt = stmt.where(Product.title.ilike(f"%{search}%"))
@@ -596,6 +617,8 @@ class ProductDAO:
             stmt = stmt.order_by(Product.price.desc())
         elif sort == "title":
             stmt = stmt.order_by(Product.title.asc())
+        elif sort == "newest":
+            stmt = stmt.order_by(Product.created_at.desc(), Product.id.desc())
         elif sort == "recommended":
             stmt = stmt.order_by(
                 ProductDAO._catalog_recommendation_score_expr(area_max=area_max).desc(),

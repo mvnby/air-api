@@ -85,6 +85,85 @@ async def test_manager_products_list_respects_category_slug(async_client, db):
 
 
 @pytest.mark.asyncio
+async def test_manager_products_list_can_show_missing_category_products(async_client, db):
+    headers = await _auth_headers(async_client)
+
+    household_tag = await _get_or_create_category_tag(db, "cat-household", "Бытовые")
+    multi_tag = await _get_or_create_category_tag(db, "cat-multi", "Мульти-сплит")
+    industrial_tag = await _get_or_create_category_tag(db, "cat-industrial", "Полупром")
+
+    marker = "UNITCATMISS111"
+    missing = Product(
+        title=f"{marker} Missing Category",
+        slug=f"{marker.lower()}-missing",
+        price=1000,
+        area=20,
+        is_published=True,
+    )
+    household = Product(
+        title=f"{marker} Household",
+        slug=f"{marker.lower()}-household",
+        price=1100,
+        area=20,
+        is_published=True,
+    )
+    multi = Product(
+        title=f"{marker} Multi",
+        slug=f"{marker.lower()}-multi",
+        price=1200,
+        area=20,
+        is_published=True,
+    )
+    industrial = Product(
+        title=f"{marker} Industrial",
+        slug=f"{marker.lower()}-industrial",
+        price=1300,
+        area=20,
+        is_published=True,
+    )
+    db.add_all([missing, household, multi, industrial])
+    await db.commit()
+    for product in [missing, household, multi, industrial]:
+        await db.refresh(product)
+
+    db.add_all(
+        [
+            ProductTagLink(product_id=household.id, tag_id=household_tag.id),
+            ProductTagLink(product_id=multi.id, tag_id=multi_tag.id),
+            ProductTagLink(product_id=industrial.id, tag_id=industrial_tag.id),
+        ]
+    )
+    await db.commit()
+
+    resp = await async_client.get(
+        "/api/manager/products/list",
+        headers=headers,
+        params={
+            "search": marker,
+            "category_status": "missing",
+            "category_slug": "cat-household",
+            "limit": 100,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    ids = {item["id"] for item in resp.json()["items"]}
+    assert missing.id in ids
+    assert household.id not in ids
+    assert multi.id not in ids
+    assert industrial.id not in ids
+
+    household_resp = await async_client.get(
+        "/api/manager/products/list",
+        headers=headers,
+        params={"search": marker, "category_slug": "cat-household", "limit": 100},
+    )
+    assert household_resp.status_code == 200, household_resp.text
+    household_ids = {item["id"] for item in household_resp.json()["items"]}
+    assert household.id in household_ids
+    assert missing.id not in household_ids
+
+
+@pytest.mark.asyncio
 async def test_manager_products_smart_search_respects_category_slug(async_client, db):
     headers = await _auth_headers(async_client)
 

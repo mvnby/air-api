@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -74,6 +74,7 @@ async def list_products_for_manager(
     has_fresh_air: Optional[bool] = Query(None),
     brand_slugs: Optional[List[str]] = Query(None, description="Brand slugs to include"),
     category_slug: Optional[str] = Query(None, description="Category tag slug: cat-household/cat-multi/cat-industrial"),
+    category_status: Optional[Literal["assigned", "missing"]] = Query(None, description="Catalog category status: assigned/missing"),
     sort: str = Query("recommended"),
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
@@ -96,6 +97,7 @@ async def list_products_for_manager(
         has_fresh_air=has_fresh_air,
         brand_slugs=brand_slugs,
         category_slug=category_slug,
+        category_status=category_status,
         sort=sort,
     )
 
