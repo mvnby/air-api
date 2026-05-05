@@ -6,9 +6,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from core.app_constants import (
-    ADMIN_ROUTE_PREFIX,
     INTERNAL_SERVER_ERROR_MESSAGE,
-    INTERNAL_SERVER_ERROR_TITLE,
 )
 from core.config import settings
 from core.logger import logger
@@ -16,19 +14,8 @@ from core.manager_error_codes import INTERNAL_ERROR, VALIDATION_ERROR, resolve_m
 from core.manager_telemetry import ManagerTelemetryService
 
 
-def _is_admin_path(path: str) -> bool:
-    return path.startswith(ADMIN_ROUTE_PREFIX)
-
-
 def _is_manager_api_path(path: str) -> bool:
     return path.startswith("/api/manager")
-
-
-def _admin_error_response(detail: str) -> JSONResponse:
-    return JSONResponse(
-        status_code=500,
-        content={"error": INTERNAL_SERVER_ERROR_TITLE, "detail": detail},
-    )
 
 
 def _public_error_response() -> JSONResponse:
@@ -94,9 +81,6 @@ async def manager_validation_exception_handler(request: Request, exc: RequestVal
 
 async def global_exception_handler(request: Request, exc: Exception):
     logger.exception(f"Unhandled exception at {request.url}: {exc}")
-
-    if _is_admin_path(str(request.url.path)):
-        return _admin_error_response(str(exc))
 
     if _is_manager_api_path(str(request.url.path)):
         ManagerTelemetryService.record_error(

@@ -246,8 +246,7 @@ const onMoveOrder = async (payload: { orderId: number; oldStatus: string; newSta
   movingOrderIds.value.push(payload.orderId);
   applyStatusLocally(payload.orderId, payload.newStatus);
   try {
-    const response = await api.moveOrderStatus(payload.orderId, payload.newStatus);
-    if (!response.success) throw new Error(response.error || 'Move failed');
+    await api.moveOrderStatus(payload.orderId, payload.newStatus);
     setToast('Статус обновлен');
   } catch (error) {
     console.error(error);

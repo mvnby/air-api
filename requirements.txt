@@ -77,7 +77,6 @@ requests-oauthlib==2.0.0
 rsa==4.9.1
 sentry-sdk==2.51.0
 soupsieve==2.8.1
-sqladmin==0.22.0
 SQLAlchemy==2.0.45
 sqlmodel==0.0.31
 starlette==0.50.0

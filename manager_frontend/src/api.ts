@@ -13,7 +13,6 @@ import {
     ManagerServiceEstimatesService,
     ManagerBrandsService,
     SystemService,
-    AdminService,
     ApiService,
     type ProductUpdate,
     type ManagerCustomerBranchCreatePayload,
@@ -164,10 +163,8 @@ export const api = {
     },
 
     async moveOrderStatus(orderId: number, newStatus: string) {
-        return await AdminService.moveOrderStatusAdminApiOrderMovePost({
-            order_id: orderId,
-            new_status: newStatus,
-        });
+        await ManagerOrdersService.patchManagerOrder(orderId, { status: newStatus });
+        return { success: true };
     },
 
     async getManagerLeads(params: {

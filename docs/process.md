@@ -12,13 +12,11 @@
 
 1. Main product development target:
    - `manager_frontend/` + `routers/manager_*`.
-2. Legacy SQLAdmin target:
-   - compatibility and maintenance only.
-   - allowed: bugfixes, regressions, required compat updates.
-   - disallowed by default: net-new product workflows/features.
-3. Any PR touching `admin/*` must include justification:
-   - why legacy change is required now,
-   - why this is not implemented in manager flow.
+2. Legacy SQLAdmin status:
+   - removed from the application.
+   - `/admin` is kept only as a redirect into Manager UI.
+   - do not reintroduce SQLAdmin or add legacy `/admin` UI workflows.
+3. Any new internal workflow must target manager routes and manager UI.
 
 ## Manager API Client Sync Policy
 
@@ -87,4 +85,3 @@ CI enforces this sync and fails if generated artifacts differ from committed fil
    ```bash
    docker compose exec app python3 scripts/normalize_legacy.py
    ```
-

@@ -7,7 +7,7 @@
 - Backend API: FastAPI + SQLModel
 - Storefront: Astro + Vue
 - Manager CRM: Vue + FastAPI
-- Legacy admin: SQLAdmin
+- Manager admin: Vue + FastAPI (`manager_frontend/`)
 - Telegram bot
 - Импортеры и парсеры товаров
 - Генерация документов, договоров, актов и счетов
@@ -52,11 +52,11 @@ FastAPI-приложение с разделением слоев:
 
 Современная админ-панель в `manager_frontend/`.
 
-Новые бизнес-функции должны разрабатываться в Manager UI, а не в legacy SQLAdmin.
+Все внутренние бизнес-функции должны разрабатываться в Manager UI.
 
 ### Legacy Admin
 
-`admin/` используется только для совместимости, багфиксов и обслуживания старых сценариев.
+Legacy SQLAdmin удален. Старый `/admin` редиректит в менеджер, новые workflows добавляются только в Manager UI.
 
 ## Быстрый старт
 

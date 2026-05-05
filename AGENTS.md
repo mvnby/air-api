@@ -6,7 +6,7 @@ This file defines practical workflows and commands for contributors and coding a
 
 - Backend API: FastAPI + SQLModel (`main.py`, `routers/`, `services/`, `crud/`)
 - Frontend storefront: Astro + Vue (`web/`)
-- Admin: SQLAdmin custom views (`admin/`)
+- Legacy admin: removed SQLAdmin surface; use the manager app (`manager_frontend/`) for admin workflows.
 - Manager app (future primary admin UI on Vue + FastAPI): `manager_frontend/`
 - Tests: `tests/unit/`, `tests/integration/`
 - Data/import utilities: `scripts/`
@@ -14,15 +14,14 @@ This file defines practical workflows and commands for contributors and coding a
 ## Core Rules
 
 - Keep service-layer boundaries:
-  - `routers/` and `admin/` should not contain direct DB business logic.
+  - `routers/` should not contain direct DB business logic.
   - business logic belongs in `services/`.
   - persistence access belongs in `crud/`.
 - Reuse existing normalization logic in `services/spec_normalizer.py` instead of duplicating key/value cleanup.
 - Prefer small, targeted changes and run relevant tests/scripts before handoff.
 - Manager-first policy:
   - New product functionality must be implemented in `manager_frontend/` + `routers/manager_*`.
-  - Legacy SQLAdmin (`admin/`) is compatibility-only: bugfixes, regressions, and required maintenance.
-  - Do not introduce net-new business features in legacy admin unless explicitly approved.
+  - Legacy SQLAdmin is removed. Do not reintroduce SQLAdmin or add new workflows under a legacy `/admin` UI.
 - Frontend theme consistency (mandatory):
   - For glass/panel/filter surfaces use global tokens from `web/src/assets/index.css` (`--panel-*` family).
   - Do not hardcode light-only panel colors (`rgba(255,255,255,...)`, `#fff`) inside page/component styles.
@@ -114,7 +113,7 @@ Use this after large catalog imports or when unknown spec keys appear.
    - CRM Orders dashboard (B2C/B2B, Kanban/List),
    - Leads funnel (`/api/manager/leads`) with qualification into `Customer + Order`.
 3. Future direction:
-   - migrate broader admin entities and flows from legacy SQLAdmin UX to Vue-based reactive UX.
+   - keep expanding manager entities and flows in the Vue-based reactive UX.
 4. When API contracts change:
    - update backend schemas/routes,
    - regenerate OpenAPI (`python3 scripts/legacy/extract_openapi.py`),
@@ -122,8 +121,8 @@ Use this after large catalog imports or when unknown spec keys appear.
    - commit generated artifacts (`openapi.json`, `manager_frontend/src/client/*`) when changed,
    - verify photo/spec bulk-edit flows end-to-end.
 5. Legacy admin freeze:
-   - keep SQLAdmin routes/views working for existing operations,
-   - avoid adding new user workflows there,
+   - SQLAdmin routes/views have been removed,
+   - avoid adding user workflows under a legacy `/admin` UI,
    - route new UX requirements to manager views first.
 
 ### 5) Leads Funnel Workflow
@@ -185,5 +184,5 @@ Production server intentionally runs from Docker images only (no git checkout in
 
 - `docker-compose.yml` service names are `app`, `db`, `web`, `bot` (not `mvn-app`).
 - `scripts/normalize_legacy.py` uses shared normalization logic from `services/spec_normalizer.py`; keep both in sync.
-- Legacy admin (`admin/`, SQLAdmin) and manager app (`manager_frontend/`, Vue) currently coexist; prefer implementing new rich admin UX in manager app.
+- Legacy SQLAdmin was removed; manager app (`manager_frontend/`, Vue) is the internal admin UI.
 - Manager list endpoints enforce pagination limits (`limit <= 100`); keep frontend requests within this bound.

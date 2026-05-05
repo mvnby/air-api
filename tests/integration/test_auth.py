@@ -33,8 +33,7 @@ async def test_login_failure(async_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_access_protected_route_without_token(async_client: AsyncClient):
     """Test accessing a protected admin route without authentication."""
-    # Using a known admin route, e.g., /admin/ (from SQLAdmin) or an API route if available
-    # Checking routers/api.py, /api/admin/proxy/egr is protected by get_current_username
+    # Checking routers/api.py, /api/admin/proxy/egr is protected by get_current_username.
     
     response = await async_client.get("/api/admin/proxy/egr?unp=100100100")
     
