@@ -146,12 +146,23 @@ const FAVORITE_TAG_TITLE = 'Избранное';
 const FAVORITE_TAG_GROUP_SLUG = 'manager-flags';
 const FAVORITE_TAG_GROUP_TITLE = 'Метки менеджера';
 const hasSearchQuery = computed(() => searchQuery.value.trim().length > 0);
-const categorySlug = ref<'cat-household' | 'cat-multi' | 'cat-industrial'>('cat-household');
-const CATEGORY_FILTER_TABS: Array<{ slug: 'cat-household' | 'cat-multi' | 'cat-industrial'; title: string }> = [
-    { slug: 'cat-household', title: 'Бытовые' },
-    { slug: 'cat-multi', title: 'Мульти-сплит' },
-    { slug: 'cat-industrial', title: 'Полупром' },
+type CatalogCategorySlug = 'cat-household' | 'cat-multi' | 'cat-industrial';
+type CategoryFilterValue = CatalogCategorySlug | 'missing';
+const categoryFilter = ref<CategoryFilterValue>('cat-household');
+const CATEGORY_FILTER_TABS: Array<{ value: CategoryFilterValue; title: string }> = [
+    { value: 'cat-household', title: 'Бытовые' },
+    { value: 'cat-multi', title: 'Мульти-сплит' },
+    { value: 'cat-industrial', title: 'Полупром' },
+    { value: 'missing', title: 'Без категории' },
 ];
+const isMissingCategoryFilter = computed(() => categoryFilter.value === 'missing');
+const categorySlug = computed<CatalogCategorySlug | undefined>(() => (
+    isMissingCategoryFilter.value ? undefined : categoryFilter.value as CatalogCategorySlug
+));
+const categoryStatus = computed<'missing' | undefined>(() => (
+    isMissingCategoryFilter.value ? 'missing' : undefined
+));
+const usesSmartSearch = computed(() => hasSearchQuery.value && !isMissingCategoryFilter.value);
 const favoriteTagId = ref<number | null>(null);
 const favoriteUpdatingIds = ref<Set<number>>(new Set());
 const availableBrands = computed(() => (
@@ -176,6 +187,9 @@ const applyFilters = () => {
 };
 
 const onCategoryChange = () => {
+    if (isMissingCategoryFilter.value && sortMode.value === 'recommended') {
+        sortMode.value = 'newest';
+    }
     selectedProductIds.value.clear();
     page.value = 1;
     loadProducts();
@@ -191,7 +205,7 @@ const resetFilters = () => {
     hasFreshAir.value = undefined;
     selectedBrandSlug.value = null;
     sortMode.value = 'recommended';
-    categorySlug.value = 'cat-household';
+    categoryFilter.value = 'cat-household';
     selectedProductIds.value.clear();
     page.value = 1;
     loadProducts();
@@ -204,6 +218,7 @@ const getManagerProductFilters = () => ({
     brandSlugs: selectedBrandSlug.value ? [selectedBrandSlug.value] : undefined,
     areaMin: areaMin.value,
     areaMax: areaMax.value,
+    categoryStatus: categoryStatus.value,
 });
 
 const toggleBrand = (slug: string | null) => {
@@ -453,7 +468,7 @@ const loadProducts = async () => {
   loading.value = true;
   page.value = 1;
   try {
-    if (hasSearchQuery.value) {
+    if (usesSmartSearch.value) {
       const smartResults = await api.smartSearchProducts(
           searchQuery.value.trim(),
           SMART_SEARCH_LIMIT,
@@ -468,7 +483,7 @@ const loadProducts = async () => {
       const data = await api.getManagerProducts(
           1,
           limit,
-          undefined,
+          isMissingCategoryFilter.value ? searchQuery.value.trim() || undefined : undefined,
           undefined, // isPublished (not exposed yet)
           areaMin.value,
           areaMax.value,
@@ -502,7 +517,7 @@ const loadProducts = async () => {
 };
 
 const loadMore = async () => {
-    if (loadingMore.value || !hasMore.value || hasSearchQuery.value) return;
+    if (loadingMore.value || !hasMore.value || usesSmartSearch.value) return;
     loadingMore.value = true;
     page.value++;
     try {
@@ -874,11 +889,11 @@ watchDebounced(
             </label>
             <select
               id="manager-product-category"
-              v-model="categorySlug"
+              v-model="categoryFilter"
               class="min-w-[150px] bg-transparent text-sm font-semibold text-gray-900 dark:text-slate-100 outline-none"
               @change="onCategoryChange"
             >
-              <option v-for="tab in CATEGORY_FILTER_TABS" :key="tab.slug" :value="tab.slug">
+              <option v-for="tab in CATEGORY_FILTER_TABS" :key="tab.value" :value="tab.value">
                 {{ tab.title }}
               </option>
             </select>

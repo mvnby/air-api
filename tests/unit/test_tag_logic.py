@@ -61,6 +61,24 @@ def test_detect_category_slug_for_multi_inner_block():
     assert slug == "cat-multi"
 
 
+def test_detect_category_slug_for_mobile_conditioner():
+    slug = detect_category_slug(
+        metrics={},
+        specs={"type": "мобильный", "indoor_type": "напольный"},
+        title="TCL TAC-09CPB/PSLW",
+    )
+    assert slug == "cat-household"
+
+
+def test_detect_category_slug_for_portable_monoblock_conditioner():
+    slug = detect_category_slug(
+        metrics={},
+        specs={"Тип кондиционера": "portable monoblock"},
+        title="MDV portable AC",
+    )
+    assert slug == "cat-household"
+
+
 def test_extract_brand_slug_falls_back_to_title_first_brand_word():
     slug = extract_brand_slug(
         specs={"Тип кондиционера": "сплит-система"},

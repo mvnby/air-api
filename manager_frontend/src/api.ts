@@ -111,6 +111,7 @@ export interface ManagerProductFilterOptions {
     brandSlugs?: string[];
     areaMin?: number;
     areaMax?: number;
+    categoryStatus?: 'assigned' | 'missing';
 }
 
 export const api = {
@@ -457,6 +458,7 @@ export const api = {
             filters.hasFreshAir ?? undefined,
             filters.brandSlugs ?? undefined,
             categorySlug ?? undefined,
+            filters.categoryStatus ?? undefined,
             sort,
         );
     },

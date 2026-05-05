@@ -30,6 +30,7 @@ class ManagerCatalogService:
         has_fresh_air: Optional[bool],
         brand_slugs: Optional[list[str]],
         category_slug: Optional[str],
+        category_status: Optional[str],
         sort: str,
     ) -> Dict[str, Any]:
         return await ProductService.get_manager_list(
@@ -46,6 +47,7 @@ class ManagerCatalogService:
             has_fresh_air=has_fresh_air,
             brand_slugs=brand_slugs,
             category_slug=category_slug,
+            category_status=category_status,
             sort=sort,
         )
 
