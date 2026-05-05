@@ -5,8 +5,7 @@ def test_refactored_routers_do_not_perform_direct_db_work():
     repo_root = Path(__file__).resolve().parents[2]
     router_paths = [
         repo_root / "routers" / "manager_orders_write.py",
-        repo_root / "routers" / "admin_schedule.py",
-        repo_root / "routers" / "admin_orders.py",
+        repo_root / "routers" / "manager_calendar.py",
     ]
     forbidden = (
         "async_session_maker",
