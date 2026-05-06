@@ -18,6 +18,9 @@ from .cart import Cart, CartItem
 from .content import Article, GlobalConfig
 from .order import (
     Installer,
+    DocumentTemplate,
+    DocumentTemplateActLink,
+    DocumentTemplateCustomerLink,
     Order,
     OrderDocument,
     OrderInstaller,
@@ -62,6 +65,9 @@ __all__ = [
     "CustomerContract",
     "CustomerType",
     "DocumentRoleType",
+    "DocumentTemplate",
+    "DocumentTemplateActLink",
+    "DocumentTemplateCustomerLink",
     "Favorite",
     "GlobalConfig",
     "InstallationRate",

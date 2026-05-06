@@ -11,6 +11,7 @@ from services.google_service import get_google_service
 from services.documents.base import TEMPLATES, DOC_NAMES, BaseDocumentStrategy
 from services.documents.factory import DocumentFactory
 from services.document_role_service import DocumentRoleService
+from services.document_template_service import DocumentTemplateService
 
 
 class DocumentService:
@@ -22,12 +23,27 @@ class DocumentService:
     async def get_available_templates(
         session: AsyncSession,
         doc_type: str,
+        order_id: Optional[int] = None,
+        customer_id: Optional[int] = None,
     ) -> List[dict]:
         """
         Возвращает список доступных шаблонов для данного типа документа.
         Для contract — читает GlobalConfig key 'contract_templates' (JSON).
         Для остальных — возвращает единственный дефолтный шаблон.
         """
+        if doc_type in DocumentTemplateService.MANAGED_TYPES:
+            try:
+                if order_id:
+                    return await DocumentTemplateService.get_relevant_templates_for_order(session, order_id, doc_type)
+                return await DocumentTemplateService.get_relevant_templates(
+                    session,
+                    doc_type,
+                    customer_id=customer_id,
+                )
+            except Exception:
+                if doc_type != "contract":
+                    raise
+
         default_id = TEMPLATES.get(doc_type)
         default_name = DOC_NAMES.get(doc_type, doc_type)
 
@@ -97,6 +113,7 @@ class DocumentService:
         session: AsyncSession,
         order_id: int,
         doc_type: str = "contract",
+        document_template_id: Optional[int] = None,
         template_id: Optional[str] = None,
         contract_date: Optional[datetime] = None,
     ) -> OrderDocument:
@@ -129,6 +146,7 @@ class DocumentService:
             session,
             order_id,
             doc_type,
+            document_template_id=document_template_id,
             template_id=template_id,
             contract_date=contract_date,
         )
@@ -138,6 +156,7 @@ class DocumentService:
         session: AsyncSession,
         order_id: int,
         doc_type: str,
+        document_template_id: Optional[int] = None,
         template_id: Optional[str] = None,
         contract_date: Optional[datetime] = None,
     ) -> dict:
@@ -148,6 +167,7 @@ class DocumentService:
             session=session,
             order_id=order_id,
             doc_type=doc_type,
+            document_template_id=document_template_id,
             template_id=template_id,
             contract_date=contract_date,
         )
@@ -299,6 +319,7 @@ class DocumentService:
         session: AsyncSession,
         order_id: int,
         doc_type: str,
+        document_template_id: Optional[int] = None,
         template_id: Optional[str] = None,
         contract_date: Optional[datetime] = None,
     ) -> OrderDocument:
@@ -313,21 +334,27 @@ class DocumentService:
             order = order_result.scalars().first()
             if not order:
                 raise ValueError("Order not found")
+            base_doc_types = ["contract", "invoice"] if doc_type == "act" else ["contract"]
             contract_query = select(OrderDocument).where(
                 OrderDocument.order_id == order_id,
-                OrderDocument.doc_type == "contract"
+                OrderDocument.doc_type.in_(base_doc_types)
             )
             result = await session.execute(contract_query)
-            has_one_time_contract = result.scalars().first() is not None
+            has_one_time_base_doc = result.scalars().first() is not None
             if order.customer and order.customer.type == CustomerType.company:
-                if not order.customer_contract_id and not has_one_time_contract:
-                    raise ValueError("Невозможно создать акт/накладную: выберите открытый договор клиента или создайте договор заказа")
-            elif not has_one_time_contract:
-                raise ValueError("Невозможно создать акт/накладную: отсутствует договор")
+                if not order.customer_contract_id and not has_one_time_base_doc:
+                    raise ValueError("Невозможно создать акт/накладную: выберите открытый договор клиента или создайте договор/счет заказа")
+            elif not has_one_time_base_doc:
+                raise ValueError("Невозможно создать акт/накладную: отсутствует договор или счет")
 
-        # 1. Получаем template_id (используем переданный или дефолтный)
-        if not template_id:
-            template_id = TEMPLATES.get(doc_type)
+        # 1. Получаем template_id (managed template, legacy query param or default)
+        document_template_id, template_id = await DocumentTemplateService.resolve_template_for_generation(
+            session,
+            order_id=order_id,
+            doc_type=doc_type,
+            document_template_id=document_template_id,
+            template_id=template_id,
+        )
         if not template_id:
             raise ValueError(f"Unknown document type: {doc_type}")
         
@@ -422,6 +449,8 @@ class DocumentService:
         # 8. Создаем запись в БД
         new_doc = OrderDocument(
             order_id=order_id,
+            document_template_id=document_template_id,
+            template_id=template_id,
             doc_type=doc_type,
             number=doc_number,
             date=effective_doc_date,

@@ -140,6 +140,7 @@ export class ManagerOrdersService {
      * Generate Manager Order Document
      * @param orderId
      * @param docType
+     * @param documentTemplateId Managed document template ID
      * @param templateId Google Drive template file ID
      * @param contractDate Document/contract date as ISO datetime
      * @returns ManagerOrderDocumentResponse Successful Response
@@ -148,6 +149,7 @@ export class ManagerOrdersService {
     public static generateManagerOrderDocument(
         orderId: number,
         docType: string,
+        documentTemplateId?: (number | null),
         templateId?: (string | null),
         contractDate?: (string | null),
     ): CancelablePromise<ManagerOrderDocumentResponse> {
@@ -159,6 +161,7 @@ export class ManagerOrdersService {
                 'doc_type': docType,
             },
             query: {
+                'document_template_id': documentTemplateId,
                 'template_id': templateId,
                 'contract_date': contractDate,
             },

@@ -2,16 +2,15 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type DocumentTemplateItem = {
-    id: string;
-    document_template_id?: (number | null);
+export type DocumentTemplatePayload = {
     name: string;
-    document_role_type?: string;
-    is_open_contract?: boolean;
-    doc_type?: string;
+    doc_type: string;
+    google_template_id: string;
+    document_role_type?: (string | null);
     description?: (string | null);
     is_default?: boolean;
     is_active?: boolean;
+    is_open_contract?: boolean;
     client_restricted?: boolean;
     sort_order?: number;
     customer_ids?: Array<number>;

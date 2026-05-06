@@ -197,6 +197,66 @@ class OrderServiceLink(SQLModel, table=True):
     service: "Service" = Relationship(back_populates="order_links")
 
 
+class DocumentTemplateCustomerLink(SQLModel, table=True):
+    __tablename__ = "document_template_customer_link"
+
+    template_id: int = Field(foreign_key="document_template.id", primary_key=True)
+    customer_id: int = Field(foreign_key="customer.id", primary_key=True)
+
+
+class DocumentTemplateActLink(SQLModel, table=True):
+    __tablename__ = "document_template_act_link"
+
+    contract_template_id: int = Field(foreign_key="document_template.id", primary_key=True)
+    act_template_id: int = Field(foreign_key="document_template.id", primary_key=True)
+
+
+class DocumentTemplate(SQLModel, table=True):
+    __tablename__ = "document_template"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(index=True)
+    doc_type: str = Field(index=True)
+    google_template_id: str = Field(index=True)
+    document_role_type: Optional[DocumentRoleType] = Field(default=None, sa_column=Column(String, nullable=True))
+    description: Optional[str] = None
+
+    is_default: bool = Field(default=False, index=True)
+    is_active: bool = Field(default=True, index=True)
+    is_open_contract: bool = Field(default=False, index=True)
+    client_restricted: bool = Field(default=False, index=True)
+    sort_order: int = Field(default=0, index=True)
+
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
+
+    customers: List["Customer"] = Relationship(
+        link_model=DocumentTemplateCustomerLink,
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )
+    linked_act_templates: List["DocumentTemplate"] = Relationship(
+        link_model=DocumentTemplateActLink,
+        sa_relationship_kwargs={
+            "primaryjoin": "DocumentTemplate.id==DocumentTemplateActLink.contract_template_id",
+            "secondaryjoin": "DocumentTemplate.id==DocumentTemplateActLink.act_template_id",
+            "lazy": "selectin",
+            "overlaps": "linked_contract_templates",
+        },
+    )
+    linked_contract_templates: List["DocumentTemplate"] = Relationship(
+        link_model=DocumentTemplateActLink,
+        sa_relationship_kwargs={
+            "primaryjoin": "DocumentTemplate.id==DocumentTemplateActLink.act_template_id",
+            "secondaryjoin": "DocumentTemplate.id==DocumentTemplateActLink.contract_template_id",
+            "lazy": "selectin",
+            "overlaps": "linked_act_templates",
+        },
+    )
+
+    def __str__(self):
+        return self.name
+
+
 class OrderWorkStage(SQLModel, table=True):
     __tablename__ = "order_work_stage"
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -376,6 +436,8 @@ class OrderDocument(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     order_id: int = Field(foreign_key="order.id", index=True)
+    document_template_id: Optional[int] = Field(default=None, foreign_key="document_template.id", index=True)
+    template_id: Optional[str] = Field(default=None, index=True)
     doc_type: str = Field(index=True)
     number: str
     date: datetime = Field(default_factory=datetime.now)
@@ -386,6 +448,7 @@ class OrderDocument(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.now)
 
     order: "Order" = Relationship(back_populates="documents")
+    document_template: Optional["DocumentTemplate"] = Relationship()
 
     def __str__(self):
         return f"{self.doc_type.upper()} {self.number} от {self.date.strftime('%d.%m.%Y')}"
