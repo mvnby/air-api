@@ -629,13 +629,66 @@ class ManagerOrderDocumentResponse(BaseModel):
 
 class DocumentTemplateItem(BaseModel):
     id: str
+    document_template_id: Optional[int] = None
     name: str
     document_role_type: str = "seller_buyer"
     is_open_contract: bool = False
+    doc_type: str = "contract"
+    description: Optional[str] = None
+    is_default: bool = False
+    is_active: bool = True
+    client_restricted: bool = False
+    sort_order: int = 0
+    customer_ids: List[int] = Field(default_factory=list)
+    linked_contract_template_ids: List[int] = Field(default_factory=list)
+    linked_act_template_ids: List[int] = Field(default_factory=list)
 
 
 class DocumentTemplateListResponse(BaseModel):
     items: List[DocumentTemplateItem]
+
+
+class DocumentTemplateFileItem(BaseModel):
+    id: str
+    name: str
+    mime_type: Optional[str] = None
+    created_time: Optional[str] = None
+
+
+class DocumentTemplateFileListResponse(BaseModel):
+    items: List[DocumentTemplateFileItem]
+
+
+class DocumentTemplatePayload(BaseModel):
+    name: str
+    doc_type: str
+    google_template_id: str
+    document_role_type: Optional[str] = None
+    description: Optional[str] = None
+    is_default: bool = False
+    is_active: bool = True
+    is_open_contract: bool = False
+    client_restricted: bool = False
+    sort_order: int = 0
+    customer_ids: List[int] = Field(default_factory=list)
+    linked_contract_template_ids: List[int] = Field(default_factory=list)
+    linked_act_template_ids: List[int] = Field(default_factory=list)
+
+
+class DocumentTemplateUpdatePayload(BaseModel):
+    name: Optional[str] = None
+    doc_type: Optional[str] = None
+    google_template_id: Optional[str] = None
+    document_role_type: Optional[str] = None
+    description: Optional[str] = None
+    is_default: Optional[bool] = None
+    is_active: Optional[bool] = None
+    is_open_contract: Optional[bool] = None
+    client_restricted: Optional[bool] = None
+    sort_order: Optional[int] = None
+    customer_ids: Optional[List[int]] = None
+    linked_contract_template_ids: Optional[List[int]] = None
+    linked_act_template_ids: Optional[List[int]] = None
 
 
 

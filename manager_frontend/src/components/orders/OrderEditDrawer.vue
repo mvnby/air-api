@@ -444,6 +444,14 @@ const handleFileUpload = async (event: Event) => {
 const isCompanyOrder = computed(() => props.order?.customer?.type === 'company' || !!props.order?.customer?.inn);
 const hasOrderContract = computed(() => documents.value.some(d => d.doc_type === 'contract'));
 const hasContract = computed(() => (isCompanyOrder.value ? !!selectedCustomerContractId.value : false) || hasOrderContract.value);
+const hasOrderInvoice = computed(() => documents.value.some(d => d.doc_type === 'invoice'));
+const hasClosingBaseDocument = computed(() => hasContract.value || hasOrderInvoice.value);
+const isDocumentTypeLocked = (type: string) => (
+  type === 'act' ? !hasClosingBaseDocument.value : (type === 'ttn1' || type === 'tn2') && !hasContract.value
+);
+const lockedDocumentTitle = (type: string) => (
+  type === 'act' ? 'Сначала создайте договор или счет' : 'Сначала создайте договор'
+);
 const websiteOrderSummary = computed(() => {
   const lines = websiteProductSummaryLines.value.length + websiteServiceSummaryLines.value.length;
   const parts = [];
@@ -470,10 +478,10 @@ const planningDetailsSummary = computed(() => {
   return parts.join(' · ') || 'дополнительные поля не заполнены';
 });
 const documentSectionSummary = computed(() => {
-  const contractText = hasContract.value ? 'договор есть' : 'без договора';
+  const contractText = hasContract.value ? 'договор есть' : (hasOrderInvoice.value ? 'есть счет' : 'без договора');
   return `${documents.value.length} док. · ${contractText}`;
 });
-const documentSectionHasError = computed(() => isCompanyOrder.value && !selectedCustomerContractId.value && !hasOrderContract.value);
+const documentSectionHasError = computed(() => isCompanyOrder.value && !selectedCustomerContractId.value && !hasClosingBaseDocument.value);
 
 const DOCUMENT_TYPES = [
   { type: 'contract', label: 'Договор' },
@@ -543,7 +551,7 @@ const selectedContractBinding = computed({
 
 const loadContractTemplates = async () => {
   try {
-    const res = await ManagerDocsService.getDocTemplates('contract');
+    const res = await ManagerDocsService.getDocTemplates('contract', props.order?.id);
     contractTemplates.value = res.items.filter((template) => !template.is_open_contract);
     if (contractTemplates.value.length > 0 && contractTemplates.value[0]) {
       selectedContractTemplateId.value = contractTemplates.value[0].id;
@@ -623,14 +631,20 @@ const useOneTimeContractForClosingDocs = async () => {
   });
 };
 
-const generateDocument = async (type: string, templateId?: string, documentDate?: string) => {
+const generateDocument = async (type: string, template?: DocumentTemplateItem | null, documentDate?: string) => {
   if (!props.order?.id) return;
   isGeneratingDoc.value = true;
   try {
     if (type === 'contract' && isCompanyOrder.value) {
       await useOneTimeContractForClosingDocs();
     }
-    const res = await ManagerOrdersService.generateManagerOrderDocument(props.order.id, type, templateId, documentDate);
+    const res = await ManagerOrdersService.generateManagerOrderDocument(
+      props.order.id,
+      type,
+      template?.document_template_id ?? undefined,
+      template && !template.document_template_id ? template.id : undefined,
+      documentDate,
+    );
     window.open(res.edit_url, '_blank');
     await loadDocuments(props.order.id);
     setToast('Документ создан', 'success');
@@ -2200,12 +2214,12 @@ watch(
                 v-for="dtype in DOCUMENT_TYPES"
                 :key="dtype.type"
                 class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:text-slate-400 disabled:opacity-70 disabled:hover:bg-transparent dark:text-slate-200 dark:hover:bg-slate-700 dark:disabled:text-slate-500"
-                :disabled="(dtype.type === 'act' || dtype.type === 'ttn1' || dtype.type === 'tn2') && !hasContract"
-                :title="(dtype.type === 'act' || dtype.type === 'ttn1' || dtype.type === 'tn2') && !hasContract ? 'Сначала создайте договор' : ''"
-                @click="generateDocument(dtype.type, dtype.type === 'contract' ? selectedContractTemplateId || undefined : undefined, getDocumentDateForType(dtype.type)); docDropdownOpen = false"
+                :disabled="isDocumentTypeLocked(dtype.type)"
+                :title="isDocumentTypeLocked(dtype.type) ? lockedDocumentTitle(dtype.type) : ''"
+                @click="generateDocument(dtype.type, dtype.type === 'contract' ? selectedContractTemplate : undefined, getDocumentDateForType(dtype.type)); docDropdownOpen = false"
               >
                 {{ dtype.label }}
-                <span v-if="(dtype.type === 'act' || dtype.type === 'ttn1' || dtype.type === 'tn2') && !hasContract" class="material-icons-round text-[16px] text-amber-500">lock</span>
+                <span v-if="isDocumentTypeLocked(dtype.type)" class="material-icons-round text-[16px] text-amber-500">lock</span>
               </button>
             </div>
           </div>
@@ -2239,7 +2253,7 @@ watch(
               Создать открытый договор
             </button>
           </div>
-          <p v-else-if="!selectedCustomerContractId && !hasOrderContract" class="mt-2 text-xs text-amber-600 dark:text-amber-400">Для актов и накладных нужен открытый договор или разовый договор заказа.</p>
+          <p v-else-if="!selectedCustomerContractId && !hasClosingBaseDocument" class="mt-2 text-xs text-amber-600 dark:text-amber-400">Для актов нужен договор или счет, для накладных нужен договор.</p>
         </div>
 
         <div class="mb-3 rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-slate-700/50 dark:bg-slate-900/40 dark:shadow-none">

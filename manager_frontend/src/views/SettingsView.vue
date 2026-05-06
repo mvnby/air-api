@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { api } from '../api';
-import type { ManagerGoogleAuthStatusResponse, ManagerSettingResponse, ManagerSettingUpdatePayload } from '../client';
-import { ManagerSettingsService } from '../client';
+import type { DocumentTemplateItem, DocumentTemplatePayload, ManagerCatalogCustomerItemResponse, ManagerGoogleAuthStatusResponse, ManagerSettingResponse, ManagerSettingUpdatePayload } from '../client';
+import { ManagerDocsService, ManagerSettingsService } from '../client';
 import { getApiErrorMessage } from '../utils/api-errors';
 
 const settings = ref<ManagerSettingResponse[]>([]);
@@ -14,18 +14,52 @@ const toastType = ref<'success' | 'error'>('success');
 // A set to keep track of which settings are currently being saved
 const savingKeys = ref<Set<string>>(new Set());
 type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
+type SettingsTab = 'general' | 'documentTemplates';
+type ManagedDocumentType = 'contract' | 'act' | 'invoice';
+type DocumentTemplateFileOption = {
+    id: string;
+    name: string;
+    mime_type?: string | null;
+    created_time?: string | null;
+};
 interface ContractTemplateForm {
     id: string;
     name: string;
     document_role_type: DocumentRoleType;
     is_open_contract: boolean;
 }
+type DocumentTemplateForm = {
+    document_template_id?: number | null;
+    name: string;
+    doc_type: ManagedDocumentType;
+    google_template_id: string;
+    document_role_type: DocumentRoleType;
+    description: string;
+    is_default: boolean;
+    is_active: boolean;
+    is_open_contract: boolean;
+    client_restricted: boolean;
+    sort_order: number;
+    customer_ids: number[];
+    linked_contract_template_ids: number[];
+    linked_act_template_ids: number[];
+};
 const DOCUMENT_ROLE_OPTIONS: Array<{ value: DocumentRoleType; label: string }> = [
     { value: 'seller_buyer', label: 'Продавец / Покупатель' },
     { value: 'executor_customer', label: 'Исполнитель / Заказчик' },
     { value: 'contractor_customer', label: 'Подрядчик / Заказчик' },
 ];
 const contractTemplateDrafts = ref<Record<string, ContractTemplateForm[]>>({});
+const documentTemplates = ref<DocumentTemplateForm[]>([]);
+const customers = ref<ManagerCatalogCustomerItemResponse[]>([]);
+const templateFiles = ref<DocumentTemplateFileOption[]>([]);
+const customerSearch = ref('');
+const templateFolderId = ref('1SClclCJS2FUVtfF-vbVqN8zI77Sl_E9t');
+const activeSettingsTab = ref<SettingsTab>('general');
+const loadingTemplateFiles = ref(false);
+const loadingCustomerSearch = ref(false);
+const savingTemplateKeys = ref<Set<string>>(new Set());
+const deletingTemplateId = ref<number | null>(null);
 
 // Create form
 const showCreateForm = ref(false);
@@ -49,6 +83,74 @@ const setToast = (msg: string, type: 'success' | 'error' = 'success') => {
     toastType.value = type;
     window.setTimeout(() => { toast.value = ''; }, 3000);
 }
+
+const DOCUMENT_TYPE_OPTIONS: Array<{ value: ManagedDocumentType; label: string; addLabel: string }> = [
+    { value: 'contract', label: 'Договор', addLabel: 'Договор' },
+    { value: 'invoice', label: 'Счет / счет-договор', addLabel: 'Счет' },
+    { value: 'act', label: 'Акт', addLabel: 'Акт' },
+];
+
+const emptyDocumentTemplate = (docType: ManagedDocumentType = 'contract'): DocumentTemplateForm => ({
+    document_template_id: null,
+    name: '',
+    doc_type: docType,
+    google_template_id: '',
+    document_role_type: 'seller_buyer',
+    description: '',
+    is_default: false,
+    is_active: true,
+    is_open_contract: false,
+    client_restricted: false,
+    sort_order: documentTemplates.value.length * 10,
+    customer_ids: [],
+    linked_contract_template_ids: [],
+    linked_act_template_ids: [],
+});
+
+const mapTemplateItemToForm = (item: DocumentTemplateItem): DocumentTemplateForm => ({
+    document_template_id: item.document_template_id ?? null,
+    name: item.name || '',
+    doc_type: normalizeDocumentType(item.doc_type),
+    google_template_id: item.id || '',
+    document_role_type: normalizeRoleType(item.document_role_type),
+    description: item.description || '',
+    is_default: item.is_default === true,
+    is_active: item.is_active !== false,
+    is_open_contract: item.is_open_contract === true,
+    client_restricted: item.client_restricted === true,
+    sort_order: Number(item.sort_order ?? 0),
+    customer_ids: [...(item.customer_ids ?? [])],
+    linked_contract_template_ids: [...(item.linked_contract_template_ids ?? [])],
+    linked_act_template_ids: [...(item.linked_act_template_ids ?? [])],
+});
+
+const documentTemplatePayload = (template: DocumentTemplateForm): DocumentTemplatePayload => ({
+    name: template.name.trim(),
+    doc_type: template.doc_type,
+    google_template_id: template.google_template_id.trim(),
+    document_role_type: normalizeRoleType(template.document_role_type),
+    description: template.description.trim() || undefined,
+    is_default: template.is_default,
+    is_active: template.is_active,
+    is_open_contract: template.doc_type === 'contract' ? template.is_open_contract : false,
+    client_restricted: template.client_restricted,
+    sort_order: Number(template.sort_order || 0),
+    customer_ids: template.customer_ids,
+    linked_contract_template_ids: template.doc_type === 'act' ? template.linked_contract_template_ids : [],
+    linked_act_template_ids: template.doc_type === 'contract' || template.doc_type === 'invoice' ? template.linked_act_template_ids : [],
+});
+
+const contractDocumentTemplates = computed(() =>
+    documentTemplates.value.filter((template) => ['contract', 'invoice'].includes(template.doc_type) && template.document_template_id),
+);
+const actDocumentTemplates = computed(() =>
+    documentTemplates.value.filter((template) => template.doc_type === 'act' && template.document_template_id),
+);
+const selectedCustomerMap = computed(() => new Map(customers.value.map((customer) => [customer.id, customer])));
+const filteredTemplateFiles = computed(() => {
+    const usedIds = new Set(documentTemplates.value.map((template) => template.google_template_id).filter(Boolean));
+    return templateFiles.value.filter((file) => file.id && (!usedIds.has(file.id) || documentTemplates.value.some((template) => template.google_template_id === file.id)));
+});
 
 const loadGoogleAuthStatus = async () => {
     googleAuthLoading.value = true;
@@ -79,7 +181,7 @@ const loadSettings = async () => {
     error.value = '';
     try {
         const res = await api.listManagerSettings();
-        settings.value = res.items;
+        settings.value = res.items.filter((setting) => setting.key !== 'contract_templates');
         contractTemplateDrafts.value = Object.fromEntries(
             res.items
                 .filter((setting) => setting.key === 'contract_templates')
@@ -92,10 +194,138 @@ const loadSettings = async () => {
     }
 };
 
+const loadDocumentTemplates = async () => {
+    try {
+        const res = await ManagerDocsService.listManagerDocumentTemplates();
+        documentTemplates.value = res.items.map(mapTemplateItemToForm);
+    } catch (e) {
+        setToast(getApiErrorMessage(e), 'error');
+    }
+};
+
+const loadCustomers = async (search = '') => {
+    loadingCustomerSearch.value = true;
+    try {
+        const res = await api.getManagerCustomers(1, 20, search.trim() || undefined, undefined, false);
+        const selectedIds = new Set(documentTemplates.value.flatMap((template) => template.customer_ids));
+        const existingSelected = customers.value.filter((customer) => selectedIds.has(customer.id));
+        const merged = [...existingSelected, ...res.items];
+        customers.value = Array.from(new Map(merged.map((customer) => [customer.id, customer])).values());
+    } catch (e) {
+        setToast(getApiErrorMessage(e), 'error');
+    } finally {
+        loadingCustomerSearch.value = false;
+    }
+};
+
+const loadTemplateFiles = async () => {
+    loadingTemplateFiles.value = true;
+    try {
+        const res = await ManagerDocsService.listManagerDocumentTemplateFiles(templateFolderId.value.trim() || undefined, 100);
+        templateFiles.value = res.items.map((item) => ({
+            id: item.id,
+            name: item.name,
+            mime_type: item.mime_type,
+            created_time: item.created_time,
+        }));
+    } catch (e) {
+        setToast(getApiErrorMessage(e), 'error');
+    } finally {
+        loadingTemplateFiles.value = false;
+    }
+};
+
+const addDocumentTemplate = (docType: ManagedDocumentType) => {
+    documentTemplates.value = [emptyDocumentTemplate(docType), ...documentTemplates.value];
+};
+
+const selectTemplateFile = (template: DocumentTemplateForm, fileId: string) => {
+    template.google_template_id = fileId;
+    const file = templateFiles.value.find((item) => item.id === fileId);
+    if (file && !template.name.trim()) {
+        template.name = file.name.replace(/\.[^.]+$/, '');
+    }
+};
+
+const selectedCustomersForTemplate = (template: DocumentTemplateForm) => (
+    template.customer_ids
+        .map((customerId) => selectedCustomerMap.value.get(customerId))
+        .filter((customer): customer is ManagerCatalogCustomerItemResponse => Boolean(customer))
+);
+
+const addCustomerToTemplate = (template: DocumentTemplateForm, customerId: number | string) => {
+    const normalizedId = Number(customerId);
+    if (!normalizedId || template.customer_ids.includes(normalizedId)) return;
+    template.customer_ids = [...template.customer_ids, normalizedId];
+    template.client_restricted = true;
+};
+
+const removeCustomerFromTemplate = (template: DocumentTemplateForm, customerId: number) => {
+    template.customer_ids = template.customer_ids.filter((id) => id !== customerId);
+    if (!template.customer_ids.length) {
+        template.client_restricted = false;
+    }
+};
+
+const customerLabel = (customer: ManagerCatalogCustomerItemResponse) => {
+    const title = customer.full_legal_name || customer.name || `Клиент #${customer.id}`;
+    return customer.inn ? `${title} · УНП ${customer.inn}` : title;
+};
+
+const saveDocumentTemplate = async (template: DocumentTemplateForm) => {
+    const key = String(template.document_template_id || `new:${template.doc_type}:${template.sort_order}`);
+    if (savingTemplateKeys.value.has(key)) return;
+    if (!template.name.trim() || !template.google_template_id.trim()) {
+        setToast('Заполните название и Google Template ID', 'error');
+        return;
+    }
+    savingTemplateKeys.value.add(key);
+    try {
+        const payload = documentTemplatePayload(template);
+        const saved = template.document_template_id
+            ? await ManagerDocsService.patchManagerDocumentTemplate(template.document_template_id, payload)
+            : await ManagerDocsService.createManagerDocumentTemplate(payload);
+        const savedForm = mapTemplateItemToForm(saved);
+        const index = documentTemplates.value.indexOf(template);
+        if (index >= 0) {
+            documentTemplates.value[index] = savedForm;
+        }
+        setToast('Шаблон сохранен');
+    } catch (e) {
+        setToast(getApiErrorMessage(e), 'error');
+    } finally {
+        savingTemplateKeys.value.delete(key);
+    }
+};
+
+const deleteDocumentTemplate = async (template: DocumentTemplateForm) => {
+    if (!template.document_template_id) {
+        documentTemplates.value = documentTemplates.value.filter((item) => item !== template);
+        return;
+    }
+    if (!confirm(`Удалить шаблон "${template.name}"?`)) return;
+    deletingTemplateId.value = template.document_template_id;
+    try {
+        await ManagerDocsService.deleteManagerDocumentTemplate(template.document_template_id);
+        documentTemplates.value = documentTemplates.value.filter((item) => item.document_template_id !== template.document_template_id);
+        setToast('Шаблон удален');
+    } catch (e) {
+        setToast(getApiErrorMessage(e), 'error');
+    } finally {
+        deletingTemplateId.value = null;
+    }
+};
+
 const normalizeRoleType = (value: unknown): DocumentRoleType => {
     const raw = String(value || '').trim();
     if (raw === 'executor_customer' || raw === 'contractor_customer') return raw;
     return 'seller_buyer';
+};
+
+const normalizeDocumentType = (value: unknown): ManagedDocumentType => {
+    const raw = String(value || '').trim();
+    if (raw === 'act' || raw === 'invoice') return raw;
+    return 'contract';
 };
 
 const parseContractTemplates = (raw: string): ContractTemplateForm[] => {
@@ -213,6 +443,8 @@ const formatDate = (dateStr: string) => {
 
 onMounted(() => {
     void loadSettings();
+    void loadDocumentTemplates().then(() => loadCustomers());
+    void loadTemplateFiles();
     void loadGoogleAuthStatus();
 });
 </script>
@@ -228,44 +460,65 @@ onMounted(() => {
             </div>
         </Transition>
 
-        <div class="flex justify-between items-center mb-8">
-            <div>
+        <div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div class="pl-16 sm:pl-0">
                 <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
                     <span class="material-icons-round text-teal-600 dark:text-teal-400">settings</span>
-                    Настройки сайта
+                    Настройки
                 </h1>
                 <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">
                     Управление глобальными параметрами и конфигурацией сайта
                 </p>
             </div>
             
-            <div class="flex items-center gap-2">
+            <div class="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:items-center">
                 <button
                     @click="goToBackups"
-                    class="flex items-center gap-2 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-medium py-2.5 px-4 rounded-lg shadow-sm transition-all text-sm"
+                    class="flex min-w-0 items-center justify-center gap-2 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-medium py-2.5 px-3 sm:px-4 rounded-lg shadow-sm transition-all text-sm"
                 >
                     <span class="material-icons-round text-[18px]">warning</span>
-                    DR / Бэкапы
+                    <span class="min-w-0 leading-tight">DR / Бэкапы</span>
                 </button>
                 <button 
                     @click="showCreateForm = !showCreateForm"
-                    class="flex items-center gap-2 bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-medium py-2.5 px-4 rounded-lg shadow-sm transition-all text-sm"
+                    class="flex min-w-0 items-center justify-center gap-2 bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-medium py-2.5 px-3 sm:px-4 rounded-lg shadow-sm transition-all text-sm"
                 >
                     <span class="material-icons-round text-[18px]">{{ showCreateForm ? 'close' : 'add_circle' }}</span>
-                    {{ showCreateForm ? 'Отмена' : 'Добавить' }}
+                    <span class="min-w-0 leading-tight">{{ showCreateForm ? 'Отмена' : 'Добавить' }}</span>
                 </button>
                 <button 
                     @click="loadSettings"
-                    class="flex items-center gap-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 active:bg-gray-100 dark:active:bg-slate-600 text-gray-700 dark:text-slate-300 font-medium py-2.5 px-4 rounded-lg shadow-sm transition-all text-sm"
+                    class="flex min-w-0 items-center justify-center gap-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 active:bg-gray-100 dark:active:bg-slate-600 text-gray-700 dark:text-slate-300 font-medium py-2.5 px-3 sm:px-4 rounded-lg shadow-sm transition-all text-sm"
                     :disabled="loading"
                 >
                     <span class="material-icons-round text-[18px]" :class="{'animate-spin': loading}">refresh</span>
-                    Обновить
+                    <span class="min-w-0 leading-tight">Обновить</span>
                 </button>
             </div>
         </div>
 
-        <div class="mb-6 bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-gray-200 dark:border-slate-700/60 p-6">
+        <div class="mb-6 flex flex-wrap gap-2 rounded-xl border border-gray-200 bg-white p-2 shadow-sm dark:border-slate-700/60 dark:bg-[#1e293b]">
+            <button
+                type="button"
+                class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                :class="activeSettingsTab === 'general' ? 'bg-teal-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'"
+                @click="activeSettingsTab = 'general'"
+            >
+                <span class="material-icons-round text-[18px]">tune</span>
+                Основные
+            </button>
+            <button
+                type="button"
+                class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                :class="activeSettingsTab === 'documentTemplates' ? 'bg-teal-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'"
+                @click="activeSettingsTab = 'documentTemplates'"
+            >
+                <span class="material-icons-round text-[18px]">description</span>
+                Шаблоны документов
+            </button>
+        </div>
+
+        <div v-if="activeSettingsTab === 'general'" class="mb-6 bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-gray-200 dark:border-slate-700/60 p-6">
             <div class="flex items-start justify-between gap-4 flex-wrap">
                 <div>
                     <h3 class="text-base font-semibold text-gray-900 dark:text-slate-200 mb-1 flex items-center gap-2">
@@ -312,9 +565,257 @@ onMounted(() => {
             </div>
         </div>
 
+        <div v-if="activeSettingsTab === 'documentTemplates'" class="mb-6 bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-gray-200 dark:border-slate-700/60 p-6">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                    <h3 class="text-base font-semibold text-gray-900 dark:text-slate-200 mb-1 flex items-center gap-2">
+                        <span class="material-icons-round text-teal-500 text-[20px]">description</span>
+                        Шаблоны документов
+                    </h3>
+                    <p class="text-xs text-gray-500 dark:text-slate-400">
+                        Общие формы для всех клиентов и редкие персональные формы по УНП/названию.
+                    </p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button
+                        v-for="option in DOCUMENT_TYPE_OPTIONS"
+                        :key="option.value"
+                        type="button"
+                        class="flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-medium text-white shadow-sm"
+                        :class="option.value === 'act' ? 'bg-slate-700 hover:bg-slate-600' : 'bg-teal-600 hover:bg-teal-500'"
+                        @click="addDocumentTemplate(option.value)"
+                    >
+                        <span class="material-icons-round text-[16px]">add</span>
+                        {{ option.addLabel }}
+                    </button>
+                </div>
+            </div>
+
+            <div class="mt-5 rounded-xl border border-teal-100 bg-teal-50/60 p-4 dark:border-teal-500/30 dark:bg-teal-500/10">
+                <label class="mb-2 block text-xs font-medium text-teal-800 dark:text-teal-200">Папка Google Drive с шаблонами</label>
+                <div class="flex flex-col gap-2 sm:flex-row">
+                    <input
+                        v-model="templateFolderId"
+                        type="text"
+                        class="min-w-0 flex-1 rounded-lg border border-teal-200 bg-white px-3 py-2 font-mono text-sm text-gray-900 shadow-sm dark:border-teal-500/40 dark:bg-slate-900 dark:text-slate-200"
+                        placeholder="Google Drive folder ID"
+                    />
+                    <button
+                        type="button"
+                        class="flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-teal-700 shadow-sm ring-1 ring-teal-200 hover:bg-teal-50 disabled:opacity-60 dark:bg-slate-900 dark:text-teal-200 dark:ring-teal-500/40 dark:hover:bg-slate-800"
+                        :disabled="loadingTemplateFiles"
+                        @click="loadTemplateFiles"
+                    >
+                        <span class="material-icons-round text-[18px]" :class="{ 'animate-spin': loadingTemplateFiles }">refresh</span>
+                        Обновить список
+                    </button>
+                </div>
+            </div>
+
+            <div class="mt-5 space-y-3">
+                <div
+                    v-for="template in documentTemplates"
+                    :key="template.document_template_id || `${template.doc_type}-${template.sort_order}-${template.google_template_id}`"
+                    class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-slate-700 dark:bg-slate-900/50"
+                >
+                    <div class="grid grid-cols-1 gap-3 lg:grid-cols-[170px_1fr_1.2fr_180px_120px]">
+                        <div>
+                            <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Тип</label>
+                            <select
+                                v-model="template.doc_type"
+                                class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                            >
+                                <option v-for="option in DOCUMENT_TYPE_OPTIONS" :key="option.value" :value="option.value">
+                                    {{ option.label }}
+                                </option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Название</label>
+                            <input
+                                v-model="template.name"
+                                type="text"
+                                class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                                placeholder="Название для менеджера"
+                            />
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Файл шаблона</label>
+                            <select
+                                :value="template.google_template_id"
+                                class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                                @change="selectTemplateFile(template, ($event.target as HTMLSelectElement).value)"
+                            >
+                                <option value="">Выберите файл из папки templates</option>
+                                <option v-for="file in filteredTemplateFiles" :key="file.id" :value="file.id">
+                                    {{ file.name }}
+                                </option>
+                            </select>
+                            <input
+                                v-model="template.google_template_id"
+                                type="text"
+                                class="mt-2 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 font-mono text-xs text-gray-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400"
+                                placeholder="или Google Template ID вручную"
+                            />
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Роли</label>
+                            <select
+                                v-model="template.document_role_type"
+                                class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                            >
+                                <option v-for="option in DOCUMENT_ROLE_OPTIONS" :key="option.value" :value="option.value">
+                                    {{ option.label }}
+                                </option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Позиция</label>
+                            <input
+                                v-model.number="template.sort_order"
+                                type="number"
+                                class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                                placeholder="0"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
+                        <textarea
+                            v-model="template.description"
+                            rows="3"
+                            class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                            placeholder="Комментарий для менеджера"
+                        />
+                        <div>
+                            <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Доступность</label>
+                            <div class="rounded-lg border border-gray-300 bg-white p-3 shadow-sm dark:border-slate-600 dark:bg-slate-900">
+                                <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
+                                    <input
+                                        type="checkbox"
+                                        class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                                        :checked="!template.client_restricted"
+                                        @change="template.client_restricted = !($event.target as HTMLInputElement).checked; if (!template.client_restricted) template.customer_ids = []"
+                                    />
+                                    Для всех клиентов
+                                </label>
+                                <div v-if="template.client_restricted" class="mt-3 space-y-2">
+                                    <div class="flex gap-2">
+                                        <input
+                                            v-model="customerSearch"
+                                            type="search"
+                                            class="min-w-0 flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                            placeholder="Найти по УНП или названию"
+                                            @keydown.enter.prevent="loadCustomers(customerSearch)"
+                                        />
+                                        <button
+                                            type="button"
+                                            class="rounded-lg bg-slate-700 px-3 py-2 text-xs font-medium text-white hover:bg-slate-600 disabled:opacity-60"
+                                            :disabled="loadingCustomerSearch"
+                                            @click="loadCustomers(customerSearch)"
+                                        >
+                                            Найти
+                                        </button>
+                                    </div>
+                                    <select
+                                        class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                        @change="addCustomerToTemplate(template, ($event.target as HTMLSelectElement).value); ($event.target as HTMLSelectElement).value = ''"
+                                    >
+                                        <option value="">Добавить найденного клиента</option>
+                                        <option
+                                            v-for="customer in customers"
+                                            :key="customer.id"
+                                            :value="customer.id"
+                                            :disabled="template.customer_ids.includes(customer.id)"
+                                        >
+                                            {{ customerLabel(customer) }}
+                                        </option>
+                                    </select>
+                                    <div class="flex flex-wrap gap-2">
+                                        <button
+                                            v-for="customer in selectedCustomersForTemplate(template)"
+                                            :key="customer.id"
+                                            type="button"
+                                            class="inline-flex items-center gap-1 rounded-full bg-teal-50 px-3 py-1 text-xs font-medium text-teal-800 ring-1 ring-teal-200 dark:bg-teal-500/10 dark:text-teal-200 dark:ring-teal-500/30"
+                                            @click="removeCustomerFromTemplate(template, customer.id)"
+                                        >
+                                            {{ customerLabel(customer) }}
+                                            <span class="material-icons-round text-[14px]">close</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="template.doc_type === 'contract' || template.doc_type === 'invoice'">
+                            <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Связанные акты</label>
+                            <select
+                                v-model="template.linked_act_template_ids"
+                                multiple
+                                class="h-24 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                            >
+                                <option v-for="act in actDocumentTemplates" :key="act.document_template_id || 0" :value="act.document_template_id || 0">
+                                    {{ act.name }}
+                                </option>
+                            </select>
+                        </div>
+                        <div v-else>
+                            <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Для договоров / счетов</label>
+                            <select
+                                v-model="template.linked_contract_template_ids"
+                                multiple
+                                class="h-24 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                            >
+                                <option v-for="contract in contractDocumentTemplates" :key="contract.document_template_id || 0" :value="contract.document_template_id || 0">
+                                    {{ contract.name }}
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
+                        <div class="flex flex-wrap gap-3 text-sm text-gray-700 dark:text-slate-300">
+                            <label class="flex items-center gap-2">
+                                <input v-model="template.is_active" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+                                Активен
+                            </label>
+                            <label class="flex items-center gap-2">
+                                <input v-model="template.is_default" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+                                По умолчанию
+                            </label>
+                            <label v-if="template.doc_type === 'contract'" class="flex items-center gap-2">
+                                <input v-model="template.is_open_contract" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+                                Открытый договор
+                            </label>
+                        </div>
+                        <div class="flex gap-2">
+                            <button
+                                type="button"
+                                class="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 shadow-sm hover:bg-red-50 dark:border-red-500/40 dark:bg-slate-900 dark:text-red-300 dark:hover:bg-red-500/10"
+                                :disabled="deletingTemplateId === template.document_template_id"
+                                @click="deleteDocumentTemplate(template)"
+                            >
+                                Удалить
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-lg bg-teal-600 px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-teal-500 disabled:opacity-60"
+                                :disabled="savingTemplateKeys.has(String(template.document_template_id || `new:${template.doc_type}:${template.sort_order}`))"
+                                @click="saveDocumentTemplate(template)"
+                            >
+                                Сохранить
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <p v-if="!documentTemplates.length" class="rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-slate-700 dark:text-slate-400">
+                    Управляемые шаблоны пока не добавлены. Старые шаблоны из JSON продолжают работать как fallback до миграции.
+                </p>
+            </div>
+        </div>
+
         <!-- Create Setting Form -->
         <Transition name="toast">
-            <div v-if="showCreateForm" class="mb-6 bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border-2 border-teal-500/50 p-6">
+            <div v-if="activeSettingsTab === 'general' && showCreateForm" class="mb-6 bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border-2 border-teal-500/50 p-6">
                 <h3 class="text-base font-semibold text-gray-900 dark:text-slate-200 mb-4 flex items-center gap-2">
                     <span class="material-icons-round text-teal-500 text-[20px]">add_circle</span>
                     Новый параметр
@@ -369,11 +870,11 @@ onMounted(() => {
             {{ error }}
         </div>
 
-        <div v-if="loading && !settings.length" class="flex justify-center py-20">
+        <div v-if="activeSettingsTab === 'general' && loading && !settings.length" class="flex justify-center py-20">
             <div class="w-8 h-8 rounded-full border-4 border-gray-200 dark:border-slate-700 border-t-teal-500 animate-spin"></div>
         </div>
 
-        <div v-else class="space-y-4">
+        <div v-else-if="activeSettingsTab === 'general'" class="space-y-4">
             <div v-for="setting in settings" :key="setting.key" class="bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-gray-200 dark:border-slate-700/60 p-6 flex flex-col md:flex-row gap-6 items-start md:items-center transition-colors">
                 <div class="flex-1 space-y-2 w-full">
                     <div>

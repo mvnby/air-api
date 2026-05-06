@@ -126,12 +126,18 @@ const addPayment = async () => {
   }
 };
 
-const generateDocument = async (type: string, templateId?: string, documentDate?: string) => {
+const generateDocument = async (type: string, template?: DocumentTemplateItem | null, documentDate?: string) => {
   try {
     if (type === 'contract' && isCompanyOrder.value) {
       await useOneTimeContractForClosingDocs();
     }
-    const res = await ManagerOrdersService.generateManagerOrderDocument(props.order.id, type, templateId, documentDate);
+    const res = await ManagerOrdersService.generateManagerOrderDocument(
+      props.order.id,
+      type,
+      template?.document_template_id ?? undefined,
+      template && !template.document_template_id ? template.id : undefined,
+      documentDate,
+    );
     window.open(res.edit_url, '_blank');
     await loadDocuments();
     emit('refresh');
@@ -188,6 +194,14 @@ const oneTimeContractDocument = computed(() => (
 ));
 const hasOrderContract = computed(() => !!oneTimeContractDocument.value);
 const hasContract = computed(() => (isCompanyOrder.value ? !!selectedCustomerContractId.value : false) || hasOrderContract.value);
+const hasOrderInvoice = computed(() => documents.value.some((doc) => doc.doc_type === 'invoice'));
+const hasClosingBaseDocument = computed(() => hasContract.value || hasOrderInvoice.value);
+const isDocumentTypeLocked = (type: string) => (
+  type === 'act' ? !hasClosingBaseDocument.value : (type === 'ttn1' || type === 'tn2') && !hasContract.value
+);
+const lockedDocumentTitle = (type: string) => (
+  type === 'act' ? 'Сначала создайте договор или счет' : 'Сначала создайте договор'
+);
 const datedDocumentTypes = new Set(['contract', 'act', 'tn2', 'ttn1']);
 const getDocumentDateForType = (type: string) => (
   datedDocumentTypes.has(type) && documentDate.value ? `${documentDate.value}T00:00:00` : undefined
@@ -289,7 +303,7 @@ const loadDocuments = async () => {
 
 const loadContractTemplates = async () => {
   try {
-    const res = await ManagerDocsService.getDocTemplates('contract');
+    const res = await ManagerDocsService.getDocTemplates('contract', props.order.id);
     contractTemplates.value = res.items.filter((template) => !template.is_open_contract);
     if (contractTemplates.value.length > 0 && contractTemplates.value[0]) {
       selectedContractTemplateId.value = contractTemplates.value[0].id;
@@ -303,10 +317,10 @@ const handleDocGenerate = async (type: string) => {
   isGeneratingDoc.value = true;
   docDropdownOpen.value = false;
   try {
-    const templateId = (type === 'contract' && selectedContractTemplateId.value)
-      ? selectedContractTemplateId.value
+    const template = (type === 'contract' && selectedContractTemplateId.value)
+      ? selectedContractTemplate.value
       : undefined;
-    await generateDocument(type, templateId, getDocumentDateForType(type));
+    await generateDocument(type, template, getDocumentDateForType(type));
     setToast('Документ создан', 'success');
   } finally {
     isGeneratingDoc.value = false;
@@ -564,12 +578,12 @@ watch(() => props.order.id, () => {
                   v-for="dtype in DOCUMENT_TYPES"
                   :key="dtype.type"
                   class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:text-slate-400 disabled:opacity-70 disabled:hover:bg-transparent dark:text-slate-200 dark:hover:bg-slate-700 dark:disabled:text-slate-500"
-                  :disabled="(dtype.type === 'act' || dtype.type === 'ttn1' || dtype.type === 'tn2') && !hasContract"
-                  :title="(dtype.type === 'act' || dtype.type === 'ttn1' || dtype.type === 'tn2') && !hasContract ? 'Сначала создайте договор' : ''"
+                  :disabled="isDocumentTypeLocked(dtype.type)"
+                  :title="isDocumentTypeLocked(dtype.type) ? lockedDocumentTitle(dtype.type) : ''"
                   @click="handleDocGenerate(dtype.type)"
                 >
                   {{ dtype.label }}
-                  <span v-if="(dtype.type === 'act' || dtype.type === 'ttn1' || dtype.type === 'tn2') && !hasContract" class="material-icons-round text-[16px] text-amber-500">lock</span>
+                  <span v-if="isDocumentTypeLocked(dtype.type)" class="material-icons-round text-[16px] text-amber-500">lock</span>
                 </button>
               </div>
             </div>
@@ -603,7 +617,7 @@ watch(() => props.order.id, () => {
                 Создать открытый договор
               </button>
             </div>
-            <p v-else-if="!selectedCustomerContractId && !hasOrderContract" class="mt-2 text-xs text-amber-600 dark:text-amber-400">Для актов и накладных нужен открытый договор или разовый договор заказа.</p>
+            <p v-else-if="!selectedCustomerContractId && !hasClosingBaseDocument" class="mt-2 text-xs text-amber-600 dark:text-amber-400">Для актов нужен договор или счет, для накладных нужен договор.</p>
           </div>
 
           <div class="mb-3 rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-slate-700/50 dark:bg-slate-900/40 dark:shadow-none">

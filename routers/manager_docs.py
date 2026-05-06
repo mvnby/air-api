@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, UploadFile, File
+from fastapi import APIRouter, Depends, UploadFile, File, Query
 from fastapi.responses import StreamingResponse
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
@@ -12,6 +13,11 @@ from routers.manager_operation_ids import (
     GET_MANAGER_DOC_DOWNLOAD,
     DELETE_MANAGER_DOC,
     GET_DOC_TEMPLATES,
+    LIST_MANAGER_DOCUMENT_TEMPLATES,
+    LIST_MANAGER_DOCUMENT_TEMPLATE_FILES,
+    CREATE_MANAGER_DOCUMENT_TEMPLATE,
+    PATCH_MANAGER_DOCUMENT_TEMPLATE,
+    DELETE_MANAGER_DOCUMENT_TEMPLATE,
 )
 from schemas import (
     ManagerOrderDocumentListResponse,
@@ -19,11 +25,19 @@ from schemas import (
     ManagerActionMessageResponse,
     DocumentTemplateListResponse,
     DocumentTemplateItem,
+    DocumentTemplateFileItem,
+    DocumentTemplateFileListResponse,
+    DocumentTemplatePayload,
+    DocumentTemplateUpdatePayload,
 )
 from services.document_service import DocumentService
+from services.document_template_service import DocumentTemplateService
+from services.google_service import get_google_service
 
 
 router = APIRouter(prefix="/api/manager", tags=["manager-docs"])
+
+DEFAULT_DOCUMENT_TEMPLATE_FOLDER_ID = "1SClclCJS2FUVtfF-vbVqN8zI77Sl_E9t"
 
 
 @router.get(
@@ -130,23 +144,126 @@ async def delete_manager_doc(
 
 
 @router.get(
+    "/docs/document-templates",
+    response_model=DocumentTemplateListResponse,
+    operation_id=LIST_MANAGER_DOCUMENT_TEMPLATES,
+)
+async def list_manager_document_templates(
+    doc_type: str | None = Query(None),
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    items = await DocumentTemplateService.list_template_items(session, doc_type, include_legacy=False)
+    return {"items": [DocumentTemplateItem(**item) for item in items]}
+
+
+@router.get(
+    "/docs/document-template-files",
+    response_model=DocumentTemplateFileListResponse,
+    operation_id=LIST_MANAGER_DOCUMENT_TEMPLATE_FILES,
+)
+async def list_manager_document_template_files(
+    folder_id: str = Query(DEFAULT_DOCUMENT_TEMPLATE_FOLDER_ID),
+    limit: int = Query(100, ge=1, le=200),
+    _: str = Depends(get_current_username),
+):
+    files = await run_in_threadpool(lambda: get_google_service().list_files(folder_id, limit=limit))
+    return {
+        "items": [
+            DocumentTemplateFileItem(
+                id=str(item.get("id") or ""),
+                name=str(item.get("name") or ""),
+                mime_type=item.get("mimeType"),
+                created_time=item.get("createdTime"),
+            )
+            for item in files
+            if item.get("id") and item.get("name")
+        ]
+    }
+
+
+@router.post(
+    "/docs/document-templates",
+    response_model=DocumentTemplateItem,
+    operation_id=CREATE_MANAGER_DOCUMENT_TEMPLATE,
+)
+async def create_manager_document_template(
+    payload: DocumentTemplatePayload,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        item = await DocumentTemplateService.create_template(session, payload)
+        return DocumentTemplateItem(**item)
+    except ValueError as exc:
+        raise manager_http_error(status_code=400, endpoint=CREATE_MANAGER_DOCUMENT_TEMPLATE, error_code=BAD_REQUEST, message=str(exc)) from exc
+
+
+@router.patch(
+    "/docs/document-templates/{template_id}",
+    response_model=DocumentTemplateItem,
+    operation_id=PATCH_MANAGER_DOCUMENT_TEMPLATE,
+)
+async def patch_manager_document_template(
+    template_id: int,
+    payload: DocumentTemplateUpdatePayload,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        item = await DocumentTemplateService.update_template(session, template_id, payload)
+        return DocumentTemplateItem(**item)
+    except ValueError as exc:
+        raise manager_http_error(status_code=400, endpoint=PATCH_MANAGER_DOCUMENT_TEMPLATE, error_code=BAD_REQUEST, message=str(exc)) from exc
+
+
+@router.delete(
+    "/docs/document-templates/{template_id}",
+    response_model=ManagerActionMessageResponse,
+    operation_id=DELETE_MANAGER_DOCUMENT_TEMPLATE,
+)
+async def delete_manager_document_template(
+    template_id: int,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        await DocumentTemplateService.delete_template(session, template_id)
+        return {"message": "Document template deleted"}
+    except ValueError as exc:
+        raise manager_http_error(status_code=404, endpoint=DELETE_MANAGER_DOCUMENT_TEMPLATE, error_code=DOCUMENT_NOT_FOUND, message=str(exc)) from exc
+
+
+@router.get(
     "/docs/templates/{doc_type}",
     response_model=DocumentTemplateListResponse,
     operation_id=GET_DOC_TEMPLATES,
 )
 async def get_doc_templates(
     doc_type: str,
+    order_id: int | None = Query(None),
+    customer_id: int | None = Query(None),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
 ):
-    items = await DocumentService.get_available_templates(session, doc_type)
+    items = await DocumentService.get_available_templates(session, doc_type, order_id=order_id, customer_id=customer_id)
     return {
         "items": [
             DocumentTemplateItem(
                 id=t["id"],
+                document_template_id=t.get("document_template_id"),
                 name=t["name"],
                 document_role_type=t.get("document_role_type"),
                 is_open_contract=bool(t.get("is_open_contract")),
+                doc_type=t.get("doc_type", doc_type),
+                description=t.get("description"),
+                is_default=bool(t.get("is_default")),
+                is_active=bool(t.get("is_active", True)),
+                client_restricted=bool(t.get("client_restricted")),
+                sort_order=int(t.get("sort_order") or 0),
+                customer_ids=t.get("customer_ids") or [],
+                linked_contract_template_ids=t.get("linked_contract_template_ids") or [],
+                linked_act_template_ids=t.get("linked_act_template_ids") or [],
             )
             for t in items
         ]

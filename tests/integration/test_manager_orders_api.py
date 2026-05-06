@@ -578,8 +578,15 @@ async def test_manager_order_generate_document(async_client, db, monkeypatch):
 
     captured = {}
 
-    async def _fake_create_or_get_document(session, order_id, doc_type, template_id=None, contract_date=None):
-        _ = (session, order_id, doc_type, template_id)
+    async def _fake_create_or_get_document(
+        session,
+        order_id,
+        doc_type,
+        document_template_id=None,
+        template_id=None,
+        contract_date=None,
+    ):
+        _ = (session, order_id, doc_type, document_template_id, template_id)
         captured["contract_date"] = contract_date
         return _FakeDoc()
 

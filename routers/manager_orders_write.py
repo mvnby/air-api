@@ -86,6 +86,7 @@ async def patch_manager_order(
 async def generate_manager_order_document(
     order_id: int,
     doc_type: str,
+    document_template_id: Optional[int] = Query(None, description="Managed document template ID"),
     template_id: Optional[str] = Query(None, description="Google Drive template file ID"),
     contract_date: Optional[str] = Query(None, description="Document/contract date as ISO datetime"),
     _: str = Depends(get_current_username),
@@ -100,6 +101,7 @@ async def generate_manager_order_document(
             session=session,
             order_id=order_id,
             doc_type=doc_type,
+            document_template_id=document_template_id,
             template_id=template_id,
             contract_date=parsed_contract_date,
         )
