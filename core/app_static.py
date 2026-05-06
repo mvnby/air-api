@@ -30,9 +30,13 @@ class ManagerAssetsStaticFiles(StaticFiles):
 
 
 def mount_static_and_media(app: FastAPI, base_dir: Path) -> None:
+    static_dir = base_dir / settings.STATIC_DIR
+    if not static_dir.exists():
+        static_dir.mkdir(parents=True, exist_ok=True)
+
     app.mount(
         f"/{settings.STATIC_DIR}",
-        StaticFiles(directory=base_dir / settings.STATIC_DIR),
+        StaticFiles(directory=static_dir),
         name="static",
     )
 
