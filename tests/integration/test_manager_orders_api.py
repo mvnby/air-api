@@ -537,6 +537,176 @@ async def test_manager_order_patch_lines_preserves_installers(async_client, db):
 
 
 @pytest.mark.asyncio
+async def test_manager_order_proposals_can_duplicate_edit_and_select(async_client, db):
+    customer = Customer(name="Proposal Customer", phone="+375296666667", type=CustomerType.individual)
+    p1 = Product(title="Proposal P1", slug="proposal-p1", price=1000, area=25)
+    p2 = Product(title="Proposal P2", slug="proposal-p2", price=2000, area=35)
+    db.add(customer)
+    db.add(p1)
+    db.add(p2)
+    await db.commit()
+    await db.refresh(customer)
+    await db.refresh(p1)
+    await db.refresh(p2)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+    first_resp = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={"products": [{"product_id": p1.id, "quantity": 1, "price": 1000, "cost": 700}], "services": []},
+        headers=headers,
+    )
+    assert first_resp.status_code == 200
+    first_data = first_resp.json()
+    assert len(first_data["proposals"]) == 1
+    default_proposal = first_data["proposals"][0]
+    assert default_proposal["is_selected"] is True
+    assert default_proposal["total_amount"] == 1000
+
+    duplicate_resp = await async_client.post(
+        f"/api/manager/orders/{order.id}/proposals/{default_proposal['id']}/duplicate",
+        json={"name": "Вариант 2"},
+        headers=headers,
+    )
+    assert duplicate_resp.status_code == 200
+    duplicate_data = duplicate_resp.json()
+    second_proposal = next(item for item in duplicate_data["proposals"] if item["name"] == "Вариант 2")
+    assert second_proposal["total_amount"] == 1000
+
+    edit_second_resp = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={
+            "products": [
+                {"product_id": p2.id, "quantity": 1, "price": 2000, "cost": 1300, "proposal_id": second_proposal["id"]},
+            ],
+            "services": [],
+        },
+        headers=headers,
+    )
+    assert edit_second_resp.status_code == 200
+    edit_second_data = edit_second_resp.json()
+    updated_second = next(item for item in edit_second_data["proposals"] if item["id"] == second_proposal["id"])
+    assert updated_second["total_amount"] == 2000
+    assert edit_second_data["product_lines"][0]["product_id"] == p1.id
+
+    select_resp = await async_client.post(
+        f"/api/manager/orders/{order.id}/proposals/{second_proposal['id']}/select",
+        headers=headers,
+    )
+    assert select_resp.status_code == 200
+    selected_data = select_resp.json()
+    assert selected_data["total_amount"] == 2000
+    assert selected_data["margin"] == 700
+    assert selected_data["product_lines"][0]["product_id"] == p2.id
+    assert next(item for item in selected_data["proposals"] if item["id"] == second_proposal["id"])["is_selected"] is True
+
+    list_resp = await async_client.get("/api/manager/orders?segment=b2c", headers=headers)
+    assert list_resp.status_code == 200
+    list_item = next(item for item in list_resp.json()["items"] if item["id"] == order.id)
+    assert list_item["total_amount"] == 2000
+    assert list_item["margin"] == 700
+
+
+@pytest.mark.asyncio
+async def test_manager_order_offer_generation_uses_requested_proposal_and_creates_each_time(async_client, db, monkeypatch):
+    customer = Customer(name="Proposal Docs", phone="+375296666668", type=CustomerType.individual)
+    p1 = Product(title="Proposal Doc P1", slug="proposal-doc-p1", price=1000, area=25)
+    p2 = Product(title="Proposal Doc P2", slug="proposal-doc-p2", price=2000, area=35)
+    db.add(customer)
+    db.add(p1)
+    db.add(p2)
+    await db.commit()
+    await db.refresh(customer)
+    await db.refresh(p1)
+    await db.refresh(p2)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+    first_resp = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={"products": [{"product_id": p1.id, "quantity": 1, "price": 1000, "cost": 700}], "services": []},
+        headers=headers,
+    )
+    assert first_resp.status_code == 200
+    default_proposal = first_resp.json()["proposals"][0]
+
+    duplicate_resp = await async_client.post(
+        f"/api/manager/orders/{order.id}/proposals/{default_proposal['id']}/duplicate",
+        json={"name": "Вариант 2"},
+        headers=headers,
+    )
+    assert duplicate_resp.status_code == 200
+    second_proposal = next(item for item in duplicate_resp.json()["proposals"] if item["name"] == "Вариант 2")
+
+    edit_second_resp = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={
+            "products": [
+                {"product_id": p2.id, "quantity": 1, "price": 2000, "cost": 1300, "proposal_id": second_proposal["id"]},
+            ],
+            "services": [],
+        },
+        headers=headers,
+    )
+    assert edit_second_resp.status_code == 200
+
+    table_captures = []
+
+    class _FakeGoogleService:
+        creds = object()
+
+        def copy_template(self, template_id, title):
+            index = len(table_captures) + 1
+            return {
+                "file_id": f"proposal-doc-{index}",
+                "edit_url": f"https://docs.google.com/document/d/proposal-doc-{index}/edit",
+            }
+
+        def replace_placeholders(self, file_id, replacements):
+            pass
+
+        def _fill_table(self, docs_service, file_id, table_data, has_footer):
+            table_captures.append(table_data)
+
+    from services import document_service
+    import googleapiclient.discovery
+
+    monkeypatch.setattr(document_service, "get_google_service", lambda: _FakeGoogleService())
+    monkeypatch.setattr(googleapiclient.discovery, "build", lambda *args, **kwargs: object())
+
+    second_offer_resp = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/offer",
+        params={"proposal_id": second_proposal["id"]},
+        headers=headers,
+    )
+    assert second_offer_resp.status_code == 200, second_offer_resp.text
+    second_offer = second_offer_resp.json()
+    assert second_offer["proposal_id"] == second_proposal["id"]
+    assert table_captures[-1][0][1] == "Proposal Doc P2"
+    assert table_captures[-1][-1][-1] == "2000.00"
+
+    first_offer_resp = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/offer",
+        params={"proposal_id": default_proposal["id"]},
+        headers=headers,
+    )
+    assert first_offer_resp.status_code == 200, first_offer_resp.text
+    first_offer = first_offer_resp.json()
+    assert first_offer["proposal_id"] == default_proposal["id"]
+    assert first_offer["doc_id"] != second_offer["doc_id"]
+    assert table_captures[-1][0][1] == "Proposal Doc P1"
+    assert table_captures[-1][-1][-1] == "1000.00"
+
+
+@pytest.mark.asyncio
 async def test_manager_order_patch_validation_errors(async_client, db):
     customer = Customer(name="Validation", phone="+375299999999", type=CustomerType.individual)
     db.add(customer)
@@ -585,8 +755,9 @@ async def test_manager_order_generate_document(async_client, db, monkeypatch):
         document_template_id=None,
         template_id=None,
         contract_date=None,
+        proposal_id=None,
     ):
-        _ = (session, order_id, doc_type, document_template_id, template_id)
+        _ = (session, order_id, doc_type, document_template_id, template_id, proposal_id)
         captured["contract_date"] = contract_date
         return _FakeDoc()
 

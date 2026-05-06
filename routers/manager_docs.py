@@ -55,6 +55,7 @@ async def get_manager_order_documents(
         "items": [
             ManagerOrderDocumentItem(
                 id=d.id,
+                proposal_id=d.proposal_id,
                 doc_type=d.doc_type,
                 number=d.number,
                 date=d.date,
@@ -79,6 +80,7 @@ async def upload_manager_order_document(
     doc = await DocumentService.upload_document(session, order_id, file)
     return ManagerOrderDocumentItem(
         id=doc.id,
+        proposal_id=doc.proposal_id,
         doc_type=doc.doc_type,
         number=doc.number,
         date=doc.date,

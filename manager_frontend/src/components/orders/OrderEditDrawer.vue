@@ -13,6 +13,7 @@ import type {
   ManagerCustomerBranchItemResponse,
   ManagerServiceEstimateResponse,
   OrderProductLineResponse,
+  OrderProposalResponse,
   OrderServiceLineResponse,
   ManagerOrderDocumentItem,
   ManagerInstallerResponse,
@@ -142,6 +143,8 @@ const measurementRequired = ref(false);
 const measurerId = ref<number | null>(null);
 const measurementResult = ref('');
 const proposalStatus = ref<'draft' | 'sent' | 'approved' | 'rejected'>('draft');
+const activeProposalId = ref<number | null>(null);
+const proposalActionLoading = ref(false);
 
 const installersList = ref<ManagerInstallerResponse[]>([]);
 
@@ -304,7 +307,34 @@ const filteredEstimateOptions = computed(() => {
     return byTitle || byId;
   });
 });
-const draftKey = computed(() => (props.order ? `manager_order_drawer_draft_${props.order.id}` : ''));
+const orderProposals = computed(() => {
+  const proposals = props.order?.proposals || [];
+  return [...proposals]
+    .filter((proposal) => !proposal.is_archived)
+    .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0) || Number(a.id) - Number(b.id));
+});
+const selectedOrderProposal = computed(() => (
+  orderProposals.value.find((proposal) => proposal.is_selected)
+  || orderProposals.value[0]
+  || null
+));
+const activeProposal = computed(() => (
+  orderProposals.value.find((proposal) => proposal.id === activeProposalId.value)
+  || selectedOrderProposal.value
+));
+const activeProposalLineLabel = computed(() => {
+  const proposal = activeProposal.value;
+  if (!proposal) return 'основной расчет';
+  const count = (proposal.product_lines?.length || 0) + (proposal.service_lines?.length || 0);
+  return `${proposal.name} · ${count} поз. · ${formatMoney(proposal.total_amount || 0)}`;
+});
+const documentProposalName = (doc: ManagerOrderDocumentItem) => {
+  if (!doc.proposal_id) return '';
+  return orderProposals.value.find((proposal) => proposal.id === doc.proposal_id)?.name || `вариант #${doc.proposal_id}`;
+};
+const draftKey = computed(() => (
+  props.order ? `manager_order_drawer_draft_${props.order.id}_${activeProposalId.value || 'default'}` : ''
+));
 const hasManualEurRate = computed(() => Boolean(currentFxRate.value?.eur_byn));
 
 const getActiveFxRate = (currency: PaymentCurrency | null): number | null => {
@@ -638,12 +668,17 @@ const generateDocument = async (type: string, template?: DocumentTemplateItem | 
     if (type === 'contract' && isCompanyOrder.value) {
       await useOneTimeContractForClosingDocs();
     }
+    const proposalId = type === 'offer' ? (activeProposalId.value ?? undefined) : undefined;
+    if (type === 'offer') {
+      await saveCurrentProposalLines();
+    }
     const res = await ManagerOrdersService.generateManagerOrderDocument(
       props.order.id,
       type,
       template?.document_template_id ?? undefined,
       template && !template.document_template_id ? template.id : undefined,
       documentDate,
+      proposalId,
     );
     window.open(res.edit_url, '_blank');
     await loadDocuments(props.order.id);
@@ -952,6 +987,34 @@ const clearDraft = () => {
   }
 };
 
+const mapProductLineFromResponse = (line: OrderProductLineResponse): ProductLine => ({
+  product_id: line.product_id || 0,
+  product_query: line.product_title || '',
+  quantity: line.quantity,
+  price: line.price,
+  cost: line.cost,
+});
+
+const mapServiceLineFromResponse = (line: OrderServiceLineResponse): ServiceLine => ({
+  service_id: line.service_id,
+  title: line.service_title,
+  quantity: line.quantity,
+  price: line.price,
+  cost: line.cost,
+});
+
+const loadProposalLines = (proposal: OrderProposalResponse | null | undefined, fallbackOrder?: ManagerOrderDetailResponse | null) => {
+  if (proposal) {
+    activeProposalId.value = proposal.id;
+    proposalStatus.value = (proposal.status as any) || proposalStatus.value || 'draft';
+    productLines.value = (proposal.product_lines || []).map(mapProductLineFromResponse);
+    serviceLines.value = (proposal.service_lines || []).map(mapServiceLineFromResponse);
+    return;
+  }
+  productLines.value = (fallbackOrder?.product_lines ?? []).map(mapProductLineFromResponse);
+  serviceLines.value = (fallbackOrder?.service_lines ?? []).map(mapServiceLineFromResponse);
+};
+
 const initForm = async (order: ManagerOrderDetailResponse | null) => {
   if (!order) return;
   localServerErrors.value = {};
@@ -995,26 +1058,17 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
     }).catch(e => console.error("Failed to load installers", e));
   }
 
-  productLines.value = (order.product_lines ?? []).map((line: OrderProductLineResponse) => ({
-    product_id: line.product_id || 0,
-    product_query: line.product_title || '',
-    quantity: line.quantity,
-    price: line.price,
-    cost: line.cost,
-  }));
-  serviceLines.value = (order.service_lines ?? []).map((line: OrderServiceLineResponse) => ({
-    service_id: line.service_id,
-    title: line.service_title,
-    quantity: line.quantity,
-    price: line.price,
-    cost: line.cost,
-  }));
+  const selectedProposal = (order.proposals || []).find((proposal) => proposal.is_selected && !proposal.is_archived)
+    || (order.proposals || []).find((proposal) => !proposal.is_archived)
+    || null;
+  loadProposalLines(selectedProposal, order);
   showEstimateImport.value = false;
   await loadEstimateOptions();
 
   // Documents
   documents.value = (order.documents || []).map((d: any) => ({
       id: d.id,
+      proposal_id: d.proposal_id,
       doc_type: d.doc_type,
       number: d.number,
       date: d.date,
@@ -1149,17 +1203,17 @@ const onProductInputFocus = (index: number) => {
 const selectProductForLine = (index: number, option: ProductOption) => {
   const row = productLines.value[index];
   if (!row) return;
-  const isNewLine = !row.product_id && Number(row.price || 0) <= 0;
   row.product_id = option.id;
   row.product_query = option.title;
-  // Automatically fill cost if it exists on the product
+  row.price = option.price;
+  // Quick selection means the row now follows the selected catalog product.
   if (option.cost && option.cost > 0) {
     row.cost = option.cost;
   }
   rememberProductOption(option);
   activeSuggestionIndex.value = null;
   productOptions.value = [];
-  onProductChanged(index, isNewLine);
+  onProductChanged(index, false);
 };
 
 const openSelectedProduct = (index: number) => {
@@ -1182,6 +1236,182 @@ const addProductLine = () => {
 
 const addServiceLine = () => {
   serviceLines.value.push({ title: '', quantity: 1, price: 0, cost: 0, service_id: null });
+};
+
+const applyOrderResponse = async (
+  order: ManagerOrderDetailResponse,
+  preferredProposalId?: number | null,
+  emitReload = true,
+) => {
+  if (props.order) {
+    Object.assign(props.order, order);
+  }
+  const nextProposal = preferredProposalId
+    ? (order.proposals || []).find((proposal) => proposal.id === preferredProposalId && !proposal.is_archived)
+    : ((order.proposals || []).find((proposal) => proposal.is_selected && !proposal.is_archived)
+      || (order.proposals || []).find((proposal) => !proposal.is_archived));
+  loadProposalLines(nextProposal || null, order);
+  syncProductLookupFromLines();
+  if (emitReload) emit('reload', order.id);
+};
+
+const buildProposalLinesPayload = () => ({
+  products: productLines.value.map((line) => ({
+    product_id: line.product_id || 0,
+    quantity: Math.trunc(Number(line.quantity) || 0),
+    price: Math.round(Number(line.price) || 0),
+    cost: (!line.cost && line.cost !== 0) ? null : toIntegerMoney(line.cost),
+    link_id: null,
+    proposal_id: activeProposalId.value,
+  })),
+  services: serviceLines.value.map((line) => ({
+    service_id: line.service_id ?? null,
+    title: line.title,
+    quantity: Math.trunc(Number(line.quantity) || 0),
+    price: Math.round(Number(line.price) || 0),
+    cost: (!line.cost && line.cost !== 0) ? null : toIntegerMoney(line.cost),
+    link_id: null,
+    proposal_id: activeProposalId.value,
+  })),
+});
+
+const validateProposalLines = () => {
+  if (productLines.value.some((line) => line.quantity <= 0)) return 'Количество товара должно быть больше 0';
+  if (productLines.value.some((line) => line.price < 0)) return 'Цена товара не может быть отрицательной';
+  if (productLines.value.some((line) => !line.product_id)) return 'Выберите товар из выпадающего списка';
+  if (serviceLines.value.some((line) => line.quantity <= 0)) return 'Количество услуги должно быть больше 0';
+  if (serviceLines.value.some((line) => line.price < 0)) return 'Цена услуги не может быть отрицательной';
+  if (serviceLines.value.some((line) => !line.title?.trim())) return 'Для услуги укажите название';
+  return '';
+};
+
+const saveCurrentProposalLines = async () => {
+  if (!props.order?.id || !activeProposalId.value) return props.order || null;
+  const validationError = validateProposalLines();
+  if (validationError) {
+    localFormError.value = validationError;
+    throw new Error(validationError);
+  }
+  const currentProposalId = activeProposalId.value;
+  const order = await ManagerOrdersService.patchManagerOrder(props.order.id, buildProposalLinesPayload());
+  clearDraft();
+  await applyOrderResponse(order, currentProposalId, false);
+  return order;
+};
+
+const setActiveProposal = async (proposal: OrderProposalResponse) => {
+  if (!proposal || activeProposalId.value === proposal.id) return;
+  try {
+    await saveCurrentProposalLines();
+  } catch (error) {
+    setToast(`Сначала сохраните текущий вариант: ${getApiErrorMessage(error)}`, 'error');
+    return;
+  }
+  loadProposalLines(proposal, props.order);
+  productLookupById.value = {};
+  syncProductLookupFromLines();
+};
+
+const onProposalClick = (proposal: OrderProposalResponse, event: MouseEvent) => {
+  if (event.detail > 1) {
+    void selectProposalForOrder(proposal);
+    return;
+  }
+  void setActiveProposal(proposal);
+};
+
+const createProposal = async () => {
+  if (!props.order?.id || proposalActionLoading.value) return;
+  const name = window.prompt('Название нового предложения', `Вариант ${orderProposals.value.length + 1}`);
+  if (name === null) return;
+  proposalActionLoading.value = true;
+  try {
+    await saveCurrentProposalLines();
+    const order = await ManagerOrdersService.createManagerOrderProposal(props.order.id, { name });
+    const created = order.proposals?.[Math.max(0, (order.proposals?.length || 1) - 1)] || null;
+    await applyOrderResponse(order, created?.id || null);
+    setToast('Предложение создано', 'success');
+  } catch (error) {
+    setToast(`Ошибка создания предложения: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    proposalActionLoading.value = false;
+  }
+};
+
+const duplicateProposal = async () => {
+  if (!props.order?.id || !activeProposal.value?.id || proposalActionLoading.value) return;
+  const name = window.prompt('Название копии', `${activeProposal.value.name} копия`);
+  if (name === null) return;
+  proposalActionLoading.value = true;
+  try {
+    const sourceProposalId = activeProposal.value.id;
+    await saveCurrentProposalLines();
+    const order = await ManagerOrdersService.duplicateManagerOrderProposal(props.order.id, sourceProposalId, { name });
+    const created = order.proposals?.[Math.max(0, (order.proposals?.length || 1) - 1)] || null;
+    await applyOrderResponse(order, created?.id || null);
+    setToast('Предложение скопировано', 'success');
+  } catch (error) {
+    setToast(`Ошибка копирования предложения: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    proposalActionLoading.value = false;
+  }
+};
+
+const renameProposal = async () => {
+  if (!props.order?.id || !activeProposal.value?.id || proposalActionLoading.value) return;
+  const name = window.prompt('Новое название предложения', activeProposal.value.name);
+  if (name === null || !name.trim()) return;
+  proposalActionLoading.value = true;
+  try {
+    const proposalId = activeProposal.value.id;
+    await saveCurrentProposalLines();
+    const order = await ManagerOrdersService.patchManagerOrderProposal(props.order.id, proposalId, { name });
+    await applyOrderResponse(order, proposalId);
+    setToast('Название обновлено', 'success');
+  } catch (error) {
+    setToast(`Ошибка переименования: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    proposalActionLoading.value = false;
+  }
+};
+
+const archiveProposal = async () => {
+  if (!props.order?.id || !activeProposal.value?.id || proposalActionLoading.value) return;
+  if (orderProposals.value.length <= 1) {
+    setToast('Нельзя удалить единственное предложение', 'error');
+    return;
+  }
+  if (!window.confirm(`Убрать предложение «${activeProposal.value.name}» в архив?`)) return;
+  const archivedId = activeProposal.value.id;
+  proposalActionLoading.value = true;
+  try {
+    const order = await ManagerOrdersService.archiveManagerOrderProposal(props.order.id, archivedId);
+    const next = (order.proposals || []).find((proposal) => proposal.is_selected && !proposal.is_archived)
+      || (order.proposals || []).find((proposal) => proposal.id !== archivedId && !proposal.is_archived)
+      || null;
+    await applyOrderResponse(order, next?.id || null);
+    setToast('Предложение архивировано', 'success');
+  } catch (error) {
+    setToast(`Ошибка архивации: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    proposalActionLoading.value = false;
+  }
+};
+
+const selectProposalForOrder = async (proposal?: OrderProposalResponse) => {
+  const targetProposal = proposal || activeProposal.value;
+  if (!props.order?.id || !targetProposal?.id || targetProposal.is_selected || proposalActionLoading.value) return;
+  proposalActionLoading.value = true;
+  try {
+    await saveCurrentProposalLines();
+    const order = await ManagerOrdersService.selectManagerOrderProposal(props.order.id, targetProposal.id);
+    await applyOrderResponse(order, targetProposal.id);
+    setToast('Предложение выбрано для заказа', 'success');
+  } catch (error) {
+    setToast(`Ошибка выбора предложения: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    proposalActionLoading.value = false;
+  }
 };
 
 const toggleEstimateImport = async () => {
@@ -1410,6 +1640,7 @@ const handleSave = () => {
   }
 
   clearDraft();
+  const linePayload = buildProposalLinesPayload();
   const payload: ManagerOrderUpdatePayload = {
     status: status.value,
     title: orderTitle.value,
@@ -1422,21 +1653,8 @@ const handleSave = () => {
     installer_id: installerId.value,
     customer_branch_id: customerBranchId.value,
     customer_delivery_address: customerDeliveryAddress.value,
-    products: productLines.value.map((line) => ({
-      product_id: line.product_id || 0,
-      quantity: Math.trunc(Number(line.quantity) || 0),
-      price: Math.round(Number(line.price) || 0),
-      cost: (!line.cost && line.cost !== 0) ? null : toIntegerMoney(line.cost),
-      link_id: null,
-    })),
-    services: serviceLines.value.map((line) => ({
-      service_id: line.service_id ?? null,
-      title: line.title,
-      quantity: Math.trunc(Number(line.quantity) || 0),
-      price: Math.round(Number(line.price) || 0),
-      cost: (!line.cost && line.cost !== 0) ? null : toIntegerMoney(line.cost),
-      link_id: null,
-    })),
+    products: linePayload.products,
+    services: linePayload.services,
     measurement_required: measurementRequired.value,
     measurer_id: measurerId.value,
     measurement_result: measurementResult.value,
@@ -1863,7 +2081,78 @@ watch(
 
       <!-- Смета -->
       <div class="mt-6 rounded-2xl border border-gray-200 bg-gray-50/50 p-3 sm:p-4">
-        <h3 class="mb-4 border-b border-gray-200 pb-2 text-lg font-bold text-gray-900 sm:text-xl font-['Space_Grotesk']">Смета: Оборудование и услуги</h3>
+        <div class="mb-4 border-b border-gray-200 pb-3">
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h3 class="text-lg font-bold text-gray-900 sm:text-xl font-['Space_Grotesk']">Оборудование и услуги</h3>
+              <p class="mt-1 text-xs text-gray-500">{{ activeProposalLineLabel }}</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="btn-mini-outline whitespace-nowrap text-xs"
+                :disabled="proposalActionLoading"
+                @click="createProposal"
+              >
+                + вариант
+              </button>
+              <button
+                type="button"
+                class="btn-mini-outline whitespace-nowrap text-xs"
+                :disabled="proposalActionLoading || !activeProposal"
+                @click="duplicateProposal"
+              >
+                Копия
+              </button>
+              <button
+                type="button"
+                class="btn-mini-outline whitespace-nowrap text-xs"
+                :disabled="proposalActionLoading || !activeProposal"
+                @click="renameProposal"
+              >
+                Название
+              </button>
+            </div>
+          </div>
+
+          <div v-if="orderProposals.length" class="mt-3 flex gap-2 overflow-x-auto pb-1">
+            <button
+              v-for="proposal in orderProposals"
+              :key="proposal.id"
+              type="button"
+              class="shrink-0 rounded-xl border px-3 py-2 text-left text-xs transition"
+              :class="proposal.id === activeProposal?.id
+                ? 'border-teal-500 bg-teal-50 text-teal-900 shadow-sm'
+                : 'border-gray-200 bg-white text-gray-600 hover:border-teal-200 hover:text-teal-800'"
+              @click="onProposalClick(proposal, $event)"
+            >
+              <span class="flex items-center gap-1 font-semibold">
+                {{ proposal.name }}
+                <span v-if="proposal.is_selected" class="material-icons-round text-[14px] text-teal-600">check_circle</span>
+              </span>
+              <span class="mt-0.5 block whitespace-nowrap text-[11px] opacity-75">{{ formatMoney(proposal.total_amount || 0) }}</span>
+            </button>
+          </div>
+
+          <div v-if="activeProposal" class="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              class="btn-mini whitespace-nowrap text-xs"
+              :disabled="proposalActionLoading || activeProposal.is_selected"
+              @click="selectProposalForOrder()"
+            >
+              {{ activeProposal.is_selected ? 'Выбрано для заказа' : 'Выбрать для заказа' }}
+            </button>
+            <button
+              type="button"
+              class="rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+              :disabled="proposalActionLoading || orderProposals.length <= 1"
+              @click="archiveProposal"
+            >
+              В архив
+            </button>
+          </div>
+        </div>
 
         <section class="mt-2">
           <div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -2277,7 +2566,10 @@ watch(
                     </div>
                     <div>
                         <p class="text-sm font-medium text-slate-900 dark:text-white">{{ doc.number || doc.doc_type }}</p>
-                        <p class="text-xs text-slate-500 dark:text-slate-400">{{ new Date(doc.date).toLocaleDateString() }} · <span class="uppercase">{{ doc.doc_type }}</span></p>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                          {{ new Date(doc.date).toLocaleDateString() }} · <span class="uppercase">{{ doc.doc_type }}</span>
+                          <span v-if="documentProposalName(doc)"> · {{ documentProposalName(doc) }}</span>
+                        </p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">

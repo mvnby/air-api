@@ -79,6 +79,7 @@ class OrderDAO:
     async def get_with_links(session: AsyncSession, order_id: int) -> Optional[Order]:
         """Get order with all links (products, services, installers)."""
         stmt = select(Order).where(Order.id == order_id).options(
+            selectinload(Order.proposals),
             selectinload(Order.product_links),
             selectinload(Order.service_links),
             selectinload(Order.installers)

@@ -8,8 +8,13 @@ from core.manager_error_codes import BAD_REQUEST, DOCUMENT_GENERATION_FAILED, OR
 from core.security import get_current_username
 from routers.manager_operation_ids import (
     CREATE_MANAGER_ORDER,
+    CREATE_MANAGER_ORDER_PROPOSAL,
+    DUPLICATE_MANAGER_ORDER_PROPOSAL,
     GENERATE_MANAGER_ORDER_DOCUMENT,
     PATCH_MANAGER_ORDER,
+    PATCH_MANAGER_ORDER_PROPOSAL,
+    ARCHIVE_MANAGER_ORDER_PROPOSAL,
+    SELECT_MANAGER_ORDER_PROPOSAL,
     DELETE_MANAGER_ORDER,
     ADD_MANAGER_ORDER_PAYMENT,
     DELETE_MANAGER_ORDER_PAYMENT,
@@ -22,6 +27,8 @@ from schemas import (
     ManagerOrderDetailResponse,
     ManagerOrderDocumentResponse,
     ManagerOrderUpdatePayload,
+    OrderProposalCreatePayload,
+    OrderProposalUpdatePayload,
     PaymentCreatePayload,
     PaymentResponse,
     OrderWorkStageCreatePayload,
@@ -79,6 +86,102 @@ async def patch_manager_order(
 
 
 @router.post(
+    "/{order_id}/proposals",
+    response_model=ManagerOrderDetailResponse,
+    operation_id=CREATE_MANAGER_ORDER_PROPOSAL,
+)
+async def create_manager_order_proposal(
+    order_id: int,
+    payload: OrderProposalCreatePayload,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await OrderService.create_order_proposal(session, order_id, payload)
+    except ValueError as exc:
+        raise manager_http_error(status_code=400, endpoint=CREATE_MANAGER_ORDER_PROPOSAL, error_code=BAD_REQUEST, message=str(exc)) from exc
+
+
+@router.post(
+    "/{order_id}/proposals/{proposal_id}/duplicate",
+    response_model=ManagerOrderDetailResponse,
+    operation_id=DUPLICATE_MANAGER_ORDER_PROPOSAL,
+)
+async def duplicate_manager_order_proposal(
+    order_id: int,
+    proposal_id: int,
+    payload: OrderProposalCreatePayload,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    duplicate_payload = OrderProposalCreatePayload(
+        name=payload.name,
+        duplicate_from_proposal_id=proposal_id,
+    )
+    try:
+        return await OrderService.create_order_proposal(session, order_id, duplicate_payload)
+    except ValueError as exc:
+        raise manager_http_error(status_code=400, endpoint=DUPLICATE_MANAGER_ORDER_PROPOSAL, error_code=BAD_REQUEST, message=str(exc)) from exc
+
+
+@router.patch(
+    "/{order_id}/proposals/{proposal_id}",
+    response_model=ManagerOrderDetailResponse,
+    operation_id=PATCH_MANAGER_ORDER_PROPOSAL,
+)
+async def patch_manager_order_proposal(
+    order_id: int,
+    proposal_id: int,
+    payload: OrderProposalUpdatePayload,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await OrderService.update_order_proposal(session, order_id, proposal_id, payload)
+    except ValueError as exc:
+        raise manager_http_error(status_code=400, endpoint=PATCH_MANAGER_ORDER_PROPOSAL, error_code=BAD_REQUEST, message=str(exc)) from exc
+
+
+@router.post(
+    "/{order_id}/proposals/{proposal_id}/archive",
+    response_model=ManagerOrderDetailResponse,
+    operation_id=ARCHIVE_MANAGER_ORDER_PROPOSAL,
+)
+async def archive_manager_order_proposal(
+    order_id: int,
+    proposal_id: int,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await OrderService.update_order_proposal(
+            session,
+            order_id,
+            proposal_id,
+            OrderProposalUpdatePayload(is_archived=True),
+        )
+    except ValueError as exc:
+        raise manager_http_error(status_code=400, endpoint=ARCHIVE_MANAGER_ORDER_PROPOSAL, error_code=BAD_REQUEST, message=str(exc)) from exc
+
+
+@router.post(
+    "/{order_id}/proposals/{proposal_id}/select",
+    response_model=ManagerOrderDetailResponse,
+    operation_id=SELECT_MANAGER_ORDER_PROPOSAL,
+)
+async def select_manager_order_proposal(
+    order_id: int,
+    proposal_id: int,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await OrderService.select_order_proposal(session, order_id, proposal_id)
+    except ValueError as exc:
+        raise manager_http_error(status_code=400, endpoint=SELECT_MANAGER_ORDER_PROPOSAL, error_code=BAD_REQUEST, message=str(exc)) from exc
+
+
+@router.post(
     "/{order_id}/documents/{doc_type}",
     response_model=ManagerOrderDocumentResponse,
     operation_id=GENERATE_MANAGER_ORDER_DOCUMENT,
@@ -89,6 +192,7 @@ async def generate_manager_order_document(
     document_template_id: Optional[int] = Query(None, description="Managed document template ID"),
     template_id: Optional[str] = Query(None, description="Google Drive template file ID"),
     contract_date: Optional[str] = Query(None, description="Document/contract date as ISO datetime"),
+    proposal_id: Optional[int] = Query(None, description="Order proposal ID for generated commercial offer"),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
 ):
@@ -104,6 +208,7 @@ async def generate_manager_order_document(
             document_template_id=document_template_id,
             template_id=template_id,
             contract_date=parsed_contract_date,
+            proposal_id=proposal_id,
         )
     except ValueError as exc:
         raise manager_http_error(

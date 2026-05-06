@@ -4744,6 +4744,307 @@
         }
       }
     },
+    "/api/manager/orders/{order_id}/proposals": {
+      "post": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Create Manager Order Proposal",
+        "operationId": "create_manager_order_proposal",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderProposalCreatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/proposals/{proposal_id}/duplicate": {
+      "post": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Duplicate Manager Order Proposal",
+        "operationId": "duplicate_manager_order_proposal",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderProposalCreatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/proposals/{proposal_id}": {
+      "patch": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Patch Manager Order Proposal",
+        "operationId": "patch_manager_order_proposal",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderProposalUpdatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/proposals/{proposal_id}/archive": {
+      "post": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Archive Manager Order Proposal",
+        "operationId": "archive_manager_order_proposal",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/proposals/{proposal_id}/select": {
+      "post": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Select Manager Order Proposal",
+        "operationId": "select_manager_order_proposal",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/orders/{order_id}/documents/{doc_type}": {
       "post": {
         "tags": [
@@ -4828,6 +5129,24 @@
               "title": "Contract Date"
             },
             "description": "Document/contract date as ISO datetime"
+          },
+          {
+            "name": "proposal_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Order proposal ID for generated commercial offer",
+              "title": "Proposal Id"
+            },
+            "description": "Order proposal ID for generated commercial offer"
           }
         ],
         "responses": {
@@ -12500,6 +12819,17 @@
             "type": "integer",
             "title": "Order Id"
           },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
           "doc_type": {
             "type": "string",
             "title": "Doc Type"
@@ -14010,6 +14340,14 @@
             "title": "Service Lines",
             "default": []
           },
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/OrderProposalResponse"
+            },
+            "type": "array",
+            "title": "Proposals",
+            "default": []
+          },
           "documents": {
             "items": {
               "$ref": "#/components/schemas/ManagerOrderDocumentItem"
@@ -14077,6 +14415,17 @@
             "type": "integer",
             "title": "Id"
           },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
           "doc_type": {
             "type": "string",
             "title": "Doc Type"
@@ -14126,6 +14475,17 @@
           "doc_id": {
             "type": "integer",
             "title": "Doc Id"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
           },
           "doc_type": {
             "type": "string",
@@ -14556,6 +14916,17 @@
             ],
             "title": "Link Id"
           },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
           "product_id": {
             "type": "integer",
             "title": "Product Id"
@@ -14600,6 +14971,17 @@
               }
             ],
             "title": "Link Id"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
           },
           "service_id": {
             "anyOf": [
@@ -16771,6 +17153,17 @@
             "type": "integer",
             "title": "Id"
           },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
           "product_id": {
             "anyOf": [
               {
@@ -16824,6 +17217,156 @@
         ],
         "title": "OrderProductLineResponse"
       },
+      "OrderProposalCreatePayload": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "duplicate_from_proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate From Proposal Id"
+          }
+        },
+        "type": "object",
+        "title": "OrderProposalCreatePayload"
+      },
+      "OrderProposalResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "draft"
+          },
+          "is_selected": {
+            "type": "boolean",
+            "title": "Is Selected",
+            "default": false
+          },
+          "is_archived": {
+            "type": "boolean",
+            "title": "Is Archived",
+            "default": false
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order",
+            "default": 0
+          },
+          "total_amount": {
+            "type": "number",
+            "title": "Total Amount",
+            "default": 0.0
+          },
+          "total_cost": {
+            "type": "number",
+            "title": "Total Cost",
+            "default": 0.0
+          },
+          "margin": {
+            "type": "number",
+            "title": "Margin",
+            "default": 0.0
+          },
+          "product_lines": {
+            "items": {
+              "$ref": "#/components/schemas/OrderProductLineResponse"
+            },
+            "type": "array",
+            "title": "Product Lines"
+          },
+          "service_lines": {
+            "items": {
+              "$ref": "#/components/schemas/OrderServiceLineResponse"
+            },
+            "type": "array",
+            "title": "Service Lines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "order_id",
+          "name"
+        ],
+        "title": "OrderProposalResponse"
+      },
+      "OrderProposalUpdatePayload": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
+          },
+          "is_archived": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Archived"
+          }
+        },
+        "type": "object",
+        "title": "OrderProposalUpdatePayload"
+      },
       "OrderResponse": {
         "properties": {
           "id": {
@@ -16858,6 +17401,17 @@
           "id": {
             "type": "integer",
             "title": "Id"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
           },
           "service_id": {
             "anyOf": [
