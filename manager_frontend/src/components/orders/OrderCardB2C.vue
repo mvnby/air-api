@@ -61,6 +61,16 @@ const statusFlags = computed(() => [
   props.order.ready_for_execution ? { label: 'Согласовано', className: 'bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300' } : null,
 ].filter(Boolean) as { label: string; className: string }[]);
 const hasComment = computed(() => Boolean(props.order.comment?.trim()));
+const paymentSummary = computed(() => {
+  const balance = Number(props.order.balance_due || 0);
+  if (balance > 0) {
+    return { label: `Долг: ${formatMoney(balance)}`, className: 'text-red-600 dark:text-red-300' };
+  }
+  if (props.order.total_amount > 0) {
+    return { label: 'Долг: нет', className: 'text-teal-700 dark:text-teal-300' };
+  }
+  return { label: 'Без суммы', className: 'text-gray-500 dark:text-slate-400' };
+});
 </script>
 
 <template>
@@ -122,7 +132,7 @@ const hasComment = computed(() => Boolean(props.order.comment?.trim()));
         {{ flag.label }}
       </span>
       <span v-if="dateSummary" class="text-[11px] font-medium" :class="dateSummary.className">{{ dateSummary.label }}: {{ dateSummary.value }}</span>
-      <span class="text-[11px] text-gray-500 dark:text-slate-400">Маржа: {{ formatMoney(order.margin) }}</span>
+      <span class="text-[11px] font-semibold" :class="paymentSummary.className">{{ paymentSummary.label }}</span>
     </div>
 
     <Transition name="fade">

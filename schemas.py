@@ -345,6 +345,7 @@ class OrderCustomerContractBrief(BaseModel):
 
 class OrderProductLineResponse(BaseModel):
     id: int
+    proposal_id: Optional[int] = None
     product_id: Optional[int] = None
     product_title: str
     quantity: int
@@ -357,6 +358,7 @@ class OrderProductLineResponse(BaseModel):
 
 class OrderServiceLineResponse(BaseModel):
     id: int
+    proposal_id: Optional[int] = None
     service_id: Optional[int] = None
     service_title: str
     quantity: int
@@ -440,6 +442,7 @@ class ManagerOrderListItemResponse(BaseModel):
 
 class ManagerOrderDocumentItem(BaseModel):
     id: int
+    proposal_id: Optional[int] = None
     doc_type: str
     number: str
     date: datetime
@@ -453,6 +456,7 @@ class ManagerOrderDocumentListResponse(BaseModel):
 class ManagerCustomerDocumentItem(BaseModel):
     id: int
     order_id: int
+    proposal_id: Optional[int] = None
     doc_type: str
     number: str
     date: datetime
@@ -514,10 +518,42 @@ class OrderWorkStageResponse(BaseModel):
     installer: Optional[ManagerInstallerResponse] = None
 
 
+class OrderProposalResponse(BaseModel):
+    id: int
+    order_id: int
+    name: str
+    status: str = "draft"
+    is_selected: bool = False
+    is_archived: bool = False
+    sort_order: int = 0
+    total_amount: float = 0.0
+    total_cost: float = 0.0
+    margin: float = 0.0
+    product_lines: List[OrderProductLineResponse] = Field(default_factory=list)
+    service_lines: List[OrderServiceLineResponse] = Field(default_factory=list)
+
+
+class OrderProposalCreatePayload(BaseModel):
+    name: Optional[str] = None
+    duplicate_from_proposal_id: Optional[int] = None
+
+
+class OrderProposalUpdatePayload(BaseModel):
+    name: Optional[str] = None
+    status: Optional[str] = None
+    sort_order: Optional[int] = None
+    is_archived: Optional[bool] = None
+
+
+class OrderProposalListResponse(BaseModel):
+    items: List[OrderProposalResponse]
+
+
 
 class ManagerOrderDetailResponse(ManagerOrderListItemResponse):
     product_lines: List[OrderProductLineResponse] = []
     service_lines: List[OrderServiceLineResponse] = []
+    proposals: List[OrderProposalResponse] = []
     documents: List[ManagerOrderDocumentItem] = []
     payments: List[PaymentResponse] = []
     work_stages: List[OrderWorkStageResponse] = []
@@ -530,6 +566,7 @@ class ManagerOrderListResponse(BaseModel):
 
 class ManagerOrderProductLinePayload(BaseModel):
     link_id: Optional[int] = None
+    proposal_id: Optional[int] = None
     product_id: int
     quantity: int
     price: int
@@ -538,6 +575,7 @@ class ManagerOrderProductLinePayload(BaseModel):
 
 class ManagerOrderServiceLinePayload(BaseModel):
     link_id: Optional[int] = None
+    proposal_id: Optional[int] = None
     service_id: Optional[int] = None
     title: str
     quantity: int
@@ -623,6 +661,7 @@ class ManagerOrderCreatePayload(BaseModel):
 
 class ManagerOrderDocumentResponse(BaseModel):
     doc_id: int
+    proposal_id: Optional[int] = None
     doc_type: str
     edit_url: str
 

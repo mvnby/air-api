@@ -8,6 +8,7 @@ import type { OrderCustomerBranchBrief } from './OrderCustomerBranchBrief';
 import type { OrderCustomerBrief } from './OrderCustomerBrief';
 import type { OrderCustomerContractBrief } from './OrderCustomerContractBrief';
 import type { OrderProductLineResponse } from './OrderProductLineResponse';
+import type { OrderProposalResponse } from './OrderProposalResponse';
 import type { OrderServiceLineResponse } from './OrderServiceLineResponse';
 import type { OrderWorkStageResponse } from './OrderWorkStageResponse';
 import type { PaymentCurrency } from './PaymentCurrency';
@@ -55,6 +56,7 @@ export type ManagerOrderDetailResponse = {
     balance_due?: number;
     product_lines?: Array<OrderProductLineResponse>;
     service_lines?: Array<OrderServiceLineResponse>;
+    proposals?: Array<OrderProposalResponse>;
     documents?: Array<ManagerOrderDocumentItem>;
     payments?: Array<PaymentResponse>;
     work_stages?: Array<OrderWorkStageResponse>;

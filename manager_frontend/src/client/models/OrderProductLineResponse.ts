@@ -4,6 +4,7 @@
 /* eslint-disable */
 export type OrderProductLineResponse = {
     id: number;
+    proposal_id?: (number | null);
     product_id?: (number | null);
     product_title: string;
     quantity: number;

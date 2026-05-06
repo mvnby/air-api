@@ -7,6 +7,8 @@ import type { ManagerOrderDetailResponse } from '../models/ManagerOrderDetailRes
 import type { ManagerOrderDocumentResponse } from '../models/ManagerOrderDocumentResponse';
 import type { ManagerOrderListResponse } from '../models/ManagerOrderListResponse';
 import type { ManagerOrderUpdatePayload } from '../models/ManagerOrderUpdatePayload';
+import type { OrderProposalCreatePayload } from '../models/OrderProposalCreatePayload';
+import type { OrderProposalUpdatePayload } from '../models/OrderProposalUpdatePayload';
 import type { OrderWorkStageCreatePayload } from '../models/OrderWorkStageCreatePayload';
 import type { OrderWorkStageUpdatePayload } from '../models/OrderWorkStageUpdatePayload';
 import type { PaymentCreatePayload } from '../models/PaymentCreatePayload';
@@ -137,12 +139,137 @@ export class ManagerOrdersService {
         });
     }
     /**
+     * Create Manager Order Proposal
+     * @param orderId
+     * @param requestBody
+     * @returns ManagerOrderDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static createManagerOrderProposal(
+        orderId: number,
+        requestBody: OrderProposalCreatePayload,
+    ): CancelablePromise<ManagerOrderDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/proposals',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Duplicate Manager Order Proposal
+     * @param orderId
+     * @param proposalId
+     * @param requestBody
+     * @returns ManagerOrderDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static duplicateManagerOrderProposal(
+        orderId: number,
+        proposalId: number,
+        requestBody: OrderProposalCreatePayload,
+    ): CancelablePromise<ManagerOrderDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/proposals/{proposal_id}/duplicate',
+            path: {
+                'order_id': orderId,
+                'proposal_id': proposalId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Patch Manager Order Proposal
+     * @param orderId
+     * @param proposalId
+     * @param requestBody
+     * @returns ManagerOrderDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static patchManagerOrderProposal(
+        orderId: number,
+        proposalId: number,
+        requestBody: OrderProposalUpdatePayload,
+    ): CancelablePromise<ManagerOrderDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/orders/{order_id}/proposals/{proposal_id}',
+            path: {
+                'order_id': orderId,
+                'proposal_id': proposalId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Archive Manager Order Proposal
+     * @param orderId
+     * @param proposalId
+     * @returns ManagerOrderDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static archiveManagerOrderProposal(
+        orderId: number,
+        proposalId: number,
+    ): CancelablePromise<ManagerOrderDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/proposals/{proposal_id}/archive',
+            path: {
+                'order_id': orderId,
+                'proposal_id': proposalId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Select Manager Order Proposal
+     * @param orderId
+     * @param proposalId
+     * @returns ManagerOrderDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static selectManagerOrderProposal(
+        orderId: number,
+        proposalId: number,
+    ): CancelablePromise<ManagerOrderDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/proposals/{proposal_id}/select',
+            path: {
+                'order_id': orderId,
+                'proposal_id': proposalId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Generate Manager Order Document
      * @param orderId
      * @param docType
      * @param documentTemplateId Managed document template ID
      * @param templateId Google Drive template file ID
      * @param contractDate Document/contract date as ISO datetime
+     * @param proposalId Order proposal ID for generated commercial offer
      * @returns ManagerOrderDocumentResponse Successful Response
      * @throws ApiError
      */
@@ -152,6 +279,7 @@ export class ManagerOrdersService {
         documentTemplateId?: (number | null),
         templateId?: (string | null),
         contractDate?: (string | null),
+        proposalId?: (number | null),
     ): CancelablePromise<ManagerOrderDocumentResponse> {
         return __request(OpenAPI, {
             method: 'POST',
@@ -164,6 +292,7 @@ export class ManagerOrdersService {
                 'document_template_id': documentTemplateId,
                 'template_id': templateId,
                 'contract_date': contractDate,
+                'proposal_id': proposalId,
             },
             errors: {
                 422: `Validation Error`,

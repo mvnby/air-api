@@ -42,9 +42,10 @@ class BaseDocumentStrategy(ABC):
             selectinload(Order.customer),
             selectinload(Order.customer_branch),
             selectinload(Order.customer_contract),
+            selectinload(Order.proposals),
             selectinload(Order.product_links).selectinload(OrderProductLink.product),
             selectinload(Order.service_links).selectinload(OrderServiceLink.service)
-        )
+        ).execution_options(populate_existing=True)
         result = await self.session.execute(query)
         self.order = result.unique().scalar_one_or_none()
 

@@ -4,6 +4,7 @@
 /* eslint-disable */
 export type ManagerOrderDocumentItem = {
     id: number;
+    proposal_id?: (number | null);
     doc_type: string;
     number: string;
     date: string;

@@ -171,6 +171,7 @@ async def get_customer_docs_for_manager(
             {
                 "id": doc.id,
                 "order_id": doc.order_id,
+                "proposal_id": doc.proposal_id,
                 "doc_type": doc.doc_type,
                 "number": doc.number,
                 "date": doc.date,

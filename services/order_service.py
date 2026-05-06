@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from crud.order import OrderDAO
 from crud.product import ProductDAO
-from models import Order, OrderProductLink, OrderServiceLink, Customer, CustomerBranch, CustomerContract, CustomerType, OrderStatus, PaymentCurrency, Product, LeadSource, Service, OrderInstaller, OrderWorkStage
+from models import Order, OrderProductLink, OrderProposal, OrderServiceLink, Customer, CustomerBranch, CustomerContract, CustomerType, OrderStatus, PaymentCurrency, Product, LeadSource, Service, OrderInstaller, OrderWorkStage
 from services.customer_contract_service import CustomerContractService
 from services.document_role_service import DocumentRoleService
 from services.product_supply_metrics_service import ProductSupplyMetricsService
@@ -131,8 +131,68 @@ class OrderService:
 
     @staticmethod
     async def _refresh_order_financials(session: AsyncSession, order: Order) -> None:
-        await session.refresh(order, attribute_names=["payments", "product_links", "service_links", "installers"])
+        await session.refresh(order, attribute_names=["payments", "proposals", "product_links", "service_links", "installers"])
         order.calculate_totals()
+
+    @staticmethod
+    def _clean_proposal_name(raw: Any, fallback: str = "Основное") -> str:
+        name = " ".join(str(raw or "").split())
+        return name or fallback
+
+    @staticmethod
+    def _proposal_line_totals(product_links: List[OrderProductLink], service_links: List[OrderServiceLink]) -> tuple[float, float, float]:
+        total_amount = float(
+            sum((link.price or 0) * (link.quantity or 0) for link in product_links)
+            + sum((link.price or 0) * (link.quantity or 0) for link in service_links)
+        )
+        total_cost = float(
+            sum((link.cost or 0) * (link.quantity or 0) for link in product_links)
+            + sum((link.cost or 0) * (link.quantity or 0) for link in service_links)
+        )
+        return total_amount, total_cost, total_amount - total_cost
+
+    @staticmethod
+    def _selected_proposal(order: Order) -> Optional[OrderProposal]:
+        active = [proposal for proposal in getattr(order, "proposals", []) if not proposal.is_archived]
+        return (
+            next((proposal for proposal in active if proposal.is_selected), None)
+            or next(iter(sorted(active, key=lambda proposal: proposal.sort_order)), None)
+        )
+
+    @staticmethod
+    async def ensure_default_proposal(session: AsyncSession, order: Order) -> OrderProposal:
+        proposals = list(getattr(order, "proposals", []) or [])
+        active = [proposal for proposal in proposals if not proposal.is_archived]
+        if active:
+            selected = OrderService._selected_proposal(order)
+            if selected and not selected.is_selected:
+                for proposal in proposals:
+                    proposal.is_selected = proposal.id == selected.id
+                    session.add(proposal)
+                await session.flush()
+            return selected or active[0]
+
+        proposal = OrderProposal(
+            order_id=int(order.id),
+            name="Основное",
+            status=order.proposal_status or "draft",
+            is_selected=True,
+            sort_order=0,
+        )
+        session.add(proposal)
+        await session.flush()
+        await session.execute(
+            OrderProductLink.__table__.update()
+            .where(OrderProductLink.order_id == order.id, OrderProductLink.proposal_id.is_(None))
+            .values(proposal_id=proposal.id)
+        )
+        await session.execute(
+            OrderServiceLink.__table__.update()
+            .where(OrderServiceLink.order_id == order.id, OrderServiceLink.proposal_id.is_(None))
+            .values(proposal_id=proposal.id)
+        )
+        await session.refresh(order, attribute_names=["proposals", "product_links", "service_links"])
+        return proposal
 
     @staticmethod
     async def _get_product_purchase_cost(
@@ -460,6 +520,15 @@ class OrderService:
         )
         session.add(order)
         await session.flush()
+        proposal = OrderProposal(
+            order_id=int(order.id),
+            name="Основное",
+            status=order.proposal_status or "draft",
+            is_selected=True,
+            sort_order=0,
+        )
+        session.add(proposal)
+        await session.flush()
         
         # 3. Add items with current prices
         total_amount = 0.0
@@ -489,6 +558,7 @@ class OrderService:
                 
                 link = OrderProductLink(
                     order_id=order.id,
+                    proposal_id=proposal.id,
                     product_id=product.id,
                     quantity=item["quantity"],
                     price=product.price,
@@ -795,6 +865,7 @@ class OrderService:
         for inst_svc in installation_services:
             service_link = OrderServiceLink(
                 order_id=order.id,
+                proposal_id=proposal.id,
                 service_id=inst_svc.get("service_id"), # Now supported
                 title=inst_svc["title"],
                 price=inst_svc["price"],
@@ -827,14 +898,19 @@ class OrderService:
         Full sync of order items (products/services).
         Uses current DB prices for products.
         """
+        order = await OrderDAO.get_with_links(session, order_id)
+        if not order:
+            return
+        proposal = await OrderService.ensure_default_proposal(session, order)
         # 1. Очищаем старые связи
-        await OrderDAO.clear_product_links(session, order_id)
-        await OrderDAO.clear_service_links(session, order_id)
+        await session.execute(delete(OrderProductLink).where(OrderProductLink.order_id == order_id, OrderProductLink.proposal_id == proposal.id))
+        await session.execute(delete(OrderServiceLink).where(OrderServiceLink.order_id == order_id, OrderServiceLink.proposal_id == proposal.id))
         
         # 2. Добавляем товары
         for p in items_data.get("products", []):
             link = OrderProductLink(
                 order_id=order_id,
+                proposal_id=proposal.id,
                 product_id=p["product_id"],
                 quantity=p["quantity"],
                 price=p["price"] # Цена должна приходить актуальная
@@ -845,6 +921,7 @@ class OrderService:
         for s in items_data.get("services", []):
             link = OrderServiceLink(
                 order_id=order_id,
+                proposal_id=proposal.id,
                 service_id=s["service_id"],
                 quantity=s["quantity"],
                 price=s["price"]
@@ -857,10 +934,8 @@ class OrderService:
         # 4. Пересчитываем итоговые цифры заказа
         # Необходимо подгрузить связи, чтобы calculate_totals отработал корректно
         # Используем существующий метод DAO или подгружаем вручную
-        order = await OrderDAO.get_with_links(session, order_id)
-        if order:
-            order.calculate_totals()
-            session.add(order)
+        await OrderService._refresh_order_financials(session, order)
+        session.add(order)
             
         await session.commit()
 
@@ -952,10 +1027,14 @@ class OrderService:
             items_data: Dict with 'products', 'services', 'installers' lists
         """
         from models import OrderInstaller
+        order = await OrderDAO.get_with_links(session, order_id)
+        if not order:
+            return
+        proposal = await OrderService.ensure_default_proposal(session, order)
         
         # 1. Clear existing links
-        await OrderDAO.clear_product_links(session, order_id)
-        await OrderDAO.clear_service_links(session, order_id)
+        await session.execute(delete(OrderProductLink).where(OrderProductLink.order_id == order_id, OrderProductLink.proposal_id == proposal.id))
+        await session.execute(delete(OrderServiceLink).where(OrderServiceLink.order_id == order_id, OrderServiceLink.proposal_id == proposal.id))
         
         # Clear installers
         stmt = OrderInstaller.__table__.delete().where(OrderInstaller.order_id == order_id)
@@ -965,6 +1044,7 @@ class OrderService:
         for prod in items_data.get("products", []):
             link = OrderProductLink(
                 order_id=order_id,
+                proposal_id=proposal.id,
                 product_id=int(prod["product_id"]),
                 quantity=int(prod["quantity"]),
                 price=int(prod["price"])
@@ -979,6 +1059,7 @@ class OrderService:
             
             link = OrderServiceLink(
                 order_id=order_id,
+                proposal_id=proposal.id,
                 service_id=service_id,  # Can be None for custom services
                 title=serv.get("title"),  # Custom editable title
                 quantity=int(serv["quantity"]),
@@ -999,10 +1080,8 @@ class OrderService:
         await session.flush()
         
         # 5. Recalculate totals
-        order = await OrderDAO.get_with_links(session, order_id)
-        if order:
-            order.calculate_totals()
-            session.add(order)
+        await OrderService._refresh_order_financials(session, order)
+        session.add(order)
         
         await session.commit()
 
@@ -1159,6 +1238,12 @@ class OrderService:
 
     @staticmethod
     def _map_order_list_item(order: Order) -> Dict[str, Any]:
+        if (
+            "proposals" in getattr(order, "__dict__", {})
+            and "product_links" in getattr(order, "__dict__", {})
+            and "service_links" in getattr(order, "__dict__", {})
+        ):
+            order.calculate_totals()
         return {
             "id": int(order.id or 0),
             "status": order.status.value if hasattr(order.status, "value") else str(order.status or OrderStatus.NEW_LEAD.value),
@@ -1220,6 +1305,7 @@ class OrderService:
         line_total = link.price * link.quantity
         return {
             "id": link.id,
+            "proposal_id": link.proposal_id,
             "product_id": link.product_id,
             "product_title": product_title,
             "quantity": link.quantity,
@@ -1236,12 +1322,33 @@ class OrderService:
         line_total = link.price * link.quantity
         return {
             "id": link.id,
+            "proposal_id": link.proposal_id,
             "service_id": link.service_id,
             "service_title": service_title,
             "quantity": link.quantity,
             "price": link.price,
             "cost": link.cost,
             "line_total": line_total,
+        }
+
+    @staticmethod
+    def _map_order_proposal(order: Order, proposal: OrderProposal) -> Dict[str, Any]:
+        product_links = [link for link in order.product_links if link.proposal_id == proposal.id]
+        service_links = [link for link in order.service_links if link.proposal_id == proposal.id]
+        total_amount, total_cost, margin = OrderService._proposal_line_totals(product_links, service_links)
+        return {
+            "id": int(proposal.id),
+            "order_id": int(proposal.order_id),
+            "name": proposal.name,
+            "status": proposal.status or "draft",
+            "is_selected": bool(proposal.is_selected),
+            "is_archived": bool(proposal.is_archived),
+            "sort_order": int(proposal.sort_order or 0),
+            "total_amount": total_amount,
+            "total_cost": total_cost,
+            "margin": margin,
+            "product_lines": [OrderService._map_product_line(link) for link in product_links],
+            "service_lines": [OrderService._map_service_line(link) for link in service_links],
         }
 
     @staticmethod
@@ -1274,6 +1381,7 @@ class OrderService:
                 selectinload(Order.customer),
                 selectinload(Order.customer_branch),
                 selectinload(Order.customer_contract),
+                selectinload(Order.proposals),
                 selectinload(Order.product_links).selectinload(OrderProductLink.product),
                 selectinload(Order.service_links).selectinload(OrderServiceLink.service),
                 selectinload(Order.installers).selectinload(OrderInstaller.installer),
@@ -1362,6 +1470,7 @@ class OrderService:
                 selectinload(Order.customer),
                 selectinload(Order.customer_branch),
                 selectinload(Order.customer_contract),
+                selectinload(Order.proposals),
                 selectinload(Order.product_links).selectinload(OrderProductLink.product),
                 selectinload(Order.service_links).selectinload(OrderServiceLink.service),
                 selectinload(Order.installers).selectinload(OrderInstaller.installer),
@@ -1374,13 +1483,29 @@ class OrderService:
         order = result.scalars().first()
         if not order:
             return None
+        await OrderService.ensure_default_proposal(session, order)
 
         data = OrderService._map_order_list_item(order)
-        data["product_lines"] = [OrderService._map_product_line(link) for link in order.product_links]
-        data["service_lines"] = [OrderService._map_service_line(link) for link in order.service_links]
+        selected_proposal = OrderService._selected_proposal(order)
+        selected_proposal_id = selected_proposal.id if selected_proposal else None
+        data["product_lines"] = [
+            OrderService._map_product_line(link)
+            for link in order.product_links
+            if selected_proposal_id is None or link.proposal_id == selected_proposal_id
+        ]
+        data["service_lines"] = [
+            OrderService._map_service_line(link)
+            for link in order.service_links
+            if selected_proposal_id is None or link.proposal_id == selected_proposal_id
+        ]
+        data["proposals"] = [
+            OrderService._map_order_proposal(order, proposal)
+            for proposal in sorted(order.proposals, key=lambda proposal: (proposal.is_archived, proposal.sort_order, proposal.id or 0))
+        ]
         data["documents"] = [
             {
                 "id": doc.id,
+                "proposal_id": doc.proposal_id,
                 "doc_type": doc.doc_type,
                 "number": doc.number,
                 "date": doc.date,
@@ -1422,6 +1547,125 @@ class OrderService:
             for ws in (order.work_stages or [])
         ]
         return data
+
+    @staticmethod
+    async def _load_order_for_proposal_write(session: AsyncSession, order_id: int) -> Order:
+        stmt = (
+            select(Order)
+            .where(Order.id == order_id)
+            .options(
+                selectinload(Order.proposals),
+                selectinload(Order.product_links).selectinload(OrderProductLink.product),
+                selectinload(Order.service_links).selectinload(OrderServiceLink.service),
+                selectinload(Order.payments),
+                selectinload(Order.installers),
+            )
+        )
+        result = await session.execute(stmt)
+        order = result.scalars().first()
+        if not order:
+            raise ValueError("Order not found")
+        await OrderService.ensure_default_proposal(session, order)
+        return order
+
+    @staticmethod
+    async def create_order_proposal(session: AsyncSession, order_id: int, payload: Any) -> Dict[str, Any]:
+        order = await OrderService._load_order_for_proposal_write(session, order_id)
+        source = None
+        source_id = getattr(payload, "duplicate_from_proposal_id", None)
+        if source_id:
+            source = next((proposal for proposal in order.proposals if proposal.id == source_id and not proposal.is_archived), None)
+            if not source:
+                raise ValueError("Source proposal not found")
+
+        active_count = len([proposal for proposal in order.proposals if not proposal.is_archived])
+        proposal = OrderProposal(
+            order_id=order_id,
+            name=OrderService._clean_proposal_name(getattr(payload, "name", None), f"Вариант {active_count + 1}"),
+            status="draft",
+            is_selected=active_count == 0,
+            sort_order=active_count * 10,
+        )
+        session.add(proposal)
+        await session.flush()
+
+        if source:
+            for link in [item for item in order.product_links if item.proposal_id == source.id]:
+                session.add(
+                    OrderProductLink(
+                        order_id=order_id,
+                        proposal_id=proposal.id,
+                        product_id=link.product_id,
+                        quantity=link.quantity,
+                        price=link.price,
+                        cost=link.cost,
+                        is_installation_included=link.is_installation_included,
+                        installation_price=link.installation_price,
+                        installation_details=link.installation_details,
+                    )
+                )
+            for link in [item for item in order.service_links if item.proposal_id == source.id]:
+                session.add(
+                    OrderServiceLink(
+                        order_id=order_id,
+                        proposal_id=proposal.id,
+                        service_id=link.service_id,
+                        title=link.title,
+                        quantity=link.quantity,
+                        price=link.price,
+                        cost=link.cost,
+                    )
+                )
+        await session.flush()
+        await OrderService._refresh_order_financials(session, order)
+        session.add(order)
+        await session.commit()
+        return await OrderService.get_order_detail_for_manager(session, order_id)
+
+    @staticmethod
+    async def update_order_proposal(session: AsyncSession, order_id: int, proposal_id: int, payload: Any) -> Dict[str, Any]:
+        order = await OrderService._load_order_for_proposal_write(session, order_id)
+        proposal = next((item for item in order.proposals if item.id == proposal_id), None)
+        if not proposal:
+            raise ValueError("Proposal not found")
+        fields_set = getattr(payload, "model_fields_set", getattr(payload, "__fields_set__", set()))
+        if "name" in fields_set:
+            proposal.name = OrderService._clean_proposal_name(payload.name, proposal.name)
+        if "status" in fields_set and payload.status is not None:
+            proposal.status = str(payload.status or "draft")
+        if "sort_order" in fields_set and payload.sort_order is not None:
+            proposal.sort_order = int(payload.sort_order)
+        if "is_archived" in fields_set and payload.is_archived is not None:
+            proposal.is_archived = bool(payload.is_archived)
+            if proposal.is_archived and proposal.is_selected:
+                active = [item for item in order.proposals if item.id != proposal.id and not item.is_archived]
+                replacement = next(iter(sorted(active, key=lambda item: item.sort_order)), None)
+                proposal.is_selected = False
+                if replacement:
+                    replacement.is_selected = True
+                    session.add(replacement)
+        session.add(proposal)
+        await session.flush()
+        await OrderService._refresh_order_financials(session, order)
+        session.add(order)
+        await session.commit()
+        return await OrderService.get_order_detail_for_manager(session, order_id)
+
+    @staticmethod
+    async def select_order_proposal(session: AsyncSession, order_id: int, proposal_id: int) -> Dict[str, Any]:
+        order = await OrderService._load_order_for_proposal_write(session, order_id)
+        proposal = next((item for item in order.proposals if item.id == proposal_id and not item.is_archived), None)
+        if not proposal:
+            raise ValueError("Proposal not found")
+        for item in order.proposals:
+            item.is_selected = item.id == proposal.id
+            session.add(item)
+        order.proposal_status = proposal.status or order.proposal_status or "draft"
+        await session.flush()
+        await OrderService._refresh_order_financials(session, order)
+        session.add(order)
+        await session.commit()
+        return await OrderService.get_order_detail_for_manager(session, order_id)
 
 
     @staticmethod
@@ -1672,8 +1916,29 @@ class OrderService:
             flag_modified(order, "technical_meta")
 
         if "products" in fields_set or "services" in fields_set:
+            await session.refresh(order, attribute_names=["proposals", "product_links", "service_links", "payments", "installers"])
+            selected_proposal = await OrderService.ensure_default_proposal(session, order)
+            payload_proposal_ids = {
+                int(line.proposal_id)
+                for line in list(payload.products or []) + list(payload.services or [])
+                if getattr(line, "proposal_id", None)
+            }
+            if len(payload_proposal_ids) > 1:
+                raise ValueError("Only one proposal can be updated at a time")
+            target_proposal_id = next(iter(payload_proposal_ids), None) or int(selected_proposal.id)
+            target_proposal = next(
+                (proposal for proposal in order.proposals if proposal.id == target_proposal_id and not proposal.is_archived),
+                None,
+            )
+            if not target_proposal:
+                raise ValueError("Proposal not found")
             if "products" in fields_set and payload.products is not None:
-                await session.execute(delete(OrderProductLink).where(OrderProductLink.order_id == order_id))
+                await session.execute(
+                    delete(OrderProductLink).where(
+                        OrderProductLink.order_id == order_id,
+                        OrderProductLink.proposal_id == target_proposal_id,
+                    )
+                )
                 for product_line in payload.products:
                     if product_line.quantity <= 0:
                         raise ValueError("Product quantity must be > 0")
@@ -1685,6 +1950,7 @@ class OrderService:
                     )
                     new_product_link = OrderProductLink(
                         order_id=order_id,
+                        proposal_id=target_proposal_id,
                         product_id=product_line.product_id,
                         quantity=product_line.quantity,
                         price=product_line.price,
@@ -1693,7 +1959,12 @@ class OrderService:
                     session.add(new_product_link)
 
             if "services" in fields_set and payload.services is not None:
-                await session.execute(delete(OrderServiceLink).where(OrderServiceLink.order_id == order_id))
+                await session.execute(
+                    delete(OrderServiceLink).where(
+                        OrderServiceLink.order_id == order_id,
+                        OrderServiceLink.proposal_id == target_proposal_id,
+                    )
+                )
                 for service_line in payload.services:
                     if service_line.quantity <= 0:
                         raise ValueError("Service quantity must be > 0")
@@ -1707,6 +1978,7 @@ class OrderService:
                     )
                     new_service_link = OrderServiceLink(
                         order_id=order_id,
+                        proposal_id=target_proposal_id,
                         service_id=service_line.service_id,
                         title=service_line.title,
                         quantity=service_line.quantity,

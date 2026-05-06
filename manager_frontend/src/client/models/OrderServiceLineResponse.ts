@@ -4,6 +4,7 @@
 /* eslint-disable */
 export type OrderServiceLineResponse = {
     id: number;
+    proposal_id?: (number | null);
     service_id?: (number | null);
     service_title: string;
     quantity: number;

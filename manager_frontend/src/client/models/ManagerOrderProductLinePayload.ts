@@ -4,6 +4,7 @@
 /* eslint-disable */
 export type ManagerOrderProductLinePayload = {
     link_id?: (number | null);
+    proposal_id?: (number | null);
     product_id: number;
     quantity: number;
     price: number;

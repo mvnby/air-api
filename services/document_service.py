@@ -5,6 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import set_committed_value
 
 from models import CustomerType, OrderDocument, Order, GlobalConfig
 from services.google_service import get_google_service
@@ -116,6 +117,7 @@ class DocumentService:
         document_template_id: Optional[int] = None,
         template_id: Optional[str] = None,
         contract_date: Optional[datetime] = None,
+        proposal_id: Optional[int] = None,
     ) -> OrderDocument:
         """
         Создает документ или возвращает существующий.
@@ -129,6 +131,17 @@ class DocumentService:
         Returns:
             OrderDocument объект с данными о документе
         """
+        if doc_type == "offer":
+            return await DocumentService._create_new_document(
+                session,
+                order_id,
+                doc_type,
+                document_template_id=document_template_id,
+                template_id=template_id,
+                contract_date=contract_date,
+                proposal_id=proposal_id,
+            )
+
         # 1. Проверяем, есть ли уже такой документ
         # Если есть дубликаты, берем самый новый
         query = select(OrderDocument).where(
@@ -149,6 +162,7 @@ class DocumentService:
             document_template_id=document_template_id,
             template_id=template_id,
             contract_date=contract_date,
+            proposal_id=proposal_id,
         )
 
     @staticmethod
@@ -159,6 +173,7 @@ class DocumentService:
         document_template_id: Optional[int] = None,
         template_id: Optional[str] = None,
         contract_date: Optional[datetime] = None,
+        proposal_id: Optional[int] = None,
     ) -> dict:
         if doc_type not in DocumentService.ALLOWED_DOC_TYPES:
             raise ValueError(f"Unsupported document type: {doc_type}")
@@ -170,9 +185,11 @@ class DocumentService:
             document_template_id=document_template_id,
             template_id=template_id,
             contract_date=contract_date,
+            proposal_id=proposal_id,
         )
         return {
             "doc_id": doc.id,
+            "proposal_id": getattr(doc, "proposal_id", None),
             "doc_type": doc.doc_type,
             "edit_url": doc.google_edit_url,
         }
@@ -322,6 +339,7 @@ class DocumentService:
         document_template_id: Optional[int] = None,
         template_id: Optional[str] = None,
         contract_date: Optional[datetime] = None,
+        proposal_id: Optional[int] = None,
     ) -> OrderDocument:
         """Создает новый документ в Google Drive и сохраняет в БД"""
         
@@ -371,6 +389,7 @@ class DocumentService:
         # 4. Получаем стратегию для подготовки данных
         strategy = DocumentFactory.get_strategy(doc_type, session, order_id)
         await strategy.fetch_order()
+        effective_proposal_id = DocumentService._apply_offer_proposal(strategy.order, proposal_id) if doc_type == "offer" else None
         if doc_type == "contract" and strategy.order:
             if not strategy.order.document_role_type:
                 strategy.order.document_role_type = await DocumentService._get_contract_template_role_type(session, template_id)
@@ -449,6 +468,7 @@ class DocumentService:
         # 8. Создаем запись в БД
         new_doc = OrderDocument(
             order_id=order_id,
+            proposal_id=effective_proposal_id,
             document_template_id=document_template_id,
             template_id=template_id,
             doc_type=doc_type,
@@ -472,6 +492,41 @@ class DocumentService:
         await session.refresh(new_doc)
         
         return new_doc
+
+    @staticmethod
+    def _apply_offer_proposal(order: Optional[Order], proposal_id: Optional[int]) -> Optional[int]:
+        if not order:
+            return None
+
+        active_proposals = [proposal for proposal in getattr(order, "proposals", []) if not proposal.is_archived]
+        selected = None
+        if proposal_id is not None:
+            selected = next((proposal for proposal in active_proposals if proposal.id == proposal_id), None)
+            if not selected:
+                raise ValueError("Proposal not found")
+        else:
+            selected = (
+                next((proposal for proposal in active_proposals if proposal.is_selected), None)
+                or next(iter(sorted(active_proposals, key=lambda item: item.sort_order)), None)
+            )
+
+        if not selected or selected.id is None:
+            return None
+
+        selected_id = int(selected.id)
+        product_links = [link for link in order.product_links if link.proposal_id == selected_id]
+        service_links = [link for link in order.service_links if link.proposal_id == selected_id]
+        total_amount = sum((link.price or 0) * (link.quantity or 0) for link in product_links)
+        total_amount += sum((link.price or 0) * (link.quantity or 0) for link in service_links)
+        total_cost = sum((link.cost or 0) * (link.quantity or 0) for link in product_links)
+        total_cost += sum((link.cost or 0) * (link.quantity or 0) for link in service_links)
+
+        set_committed_value(order, "product_links", product_links)
+        set_committed_value(order, "service_links", service_links)
+        set_committed_value(order, "total_amount", total_amount)
+        set_committed_value(order, "total_cost", total_cost)
+        set_committed_value(order, "margin", total_amount - total_cost)
+        return selected_id
     
     @staticmethod
     async def _get_next_number(session: AsyncSession, doc_type: str, base_date: Optional[datetime] = None) -> str:

@@ -163,10 +163,31 @@ class ServiceEstimateItem(SQLModel, table=True):
     estimate: ServiceEstimate = Relationship(back_populates="items")
 
 
+class OrderProposal(SQLModel, table=True):
+    __tablename__ = "order_proposal"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    order_id: int = Field(foreign_key="order.id", index=True)
+
+    name: str = Field(default="Основное")
+    status: str = Field(default="draft", sa_column=Column(String, default="draft"))
+    is_selected: bool = Field(default=False, index=True)
+    is_archived: bool = Field(default=False, index=True)
+    sort_order: int = Field(default=0, index=True)
+
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
+
+    order: "Order" = Relationship(back_populates="proposals")
+    product_links: List["OrderProductLink"] = Relationship(back_populates="proposal")
+    service_links: List["OrderServiceLink"] = Relationship(back_populates="proposal")
+
+
 class OrderProductLink(SQLModel, table=True):
     __tablename__ = "order_product_link"
     id: Optional[int] = Field(default=None, primary_key=True)
     order_id: Optional[int] = Field(default=None, foreign_key="order.id")
+    proposal_id: Optional[int] = Field(default=None, foreign_key="order_proposal.id", index=True)
     product_id: Optional[int] = Field(default=None, foreign_key="product.id")
     quantity: int = Field(default=1)
 
@@ -178,6 +199,7 @@ class OrderProductLink(SQLModel, table=True):
     installation_details: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
     order: "Order" = Relationship(back_populates="product_links")
+    proposal: Optional[OrderProposal] = Relationship(back_populates="product_links")
     product: "Product" = Relationship(back_populates="order_links")
 
 
@@ -185,6 +207,7 @@ class OrderServiceLink(SQLModel, table=True):
     __tablename__ = "order_service_link"
     id: Optional[int] = Field(default=None, primary_key=True)
     order_id: Optional[int] = Field(default=None, foreign_key="order.id")
+    proposal_id: Optional[int] = Field(default=None, foreign_key="order_proposal.id", index=True)
     service_id: Optional[int] = Field(default=None, foreign_key="service.id")
     quantity: int = Field(default=1)
 
@@ -194,6 +217,7 @@ class OrderServiceLink(SQLModel, table=True):
     cost: int = Field(default=0)
 
     order: "Order" = Relationship(back_populates="service_links")
+    proposal: Optional[OrderProposal] = Relationship(back_populates="service_links")
     service: "Service" = Relationship(back_populates="order_links")
 
 
@@ -346,6 +370,13 @@ class Order(SQLModel, table=True):
     customer_branch: Optional["CustomerBranch"] = Relationship(back_populates="orders")
     customer_contract: Optional["CustomerContract"] = Relationship(back_populates="orders")
 
+    proposals: List[OrderProposal] = Relationship(
+        back_populates="order",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin",
+        },
+    )
     product_links: List[OrderProductLink] = Relationship(
         back_populates="order",
         sa_relationship_kwargs={
@@ -390,11 +421,23 @@ class Order(SQLModel, table=True):
     )
 
     def calculate_totals(self):
-        p_sum = sum([item.price * item.quantity for item in self.product_links])
-        s_sum = sum([item.price * item.quantity for item in self.service_links])
+        selected_proposal = next((proposal for proposal in self.proposals if proposal.is_selected and not proposal.is_archived), None)
+        if not selected_proposal:
+            selected_proposal = next((proposal for proposal in sorted(self.proposals, key=lambda item: item.sort_order) if not proposal.is_archived), None)
+        selected_proposal_id = selected_proposal.id if selected_proposal and selected_proposal.id is not None else None
 
-        p_cost = sum([item.cost * item.quantity for item in self.product_links])
-        s_cost = sum([item.cost * item.quantity for item in self.service_links])
+        if selected_proposal_id is not None:
+            product_links = [item for item in self.product_links if item.proposal_id == selected_proposal_id]
+            service_links = [item for item in self.service_links if item.proposal_id == selected_proposal_id]
+        else:
+            product_links = list(self.product_links)
+            service_links = list(self.service_links)
+
+        p_sum = sum([item.price * item.quantity for item in product_links])
+        s_sum = sum([item.price * item.quantity for item in service_links])
+
+        p_cost = sum([item.cost * item.quantity for item in product_links])
+        s_cost = sum([item.cost * item.quantity for item in service_links])
 
         i_cost = sum([inst.agreed_pay for inst in self.installers])
 
@@ -436,6 +479,7 @@ class OrderDocument(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     order_id: int = Field(foreign_key="order.id", index=True)
+    proposal_id: Optional[int] = Field(default=None, foreign_key="order_proposal.id", index=True)
     document_template_id: Optional[int] = Field(default=None, foreign_key="document_template.id", index=True)
     template_id: Optional[str] = Field(default=None, index=True)
     doc_type: str = Field(index=True)
@@ -448,6 +492,7 @@ class OrderDocument(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.now)
 
     order: "Order" = Relationship(back_populates="documents")
+    proposal: Optional[OrderProposal] = Relationship()
     document_template: Optional["DocumentTemplate"] = Relationship()
 
     def __str__(self):
