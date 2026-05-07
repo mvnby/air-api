@@ -293,7 +293,6 @@ const saveOrder = async (payload: { orderId: number; data: ManagerOrderUpdatePay
   orderFormError.value = '';
   try {
     selectedOrder.value = await api.patchManagerOrder(payload.orderId, payload.data);
-    drawerOpen.value = false;
     setToast('Сделка сохранена');
     await loadOrders();
   } catch (error) {

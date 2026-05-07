@@ -167,14 +167,19 @@ const localServerErrors = ref<Record<string, string>>({});
 
 const createDefaultDrawerSections = () => ({
   website: false,
+  clientDetails: false,
   planningDetails: false,
-  branchDetails: false,
+  proposals: false,
   documents: false,
+  payments: false,
 });
 const expandedDrawerSections = ref(createDefaultDrawerSections());
 
 const localFormError = ref('');
 const showCustomerModal = ref(false);
+const isEditingOrderTitle = ref(false);
+const showManagerLabelInput = ref(false);
+const showBranchFields = ref(false);
 
 const showChangeCustomerModal = ref(false);
 const customerSearchQuery = ref('');
@@ -298,6 +303,47 @@ const isB2cCustomer = computed(() => {
   if (!customer.value) return true; // defaults to B2C if unknown
   return customer.value.type !== 'company';
 });
+const displayOrderTitle = computed(() => (
+  orderTitle.value.trim()
+  || customer.value?.full_legal_name
+  || customer.value?.name
+  || 'Без названия'
+));
+const clientDisplayName = computed(() => (
+  customer.value?.full_legal_name
+  || customer.value?.name
+  || 'Клиент не выбран'
+));
+const selectedCustomerBranch = computed(() => (
+  customerBranches.value.find((branch) => branch.id === customerBranchId.value)
+  || props.order?.customer_branch
+  || null
+));
+const compactObjectAddress = computed(() => (
+  customerDeliveryAddress.value.trim()
+  || selectedCustomerBranch.value?.delivery_address
+  || ''
+));
+const clientSummaryContacts = computed(() => {
+  const rows: Array<{ key: string; icon?: string; label: string; value: string; href?: string; copyLabel: string }> = [];
+  const phone = customer.value?.phone?.trim();
+  const email = customer.value?.email?.trim();
+  const inn = customer.value?.inn?.trim();
+  const address = compactObjectAddress.value.trim();
+
+  if (phone) rows.push({ key: 'phone', icon: 'phone', label: 'Телефон', value: phone, href: `tel:${phone.replace(/\s+/g, '')}`, copyLabel: 'Телефон' });
+  if (email) rows.push({ key: 'email', icon: 'email', label: 'Email', value: email, href: `mailto:${email}`, copyLabel: 'Email' });
+  if (inn) rows.push({ key: 'inn', label: 'УНП', value: inn, copyLabel: 'УНП' });
+  if (address) rows.push({ key: 'address', icon: 'location_on', label: 'Адрес', value: address, href: `https://yandex.by/maps/?text=${encodeURIComponent(address)}`, copyLabel: 'Адрес' });
+
+  return rows;
+});
+const customerDetailsSummary = computed(() => {
+  const parts = [];
+  if (compactObjectAddress.value) parts.push(compactObjectAddress.value);
+  if (comment.value.trim()) parts.push('есть комментарий');
+  return parts.join(' · ') || 'адрес и комментарий';
+});
 const filteredEstimateOptions = computed(() => {
   const query = estimateSearchQuery.value.trim().toLowerCase();
   if (!query) return estimateOptions.value;
@@ -328,6 +374,9 @@ const activeProposalLineLabel = computed(() => {
   const count = (proposal.product_lines?.length || 0) + (proposal.service_lines?.length || 0);
   return `${proposal.name} · ${count} поз. · ${formatMoney(proposal.total_amount || 0)}`;
 });
+const paymentsSectionSummary = computed(() => (
+  `оплачено ${formatMoney(totalPaymentsPreview.value)} · остаток ${formatMoney(balanceDuePreview.value)} · итого ${formatMoney(totalPreview.value)} · маржа ${formatMoney(marginPreview.value)}`
+));
 const documentProposalName = (doc: ManagerOrderDocumentItem) => {
   if (!doc.proposal_id) return '';
   return orderProposals.value.find((proposal) => proposal.id === doc.proposal_id)?.name || `вариант #${doc.proposal_id}`;
@@ -361,6 +410,7 @@ const addManagerLabel = () => {
   const exists = managerLabels.value.some((item) => item.toLocaleLowerCase('ru-RU') === label.toLocaleLowerCase('ru-RU'));
   if (!exists) managerLabels.value.push(label);
   managerLabelDraft.value = '';
+  showManagerLabelInput.value = false;
 };
 
 const removeManagerLabel = (label: string) => {
@@ -843,41 +893,6 @@ const marginPreview = computed(() => {
   const pCost = productLines.value.reduce((sum, line) => sum + line.cost * line.quantity, 0);
   const sCost = serviceLines.value.reduce((sum, line) => sum + line.cost * line.quantity, 0);
   return Math.round(totalPreview.value - (pCost + sCost));
-});
-
-const summaryFinancials = computed(() => {
-  const dealRate = (enableCurrency.value && targetCurrency.value && targetCurrencyAmount.value && targetCurrencyAmount.value > 0)
-    ? (totalPreview.value / targetCurrencyAmount.value)
-    : null;
-  const isCurrencyMode = Boolean(enableCurrency.value && targetCurrency.value && currentFxRate.value && dealRate);
-  const curr = targetCurrency.value || 'USD';
-  const currSymbol = curr === 'EUR' ? '€' : '$';
-
-  const bynPaid = payments.value.filter(p => p.currency === 'BYN').reduce((s, p) => s + p.amount, 0);
-  const foreignPaid = isCurrencyMode
-    ? payments.value.filter(p => p.currency === curr).reduce((s, p) => s + p.amount, 0)
-    : 0;
-
-  const totalInTarget = isCurrencyMode ? (targetCurrencyAmount.value || 0) : 0;
-  const paidInTarget = isCurrencyMode && dealRate ? foreignPaid + (bynPaid / dealRate) : 0;
-  const balanceInTarget = Math.max(0, totalInTarget - paidInTarget);
-
-  const totalInByn = totalPreview.value;
-  const paidInByn = isCurrencyMode && dealRate ? bynPaid + (foreignPaid * dealRate) : bynPaid;
-  const balanceInByn = Math.max(0, totalInByn - paidInByn);
-
-  return {
-    isCurrencyMode,
-    targetCurrency: curr,
-    currSymbol,
-    totalInTarget: Math.round(totalInTarget),
-    paidInTarget: Math.round(paidInTarget),
-    balanceInTarget: Math.round(balanceInTarget),
-    totalInByn: Math.round(totalInByn),
-    paidInByn: Math.round(paidInByn),
-    balanceInByn: Math.round(balanceInByn),
-    dealRate: dealRate || 0
-  };
 });
 
 const rememberProductOption = (option: ProductOption) => {
@@ -1728,69 +1743,54 @@ watch(
     </Transition>
     <div class="flex-1 bg-black/60" @click="closeDrawer" />
     <aside class="h-full w-full min-w-0 max-w-3xl overflow-y-auto bg-white p-4 text-gray-900 shadow-2xl sm:p-6 md:border-l md:border-gray-200">
-      <header class="mb-4 flex flex-col gap-3 border-b border-gray-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
-        <div class="min-w-0 flex-1">
-          <div class="mb-1 flex flex-wrap items-center gap-2 sm:gap-3">
-            <h2 class="min-w-0 break-words text-lg font-semibold text-gray-900 sm:text-xl font-['Space_Grotesk']">№{{ order?.id }} {{ orderTitle || customer?.full_legal_name || customer?.name || 'Без имени' }}</h2>
-            <span
-              v-if="isWebsiteOrder"
-              class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700"
-            >
-              <span class="material-icons-round text-[14px]">language</span>
-              Сайт
-            </span>
-            <button @click="showCustomerModal = true" class="text-xs font-medium text-teal-600 hover:text-teal-700 bg-teal-50 px-2 py-0.5 rounded flex items-center gap-1 transition-colors" :disabled="!customer?.id">
-              <span class="material-icons-round text-[14px]">info</span>
-              Подробнее
-            </button>
-            <button @click="showChangeCustomerModal = true" class="text-xs font-medium text-slate-600 hover:text-slate-700 bg-slate-100 px-2 py-0.5 rounded flex items-center gap-1 transition-colors">
-              <span class="material-icons-round text-[14px]">swap_horiz</span>
-              Изменить
-            </button>
-          </div>
-          <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
-            <span v-if="customer?.phone" class="flex items-center gap-1"><span class="material-icons-round text-[14px]">phone</span> {{ customer.phone }}</span>
-            <span v-if="customer?.email" class="flex items-center gap-1"><span class="material-icons-round text-[14px]">email</span> {{ customer.email }}</span>
-            <span v-if="customer?.inn" class="flex items-center gap-1"><span class="font-medium text-xs">УНП</span> {{ customer.inn }}</span>
-          </div>
-        </div>
+      <header class="mb-4 border-b border-gray-100 pb-4">
+        <div class="mb-3 flex items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="mb-1 flex flex-wrap items-center gap-2">
+              <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">Заказ №{{ order?.id }}</span>
+              <span
+                v-if="isWebsiteOrder"
+                class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700"
+              >
+                <span class="material-icons-round text-[14px]">language</span>
+                Сайт
+              </span>
+            </div>
 
-        <div class="flex items-start gap-2 sm:ml-4">
-          <button v-if="order" type="button" @click="toggleHold" class="text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors" :class="order.is_on_hold ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'">
-            {{ order.is_on_hold ? 'Вернуть в работу' : 'Отложить' }}
-          </button>
-          <button class="flex items-center justify-center w-8 h-8 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" type="button" @click="closeDrawer" title="Закрыть">
-            <span class="material-icons-round">close</span>
-          </button>
-        </div>
-      </header>
+            <div v-if="isEditingOrderTitle" class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start">
+              <label class="min-w-0 flex-1">
+                <span class="sr-only">Рабочее название заказа</span>
+                <input
+                  v-model="orderTitle"
+                  class="field-input text-base font-semibold sm:text-lg"
+                  placeholder="Например: Монтаж магазина в Дубровно"
+                  maxlength="160"
+                  @keydown.enter.prevent="isEditingOrderTitle = false"
+                  @keydown.esc.prevent="isEditingOrderTitle = false"
+                />
+                <span v-if="getFieldError('title')" class="text-xs text-red-300">{{ getFieldError('title') }}</span>
+              </label>
+              <button type="button" class="btn-mini-outline whitespace-nowrap" @click="isEditingOrderTitle = false">Готово</button>
+            </div>
+            <div v-else class="mt-1 flex min-w-0 items-start gap-2">
+              <h2 class="min-w-0 break-words text-lg font-semibold text-gray-900 sm:text-xl font-['Space_Grotesk']">{{ displayOrderTitle }}</h2>
+              <button
+                type="button"
+                class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-teal-700"
+                title="Редактировать название"
+                @click="isEditingOrderTitle = true"
+              >
+                <span class="material-icons-round text-[16px]">edit</span>
+              </button>
+            </div>
 
-      <p v-if="displayFormError" class="mb-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
-        {{ displayFormError }}
-      </p>
-
-      <section class="mb-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <div class="grid gap-3 md:grid-cols-2">
-          <label class="field-label md:col-span-2">
-            Внутреннее название
-            <input
-              v-model="orderTitle"
-              class="field-input"
-              placeholder="Например: Монтаж магазина в Дубровно"
-              maxlength="160"
-            />
-            <span v-if="getFieldError('title')" class="text-xs text-red-300">{{ getFieldError('title') }}</span>
-          </label>
-
-          <div class="md:col-span-2">
-            <p class="mb-1 text-xs font-medium uppercase tracking-[0.08em] text-slate-500">Метки</p>
-            <div class="flex flex-wrap gap-2">
+            <div class="mt-3 flex flex-wrap items-center gap-2">
               <span
                 v-for="label in managerLabels"
                 :key="label"
-                class="inline-flex items-center gap-1 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-800"
+                class="inline-flex max-w-full items-center gap-1 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-800"
               >
-                {{ label }}
+                <span class="truncate">{{ label }}</span>
                 <button
                   type="button"
                   class="flex h-4 w-4 items-center justify-center rounded-full text-teal-500 hover:bg-teal-100 hover:text-teal-800"
@@ -1800,21 +1800,196 @@ watch(
                   <span class="material-icons-round text-[14px]">close</span>
                 </button>
               </span>
-              <span v-if="!managerLabels.length" class="text-sm text-slate-500">Метки не добавлены</span>
+              <button
+                v-if="!showManagerLabelInput"
+                type="button"
+                class="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:border-teal-300 hover:text-teal-700"
+                @click="showManagerLabelInput = true"
+              >
+                <span class="material-icons-round text-[14px]">add</span>
+                метка
+              </button>
+              <div v-else class="flex min-w-[220px] max-w-full flex-1 gap-2 sm:flex-none">
+                <input
+                  v-model="managerLabelDraft"
+                  class="field-input h-8 text-xs"
+                  placeholder="срочно, ждём оплату"
+                  @keydown.enter.prevent="addManagerLabel"
+                  @keydown.esc.prevent="showManagerLabelInput = false"
+                />
+                <button type="button" class="btn-mini h-8 whitespace-nowrap text-xs" @click="addManagerLabel">Добавить</button>
+              </div>
+              <span v-if="getFieldError('manager_labels')" class="text-xs text-red-300">{{ getFieldError('manager_labels') }}</span>
             </div>
-            <div class="mt-2 flex flex-col gap-2 sm:flex-row">
+          </div>
+
+          <button class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600" type="button" @click="closeDrawer" title="Закрыть">
+            <span class="material-icons-round">close</span>
+          </button>
+        </div>
+
+        <div class="grid gap-3 lg:grid-cols-[1fr_auto]">
+          <div class="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Клиент</p>
+                  <button @click="showCustomerModal = true" class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-teal-700 transition hover:bg-white" :disabled="!customer?.id">
+                    <span class="material-icons-round text-[15px]">open_in_new</span>
+                    Открыть клиента
+                  </button>
+                </div>
+                <p class="mt-1 break-words text-sm font-semibold text-slate-900">{{ clientDisplayName }}</p>
+              </div>
+              <div class="flex shrink-0 flex-wrap gap-2">
+                <button @click="showChangeCustomerModal = true" class="btn-mini-outline whitespace-nowrap text-xs">
+                  <span class="material-icons-round text-[15px]">swap_horiz</span>
+                  Сменить клиента
+                </button>
+                <button v-if="customer?.id" @click="showBranchFields = !showBranchFields" class="btn-mini-outline whitespace-nowrap text-xs" :class="showBranchFields ? 'border-teal-200 bg-teal-50 text-teal-700' : ''">
+                  <span class="material-icons-round text-[15px]">account_tree</span>
+                  Филиал
+                </button>
+              </div>
+            </div>
+
+            <div v-if="clientSummaryContacts.length" class="mt-3 flex flex-wrap gap-2">
+              <div
+                v-for="item in clientSummaryContacts"
+                :key="item.key"
+                class="group inline-flex min-w-0 max-w-full items-center rounded-full border border-white bg-white px-2.5 py-1 text-xs text-slate-700 shadow-sm"
+              >
+                <span v-if="item.icon" class="material-icons-round mr-1 text-[14px] text-slate-400">{{ item.icon }}</span>
+                <span v-else class="mr-1 text-[10px] font-semibold uppercase text-slate-400">{{ item.label }}</span>
+                <a
+                  v-if="item.href"
+                  :href="item.href"
+                  target="_blank"
+                  class="min-w-0 truncate font-medium hover:text-teal-700"
+                >
+                  {{ item.value }}
+                </a>
+                <span v-else class="min-w-0 truncate font-medium">{{ item.value }}</span>
+                <button
+                  type="button"
+                  class="ml-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-teal-700"
+                  :title="`Скопировать ${item.label.toLowerCase()}`"
+                  @click="copyText(item.value, item.copyLabel)"
+                >
+                  <span class="material-icons-round text-[13px]">content_copy</span>
+                </button>
+              </div>
+            </div>
+
+            <div v-if="showBranchFields && customer?.id" class="mt-3 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-2">
+              <label class="field-label md:col-span-2">
+                Филиал клиента
+                <select
+                  :value="customerBranchId ?? ''"
+                  class="field-input"
+                  :disabled="customerBranchesLoading"
+                  @change="onCustomerBranchChange"
+                >
+                  <option value="">Без филиала</option>
+                  <option
+                    v-for="branch in customerBranches"
+                    :key="`order-branch-${branch.id}`"
+                    :value="branch.id"
+                  >
+                    {{ branch.name || `Филиал #${branch.id}` }} — {{ branch.delivery_address }}
+                  </option>
+                </select>
+                <span v-if="customerBranchesLoading" class="text-xs text-gray-500">Загрузка филиалов...</span>
+                <span v-else-if="!customerBranches.length" class="text-xs text-gray-500">У клиента нет филиалов</span>
+              </label>
+
               <input
-                v-model="managerLabelDraft"
-                class="field-input sm:flex-1"
-                placeholder="срочно, ждём адрес, уточнить оплату"
-                @keydown.enter.prevent="addManagerLabel"
+                v-model="newBranchName"
+                class="field-input"
+                placeholder="Новый филиал (название)"
               />
-              <button type="button" class="btn-mini whitespace-nowrap" @click="addManagerLabel">Добавить метку</button>
+              <input
+                v-model="newBranchAddress"
+                class="field-input"
+                placeholder="Новый филиал (адрес)"
+              />
+              <div class="md:col-span-2">
+                <button
+                  type="button"
+                  class="btn-mini-outline text-xs"
+                  :disabled="creatingCustomerBranch"
+                  @click="createCustomerBranch"
+                >
+                  {{ creatingCustomerBranch ? 'Создаем филиал...' : 'Создать филиал и выбрать' }}
+                </button>
+              </div>
             </div>
-            <span v-if="getFieldError('manager_labels')" class="text-xs text-red-300">{{ getFieldError('manager_labels') }}</span>
+          </div>
+
+          <div class="flex flex-wrap items-start gap-2 lg:justify-end">
+            <button v-if="status === 'negotiation' && !measurementRequired" type="button" class="btn-mini-outline whitespace-nowrap text-xs" @click="measurementRequired = true">
+              <span class="material-icons-round text-[15px]">add_location_alt</span>
+              Выезд на замер
+            </button>
+            <button v-if="order" type="button" @click="toggleHold" class="text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors" :class="order.is_on_hold ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'">
+              {{ order.is_on_hold ? 'Вернуть в работу' : 'Отложить' }}
+            </button>
           </div>
         </div>
-      </section>
+      </header>
+
+      <p v-if="displayFormError" class="mb-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
+        {{ displayFormError }}
+      </p>
+
+      <OrderDrawerSection
+        v-model:expanded="expandedDrawerSections.clientDetails"
+        title="Объект"
+        :summary="customerDetailsSummary"
+        tone="default"
+        :has-error="Boolean(getFieldError('customer_delivery_address') || getFieldError('comment'))"
+      >
+        <div class="grid gap-3 md:grid-cols-2">
+          <label class="field-label md:col-span-2 relative">
+            Адрес объекта / доставки
+            <input
+              v-model="customerDeliveryAddress"
+              @input="onAddressInput"
+              @blur="hideAddressSuggestions"
+              @focus="addressSuggestActive = true"
+              class="field-input"
+              placeholder="Введите адрес..."
+              autocomplete="off"
+            />
+            <div v-if="addressLookupLoading" class="absolute right-3 top-9">
+              <span class="material-icons-round animate-spin text-gray-400 text-[18px]">refresh</span>
+            </div>
+            <span v-if="getFieldError('customer_delivery_address')" class="text-xs text-red-300">{{ getFieldError('customer_delivery_address') }}</span>
+
+            <ul v-if="addressSuggestActive && addressSuggestions.length > 0" class="absolute top-full left-0 z-50 mt-1 max-h-60 w-full overflow-auto rounded-xl bg-white flex flex-col p-1 shadow-2xl border border-gray-100 ring-1 ring-black/5">
+              <li
+                v-for="(item, i) in addressSuggestions"
+                :key="i"
+                class="flex cursor-pointer flex-col px-3 py-2 text-sm hover:bg-gray-50 rounded-lg transition-colors border-b border-gray-50 last:border-0"
+                @mousedown.prevent="selectAddressSuggestion(item)"
+              >
+                <div class="font-medium text-gray-900">{{ item.title?.text }}</div>
+                <div v-if="item.subtitle?.text" class="text-xs text-gray-500 mt-0.5 truncate">{{ item.subtitle?.text }}</div>
+              </li>
+            </ul>
+          </label>
+
+          <label class="field-label md:col-span-2">
+            Комментарий
+            <textarea
+              v-model="comment"
+              class="field-input min-h-[90px]"
+              :class="getFieldError('comment') ? 'border-red-500 focus:outline-red-400' : ''"
+            />
+            <span v-if="getFieldError('comment')" class="text-xs text-red-300">{{ getFieldError('comment') }}</span>
+          </label>
+        </div>
+      </OrderDrawerSection>
 
       <OrderDrawerSection
         v-if="isWebsiteOrder"
@@ -1926,192 +2101,88 @@ watch(
 
 
       <!-- Планирование (Measurement & Logistics) -->
-      <section v-if="status === 'negotiation'" class="mt-6 rounded-2xl bg-blue-50/30 border border-blue-100 p-4">
-        <div class="mb-4 border-b border-blue-100 pb-2">
-          <h3 class="text-lg font-semibold text-blue-900 font-['Space_Grotesk']">Планирование</h3>
-          <p class="mt-1 truncate text-xs text-blue-700/70">{{ planningSummary }}</p>
+      <section v-if="status === 'negotiation'" class="mt-4 rounded-2xl border border-blue-100 bg-blue-50/30 p-3">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="min-w-0">
+            <h3 class="text-sm font-semibold text-blue-900">Планирование</h3>
+            <p class="mt-0.5 truncate text-xs text-blue-700/70">{{ planningSummary }}</p>
+          </div>
+          <button
+            v-if="!measurementRequired"
+            type="button"
+            class="btn-mini-outline justify-center whitespace-nowrap text-xs"
+            @click="measurementRequired = true"
+          >
+            <span class="material-icons-round text-[15px]">add_location_alt</span>
+            Выезд на замер
+          </button>
+          <label v-else class="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-medium text-blue-900 ring-1 ring-blue-100">
+            <input type="checkbox" v-model="measurementRequired" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+            Замер нужен
+          </label>
         </div>
 
-        <label class="flex items-center gap-2 cursor-pointer mb-4">
-          <input type="checkbox" v-model="measurementRequired" class="w-5 h-5 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
-          <span class="font-medium text-gray-800">Требуется выезд на замер</span>
-        </label>
-
-        <div v-if="!measurementRequired" class="text-sm text-gray-500 bg-white p-3 rounded-xl border border-gray-200 mb-4 shadow-sm">
-          Замер не требуется. Можно планировать монтаж сразу.
-        </div>
-
-        <div v-if="measurementRequired" class="mb-4 rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
+        <div v-if="measurementRequired" class="mt-3 rounded-xl border border-blue-100 bg-white p-3 shadow-sm">
           <DateTimeField v-model="assessmentDate" label="Дата и время замера" :error="getFieldError('measurement_date')" />
         </div>
 
         <OrderDrawerSection
           v-model:expanded="expandedDrawerSections.planningDetails"
-          title="Дополнительные параметры планирования"
+          title="Детали выезда и монтажа"
           :summary="planningDetailsSummary"
           tone="blue"
-          :has-error="Boolean(getFieldError('measurement_date') || getFieldError('installation_date') || getFieldError('customer_delivery_address'))"
+          :has-error="Boolean(getFieldError('measurement_date') || getFieldError('installation_date'))"
         >
-          <div v-if="measurementRequired" class="grid gap-3 md:grid-cols-2">
+          <div class="grid gap-3 md:grid-cols-2">
+            <template v-if="measurementRequired">
+              <label class="field-label">
+                Замерщик
+                <select v-model="measurerId" class="field-input">
+                  <option :value="null">Не назначен</option>
+                  <option v-for="inst in installersList" :key="inst.id" :value="inst.id">
+                    {{ inst.name }} {{ !inst.is_active ? '(в архиве)' : '' }}
+                  </option>
+                </select>
+              </label>
+              <label class="field-label md:col-span-2">
+                Результат замера
+                <textarea
+                  v-model="measurementResult"
+                  class="field-input min-h-[60px]"
+                  placeholder="Резюме после выезда (длины трасс, доп. работы)..."
+                />
+              </label>
+            </template>
+            <DateTimeField v-model="installationDate" label="Дата монтажа" :error="getFieldError('installation_date')" />
             <label class="field-label">
-              Замерщик
-              <select v-model="measurerId" class="field-input">
+              Монтажник
+              <select v-model="installerId" class="field-input">
                 <option :value="null">Не назначен</option>
                 <option v-for="inst in installersList" :key="inst.id" :value="inst.id">
                   {{ inst.name }} {{ !inst.is_active ? '(в архиве)' : '' }}
                 </option>
               </select>
             </label>
-            <label class="field-label md:col-span-2">
-              Результат замера
-              <textarea
-                v-model="measurementResult"
-                class="field-input min-h-[60px]"
-                placeholder="Резюме после выезда (длины трасс, доп. работы)..."
-              />
-            </label>
           </div>
-          <p v-else class="text-sm text-gray-500">Дополнительные поля замера появятся, если включить выезд на замер.</p>
         </OrderDrawerSection>
-
-        <div class="grid gap-3 md:grid-cols-2">
-          <DateTimeField v-model="installationDate" label="Дата монтажа" :error="getFieldError('installation_date')" />
-          <label class="field-label">
-            Монтажник
-            <select v-model="installerId" class="field-input">
-              <option :value="null">Не назначен</option>
-              <option v-for="inst in installersList" :key="inst.id" :value="inst.id">
-                {{ inst.name }} {{ !inst.is_active ? '(в архиве)' : '' }}
-              </option>
-            </select>
-          </label>
-          <OrderDrawerSection
-            v-if="customer?.id"
-            v-model:expanded="expandedDrawerSections.branchDetails"
-            class="md:col-span-2"
-            title="Филиал клиента"
-            :summary="customerBranchId ? 'филиал выбран' : 'без филиала'"
-            tone="blue"
-          >
-            <div class="mt-2 grid gap-2 md:grid-cols-2">
-              <label class="field-label md:col-span-2">
-                Выбор филиала
-                <select
-                  :value="customerBranchId ?? ''"
-                  class="field-input"
-                  :disabled="customerBranchesLoading"
-                  @change="onCustomerBranchChange"
-                >
-                  <option value="">Без филиала</option>
-                  <option
-                    v-for="branch in customerBranches"
-                    :key="`order-branch-${branch.id}`"
-                    :value="branch.id"
-                  >
-                    {{ branch.name || `Филиал #${branch.id}` }} — {{ branch.delivery_address }}
-                  </option>
-                </select>
-                <span v-if="customerBranchesLoading" class="text-xs text-gray-500">Загрузка филиалов...</span>
-                <span v-else-if="!customerBranches.length" class="text-xs text-gray-500">У клиента нет филиалов</span>
-              </label>
-
-              <input
-                v-model="newBranchName"
-                class="field-input"
-                placeholder="Новый филиал (название)"
-              />
-              <input
-                v-model="newBranchAddress"
-                class="field-input"
-                placeholder="Новый филиал (адрес)"
-              />
-              <div class="md:col-span-2">
-                <button
-                  type="button"
-                  class="btn-mini-outline text-xs"
-                  :disabled="creatingCustomerBranch"
-                  @click="createCustomerBranch"
-                >
-                  {{ creatingCustomerBranch ? 'Создаем филиал...' : 'Создать филиал и выбрать' }}
-                </button>
-              </div>
-            </div>
-          </OrderDrawerSection>
-          <label class="field-label md:col-span-2 relative">
-            Адрес объекта / доставки
-            <input
-              v-model="customerDeliveryAddress"
-              @input="onAddressInput"
-              @blur="hideAddressSuggestions"
-              @focus="addressSuggestActive = true"
-              class="field-input"
-              placeholder="Введите адрес..."
-              autocomplete="off"
-            />
-            <div v-if="addressLookupLoading" class="absolute right-3 top-9">
-              <span class="material-icons-round animate-spin text-gray-400 text-[18px]">refresh</span>
-            </div>
-            <span v-if="getFieldError('customer_delivery_address')" class="text-xs text-red-300">{{ getFieldError('customer_delivery_address') }}</span>
-
-            <ul v-if="addressSuggestActive && addressSuggestions.length > 0" class="absolute top-full left-0 z-50 mt-1 max-h-60 w-full overflow-auto rounded-xl bg-white flex flex-col p-1 shadow-2xl border border-gray-100 ring-1 ring-black/5">
-              <li
-                v-for="(item, i) in addressSuggestions"
-                :key="i"
-                class="flex cursor-pointer flex-col px-3 py-2 text-sm hover:bg-gray-50 rounded-lg transition-colors border-b border-gray-50 last:border-0"
-                @mousedown.prevent="selectAddressSuggestion(item)"
-              >
-                <div class="font-medium text-gray-900">{{ item.title?.text }}</div>
-                <div v-if="item.subtitle?.text" class="text-xs text-gray-500 mt-0.5 truncate">{{ item.subtitle?.text }}</div>
-              </li>
-            </ul>
-          </label>
-        </div>
-        <label class="field-label md:col-span-2">
-          Комментарий
-          <textarea
-            v-model="comment"
-            class="field-input min-h-[90px]"
-            :class="getFieldError('comment') ? 'border-red-500 focus:outline-red-400' : ''"
-          />
-          <span v-if="getFieldError('comment')" class="text-xs text-red-300">{{ getFieldError('comment') }}</span>
-        </label>
       </section>
 
 
 
       <!-- Смета -->
-      <div class="mt-6 rounded-2xl border border-gray-200 bg-gray-50/50 p-3 sm:p-4">
+      <OrderDrawerSection
+        v-model:expanded="expandedDrawerSections.proposals"
+        title="Предложения"
+        :summary="activeProposalLineLabel"
+        tone="default"
+        :has-error="Boolean(getFieldError('products') || getFieldError('services'))"
+      >
+      <div class="rounded-2xl border border-gray-200 bg-gray-50/50 p-3 sm:p-4">
         <div class="mb-4 border-b border-gray-200 pb-3">
           <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h3 class="text-lg font-bold text-gray-900 sm:text-xl font-['Space_Grotesk']">Оборудование и услуги</h3>
+              <h3 class="text-lg font-bold text-gray-900 sm:text-xl font-['Space_Grotesk']">Предложения</h3>
               <p class="mt-1 text-xs text-gray-500">{{ activeProposalLineLabel }}</p>
-            </div>
-            <div class="flex flex-wrap gap-2">
-              <button
-                type="button"
-                class="btn-mini-outline whitespace-nowrap text-xs"
-                :disabled="proposalActionLoading"
-                @click="createProposal"
-              >
-                + вариант
-              </button>
-              <button
-                type="button"
-                class="btn-mini-outline whitespace-nowrap text-xs"
-                :disabled="proposalActionLoading || !activeProposal"
-                @click="duplicateProposal"
-              >
-                Копия
-              </button>
-              <button
-                type="button"
-                class="btn-mini-outline whitespace-nowrap text-xs"
-                :disabled="proposalActionLoading || !activeProposal"
-                @click="renameProposal"
-              >
-                Название
-              </button>
             </div>
           </div>
 
@@ -2132,6 +2203,15 @@ watch(
               </span>
               <span class="mt-0.5 block whitespace-nowrap text-[11px] opacity-75">{{ formatMoney(proposal.total_amount || 0) }}</span>
             </button>
+            <button
+              type="button"
+              class="flex min-h-[58px] w-12 shrink-0 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white text-slate-500 transition hover:border-teal-300 hover:text-teal-700"
+              :disabled="proposalActionLoading"
+              title="Добавить предложение"
+              @click="createProposal"
+            >
+              <span class="material-icons-round text-[20px]">add</span>
+            </button>
           </div>
 
           <div v-if="activeProposal" class="mt-3 flex flex-wrap items-center gap-2">
@@ -2141,15 +2221,35 @@ watch(
               :disabled="proposalActionLoading || activeProposal.is_selected"
               @click="selectProposalForOrder()"
             >
-              {{ activeProposal.is_selected ? 'Выбрано для заказа' : 'Выбрать для заказа' }}
+              <span class="material-icons-round text-[15px]">check_circle</span>
+              Выбрать
             </button>
             <button
               type="button"
-              class="rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+              class="btn-mini-outline whitespace-nowrap text-xs"
+              :disabled="proposalActionLoading || !activeProposal"
+              @click="duplicateProposal"
+            >
+              <span class="material-icons-round text-[15px]">content_copy</span>
+              Копия
+            </button>
+            <button
+              type="button"
+              class="btn-mini-outline whitespace-nowrap text-xs"
+              :disabled="proposalActionLoading || !activeProposal"
+              @click="renameProposal"
+            >
+              <span class="material-icons-round text-[15px]">edit</span>
+              Название
+            </button>
+            <button
+              type="button"
+              class="flex h-9 w-9 items-center justify-center rounded-xl border border-red-200 bg-white text-red-600 hover:bg-red-50 disabled:opacity-50"
               :disabled="proposalActionLoading || orderProposals.length <= 1"
               @click="archiveProposal"
+              title="В архив"
             >
-              В архив
+              <span class="material-icons-round text-[18px]">delete</span>
             </button>
           </div>
         </div>
@@ -2408,27 +2508,17 @@ watch(
           </div>
         </section>
       </div>
+      </OrderDrawerSection>
 
       <!-- Экшн-зона (Proposal & Docs) -->
       <OrderDrawerSection
         v-model:expanded="expandedDrawerSections.documents"
-        title="Согласование и документы"
+        title="Документы"
         :summary="documentSectionSummary"
         tone="amber"
         :has-error="documentSectionHasError"
       >
-
         <div v-if="status === 'negotiation'" class="mb-6">
-          <label class="field-label mb-3">
-            Статус согласования
-            <select v-model="proposalStatus" class="field-input" :class="getFieldError('proposal_status') ? 'border-red-500' : ''">
-              <option value="draft">Черновик (Draft)</option>
-              <option value="sent">Отправлено (Sent)</option>
-              <option value="approved">Согласовано (Approved)</option>
-              <option value="rejected">Отказ (Rejected)</option>
-            </select>
-          </label>
-
           <div class="flex flex-wrap gap-2">
             <!-- B2C Action -->
             <a
@@ -2451,9 +2541,7 @@ watch(
         </div>
 
         <div class="mb-2 flex items-center justify-between">
-          <h4 class="text-md font-semibold text-slate-800">Документы (B2B / Договоры)</h4>
-
-          <div class="relative flex items-center gap-2">
+          <div class="relative ml-auto flex items-center gap-2">
             <button
                class="flex items-center gap-1 rounded-xl bg-[#007f80] px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/50 disabled:opacity-50"
                :disabled="isGeneratingDoc || !!processingDocId || isUploadingDoc"
@@ -2600,11 +2688,16 @@ watch(
       />
 
       <!-- Оплаты и Валюта (Объединенный блок) -->
-      <section v-if="order && status !== 'execution'" class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-3 shadow-sm sm:p-5">
-        <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <h3 class="text-lg flex gap-2 items-center font-semibold font-['Space_Grotesk'] text-slate-800">
-                <span class="material-icons-round text-teal-600">account_balance_wallet</span> Оплаты
-            </h3>
+      <OrderDrawerSection
+        v-if="order && status !== 'execution'"
+        v-model:expanded="expandedDrawerSections.payments"
+        title="Оплаты"
+        :summary="paymentsSectionSummary"
+        icon="account_balance_wallet"
+        tone="default"
+      >
+      <section class="rounded-2xl border border-slate-200 bg-slate-50 p-3 shadow-sm sm:p-5">
+        <div v-if="isB2cCustomer" class="mb-4 flex justify-end">
             <label v-if="isB2cCustomer" class="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm hover:bg-slate-50 transition-colors">
                 <input type="checkbox" v-model="enableCurrency" class="rounded text-blue-600 focus:ring-blue-500 border-slate-300 w-4 h-4" />
                 Считать в валюте
@@ -2646,14 +2739,6 @@ watch(
             </div>
         </div>
 
-        <!-- Стандартные оплаты (BYN), показываются если отключен чекбокс валюты -->
-        <div v-if="!enableCurrency" class="mb-4 text-center border border-slate-200 rounded-xl py-6 bg-white shadow-inner">
-            <p class="text-sm font-medium text-slate-500 uppercase tracking-wide">Остаток к оплате</p>
-            <p class="text-4xl font-black mt-2 tracking-tight" :class="balanceDuePreview > 0 ? 'text-red-500' : 'text-teal-600'">
-                {{ formatMoney(balanceDuePreview) }}
-            </p>
-        </div>
-
         <div class="mt-3 flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-end">
             <label class="flex-1 field-label !mb-0 text-xs">Внести платеж ({{ enableCurrency ? (targetCurrency || 'USD') : 'BYN' }})
                 <input v-model.number="newPaymentAmount" type="number" step="0.01" min="0" class="field-input mt-1 shadow-sm" placeholder="0.00" />
@@ -2688,51 +2773,18 @@ watch(
             </div>
         </div>
       </section>
-
-      <section class="mt-6 rounded-2xl bg-gray-100 p-3 sm:p-4">
-        <div v-if="summaryFinancials.isCurrencyMode" class="space-y-2">
-            <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <p class="text-sm text-gray-600">Оплачено:</p>
-              <p class="text-sm font-semibold text-teal-600">
-                {{ summaryFinancials.paidInTarget }} {{ summaryFinancials.currSymbol }}
-                <span class="text-xs text-gray-400 font-normal ml-1">({{ summaryFinancials.paidInByn }} руб.)</span>
-              </p>
-            </div>
-            <div class="flex flex-col gap-1 border-b border-gray-200 pb-2 sm:flex-row sm:items-center sm:justify-between">
-              <p class="text-sm text-gray-600">Остаток:</p>
-              <p class="text-sm font-semibold" :class="summaryFinancials.balanceInTarget > 0 ? 'text-red-500' : 'text-gray-900'">
-                {{ summaryFinancials.balanceInTarget }} {{ summaryFinancials.currSymbol }}
-                <span class="text-xs text-gray-400 font-normal ml-1">({{ summaryFinancials.balanceInByn }} руб.)</span>
-              </p>
-            </div>
-            <div class="flex flex-col gap-1 pt-1 sm:flex-row sm:items-center sm:justify-between">
-              <p class="text-sm font-medium text-gray-700">Итого: {{ summaryFinancials.totalInTarget }} {{ summaryFinancials.currSymbol }}</p>
-              <p class="text-sm text-gray-500">Конвертация (~{{ summaryFinancials.dealRate.toFixed(4) }})</p>
-            </div>
-            <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <p class="text-sm text-gray-700">Всего BYN: {{ summaryFinancials.totalInByn }} руб.</p>
-              <p class="text-sm text-gray-600">Маржа: <span class="font-semibold text-teal-700">{{ summaryFinancials.totalInByn - (productLines.reduce((s,l)=>s+l.cost*l.quantity,0) + serviceLines.reduce((s,l)=>s+l.cost*l.quantity,0)) }} руб.</span></p>
-            </div>
-        </div>
-        <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-           <div>
-            <p class="text-sm text-gray-600">Оплачено: <span class="font-semibold text-teal-600">{{ formatMoney(totalPaymentsPreview) }}</span></p>
-            <p class="text-sm text-gray-600">Остаток: <span class="font-semibold" :class="balanceDuePreview > 0 ? 'text-red-500' : 'text-gray-900'">{{ formatMoney(balanceDuePreview) }}</span></p>
-            <p class="text-sm text-gray-600 mt-2">Итого сумма: <span class="font-semibold text-gray-900">{{ formatMoney(totalPreview) }}</span></p>
-            <p class="text-sm text-gray-600">Маржа: <span class="font-semibold text-teal-700">{{ formatMoney(marginPreview) }}</span></p>
-           </div>
-        </div>
-      </section>
+      </OrderDrawerSection>
 
       <footer class="mt-6 flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <button class="btn-mini hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-gray-400 bg-white border border-gray-200 transition-colors" :disabled="saving || isDeleting" @click="deleteOrder" title="Безвозвратное удаление">
+          <button class="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-50" :disabled="saving || isDeleting" @click="deleteOrder" title="Безвозвратное удаление">
+            <span class="material-icons-round text-[18px]">delete</span>
             {{ isDeleting ? 'Удаление...' : 'Удалить заказ' }}
           </button>
         </div>
-        <div class="flex flex-col gap-2 sm:flex-row">
-          <button class="btn-mini-outline" :disabled="saving || isDeleting" @click="closeDrawer">Отмена</button>
-          <button class="btn-mini" :disabled="saving || isDeleting" @click="handleSave">
+        <div class="flex flex-row gap-2">
+          <button class="btn-mini-outline flex-1 sm:flex-none" :disabled="saving || isDeleting" @click="closeDrawer">Закрыть</button>
+          <button class="btn-mini flex-1 sm:flex-none" :disabled="saving || isDeleting" @click="handleSave">
             {{ saving ? 'Сохраняем...' : 'Сохранить' }}
           </button>
         </div>

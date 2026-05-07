@@ -3,6 +3,7 @@ defineProps<{
   title: string;
   summary?: string;
   expanded: boolean;
+  icon?: string;
   tone?: 'default' | 'blue' | 'amber' | 'emerald';
   hasError?: boolean;
 }>();
@@ -28,7 +29,10 @@ const toneClasses = {
       @click="emit('update:expanded', !expanded)"
     >
       <div class="min-w-0">
-        <h3 class="text-sm font-semibold text-slate-900">{{ title }}</h3>
+        <h3 class="flex items-center gap-2 text-sm font-semibold text-slate-900">
+          <span v-if="icon" class="material-icons-round text-[18px] text-teal-600" aria-hidden="true">{{ icon }}</span>
+          {{ title }}
+        </h3>
         <p v-if="summary" class="mt-0.5 truncate text-xs text-slate-500">{{ summary }}</p>
       </div>
       <span class="material-icons-round shrink-0 text-[20px] text-slate-500" aria-hidden="true">{{ expanded ? 'expand_less' : 'expand_more' }}</span>
