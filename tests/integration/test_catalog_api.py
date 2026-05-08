@@ -54,6 +54,28 @@ async def test_product_not_found(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_public_product_search_returns_items_from_smart_search(async_client: AsyncClient, db):
+    marker = "PUBLICSEARCHSMART123"
+    product = Product(
+        title=f"{marker} Smart Search Product",
+        slug=f"{marker.lower()}-smart-search-product",
+        price=1234,
+        area=25,
+        is_inverter=True,
+        is_published=True,
+    )
+    db.add(product)
+    await db.commit()
+    await db.refresh(product)
+
+    response = await async_client.get("/api/products/search", params={"q": marker, "is_inverter": True})
+
+    assert response.status_code == 200, response.text
+    items = response.json()["items"]
+    assert any(item["id"] == product.id for item in items)
+
+
+@pytest.mark.asyncio
 async def test_catalog_default_sort_uses_recommendation_score(async_client: AsyncClient, db):
     now = datetime.now()
     apartment = Product(

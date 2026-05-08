@@ -44,11 +44,10 @@ class TagService:
         )
         session.add(group)
         await session.commit()
-        await session.refresh(group)
-        
-        # Ensure 'tags' attr exists for response
-        group.tags = []
-        return group
+
+        stmt = select(TagGroup).where(TagGroup.id == group.id).options(selectinload(TagGroup.tags))
+        res = await session.execute(stmt)
+        return res.scalars().one()
 
     @staticmethod
     async def update_tag_group(session: AsyncSession, group_id: int, payload: ManagerTagGroupUpdatePayload) -> TagGroup:
