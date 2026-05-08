@@ -156,6 +156,8 @@ class FilterTagOption(BaseModel):
     id: int
     title: str
     slug: str
+    logo_url: Optional[str] = None
+    sort_order: Optional[int] = None
 
 
 class FiltersConfigResponse(BaseModel):

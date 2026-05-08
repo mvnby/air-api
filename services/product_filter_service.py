@@ -74,6 +74,15 @@ class ProductFilterService:
         return {
             "price": {"min": price_min, "max": price_max},
             "area": {"min": area_min, "max": area_max},
-            "brands": [{"id": brand.id, "title": brand.title, "slug": brand.slug} for brand in brands],
+            "brands": [
+                {
+                    "id": brand.id,
+                    "title": brand.title,
+                    "slug": brand.slug,
+                    "logo_url": brand.logo_url,
+                    "sort_order": brand.sort_order,
+                }
+                for brand in brands
+            ],
             "expert_tags": [{"id": t.id, "title": t.title, "slug": t.slug} for t in expert_tags],
         }

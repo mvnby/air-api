@@ -6,5 +6,7 @@ export type FilterTagOption = {
     id: number;
     title: string;
     slug: string;
+    logo_url?: (string | null);
+    sort_order?: (number | null);
 };
 

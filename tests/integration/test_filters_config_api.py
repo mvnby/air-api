@@ -16,7 +16,13 @@ async def test_filters_config_returns_ranges_and_allowed_tags(async_client, db):
     await db.refresh(expert_group)
     await db.refresh(technical_group)
 
-    brand = Brand(title="Haier", slug="haier", is_published=True, sort_order=10)
+    brand = Brand(
+        title="Haier",
+        slug="haier",
+        logo_url="/uploads/brands/haier.svg",
+        is_published=True,
+        sort_order=10,
+    )
     priority_brand = Brand(title="MDV", slug="mdv", is_published=True, sort_order=0)
     expert = Tag(title="Хит", slug="hit", group_id=expert_group.id, is_public=True)
     technical = Tag(title="Wi-Fi", slug="wifi-builtin", group_id=technical_group.id, is_public=True)
@@ -42,6 +48,8 @@ async def test_filters_config_returns_ranges_and_allowed_tags(async_client, db):
     assert data["price"] == {"min": 1000, "max": 2400}
     assert data["area"] == {"min": 20, "max": 55}
     assert [item["slug"] for item in data["brands"]] == ["mdv", "haier"]
+    assert data["brands"][1]["logo_url"] == "/uploads/brands/haier.svg"
+    assert data["brands"][1]["sort_order"] == 10
     assert [item["slug"] for item in data["expert_tags"]] == ["hit"]
     assert "wifi-builtin" not in [item["slug"] for item in data["expert_tags"]]
 
