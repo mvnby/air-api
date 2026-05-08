@@ -142,9 +142,10 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
             q=(query or "").strip(),
             limit=max(limit, 1),
         )
+        smart_items = smart_results.get("items", []) if isinstance(smart_results, dict) else list(smart_results or [])
         if is_inverter is not None:
-            smart_results = [item for item in smart_results if bool(item.get("is_inverter")) is is_inverter]
-        return smart_results[:limit]
+            smart_items = [item for item in smart_items if bool(item.get("is_inverter")) is is_inverter]
+        return smart_items[:limit]
 
     @staticmethod
     async def get_curated(
