@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import ProductCard from './ProductCard.vue';
-import { getCatalog, getFiltersConfig } from '../utils/api';
+import { getCatalog, getFiltersConfig, resolveImageUrl } from '../utils/api';
 import { getBrandConfig } from '../utils/brands';
 
 const BASE_LIMIT = 20;
@@ -95,6 +95,12 @@ const availableBrands = ref((props.initialBrands || []).map((brand) => ({
   sort_order: brand.sort_order ?? 999,
 })));
 let searchDebounceTimeout = null;
+
+const getBrandLogo = (brand) => {
+  const logoUrl = String(brand?.logo_url || '').trim();
+  if (logoUrl) return resolveImageUrl(logoUrl);
+  return getBrandConfig(brand?.slug || '').logo || '';
+};
 
 const lockedFilters = computed(() => props.lockedInitialFilters || null);
 const knownBrandSlugs = computed(() => new Set(availableBrands.value.map((brand) => brand.slug)));
@@ -1237,8 +1243,8 @@ onMounted(async () => {
               @click="toggleBrand(brand.slug)"
             >
               <img
-                v-if="getBrandConfig(brand.slug).logo"
-                :src="getBrandConfig(brand.slug).logo"
+                v-if="getBrandLogo(brand)"
+                :src="getBrandLogo(brand)"
                 :alt="brand.title"
                 class="brand-pill-logo"
               />
@@ -1523,16 +1529,19 @@ onMounted(async () => {
 
 .brand-strip {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.6rem;
-  overflow-x: auto;
+  overflow: visible;
   padding-bottom: 0.25rem;
-  scrollbar-width: thin;
 }
 
 .brand-pill {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  flex: 0 0 auto;
+  max-width: 100%;
+  min-width: 0;
   border: 1px solid var(--panel-chip-border);
   background: var(--panel-pill-bg);
   border-radius: 999px;
@@ -1543,6 +1552,12 @@ onMounted(async () => {
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.2s ease;
+}
+
+.brand-pill span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .brand-pill:hover {
@@ -1560,6 +1575,7 @@ onMounted(async () => {
 .brand-pill-logo {
   width: 22px;
   height: 22px;
+  flex: 0 0 22px;
   object-fit: contain;
   display: block;
 }
