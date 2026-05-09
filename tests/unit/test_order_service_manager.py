@@ -1,9 +1,27 @@
 import pytest
 from datetime import datetime, timedelta
+from pathlib import Path
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
+from sqlmodel import SQLModel
+from sqlmodel import select
 
-from models import Customer, CustomerType, Order, OrderStatus, Product, Service
+from models import BankReceipt, Customer, CustomerType, Order, OrderProposal, OrderStatus, OutgoingEmail, PaymentCurrency, Product, Service
 from schemas import ManagerOrderUpdatePayload
 from services.order_service import OrderService
+
+
+@pytest.fixture
+async def sqlite_order_session(tmp_path: Path):
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'order_service.db'}", echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+
+    session_factory = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    async with session_factory() as session:
+        yield session
+
+    await engine.dispose()
 
 
 def test_service_default_order_title_inference():
@@ -191,3 +209,60 @@ async def test_service_update_order_for_manager_validation(db):
             order.id,
             ManagerOrderUpdatePayload(products=[{"product_id": 1, "quantity": 1, "price": -1}]),
         )
+
+
+@pytest.mark.asyncio
+async def test_service_delete_order_cleans_proposals_and_detaches_audit_rows(sqlite_order_session):
+    db = sqlite_order_session
+    customer = Customer(name="Delete", phone="+375296666666", type=CustomerType.individual)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    proposal = OrderProposal(order_id=order.id, name="Основное", is_selected=True)
+    db.add(proposal)
+    await db.commit()
+    await db.refresh(proposal)
+
+    receipt = BankReceipt(
+        status="matched",
+        operation_type="incoming_funds",
+        sender_email="noreply@service.belapb.by",
+        subject="Поступление средств на счет",
+        message_id="<delete-order-bank@example.test>",
+        fingerprint="delete-order-bank-fingerprint",
+        amount=100,
+        currency=PaymentCurrency.BYN,
+        matched_order_id=order.id,
+        matched_payment_id=123,
+        raw_body="raw",
+    )
+    email = OutgoingEmail(
+        status="sent",
+        order_id=order.id,
+        customer_id=customer.id,
+        recipient_email="client@example.test",
+        subject="Документы",
+    )
+    db.add(receipt)
+    db.add(email)
+    await db.commit()
+
+    assert await OrderService.delete_order(db, order.id) is True
+
+    assert await db.get(Order, order.id) is None
+    assert (await db.execute(select(OrderProposal).where(OrderProposal.id == proposal.id))).scalar_one_or_none() is None
+
+    detached_receipt = (await db.execute(select(BankReceipt).where(BankReceipt.id == receipt.id))).scalar_one()
+    assert detached_receipt.status == "requires_review"
+    assert detached_receipt.matched_order_id is None
+    assert detached_receipt.matched_payment_id is None
+    assert detached_receipt.match_meta == {"reason": "matched_order_deleted", "deleted_order_id": order.id}
+
+    detached_email = (await db.execute(select(OutgoingEmail).where(OutgoingEmail.id == email.id))).scalar_one()
+    assert detached_email.order_id is None
