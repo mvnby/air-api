@@ -1522,6 +1522,7 @@ class OrderService:
                 "type": p.type.value if hasattr(p.type, "value") else str(p.type),
                 "comment": p.comment,
                 "created_at": p.created_at,
+                "bank_receipt_id": p.bank_receipt_id,
             }
             for p in sorted(order.payments, key=lambda d: d.date, reverse=True)
         ]
@@ -2065,6 +2066,7 @@ class OrderService:
                 "type": p.type.value if hasattr(p.type, "value") else str(p.type),
                 "comment": p.comment,
                 "created_at": p.created_at,
+                "bank_receipt_id": p.bank_receipt_id,
             }
             for p in sorted(order.payments, key=lambda d: d.date, reverse=True)
         ]
@@ -2098,6 +2100,7 @@ class OrderService:
                 "type": p.type.value if hasattr(p.type, "value") else str(p.type),
                 "comment": p.comment,
                 "created_at": p.created_at,
+                "bank_receipt_id": p.bank_receipt_id,
             }
             for p in sorted(order.payments, key=lambda d: d.date, reverse=True)
         ]

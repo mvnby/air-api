@@ -11,5 +11,6 @@ export type PaymentResponse = {
     type: string;
     comment?: (string | null);
     created_at: string;
+    bank_receipt_id?: (number | null);
 };
 

@@ -484,6 +484,7 @@ class PaymentResponse(BaseModel):
     type: str
     comment: Optional[str] = None
     created_at: datetime
+    bank_receipt_id: Optional[int] = None
 
 
 
@@ -1567,11 +1568,25 @@ class DashboardContractExpiry(BaseModel):
     edit_url: Optional[str] = None
 
 
+class DashboardBankReceiptReviewItem(BaseModel):
+    id: int
+    received_at: Optional[datetime] = None
+    amount: float
+    currency: PaymentCurrency
+    payer_name: Optional[str] = None
+    payer_unp: Optional[str] = None
+    payment_document_number: Optional[str] = None
+    payment_purpose: Optional[str] = None
+    candidate_order_ids: List[int] = []
+
+
 class DashboardStatsResponse(BaseModel):
     total_amount: float
     new_leads_count: int
     upcoming_touchpoints: List[DashboardTouchpoint]
     expiring_contracts: List[DashboardContractExpiry] = []
+    bank_receipts_review_count: int = 0
+    bank_receipts_review: List[DashboardBankReceiptReviewItem] = []
 
 
 # --- LEADS INBOX ---
@@ -1974,3 +1989,110 @@ class ManagerServiceEstimateOrderLinesResponse(BaseModel):
     mode: ManagerServiceEstimateOrderLinesMode
     title: str
     services: List[ManagerOrderServiceLinePayload]
+
+
+# --- MANAGER MAIL ---
+
+class BankReceiptResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    status: str
+    operation_type: str
+    sender_email: str
+    subject: str
+    message_id: Optional[str] = None
+    fingerprint: str
+    email_date: Optional[datetime] = None
+    received_at: Optional[datetime] = None
+    our_account: Optional[str] = None
+    amount: float
+    currency: PaymentCurrency
+    payer_name: Optional[str] = None
+    payer_unp: Optional[str] = None
+    payer_account: Optional[str] = None
+    payment_document_raw: Optional[str] = None
+    payment_document_number: Optional[str] = None
+    payment_purpose: Optional[str] = None
+    account_balance_after: Optional[float] = None
+    parse_error: Optional[str] = None
+    matched_order_id: Optional[int] = None
+    matched_payment_id: Optional[int] = None
+    match_meta: Optional[Dict[str, Any]] = None
+    raw_body: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class BankReceiptListResponse(BaseModel):
+    items: List[BankReceiptResponse]
+    total: int
+    page: int
+    limit: int
+
+
+class BankReceiptImportResponse(BaseModel):
+    processed: int = 0
+    created: int = 0
+    duplicates: int = 0
+    failed: int = 0
+    receipt_ids: List[int] = []
+
+
+class BankReceiptAttachPayload(BaseModel):
+    order_id: int
+    payment_type: str = "postpayment"
+
+
+class OutgoingEmailSendPayload(BaseModel):
+    to_email: str
+    subject: str
+    body_text: Optional[str] = None
+    body_html: Optional[str] = None
+    reply_to: Optional[str] = None
+
+    @field_validator("to_email")
+    @classmethod
+    def _validate_to_email(cls, value: str) -> str:
+        email = validate_optional_email(value)
+        if not email:
+            raise ValueError("to_email is required")
+        return email
+
+    @field_validator("reply_to")
+    @classmethod
+    def _validate_optional_mail(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_email(value)
+
+    @field_validator("subject")
+    @classmethod
+    def _validate_subject(cls, value: str) -> str:
+        subject = " ".join(str(value or "").split())
+        if not subject:
+            raise ValueError("subject is required")
+        return subject
+
+
+class OrderEmailSendPayload(OutgoingEmailSendPayload):
+    document_ids: List[int] = Field(default_factory=list)
+
+
+class OutgoingEmailResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    status: str
+    order_id: Optional[int] = None
+    customer_id: Optional[int] = None
+    recipient_email: str
+    subject: str
+    body_text: Optional[str] = None
+    body_html: Optional[str] = None
+    from_email: Optional[str] = None
+    from_name: Optional[str] = None
+    reply_to: Optional[str] = None
+    attachments: Optional[List[Dict[str, Any]]] = None
+    error: Optional[str] = None
+    sent_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None

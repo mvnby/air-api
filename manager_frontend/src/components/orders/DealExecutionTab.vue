@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { ManagerOrdersService, ManagerDocsService, ManagerContractsService } from '../../client';
-import type { DocumentTemplateItem, ManagerCustomerContractItemResponse, ManagerOrderDetailResponse, ManagerOrderDocumentItem } from '../../client';
+import { ManagerOrdersService, ManagerDocsService, ManagerContractsService, ManagerMailService } from '../../client';
+import type { BankReceiptResponse, DocumentTemplateItem, ManagerCustomerContractItemResponse, ManagerOrderDetailResponse, ManagerOrderDocumentItem } from '../../client';
 import { formatMoney } from './order-utils';
 import DateTimeField from '../ui/DateTimeField.vue';
 import { getApiErrorMessage } from '../../utils/api-errors';
@@ -108,6 +108,9 @@ const closeDeal = async () => {
 };
 
 const payments = computed(() => props.order.payments || []);
+const bankReceipts = ref<BankReceiptResponse[]>([]);
+const bankReceiptsLoading = ref(false);
+const attachingReceiptId = ref<number | null>(null);
 const newPaymentAmount = ref<number | null>(null);
 const newPaymentType = ref<string>('postpayment');
 
@@ -124,6 +127,58 @@ const addPayment = async () => {
   } catch (error) {
     setToast(`Ошибка: ${getApiErrorMessage(error)}`, 'error');
   }
+};
+
+const loadCandidateBankReceipts = async () => {
+  const inn = props.order.customer?.inn;
+  if (!inn) {
+    bankReceipts.value = [];
+    return;
+  }
+  bankReceiptsLoading.value = true;
+  try {
+    const response = await ManagerMailService.listManagerBankReceipts(1, 20, 'requires_review', inn);
+    bankReceipts.value = response.items || [];
+  } catch (error) {
+    console.error('Failed to load bank receipts', error);
+    bankReceipts.value = [];
+  } finally {
+    bankReceiptsLoading.value = false;
+  }
+};
+
+const attachBankReceipt = async (receipt: BankReceiptResponse) => {
+  attachingReceiptId.value = receipt.id;
+  try {
+    await ManagerMailService.attachManagerBankReceipt(receipt.id, {
+      order_id: props.order.id,
+      payment_type: 'postpayment',
+    });
+    await loadCandidateBankReceipts();
+    emit('refresh');
+    setToast('Поступление прикреплено');
+  } catch (error) {
+    setToast(`Ошибка привязки: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    attachingReceiptId.value = null;
+  }
+};
+
+const receiptCandidateHint = (receipt: BankReceiptResponse) => {
+  const meta = receipt.match_meta as any;
+  const docs = Array.isArray(meta?.document_candidates) ? meta.document_candidates : [];
+  if (docs.length) {
+    const doc = docs[0];
+    return `${doc.doc_type || 'документ'} ${doc.number || ''} · заказ #${doc.order_id}`;
+  }
+  const ids = Array.isArray(meta?.candidate_order_ids) ? meta.candidate_order_ids : [];
+  if (ids.length) return `кандидат: заказ #${ids[0]}`;
+  return '';
+};
+
+const formatReceiptDate = (value?: string | null) => {
+  if (!value) return 'дата не указана';
+  return new Date(value).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 };
 
 const generateDocument = async (type: string, template?: DocumentTemplateItem | null, documentDate?: string) => {
@@ -387,6 +442,7 @@ watch(() => props.order.id, () => {
   loadDocuments();
   loadContractTemplates();
   loadCustomerContracts();
+  loadCandidateBankReceipts();
   selectedCustomerContractId.value = props.order.customer_contract_id || null;
   selectedDocumentRoleType.value = props.order.document_role_type || null;
 }, { immediate: true });
@@ -513,6 +569,37 @@ watch(() => props.order.id, () => {
                   <input v-model.number="newPaymentAmount" type="number" min="0" class="field-input mt-1 shadow-sm" placeholder="0.00" />
               </label>
               <button class="btn-mini h-[38px] w-[100px]" :disabled="!newPaymentAmount" @click="addPayment">Внести</button>
+          </div>
+
+          <div v-if="(order.balance_due || 0) > 0 && order.customer?.inn" class="mt-4 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+            <div class="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p class="text-sm font-semibold text-amber-900">Поступления по УНП</p>
+                <p class="text-xs text-amber-700">Только платежи, которые требуют ручной проверки.</p>
+              </div>
+              <span v-if="bankReceiptsLoading" class="material-icons-round animate-spin text-amber-600">refresh</span>
+            </div>
+            <div v-if="bankReceipts.length" class="space-y-2">
+              <div v-for="receipt in bankReceipts" :key="receipt.id" class="rounded-lg border border-amber-100 bg-white p-3 text-xs shadow-sm">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="font-bold text-slate-900">{{ formatMoney(receipt.amount) }}</span>
+                      <span class="text-slate-500">{{ formatReceiptDate(receipt.received_at) }}</span>
+                      <span v-if="receipt.payment_document_number" class="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-500">№ {{ receipt.payment_document_number }}</span>
+                    </div>
+                    <p v-if="receiptCandidateHint(receipt)" class="mt-1 text-amber-700">{{ receiptCandidateHint(receipt) }}</p>
+                    <p class="mt-1 text-slate-500">{{ receipt.payment_purpose || 'Назначение не указано' }}</p>
+                  </div>
+                  <button class="btn-mini h-8 shrink-0" :disabled="attachingReceiptId === receipt.id" @click="attachBankReceipt(receipt)">
+                    {{ attachingReceiptId === receipt.id ? '...' : 'Прикрепить' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div v-else-if="!bankReceiptsLoading" class="rounded-lg border border-dashed border-amber-200 bg-white/70 p-3 text-center text-xs text-amber-700">
+              Нет неподтвержденных поступлений по УНП {{ order.customer.inn }}
+            </div>
           </div>
 
           <div class="mt-4 space-y-2 max-h-32 overflow-y-auto pr-1">
