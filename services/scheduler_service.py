@@ -148,6 +148,9 @@ class SchedulerService:
         # Run supplier sheets sync loop
         asyncio.create_task(self._supplier_sync_loop())
 
+        # Run bank receipt IMAP import loop
+        asyncio.create_task(self._bank_mail_import_loop())
+
         # Keep the main loop alive 
         while True:
             await asyncio.sleep(3600)
@@ -263,5 +266,39 @@ class SchedulerService:
             except Exception as e:
                 logger.error(f"❌ Supplier sync loop error: {e}")
                 await asyncio.sleep(300)
+
+    async def _bank_mail_import_loop(self):
+        while True:
+            interval_minutes = max(1, int(settings.MAIL_IMAP_IMPORT_INTERVAL_MINUTES or 20))
+            try:
+                if not settings.MAIL_IMAP_AUTO_IMPORT_ENABLED:
+                    await asyncio.sleep(interval_minutes * 60)
+                    continue
+                if not settings.MAIL_IMAP_USERNAME or not settings.MAIL_IMAP_PASSWORD:
+                    logger.info("Bank mail import skipped: IMAP credentials are not configured.")
+                    await asyncio.sleep(interval_minutes * 60)
+                    continue
+
+                from services.mail_imap_service import MailImapService
+                from services.notification_service import NotificationService
+
+                logger.info("⏳ Bank mail import job started...")
+                async with async_session_maker() as session:
+                    result = await MailImapService.import_bank_receipts(session, limit=50)
+                    notified_admins = await NotificationService.notify_admins_bank_receipts_requires_review(
+                        session,
+                        result.created_receipt_ids,
+                    )
+                logger.info(
+                    "✅ Bank mail import done. processed=%s created=%s duplicates=%s failed=%s notified_admins=%s",
+                    result.processed,
+                    result.created,
+                    result.duplicates,
+                    result.failed,
+                    notified_admins,
+                )
+            except Exception as e:
+                logger.error(f"❌ Bank mail import loop error: {e}")
+            await asyncio.sleep(interval_minutes * 60)
 
 scheduler_service = SchedulerService()

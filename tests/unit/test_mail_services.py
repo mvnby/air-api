@@ -9,7 +9,9 @@ from core.config import settings
 from models import BankReceipt, Customer, Order, OrderServiceLink, Payment, PaymentCurrency
 from services.bank_email_parser_service import BankEmailParserService
 from services.bank_receipt_service import BankReceiptService
+from services.bot_service import BotService
 from services.mail_smtp_service import MailAttachment, MailSmtpService
+from services.notification_service import NotificationService
 
 
 SAMPLE_BANK_EMAIL = """
@@ -171,6 +173,65 @@ async def test_bank_receipt_can_be_manually_attached_to_order(sqlite_session):
     payments = (await sqlite_session.execute(select(Payment))).scalars().all()
     assert len(payments) == 1
     assert payments[0].bank_receipt_id == receipt.id
+
+
+@pytest.mark.asyncio
+async def test_bank_receipt_review_notification_goes_to_admins(sqlite_session, monkeypatch):
+    receipt = BankReceipt(
+        status="requires_review",
+        operation_type="incoming_funds",
+        sender_email="noreply@service.belapb.by",
+        subject="Поступление средств на счет",
+        message_id="<notify-bank@example.test>",
+        fingerprint="notify-bank-fingerprint",
+        amount=1440,
+        currency=PaymentCurrency.BYN,
+        payer_name="ООО Тест",
+        payer_unp="300203571",
+        payment_document_number="008050",
+        payment_purpose="Оплата по договору Д-2026-010",
+        match_meta={"candidate_order_ids": [50]},
+        raw_body="raw",
+    )
+    matched = BankReceipt(
+        status="matched",
+        operation_type="incoming_funds",
+        sender_email="noreply@service.belapb.by",
+        subject="Поступление средств на счет",
+        message_id="<matched-bank@example.test>",
+        fingerprint="matched-bank-fingerprint",
+        amount=1015,
+        currency=PaymentCurrency.BYN,
+        payer_name="ООО Уже разнесено",
+        payer_unp="300200572",
+        raw_body="raw",
+    )
+    sqlite_session.add(receipt)
+    sqlite_session.add(matched)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(receipt)
+    await sqlite_session.refresh(matched)
+
+    sent: list[tuple[int, str]] = []
+
+    async def fake_send_message(user_id: int, text: str):
+        sent.append((user_id, text))
+
+    monkeypatch.setattr(settings, "ADMIN_IDS", "101,202")
+    monkeypatch.setattr(settings, "ADMIN_ID", 0)
+    monkeypatch.setattr(BotService, "send_message", fake_send_message)
+
+    sent_count = await NotificationService.notify_admins_bank_receipts_requires_review(
+        sqlite_session,
+        [receipt.id, matched.id],
+    )
+
+    assert sent_count == 2
+    assert [item[0] for item in sent] == [101, 202]
+    assert "Новые поступления требуют проверки: 1" in sent[0][1]
+    assert "ООО Тест" in sent[0][1]
+    assert "#50" in sent[0][1]
+    assert "Уже разнесено" not in sent[0][1]
 
 
 def test_smtp_builds_utf8_message_and_sanitizes_errors(monkeypatch):

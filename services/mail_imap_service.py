@@ -104,6 +104,8 @@ class MailImapService:
                     result.duplicates += 1
                 if receipt.id is not None:
                     result.receipt_ids.append(int(receipt.id))
+                    if created:
+                        result.created_receipt_ids.append(int(receipt.id))
                 if created and settings.MAIL_IMAP_PROCESSED_FOLDER:
                     client.copy(imap_id, settings.MAIL_IMAP_PROCESSED_FOLDER)
                     client.store(imap_id, "+FLAGS", "\\Deleted")

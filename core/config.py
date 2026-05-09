@@ -87,6 +87,8 @@ class Settings(BaseSettings):
     MAIL_IMAP_PASSWORD: str = ""
     MAIL_IMAP_BANK_FOLDER: str = "INBOX"
     MAIL_IMAP_PROCESSED_FOLDER: str = ""
+    MAIL_IMAP_AUTO_IMPORT_ENABLED: bool = True
+    MAIL_IMAP_IMPORT_INTERVAL_MINUTES: int = 20
     MAIL_SMTP_HOST: str = "smtp.yandex.ru"
     MAIL_SMTP_PORT: int = 465
     MAIL_SMTP_USE_SSL: bool = True

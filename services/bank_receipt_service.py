@@ -19,6 +19,7 @@ class BankReceiptImportResult:
     duplicates: int = 0
     failed: int = 0
     receipt_ids: List[int] = field(default_factory=list)
+    created_receipt_ids: List[int] = field(default_factory=list)
 
 
 class BankReceiptService:
