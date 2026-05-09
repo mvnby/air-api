@@ -2211,12 +2211,15 @@ class OrderService:
         """
         import sqlalchemy as sa
         from models.order import (
+            BankReceipt,
             Order,
             OrderDocument,
             OrderInstaller,
             OrderProductLink,
+            OrderProposal,
             OrderServiceLink,
             OrderWorkStage,
+            OutgoingEmail,
             Payment,
         )
         from services.document_service import DocumentService
@@ -2240,13 +2243,30 @@ class OrderService:
                     extra={"order_id": order_id, "doc_id": doc.id, "google_file_id": doc.google_file_id, "error": str(exc)},
                 )
 
-        # Explicit SQL deletes avoid async lazy-load cascade pitfalls on AsyncSession.
+        # Explicit SQL updates/deletes avoid async lazy-load cascade pitfalls on AsyncSession.
+        # Keep audit/history rows, but detach them from an order that is being hard-deleted.
+        await session.execute(
+            sa.update(BankReceipt)
+            .where(BankReceipt.matched_order_id == order_id)
+            .values(
+                status="requires_review",
+                matched_order_id=None,
+                matched_payment_id=None,
+                match_meta={"reason": "matched_order_deleted", "deleted_order_id": order_id},
+            )
+        )
+        await session.execute(
+            sa.update(OutgoingEmail)
+            .where(OutgoingEmail.order_id == order_id)
+            .values(order_id=None)
+        )
         await session.execute(sa.delete(OrderProductLink).where(OrderProductLink.order_id == order_id))
         await session.execute(sa.delete(OrderServiceLink).where(OrderServiceLink.order_id == order_id))
         await session.execute(sa.delete(OrderWorkStage).where(OrderWorkStage.order_id == order_id))
         await session.execute(sa.delete(OrderInstaller).where(OrderInstaller.order_id == order_id))
         await session.execute(sa.delete(Payment).where(Payment.order_id == order_id))
         await session.execute(sa.delete(OrderDocument).where(OrderDocument.order_id == order_id))
+        await session.execute(sa.delete(OrderProposal).where(OrderProposal.order_id == order_id))
         await session.execute(sa.delete(Order).where(Order.id == order_id))
         await session.commit()
         
