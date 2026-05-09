@@ -17,6 +17,7 @@ from .brand import Brand, ProductSeries
 from .cart import Cart, CartItem
 from .content import Article, GlobalConfig
 from .order import (
+    BankReceipt,
     Installer,
     DocumentTemplate,
     DocumentTemplateActLink,
@@ -33,6 +34,7 @@ from .order import (
     OrderServiceLink,
     OrderServiceLink,
     OrderWorkStage,
+    OutgoingEmail,
     Payment,
     Service,
 )
@@ -58,6 +60,7 @@ from .supplier import (
 
 __all__ = [
     "Article",
+    "BankReceipt",
     "Cart",
     "CartItem",
     "Brand",
@@ -93,6 +96,7 @@ __all__ = [
     "OrderStageStatus",
     "OrderStatus",
     "OrderWorkStage",
+    "OutgoingEmail",
     "PaymentCurrency",
     "Product",
     "ProductAttachment",

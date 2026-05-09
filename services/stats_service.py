@@ -3,10 +3,10 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from models.order import Order
+from models.order import BankReceipt, Order
 from models.customer import Customer, CustomerContract
 from models.common import OrderStatus
-from schemas import DashboardContractExpiry, DashboardStatsResponse, DashboardTouchpoint
+from schemas import DashboardBankReceiptReviewItem, DashboardContractExpiry, DashboardStatsResponse, DashboardTouchpoint
 
 class StatsService:
     @staticmethod
@@ -87,9 +87,39 @@ class StatsService:
             for contract in contracts
         ]
 
+        bank_receipts_count_stmt = select(func.count(BankReceipt.id)).where(BankReceipt.status == "requires_review")
+        bank_receipts_count = int((await session.execute(bank_receipts_count_stmt)).scalar() or 0)
+        bank_receipts_stmt = (
+            select(BankReceipt)
+            .where(BankReceipt.status == "requires_review")
+            .order_by(BankReceipt.received_at.desc().nullslast(), BankReceipt.created_at.desc())
+            .limit(5)
+        )
+        bank_receipts_result = await session.execute(bank_receipts_stmt)
+        bank_receipts_review = []
+        for receipt in bank_receipts_result.scalars().all():
+            meta = receipt.match_meta if isinstance(receipt.match_meta, dict) else {}
+            raw_ids = meta.get("candidate_order_ids") or []
+            candidate_order_ids = [int(item) for item in raw_ids if item]
+            bank_receipts_review.append(
+                DashboardBankReceiptReviewItem(
+                    id=int(receipt.id or 0),
+                    received_at=receipt.received_at,
+                    amount=float(receipt.amount or 0),
+                    currency=receipt.currency,
+                    payer_name=receipt.payer_name,
+                    payer_unp=receipt.payer_unp,
+                    payment_document_number=receipt.payment_document_number,
+                    payment_purpose=receipt.payment_purpose,
+                    candidate_order_ids=candidate_order_ids,
+                )
+            )
+
         return DashboardStatsResponse(
             total_amount=float(total_amount),
             new_leads_count=new_leads_count,
             upcoming_touchpoints=touchpoints,
             expiring_contracts=expiring_contracts,
+            bank_receipts_review_count=bank_receipts_count,
+            bank_receipts_review=bank_receipts_review,
         )

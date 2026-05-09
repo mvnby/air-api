@@ -11,6 +11,7 @@ from routers import manager_dashboard
 from routers import manager_docs
 from routers import manager_google_auth
 from routers import manager_leads
+from routers import manager_mail
 from routers import manager_media
 from routers import manager_orders
 from routers import manager_specs
@@ -32,6 +33,7 @@ router.include_router(manager_auth.router)
 router.include_router(manager_docs.router)
 router.include_router(manager_orders.router)
 router.include_router(manager_leads.router)
+router.include_router(manager_mail.router)
 router.include_router(manager_crm.router)
 router.include_router(manager_contracts.router)
 router.include_router(manager_calendar.router)

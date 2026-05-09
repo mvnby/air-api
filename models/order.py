@@ -499,11 +499,75 @@ class OrderDocument(SQLModel, table=True):
         return f"{self.doc_type.upper()} {self.number} от {self.date.strftime('%d.%m.%Y')}"
 
 
+class BankReceipt(SQLModel, table=True):
+    __tablename__ = "bank_receipt"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    status: str = Field(default="new", sa_column=Column(String, index=True))
+
+    operation_type: str = Field(default="incoming_funds", sa_column=Column(String, index=True))
+    sender_email: str = Field(index=True)
+    subject: str
+    message_id: Optional[str] = Field(default=None, index=True, unique=True)
+    fingerprint: str = Field(index=True, unique=True)
+    email_date: Optional[datetime] = Field(default=None, index=True)
+
+    received_at: Optional[datetime] = Field(default=None, index=True)
+    our_account: Optional[str] = Field(default=None, index=True)
+    amount: float = Field(default=0.0, index=True)
+    currency: PaymentCurrency = Field(default=PaymentCurrency.BYN, sa_column=Column(String, nullable=False, default=PaymentCurrency.BYN.value))
+    payer_name: Optional[str] = Field(default=None, index=True)
+    payer_unp: Optional[str] = Field(default=None, index=True)
+    payer_account: Optional[str] = Field(default=None, index=True)
+    payment_document_raw: Optional[str] = None
+    payment_document_number: Optional[str] = Field(default=None, index=True)
+    payment_purpose: Optional[str] = None
+    account_balance_after: Optional[float] = None
+
+    raw_body: str
+    parse_error: Optional[str] = None
+    matched_order_id: Optional[int] = Field(default=None, foreign_key="order.id", index=True)
+    matched_payment_id: Optional[int] = Field(default=None, index=True)
+    match_meta: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
+
+    matched_order: Optional["Order"] = Relationship()
+
+
+class OutgoingEmail(SQLModel, table=True):
+    __tablename__ = "outgoing_email"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    status: str = Field(default="pending", sa_column=Column(String, index=True))
+    order_id: Optional[int] = Field(default=None, foreign_key="order.id", index=True)
+    customer_id: Optional[int] = Field(default=None, foreign_key="customer.id", index=True)
+
+    recipient_email: str = Field(index=True)
+    subject: str
+    body_text: Optional[str] = None
+    body_html: Optional[str] = None
+    from_email: Optional[str] = None
+    from_name: Optional[str] = None
+    reply_to: Optional[str] = None
+    attachments: Optional[List[Dict[str, Any]]] = Field(default=None, sa_column=Column(JSON))
+    error: Optional[str] = None
+
+    sent_at: Optional[datetime] = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
+
+    order: Optional["Order"] = Relationship()
+    customer: Optional["Customer"] = Relationship()
+
+
 class Payment(SQLModel, table=True):
     __tablename__ = "payment"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     order_id: int = Field(foreign_key="order.id", index=True)
+    bank_receipt_id: Optional[int] = Field(default=None, foreign_key="bank_receipt.id", index=True)
 
     amount: float = Field(default=0.0)
     currency: PaymentCurrency = Field(default=PaymentCurrency.BYN, sa_column=Column(String, nullable=False, default=PaymentCurrency.BYN.value))

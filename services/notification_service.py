@@ -1,11 +1,12 @@
 import logging
+from html import escape
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from core.config import settings
-from models.order import Order, OrderProductLink
+from models.order import BankReceipt, Order, OrderProductLink
 from services.bot_service import BotService
 
 logger = logging.getLogger(__name__)
@@ -59,3 +60,63 @@ class NotificationService:
                 await BotService.send_message(admin_id, admin_text)
             except Exception:
                 logger.exception("NOTIFY_NEW_ORDER_SEND_FAILED order_id=%s admin_id=%s", order.id, admin_id)
+
+    @staticmethod
+    async def notify_admins_bank_receipts_requires_review(
+        session: AsyncSession,
+        receipt_ids: list[int],
+    ) -> int:
+        if not settings.admin_list or not receipt_ids:
+            return 0
+
+        stmt = (
+            select(BankReceipt)
+            .where(
+                BankReceipt.id.in_(receipt_ids),
+                BankReceipt.status == "requires_review",
+            )
+            .order_by(BankReceipt.received_at.desc(), BankReceipt.created_at.desc())
+        )
+        result = await session.execute(stmt)
+        receipts = list(result.scalars().all())
+        if not receipts:
+            return 0
+
+        lines = [
+            f"🔔 <b>Новые поступления требуют проверки: {len(receipts)}</b>",
+            "",
+        ]
+        for receipt in receipts[:10]:
+            meta = receipt.match_meta or {}
+            candidate_ids = meta.get("candidate_order_ids") or []
+            candidate_text = ", ".join(f"#{order_id}" for order_id in candidate_ids[:5]) or "нет"
+            amount = f"{receipt.amount:g} {receipt.currency.value if hasattr(receipt.currency, 'value') else receipt.currency}"
+            payer = receipt.payer_name or "плательщик не распознан"
+            purpose = (receipt.payment_purpose or "").strip()
+            if len(purpose) > 180:
+                purpose = f"{purpose[:177]}..."
+            lines.extend(
+                [
+                    f"💳 <b>{escape(amount)}</b> от {escape(payer)}",
+                    f"УНП: {escape(receipt.payer_unp or 'не найден')}",
+                    f"Кандидаты заказов: {escape(candidate_text)}",
+                ]
+            )
+            if receipt.payment_document_number:
+                lines.append(f"Платежный документ: {escape(receipt.payment_document_number)}")
+            if purpose:
+                lines.append(f"<i>{escape(purpose)}</i>")
+            lines.append("")
+
+        if len(receipts) > 10:
+            lines.append(f"Еще {len(receipts) - 10} поступлений видно на главной менеджера.")
+
+        text = "\n".join(lines).strip()
+        sent = 0
+        for admin_id in settings.admin_list:
+            try:
+                await BotService.send_message(admin_id, text)
+                sent += 1
+            except Exception:
+                logger.exception("NOTIFY_BANK_RECEIPTS_SEND_FAILED admin_id=%s", admin_id)
+        return sent

@@ -78,6 +78,24 @@ class Settings(BaseSettings):
     GITHUB_TOKEN: str = ""
     GITHUB_OWNER: str = "mvnby"
     GITHUB_REPO: str = "air-api"
+
+    # Mail integration (Yandex Mail by default)
+    MAIL_IMAP_HOST: str = "imap.yandex.ru"
+    MAIL_IMAP_PORT: int = 993
+    MAIL_IMAP_USE_SSL: bool = True
+    MAIL_IMAP_USERNAME: str = ""
+    MAIL_IMAP_PASSWORD: str = ""
+    MAIL_IMAP_BANK_FOLDER: str = "INBOX"
+    MAIL_IMAP_PROCESSED_FOLDER: str = ""
+    MAIL_IMAP_AUTO_IMPORT_ENABLED: bool = True
+    MAIL_IMAP_IMPORT_INTERVAL_MINUTES: int = 20
+    MAIL_SMTP_HOST: str = "smtp.yandex.ru"
+    MAIL_SMTP_PORT: int = 465
+    MAIL_SMTP_USE_SSL: bool = True
+    MAIL_SMTP_USERNAME: str = ""
+    MAIL_SMTP_PASSWORD: str = ""
+    MAIL_FROM_EMAIL: str = ""
+    MAIL_FROM_NAME: str = "Мастер Воздуха"
     
     model_config = SettingsConfigDict(
         env_file=".env",
