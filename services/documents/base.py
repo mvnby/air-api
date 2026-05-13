@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
+import re
 from typing import Dict, Any, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -86,6 +87,21 @@ class BaseDocumentStrategy(ABC):
         except Exception:
             return str(amount)
 
+    @staticmethod
+    def _format_additional_conditions(value: Optional[str]) -> str:
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        lines = []
+        for line in text.splitlines():
+            cleaned = line.strip()
+            if not cleaned:
+                continue
+            cleaned = re.sub(r"^(?:[-•]\s*|\d+[\.)]\s*)", "", cleaned).strip()
+            if cleaned:
+                lines.append(cleaned)
+        return "\n".join(lines)
+
     async def _prepare_base_variables(
         self,
         doc_number: Optional[str] = None,
@@ -128,6 +144,7 @@ class BaseDocumentStrategy(ABC):
             "{{act_number}}": "1",
             "{{act_sequence_number}}": "1",
             "{{document_role_type}}": DocumentRoleService.effective_role_type(order),
+            "{{additional_conditions}}": self._format_additional_conditions(order.additional_conditions),
         }
 
         # A one-time contract document must always use its own generated number/date,

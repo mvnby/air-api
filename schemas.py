@@ -392,6 +392,7 @@ class ManagerOrderListItemResponse(BaseModel):
     customer_contract: Optional[OrderCustomerContractBrief] = None
     document_role_type: Optional[str] = None
     effective_document_role_type: str = "seller_buyer"
+    additional_conditions: Optional[str] = None
     installer_id: Optional[int] = None
     installer: Optional[ManagerInstallerResponse] = None
     # New fields
@@ -600,6 +601,7 @@ class ManagerOrderUpdatePayload(BaseModel):
     measurement_required: Optional[bool] = None
     measurer_id: Optional[int] = None
     measurement_result: Optional[str] = None
+    additional_conditions: Optional[str] = None
     proposal_status: Optional[str] = None
     proposal_sent_at: Optional[datetime] = None
 

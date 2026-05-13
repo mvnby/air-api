@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import BigInteger, Column, JSON, String
+from sqlalchemy import BigInteger, Column, JSON, String, Text
 from sqlmodel import Field, Relationship, SQLModel
 
 from .common import ClosingResult, DocumentRoleType, EquipmentStatus, LeadSource, OrderStageStatus, OrderStatus, PaymentCurrency, PaymentType
@@ -347,6 +347,7 @@ class Order(SQLModel, table=True):
     measurement_date: Optional[datetime] = None   # renamed from assessment_date
     measurer_id: Optional[int] = Field(default=None, index=True)
     measurement_result: Optional[str] = Field(default=None)
+    additional_conditions: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     proposal_status: str = Field(default="draft", sa_column=Column(String, default="draft", index=True))
     proposal_sent_at: Optional[datetime] = None
 

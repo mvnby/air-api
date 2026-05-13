@@ -1272,6 +1272,7 @@ class OrderService:
                 order.document_role_type.value if hasattr(order.document_role_type, "value") else order.document_role_type
             ),
             "effective_document_role_type": DocumentRoleService.effective_role_type(order),
+            "additional_conditions": order.additional_conditions,
             "closing_result": order.closing_result,
             "reject_reason": order.reject_reason,
             "is_on_hold": bool(order.is_on_hold),
@@ -1736,6 +1737,9 @@ class OrderService:
             order.measurer_id = payload.measurer_id
         if "measurement_result" in fields_set:
             order.measurement_result = payload.measurement_result
+        if "additional_conditions" in fields_set:
+            value = (payload.additional_conditions or "").strip()
+            order.additional_conditions = value or None
         if "proposal_status" in fields_set and payload.proposal_status is not None:
             order.proposal_status = payload.proposal_status
         if "proposal_sent_at" in fields_set:

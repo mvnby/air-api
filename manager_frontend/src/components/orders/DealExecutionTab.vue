@@ -4,6 +4,7 @@ import { ManagerOrdersService, ManagerDocsService, ManagerContractsService, Mana
 import type { BankReceiptResponse, DocumentTemplateItem, ManagerCustomerContractItemResponse, ManagerOrderDetailResponse, ManagerOrderDocumentItem } from '../../client';
 import { formatMoney } from './order-utils';
 import DateTimeField from '../ui/DateTimeField.vue';
+import AdditionalConditionsLibrary from './AdditionalConditionsLibrary.vue';
 import DocumentSendModal from './DocumentSendModal.vue';
 import { getApiErrorMessage } from '../../utils/api-errors';
 
@@ -232,6 +233,9 @@ const documentDate = ref(new Date().toISOString().slice(0, 10));
 const customerContracts = ref<ManagerCustomerContractItemResponse[]>([]);
 const selectedCustomerContractId = ref<number | null>(props.order.customer_contract_id || null);
 const selectedDocumentRoleType = ref<string | null>(props.order.document_role_type || null);
+const additionalConditions = ref(props.order.additional_conditions || '');
+const additionalConditionsSaved = ref(props.order.additional_conditions || '');
+const isSavingAdditionalConditions = ref(false);
 const ONE_TIME_CONTRACT_VALUE = 'one-time-contract';
 
 const DOCUMENT_TYPES = [
@@ -289,6 +293,7 @@ const selectedDocumentRoleBinding = computed({
     void updateDocumentRoleBinding(value);
   },
 });
+const hasAdditionalConditionsChanges = computed(() => additionalConditions.value !== additionalConditionsSaved.value);
 
 const loadCustomerContracts = async () => {
   if (!props.order.customer?.id) {
@@ -341,6 +346,25 @@ const updateDocumentRoleBinding = async (value: string) => {
   }
 };
 
+const saveAdditionalConditions = async (showSuccessToast = true) => {
+  if (!hasAdditionalConditionsChanges.value) return true;
+  const valueToSave = additionalConditions.value;
+  isSavingAdditionalConditions.value = true;
+  try {
+    await ManagerOrdersService.patchManagerOrder(props.order.id, {
+      additional_conditions: valueToSave,
+    });
+    additionalConditionsSaved.value = valueToSave;
+    if (showSuccessToast) setToast('Условия сохранены', 'success');
+    return true;
+  } catch (error) {
+    setToast(`Ошибка сохранения условий: ${getApiErrorMessage(error)}`, 'error');
+    return false;
+  } finally {
+    isSavingAdditionalConditions.value = false;
+  }
+};
+
 const useOneTimeContractForClosingDocs = async () => {
   if (!selectedCustomerContractId.value) return;
   selectedCustomerContractId.value = null;
@@ -387,6 +411,7 @@ const handleDocGenerate = async (type: string) => {
   isGeneratingDoc.value = true;
   docDropdownOpen.value = false;
   try {
+    if (!(await saveAdditionalConditions(false))) return;
     const template = (type === 'contract' && selectedContractTemplateId.value)
       ? selectedContractTemplate.value
       : undefined;
@@ -460,6 +485,8 @@ watch(() => props.order.id, () => {
   loadCandidateBankReceipts();
   selectedCustomerContractId.value = props.order.customer_contract_id || null;
   selectedDocumentRoleType.value = props.order.document_role_type || null;
+  additionalConditionsSaved.value = props.order.additional_conditions || '';
+  additionalConditions.value = props.order.additional_conditions || '';
 }, { immediate: true });
 </script>
 
@@ -738,6 +765,11 @@ watch(() => props.order.id, () => {
             </div>
             <p v-else-if="!selectedCustomerContractId && !hasClosingBaseDocument" class="mt-2 text-xs text-amber-600 dark:text-amber-400">Для актов нужен договор или счет, для накладных нужен договор.</p>
           </div>
+
+          <AdditionalConditionsLibrary
+            v-model="additionalConditions"
+            :saving="isSavingAdditionalConditions"
+          />
 
           <div class="mb-3 rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-slate-700/50 dark:bg-slate-900/40 dark:shadow-none">
             <label class="mb-1 block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Роли сторон в актах и счетах</label>
