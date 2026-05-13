@@ -64,7 +64,7 @@
             </nav>
 
             <div class="menu-footer">
-              <a href="tel:+375333595959" class="btn btn-primary w-full">
+              <a :href="`tel:${phoneClean}`" class="btn btn-primary w-full">
                 <span class="material-icons-round">call</span>
                 Позвонить
               </a>
@@ -78,6 +78,13 @@
 
 <script setup>
 import { ref, watch } from 'vue';
+
+defineProps({
+  phoneClean: {
+    type: String,
+    required: true,
+  },
+});
 
 const isOpen = ref(false);
 

@@ -1,7 +1,7 @@
 ---
 import "../assets/index.css";
 import { getGlobalConfig } from "../utils/api";
-import { SITE_CONFIG } from "../config";
+import { normalizePhoneForTel, SITE_CONFIG } from "../config";
 import HeaderCart from "../components/cart/HeaderCart.vue";
 import MobileMenu from "../components/ui/MobileMenu.vue";
 import ToastContainer from "../components/ui/ToastContainer.vue";
@@ -38,7 +38,7 @@ const config = await getGlobalConfig();
 
 // Default fallbacks if config is missing
 const phone = config["phone"] || SITE_CONFIG.phone;
-const phoneClean = config["phone_clean"] || SITE_CONFIG.phoneClean;
+const phoneClean = normalizePhoneForTel(phone) || config["phone_clean"] || SITE_CONFIG.phoneClean;
 const email = config["email"] || SITE_CONFIG.email;
 const address = config["address"] || SITE_CONFIG.address;
 ---
@@ -174,7 +174,7 @@ const address = config["address"] || SITE_CONFIG.address;
 				</div>
 
 				<div class="nav-actions">
-					<MobileMenu client:media="(max-width: 980px)" />
+					<MobileMenu phoneClean={phoneClean} client:media="(max-width: 980px)" />
 					<button
 						id="theme-toggle"
 						class="icon-btn"
