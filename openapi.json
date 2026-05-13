@@ -14930,6 +14930,17 @@
             "title": "Effective Document Role Type",
             "default": "seller_buyer"
           },
+          "additional_conditions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Conditions"
+          },
           "installer_id": {
             "anyOf": [
               {
@@ -15452,6 +15463,17 @@
             "title": "Effective Document Role Type",
             "default": "seller_buyer"
           },
+          "additional_conditions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Conditions"
+          },
           "installer_id": {
             "anyOf": [
               {
@@ -15915,6 +15937,17 @@
               }
             ],
             "title": "Measurement Result"
+          },
+          "additional_conditions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Conditions"
           },
           "proposal_status": {
             "anyOf": [

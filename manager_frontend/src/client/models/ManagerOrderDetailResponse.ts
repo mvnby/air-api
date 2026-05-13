@@ -36,6 +36,7 @@ export type ManagerOrderDetailResponse = {
     customer_contract?: (OrderCustomerContractBrief | null);
     document_role_type?: (string | null);
     effective_document_role_type?: string;
+    additional_conditions?: (string | null);
     installer_id?: (number | null);
     installer?: (ManagerInstallerResponse | null);
     equipment_status?: string;

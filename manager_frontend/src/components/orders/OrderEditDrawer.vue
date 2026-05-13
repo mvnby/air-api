@@ -4,6 +4,7 @@ import { useDebounceFn } from '@vueuse/core';
 import { api } from '../../api';
 import DateTimeField from '../ui/DateTimeField.vue';
 import CustomerSummaryCard from '../customers/CustomerSummaryCard.vue';
+import AdditionalConditionsLibrary from './AdditionalConditionsLibrary.vue';
 import DealExecutionTab from './DealExecutionTab.vue';
 import DocumentSendModal from './DocumentSendModal.vue';
 import OrderDrawerSection from './OrderDrawerSection.vue';
@@ -144,6 +145,9 @@ watch(targetCurrency, (newCurrency) => {
 const measurementRequired = ref(false);
 const measurerId = ref<number | null>(null);
 const measurementResult = ref('');
+const additionalConditions = ref('');
+const additionalConditionsSaved = ref('');
+const isSavingAdditionalConditions = ref(false);
 const proposalStatus = ref<'draft' | 'sent' | 'approved' | 'rejected'>('draft');
 const activeProposalId = ref<number | null>(null);
 const proposalActionLoading = ref(false);
@@ -673,6 +677,25 @@ const handleDocumentsSent = () => {
   emit('reload', props.order.id);
 };
 
+const saveAdditionalConditions = async (showSuccessToast = false) => {
+  if (!props.order?.id || additionalConditions.value === additionalConditionsSaved.value) return true;
+  const valueToSave = additionalConditions.value;
+  isSavingAdditionalConditions.value = true;
+  try {
+    await ManagerOrdersService.patchManagerOrder(props.order.id, {
+      additional_conditions: valueToSave,
+    });
+    additionalConditionsSaved.value = valueToSave;
+    if (showSuccessToast) setToast('Условия сохранены', 'success');
+    return true;
+  } catch (error) {
+    setToast(`Ошибка сохранения условий: ${getApiErrorMessage(error)}`, 'error');
+    return false;
+  } finally {
+    isSavingAdditionalConditions.value = false;
+  }
+};
+
 const loadCustomerContracts = async (customerId?: number, selectedId?: number | null) => {
   if (!customerId) {
     customerContracts.value = [];
@@ -738,6 +761,7 @@ const generateDocument = async (type: string, template?: DocumentTemplateItem | 
   if (!props.order?.id) return;
   isGeneratingDoc.value = true;
   try {
+    if (!(await saveAdditionalConditions(false))) return;
     if (type === 'contract' && isCompanyOrder.value) {
       await useOneTimeContractForClosingDocs();
     }
@@ -1126,6 +1150,8 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   measurementRequired.value = order.measurement_required ?? false;
   measurerId.value = order.measurer_id ?? null;
   measurementResult.value = order.measurement_result ?? '';
+  additionalConditionsSaved.value = order.additional_conditions ?? '';
+  additionalConditions.value = order.additional_conditions ?? '';
   proposalStatus.value = (order.proposal_status as any) || 'draft';
   targetCurrency.value = order.target_currency || null;
   targetCurrencyAmount.value = order.target_currency_amount || null;
@@ -1750,6 +1776,7 @@ const handleSave = () => {
     measurement_required: measurementRequired.value,
     measurer_id: measurerId.value,
     measurement_result: measurementResult.value,
+    additional_conditions: additionalConditions.value,
     proposal_status: status.value === 'execution' ? 'approved' : proposalStatus.value,
     target_currency: enableCurrency.value ? (targetCurrency.value || null) : null,
     target_currency_amount: enableCurrency.value && targetCurrencyAmount.value ? Number(String(targetCurrencyAmount.value).replace(',', '.')) : null,
@@ -2719,6 +2746,8 @@ watch(
           </div>
           <p v-else-if="!selectedCustomerContractId && !hasClosingBaseDocument" class="mt-2 text-xs text-amber-600 dark:text-amber-400">Для актов нужен договор или счет, для накладных нужен договор.</p>
         </div>
+
+        <AdditionalConditionsLibrary v-model="additionalConditions" :saving="isSavingAdditionalConditions" />
 
         <div class="mb-3 rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-slate-700/50 dark:bg-slate-900/40 dark:shadow-none">
           <label class="mb-1 block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Роли сторон в актах и счетах</label>

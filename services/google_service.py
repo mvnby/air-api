@@ -422,7 +422,8 @@ class GoogleDocsService:
             new_file = drive_service.files().copy(fileId=template_id, body=copy_body).execute()
             new_doc_id = new_file.get('id')
 
-            # 2. Замены
+            # 2. Условные блоки и замены
+            self.render_conditional_blocks(docs_service, new_doc_id, replacements)
             requests = []
             for key, value in replacements.items():
                 requests.append({
@@ -512,6 +513,7 @@ class GoogleDocsService:
         
         try:
             docs_service = build('docs', 'v1', credentials=self.creds)
+            self.render_conditional_blocks(docs_service, file_id, replacements)
             
             # Формируем запросы на замену
             requests = []
@@ -530,6 +532,121 @@ class GoogleDocsService:
                 ).execute()
         except Exception as e:
             raise Exception(f"Google Docs API Error: {str(e)}")
+
+    @staticmethod
+    def _is_truthy_template_value(value: Any) -> bool:
+        if value is None:
+            return False
+        if isinstance(value, str):
+            return bool(value.strip())
+        if isinstance(value, (list, tuple, set, dict)):
+            return bool(value)
+        return bool(value)
+
+    @staticmethod
+    def _replacement_value_for_condition(replacements: Dict[str, Any], name: str) -> Any:
+        return replacements.get(f"{{{{{name}}}}}", replacements.get(name))
+
+    @staticmethod
+    def _iter_text_runs(elements: List[Dict[str, Any]]):
+        for element in elements or []:
+            if "paragraph" in element:
+                for paragraph_element in element["paragraph"].get("elements", []):
+                    text_run = paragraph_element.get("textRun")
+                    if text_run and "content" in text_run:
+                        yield {
+                            "text": text_run.get("content", ""),
+                            "start": paragraph_element.get("startIndex"),
+                            "end": paragraph_element.get("endIndex"),
+                        }
+            if "table" in element:
+                for row in element["table"].get("tableRows", []):
+                    for cell in row.get("tableCells", []):
+                        yield from GoogleDocsService._iter_text_runs(cell.get("content", []))
+            if "tableOfContents" in element:
+                yield from GoogleDocsService._iter_text_runs(element["tableOfContents"].get("content", []))
+
+    @staticmethod
+    def _expand_to_line_boundaries(text: str, start: int, end: int) -> tuple[int, int]:
+        line_start = text.rfind("\n", 0, start) + 1
+        line_end = text.find("\n", end)
+        before_marker = text[line_start:start]
+        after_marker = text[end:line_end] if line_end != -1 else text[end:]
+        if before_marker.strip() == "" and after_marker.strip() == "":
+            return line_start, line_end + 1 if line_end != -1 else end
+        return start, end
+
+    @staticmethod
+    def _build_conditional_block_requests(document: Dict[str, Any], replacements: Dict[str, Any]) -> List[Dict[str, Any]]:
+        runs = [
+            run for run in GoogleDocsService._iter_text_runs(document.get("body", {}).get("content", []))
+            if run.get("text") and run.get("start") is not None and run.get("end") is not None
+        ]
+        if not runs:
+            return []
+
+        full_text_parts: List[str] = []
+        spans: List[tuple[int, int, int]] = []
+        cursor = 0
+        for run in runs:
+            text = run["text"]
+            spans.append((cursor, int(run["start"]), len(text)))
+            full_text_parts.append(text)
+            cursor += len(text)
+        full_text = "".join(full_text_parts)
+
+        def doc_index(offset: int) -> int:
+            for text_offset, start_index, length in spans:
+                if text_offset <= offset <= text_offset + length:
+                    return start_index + (offset - text_offset)
+            last_offset, last_start, last_length = spans[-1]
+            return last_start + last_length + max(0, offset - (last_offset + last_length))
+
+        requests: List[Dict[str, Any]] = []
+        marker_re = re.compile(r"{{#if\s+([A-Za-z0-9_]+)\s*}}")
+        close_marker = "{{/if}}"
+        search_from = 0
+        while True:
+            opening = marker_re.search(full_text, search_from)
+            if not opening:
+                break
+            close_start = full_text.find(close_marker, opening.end())
+            if close_start == -1:
+                break
+            close_end = close_start + len(close_marker)
+            condition_name = opening.group(1)
+            condition_value = GoogleDocsService._replacement_value_for_condition(replacements, condition_name)
+            if GoogleDocsService._is_truthy_template_value(condition_value):
+                ranges = [
+                    GoogleDocsService._expand_to_line_boundaries(full_text, opening.start(), opening.end()),
+                    GoogleDocsService._expand_to_line_boundaries(full_text, close_start, close_end),
+                ]
+            else:
+                ranges = [GoogleDocsService._expand_to_line_boundaries(full_text, opening.start(), close_end)]
+
+            for start, end in ranges:
+                if end > start:
+                    requests.append({
+                        "deleteContentRange": {
+                            "range": {
+                                "startIndex": doc_index(start),
+                                "endIndex": doc_index(end),
+                            }
+                        }
+                    })
+            search_from = close_end
+
+        requests.sort(key=lambda item: item["deleteContentRange"]["range"]["startIndex"], reverse=True)
+        return requests
+
+    def render_conditional_blocks(self, docs_service: Any, file_id: str, replacements: Dict[str, Any]) -> None:
+        document = docs_service.documents().get(documentId=file_id).execute()
+        requests = self._build_conditional_block_requests(document, replacements)
+        if requests:
+            docs_service.documents().batchUpdate(
+                documentId=file_id,
+                body={"requests": requests},
+            ).execute()
     
     def export_file(self, file_id: str, mime_type: str = 'application/pdf') -> BytesIO:
         """

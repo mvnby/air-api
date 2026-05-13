@@ -17,6 +17,7 @@ export type ManagerOrderUpdatePayload = {
     measurement_required?: (boolean | null);
     measurer_id?: (number | null);
     measurement_result?: (string | null);
+    additional_conditions?: (string | null);
     proposal_status?: (string | null);
     proposal_sent_at?: (string | null);
     is_paid?: (boolean | null);
