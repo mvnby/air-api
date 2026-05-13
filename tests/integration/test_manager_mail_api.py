@@ -94,3 +94,46 @@ async def test_manager_mail_send_test_endpoint_uses_smtp_service(async_client, m
     assert payload["id"] == 99
     assert payload["status"] == "sent"
     assert payload["recipient_email"] == "client@example.com"
+
+
+@pytest.mark.asyncio
+async def test_manager_mail_send_order_email_passes_document_ids(async_client, monkeypatch):
+    async def fake_send(_session, **kwargs):
+        assert kwargs["order_id"] == 123
+        assert kwargs["to_email"] == "client@example.com"
+        assert kwargs["document_ids"] == [10, 11]
+        return OutgoingEmail(
+            id=100,
+            status="sent",
+            order_id=kwargs["order_id"],
+            recipient_email=kwargs["to_email"],
+            subject=kwargs["subject"],
+            body_text=kwargs["body_text"],
+            from_email="a@mvn.by",
+            from_name="Мастер Воздуха",
+            sent_at=datetime(2026, 5, 8, 15, 10),
+            attachments=[
+                {"filename": "КП-2026-001.pdf", "mime_type": "application/pdf", "size": 100},
+                {"filename": "СЧ-2026-001.pdf", "mime_type": "application/pdf", "size": 100},
+            ],
+        )
+
+    monkeypatch.setattr("routers.manager_mail.MailSmtpService.send_order_email", fake_send)
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.post(
+        "/api/manager/mail/orders/123/email",
+        headers=headers,
+        json={
+            "to_email": "client@example.com",
+            "subject": "Коммерческое предложение",
+            "body_text": "Здравствуйте, документы во вложении.",
+            "document_ids": [10, 11],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == 100
+    assert payload["order_id"] == 123
+    assert len(payload["attachments"]) == 2
