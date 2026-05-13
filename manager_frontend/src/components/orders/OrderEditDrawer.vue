@@ -5,6 +5,7 @@ import { api } from '../../api';
 import DateTimeField from '../ui/DateTimeField.vue';
 import CustomerSummaryCard from '../customers/CustomerSummaryCard.vue';
 import DealExecutionTab from './DealExecutionTab.vue';
+import DocumentSendModal from './DocumentSendModal.vue';
 import OrderDrawerSection from './OrderDrawerSection.vue';
 import type {
   ManagerOrderDetailResponse,
@@ -163,6 +164,7 @@ const estimateSearchQuery = ref('');
 const importingEstimate = ref(false);
 const showEstimateImport = ref(false);
 const documents = ref<ManagerOrderDocumentItem[]>([]);
+const showDocumentSendModal = ref(false);
 const payments = ref<PaymentResponse[]>([]);
 const bankReceipts = ref<BankReceiptResponse[]>([]);
 const bankReceiptsLoading = ref(false);
@@ -654,6 +656,21 @@ const loadDocuments = async (orderId: number) => {
   } catch (error) {
     console.error('Failed to load documents', error);
   }
+};
+
+const openDocumentSendModal = () => {
+  if (!props.order?.id) return;
+  if (!documents.value.length) {
+    setToast('Сначала создайте или загрузите документ', 'error');
+    return;
+  }
+  showDocumentSendModal.value = true;
+};
+
+const handleDocumentsSent = () => {
+  if (!props.order?.id) return;
+  setToast('Письмо отправлено', 'success');
+  emit('reload', props.order.id);
 };
 
 const loadCustomerContracts = async (customerId?: number, selectedId?: number | null) => {
@@ -2603,6 +2620,16 @@ watch(
         <div class="mb-2 flex items-center justify-between">
           <div class="relative ml-auto flex items-center gap-2">
             <button
+               class="flex items-center gap-1 rounded-xl bg-teal-600 px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500/50 disabled:opacity-50"
+               title="Отправить документы"
+               :disabled="!documents.length || isUploadingDoc || !!processingDocId || isGeneratingDoc"
+               @click="openDocumentSendModal"
+            >
+              <span class="material-icons-round text-[18px]">send</span>
+              Отправить
+            </button>
+
+            <button
                class="flex items-center gap-1 rounded-xl bg-[#007f80] px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/50 disabled:opacity-50"
                :disabled="isGeneratingDoc || !!processingDocId || isUploadingDoc"
                @click="docDropdownOpen = !docDropdownOpen"
@@ -2889,6 +2916,14 @@ watch(
         </div>
       </footer>
     </aside>
+
+    <DocumentSendModal
+      v-if="order"
+      v-model="showDocumentSendModal"
+      :order="order"
+      :documents="documents"
+      @sent="handleDocumentsSent"
+    />
 
     <div
       v-if="showCustomerModal"

@@ -4,6 +4,7 @@ import { ManagerOrdersService, ManagerDocsService, ManagerContractsService, Mana
 import type { BankReceiptResponse, DocumentTemplateItem, ManagerCustomerContractItemResponse, ManagerOrderDetailResponse, ManagerOrderDocumentItem } from '../../client';
 import { formatMoney } from './order-utils';
 import DateTimeField from '../ui/DateTimeField.vue';
+import DocumentSendModal from './DocumentSendModal.vue';
 import { getApiErrorMessage } from '../../utils/api-errors';
 
 const props = defineProps<{
@@ -206,6 +207,7 @@ const documents = ref<ManagerOrderDocumentItem[]>([]);
 const isGeneratingDoc = ref(false);
 const processingDocId = ref<number | null>(null);
 const docDropdownOpen = ref(false);
+const showDocumentSendModal = ref(false);
 const isUploadingDoc = ref(false);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 
@@ -356,6 +358,19 @@ const loadDocuments = async () => {
   }
 };
 
+const openDocumentSendModal = () => {
+  if (!documents.value.length) {
+    setToast('Сначала создайте или загрузите документ', 'error');
+    return;
+  }
+  showDocumentSendModal.value = true;
+};
+
+const handleDocumentsSent = () => {
+  setToast('Письмо отправлено');
+  emit('refresh');
+};
+
 const loadContractTemplates = async () => {
   try {
     const res = await ManagerDocsService.getDocTemplates('contract', props.order.id);
@@ -450,6 +465,13 @@ watch(() => props.order.id, () => {
 
 <template>
 <div class="space-y-6">
+  <DocumentSendModal
+    v-model="showDocumentSendModal"
+    :order="order"
+    :documents="documents"
+    @sent="handleDocumentsSent"
+  />
+
   <Transition name="fade">
     <div v-if="toast" class="fixed top-6 right-6 z-[100] text-white px-6 py-3 rounded-xl shadow-2xl font-medium" :class="toastType === 'success' ? 'bg-teal-600' : 'bg-red-500'">
       {{ toast }}
@@ -616,6 +638,16 @@ watch(() => props.order.id, () => {
           <div class="mb-2 flex items-center justify-between">
             <h4 class="text-md font-semibold text-slate-800">Documents (B2B / Contracts)</h4>
             <div class="relative flex items-center gap-2">
+              <button
+                class="flex items-center gap-1 rounded-xl bg-teal-600 px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500/50 disabled:opacity-50"
+                title="Отправить документы"
+                :disabled="!documents.length || isUploadingDoc || !!processingDocId || isGeneratingDoc"
+                @click="openDocumentSendModal"
+              >
+                <span class="material-icons-round text-[18px]">send</span>
+                Отправить
+              </button>
+
               <button
                 class="flex items-center gap-1 rounded-xl bg-[#007f80] px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/50 disabled:opacity-50"
                 :disabled="isGeneratingDoc || !!processingDocId || isUploadingDoc"

@@ -157,17 +157,20 @@ class MailSmtpService:
             raise ValueError("Order not found")
 
         attachments: List[MailAttachment] = []
+        has_offer_document = False
         for doc_id in document_ids or []:
             doc = await session.get(OrderDocument, doc_id)
             if not doc or doc.order_id != order_id:
                 raise ValueError(f"Document {doc_id} not found on order")
+            if doc.doc_type == "offer":
+                has_offer_document = True
             stream, filename = await DocumentService.get_download_stream(session, doc_id)
             if not stream:
                 raise ValueError(f"Document {doc_id} cannot be downloaded")
             encoded = getattr(stream, "getvalue", lambda: bytes(stream))()
             attachments.append(MailAttachment(filename=filename or f"document-{doc_id}.pdf", content=encoded, mime_type="application/pdf"))
 
-        return await MailSmtpService.send_and_record(
+        email_row = await MailSmtpService.send_and_record(
             session,
             to_email=to_email,
             subject=subject,
@@ -178,3 +181,10 @@ class MailSmtpService:
             customer_id=order.customer_id,
             attachments=attachments,
         )
+        if has_offer_document:
+            order.proposal_status = "sent"
+            order.proposal_sent_at = datetime.now()
+            session.add(order)
+            await session.commit()
+            await session.refresh(email_row)
+        return email_row

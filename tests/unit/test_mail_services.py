@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
 from core.config import settings
-from models import BankReceipt, Customer, Order, OrderServiceLink, Payment, PaymentCurrency
+from models import BankReceipt, Customer, Order, OrderDocument, OrderServiceLink, OutgoingEmail, Payment, PaymentCurrency
 from services.bank_email_parser_service import BankEmailParserService
 from services.bank_receipt_service import BankReceiptService
 from services.bot_service import BotService
@@ -252,3 +252,120 @@ def test_smtp_builds_utf8_message_and_sanitizes_errors(monkeypatch):
     assert "client@example.com" in rendered
     assert "application/pdf" in rendered
     assert "super-secret" not in MailSmtpService._sanitize_error(RuntimeError("failed with super-secret"))
+
+
+@pytest.mark.asyncio
+async def test_send_order_email_attaches_documents_and_marks_offer_sent(sqlite_session, monkeypatch):
+    monkeypatch.setattr(settings, "MAIL_SMTP_USERNAME", "a@mvn.by")
+    monkeypatch.setattr(settings, "MAIL_SMTP_PASSWORD", "super-secret")
+    monkeypatch.setattr(settings, "MAIL_FROM_EMAIL", "a@mvn.by")
+    monkeypatch.setattr(settings, "MAIL_FROM_NAME", "Мастер Воздуха")
+
+    customer = Customer(name="ООО Клиент", phone="+375291111111", type="company", email="client@example.com")
+    sqlite_session.add(customer)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(customer)
+
+    order = Order(customer_id=customer.id, status="negotiation", proposal_status="draft")
+    sqlite_session.add(order)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+
+    offer = OrderDocument(
+        order_id=order.id,
+        doc_type="offer",
+        number="КП-2026-001",
+        google_file_id="offer-file",
+        google_edit_url="https://docs.example/offer",
+    )
+    invoice = OrderDocument(
+        order_id=order.id,
+        doc_type="invoice",
+        number="СЧ-2026-001",
+        google_file_id="invoice-file",
+        google_edit_url="https://docs.example/invoice",
+    )
+    sqlite_session.add(offer)
+    sqlite_session.add(invoice)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(offer)
+    await sqlite_session.refresh(invoice)
+
+    async def fake_download(_session, doc_id: int):
+        return b"%PDF-1.4", f"document-{doc_id}.pdf"
+
+    sent_messages = []
+
+    def fake_send(message):
+        sent_messages.append(message)
+
+    monkeypatch.setattr("services.mail_smtp_service.DocumentService.get_download_stream", fake_download)
+    monkeypatch.setattr(MailSmtpService, "send_message", fake_send)
+
+    email_row = await MailSmtpService.send_order_email(
+        sqlite_session,
+        order_id=order.id,
+        to_email="client@example.com",
+        subject="Коммерческое предложение",
+        body_text="Здравствуйте, документы во вложении.",
+        document_ids=[offer.id, invoice.id],
+    )
+
+    assert email_row.status == "sent"
+    assert len(email_row.attachments or []) == 2
+    assert sent_messages
+
+    refreshed_order = await sqlite_session.get(Order, order.id)
+    assert refreshed_order.proposal_status == "sent"
+    assert refreshed_order.proposal_sent_at is not None
+
+    persisted_email = (await sqlite_session.execute(select(OutgoingEmail).where(OutgoingEmail.id == email_row.id))).scalar_one()
+    assert persisted_email.recipient_email == "client@example.com"
+    assert persisted_email.attachments[0]["mime_type"] == "application/pdf"
+
+
+@pytest.mark.asyncio
+async def test_send_order_email_without_offer_keeps_proposal_status(sqlite_session, monkeypatch):
+    monkeypatch.setattr(settings, "MAIL_SMTP_USERNAME", "a@mvn.by")
+    monkeypatch.setattr(settings, "MAIL_SMTP_PASSWORD", "super-secret")
+    monkeypatch.setattr(settings, "MAIL_FROM_EMAIL", "a@mvn.by")
+
+    customer = Customer(name="ООО Клиент", phone="+375291111111", type="company", email="client@example.com")
+    sqlite_session.add(customer)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(customer)
+
+    order = Order(customer_id=customer.id, status="negotiation", proposal_status="draft")
+    sqlite_session.add(order)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+
+    invoice = OrderDocument(
+        order_id=order.id,
+        doc_type="invoice",
+        number="СЧ-2026-002",
+        google_file_id="invoice-file",
+        google_edit_url="https://docs.example/invoice",
+    )
+    sqlite_session.add(invoice)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(invoice)
+
+    async def fake_download(_session, doc_id: int):
+        return b"%PDF-1.4", f"document-{doc_id}.pdf"
+
+    monkeypatch.setattr("services.mail_smtp_service.DocumentService.get_download_stream", fake_download)
+    monkeypatch.setattr(MailSmtpService, "send_message", lambda _message: None)
+
+    await MailSmtpService.send_order_email(
+        sqlite_session,
+        order_id=order.id,
+        to_email="client@example.com",
+        subject="Счет",
+        body_text="Здравствуйте, счет во вложении.",
+        document_ids=[invoice.id],
+    )
+
+    refreshed_order = await sqlite_session.get(Order, order.id)
+    assert refreshed_order.proposal_status == "draft"
+    assert refreshed_order.proposal_sent_at is None
