@@ -6,3 +6,13 @@ export const SITE_CONFIG = {
     address: "г. Витебск, пр-т Победы, 15",
 
 };
+
+export function normalizePhoneForTel(value?: string | null): string {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+
+    const digits = raw.replace(/\D/g, "");
+    if (!digits) return "";
+
+    return raw.startsWith("+") ? `+${digits}` : digits;
+}
