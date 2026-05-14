@@ -10,6 +10,7 @@ export type ManagerTariffRuleCreatePayload = {
     unit?: string;
     unit_price?: number;
     is_optional?: boolean;
+    is_favorite?: boolean;
     is_active?: boolean;
     sort_order?: number;
     service_id?: (number | null);

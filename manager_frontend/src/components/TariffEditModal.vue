@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { api } from '../api';
 import type {
   ManagerTariffCreatePayload,
@@ -12,6 +12,7 @@ import { getApiErrorMessage } from '../utils/api-errors';
 const props = defineProps<{
   modelValue: boolean;
   tariff?: ManagerTariffResponse | null;
+  initialServiceKind?: ManagerTariffServiceKind;
 }>();
 
 const emit = defineEmits<{
@@ -22,12 +23,39 @@ const emit = defineEmits<{
 const loading = ref(false);
 const error = ref('');
 
-const DEFAULT_TEMPLATE = 'Монтаж сплит-системы, включая расходные материалы';
+const DEFAULT_TEMPLATES: Record<ManagerTariffServiceKind, string> = {
+  installation: 'Монтаж сплит-системы, включая расходные материалы',
+  dismantling: 'Демонтаж кондиционера',
+  maintenance: 'Техническое обслуживание кондиционера',
+  repair: 'Ремонт кондиционера',
+};
+
+const serviceKindOptions: Array<{ value: ManagerTariffServiceKind; label: string }> = [
+  { value: 'installation', label: 'Монтаж' },
+  { value: 'dismantling', label: 'Демонтаж' },
+  { value: 'maintenance', label: 'Обслуживание' },
+  { value: 'repair', label: 'Ремонт' },
+];
+
+const isInstallation = computed(() => formData.value.service_kind === 'installation');
+
+const categoryPlaceholder = computed(() => {
+  if (formData.value.service_kind === 'repair') return 'diagnostics / compressor / leak';
+  if (formData.value.service_kind === 'maintenance') return 'split / cassette / duct';
+  if (formData.value.service_kind === 'dismantling') return 'Wall / Cassette / Duct';
+  return 'Wall / Cassette / Duct';
+});
+
+const powerPlaceholder = computed(() => {
+  if (formData.value.service_kind === 'repair') return 'бытовой / полупром / до 7 кВт';
+  if (formData.value.service_kind === 'maintenance') return 'до 3.5 кВт / до 7 кВт';
+  return '07-12 / до 3.5 кВт';
+});
 
 const formData = ref<ManagerTariffCreatePayload>({
   service_kind: 'installation',
   selector_label: '',
-  estimate_template: DEFAULT_TEMPLATE,
+  estimate_template: DEFAULT_TEMPLATES.installation,
   category: '',
   power_range: '',
   base_price: 0,
@@ -52,20 +80,34 @@ const resetForm = () => {
       comment: props.tariff.comment || null,
     };
   } else {
+    const serviceKind = props.initialServiceKind ?? 'installation';
     formData.value = {
-      service_kind: 'installation',
+      service_kind: serviceKind,
       selector_label: '',
-      estimate_template: DEFAULT_TEMPLATE,
+      estimate_template: DEFAULT_TEMPLATES[serviceKind],
       category: '',
       power_range: '',
       base_price: 0,
-      included_route_meters: 3,
+      included_route_meters: serviceKind === 'installation' ? 3 : 0,
       is_active: true,
       sort_order: 0,
       comment: null,
     };
   }
   error.value = '';
+};
+
+const handleServiceKindChange = () => {
+  const serviceKind = formData.value.service_kind as ManagerTariffServiceKind;
+  const currentTemplate = String(formData.value.estimate_template || '').trim();
+  if (!currentTemplate || Object.values(DEFAULT_TEMPLATES).includes(currentTemplate)) {
+    formData.value.estimate_template = DEFAULT_TEMPLATES[serviceKind];
+  }
+  if (serviceKind !== 'installation') {
+    formData.value.included_route_meters = 0;
+  } else if (!formData.value.included_route_meters) {
+    formData.value.included_route_meters = 3;
+  }
 };
 
 watch(
@@ -93,6 +135,9 @@ const submit = async () => {
   loading.value = true;
   error.value = '';
   try {
+    const normalizedIncludedRoute = formData.value.service_kind === 'installation'
+      ? formData.value.included_route_meters
+      : 0;
     if (props.tariff?.id) {
       const updatePayload: ManagerTariffUpdatePayload = {
         service_kind: formData.value.service_kind as ManagerTariffServiceKind,
@@ -101,14 +146,17 @@ const submit = async () => {
         category: formData.value.category,
         power_range: formData.value.power_range,
         base_price: formData.value.base_price,
-        included_route_meters: formData.value.included_route_meters,
+        included_route_meters: normalizedIncludedRoute,
         is_active: formData.value.is_active,
         sort_order: formData.value.sort_order,
         comment: formData.value.comment,
       };
       await api.updateManagerTariff(props.tariff.id, updatePayload);
     } else {
-      await api.createManagerTariff(formData.value);
+      await api.createManagerTariff({
+        ...formData.value,
+        included_route_meters: normalizedIncludedRoute,
+      });
     }
     emit('success');
     close();
@@ -126,7 +174,6 @@ const submit = async () => {
       <div
         v-if="modelValue"
         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-        @click.self="close"
       >
         <div class="modal-content bg-white dark:bg-[#1e293b] rounded-xl shadow-xl w-full max-w-2xl overflow-hidden border border-gray-200 dark:border-slate-700/60 flex flex-col">
           <div class="px-6 py-4 border-b border-gray-200 dark:border-slate-700/50 flex justify-between items-center bg-gray-50 dark:bg-slate-800/50">
@@ -157,10 +204,11 @@ const submit = async () => {
                   v-model="formData.service_kind"
                   class="w-full bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200"
                   :disabled="loading"
+                  @change="handleServiceKindChange"
                 >
-                  <option value="installation">Монтаж</option>
-                  <option value="dismantling">Демонтаж</option>
-                  <option value="maintenance">Обслуживание</option>
+                  <option v-for="option in serviceKindOptions" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                  </option>
                 </select>
               </label>
 
@@ -203,7 +251,7 @@ const submit = async () => {
                   v-model="formData.category"
                   type="text"
                   class="w-full bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200"
-                  placeholder="Wall / Cassette / Duct"
+                  :placeholder="categoryPlaceholder"
                   :disabled="loading"
                 />
               </label>
@@ -213,7 +261,7 @@ const submit = async () => {
                   v-model="formData.power_range"
                   type="text"
                   class="w-full bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200"
-                  placeholder="07-12 / до 3.5 кВт"
+                  :placeholder="powerPlaceholder"
                   :disabled="loading"
                 />
               </label>
@@ -230,7 +278,7 @@ const submit = async () => {
                   :disabled="loading"
                 />
               </label>
-              <label class="block">
+              <label v-if="isInstallation" class="block">
                 <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Включено трассы, м</span>
                 <input
                   v-model.number="formData.included_route_meters"

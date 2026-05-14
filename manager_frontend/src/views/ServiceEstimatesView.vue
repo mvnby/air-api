@@ -51,6 +51,12 @@ const selectedTariff = computed(
 );
 const selectedRules = computed(() => selectedTariff.value?.rules || []);
 const totalPages = computed(() => Math.max(1, Math.ceil(listTotal.value / listLimit.value)));
+const serviceKindOptions: Array<{ value: ManagerTariffServiceKind; label: string }> = [
+  { value: 'installation', label: 'Монтаж' },
+  { value: 'dismantling', label: 'Демонтаж' },
+  { value: 'maintenance', label: 'Обслуживание' },
+  { value: 'repair', label: 'Ремонт' },
+];
 
 const hasRuleType = (type: ManagerTariffRuleType) =>
   selectedRules.value.some((rule) => rule.is_active && rule.rule_type === type);
@@ -289,7 +295,7 @@ onMounted(async () => {
         Сметы услуг
       </h1>
       <p class="text-sm text-gray-500 dark:text-slate-400">
-        Расчет сметы по parent/child тарифам с генерацией подробного и схлопнутого вида.
+        Расчет сметы по тарифам услуг с подробным и схлопнутым видом.
       </p>
     </div>
 
@@ -321,9 +327,9 @@ onMounted(async () => {
                 class="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-gray-900 dark:text-slate-100"
                 :disabled="loadingTariffs"
               >
-                <option value="installation">Монтаж</option>
-                <option value="dismantling">Демонтаж</option>
-                <option value="maintenance">Обслуживание</option>
+                <option v-for="option in serviceKindOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
               </select>
             </label>
 

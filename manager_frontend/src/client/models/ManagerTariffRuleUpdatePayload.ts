@@ -10,6 +10,7 @@ export type ManagerTariffRuleUpdatePayload = {
     unit?: (string | null);
     unit_price?: (number | null);
     is_optional?: (boolean | null);
+    is_favorite?: (boolean | null);
     is_active?: (boolean | null);
     sort_order?: (number | null);
     service_id?: (number | null);

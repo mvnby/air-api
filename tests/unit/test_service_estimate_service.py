@@ -178,3 +178,46 @@ async def test_create_and_get_install_estimate_snapshot(db):
 
     listed_after_delete = await ServiceEstimateService.list_estimates(db, page=1, limit=20)
     assert listed_after_delete.total == 0
+
+
+@pytest.mark.asyncio
+async def test_calculate_repair_estimate_without_route_specific_lines(db):
+    tariff = ServiceTariff(
+        service_kind="repair",
+        selector_label="Ремонт кондиционера",
+        estimate_template="Ремонт кондиционера",
+        category="repair",
+        power_range="",
+        base_price=150,
+        included_route_meters=0,
+    )
+    db.add(tariff)
+    await db.commit()
+    await db.refresh(tariff)
+
+    diagnostic_rule = ServiceTariffRule(
+        tariff_id=tariff.id,
+        rule_type="fixed_once",
+        name="Диагностика",
+        line_template="{name}",
+        unit="шт",
+        unit_price=50,
+        is_optional=False,
+        is_active=True,
+        sort_order=10,
+    )
+    db.add(diagnostic_rule)
+    await db.commit()
+
+    payload = ManagerInstallEstimateCalculatePayload(
+        tariff_id=tariff.id,
+        route_length_m=10,
+        quantity=1,
+        extra_holes_count=3,
+    )
+
+    result = await ServiceEstimateService.calculate_install_estimate(db, payload)
+
+    assert result.tariff.service_kind == "repair"
+    assert result.subtotal == 200
+    assert [line.name for line in result.lines] == ["Ремонт кондиционера", "Диагностика"]

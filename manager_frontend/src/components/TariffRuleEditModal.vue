@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { api } from '../api';
 import type {
+  ManagerTariffResponse,
   ManagerTariffRuleCreatePayload,
   ManagerTariffRuleResponse,
   ManagerTariffRuleType,
@@ -12,6 +13,7 @@ import { getApiErrorMessage } from '../utils/api-errors';
 const props = defineProps<{
   modelValue: boolean;
   tariffId: number | null;
+  tariff?: ManagerTariffResponse | null;
   rule?: ManagerTariffRuleResponse | null;
 }>();
 
@@ -24,6 +26,9 @@ const loading = ref(false);
 const error = ref('');
 const hint = ref('');
 const lineTemplateInput = ref<HTMLInputElement | null>(null);
+const favoriteRules = ref<ManagerTariffRuleResponse[]>([]);
+const favoriteRulesLoading = ref(false);
+const favoriteRulesError = ref('');
 
 type RuleTypeOption = {
   value: ManagerTariffRuleType;
@@ -103,6 +108,29 @@ const placeholderHints: PlaceholderHint[] = [
   },
 ];
 
+const serviceKind = computed(() => props.tariff?.service_kind ?? 'installation');
+const isInstallation = computed(() => serviceKind.value === 'installation');
+const defaultRuleType = computed<ManagerTariffRuleType>(() => (isInstallation.value ? 'per_unit_manual' : 'fixed_once'));
+const availableRuleTypeOptions = computed(() => {
+  const allowed = isInstallation.value
+    ? ruleTypeOptions
+    : ruleTypeOptions.filter((option) => option.value === 'fixed_once' || option.value === 'per_unit_manual');
+  if (!allowed.some((option) => option.value === formData.value.rule_type)) {
+    return [
+      ...allowed,
+      ...ruleTypeOptions.filter((option) => option.value === formData.value.rule_type),
+    ];
+  }
+  return allowed;
+});
+const displayedPlaceholderHints = computed(() =>
+  isInstallation.value
+    ? placeholderHints
+    : placeholderHints.filter(
+        (item) => !['{route_length_m}', '{included_route_meters}', '{extra_route_meters}', '{extra_holes_count}'].includes(item.token)
+      )
+);
+
 const selectedRuleTypeOption = computed(
   () => ruleTypeOptions.find((item) => item.value === formData.value.rule_type) ?? ruleTypeOptions[0]
 );
@@ -114,10 +142,26 @@ const formData = ref<ManagerTariffRuleCreatePayload>({
   unit: 'шт',
   unit_price: 0,
   is_optional: false,
+  is_favorite: false,
   is_active: true,
   sort_order: 0,
   service_id: null,
 });
+
+const loadFavoriteRules = async () => {
+  if (!props.modelValue || !props.tariff) return;
+  favoriteRulesLoading.value = true;
+  favoriteRulesError.value = '';
+  try {
+    const response = await api.listManagerFavoriteTariffRules(serviceKind.value, false, props.tariffId ?? undefined);
+    favoriteRules.value = response.items || [];
+  } catch (e) {
+    favoriteRules.value = [];
+    favoriteRulesError.value = getApiErrorMessage(e);
+  } finally {
+    favoriteRulesLoading.value = false;
+  }
+};
 
 const resetForm = () => {
   if (props.rule) {
@@ -128,18 +172,20 @@ const resetForm = () => {
       unit: props.rule.unit,
       unit_price: props.rule.unit_price,
       is_optional: props.rule.is_optional,
+      is_favorite: props.rule.is_favorite,
       is_active: props.rule.is_active,
       sort_order: props.rule.sort_order,
       service_id: props.rule.service_id ?? null,
     };
   } else {
     formData.value = {
-      rule_type: 'per_unit_manual',
+      rule_type: defaultRuleType.value,
       name: '',
       line_template: '{name}',
       unit: 'шт',
       unit_price: 0,
       is_optional: false,
+      is_favorite: false,
       is_active: true,
       sort_order: 0,
       service_id: null,
@@ -152,7 +198,17 @@ const resetForm = () => {
 watch(
   () => props.modelValue,
   (value) => {
-    if (value) resetForm();
+    if (value) {
+      resetForm();
+      void loadFavoriteRules();
+    }
+  }
+);
+
+watch(
+  () => props.tariff?.service_kind,
+  () => {
+    if (props.modelValue) void loadFavoriteRules();
   }
 );
 
@@ -161,6 +217,7 @@ const close = () => {
 };
 
 const submit = async () => {
+  if (loading.value) return;
   if (!props.tariffId) {
     error.value = 'Не выбран тариф';
     return;
@@ -212,6 +269,19 @@ const setDefaultsByType = (type: ManagerTariffRuleType) => {
   }
 };
 
+const applyFavoriteRule = (rule: ManagerTariffRuleResponse) => {
+  formData.value.rule_type = rule.rule_type;
+  formData.value.name = rule.name;
+  formData.value.line_template = rule.line_template;
+  formData.value.unit = rule.unit;
+  formData.value.unit_price = rule.unit_price;
+  formData.value.is_optional = rule.is_optional;
+  formData.value.is_favorite = false;
+  formData.value.is_active = true;
+  formData.value.service_id = rule.service_id ?? null;
+  setHint(`Добавлено из избранного: ${rule.name}`);
+};
+
 const setHint = (message: string) => {
   hint.value = message;
   window.setTimeout(() => {
@@ -257,7 +327,6 @@ const insertPlaceholder = async (token: string) => {
       <div
         v-if="modelValue"
         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-        @click.self="close"
       >
         <div class="modal-content bg-white dark:bg-[#1e293b] rounded-xl shadow-xl w-full max-w-xl overflow-hidden border border-gray-200 dark:border-slate-700/60 flex flex-col">
           <div class="px-6 py-4 border-b border-gray-200 dark:border-slate-700/50 flex justify-between items-center bg-gray-50 dark:bg-slate-800/50">
@@ -287,7 +356,7 @@ const insertPlaceholder = async (token: string) => {
                   :disabled="loading"
                 >
                   <option
-                    v-for="option in ruleTypeOptions"
+                    v-for="option in availableRuleTypeOptions"
                     :key="option.value"
                     :value="option.value"
                   >
@@ -305,6 +374,37 @@ const insertPlaceholder = async (token: string) => {
                   :disabled="loading"
                 />
               </label>
+            </div>
+
+            <div class="rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 p-3">
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <div class="text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase">Избранные правила</div>
+                <button
+                  type="button"
+                  class="text-xs font-medium text-teal-700 hover:text-teal-600 dark:text-teal-300 dark:hover:text-teal-200"
+                  :disabled="favoriteRulesLoading || loading"
+                  @click="loadFavoriteRules"
+                >
+                  Обновить
+                </button>
+              </div>
+              <div v-if="favoriteRulesLoading" class="text-xs text-gray-500 dark:text-slate-400">Загружаю избранные правила...</div>
+              <div v-else-if="favoriteRulesError" class="text-xs text-red-600 dark:text-red-400">{{ favoriteRulesError }}</div>
+              <div v-else-if="!favoriteRules.length" class="text-xs text-gray-500 dark:text-slate-400">
+                Пометьте любое правило этого направления звездочкой, и оно появится здесь.
+              </div>
+              <div v-else class="flex flex-wrap gap-2">
+                <button
+                  v-for="favorite in favoriteRules"
+                  :key="favorite.id"
+                  type="button"
+                  class="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+                  :disabled="loading"
+                  @click="applyFavoriteRule(favorite)"
+                >
+                  ★ {{ favorite.name }}
+                </button>
+              </div>
             </div>
 
             <div class="rounded-lg border border-sky-200 dark:border-sky-500/40 bg-sky-50 dark:bg-sky-900/20 px-3 py-2">
@@ -344,7 +444,7 @@ const insertPlaceholder = async (token: string) => {
                 </div>
                 <div class="flex flex-wrap gap-2">
                   <button
-                    v-for="item in placeholderHints"
+                    v-for="item in displayedPlaceholderHints"
                     :key="item.token"
                     type="button"
                     class="px-2 py-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
@@ -359,7 +459,7 @@ const insertPlaceholder = async (token: string) => {
                 </div>
                 <div class="mt-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 p-2 space-y-1">
                   <div
-                    v-for="item in placeholderHints"
+                    v-for="item in displayedPlaceholderHints"
                     :key="`hint-${item.token}`"
                     class="text-xs text-gray-600 dark:text-slate-300"
                   >
@@ -404,10 +504,14 @@ const insertPlaceholder = async (token: string) => {
               />
             </label>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <label class="inline-flex items-center gap-2">
                 <input v-model="formData.is_optional" type="checkbox" class="h-4 w-4" :disabled="loading" />
                 <span class="text-sm text-gray-700 dark:text-slate-300">Опциональное</span>
+              </label>
+              <label class="inline-flex items-center gap-2">
+                <input v-model="formData.is_favorite" type="checkbox" class="h-4 w-4" :disabled="loading" />
+                <span class="text-sm text-gray-700 dark:text-slate-300">В избранное</span>
               </label>
               <label class="inline-flex items-center gap-2">
                 <input v-model="formData.is_active" type="checkbox" class="h-4 w-4" :disabled="loading" />

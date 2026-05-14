@@ -292,6 +292,10 @@ export const api = {
         return await ManagerTariffsService.listManagerTariffRules(tariffId, includeInactive);
     },
 
+    async listManagerFavoriteTariffRules(serviceKind: ManagerTariffServiceKind, includeInactive = false, excludeTariffId?: number | null) {
+        return await ManagerTariffsService.listManagerFavoriteTariffRules(serviceKind, includeInactive, excludeTariffId ?? null);
+    },
+
     async createManagerTariffRule(tariffId: number, payload: ManagerTariffRuleCreatePayload) {
         return await ManagerTariffsService.createManagerTariffRule(tariffId, payload);
     },

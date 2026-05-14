@@ -1,4 +1,4 @@
-"""Business logic for service estimates based on parent/child tariff model."""
+"""Business logic for service estimates based on directional service tariffs."""
 
 import re
 from typing import Any, Dict, List, Optional

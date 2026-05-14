@@ -99,6 +99,7 @@ class ServiceTariffRule(SQLModel, table=True):
     unit_price: float = Field(default=0.0)
 
     is_optional: bool = Field(default=False, index=True)
+    is_favorite: bool = Field(default=False, index=True)
     is_active: bool = Field(default=True, index=True)
     sort_order: int = Field(default=0, index=True)
     service_id: Optional[int] = Field(default=None, foreign_key="service.id", index=True)

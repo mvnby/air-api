@@ -1731,6 +1731,7 @@ class ManagerTariffServiceKind(str, Enum):
     installation = "installation"
     dismantling = "dismantling"
     maintenance = "maintenance"
+    repair = "repair"
 
 
 class ManagerTariffRuleType(str, Enum):
@@ -1751,6 +1752,7 @@ class ManagerTariffRuleResponse(BaseModel):
     unit: str
     unit_price: float
     is_optional: bool
+    is_favorite: bool = False
     is_active: bool
     sort_order: int
     service_id: Optional[int] = None
@@ -1763,6 +1765,7 @@ class ManagerTariffRuleCreatePayload(BaseModel):
     unit: str = "шт"
     unit_price: float = 0.0
     is_optional: bool = False
+    is_favorite: bool = False
     is_active: bool = True
     sort_order: int = 0
     service_id: Optional[int] = None
@@ -1782,6 +1785,7 @@ class ManagerTariffRuleUpdatePayload(BaseModel):
     unit: Optional[str] = None
     unit_price: Optional[float] = None
     is_optional: Optional[bool] = None
+    is_favorite: Optional[bool] = None
     is_active: Optional[bool] = None
     sort_order: Optional[int] = None
     service_id: Optional[int] = None

@@ -81,7 +81,7 @@ class TariffsService:
             title = f"{title}, мощностью {power_label}"
 
         included_route = float(tariff.included_route_meters or 0)
-        if included_route > 0 and "трасс" not in title.lower():
+        if tariff.service_kind == ManagerTariffServiceKind.installation.value and included_route > 0 and "трасс" not in title.lower():
             title = f"{title}, включая трассу длиной до {TariffsService._format_number(included_route)} м"
         return title
 
@@ -194,6 +194,11 @@ class TariffsService:
 
     @staticmethod
     async def create_tariff(session: AsyncSession, payload: ManagerTariffCreatePayload) -> ServiceTariff:
+        included_route_meters = (
+            float(payload.included_route_meters or 0)
+            if payload.service_kind == ManagerTariffServiceKind.installation
+            else 0.0
+        )
         tariff = ServiceTariff(
             service_kind=payload.service_kind.value,
             selector_label=payload.selector_label.strip(),
@@ -201,7 +206,7 @@ class TariffsService:
             category=(payload.category or "").strip(),
             power_range=(payload.power_range or "").strip(),
             base_price=int(payload.base_price or 0),
-            included_route_meters=float(payload.included_route_meters or 0),
+            included_route_meters=included_route_meters,
             is_active=bool(payload.is_active),
             sort_order=int(payload.sort_order or 0),
             comment=(payload.comment or "").strip() or None,
@@ -218,6 +223,10 @@ class TariffsService:
     ) -> ServiceTariff:
         tariff = await TariffsService.get_tariff_by_id(session, tariff_id)
         update_data = payload.model_dump(exclude_unset=True)
+        next_service_kind = update_data.get("service_kind", tariff.service_kind)
+        next_service_kind_value = (
+            next_service_kind.value if hasattr(next_service_kind, "value") else str(next_service_kind or "installation")
+        )
         for key, value in update_data.items():
             if key == "service_kind" and value is not None:
                 setattr(tariff, key, value.value if hasattr(value, "value") else str(value))
@@ -226,6 +235,8 @@ class TariffsService:
                 setattr(tariff, key, (value or "").strip() or (None if key == "comment" else ""))
                 continue
             setattr(tariff, key, value)
+        if next_service_kind_value != ManagerTariffServiceKind.installation.value:
+            tariff.included_route_meters = 0.0
 
         session.add(tariff)
         await session.commit()
@@ -251,6 +262,31 @@ class TariffsService:
         return list((await session.execute(stmt)).scalars().all())
 
     @staticmethod
+    async def list_favorite_tariff_rules(
+        session: AsyncSession,
+        service_kind: ManagerTariffServiceKind,
+        include_inactive: bool = False,
+        exclude_tariff_id: Optional[int] = None,
+    ) -> List[ServiceTariffRule]:
+        stmt = (
+            select(ServiceTariffRule)
+            .join(ServiceTariff)
+            .where(ServiceTariffRule.is_favorite == True)  # noqa: E712
+            .where(ServiceTariff.service_kind == service_kind.value)
+        )
+        if not include_inactive:
+            stmt = stmt.where(ServiceTariffRule.is_active == True)  # noqa: E712
+            stmt = stmt.where(ServiceTariff.is_active == True)  # noqa: E712
+        if exclude_tariff_id is not None:
+            stmt = stmt.where(ServiceTariffRule.tariff_id != exclude_tariff_id)
+        stmt = stmt.order_by(
+            ServiceTariffRule.name,
+            ServiceTariffRule.sort_order,
+            ServiceTariffRule.id,
+        )
+        return list((await session.execute(stmt)).scalars().all())
+
+    @staticmethod
     async def get_tariff_rule_by_id(session: AsyncSession, tariff_id: int, rule_id: int) -> ServiceTariffRule:
         stmt = (
             select(ServiceTariffRule)
@@ -270,14 +306,47 @@ class TariffsService:
         payload: ManagerTariffRuleCreatePayload,
     ) -> ServiceTariffRule:
         await TariffsService.get_tariff_by_id(session, tariff_id)
+        rule_type = payload.rule_type.value
+        name = payload.name.strip()
+        line_template = (payload.line_template or "{name}").strip()
+        unit = (payload.unit or "шт").strip()
+        unit_price = float(payload.unit_price or 0)
+        service_id = payload.service_id
+
+        duplicate_stmt = (
+            select(ServiceTariffRule)
+            .where(ServiceTariffRule.tariff_id == tariff_id)
+            .where(ServiceTariffRule.rule_type == rule_type)
+            .where(ServiceTariffRule.name == name)
+            .where(ServiceTariffRule.line_template == line_template)
+            .where(ServiceTariffRule.unit == unit)
+            .where(ServiceTariffRule.unit_price == unit_price)
+            .where(ServiceTariffRule.is_optional == bool(payload.is_optional))
+            .limit(1)
+        )
+        if service_id is None:
+            duplicate_stmt = duplicate_stmt.where(ServiceTariffRule.service_id.is_(None))
+        else:
+            duplicate_stmt = duplicate_stmt.where(ServiceTariffRule.service_id == service_id)
+
+        existing = (await session.execute(duplicate_stmt)).scalars().first()
+        if existing:
+            if payload.is_favorite and not existing.is_favorite:
+                existing.is_favorite = True
+                session.add(existing)
+                await session.commit()
+                return await TariffsService.get_tariff_rule_by_id(session, tariff_id, int(existing.id))
+            return existing
+
         rule = ServiceTariffRule(
             tariff_id=tariff_id,
-            rule_type=payload.rule_type.value,
-            name=payload.name.strip(),
-            line_template=(payload.line_template or "{name}").strip(),
-            unit=(payload.unit or "шт").strip(),
-            unit_price=float(payload.unit_price or 0),
+            rule_type=rule_type,
+            name=name,
+            line_template=line_template,
+            unit=unit,
+            unit_price=unit_price,
             is_optional=bool(payload.is_optional),
+            is_favorite=bool(payload.is_favorite),
             is_active=bool(payload.is_active),
             sort_order=int(payload.sort_order or 0),
             service_id=payload.service_id,

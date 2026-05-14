@@ -16,6 +16,16 @@ type StructuredDetail = {
   field_errors?: Record<string, string>;
 };
 
+const FIELD_LABELS: Record<string, string> = {
+  service_kind: 'Направление',
+  selector_label: 'Короткое название',
+  estimate_template: 'Шаблон формулировки',
+  category: 'Категория',
+  power_range: 'Диапазон мощности',
+  base_price: 'Базовая цена',
+  included_route_meters: 'Включено трассы',
+};
+
 const ERROR_CODE_MESSAGES: Record<string, string> = {
   validation_error: 'Проверьте заполнение полей формы',
   bad_request: 'Проверьте введенные данные',
@@ -25,6 +35,14 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
   customer_not_found: 'Клиент не найден',
   product_not_found: 'Товар не найден',
   document_generation_failed: 'Не удалось сформировать документ',
+};
+
+const formatFieldErrorMessage = (field: string, message: string): string => {
+  const label = FIELD_LABELS[field] ?? field;
+  if (field === 'service_kind' && /Input should be/.test(message)) {
+    return `${label}: запущенный API ещё не поддерживает выбранное направление. Перезапустите backend и повторите действие.`;
+  }
+  return `${label}: ${message}`;
 };
 
 export const getApiErrorCode = (error: unknown): string | null => {
@@ -52,6 +70,12 @@ export const getApiErrorMessage = (error: unknown): string => {
 
   if (detail && typeof detail === 'object') {
     const payload = detail as StructuredDetail;
+    if (payload.field_errors && typeof payload.field_errors === 'object') {
+      const firstFieldError = Object.entries(payload.field_errors).find(([, msg]) => Boolean(msg));
+      if (firstFieldError) {
+        return formatFieldErrorMessage(firstFieldError[0], firstFieldError[1]);
+      }
+    }
     if (payload.message) return payload.message;
     const mappedMessage = payload.error_code ? ERROR_CODE_MESSAGES[payload.error_code] : undefined;
     if (mappedMessage) return mappedMessage;
