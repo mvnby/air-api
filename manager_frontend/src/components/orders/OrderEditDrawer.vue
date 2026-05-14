@@ -62,6 +62,15 @@ type ProductLine = { product_id: number; product_query: string; quantity: number
 type ServiceLine = { service_id?: number | null; title: string; quantity: number; price: number; cost: number };
 type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
 
+const serviceKindLabels: Record<string, string> = {
+  installation: 'монтаж',
+  dismantling: 'демонтаж',
+  maintenance: 'обслуживание',
+  repair: 'ремонт',
+};
+
+const formatServiceKind = (kind?: string | null) => serviceKindLabels[String(kind || '')] || kind || '';
+
 type OrderDrawerDraft = {
   productLines: ProductLine[];
 };
@@ -2517,7 +2526,7 @@ watch(
                       <p class="line-clamp-2 font-medium text-gray-900">{{ item.title }}</p>
                       <p class="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-gray-500">
                         <span>{{ formatMoney(item.price) }}</span>
-                        <span v-if="item.service_kind">· {{ item.service_kind }}</span>
+                        <span v-if="item.service_kind">· {{ formatServiceKind(item.service_kind) }}</span>
                         <span v-if="item.category">· {{ item.category }}</span>
                         <span v-if="item.included_route_meters">· трасса до {{ item.included_route_meters }} м</span>
                       </p>

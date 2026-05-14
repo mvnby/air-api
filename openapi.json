@@ -7623,6 +7623,78 @@
         }
       }
     },
+    "/api/manager/tariffs/rules/favorites": {
+      "get": {
+        "tags": [
+          "manager/tariffs"
+        ],
+        "summary": "List Manager Favorite Tariff Rules",
+        "operationId": "list_manager_favorite_tariff_rules",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "service_kind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ManagerTariffServiceKind"
+            }
+          },
+          {
+            "name": "include_inactive",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Inactive"
+            }
+          },
+          {
+            "name": "exclude_tariff_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Exclude Tariff Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerTariffRuleListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/tariffs/{tariff_id}/rules": {
       "get": {
         "tags": [
@@ -17308,6 +17380,11 @@
             "title": "Is Optional",
             "default": false
           },
+          "is_favorite": {
+            "type": "boolean",
+            "title": "Is Favorite",
+            "default": false
+          },
           "is_active": {
             "type": "boolean",
             "title": "Is Active",
@@ -17385,6 +17462,11 @@
           "is_optional": {
             "type": "boolean",
             "title": "Is Optional"
+          },
+          "is_favorite": {
+            "type": "boolean",
+            "title": "Is Favorite",
+            "default": false
           },
           "is_active": {
             "type": "boolean",
@@ -17498,6 +17580,17 @@
             ],
             "title": "Is Optional"
           },
+          "is_favorite": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Favorite"
+          },
           "is_active": {
             "anyOf": [
               {
@@ -17540,7 +17633,8 @@
         "enum": [
           "installation",
           "dismantling",
-          "maintenance"
+          "maintenance",
+          "repair"
         ],
         "title": "ManagerTariffServiceKind"
       },

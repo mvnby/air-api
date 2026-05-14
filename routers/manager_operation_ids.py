@@ -115,6 +115,7 @@ CREATE_MANAGER_TARIFF = "create_manager_tariff"
 UPDATE_MANAGER_TARIFF = "update_manager_tariff"
 DELETE_MANAGER_TARIFF = "delete_manager_tariff"
 LIST_MANAGER_TARIFF_RULES = "list_manager_tariff_rules"
+LIST_MANAGER_FAVORITE_TARIFF_RULES = "list_manager_favorite_tariff_rules"
 CREATE_MANAGER_TARIFF_RULE = "create_manager_tariff_rule"
 UPDATE_MANAGER_TARIFF_RULE = "update_manager_tariff_rule"
 DELETE_MANAGER_TARIFF_RULE = "delete_manager_tariff_rule"
@@ -259,6 +260,7 @@ ALL_MANAGER_OPERATION_IDS = (
     UPDATE_MANAGER_TARIFF,
     DELETE_MANAGER_TARIFF,
     LIST_MANAGER_TARIFF_RULES,
+    LIST_MANAGER_FAVORITE_TARIFF_RULES,
     CREATE_MANAGER_TARIFF_RULE,
     UPDATE_MANAGER_TARIFF_RULE,
     DELETE_MANAGER_TARIFF_RULE,

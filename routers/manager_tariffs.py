@@ -8,6 +8,7 @@ from routers.manager_operation_ids import (
     CREATE_MANAGER_TARIFF_RULE,
     DELETE_MANAGER_TARIFF,
     DELETE_MANAGER_TARIFF_RULE,
+    LIST_MANAGER_FAVORITE_TARIFF_RULES,
     LIST_MANAGER_QUICK_TARIFFS,
     LIST_MANAGER_TARIFFS,
     LIST_MANAGER_TARIFF_RULES,
@@ -90,6 +91,26 @@ async def delete_manager_tariff(
 ):
     await TariffsService.delete_tariff(session, tariff_id)
     return ManagerActionMessageResponse(message="Tariff deleted successfully")
+
+
+@router.get(
+    "/rules/favorites",
+    response_model=ManagerTariffRuleListResponse,
+    operation_id=LIST_MANAGER_FAVORITE_TARIFF_RULES,
+)
+async def list_manager_favorite_tariff_rules(
+    service_kind: ManagerTariffServiceKind = Query(...),
+    include_inactive: bool = Query(False),
+    exclude_tariff_id: int | None = Query(None),
+    session: AsyncSession = Depends(get_session),
+):
+    items = await TariffsService.list_favorite_tariff_rules(
+        session=session,
+        service_kind=service_kind,
+        include_inactive=include_inactive,
+        exclude_tariff_id=exclude_tariff_id,
+    )
+    return ManagerTariffRuleListResponse(items=items)
 
 
 @router.get(

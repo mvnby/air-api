@@ -130,6 +130,32 @@ export class ManagerTariffsService {
         });
     }
     /**
+     * List Manager Favorite Tariff Rules
+     * @param serviceKind
+     * @param includeInactive
+     * @param excludeTariffId
+     * @returns ManagerTariffRuleListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listManagerFavoriteTariffRules(
+        serviceKind: ManagerTariffServiceKind,
+        includeInactive: boolean = false,
+        excludeTariffId?: (number | null),
+    ): CancelablePromise<ManagerTariffRuleListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/tariffs/rules/favorites',
+            query: {
+                'service_kind': serviceKind,
+                'include_inactive': includeInactive,
+                'exclude_tariff_id': excludeTariffId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * List Manager Tariff Rules
      * @param tariffId
      * @param includeInactive

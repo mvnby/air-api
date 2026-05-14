@@ -29,6 +29,18 @@ const selectedTariff = computed(
   () => tariffs.value.find((item) => item.id === selectedTariffId.value) ?? null
 );
 
+const serviceKindOptions: Array<{ value: ManagerTariffServiceKind; label: string }> = [
+  { value: 'installation', label: 'Монтаж' },
+  { value: 'dismantling', label: 'Демонтаж' },
+  { value: 'maintenance', label: 'Обслуживание' },
+  { value: 'repair', label: 'Ремонт' },
+];
+
+const serviceKindLabel = (kind: ManagerTariffServiceKind | string) =>
+  serviceKindOptions.find((item) => item.value === kind)?.label ?? String(kind || 'Услуга');
+
+const shouldShowRouteColumn = computed(() => kindFilter.value === 'installation');
+
 const setToast = (message: string) => {
   toast.value = message;
   window.setTimeout(() => {
@@ -49,6 +61,8 @@ const loadTariffs = async () => {
     }
   } catch (e) {
     error.value = getApiErrorMessage(e);
+    tariffs.value = [];
+    selectedTariffId.value = null;
   } finally {
     loading.value = false;
   }
@@ -127,10 +141,10 @@ onMounted(loadTariffs);
       <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
           <span class="material-icons-round text-teal-600 dark:text-teal-400">payments</span>
-          Тарифы услуг (parent/child)
+          Тарифы услуг
         </h1>
         <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">
-          Базовые тарифы и правила подуслуг для смет
+          Базовые тарифы, направления и правила подуслуг для смет
         </p>
       </div>
 
@@ -141,9 +155,9 @@ onMounted(loadTariffs);
           class="rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
           @change="loadTariffs"
         >
-          <option value="installation">Монтаж</option>
-          <option value="dismantling">Демонтаж</option>
-          <option value="maintenance">Обслуживание</option>
+          <option v-for="option in serviceKindOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
         </select>
         <label class="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-slate-300">
           <input v-model="includeInactive" type="checkbox" @change="loadTariffs" />
@@ -177,7 +191,7 @@ onMounted(loadTariffs);
             <tr>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase">Тариф</th>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase">База</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase">Трасса</th>
+              <th v-if="shouldShowRouteColumn" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase">Трасса</th>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase">Правила</th>
               <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase">Действия</th>
             </tr>
@@ -193,14 +207,14 @@ onMounted(loadTariffs);
                 <button class="text-left" @click="selectedTariffId = tariff.id">
                   <div class="text-sm font-semibold text-gray-900 dark:text-slate-100">{{ tariff.selector_label }}</div>
                   <div class="text-xs text-gray-500 dark:text-slate-400">
-                    {{ tariff.category || '—' }} · {{ tariff.power_range || 'all' }} · sort {{ tariff.sort_order }}
+                    {{ serviceKindLabel(tariff.service_kind) }} · {{ tariff.category || '—' }} · {{ tariff.power_range || 'all' }} · sort {{ tariff.sort_order }}
                   </div>
                 </button>
               </td>
               <td class="px-4 py-3 text-sm font-medium text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                 {{ tariff.base_price }} BYN
               </td>
-              <td class="px-4 py-3 text-sm text-gray-700 dark:text-slate-300 whitespace-nowrap">
+              <td v-if="shouldShowRouteColumn" class="px-4 py-3 text-sm text-gray-700 dark:text-slate-300 whitespace-nowrap">
                 {{ tariff.included_route_meters }} м
               </td>
               <td class="px-4 py-3 text-sm text-gray-700 dark:text-slate-300">
@@ -233,7 +247,7 @@ onMounted(loadTariffs);
               </td>
             </tr>
             <tr v-if="!tariffs.length && !loading">
-              <td colspan="5" class="px-6 py-12 text-center text-gray-500 dark:text-slate-400">
+              <td :colspan="shouldShowRouteColumn ? 5 : 4" class="px-6 py-12 text-center text-gray-500 dark:text-slate-400">
                 Тарифы не найдены
               </td>
             </tr>
@@ -291,6 +305,12 @@ onMounted(loadTariffs);
                 <span class="px-2 py-0.5 rounded bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600">
                   {{ rule.is_optional ? 'optional' : 'required' }}
                 </span>
+                <span
+                  v-if="rule.is_favorite"
+                  class="px-2 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200 border border-amber-200 dark:border-amber-500/30"
+                >
+                  favorite
+                </span>
                 <span class="px-2 py-0.5 rounded bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600">
                   {{ rule.is_active ? 'active' : 'inactive' }}
                 </span>
@@ -301,10 +321,16 @@ onMounted(loadTariffs);
       </section>
     </div>
 
-    <TariffEditModal v-model="showTariffModal" :tariff="editingTariff" @success="handleTariffSuccess" />
+    <TariffEditModal
+      v-model="showTariffModal"
+      :tariff="editingTariff"
+      :initial-service-kind="kindFilter"
+      @success="handleTariffSuccess"
+    />
     <TariffRuleEditModal
       v-model="showRuleModal"
       :tariff-id="selectedTariffId"
+      :tariff="selectedTariff"
       :rule="editingRule"
       @success="handleRuleSuccess"
     />

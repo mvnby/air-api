@@ -34,6 +34,20 @@ def test_build_quick_add_title_keeps_specific_template_without_duplicate_route()
     assert TariffsService.build_quick_add_title(tariff) == "Монтаж настенного кондиционера до 3,5 кВт с трассой до 3 м"
 
 
+def test_build_quick_add_title_does_not_add_route_for_repair_tariff():
+    tariff = ServiceTariff(
+        service_kind="repair",
+        selector_label="Ремонт кондиционера",
+        estimate_template="Ремонт кондиционера",
+        category="repair",
+        power_range="",
+        base_price=150,
+        included_route_meters=3,
+    )
+
+    assert TariffsService.build_quick_add_title(tariff) == "Ремонт кондиционера"
+
+
 @pytest.mark.asyncio
 async def test_list_quick_add_tariffs_filters_active_search_and_kind(db):
     active_installation = ServiceTariff(
@@ -69,6 +83,17 @@ async def test_list_quick_add_tariffs_filters_active_search_and_kind(db):
         is_active=True,
         sort_order=1,
     )
+    active_repair = ServiceTariff(
+        service_kind="repair",
+        selector_label="Ремонт кондиционера",
+        estimate_template="Ремонт кондиционера",
+        category="repair",
+        power_range="",
+        base_price=150,
+        included_route_meters=0,
+        is_active=True,
+        sort_order=2,
+    )
     inactive_installation = ServiceTariff(
         service_kind="installation",
         selector_label="Монтаж архивный",
@@ -83,14 +108,19 @@ async def test_list_quick_add_tariffs_filters_active_search_and_kind(db):
     db.add(active_installation)
     db.add(active_maintenance)
     db.add(active_dismantling)
+    db.add(active_repair)
     db.add(inactive_installation)
     await db.commit()
 
     result = await TariffsService.list_quick_add_tariffs(db, q="монт", limit=10)
 
-    assert [item.tariff_id for item in result] == [active_installation.id, active_dismantling.id]
+    assert [item.tariff_id for item in result] == [active_installation.id, active_dismantling.id, active_repair.id]
     assert result[0].price == 500
     assert "мощностью до 3,5 кВт" in result[0].title
 
     maintenance = await TariffsService.list_quick_add_tariffs(db, service_kind="maintenance", q="обслуж", limit=10)
     assert [item.tariff_id for item in maintenance] == [active_maintenance.id]
+
+    repair = await TariffsService.list_quick_add_tariffs(db, service_kind="repair", q="ремонт", limit=10)
+    assert [item.tariff_id for item in repair] == [active_repair.id]
+    assert repair[0].service_kind == "repair"
