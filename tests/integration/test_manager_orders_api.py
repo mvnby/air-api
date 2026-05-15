@@ -936,6 +936,56 @@ async def test_manager_order_generate_defect_act_placeholders(async_client, db, 
 
 
 @pytest.mark.asyncio
+async def test_manager_order_defect_act_prefers_official_complaint_for_technical_condition(async_client, db, monkeypatch):
+    customer = Customer(name="ООО Мегахенд", phone="+375291111111", type=CustomerType.company)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(
+        customer_id=customer.id,
+        status=OrderStatus.NEW_LEAD,
+        technical_meta={
+            "repair": {
+                "customer_complaint": "Вообще не холодит",
+                "complaint_official": "Отсутствие теплообмена в режиме охлаждения",
+            },
+        },
+    )
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    captured = {}
+
+    class _FakeGoogleService:
+        def copy_template(self, template_id, title):
+            captured["template_id"] = template_id
+            captured["title"] = title
+            return {"file_id": "fake-defect-act", "edit_url": "https://docs.google.com/document/d/fake-defect-act/edit"}
+
+        def replace_placeholders(self, file_id, replacements):
+            captured["file_id"] = file_id
+            captured["replacements"] = replacements
+
+    from services import document_service
+
+    monkeypatch.setattr(document_service, "get_google_service", lambda: _FakeGoogleService())
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/defect_act?contract_date=2026-05-14T00:00:00",
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    replacements = captured["replacements"]
+    assert replacements["{{technical_condition}}"] == "Отсутствие теплообмена в режиме охлаждения"
+    assert replacements["{{customer_complaint}}"] == "Вообще не холодит"
+    assert replacements["{{complaint_official}}"] == "Отсутствие теплообмена в режиме охлаждения"
+
+
+@pytest.mark.asyncio
 async def test_manager_order_patch_customer_critical_requisites_requires_confirmation(async_client, db):
     customer = Customer(
         name="Critical Requisites",
