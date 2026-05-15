@@ -5471,6 +5471,248 @@
         }
       }
     },
+    "/api/manager/repair-complaints": {
+      "get": {
+        "tags": [
+          "manager/repair-complaints"
+        ],
+        "summary": "List Manager Repair Complaint Presets",
+        "operationId": "list_manager_repair_complaint_presets",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Q"
+            }
+          },
+          {
+            "name": "complaint_group",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Complaint Group"
+            }
+          },
+          {
+            "name": "include_inactive",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Inactive"
+            }
+          },
+          {
+            "name": "favorites_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Favorites Only"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerRepairComplaintPresetListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manager/repair-complaints"
+        ],
+        "summary": "Create Manager Repair Complaint Preset",
+        "operationId": "create_manager_repair_complaint_preset",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerRepairComplaintPresetCreatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerRepairComplaintPresetResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/repair-complaints/{preset_id}": {
+      "put": {
+        "tags": [
+          "manager/repair-complaints"
+        ],
+        "summary": "Update Manager Repair Complaint Preset",
+        "operationId": "update_manager_repair_complaint_preset",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Preset Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerRepairComplaintPresetUpdatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerRepairComplaintPresetResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "manager/repair-complaints"
+        ],
+        "summary": "Delete Manager Repair Complaint Preset",
+        "operationId": "delete_manager_repair_complaint_preset",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Preset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerActionMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/leads/counter": {
       "get": {
         "tags": [
@@ -14847,6 +15089,16 @@
             ],
             "title": "Title"
           },
+          "workflow_type": {
+            "type": "string",
+            "title": "Workflow Type",
+            "default": "sales_installation"
+          },
+          "repair_meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Repair Meta"
+          },
           "manager_labels": {
             "items": {
               "type": "string"
@@ -15380,6 +15632,16 @@
             ],
             "title": "Title"
           },
+          "workflow_type": {
+            "type": "string",
+            "title": "Workflow Type",
+            "default": "sales_installation"
+          },
+          "repair_meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Repair Meta"
+          },
           "manager_labels": {
             "items": {
               "type": "string"
@@ -15904,6 +16166,29 @@
               }
             ],
             "title": "Title"
+          },
+          "workflow_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Type"
+          },
+          "repair_meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repair Meta"
           },
           "manager_labels": {
             "anyOf": [
@@ -16462,6 +16747,247 @@
           "price"
         ],
         "title": "ManagerQuickTariffResponse"
+      },
+      "ManagerRepairComplaintPresetCreatePayload": {
+        "properties": {
+          "complaint_group": {
+            "type": "string",
+            "title": "Complaint Group",
+            "default": ""
+          },
+          "customer_phrase": {
+            "type": "string",
+            "title": "Customer Phrase"
+          },
+          "document_wording": {
+            "type": "string",
+            "title": "Document Wording",
+            "default": ""
+          },
+          "likely_diagnosis": {
+            "type": "string",
+            "title": "Likely Diagnosis",
+            "default": ""
+          },
+          "is_favorite": {
+            "type": "boolean",
+            "title": "Is Favorite",
+            "default": false
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order",
+            "default": 0
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "customer_phrase"
+        ],
+        "title": "ManagerRepairComplaintPresetCreatePayload"
+      },
+      "ManagerRepairComplaintPresetListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerRepairComplaintPresetResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ManagerRepairComplaintPresetListResponse"
+      },
+      "ManagerRepairComplaintPresetResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "complaint_group": {
+            "type": "string",
+            "title": "Complaint Group",
+            "default": ""
+          },
+          "customer_phrase": {
+            "type": "string",
+            "title": "Customer Phrase"
+          },
+          "document_wording": {
+            "type": "string",
+            "title": "Document Wording",
+            "default": ""
+          },
+          "likely_diagnosis": {
+            "type": "string",
+            "title": "Likely Diagnosis",
+            "default": ""
+          },
+          "is_favorite": {
+            "type": "boolean",
+            "title": "Is Favorite",
+            "default": false
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order",
+            "default": 0
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "customer_phrase",
+          "created_at"
+        ],
+        "title": "ManagerRepairComplaintPresetResponse"
+      },
+      "ManagerRepairComplaintPresetUpdatePayload": {
+        "properties": {
+          "complaint_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Complaint Group"
+          },
+          "customer_phrase": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Phrase"
+          },
+          "document_wording": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Wording"
+          },
+          "likely_diagnosis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Likely Diagnosis"
+          },
+          "is_favorite": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Favorite"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "title": "ManagerRepairComplaintPresetUpdatePayload"
       },
       "ManagerRestoreJobStartResponse": {
         "properties": {

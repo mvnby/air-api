@@ -18,7 +18,9 @@ from models import (
     OrderStatus,
     Payment,
     Product,
+    RepairComplaintPreset,
     Service,
+    ServiceTariff,
 )
 from models.order import OrderWorkStage
 
@@ -163,6 +165,97 @@ async def test_manager_order_patch_scalar_fields(async_client, db):
     assert data["status"] == "negotiation"
     assert data["comment"] == "updated from manager"
     assert data["is_paid"] is True
+
+
+@pytest.mark.asyncio
+async def test_manager_order_patch_repair_workflow_adds_diagnostic_and_meta(async_client, db):
+    customer = Customer(name="Repair Workflow", phone="+375295555558", type=CustomerType.company)
+    tariff = ServiceTariff(
+        service_kind="repair",
+        selector_label="Диагностика кондиционера на объекте",
+        estimate_template="Диагностика кондиционера на объекте",
+        category="diagnostic",
+        power_range="",
+        base_price=80,
+        is_active=True,
+        sort_order=1,
+    )
+    db.add(customer)
+    db.add(tariff)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+    payload = {
+        "workflow_type": "repair",
+        "repair_meta": {
+            "customer_complaint": "Не охлаждает",
+            "equipment_serial_number": "SN-REPAIR-1",
+        },
+    }
+    response = await async_client.patch(f"/api/manager/orders/{order.id}", json=payload, headers=headers)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["workflow_type"] == "repair"
+    assert data["repair_meta"]["customer_complaint"] == "Не охлаждает"
+    assert data["repair_meta"]["equipment_serial_number"] == "SN-REPAIR-1"
+    assert any("Диагностика кондиционера" in line["service_title"] for line in data["service_lines"])
+
+
+@pytest.mark.asyncio
+async def test_manager_repair_complaint_presets_crud_and_duplicates(async_client, db):
+    db.add(
+        RepairComplaintPreset(
+            complaint_group="cooling",
+            customer_phrase="Не холодит",
+            document_wording="Снижение эффективности охлаждения.",
+            likely_diagnosis="Вероятна утечка хладагента.",
+            is_favorite=True,
+            sort_order=10,
+        )
+    )
+    await db.commit()
+
+    headers = await _auth_headers(async_client)
+    list_response = await async_client.get(
+        "/api/manager/repair-complaints?q=холод&favorites_only=true",
+        headers=headers,
+    )
+    assert list_response.status_code == 200
+    items = list_response.json()["items"]
+    assert len(items) == 1
+    assert items[0]["customer_phrase"] == "Не холодит"
+
+    create_payload = {
+        "complaint_group": "water_drainage",
+        "customer_phrase": "Капает вода",
+        "document_wording": "Нарушение отвода конденсата.",
+        "likely_diagnosis": "Засор дренажа.",
+        "is_favorite": False,
+        "sort_order": 20,
+    }
+    create_response = await async_client.post("/api/manager/repair-complaints", json=create_payload, headers=headers)
+    assert create_response.status_code == 201, create_response.text
+    created = create_response.json()
+    assert created["customer_phrase"] == "Капает вода"
+
+    duplicate_response = await async_client.post("/api/manager/repair-complaints", json=create_payload, headers=headers)
+    assert duplicate_response.status_code == 409
+
+    update_response = await async_client.put(
+        f"/api/manager/repair-complaints/{created['id']}",
+        json={"is_favorite": True, "likely_diagnosis": "Засор или перегиб дренажной трубки."},
+        headers=headers,
+    )
+    assert update_response.status_code == 200
+    updated = update_response.json()
+    assert updated["is_favorite"] is True
+    assert updated["likely_diagnosis"] == "Засор или перегиб дренажной трубки."
 
 
 @pytest.mark.asyncio
@@ -775,6 +868,71 @@ async def test_manager_order_generate_document(async_client, db, monkeypatch):
     assert data["doc_type"] == "contract"
     assert data["edit_url"].startswith("https://docs.google.com")
     assert captured["contract_date"] == datetime(2026, 4, 20)
+
+
+@pytest.mark.asyncio
+async def test_manager_order_generate_defect_act_placeholders(async_client, db, monkeypatch):
+    customer = Customer(name='ООО "Сервис"', phone="+375297777777", type=CustomerType.company)
+    product = Product(title="Кондиционер BEKO BK 260 AK", slug="beko-bk-260-ak", price=1000)
+    db.add(customer)
+    db.add(product)
+    await db.commit()
+    await db.refresh(customer)
+    await db.refresh(product)
+
+    order = Order(
+        customer_id=customer.id,
+        status=OrderStatus.NEW_LEAD,
+        technical_meta={
+            "equipment_serial_number": "SN-001",
+            "equipment_inventory_number": "INV-777",
+            "technical_condition": "Компрессор отключается по защите.",
+            "technical_conclusion": "Компрессор подлежит замене.",
+            "recommended_decision": "Вывести из эксплуатации.",
+        },
+    )
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    db.add(OrderProductLink(order_id=order.id, product_id=product.id, quantity=1, price=1000, cost=700))
+    await db.commit()
+
+    captured = {}
+
+    class _FakeGoogleService:
+        def copy_template(self, template_id, title):
+            captured["template_id"] = template_id
+            captured["title"] = title
+            return {"file_id": "fake-defect-act", "edit_url": "https://docs.google.com/document/d/fake-defect-act/edit"}
+
+        def replace_placeholders(self, file_id, replacements):
+            captured["file_id"] = file_id
+            captured["replacements"] = replacements
+
+    from services import document_service
+
+    monkeypatch.setattr(document_service, "get_google_service", lambda: _FakeGoogleService())
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/defect_act?contract_date=2026-05-14T00:00:00",
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["doc_type"] == "defect_act"
+    assert captured["template_id"] == "1-MjndKurd91Ag_s8Fqc0Hhm37YxMITtD59HJ1RN2O_s"
+    replacements = captured["replacements"]
+    assert replacements["{{defect_act_number}}"].startswith("ДА-2026-")
+    assert replacements["{{defect_act_date_text}}"] == "14 мая 2026 г."
+    assert replacements["{{client_name}}"] == 'ООО "Сервис"'
+    assert replacements["{{equipment_name}}"] == "Кондиционер BEKO BK 260 AK"
+    assert replacements["{{equipment_serial_number}}"] == "SN-001"
+    assert replacements["{{equipment_inventory_number}}"] == "INV-777"
+    assert replacements["{{technical_condition}}"] == "Компрессор отключается по защите."
+    assert replacements["{{technical_conclusion}}"] == "Компрессор подлежит замене."
+    assert replacements["{{recommended_decision}}"] == "Вывести из эксплуатации."
 
 
 @pytest.mark.asyncio

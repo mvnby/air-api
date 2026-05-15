@@ -101,6 +101,154 @@ class ActStrategy(GoogleDocStrategy):
         replacements["{{sum_word}}"] = self._amount_in_words(total_services)
 
 
+class DefectActStrategy(GoogleDocStrategy):
+    """Defect/diagnostic act for repair workflow."""
+
+    MONTHS_RU = {
+        1: "января",
+        2: "февраля",
+        3: "марта",
+        4: "апреля",
+        5: "мая",
+        6: "июня",
+        7: "июля",
+        8: "августа",
+        9: "сентября",
+        10: "октября",
+        11: "ноября",
+        12: "декабря",
+    }
+
+    @staticmethod
+    def _first_text(*values: Any, default: str = "") -> str:
+        for value in values:
+            text = str(value or "").strip()
+            if text:
+                return text
+        return default
+
+    def _meta_text(self, *keys: str, default: str = "") -> str:
+        meta = self.order.technical_meta if self.order and isinstance(self.order.technical_meta, dict) else {}
+        repair_meta = meta.get("repair") if isinstance(meta.get("repair"), dict) else {}
+        for key in keys:
+            text = str(repair_meta.get(key) or "").strip()
+            if text:
+                return text
+            text = str(meta.get(key) or "").strip()
+            if text:
+                return text
+        return default
+
+    def _first_equipment_title(self) -> str:
+        if not self.order:
+            return ""
+        first_link = next(iter(self.order.product_links), None)
+        if first_link and first_link.product and first_link.product.title:
+            return first_link.product.title
+        return self.order.title or ""
+
+    @classmethod
+    def _date_text(cls, value: Optional[datetime]) -> str:
+        effective = value or datetime.now()
+        month = cls.MONTHS_RU.get(effective.month, effective.strftime("%m"))
+        return f"{effective.day} {month} {effective.year} г."
+
+    def _add_specific_replacements(self, replacements: dict):
+        document_date = datetime.strptime(replacements.get("{{date}}", ""), "%d.%m.%Y") if replacements.get("{{date}}") else datetime.now()
+        equipment_name = self._first_text(
+            self._meta_text("equipment_name", "defect_equipment_name"),
+            self._first_equipment_title(),
+            default="кондиционер",
+        )
+        equipment_brand = self._meta_text("equipment_brand", "brand")
+        equipment_model = self._meta_text("equipment_model", "model")
+        equipment_power = self._meta_text("equipment_power", "power")
+        if equipment_name == "кондиционер":
+            detailed_name = " ".join(part for part in [equipment_brand, equipment_model, equipment_power] if part)
+            if detailed_name:
+                equipment_name = detailed_name
+        technical_condition = self._first_text(
+            self._meta_text("technical_condition", "defect_technical_condition", "customer_complaint", "complaint_text"),
+            getattr(self.order, "measurement_result", None) if self.order else None,
+            default="_________________",
+        )
+
+        replacements.update(
+            {
+                "{{defect_act_number}}": replacements.get("{{doc_number}}", replacements.get("{{number}}", "")),
+                "{{defect_act_date}}": replacements.get("{{date}}", ""),
+                "{{defect_act_date_text}}": self._date_text(document_date),
+                "{{equipment_name}}": equipment_name,
+                "{{equipment_brand}}": equipment_brand,
+                "{{equipment_model}}": equipment_model,
+                "{{equipment_power}}": equipment_power,
+                "{{equipment_serial_number}}": self._meta_text(
+                    "equipment_serial_number",
+                    "serial_number",
+                    "defect_serial_number",
+                    default="_________________",
+                ),
+                "{{equipment_inventory_number}}": self._meta_text(
+                    "equipment_inventory_number",
+                    "inventory_number",
+                    "defect_inventory_number",
+                    default="_________________",
+                ),
+                "{{equipment_commissioning_date}}": self._meta_text(
+                    "equipment_commissioning_date",
+                    "commissioning_date",
+                    default="_________________",
+                ),
+                "{{technical_condition}}": technical_condition,
+                "{{customer_complaint}}": self._meta_text("customer_complaint", "complaint_text", default="_________________"),
+                "{{complaint_official}}": self._meta_text("complaint_official", default="_________________"),
+                "{{likely_diagnosis}}": self._meta_text("likely_diagnosis", default="_________________"),
+                "{{inspection_work_done}}": self._meta_text(
+                    "inspection_work_done",
+                    "diagnostic_work_done",
+                    default="_________________",
+                ),
+                "{{startup_check_result}}": self._meta_text(
+                    "startup_check_result",
+                    "run_check_result",
+                    default="_________________",
+                ),
+                "{{compressor_check_result}}": self._meta_text("compressor_check_result", default="_________________"),
+                "{{measurement_result}}": self._meta_text(
+                    "measurement_result",
+                    "defect_measurement_result",
+                    "diagnostic_measurement_result",
+                    default=(getattr(self.order, "measurement_result", None) if self.order else None) or "_________________",
+                ),
+                "{{further_use_assessment}}": self._meta_text(
+                    "further_use_assessment",
+                    "operation_assessment",
+                    default="_________________",
+                ),
+                "{{operation_restrictions}}": self._meta_text(
+                    "operation_restrictions",
+                    "use_restrictions",
+                    default="_________________",
+                ),
+                "{{technical_conclusion}}": self._meta_text(
+                    "technical_conclusion",
+                    "defect_conclusion",
+                    default="_________________",
+                ),
+                "{{repair_feasibility}}": self._meta_text(
+                    "repair_feasibility",
+                    "repair_feasibility_text",
+                    default="_________________",
+                ),
+                "{{recommended_decision}}": self._meta_text(
+                    "recommended_decision",
+                    "defect_recommendation",
+                    default="_________________",
+                ),
+            }
+        )
+
+
 class GeneralDocStrategy(GoogleDocStrategy):
     """Contract, Offer, Invoice: Products + Services table."""
     

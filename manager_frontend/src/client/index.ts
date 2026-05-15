@@ -127,6 +127,10 @@ export type { ManagerOrderServiceLinePayload } from './models/ManagerOrderServic
 export type { ManagerOrderUpdatePayload } from './models/ManagerOrderUpdatePayload';
 export type { ManagerQuickTariffListResponse } from './models/ManagerQuickTariffListResponse';
 export type { ManagerQuickTariffResponse } from './models/ManagerQuickTariffResponse';
+export type { ManagerRepairComplaintPresetCreatePayload } from './models/ManagerRepairComplaintPresetCreatePayload';
+export type { ManagerRepairComplaintPresetListResponse } from './models/ManagerRepairComplaintPresetListResponse';
+export type { ManagerRepairComplaintPresetResponse } from './models/ManagerRepairComplaintPresetResponse';
+export type { ManagerRepairComplaintPresetUpdatePayload } from './models/ManagerRepairComplaintPresetUpdatePayload';
 export type { ManagerRestoreJobStartResponse } from './models/ManagerRestoreJobStartResponse';
 export type { ManagerRestoreJobStatusResponse } from './models/ManagerRestoreJobStatusResponse';
 export type { ManagerServiceEstimateListResponse } from './models/ManagerServiceEstimateListResponse';
@@ -230,6 +234,7 @@ export { ManagerLeadsService } from './services/ManagerLeadsService';
 export { ManagerLeadsInboxService } from './services/ManagerLeadsInboxService';
 export { ManagerMailService } from './services/ManagerMailService';
 export { ManagerOrdersService } from './services/ManagerOrdersService';
+export { ManagerRepairComplaintsService } from './services/ManagerRepairComplaintsService';
 export { ManagerServiceEstimatesService } from './services/ManagerServiceEstimatesService';
 export { ManagerSettingsService } from './services/ManagerSettingsService';
 export { ManagerTagsService } from './services/ManagerTagsService';

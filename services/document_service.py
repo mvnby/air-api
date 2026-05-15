@@ -18,7 +18,7 @@ from services.document_template_service import DocumentTemplateService
 class DocumentService:
     """Сервис для работы с документами заказов через Google Drive"""
 
-    ALLOWED_DOC_TYPES = {"contract", "invoice", "work_order", "act", "offer", "tn2", "ttn1"}
+    ALLOWED_DOC_TYPES = {"contract", "invoice", "work_order", "act", "defect_act", "offer", "tn2", "ttn1"}
 
     @staticmethod
     async def get_available_templates(
@@ -550,6 +550,7 @@ class DocumentService:
             "offer": "КП",
             "invoice": "С",
             "act": "А",
+            "defect_act": "ДА",
             "work_order": "НЗ",
             "tn2": "ТН2",
             "ttn1": "ТТН1"
