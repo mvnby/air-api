@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from crud.order import OrderDAO
 from crud.product import ProductDAO
-from models import Order, OrderProductLink, OrderProposal, OrderServiceLink, Customer, CustomerBranch, CustomerContract, CustomerType, OrderStatus, PaymentCurrency, Product, LeadSource, Service, OrderInstaller, OrderWorkStage
+from models import Order, OrderProductLink, OrderProposal, OrderServiceLink, Customer, CustomerBranch, CustomerContract, CustomerType, OrderStatus, PaymentCurrency, Product, LeadSource, Service, ServiceTariff, OrderInstaller, OrderWorkStage
 from services.customer_contract_service import CustomerContractService
 from services.document_role_service import DocumentRoleService
 from services.product_supply_metrics_service import ProductSupplyMetricsService
@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 class OrderService:
     MANAGER_LABELS_META_KEY = "manager_labels"
     LEGACY_WEBSITE_TITLE_PREFIX = "Заказ с сайта от "
+    ORDER_WORKFLOW_TYPES = {"sales_installation", "service_work", "maintenance", "repair"}
     SERVICE_TYPE_TITLE_MAP = {
         "turnkey": "Продажа + монтаж",
         "install_only": "Монтаж",
@@ -109,6 +110,52 @@ class OrderService:
     def _get_manager_labels(order: Order) -> List[str]:
         meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
         return OrderService._normalize_manager_labels(meta.get(OrderService.MANAGER_LABELS_META_KEY))
+
+    @staticmethod
+    def _workflow_type_from_service_type(service_type: Optional[str], fallback: str = "sales_installation") -> str:
+        mapping = {
+            "turnkey": "sales_installation",
+            "install_only": "service_work",
+            "pre_install": "service_work",
+            "dismantling": "service_work",
+            "maintenance": "maintenance",
+            "repair": "repair",
+        }
+        return mapping.get(str(service_type or "").strip(), fallback)
+
+    @staticmethod
+    def _normalize_workflow_type(raw: Any, fallback: str = "sales_installation") -> str:
+        value = str(raw or "").strip()
+        if value in OrderService.ORDER_WORKFLOW_TYPES:
+            return value
+        if value:
+            service_mapped = OrderService._workflow_type_from_service_type(value, "")
+            if service_mapped:
+                return service_mapped
+        return fallback
+
+    @staticmethod
+    def _get_repair_meta(order: Order) -> Dict[str, Any]:
+        meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
+        repair_meta = meta.get("repair")
+        return dict(repair_meta) if isinstance(repair_meta, dict) else {}
+
+    @staticmethod
+    def _set_repair_meta(order: Order, raw_meta: Any) -> None:
+        meta = dict(order.technical_meta or {}) if isinstance(order.technical_meta, dict) else {}
+        if isinstance(raw_meta, dict):
+            cleaned = {
+                str(key): value
+                for key, value in raw_meta.items()
+                if value is not None and not (isinstance(value, str) and not value.strip())
+            }
+        else:
+            cleaned = {}
+        if cleaned:
+            meta["repair"] = cleaned
+        else:
+            meta.pop("repair", None)
+        order.technical_meta = meta
 
     @staticmethod
     def _set_manager_labels(order: Order, raw_labels: Any) -> None:
@@ -395,6 +442,7 @@ class OrderService:
 
             order.technical_meta = dict(order.technical_meta or {})
             order.technical_meta["service_type"] = payload.service_type
+            order.workflow_type = OrderService._workflow_type_from_service_type(payload.service_type, order.workflow_type)
             flag_modified(order, "technical_meta")
             changed = True
 
@@ -1253,6 +1301,8 @@ class OrderService:
                 else (str(order.lead_source) if order.lead_source else None)
             ),
             "title": OrderService._display_order_title(order),
+            "workflow_type": OrderService._normalize_workflow_type(getattr(order, "workflow_type", None)),
+            "repair_meta": OrderService._get_repair_meta(order),
             "manager_labels": OrderService._get_manager_labels(order),
             "created_at": order.created_at,
             "updated_at": order.updated_at,
@@ -1685,6 +1735,46 @@ class OrderService:
         return {"cost": 0}
 
     @staticmethod
+    async def _maybe_add_default_repair_diagnostic(session: AsyncSession, order: Order) -> None:
+        await session.refresh(order, attribute_names=["proposals", "service_links", "payments", "product_links", "installers"])
+        selected_proposal = await OrderService.ensure_default_proposal(session, order)
+        target_proposal_id = int(selected_proposal.id)
+        existing_services = [
+            link for link in order.service_links
+            if link.proposal_id == target_proposal_id
+        ]
+        if any("диагност" in (link.title or "").lower() for link in existing_services):
+            return
+
+        result = await session.execute(
+            select(ServiceTariff)
+            .where(
+                ServiceTariff.service_kind == "repair",
+                ServiceTariff.is_active == True,  # noqa: E712
+                ServiceTariff.selector_label.ilike("%диагност%"),
+            )
+            .order_by(ServiceTariff.sort_order, ServiceTariff.id)
+            .limit(1)
+        )
+        tariff = result.scalars().first()
+        if not tariff:
+            return
+
+        session.add(
+            OrderServiceLink(
+                order_id=int(order.id),
+                proposal_id=target_proposal_id,
+                service_id=None,
+                title=OrderService._clean_order_title(tariff.estimate_template or tariff.selector_label) or tariff.selector_label,
+                quantity=1,
+                price=int(tariff.base_price or 0),
+                cost=0,
+            )
+        )
+        await session.flush()
+        await OrderService._refresh_order_financials(session, order)
+
+    @staticmethod
     async def update_order_for_manager(
         session: AsyncSession,
         order_id: int,
@@ -1706,6 +1796,15 @@ class OrderService:
                 raise ValueError(f"Invalid status: {payload.status}") from exc
         if "title" in fields_set:
             order.title = OrderService._clean_order_title(payload.title)
+        workflow_type_changed = False
+        if "workflow_type" in fields_set and payload.workflow_type is not None:
+            next_workflow_type = OrderService._normalize_workflow_type(payload.workflow_type, order.workflow_type)
+            workflow_type_changed = next_workflow_type != order.workflow_type
+            order.workflow_type = next_workflow_type
+        if "repair_meta" in fields_set:
+            OrderService._set_repair_meta(order, payload.repair_meta)
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(order, "technical_meta")
         if "manager_labels" in fields_set:
             OrderService._set_manager_labels(order, payload.manager_labels)
         if "next_followup_date" in fields_set:
@@ -1916,6 +2015,8 @@ class OrderService:
                 val = getattr(payload, field, None)
                 if val is not None:
                     new_meta[meta_key] = val
+                    if field == "service_type" and "workflow_type" not in fields_set:
+                        order.workflow_type = OrderService._workflow_type_from_service_type(val, order.workflow_type)
             order.technical_meta = new_meta
             from sqlalchemy.orm.attributes import flag_modified
             flag_modified(order, "technical_meta")
@@ -1997,6 +2098,9 @@ class OrderService:
         elif currency_fields_changed:
             await session.flush()
             await OrderService._refresh_order_financials(session, order)
+
+        if workflow_type_changed and order.workflow_type == "repair" and "services" not in fields_set:
+            await OrderService._maybe_add_default_repair_diagnostic(session, order)
 
         session.add(order)
         await session.commit()

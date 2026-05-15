@@ -44,6 +44,27 @@ Suggested defect library groups:
 - Installation defects: incorrect route, poor drainage, vibration, missing service clearance.
 - Economic decision: repair is not cost-effective, spare parts unavailable, replacement recommended.
 
+## Complaint Intake Library
+
+Repair intake should keep the customer's plain-language complaint separate from the official wording used in documents and the internal likely diagnosis.
+
+Suggested mapping fields:
+
+- Customer complaint: what the client says in their own words.
+- Document wording: polished wording for the diagnostic act or defect report.
+- Likely diagnosis: internal hint for the manager/technician, not a final conclusion.
+- Complaint group: water/drainage, noise/vibration, cooling performance, smell/contamination, control/electronics, freezing, shutdown/error.
+- Active flag and sort order, so common complaints can be curated without deleting old variants.
+
+Seed examples from the diagnostic worksheet:
+
+- "Капает вода в комнату" -> "Нарушение герметичности дренажной системы / Закупорка дренажного канала." -> blocked tray, bent drain pipe, slime in the route.
+- "Вообще не холодит" -> "Отсутствие теплообмена в режиме охлаждения." -> refrigerant leak, start capacitor failure, compressor failure.
+- "Пахнет сыростью/плесенью" -> "Наличие неприятных запахов при работе вентилятора внутреннего блока." -> bacterial contamination, cleaning/disinfection required.
+- "Сам выключается" -> "Аварийная остановка системы с индикацией ошибки (если есть код)." -> protection triggered, sensor/control board issue, low refrigerant, overheating.
+
+The library should deduplicate aliases during import/editing. For example, "Не реагирует на пульт" appears as a repeated customer complaint variant and should become one reusable complaint option with editable wording.
+
 ## Out Of Scope
 
 - Full repair statuses and lifecycle.

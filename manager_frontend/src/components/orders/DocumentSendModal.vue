@@ -20,6 +20,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   contract: 'Договор',
   invoice: 'Счет',
   act: 'Акт',
+  defect_act: 'Дефектный акт',
   tn2: 'ТН-2',
   ttn1: 'ТТН-1',
   uploaded_pdf: 'PDF',

@@ -242,6 +242,7 @@ const DOCUMENT_TYPES = [
   { type: 'contract', label: 'Договор' },
   { type: 'invoice', label: 'Счет' },
   { type: 'act', label: 'Акт' },
+  { type: 'defect_act', label: 'Дефектный акт' },
   { type: 'offer', label: 'КП' },
   { type: 'tn2', label: 'ТН-2' },
   { type: 'ttn1', label: 'ТТН-1' },
@@ -263,7 +264,7 @@ const isDocumentTypeLocked = (type: string) => (
 const lockedDocumentTitle = (type: string) => (
   type === 'act' ? 'Сначала создайте договор или счет' : 'Сначала создайте договор'
 );
-const datedDocumentTypes = new Set(['contract', 'act', 'tn2', 'ttn1']);
+const datedDocumentTypes = new Set(['contract', 'act', 'defect_act', 'tn2', 'ttn1']);
 const getDocumentDateForType = (type: string) => (
   datedDocumentTypes.has(type) && documentDate.value ? `${documentDate.value}T00:00:00` : undefined
 );

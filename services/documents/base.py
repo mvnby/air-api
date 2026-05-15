@@ -18,6 +18,7 @@ TEMPLATES = {
     "invoice": "13LlTvDxz5LXu4Wtt9pLkWf7JDG_rnt9vGoi49GMP9dY",
     "work_order": "1tom7jwtOSajR8oCIhSniWEOQFxu2RdwYQcHmEkU34Dc", 
     "act": "1Ttdz0UsuNFJB9FExgxIdvEoHSDc_vippFCq3_I7s3Xw",               
+    "defect_act": "1-MjndKurd91Ag_s8Fqc0Hhm37YxMITtD59HJ1RN2O_s",
     "tn2": "1LMy6ueY-84FL-5iDcsgGCtLdd4PdK5wpt3tslshgB_E",          
     "ttn1": "19pGneO6T2HDQlWsmhj1kF2oWUmq16hI0EmRHueo6g8I"         
 }
@@ -27,6 +28,7 @@ DOC_NAMES = {
     "offer": "КП", 
     "invoice": "Счет", 
     "act": "Акт",
+    "defect_act": "Дефектный акт",
     "work_order": "Наряд-заказ",
     "tn2": "ТН-2", 
     "ttn1": "ТТН-1"

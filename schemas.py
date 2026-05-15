@@ -374,6 +374,8 @@ class ManagerOrderListItemResponse(BaseModel):
     status: str
     lead_source: Optional[str] = None
     title: Optional[str] = None
+    workflow_type: str = "sales_installation"
+    repair_meta: Dict[str, Any] = Field(default_factory=dict)
     manager_labels: List[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -590,6 +592,8 @@ class ManagerOrderServiceLinePayload(BaseModel):
 class ManagerOrderUpdatePayload(BaseModel):
     status: Optional[str] = None
     title: Optional[str] = None
+    workflow_type: Optional[str] = None
+    repair_meta: Optional[Dict[str, Any]] = None
     manager_labels: Optional[List[str]] = None
     next_followup_date: Optional[datetime] = None
     measurement_date: Optional[datetime] = None
@@ -1861,6 +1865,50 @@ class ManagerQuickTariffResponse(BaseModel):
 
 class ManagerQuickTariffListResponse(BaseModel):
     items: List[ManagerQuickTariffResponse]
+
+
+# --- REPAIR COMPLAINT PRESETS ---
+
+class ManagerRepairComplaintPresetResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    complaint_group: str = ""
+    customer_phrase: str
+    document_wording: str = ""
+    likely_diagnosis: str = ""
+    is_favorite: bool = False
+    is_active: bool = True
+    sort_order: int = 0
+    comment: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class ManagerRepairComplaintPresetCreatePayload(BaseModel):
+    complaint_group: str = ""
+    customer_phrase: str
+    document_wording: str = ""
+    likely_diagnosis: str = ""
+    is_favorite: bool = False
+    is_active: bool = True
+    sort_order: int = 0
+    comment: Optional[str] = None
+
+
+class ManagerRepairComplaintPresetUpdatePayload(BaseModel):
+    complaint_group: Optional[str] = None
+    customer_phrase: Optional[str] = None
+    document_wording: Optional[str] = None
+    likely_diagnosis: Optional[str] = None
+    is_favorite: Optional[bool] = None
+    is_active: Optional[bool] = None
+    sort_order: Optional[int] = None
+    comment: Optional[str] = None
+
+
+class ManagerRepairComplaintPresetListResponse(BaseModel):
+    items: List[ManagerRepairComplaintPresetResponse]
 
 
 # --- SERVICE ESTIMATES ---

@@ -114,6 +114,26 @@ class ServiceTariffRule(SQLModel, table=True):
     service: Optional["Service"] = Relationship()
 
 
+class RepairComplaintPreset(SQLModel, table=True):
+    __tablename__ = "repair_complaint_preset"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    complaint_group: str = Field(default="", index=True)
+    customer_phrase: str = Field(index=True)
+    document_wording: str = Field(default="")
+    likely_diagnosis: str = Field(default="")
+    is_favorite: bool = Field(default=False, index=True)
+    is_active: bool = Field(default=True, index=True)
+    sort_order: int = Field(default=0, index=True)
+    comment: Optional[str] = Field(default=None)
+
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: Optional[datetime] = Field(
+        default_factory=datetime.now,
+        sa_column_kwargs={"onupdate": datetime.now},
+    )
+
+
 class ServiceEstimate(SQLModel, table=True):
     __tablename__ = "service_estimate"
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -317,6 +337,7 @@ class Order(SQLModel, table=True):
     lead_source: LeadSource = Field(default=LeadSource.MANAGER, sa_column=Column(String, index=True))
     title: Optional[str] = Field(default=None)
     comment: Optional[str] = Field(default=None)
+    workflow_type: str = Field(default="sales_installation", index=True)
 
     technical_meta: Dict[str, Any] = Field(default={}, sa_column=Column(JSON))
 

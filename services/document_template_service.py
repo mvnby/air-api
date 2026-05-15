@@ -19,7 +19,7 @@ from services.documents.base import DOC_NAMES, TEMPLATES
 
 
 class DocumentTemplateService:
-    MANAGED_TYPES = {"contract", "act", "invoice"}
+    MANAGED_TYPES = {"contract", "act", "invoice", "defect_act"}
 
     @staticmethod
     def _normalize_bool(value: object) -> bool:
@@ -238,6 +238,9 @@ class DocumentTemplateService:
             template.client_restricted = bool(template.client_restricted)
         elif template.doc_type in {"contract", "invoice"}:
             template.linked_contract_templates = []
+        else:
+            template.linked_contract_templates = []
+            template.linked_act_templates = []
 
     @staticmethod
     async def create_template(session: AsyncSession, payload: Any) -> dict[str, Any]:

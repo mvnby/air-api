@@ -12,6 +12,8 @@ export type ManagerOrderListItemResponse = {
     status: string;
     lead_source?: (string | null);
     title?: (string | null);
+    workflow_type?: string;
+    repair_meta?: Record<string, any>;
     manager_labels?: Array<string>;
     created_at: string;
     updated_at?: (string | null);

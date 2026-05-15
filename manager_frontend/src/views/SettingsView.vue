@@ -1,8 +1,18 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue';
 import { api } from '../api';
-import type { DocumentTemplateItem, DocumentTemplatePayload, ManagerCatalogCustomerItemResponse, ManagerGoogleAuthStatusResponse, ManagerSettingResponse, ManagerSettingUpdatePayload } from '../client';
-import { ManagerDocsService, ManagerSettingsService } from '../client';
+import type {
+    DocumentTemplateItem,
+    DocumentTemplatePayload,
+    ManagerCatalogCustomerItemResponse,
+    ManagerGoogleAuthStatusResponse,
+    ManagerRepairComplaintPresetCreatePayload,
+    ManagerRepairComplaintPresetResponse,
+    ManagerRepairComplaintPresetUpdatePayload,
+    ManagerSettingResponse,
+    ManagerSettingUpdatePayload,
+} from '../client';
+import { ManagerDocsService, ManagerRepairComplaintsService, ManagerSettingsService } from '../client';
 import { getApiErrorMessage } from '../utils/api-errors';
 
 const settings = ref<ManagerSettingResponse[]>([]);
@@ -14,8 +24,8 @@ const toastType = ref<'success' | 'error'>('success');
 // A set to keep track of which settings are currently being saved
 const savingKeys = ref<Set<string>>(new Set());
 type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
-type SettingsTab = 'general' | 'documentTemplates';
-type ManagedDocumentType = 'contract' | 'act' | 'invoice';
+type SettingsTab = 'general' | 'documentTemplates' | 'repairComplaints';
+type ManagedDocumentType = 'contract' | 'act' | 'invoice' | 'defect_act';
 type DocumentTemplateFileOption = {
     id: string;
     name: string;
@@ -44,6 +54,17 @@ type DocumentTemplateForm = {
     linked_contract_template_ids: number[];
     linked_act_template_ids: number[];
 };
+type RepairComplaintPresetForm = {
+    id?: number | null;
+    complaint_group: string;
+    customer_phrase: string;
+    document_wording: string;
+    likely_diagnosis: string;
+    is_favorite: boolean;
+    is_active: boolean;
+    sort_order: number;
+    comment: string;
+};
 const DOCUMENT_ROLE_OPTIONS: Array<{ value: DocumentRoleType; label: string }> = [
     { value: 'seller_buyer', label: 'Продавец / Покупатель' },
     { value: 'executor_customer', label: 'Исполнитель / Заказчик' },
@@ -60,6 +81,12 @@ const loadingTemplateFiles = ref(false);
 const loadingCustomerSearch = ref(false);
 const savingTemplateKeys = ref<Set<string>>(new Set());
 const deletingTemplateId = ref<number | null>(null);
+const repairComplaintPresets = ref<RepairComplaintPresetForm[]>([]);
+const repairComplaintSearch = ref('');
+const repairComplaintGroupFilter = ref('');
+const loadingRepairComplaints = ref(false);
+const savingRepairComplaintKeys = ref<Set<string>>(new Set());
+const deletingRepairComplaintId = ref<number | null>(null);
 
 // Create form
 const showCreateForm = ref(false);
@@ -88,6 +115,17 @@ const DOCUMENT_TYPE_OPTIONS: Array<{ value: ManagedDocumentType; label: string; 
     { value: 'contract', label: 'Договор', addLabel: 'Договор' },
     { value: 'invoice', label: 'Счет / счет-договор', addLabel: 'Счет' },
     { value: 'act', label: 'Акт', addLabel: 'Акт' },
+    { value: 'defect_act', label: 'Дефектный акт', addLabel: 'Дефектный акт' },
+];
+const REPAIR_COMPLAINT_GROUP_OPTIONS = [
+    { value: 'water_drainage', label: 'Вода / дренаж' },
+    { value: 'noise_vibration', label: 'Шум / вибрация' },
+    { value: 'cooling', label: 'Охлаждение' },
+    { value: 'smell_contamination', label: 'Запах / загрязнение' },
+    { value: 'control_electronics', label: 'Управление / электроника' },
+    { value: 'freezing', label: 'Обмерзание' },
+    { value: 'shutdown_error', label: 'Отключение / ошибка' },
+    { value: 'other', label: 'Другое' },
 ];
 
 const emptyDocumentTemplate = (docType: ManagedDocumentType = 'contract'): DocumentTemplateForm => ({
@@ -122,6 +160,41 @@ const mapTemplateItemToForm = (item: DocumentTemplateItem): DocumentTemplateForm
     customer_ids: [...(item.customer_ids ?? [])],
     linked_contract_template_ids: [...(item.linked_contract_template_ids ?? [])],
     linked_act_template_ids: [...(item.linked_act_template_ids ?? [])],
+});
+
+const emptyRepairComplaintPreset = (): RepairComplaintPresetForm => ({
+    id: null,
+    complaint_group: repairComplaintGroupFilter.value || 'other',
+    customer_phrase: '',
+    document_wording: '',
+    likely_diagnosis: '',
+    is_favorite: false,
+    is_active: true,
+    sort_order: repairComplaintPresets.value.length * 10,
+    comment: '',
+});
+
+const mapRepairComplaintPresetToForm = (item: ManagerRepairComplaintPresetResponse): RepairComplaintPresetForm => ({
+    id: item.id,
+    complaint_group: item.complaint_group || 'other',
+    customer_phrase: item.customer_phrase || '',
+    document_wording: item.document_wording || '',
+    likely_diagnosis: item.likely_diagnosis || '',
+    is_favorite: item.is_favorite === true,
+    is_active: item.is_active !== false,
+    sort_order: Number(item.sort_order ?? 0),
+    comment: item.comment || '',
+});
+
+const repairComplaintPayload = (preset: RepairComplaintPresetForm): ManagerRepairComplaintPresetCreatePayload => ({
+    complaint_group: preset.complaint_group.trim() || 'other',
+    customer_phrase: preset.customer_phrase.trim(),
+    document_wording: preset.document_wording.trim(),
+    likely_diagnosis: preset.likely_diagnosis.trim(),
+    is_favorite: preset.is_favorite,
+    is_active: preset.is_active,
+    sort_order: Number(preset.sort_order || 0),
+    comment: preset.comment.trim() || undefined,
 });
 
 const documentTemplatePayload = (template: DocumentTemplateForm): DocumentTemplatePayload => ({
@@ -200,6 +273,72 @@ const loadDocumentTemplates = async () => {
         documentTemplates.value = res.items.map(mapTemplateItemToForm);
     } catch (e) {
         setToast(getApiErrorMessage(e), 'error');
+    }
+};
+
+const loadRepairComplaintPresets = async () => {
+    loadingRepairComplaints.value = true;
+    try {
+        const res = await ManagerRepairComplaintsService.listManagerRepairComplaintPresets(
+            repairComplaintSearch.value.trim(),
+            repairComplaintGroupFilter.value || null,
+            true,
+            false,
+            200,
+        );
+        repairComplaintPresets.value = res.items.map(mapRepairComplaintPresetToForm);
+    } catch (e) {
+        setToast(getApiErrorMessage(e), 'error');
+    } finally {
+        loadingRepairComplaints.value = false;
+    }
+};
+
+const addRepairComplaintPreset = () => {
+    repairComplaintPresets.value = [emptyRepairComplaintPreset(), ...repairComplaintPresets.value];
+};
+
+const saveRepairComplaintPreset = async (preset: RepairComplaintPresetForm) => {
+    const key = String(preset.id || `new:${preset.complaint_group}:${preset.sort_order}`);
+    if (savingRepairComplaintKeys.value.has(key)) return;
+    if (!preset.customer_phrase.trim()) {
+        setToast('Заполните жалобу клиента', 'error');
+        return;
+    }
+    savingRepairComplaintKeys.value.add(key);
+    try {
+        const payload = repairComplaintPayload(preset);
+        const saved = preset.id
+            ? await ManagerRepairComplaintsService.updateManagerRepairComplaintPreset(preset.id, payload as ManagerRepairComplaintPresetUpdatePayload)
+            : await ManagerRepairComplaintsService.createManagerRepairComplaintPreset(payload);
+        const savedForm = mapRepairComplaintPresetToForm(saved);
+        const index = repairComplaintPresets.value.indexOf(preset);
+        if (index >= 0) {
+            repairComplaintPresets.value[index] = savedForm;
+        }
+        setToast('Пресет жалобы сохранен');
+    } catch (e) {
+        setToast(getApiErrorMessage(e), 'error');
+    } finally {
+        savingRepairComplaintKeys.value.delete(key);
+    }
+};
+
+const deleteRepairComplaintPreset = async (preset: RepairComplaintPresetForm) => {
+    if (!preset.id) {
+        repairComplaintPresets.value = repairComplaintPresets.value.filter((item) => item !== preset);
+        return;
+    }
+    if (!confirm(`Удалить пресет "${preset.customer_phrase}"?`)) return;
+    deletingRepairComplaintId.value = preset.id;
+    try {
+        await ManagerRepairComplaintsService.deleteManagerRepairComplaintPreset(preset.id);
+        repairComplaintPresets.value = repairComplaintPresets.value.filter((item) => item.id !== preset.id);
+        setToast('Пресет жалобы удален');
+    } catch (e) {
+        setToast(getApiErrorMessage(e), 'error');
+    } finally {
+        deletingRepairComplaintId.value = null;
     }
 };
 
@@ -324,7 +463,7 @@ const normalizeRoleType = (value: unknown): DocumentRoleType => {
 
 const normalizeDocumentType = (value: unknown): ManagedDocumentType => {
     const raw = String(value || '').trim();
-    if (raw === 'act' || raw === 'invoice') return raw;
+    if (raw === 'act' || raw === 'invoice' || raw === 'defect_act') return raw;
     return 'contract';
 };
 
@@ -444,6 +583,7 @@ const formatDate = (dateStr: string) => {
 onMounted(() => {
     void loadSettings();
     void loadDocumentTemplates().then(() => loadCustomers());
+    void loadRepairComplaintPresets();
     void loadTemplateFiles();
     void loadGoogleAuthStatus();
 });
@@ -515,6 +655,15 @@ onMounted(() => {
             >
                 <span class="material-icons-round text-[18px]">description</span>
                 Шаблоны документов
+            </button>
+            <button
+                type="button"
+                class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                :class="activeSettingsTab === 'repairComplaints' ? 'bg-teal-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'"
+                @click="activeSettingsTab = 'repairComplaints'"
+            >
+                <span class="material-icons-round text-[18px]">build_circle</span>
+                Жалобы ремонта
             </button>
         </div>
 
@@ -758,7 +907,7 @@ onMounted(() => {
                                 </option>
                             </select>
                         </div>
-                        <div v-else>
+                        <div v-else-if="template.doc_type === 'act'">
                             <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Для договоров / счетов</label>
                             <select
                                 v-model="template.linked_contract_template_ids"
@@ -769,6 +918,9 @@ onMounted(() => {
                                     {{ contract.name }}
                                 </option>
                             </select>
+                        </div>
+                        <div v-else class="rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-500 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                            Дефектный акт выбирается как отдельный шаблон без привязки к договору или счету.
                         </div>
                     </div>
 
@@ -809,6 +961,151 @@ onMounted(() => {
                 </div>
                 <p v-if="!documentTemplates.length" class="rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-slate-700 dark:text-slate-400">
                     Управляемые шаблоны пока не добавлены. Старые шаблоны из JSON продолжают работать как fallback до миграции.
+                </p>
+            </div>
+        </div>
+
+        <div v-if="activeSettingsTab === 'repairComplaints'" class="mb-6 bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-gray-200 dark:border-slate-700/60 p-6">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                    <h3 class="text-base font-semibold text-gray-900 dark:text-slate-200 mb-1 flex items-center gap-2">
+                        <span class="material-icons-round text-teal-500 text-[20px]">build_circle</span>
+                        Жалобы и диагнозы для ремонта
+                    </h3>
+                    <p class="text-xs text-gray-500 dark:text-slate-400">
+                        Менеджер выбирает жалобу в заказе, а карточка подставляет формулировку для акта и вероятный диагноз.
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    class="flex items-center gap-1 rounded-lg bg-teal-600 px-3 py-2 text-xs font-medium text-white shadow-sm hover:bg-teal-500"
+                    @click="addRepairComplaintPreset"
+                >
+                    <span class="material-icons-round text-[16px]">add</span>
+                    Добавить жалобу
+                </button>
+            </div>
+
+            <div class="mt-5 grid gap-3 md:grid-cols-[1fr_240px_auto]">
+                <input
+                    v-model="repairComplaintSearch"
+                    type="search"
+                    class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                    placeholder="Поиск по жалобе, формулировке или диагнозу"
+                    @keydown.enter.prevent="loadRepairComplaintPresets"
+                />
+                <select
+                    v-model="repairComplaintGroupFilter"
+                    class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                    @change="loadRepairComplaintPresets"
+                >
+                    <option value="">Все группы</option>
+                    <option v-for="group in REPAIR_COMPLAINT_GROUP_OPTIONS" :key="group.value" :value="group.value">
+                        {{ group.label }}
+                    </option>
+                </select>
+                <button
+                    type="button"
+                    class="flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                    :disabled="loadingRepairComplaints"
+                    @click="loadRepairComplaintPresets"
+                >
+                    <span class="material-icons-round text-[18px]" :class="{ 'animate-spin': loadingRepairComplaints }">refresh</span>
+                    Обновить
+                </button>
+            </div>
+
+            <div class="mt-5 space-y-3">
+                <div
+                    v-for="preset in repairComplaintPresets"
+                    :key="preset.id || `new:${preset.complaint_group}:${preset.sort_order}`"
+                    class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-slate-700 dark:bg-slate-900/50"
+                >
+                    <div class="grid grid-cols-1 gap-3 lg:grid-cols-[180px_1fr_110px]">
+                        <div>
+                            <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Группа</label>
+                            <select
+                                v-model="preset.complaint_group"
+                                class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                            >
+                                <option v-for="group in REPAIR_COMPLAINT_GROUP_OPTIONS" :key="group.value" :value="group.value">
+                                    {{ group.label }}
+                                </option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Как говорит клиент *</label>
+                            <input
+                                v-model="preset.customer_phrase"
+                                type="text"
+                                class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                                placeholder="Не холодит, капает вода, шумит..."
+                            />
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Порядок</label>
+                            <input
+                                v-model.number="preset.sort_order"
+                                type="number"
+                                class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                        <label class="block">
+                            <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Формулировка в акт</span>
+                            <textarea
+                                v-model="preset.document_wording"
+                                rows="3"
+                                class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                                placeholder="Официальная формулировка для дефектного акта"
+                            />
+                        </label>
+                        <label class="block">
+                            <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Вероятный диагноз</span>
+                            <textarea
+                                v-model="preset.likely_diagnosis"
+                                rows="3"
+                                class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                                placeholder="Внутренняя подсказка для менеджера/мастера"
+                            />
+                        </label>
+                    </div>
+
+                    <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
+                        <div class="flex flex-wrap gap-3 text-sm text-gray-700 dark:text-slate-300">
+                            <label class="flex items-center gap-2">
+                                <input v-model="preset.is_active" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+                                Активна
+                            </label>
+                            <label class="flex items-center gap-2">
+                                <input v-model="preset.is_favorite" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+                                Избранная
+                            </label>
+                        </div>
+                        <div class="flex gap-2">
+                            <button
+                                type="button"
+                                class="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 shadow-sm hover:bg-red-50 disabled:opacity-60 dark:border-red-500/40 dark:bg-slate-900 dark:text-red-300 dark:hover:bg-red-500/10"
+                                :disabled="deletingRepairComplaintId === preset.id"
+                                @click="deleteRepairComplaintPreset(preset)"
+                            >
+                                Удалить
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-lg bg-teal-600 px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-teal-500 disabled:opacity-60"
+                                :disabled="savingRepairComplaintKeys.has(String(preset.id || `new:${preset.complaint_group}:${preset.sort_order}`))"
+                                @click="saveRepairComplaintPreset(preset)"
+                            >
+                                Сохранить
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <p v-if="!repairComplaintPresets.length" class="rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-slate-700 dark:text-slate-400">
+                    Жалобы не найдены. Добавьте первую или сбросьте фильтр.
                 </p>
             </div>
         </div>

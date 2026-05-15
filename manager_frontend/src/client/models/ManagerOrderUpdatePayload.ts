@@ -8,6 +8,8 @@ import type { PaymentCurrency } from './PaymentCurrency';
 export type ManagerOrderUpdatePayload = {
     status?: (string | null);
     title?: (string | null);
+    workflow_type?: (string | null);
+    repair_meta?: (Record<string, any> | null);
     manager_labels?: (Array<string> | null);
     next_followup_date?: (string | null);
     measurement_date?: (string | null);

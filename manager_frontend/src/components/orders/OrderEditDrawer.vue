@@ -25,8 +25,9 @@ import type {
   BankReceiptResponse,
   FxRateResponse,
   DocumentTemplateItem,
+  ManagerRepairComplaintPresetResponse,
 } from '../../client';
-import { ManagerDocsService, ManagerOrdersService, ManagerContractsService, ManagerSettingsService, ManagerMailService } from '../../client';
+import { ManagerDocsService, ManagerOrdersService, ManagerContractsService, ManagerSettingsService, ManagerMailService, ManagerRepairComplaintsService } from '../../client';
 import { formatMoney } from './order-utils';
 import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../../utils/datetime';
 
@@ -61,6 +62,57 @@ type ProductOption = {
 type ProductLine = { product_id: number; product_query: string; quantity: number; price: number; cost: number };
 type ServiceLine = { service_id?: number | null; title: string; quantity: number; price: number; cost: number };
 type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
+type OrderWorkflowType = 'sales_installation' | 'service_work' | 'maintenance' | 'repair';
+type RepairMeta = {
+  customer_complaint: string;
+  complaint_official: string;
+  likely_diagnosis: string;
+  equipment_name: string;
+  equipment_brand: string;
+  equipment_model: string;
+  equipment_power: string;
+  equipment_serial_number: string;
+  equipment_inventory_number: string;
+  equipment_commissioning_date: string;
+  technical_condition: string;
+  startup_check_result: string;
+  compressor_check_result: string;
+  measurement_result: string;
+  further_use_assessment: string;
+  operation_restrictions: string;
+  technical_conclusion: string;
+  repair_feasibility: string;
+  recommended_decision: string;
+};
+
+const WORKFLOW_OPTIONS: Array<{ value: OrderWorkflowType; label: string; hint: string; icon: string }> = [
+  { value: 'sales_installation', label: 'Продажа + монтаж', hint: 'товары, КП, монтаж', icon: 'shopping_cart' },
+  { value: 'service_work', label: 'Работы', hint: 'монтаж, демонтаж, трассы', icon: 'construction' },
+  { value: 'maintenance', label: 'Обслуживание', hint: 'ТО и сервисные договоры', icon: 'ac_unit' },
+  { value: 'repair', label: 'Ремонт', hint: 'диагностика и дефектный акт', icon: 'build_circle' },
+];
+
+const emptyRepairMeta = (): RepairMeta => ({
+  customer_complaint: '',
+  complaint_official: '',
+  likely_diagnosis: '',
+  equipment_name: '',
+  equipment_brand: '',
+  equipment_model: '',
+  equipment_power: '',
+  equipment_serial_number: '',
+  equipment_inventory_number: '',
+  equipment_commissioning_date: '',
+  technical_condition: '',
+  startup_check_result: '',
+  compressor_check_result: '',
+  measurement_result: '',
+  further_use_assessment: '',
+  operation_restrictions: '',
+  technical_conclusion: '',
+  repair_feasibility: '',
+  recommended_decision: '',
+});
 
 const serviceKindLabels: Record<string, string> = {
   installation: 'монтаж',
@@ -70,6 +122,17 @@ const serviceKindLabels: Record<string, string> = {
 };
 
 const formatServiceKind = (kind?: string | null) => serviceKindLabels[String(kind || '')] || kind || '';
+const normalizeWorkflowType = (value: unknown): OrderWorkflowType => {
+  const raw = String(value || '').trim();
+  if (raw === 'service_work' || raw === 'maintenance' || raw === 'repair') return raw;
+  return 'sales_installation';
+};
+const serviceKindForWorkflow = (value: OrderWorkflowType) => {
+  if (value === 'repair') return 'repair';
+  if (value === 'maintenance') return 'maintenance';
+  if (value === 'service_work') return 'installation';
+  return null;
+};
 
 type OrderDrawerDraft = {
   productLines: ProductLine[];
@@ -84,6 +147,8 @@ let productSearchRequestId = 0;
 
 const status = ref('new_lead');
 const orderTitle = ref('');
+const workflowType = ref<OrderWorkflowType>('sales_installation');
+const repairMeta = ref<RepairMeta>(emptyRepairMeta());
 const managerLabels = ref<string[]>([]);
 const managerLabelDraft = ref('');
 const nextFollowupDate = ref('');
@@ -176,6 +241,9 @@ const selectedEstimateId = ref<number | null>(null);
 const estimateSearchQuery = ref('');
 const importingEstimate = ref(false);
 const showEstimateImport = ref(false);
+const repairComplaintPresets = ref<ManagerRepairComplaintPresetResponse[]>([]);
+const repairComplaintSearch = ref('');
+const repairComplaintsLoading = ref(false);
 const documents = ref<ManagerOrderDocumentItem[]>([]);
 const showDocumentSendModal = ref(false);
 const payments = ref<PaymentResponse[]>([]);
@@ -188,6 +256,7 @@ const createDefaultDrawerSections = () => ({
   website: false,
   clientDetails: false,
   planningDetails: false,
+  repair: true,
   proposals: false,
   documents: false,
   payments: false,
@@ -564,9 +633,10 @@ const websiteOrderSummary = computed(() => {
 });
 const planningSummary = computed(() => {
   const parts = [];
-  parts.push(measurementRequired.value ? 'замер нужен' : 'без замера');
-  if (assessmentDate.value) parts.push(`замер ${formatDateTime(assessmentDate.value)}`);
-  if (installationDate.value) parts.push(`монтаж ${formatDateTime(installationDate.value)}`);
+  const visitLabel = workflowType.value === 'repair' ? 'диагностика' : 'замер';
+  parts.push(measurementRequired.value ? `${visitLabel} нужна` : `без ${visitLabel}`);
+  if (assessmentDate.value) parts.push(`${visitLabel} ${formatDateTime(assessmentDate.value)}`);
+  if (installationDate.value) parts.push(`${workDateLabel.value.toLowerCase()} ${formatDateTime(installationDate.value)}`);
   if (customerDeliveryAddress.value) parts.push(customerDeliveryAddress.value);
   return parts.join(' · ');
 });
@@ -578,6 +648,43 @@ const planningDetailsSummary = computed(() => {
   if (newBranchAddress.value.trim()) parts.push('готовится новый филиал');
   return parts.join(' · ') || 'дополнительные поля не заполнены';
 });
+const selectedWorkflowOption = computed(() => WORKFLOW_OPTIONS.find((item) => item.value === workflowType.value) || WORKFLOW_OPTIONS[0]!);
+const isRepairWorkflow = computed(() => workflowType.value === 'repair');
+const showProductLinesSection = computed(() => workflowType.value === 'sales_installation');
+const planningTitle = computed(() => {
+  if (workflowType.value === 'repair') return 'Диагностика и выезд';
+  if (workflowType.value === 'maintenance') return 'Планирование обслуживания';
+  if (workflowType.value === 'service_work') return 'Планирование работ';
+  return 'Планирование';
+});
+const workDateLabel = computed(() => {
+  if (workflowType.value === 'repair') return 'Дата диагностики / ремонта';
+  if (workflowType.value === 'maintenance') return 'Дата обслуживания';
+  if (workflowType.value === 'service_work') return 'Дата работ';
+  return 'Дата монтажа';
+});
+const repairSectionSummary = computed(() => {
+  const parts = [];
+  if (repairMeta.value.equipment_name.trim()) parts.push(repairMeta.value.equipment_name.trim());
+  const serial = repairMeta.value.equipment_serial_number.trim() || repairMeta.value.equipment_inventory_number.trim();
+  if (serial) parts.push(serial);
+  if (repairMeta.value.customer_complaint.trim()) parts.push('есть жалоба');
+  if (repairMeta.value.technical_conclusion.trim()) parts.push('есть вывод');
+  return parts.join(' · ') || 'данные для диагностики и дефектного акта';
+});
+const filteredRepairComplaintPresets = computed(() => {
+  const q = repairComplaintSearch.value.trim().toLowerCase();
+  const items = repairComplaintPresets.value.filter((item) => {
+    if (!q) return true;
+    return [
+      item.customer_phrase,
+      item.document_wording,
+      item.likely_diagnosis,
+      item.complaint_group,
+    ].some((value) => String(value || '').toLowerCase().includes(q));
+  });
+  return items.slice(0, 12);
+});
 const documentSectionSummary = computed(() => {
   const contractText = hasContract.value ? 'договор есть' : (hasOrderInvoice.value ? 'есть счет' : 'без договора');
   return `${documents.value.length} док. · ${contractText}`;
@@ -588,6 +695,7 @@ const DOCUMENT_TYPES = [
   { type: 'contract', label: 'Договор' },
   { type: 'invoice', label: 'Счет' },
   { type: 'act', label: 'Акт' },
+  { type: 'defect_act', label: 'Дефектный акт' },
   { type: 'offer', label: 'КП' },
   { type: 'tn2', label: 'ТН-2' },
   { type: 'ttn1', label: 'ТТН-1' },
@@ -614,7 +722,7 @@ const customerContracts = ref<ManagerCustomerContractItemResponse[]>([]);
 const selectedCustomerContractId = ref<number | null>(null);
 const selectedDocumentRoleType = ref<string | null>(null);
 const ONE_TIME_CONTRACT_VALUE = 'one-time-contract';
-const datedDocumentTypes = new Set(['contract', 'act', 'tn2', 'ttn1']);
+const datedDocumentTypes = new Set(['contract', 'act', 'defect_act', 'tn2', 'ttn1']);
 const getDocumentDateForType = (type: string) => (
   datedDocumentTypes.has(type) && documentDate.value ? `${documentDate.value}T00:00:00` : undefined
 );
@@ -1146,6 +1254,12 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   expandedDrawerSections.value = createDefaultDrawerSections();
   status.value = order.status;
   orderTitle.value = order.title ?? '';
+  workflowType.value = normalizeWorkflowType((order as any).workflow_type);
+  repairMeta.value = { ...emptyRepairMeta(), ...(((order as any).repair_meta || {}) as Partial<RepairMeta>) };
+  repairComplaintSearch.value = '';
+  if (workflowType.value === 'repair' && !repairComplaintPresets.value.length) {
+    void loadRepairComplaintPresets();
+  }
   managerLabels.value = [...(order.manager_labels ?? [])];
   managerLabelDraft.value = '';
   nextFollowupDate.value = toLocalDateTimeInput(order.next_followup_date);
@@ -1551,7 +1665,7 @@ const toggleEstimateImport = async () => {
 const debouncedLoadServiceTariffOptions = useDebounceFn(async (index: number, q: string, requestId: number) => {
   try {
     serviceTariffLookupLoading.value = true;
-    const response = await api.listManagerQuickTariffs(q, null, 10);
+    const response = await api.listManagerQuickTariffs(q, serviceKindForWorkflow(workflowType.value) as any, 10);
     if (requestId !== serviceTariffSearchRequestId || activeServiceSuggestionIndex.value !== index) return;
     serviceTariffOptions.value = response.items || [];
   } catch (error) {
@@ -1612,6 +1726,69 @@ const selectServiceTariffForLine = (index: number, option: ManagerQuickTariffRes
   row.cost = 0;
   activeServiceSuggestionIndex.value = null;
   serviceTariffOptions.value = [];
+};
+
+const hasDiagnosticServiceLine = () => serviceLines.value.some((line) => /диагност/i.test(line.title || ''));
+
+const addDefaultRepairDiagnostic = async () => {
+  if (hasDiagnosticServiceLine()) return;
+  try {
+    const response = await api.listManagerQuickTariffs('диагностика', 'repair' as any, 5);
+    const option = (response.items || [])[0];
+    serviceLines.value = [
+      {
+        service_id: null,
+        title: option?.title || 'Диагностика кондиционера на объекте',
+        quantity: 1,
+        price: Math.round(Number(option?.price || 0)),
+        cost: 0,
+      },
+      ...serviceLines.value,
+    ];
+    setToast('Добавили базовую диагностику для ремонта');
+  } catch (error) {
+    serviceLines.value = [
+      {
+        service_id: null,
+        title: 'Диагностика кондиционера на объекте',
+        quantity: 1,
+        price: 0,
+        cost: 0,
+      },
+      ...serviceLines.value,
+    ];
+    setToast(`Не нашли тариф диагностики: ${getApiErrorMessage(error)}`, 'error');
+  }
+};
+
+const setWorkflowType = async (next: OrderWorkflowType) => {
+  if (workflowType.value === next) return;
+  workflowType.value = next;
+  serviceTariffOptions.value = [];
+  activeServiceSuggestionIndex.value = null;
+  if (next === 'repair') {
+    void loadRepairComplaintPresets();
+    await addDefaultRepairDiagnostic();
+  }
+};
+
+const loadRepairComplaintPresets = async () => {
+  if (repairComplaintsLoading.value) return;
+  repairComplaintsLoading.value = true;
+  try {
+    const response = await ManagerRepairComplaintsService.listManagerRepairComplaintPresets('', null, false, false, 100);
+    repairComplaintPresets.value = response.items || [];
+  } catch (error) {
+    console.warn('Failed to load repair complaint presets', error);
+  } finally {
+    repairComplaintsLoading.value = false;
+  }
+};
+
+const applyRepairComplaintPreset = (preset: ManagerRepairComplaintPresetResponse) => {
+  repairMeta.value.customer_complaint = preset.customer_phrase || repairMeta.value.customer_complaint;
+  repairMeta.value.complaint_official = preset.document_wording || repairMeta.value.complaint_official;
+  repairMeta.value.likely_diagnosis = preset.likely_diagnosis || repairMeta.value.likely_diagnosis;
 };
 
 const loadEstimateOptions = async () => {
@@ -1771,6 +1948,8 @@ const handleSave = () => {
   const payload: ManagerOrderUpdatePayload = {
     status: status.value,
     title: orderTitle.value,
+    workflow_type: workflowType.value as any,
+    repair_meta: repairMeta.value as any,
     manager_labels: managerLabels.value,
     next_followup_date: fromLocalDateTimeInput(nextFollowupDate.value),
     measurement_date: fromLocalDateTimeInput(assessmentDate.value),
@@ -1939,6 +2118,31 @@ watch(
           <button class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600" type="button" @click="closeDrawer" title="Закрыть">
             <span class="material-icons-round">close</span>
           </button>
+        </div>
+
+        <div class="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-2">
+          <div class="mb-2 flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+            <span class="material-icons-round text-[15px]">{{ selectedWorkflowOption.icon }}</span>
+            Сценарий заказа
+          </div>
+          <div class="grid gap-2 sm:grid-cols-2">
+            <button
+              v-for="option in WORKFLOW_OPTIONS"
+              :key="option.value"
+              type="button"
+              class="rounded-xl border px-3 py-2 text-left transition"
+              :class="workflowType === option.value
+                ? 'border-teal-500 bg-white text-teal-900 shadow-sm ring-1 ring-teal-100'
+                : 'border-transparent bg-transparent text-slate-600 hover:border-slate-200 hover:bg-white'"
+              @click="setWorkflowType(option.value)"
+            >
+              <span class="flex items-center gap-2 text-sm font-semibold">
+                <span class="material-icons-round text-[18px]">{{ option.icon }}</span>
+                {{ option.label }}
+              </span>
+              <span class="mt-0.5 block text-xs opacity-75">{{ option.hint }}</span>
+            </button>
+          </div>
         </div>
 
         <div class="grid gap-3 lg:grid-cols-[1fr_auto]">
@@ -2217,7 +2421,7 @@ watch(
       <section v-if="status === 'negotiation'" class="mt-4 rounded-2xl border border-blue-100 bg-blue-50/30 p-3">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div class="min-w-0">
-            <h3 class="text-sm font-semibold text-blue-900">Планирование</h3>
+            <h3 class="text-sm font-semibold text-blue-900">{{ planningTitle }}</h3>
             <p class="mt-0.5 truncate text-xs text-blue-700/70">{{ planningSummary }}</p>
           </div>
           <button
@@ -2227,21 +2431,21 @@ watch(
             @click="measurementRequired = true"
           >
             <span class="material-icons-round text-[15px]">add_location_alt</span>
-            Выезд на замер
+            {{ isRepairWorkflow ? 'Выезд на диагностику' : 'Выезд на замер' }}
           </button>
           <label v-else class="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-medium text-blue-900 ring-1 ring-blue-100">
             <input type="checkbox" v-model="measurementRequired" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
-            Замер нужен
+            {{ isRepairWorkflow ? 'Диагностика нужна' : 'Замер нужен' }}
           </label>
         </div>
 
         <div v-if="measurementRequired" class="mt-3 rounded-xl border border-blue-100 bg-white p-3 shadow-sm">
-          <DateTimeField v-model="assessmentDate" label="Дата и время замера" :error="getFieldError('measurement_date')" />
+          <DateTimeField v-model="assessmentDate" :label="isRepairWorkflow ? 'Дата и время диагностики' : 'Дата и время замера'" :error="getFieldError('measurement_date')" />
         </div>
 
         <OrderDrawerSection
           v-model:expanded="expandedDrawerSections.planningDetails"
-          title="Детали выезда и монтажа"
+          :title="isRepairWorkflow ? 'Детали диагностики и ремонта' : 'Детали выезда и монтажа'"
           :summary="planningDetailsSummary"
           tone="blue"
           :has-error="Boolean(getFieldError('measurement_date') || getFieldError('installation_date'))"
@@ -2249,7 +2453,7 @@ watch(
           <div class="grid gap-3 md:grid-cols-2">
             <template v-if="measurementRequired">
               <label class="field-label">
-                Замерщик
+                {{ isRepairWorkflow ? 'Специалист' : 'Замерщик' }}
                 <select v-model="measurerId" class="field-input">
                   <option :value="null">Не назначен</option>
                   <option v-for="inst in installersList" :key="inst.id" :value="inst.id">
@@ -2262,13 +2466,13 @@ watch(
                 <textarea
                   v-model="measurementResult"
                   class="field-input min-h-[60px]"
-                  placeholder="Резюме после выезда (длины трасс, доп. работы)..."
+                  :placeholder="isRepairWorkflow ? 'Краткий результат диагностики...' : 'Резюме после выезда (длины трасс, доп. работы)...'"
                 />
               </label>
             </template>
-            <DateTimeField v-model="installationDate" label="Дата монтажа" :error="getFieldError('installation_date')" />
+            <DateTimeField v-model="installationDate" :label="workDateLabel" :error="getFieldError('installation_date')" />
             <label class="field-label">
-              Монтажник
+              {{ isRepairWorkflow ? 'Исполнитель ремонта' : 'Монтажник' }}
               <select v-model="installerId" class="field-input">
                 <option :value="null">Не назначен</option>
                 <option v-for="inst in installersList" :key="inst.id" :value="inst.id">
@@ -2281,11 +2485,155 @@ watch(
       </section>
 
 
+      <OrderDrawerSection
+        v-if="isRepairWorkflow"
+        v-model:expanded="expandedDrawerSections.repair"
+        title="Ремонт / диагностика"
+        :summary="repairSectionSummary"
+        tone="default"
+      >
+        <div class="grid gap-3 md:grid-cols-2">
+          <div class="md:col-span-2 rounded-xl border border-teal-100 bg-teal-50/50 p-3">
+            <div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p class="text-sm font-semibold text-teal-900">Библиотека жалоб</p>
+                <p class="text-xs text-teal-700/80">Выберите типовую жалобу, чтобы заполнить формулировку и вероятный диагноз.</p>
+              </div>
+              <button
+                type="button"
+                class="btn-mini-outline justify-center whitespace-nowrap text-xs"
+                :disabled="repairComplaintsLoading"
+                @click="loadRepairComplaintPresets"
+              >
+                <span class="material-icons-round text-[15px]" :class="{ 'animate-spin': repairComplaintsLoading }">refresh</span>
+                Обновить
+              </button>
+            </div>
+            <input
+              v-model="repairComplaintSearch"
+              type="search"
+              class="field-input mb-2"
+              placeholder="Найти: не холодит, капает, шумит..."
+            />
+            <div v-if="filteredRepairComplaintPresets.length" class="flex max-h-44 flex-wrap gap-2 overflow-auto pr-1">
+              <button
+                v-for="preset in filteredRepairComplaintPresets"
+                :key="preset.id"
+                type="button"
+                class="rounded-lg border bg-white px-3 py-2 text-left text-xs shadow-sm transition hover:border-teal-300 hover:text-teal-800"
+                :class="preset.is_favorite ? 'border-teal-200 text-teal-900' : 'border-slate-200 text-slate-700'"
+                @click="applyRepairComplaintPreset(preset)"
+              >
+                <span class="flex items-center gap-1 font-semibold">
+                  <span v-if="preset.is_favorite" class="material-icons-round text-[14px] text-amber-500">star</span>
+                  {{ preset.customer_phrase }}
+                </span>
+                <span v-if="preset.document_wording" class="mt-1 line-clamp-2 block max-w-[260px] opacity-75">{{ preset.document_wording }}</span>
+              </button>
+            </div>
+            <p v-else class="rounded-lg border border-dashed border-teal-200 bg-white/70 px-3 py-3 text-xs text-teal-700">
+              {{ repairComplaintsLoading ? 'Загружаем пресеты...' : 'Подходящих пресетов пока нет.' }}
+            </p>
+          </div>
+          <label class="field-label md:col-span-2">
+            Жалоба клиента
+            <textarea
+              v-model="repairMeta.customer_complaint"
+              class="field-input min-h-[72px]"
+              placeholder="Например: не охлаждает, шумит, течет вода..."
+            />
+          </label>
+          <label class="field-label">
+            Формулировка для акта
+            <textarea
+              v-model="repairMeta.complaint_official"
+              class="field-input min-h-[72px]"
+              placeholder="Официальная формулировка жалобы"
+            />
+          </label>
+          <label class="field-label">
+            Вероятный диагноз
+            <textarea
+              v-model="repairMeta.likely_diagnosis"
+              class="field-input min-h-[72px]"
+              placeholder="Предварительная причина неисправности"
+            />
+          </label>
+
+          <label class="field-label">
+            Оборудование
+            <input v-model="repairMeta.equipment_name" class="field-input" placeholder="Кондиционер настенный" />
+          </label>
+          <label class="field-label">
+            Бренд
+            <input v-model="repairMeta.equipment_brand" class="field-input" placeholder="LG, Gree, Mitsubishi..." />
+          </label>
+          <label class="field-label">
+            Модель
+            <input v-model="repairMeta.equipment_model" class="field-input" placeholder="Модель внутреннего/наружного блока" />
+          </label>
+          <label class="field-label">
+            Мощность
+            <input v-model="repairMeta.equipment_power" class="field-input" placeholder="2,5 кВт" />
+          </label>
+          <label class="field-label">
+            Серийный номер
+            <input v-model="repairMeta.equipment_serial_number" class="field-input" placeholder="SN..." />
+          </label>
+          <label class="field-label">
+            Инвентарный номер
+            <input v-model="repairMeta.equipment_inventory_number" class="field-input" placeholder="Инв. номер заказчика" />
+          </label>
+          <label class="field-label md:col-span-2">
+            Дата ввода в эксплуатацию
+            <input v-model="repairMeta.equipment_commissioning_date" class="field-input" placeholder="Например: 2021 г. или 12.05.2021" />
+          </label>
+
+          <label class="field-label">
+            Техническое состояние
+            <textarea v-model="repairMeta.technical_condition" class="field-input min-h-[80px]" placeholder="Общее состояние, износ, загрязнение, следы вмешательства..." />
+          </label>
+          <label class="field-label">
+            Проверка запуска
+            <textarea v-model="repairMeta.startup_check_result" class="field-input min-h-[80px]" placeholder="Запускается / не запускается, ошибки, симптомы..." />
+          </label>
+          <label class="field-label">
+            Проверка компрессора
+            <textarea v-model="repairMeta.compressor_check_result" class="field-input min-h-[80px]" placeholder="Токи, сопротивления, срабатывание защиты..." />
+          </label>
+          <label class="field-label">
+            Замеры / диагностика
+            <textarea v-model="repairMeta.measurement_result" class="field-input min-h-[80px]" placeholder="Давление, температура, утечки, электрические замеры..." />
+          </label>
+          <label class="field-label">
+            Возможность дальнейшей эксплуатации
+            <textarea v-model="repairMeta.further_use_assessment" class="field-input min-h-[80px]" placeholder="Допускается / не допускается / с ограничениями..." />
+          </label>
+          <label class="field-label">
+            Ограничения эксплуатации
+            <textarea v-model="repairMeta.operation_restrictions" class="field-input min-h-[80px]" placeholder="Что нельзя делать до ремонта или замены" />
+          </label>
+          <label class="field-label">
+            Целесообразность ремонта
+            <textarea v-model="repairMeta.repair_feasibility" class="field-input min-h-[80px]" placeholder="Ремонт целесообразен / нецелесообразен..." />
+          </label>
+          <label class="field-label">
+            Рекомендованное решение
+            <textarea v-model="repairMeta.recommended_decision" class="field-input min-h-[80px]" placeholder="Ремонт, замена узла, списание, замена оборудования..." />
+          </label>
+          <label class="field-label md:col-span-2">
+            Техническое заключение
+            <textarea v-model="repairMeta.technical_conclusion" class="field-input min-h-[96px]" placeholder="Итоговый вывод для дефектного акта" />
+          </label>
+        </div>
+      </OrderDrawerSection>
+
+
 
       <!-- Смета -->
       <OrderDrawerSection
         v-model:expanded="expandedDrawerSections.proposals"
-        title="Предложения"
+        :title="isRepairWorkflow ? 'Смета ремонта' : 'Предложения'"
         :summary="activeProposalLineLabel"
         tone="default"
         :has-error="Boolean(getFieldError('products') || getFieldError('services'))"
@@ -2294,7 +2642,7 @@ watch(
         <div class="mb-4 border-b border-gray-200 pb-3">
           <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h3 class="text-lg font-bold text-gray-900 sm:text-xl font-['Space_Grotesk']">Предложения</h3>
+              <h3 class="text-lg font-bold text-gray-900 sm:text-xl font-['Space_Grotesk']">{{ isRepairWorkflow ? 'Смета ремонта' : 'Предложения' }}</h3>
               <p class="mt-1 text-xs text-gray-500">{{ activeProposalLineLabel }}</p>
             </div>
           </div>
@@ -2367,7 +2715,7 @@ watch(
           </div>
         </div>
 
-        <section class="mt-2">
+        <section v-if="showProductLinesSection" class="mt-2">
           <div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div class="flex flex-wrap items-center gap-3">
               <h4 class="text-md font-semibold text-gray-800">Товары</h4>
