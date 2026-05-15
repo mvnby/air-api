@@ -168,7 +168,13 @@ class DefectActStrategy(GoogleDocStrategy):
             if detailed_name:
                 equipment_name = detailed_name
         technical_condition = self._first_text(
-            self._meta_text("technical_condition", "defect_technical_condition", "customer_complaint", "complaint_text"),
+            self._meta_text(
+                "technical_condition",
+                "defect_technical_condition",
+                "complaint_official",
+                "customer_complaint",
+                "complaint_text",
+            ),
             getattr(self.order, "measurement_result", None) if self.order else None,
             default="_________________",
         )
