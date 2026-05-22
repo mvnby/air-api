@@ -176,7 +176,7 @@ async def test_bank_receipt_can_be_manually_attached_to_order(sqlite_session):
 
 
 @pytest.mark.asyncio
-async def test_bank_receipt_review_notification_goes_to_admins(sqlite_session, monkeypatch):
+async def test_bank_receipt_import_notification_goes_to_admins(sqlite_session, monkeypatch):
     receipt = BankReceipt(
         status="requires_review",
         operation_type="incoming_funds",
@@ -204,6 +204,7 @@ async def test_bank_receipt_review_notification_goes_to_admins(sqlite_session, m
         currency=PaymentCurrency.BYN,
         payer_name="ООО Уже разнесено",
         payer_unp="300200572",
+        matched_order_id=61,
         raw_body="raw",
     )
     sqlite_session.add(receipt)
@@ -221,17 +222,20 @@ async def test_bank_receipt_review_notification_goes_to_admins(sqlite_session, m
     monkeypatch.setattr(settings, "ADMIN_ID", 0)
     monkeypatch.setattr(BotService, "send_message", fake_send_message)
 
-    sent_count = await NotificationService.notify_admins_bank_receipts_requires_review(
+    sent_count = await NotificationService.notify_admins_bank_receipts_imported(
         sqlite_session,
         [receipt.id, matched.id],
     )
 
     assert sent_count == 2
     assert [item[0] for item in sent] == [101, 202]
-    assert "Новые поступления требуют проверки: 1" in sent[0][1]
+    assert "Новые банковские поступления: 2" in sent[0][1]
+    assert "Разнесено автоматически: 1" in sent[0][1]
+    assert "Требует проверки: 1" in sent[0][1]
     assert "ООО Тест" in sent[0][1]
     assert "#50" in sent[0][1]
-    assert "Уже разнесено" not in sent[0][1]
+    assert "ООО Уже разнесено" in sent[0][1]
+    assert "разнесено в заказ #61" in sent[0][1]
 
 
 def test_smtp_builds_utf8_message_and_sanitizes_errors(monkeypatch):

@@ -285,7 +285,7 @@ class SchedulerService:
                 logger.info("⏳ Bank mail import job started...")
                 async with async_session_maker() as session:
                     result = await MailImapService.import_bank_receipts(session, limit=50)
-                    notified_admins = await NotificationService.notify_admins_bank_receipts_requires_review(
+                    notified_admins = await NotificationService.notify_admins_bank_receipts_imported(
                         session,
                         result.created_receipt_ids,
                     )
