@@ -63,7 +63,7 @@ async def _render_search_results(message: types.Message, query: str, products: l
         f"🔎 Нашел {len(selected_products)} вариантов по запросу «{html.escape(query)}».",
         parse_mode="HTML",
     )
-    is_admin = message.from_user.id == settings.ADMIN_ID if message.from_user else False
+    is_admin = settings.is_admin_user(message.from_user.id if message.from_user else None)
     for product in selected_products:
         await send_product_card(message, product, is_admin)
 
@@ -159,7 +159,7 @@ async def process_wifi_and_show_results(callback: CallbackQuery, state: FSMConte
             limit=5  # Максимум 5 результатов
         )
     
-    is_admin = callback.from_user.id == settings.ADMIN_ID
+    is_admin = settings.is_admin_user(callback.from_user.id)
     
     if not products:
         await callback.message.answer(
@@ -194,7 +194,7 @@ async def search_details(callback: CallbackQuery):
         await callback.answer("Товар не найден", show_alert=True)
         return
 
-    is_admin = callback.from_user.id == settings.ADMIN_ID
+    is_admin = settings.is_admin_user(callback.from_user.id)
     await send_product_card(callback, product, is_admin)
     await callback.answer()
 
