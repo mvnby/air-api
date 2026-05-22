@@ -43,6 +43,9 @@ class Settings(BaseSettings):
         if self.ADMIN_ID and self.ADMIN_ID not in ids:
             ids.append(int(self.ADMIN_ID))
         return ids
+
+    def is_admin_user(self, user_id: int | None) -> bool:
+        return user_id is not None and int(user_id) in self.admin_list
     
     # Database Settings
     POSTGRES_USER: str = "postgres"

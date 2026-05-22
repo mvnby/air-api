@@ -20,7 +20,7 @@ async def show_favorites(message: types.Message):
         return
         
     await message.answer(f"⭐ Ваши избранные товары ({len(favs)}):")
-    is_admin = user_id == settings.ADMIN_ID
+    is_admin = settings.is_admin_user(user_id)
     for product in favs:
         await send_product_card(message, product, is_admin)
 
@@ -35,7 +35,7 @@ async def process_fav_toggle(callback: CallbackQuery):
     status_msg = "Добавлено в избранное! ❤️" if is_added else "Удалено из избранного. 💔"
     
     # Update the keyboard on the existing message
-    is_admin = user_id == settings.ADMIN_ID
+    is_admin = settings.is_admin_user(user_id)
     new_kb = get_product_keyboard(product_id, is_admin, in_favorites=is_added)
     
     try:

@@ -10,7 +10,7 @@ router = Router()
 
 @router.callback_query(F.data.startswith("edit_price_"))
 async def edit_price_start(callback: CallbackQuery, state: FSMContext):
-    if callback.from_user.id != settings.ADMIN_ID: return
+    if not settings.is_admin_user(callback.from_user.id): return
     await state.update_data(product_id=callback.data.split("_")[-1])
     await state.set_state(ShopState.edit_price)
     await callback.message.answer("Новая цена (число):")
@@ -36,7 +36,7 @@ async def edit_price_finish(message: types.Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("del_confirm_"))
 async def delete_item(callback: CallbackQuery):
-    if callback.from_user.id != settings.ADMIN_ID: return
+    if not settings.is_admin_user(callback.from_user.id): return
     
     async with async_session_maker() as session:
         try:

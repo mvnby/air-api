@@ -67,11 +67,12 @@ async def test_edit_price_finish_calls_service(monkeypatch):
 @pytest.mark.asyncio
 async def test_delete_item_uses_callback_answer(monkeypatch):
     monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
-    monkeypatch.setattr(admin_handler.settings, "ADMIN_ID", 1, raising=False)
+    monkeypatch.setattr(admin_handler.settings, "ADMIN_ID", 0, raising=False)
+    monkeypatch.setattr(admin_handler.settings, "ADMIN_IDS", "1,2", raising=False)
     service_mock = AsyncMock(return_value=False)
     monkeypatch.setattr(admin_handler.ProductService, "delete", service_mock)
 
-    callback = _DummyCallback(data="del_confirm_10", user_id=1)
+    callback = _DummyCallback(data="del_confirm_10", user_id=2)
     await admin_handler.delete_item(callback)
 
     service_mock.assert_awaited_once()
