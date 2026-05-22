@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref } from 'vue';
-import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Wrench, Settings, Wallet, ChevronLeft, ChevronRight, Tags, FileSpreadsheet, Link2, Award, Database, Calculator } from 'lucide-vue-next';
+import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Wrench, Settings, Wallet, ChevronLeft, ChevronRight, Tags, FileSpreadsheet, Link2, Award, Database, Calculator, ReceiptText } from 'lucide-vue-next';
 import { api } from './api';
 import { getApiErrorMessage } from './utils/api-errors';
 
@@ -16,6 +16,7 @@ const SettingsView = defineAsyncComponent(() => import('./views/SettingsView.vue
 const SettingsBackupView = defineAsyncComponent(() => import('./views/SettingsBackupView.vue'));
 const TariffsView = defineAsyncComponent(() => import('./views/TariffsView.vue'));
 const ServiceEstimatesView = defineAsyncComponent(() => import('./views/ServiceEstimatesView.vue'));
+const BankReceiptsView = defineAsyncComponent(() => import('./views/BankReceiptsView.vue'));
 const TagsView = defineAsyncComponent(() => import('./views/TagsView.vue'));
 const BrandsView = defineAsyncComponent(() => import('./views/BrandsView.vue'));
 const SupplierFeedsView = defineAsyncComponent(() => import('./views/SupplierFeedsView.vue'));
@@ -48,6 +49,7 @@ const navItems = [
   { path: '/manager/installers', label: 'Монтажники', icon: Wrench },
   { path: '/manager/tariffs', label: 'Тарифы услуг', icon: Wallet },
   { path: '/manager/service-estimates', label: 'Сметы услуг', icon: Calculator },
+  { path: '/manager/payments', label: 'Платежи', icon: ReceiptText },
   { path: '/manager/tags', label: 'Теги', icon: Tags },
   { path: '/manager/brands', label: 'Бренды', icon: Award },
   { path: '/manager/suppliers', label: 'Прайсы поставщиков', icon: FileSpreadsheet },
@@ -69,6 +71,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/settings')) return 'settings';
   if (path.startsWith('/manager/tariffs')) return 'tariffs';
   if (path.startsWith('/manager/service-estimates')) return 'service-estimates';
+  if (path.startsWith('/manager/payments')) return 'payments';
   if (path.startsWith('/manager/tags')) return 'tags';
   if (path.startsWith('/manager/brands')) return 'brands';
   if (path.startsWith('/manager/suppliers')) return 'suppliers';
@@ -335,6 +338,7 @@ onBeforeUnmount(() => {
       <SettingsView v-else-if="currentView === 'settings'" :key="currentLocation" />
       <TariffsView v-else-if="currentView === 'tariffs'" :key="currentLocation" />
       <ServiceEstimatesView v-else-if="currentView === 'service-estimates'" :key="currentLocation" />
+      <BankReceiptsView v-else-if="currentView === 'payments'" :key="currentLocation" />
       <TagsView v-else-if="currentView === 'tags'" :key="currentLocation" />
       <BrandsView v-else-if="currentView === 'brands'" :key="currentLocation" />
       <SupplierFeedsView v-else-if="currentView === 'suppliers'" :key="currentLocation" />

@@ -203,9 +203,10 @@ class BankReceiptService:
     async def match_receipt(session: AsyncSession, receipt: BankReceipt) -> BankReceipt:
         if receipt.id and receipt.matched_payment_id:
             return receipt
+        base_meta = dict(receipt.match_meta or {})
         if not receipt.payer_unp or receipt.amount <= 0:
             receipt.status = "requires_review"
-            receipt.match_meta = {"reason": "missing_unp_or_amount", "candidate_order_ids": []}
+            receipt.match_meta = {**base_meta, "reason": "missing_unp_or_amount", "candidate_order_ids": []}
             session.add(receipt)
             await session.flush()
             return receipt
@@ -268,6 +269,7 @@ class BankReceiptService:
             receipt.matched_order_id = int(order.id)
             receipt.matched_payment_id = int(existing_payment.id)
             receipt.match_meta = {
+                **base_meta,
                 "reason": "exact_unp_and_balance_due",
                 "candidate_order_ids": candidate_ids,
                 "exact_order_ids": exact_ids,
@@ -277,6 +279,7 @@ class BankReceiptService:
             reason = "multi_document_payment" if BankReceiptService._looks_like_multi_document_payment(receipt.payment_purpose) else "not_exactly_one_candidate"
             receipt.status = "requires_review"
             receipt.match_meta = {
+                **base_meta,
                 "reason": reason,
                 "candidate_order_ids": candidate_ids,
                 "exact_order_ids": exact_ids,
@@ -338,3 +341,65 @@ class BankReceiptService:
         await session.commit()
         await session.refresh(receipt)
         return receipt
+
+    @staticmethod
+    async def update_receipt_status(
+        session: AsyncSession,
+        *,
+        receipt_id: int,
+        status: str,
+        reason: Optional[str] = None,
+    ) -> BankReceipt:
+        receipt = await session.get(BankReceipt, receipt_id)
+        if not receipt:
+            raise ValueError("Bank receipt not found")
+
+        normalized_status = str(status or "").strip().lower()
+        if normalized_status not in {"requires_review", "matched", "void", "parse_failed"}:
+            raise ValueError("Unsupported bank receipt status")
+        if normalized_status == "matched":
+            raise ValueError("Use attach action to match a bank receipt")
+
+        old_payment_id = receipt.matched_payment_id
+        old_order_id = receipt.matched_order_id
+        if normalized_status == "void" and old_payment_id:
+            payment = await session.get(Payment, old_payment_id)
+            if payment and payment.bank_receipt_id == receipt.id:
+                await session.delete(payment)
+                await session.flush()
+                if payment.order_id:
+                    order = await session.get(Order, payment.order_id)
+                    if order:
+                        await OrderService._refresh_order_financials(session, order)
+                        order.is_paid = order.balance_due <= BankReceiptService.EXACT_AMOUNT_TOLERANCE
+                        session.add(order)
+
+        meta = dict(receipt.match_meta or {})
+        meta.update(
+            {
+                "manual_status": normalized_status,
+                "manual_reason": str(reason or "").strip() or None,
+                "previous_status": receipt.status,
+                "previous_matched_order_id": old_order_id,
+                "previous_matched_payment_id": old_payment_id,
+            }
+        )
+        receipt.status = normalized_status
+        if normalized_status in {"void", "requires_review"}:
+            receipt.matched_order_id = None
+            receipt.matched_payment_id = None
+        receipt.match_meta = meta
+        session.add(receipt)
+        await session.commit()
+        await session.refresh(receipt)
+        return receipt
+
+    @staticmethod
+    async def delete_receipt(session: AsyncSession, *, receipt_id: int) -> None:
+        receipt = await session.get(BankReceipt, receipt_id)
+        if not receipt:
+            raise ValueError("Bank receipt not found")
+        if receipt.matched_payment_id:
+            raise ValueError("Cannot delete bank receipt linked to a payment; mark it as erroneous instead")
+        await session.delete(receipt)
+        await session.commit()

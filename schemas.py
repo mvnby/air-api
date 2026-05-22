@@ -2093,9 +2093,27 @@ class BankReceiptImportResponse(BaseModel):
     receipt_ids: List[int] = []
 
 
+class BankStatementImportResponse(BaseModel):
+    rows: int = 0
+    credit_rows: int = 0
+    created: int = 0
+    matched_existing: int = 0
+    skipped: int = 0
+    suspicious: int = 0
+    receipt_ids: List[int] = []
+    created_receipt_ids: List[int] = []
+    matched_receipt_ids: List[int] = []
+    suspicious_receipt_ids: List[int] = []
+
+
 class BankReceiptAttachPayload(BaseModel):
     order_id: int
     payment_type: str = "postpayment"
+
+
+class BankReceiptStatusPayload(BaseModel):
+    status: str
+    reason: Optional[str] = None
 
 
 class OutgoingEmailSendPayload(BaseModel):

@@ -6217,6 +6217,52 @@
         }
       }
     },
+    "/api/manager/mail/bank-receipts/import-statement": {
+      "post": {
+        "tags": [
+          "manager/mail"
+        ],
+        "summary": "Import Manager Bank Statement",
+        "operationId": "import_manager_bank_statement",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_manager_bank_statement"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankStatementImportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/mail/bank-receipts": {
       "get": {
         "tags": [
@@ -6366,6 +6412,112 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BankReceiptResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/mail/bank-receipts/{receipt_id}/status": {
+      "patch": {
+        "tags": [
+          "manager/mail"
+        ],
+        "summary": "Patch Manager Bank Receipt Status",
+        "operationId": "patch_manager_bank_receipt_status",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "receipt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Receipt Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BankReceiptStatusPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankReceiptResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/mail/bank-receipts/{receipt_id}": {
+      "delete": {
+        "tags": [
+          "manager/mail"
+        ],
+        "summary": "Delete Manager Bank Receipt",
+        "operationId": "delete_manager_bank_receipt",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "receipt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Receipt Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Manager Bank Receipt"
                 }
               }
             }
@@ -10098,6 +10250,98 @@
         ],
         "title": "BankReceiptResponse"
       },
+      "BankReceiptStatusPayload": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "BankReceiptStatusPayload"
+      },
+      "BankStatementImportResponse": {
+        "properties": {
+          "rows": {
+            "type": "integer",
+            "title": "Rows",
+            "default": 0
+          },
+          "credit_rows": {
+            "type": "integer",
+            "title": "Credit Rows",
+            "default": 0
+          },
+          "created": {
+            "type": "integer",
+            "title": "Created",
+            "default": 0
+          },
+          "matched_existing": {
+            "type": "integer",
+            "title": "Matched Existing",
+            "default": 0
+          },
+          "skipped": {
+            "type": "integer",
+            "title": "Skipped",
+            "default": 0
+          },
+          "suspicious": {
+            "type": "integer",
+            "title": "Suspicious",
+            "default": 0
+          },
+          "receipt_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Receipt Ids",
+            "default": []
+          },
+          "created_receipt_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Created Receipt Ids",
+            "default": []
+          },
+          "matched_receipt_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Matched Receipt Ids",
+            "default": []
+          },
+          "suspicious_receipt_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Suspicious Receipt Ids",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "BankStatementImportResponse"
+      },
       "Body_bulk_upload_local_images": {
         "properties": {
           "product_ids_json": {
@@ -10130,6 +10374,20 @@
           "files"
         ],
         "title": "Body_bulk_upload_local_images"
+      },
+      "Body_import_manager_bank_statement": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_manager_bank_statement"
       },
       "Body_login_access_token": {
         "properties": {

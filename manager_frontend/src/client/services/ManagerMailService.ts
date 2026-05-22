@@ -6,6 +6,9 @@ import type { BankReceiptAttachPayload } from '../models/BankReceiptAttachPayloa
 import type { BankReceiptImportResponse } from '../models/BankReceiptImportResponse';
 import type { BankReceiptListResponse } from '../models/BankReceiptListResponse';
 import type { BankReceiptResponse } from '../models/BankReceiptResponse';
+import type { BankReceiptStatusPayload } from '../models/BankReceiptStatusPayload';
+import type { BankStatementImportResponse } from '../models/BankStatementImportResponse';
+import type { Body_import_manager_bank_statement } from '../models/Body_import_manager_bank_statement';
 import type { OrderEmailSendPayload } from '../models/OrderEmailSendPayload';
 import type { OutgoingEmailResponse } from '../models/OutgoingEmailResponse';
 import type { OutgoingEmailSendPayload } from '../models/OutgoingEmailSendPayload';
@@ -28,6 +31,25 @@ export class ManagerMailService {
             query: {
                 'limit': limit,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Import Manager Bank Statement
+     * @param formData
+     * @returns BankStatementImportResponse Successful Response
+     * @throws ApiError
+     */
+    public static importManagerBankStatement(
+        formData: Body_import_manager_bank_statement,
+    ): CancelablePromise<BankStatementImportResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/mail/bank-receipts/import-statement',
+            formData: formData,
+            mediaType: 'multipart/form-data',
             errors: {
                 422: `Validation Error`,
             },
@@ -84,6 +106,50 @@ export class ManagerMailService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Patch Manager Bank Receipt Status
+     * @param receiptId
+     * @param requestBody
+     * @returns BankReceiptResponse Successful Response
+     * @throws ApiError
+     */
+    public static patchManagerBankReceiptStatus(
+        receiptId: number,
+        requestBody: BankReceiptStatusPayload,
+    ): CancelablePromise<BankReceiptResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/mail/bank-receipts/{receipt_id}/status',
+            path: {
+                'receipt_id': receiptId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Delete Manager Bank Receipt
+     * @param receiptId
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static deleteManagerBankReceipt(
+        receiptId: number,
+    ): CancelablePromise<Record<string, any>> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/mail/bank-receipts/{receipt_id}',
+            path: {
+                'receipt_id': receiptId,
+            },
             errors: {
                 422: `Validation Error`,
             },

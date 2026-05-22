@@ -62,7 +62,7 @@ class NotificationService:
                 logger.exception("NOTIFY_NEW_ORDER_SEND_FAILED order_id=%s admin_id=%s", order.id, admin_id)
 
     @staticmethod
-    async def notify_admins_bank_receipts_requires_review(
+    async def notify_admins_bank_receipts_imported(
         session: AsyncSession,
         receipt_ids: list[int],
     ) -> int:
@@ -71,10 +71,7 @@ class NotificationService:
 
         stmt = (
             select(BankReceipt)
-            .where(
-                BankReceipt.id.in_(receipt_ids),
-                BankReceipt.status == "requires_review",
-            )
+            .where(BankReceipt.id.in_(receipt_ids))
             .order_by(BankReceipt.received_at.desc(), BankReceipt.created_at.desc())
         )
         result = await session.execute(stmt)
@@ -82,10 +79,16 @@ class NotificationService:
         if not receipts:
             return 0
 
+        review_count = len([item for item in receipts if item.status == "requires_review"])
+        matched_count = len([item for item in receipts if item.status == "matched"])
         lines = [
-            f"🔔 <b>Новые поступления требуют проверки: {len(receipts)}</b>",
-            "",
+            f"🔔 <b>Новые банковские поступления: {len(receipts)}</b>",
         ]
+        if matched_count:
+            lines.append(f"✅ Разнесено автоматически: {matched_count}")
+        if review_count:
+            lines.append(f"⚠️ Требует проверки: {review_count}")
+        lines.append("")
         for receipt in receipts[:10]:
             meta = receipt.match_meta or {}
             candidate_ids = meta.get("candidate_order_ids") or []
@@ -95,9 +98,20 @@ class NotificationService:
             purpose = (receipt.payment_purpose or "").strip()
             if len(purpose) > 180:
                 purpose = f"{purpose[:177]}..."
+            if receipt.status == "matched":
+                status_text = (
+                    f"разнесено в заказ #{receipt.matched_order_id}"
+                    if receipt.matched_order_id
+                    else "разнесено автоматически"
+                )
+            elif receipt.status == "requires_review":
+                status_text = "требует проверки"
+            else:
+                status_text = receipt.status or "новый"
             lines.extend(
                 [
                     f"💳 <b>{escape(amount)}</b> от {escape(payer)}",
+                    f"Статус: {escape(status_text)}",
                     f"УНП: {escape(receipt.payer_unp or 'не найден')}",
                     f"Кандидаты заказов: {escape(candidate_text)}",
                 ]
@@ -120,3 +134,5 @@ class NotificationService:
             except Exception:
                 logger.exception("NOTIFY_BANK_RECEIPTS_SEND_FAILED admin_id=%s", admin_id)
         return sent
+
+    notify_admins_bank_receipts_requires_review = notify_admins_bank_receipts_imported
