@@ -256,7 +256,7 @@ class BankStatementCsvService:
                 BankReceipt.amount > 0,
                 func.date(BankReceipt.received_at) >= start_date,
                 func.date(BankReceipt.received_at) <= end_date,
-                BankReceipt.status != "void",
+                BankReceipt.status.notin_(["void", "closed_orders", "non_order_income"]),
             )
             existing_result = await session.execute(existing_stmt)
             for receipt in existing_result.scalars().all():

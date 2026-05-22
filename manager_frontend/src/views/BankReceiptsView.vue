@@ -27,6 +27,8 @@ const statusOptions = [
   { value: '', label: 'Все' },
   { value: 'requires_review', label: 'Требуют проверки' },
   { value: 'matched', label: 'Разнесены' },
+  { value: 'closed_orders', label: 'Закрытые заказы' },
+  { value: 'non_order_income', label: 'Не CRM' },
   { value: 'void', label: 'Ошибочные' },
   { value: 'parse_failed', label: 'Ошибки парсинга' },
 ];
@@ -37,6 +39,10 @@ const statusLabel = (value?: string | null) => {
       return 'Разнесен';
     case 'requires_review':
       return 'Проверить';
+    case 'closed_orders':
+      return 'Закрытые заказы';
+    case 'non_order_income':
+      return 'Не CRM';
     case 'void':
       return 'Ошибочный';
     case 'parse_failed':
@@ -52,6 +58,10 @@ const statusClass = (value?: string | null) => {
       return 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20';
     case 'requires_review':
       return 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20';
+    case 'closed_orders':
+      return 'bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20';
+    case 'non_order_income':
+      return 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20';
     case 'void':
       return 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700/50 dark:text-slate-300 dark:border-slate-600';
     case 'parse_failed':
@@ -158,6 +168,36 @@ const markVoid = async (receipt: BankReceiptResponse) => {
       reason: reason.trim() || 'Ошибочный банковский платеж',
     });
     notice.value = `Поступление #${receipt.id} помечено ошибочным.`;
+    await loadReceipts();
+  } catch (err) {
+    error.value = getApiErrorMessage(err);
+  } finally {
+    actionId.value = null;
+  }
+};
+
+const markClosedOrders = async (receipt: BankReceiptResponse) => {
+  const reason = window.prompt('Комментарий к оплате закрытых заказов', 'Оплата по актам/закрытым заказам');
+  if (reason === null) return;
+  await updateReceiptStatus(receipt, 'closed_orders', reason.trim() || 'Оплата закрытых заказов', `Поступление #${receipt.id} помечено оплатой закрытых заказов.`);
+};
+
+const markNonOrderIncome = async (receipt: BankReceiptResponse) => {
+  const reason = window.prompt('Почему поступление не относится к заказам', 'Не CRM-поступление');
+  if (reason === null) return;
+  await updateReceiptStatus(receipt, 'non_order_income', reason.trim() || 'Не относится к заказам', `Поступление #${receipt.id} помечено как не CRM.`);
+};
+
+const updateReceiptStatus = async (receipt: BankReceiptResponse, nextStatus: string, reason: string, successMessage: string) => {
+  actionId.value = receipt.id;
+  error.value = '';
+  notice.value = '';
+  try {
+    await ManagerMailService.patchManagerBankReceiptStatus(receipt.id, {
+      status: nextStatus,
+      reason,
+    });
+    notice.value = successMessage;
     await loadReceipts();
   } catch (err) {
     error.value = getApiErrorMessage(err);
@@ -307,6 +347,7 @@ onMounted(loadReceipts);
                     <span class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold" :class="statusClass(receipt.status)">
                       <CheckCircle2 v-if="receipt.status === 'matched'" class="h-3.5 w-3.5" />
                       <AlertTriangle v-else-if="receipt.status === 'requires_review'" class="h-3.5 w-3.5" />
+                      <CheckCircle2 v-else-if="receipt.status === 'closed_orders' || receipt.status === 'non_order_income'" class="h-3.5 w-3.5" />
                       <XCircle v-else-if="receipt.status === 'void'" class="h-3.5 w-3.5" />
                       {{ statusLabel(receipt.status) }}
                     </span>
@@ -340,6 +381,22 @@ onMounted(loadReceipts);
                   </td>
                   <td class="px-4 py-3 text-right">
                     <div class="flex justify-end gap-2">
+                      <button
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-sky-200 text-sky-700 hover:bg-sky-50 disabled:opacity-40 dark:border-sky-500/30 dark:text-sky-300 dark:hover:bg-sky-500/10"
+                        title="Оплата закрытых заказов"
+                        :disabled="actionId === receipt.id || receipt.status === 'closed_orders'"
+                        @click="markClosedOrders(receipt)"
+                      >
+                        <CheckCircle2 class="h-4 w-4" />
+                      </button>
+                      <button
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-violet-200 text-violet-700 hover:bg-violet-50 disabled:opacity-40 dark:border-violet-500/30 dark:text-violet-300 dark:hover:bg-violet-500/10"
+                        title="Не относится к заказам"
+                        :disabled="actionId === receipt.id || receipt.status === 'non_order_income'"
+                        @click="markNonOrderIncome(receipt)"
+                      >
+                        <AlertTriangle class="h-4 w-4" />
+                      </button>
                       <button
                         class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                         title="Ошибочный"

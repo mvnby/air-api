@@ -232,6 +232,91 @@ async def test_bank_receipt_can_be_marked_void_and_reverses_linked_payment(sqlit
 
 
 @pytest.mark.asyncio
+async def test_bank_receipt_can_be_marked_closed_orders_and_reverses_linked_payment(sqlite_session):
+    customer = Customer(name="Мясная лавка", phone="+375291111115", type="company", inn="390185132")
+    sqlite_session.add(customer)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(customer)
+
+    order = Order(customer_id=customer.id, status="execution")
+    sqlite_session.add(order)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+    sqlite_session.add(OrderServiceLink(order_id=order.id, title="Предоплата", quantity=1, price=6900, cost=0))
+    await sqlite_session.commit()
+
+    receipt = BankReceipt(
+        status="matched",
+        operation_type="incoming_funds",
+        sender_email="bank-statement@local",
+        subject="Bank statement CSV import",
+        fingerprint="closed-orders-receipt-fingerprint",
+        received_at=datetime(2026, 5, 8, 14, 57),
+        amount=6900,
+        currency=PaymentCurrency.BYN,
+        payer_name="Мясная лавка",
+        payer_unp="390185132",
+        payment_purpose="ОПЛАТА ЗА УСЛУГИ МАГАЗИН МЯСНАЯ ЛАВКА СОГЛАСНО АКТОВ ЗА 2026Г",
+        matched_order_id=order.id,
+        raw_body="statement row",
+    )
+    sqlite_session.add(receipt)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(receipt)
+
+    payment = Payment(order_id=order.id, bank_receipt_id=receipt.id, amount=6900)
+    sqlite_session.add(payment)
+    await sqlite_session.flush()
+    receipt.matched_payment_id = payment.id
+    sqlite_session.add(receipt)
+    await sqlite_session.commit()
+
+    resolved = await BankReceiptService.update_receipt_status(
+        sqlite_session,
+        receipt_id=receipt.id,
+        status="closed_orders",
+        reason="Оплата по актам закрытых заказов",
+    )
+
+    assert resolved.status == "closed_orders"
+    assert resolved.matched_order_id is None
+    assert resolved.matched_payment_id is None
+    assert resolved.match_meta["manual_reason"] == "Оплата по актам закрытых заказов"
+    payments = (await sqlite_session.execute(select(Payment))).scalars().all()
+    assert payments == []
+
+
+@pytest.mark.asyncio
+async def test_bank_interest_receipt_auto_marks_non_order_income(sqlite_session):
+    receipt = BankReceipt(
+        status="new",
+        operation_type="incoming_funds",
+        sender_email="bank-statement@local",
+        subject="Bank statement CSV import",
+        fingerprint="bank-interest-receipt-fingerprint",
+        received_at=datetime(2026, 5, 1),
+        amount=12.34,
+        currency=PaymentCurrency.BYN,
+        payer_name="Банк",
+        payer_unp="",
+        payment_purpose=(
+            "Выплата процентов за пользование временно свободными средствами, "
+            "находящимися на счете, согласно ведомости начисленных процентов"
+        ),
+        raw_body="statement row",
+    )
+    sqlite_session.add(receipt)
+    await sqlite_session.flush()
+
+    matched = await BankReceiptService.match_receipt(sqlite_session, receipt)
+
+    assert matched.status == "non_order_income"
+    assert matched.match_meta["reason"] == "bank_interest_income"
+    payments = (await sqlite_session.execute(select(Payment))).scalars().all()
+    assert payments == []
+
+
+@pytest.mark.asyncio
 async def test_order_detail_payment_includes_bank_receipt(sqlite_session):
     customer = Customer(name="Мегахенд", phone="+375291111114", type="company", inn="192663084")
     sqlite_session.add(customer)
