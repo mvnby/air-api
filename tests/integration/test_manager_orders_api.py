@@ -1229,6 +1229,7 @@ async def test_manager_order_detail_includes_bank_receipt_payment_details(async_
     payment = Payment(order_id=order.id, bank_receipt_id=receipt.id, amount=420)
     db.add(payment)
     await db.commit()
+    db.expunge(order)
 
     headers = await _auth_headers(async_client)
     response = await async_client.get(f"/api/manager/orders/{order.id}", headers=headers)
