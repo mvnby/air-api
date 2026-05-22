@@ -1038,6 +1038,25 @@ const formatReceiptDate = (value?: string | null) => {
   return new Date(value).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 };
 
+const formatPaymentType = (value?: string | null) => (value === 'prepayment' ? 'Аванс' : 'Доплата');
+
+const formatBankPaymentDate = (value?: string | null) => {
+  if (!value) return 'дата не указана';
+  return new Date(value).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const openBankReceiptJournal = (payment: PaymentResponse) => {
+  if (!props.order?.id || !payment.bank_receipt_id) return;
+  window.history.pushState({}, '', `/manager/payments?orderId=${props.order.id}`);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+};
+
 const deletingPaymentId = ref<number | null>(null);
 
 const confirmDeletePayment = (paymentId: number) => {
@@ -3264,21 +3283,46 @@ watch(
           </div>
         </div>
 
-        <div class="mt-4 space-y-2 max-h-32 overflow-y-auto pr-1">
-            <div v-for="p in payments" :key="p.id" class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 bg-white px-3 py-2 text-xs shadow-sm">
-                <span class="text-slate-500">{{ new Date(p.date).toLocaleDateString() }}</span>
-                <span class="font-bold text-slate-800" :class="p.currency !== 'BYN' ? 'text-blue-600' : ''">
-                    <template v-if="p.currency !== 'BYN'">{{ p.amount.toFixed(2) }} {{ p.currency }}</template>
-                    <template v-else>{{ formatMoney(p.amount) }}</template>
-                </span>
-                <span class="text-slate-400 w-16 text-right">{{ p.type === 'prepayment' ? 'Аванс' : 'Доплата' }}</span>
-                <div v-if="deletingPaymentId === p.id" class="flex gap-2 ml-2 items-center">
-                    <button class="text-slate-500 hover:text-slate-800 font-medium" @click="cancelDeletePayment()">Отмена</button>
-                    <button class="text-red-500 hover:text-red-700 font-bold" @click="deletePayment(p.id)">Да, удалить</button>
+        <div class="mt-4 space-y-2 max-h-56 overflow-y-auto pr-1">
+            <div v-for="p in payments" :key="p.id" class="rounded-lg border border-slate-100 bg-white px-3 py-2 text-xs shadow-sm">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-slate-500">{{ new Date(p.date).toLocaleDateString() }}</span>
+                        <span
+                          v-if="p.bank_receipt"
+                          class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700"
+                        >
+                          <span class="material-icons-round text-[13px]">account_balance</span>
+                          Банк
+                        </span>
+                    </div>
+                    <span class="font-bold text-slate-800" :class="p.currency !== 'BYN' ? 'text-blue-600' : ''">
+                        <template v-if="p.currency !== 'BYN'">{{ p.amount.toFixed(2) }} {{ p.currency }}</template>
+                        <template v-else>{{ formatMoney(p.amount) }}</template>
+                    </span>
+                    <span class="text-slate-400 w-16 text-right">{{ formatPaymentType(p.type) }}</span>
+                    <div v-if="deletingPaymentId === p.id" class="flex gap-2 ml-2 items-center">
+                        <button class="text-slate-500 hover:text-slate-800 font-medium" @click="cancelDeletePayment()">Отмена</button>
+                        <button class="text-red-500 hover:text-red-700 font-bold" @click="deletePayment(p.id)">Да, удалить</button>
+                    </div>
+                    <button v-else class="flex h-6 w-6 ml-2 items-center justify-center rounded text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors" @click="confirmDeletePayment(p.id)" title="Удалить платеж">
+                        <span class="material-icons-round text-[14px]">delete</span>
+                    </button>
                 </div>
-                <button v-else class="flex h-6 w-6 ml-2 items-center justify-center rounded text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors" @click="confirmDeletePayment(p.id)" title="Удалить платеж">
-                    <span class="material-icons-round text-[14px]">delete</span>
-                </button>
+                <div v-if="p.bank_receipt" class="mt-2 rounded-lg border border-emerald-100 bg-emerald-50/40 p-2 text-[11px] text-slate-600">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="font-semibold text-emerald-800">ПП № {{ p.bank_receipt.payment_document_number || p.bank_receipt.payment_document_raw || p.bank_receipt.id }}</span>
+                        <span>{{ formatBankPaymentDate(p.bank_receipt.received_at || p.date) }}</span>
+                        <span v-if="p.bank_receipt.payer_unp">УНП {{ p.bank_receipt.payer_unp }}</span>
+                    </div>
+                    <p v-if="p.bank_receipt.payer_name" class="mt-1 truncate font-medium text-slate-700">{{ p.bank_receipt.payer_name }}</p>
+                    <p v-if="p.bank_receipt.payment_purpose" class="mt-1 line-clamp-2 text-slate-500">{{ p.bank_receipt.payment_purpose }}</p>
+                    <button class="mt-1 inline-flex items-center gap-1 font-semibold text-emerald-700 hover:text-emerald-900" @click="openBankReceiptJournal(p)">
+                        <span class="material-icons-round text-[13px]">receipt_long</span>
+                        Открыть в журнале
+                    </button>
+                </div>
+                <p v-else-if="p.comment" class="mt-1 text-[11px] text-slate-500">{{ p.comment }}</p>
             </div>
             <div v-if="!payments.length" class="text-sm text-gray-500 italic py-3 text-center rounded-xl border border-dashed border-gray-200">
                 Нет оплат

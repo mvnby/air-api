@@ -178,6 +178,7 @@ export type { OrderWorkStageResponse } from './models/OrderWorkStageResponse';
 export type { OrderWorkStageUpdatePayload } from './models/OrderWorkStageUpdatePayload';
 export type { OutgoingEmailResponse } from './models/OutgoingEmailResponse';
 export type { OutgoingEmailSendPayload } from './models/OutgoingEmailSendPayload';
+export type { PaymentBankReceiptResponse } from './models/PaymentBankReceiptResponse';
 export type { PaymentCreatePayload } from './models/PaymentCreatePayload';
 export type { PaymentCurrency } from './models/PaymentCurrency';
 export type { PaymentResponse } from './models/PaymentResponse';

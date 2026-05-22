@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { PaymentBankReceiptResponse } from './PaymentBankReceiptResponse';
 import type { PaymentCurrency } from './PaymentCurrency';
 export type PaymentResponse = {
     id: number;
@@ -12,5 +13,6 @@ export type PaymentResponse = {
     comment?: (string | null);
     created_at: string;
     bank_receipt_id?: (number | null);
+    bank_receipt?: (PaymentBankReceiptResponse | null);
 };
 

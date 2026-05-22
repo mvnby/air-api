@@ -4,6 +4,7 @@ from sqlmodel import select
 
 from core.config import settings
 from models import (
+    BankReceipt,
     Customer,
     CustomerBranch,
     CustomerContract,
@@ -17,6 +18,7 @@ from models import (
     OrderServiceLink,
     OrderStatus,
     Payment,
+    PaymentCurrency,
     Product,
     RepairComplaintPreset,
     Service,
@@ -1188,3 +1190,53 @@ async def test_manager_order_delete_cascades_related_entities(async_client, db, 
     docs = await db.execute(select(OrderDocument).where(OrderDocument.order_id == order.id))
     assert docs.scalars().first() is None
     assert "google-file-delete-1" in deleted_ids
+
+
+@pytest.mark.asyncio
+async def test_manager_order_detail_includes_bank_receipt_payment_details(async_client, db):
+    customer = Customer(name="Bank Customer", phone="+375290009999", type=CustomerType.individual, inn="192663084")
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.EXECUTION, total_amount=420, balance_due=420)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    receipt = BankReceipt(
+        status="matched",
+        operation_type="incoming_funds",
+        sender_email="bank-statement@local",
+        subject="Bank statement CSV import",
+        fingerprint="order-detail-bank-receipt",
+        received_at=datetime(2026, 5, 22, 14, 57),
+        amount=420,
+        currency=PaymentCurrency.BYN,
+        payer_name='ООО "МЕГАХЕНД"',
+        payer_unp="192663084",
+        payer_account="BY44PJCB30120493741000000933",
+        payment_document_raw="17",
+        payment_document_number="17",
+        payment_purpose="ОПЛАТА СОГЛАСНО СЧЕТА 61",
+        matched_order_id=order.id,
+        raw_body="statement row",
+    )
+    db.add(receipt)
+    await db.commit()
+    await db.refresh(receipt)
+
+    payment = Payment(order_id=order.id, bank_receipt_id=receipt.id, amount=420)
+    db.add(payment)
+    await db.commit()
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.get(f"/api/manager/orders/{order.id}", headers=headers)
+
+    assert response.status_code == 200
+    payments = response.json()["payments"]
+    assert len(payments) == 1
+    assert payments[0]["bank_receipt_id"] == receipt.id
+    assert payments[0]["bank_receipt"]["payment_document_number"] == "17"
+    assert payments[0]["bank_receipt"]["payer_unp"] == "192663084"
+    assert payments[0]["bank_receipt"]["payment_purpose"] == "ОПЛАТА СОГЛАСНО СЧЕТА 61"

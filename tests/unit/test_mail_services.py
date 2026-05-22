@@ -14,6 +14,7 @@ from services.bank_statement_csv_service import BankStatementCsvService
 from services.bot_service import BotService
 from services.mail_smtp_service import MailAttachment, MailSmtpService
 from services.notification_service import NotificationService
+from services.order_service import OrderService
 
 
 SAMPLE_BANK_EMAIL = """
@@ -228,6 +229,51 @@ async def test_bank_receipt_can_be_marked_void_and_reverses_linked_payment(sqlit
     assert payments == []
     refreshed_order = await sqlite_session.get(Order, order.id)
     assert refreshed_order.balance_due == 420
+
+
+@pytest.mark.asyncio
+async def test_order_detail_payment_includes_bank_receipt(sqlite_session):
+    customer = Customer(name="Мегахенд", phone="+375291111114", type="company", inn="192663084")
+    sqlite_session.add(customer)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(customer)
+
+    order = Order(customer_id=customer.id, status="execution", total_amount=420, balance_due=420)
+    sqlite_session.add(order)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+
+    receipt = BankReceipt(
+        status="matched",
+        operation_type="incoming_funds",
+        sender_email="bank-statement@local",
+        subject="Bank statement CSV import",
+        fingerprint="order-detail-receipt-fingerprint",
+        received_at=datetime(2026, 5, 22, 14, 57),
+        amount=420,
+        currency=PaymentCurrency.BYN,
+        payer_name='ООО "МЕГАХЕНД"',
+        payer_unp="192663084",
+        payer_account="BY44PJCB30120493741000000933",
+        payment_document_number="17",
+        payment_purpose="ОПЛАТА СОГЛАСНО СЧЕТА 61",
+        matched_order_id=order.id,
+        raw_body="statement row",
+    )
+    sqlite_session.add(receipt)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(receipt)
+
+    sqlite_session.add(Payment(order_id=order.id, bank_receipt_id=receipt.id, amount=420))
+    await sqlite_session.commit()
+    sqlite_session.expunge(order)
+
+    detail = await OrderService.get_order_detail_for_manager(sqlite_session, order.id)
+
+    assert detail is not None
+    assert detail["payments"][0]["bank_receipt_id"] == receipt.id
+    assert detail["payments"][0]["bank_receipt"]["payment_document_number"] == "17"
+    assert detail["payments"][0]["bank_receipt"]["payer_unp"] == "192663084"
 
 
 def test_bank_statement_csv_parser_reads_credit_rows():
