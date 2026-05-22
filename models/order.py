@@ -603,6 +603,7 @@ class Payment(SQLModel, table=True):
     updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
 
     order: "Order" = Relationship(back_populates="payments")
+    bank_receipt: Optional[BankReceipt] = Relationship()
 
     def __str__(self):
         return f"Платеж {self.amount} BYN от {self.date.strftime('%d.%m.%Y')} ({self.type})"

@@ -479,6 +479,20 @@ class PaymentCreatePayload(BaseModel):
     comment: Optional[str] = None
 
 
+class PaymentBankReceiptResponse(BaseModel):
+    id: int
+    status: str
+    received_at: Optional[datetime] = None
+    amount: float
+    currency: PaymentCurrency
+    payer_name: Optional[str] = None
+    payer_unp: Optional[str] = None
+    payer_account: Optional[str] = None
+    payment_document_raw: Optional[str] = None
+    payment_document_number: Optional[str] = None
+    payment_purpose: Optional[str] = None
+
+
 class PaymentResponse(BaseModel):
     id: int
     amount: float
@@ -488,6 +502,7 @@ class PaymentResponse(BaseModel):
     comment: Optional[str] = None
     created_at: datetime
     bank_receipt_id: Optional[int] = None
+    bank_receipt: Optional[PaymentBankReceiptResponse] = None
 
 
 

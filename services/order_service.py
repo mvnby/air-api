@@ -4,12 +4,13 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-from sqlalchemy import func, or_, and_, not_, cast, String, delete
+from sqlalchemy import func, or_, and_, not_, cast, String, delete, inspect
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import NO_VALUE
 
 from crud.order import OrderDAO
 from crud.product import ProductDAO
-from models import Order, OrderProductLink, OrderProposal, OrderServiceLink, Customer, CustomerBranch, CustomerContract, CustomerType, OrderStatus, PaymentCurrency, Product, LeadSource, Service, ServiceTariff, OrderInstaller, OrderWorkStage
+from models import Order, OrderProductLink, OrderProposal, OrderServiceLink, Customer, CustomerBranch, CustomerContract, CustomerType, OrderStatus, PaymentCurrency, Product, LeadSource, Service, ServiceTariff, OrderInstaller, OrderWorkStage, Payment
 from services.customer_contract_service import CustomerContractService
 from services.document_role_service import DocumentRoleService
 from services.product_supply_metrics_service import ProductSupplyMetricsService
@@ -40,6 +41,37 @@ class OrderService:
         if title and title.startswith(OrderService.LEGACY_WEBSITE_TITLE_PREFIX):
             return None
         return title
+
+    @staticmethod
+    def _map_payment(payment: Payment) -> Dict[str, Any]:
+        receipt_value = inspect(payment).attrs.bank_receipt.loaded_value
+        receipt = receipt_value if receipt_value is not NO_VALUE else None
+        receipt_data = None
+        if receipt:
+            receipt_data = {
+                "id": receipt.id,
+                "status": receipt.status,
+                "received_at": receipt.received_at,
+                "amount": float(receipt.amount),
+                "currency": receipt.currency,
+                "payer_name": receipt.payer_name,
+                "payer_unp": receipt.payer_unp,
+                "payer_account": receipt.payer_account,
+                "payment_document_raw": receipt.payment_document_raw,
+                "payment_document_number": receipt.payment_document_number,
+                "payment_purpose": receipt.payment_purpose,
+            }
+        return {
+            "id": payment.id,
+            "amount": float(payment.amount),
+            "currency": payment.currency.value if hasattr(payment.currency, "value") else str(payment.currency),
+            "date": payment.date,
+            "type": payment.type.value if hasattr(payment.type, "value") else str(payment.type),
+            "comment": payment.comment,
+            "created_at": payment.created_at,
+            "bank_receipt_id": payment.bank_receipt_id,
+            "bank_receipt": receipt_data,
+        }
 
     @staticmethod
     def _build_default_order_title(
@@ -1526,7 +1558,7 @@ class OrderService:
                 selectinload(Order.service_links).selectinload(OrderServiceLink.service),
                 selectinload(Order.installers).selectinload(OrderInstaller.installer),
                 selectinload(Order.documents),
-                selectinload(Order.payments),
+                selectinload(Order.payments).selectinload(Payment.bank_receipt),
                 selectinload(Order.work_stages).selectinload(OrderWorkStage.installer),
             )
         )
@@ -1564,19 +1596,7 @@ class OrderService:
             }
             for doc in sorted(order.documents, key=lambda d: d.created_at, reverse=True)
         ]
-        data["payments"] = [
-            {
-                "id": p.id,
-                "amount": float(p.amount),
-                "currency": p.currency,
-                "date": p.date,
-                "type": p.type.value if hasattr(p.type, "value") else str(p.type),
-                "comment": p.comment,
-                "created_at": p.created_at,
-                "bank_receipt_id": p.bank_receipt_id,
-            }
-            for p in sorted(order.payments, key=lambda d: d.date, reverse=True)
-        ]
+        data["payments"] = [OrderService._map_payment(p) for p in sorted(order.payments, key=lambda d: d.date, reverse=True)]
         data["work_stages"] = [
             {
                 "id": ws.id,
@@ -2164,20 +2184,8 @@ class OrderService:
         session.add(order)
         await session.commit()
         
-        # Return payments mapped exactly as in get_order_detail_for_manager
-        return [
-            {
-                "id": p.id,
-                "amount": float(p.amount),
-                "currency": p.currency.value if hasattr(p.currency, "value") else str(p.currency),
-                "date": p.date,
-                "type": p.type.value if hasattr(p.type, "value") else str(p.type),
-                "comment": p.comment,
-                "created_at": p.created_at,
-                "bank_receipt_id": p.bank_receipt_id,
-            }
-            for p in sorted(order.payments, key=lambda d: d.date, reverse=True)
-        ]
+        # Return payments mapped exactly as in get_order_detail_for_manager.
+        return [OrderService._map_payment(p) for p in sorted(order.payments, key=lambda d: d.date, reverse=True)]
 
     @staticmethod
     async def delete_payment(session: AsyncSession, order_id: int, payment_id: int):
@@ -2199,19 +2207,7 @@ class OrderService:
         session.add(order)
         await session.commit()
         
-        return [
-            {
-                "id": p.id,
-                "amount": float(p.amount),
-                "currency": p.currency.value if hasattr(p.currency, "value") else str(p.currency),
-                "date": p.date,
-                "type": p.type.value if hasattr(p.type, "value") else str(p.type),
-                "comment": p.comment,
-                "created_at": p.created_at,
-                "bank_receipt_id": p.bank_receipt_id,
-            }
-            for p in sorted(order.payments, key=lambda d: d.date, reverse=True)
-        ]
+        return [OrderService._map_payment(p) for p in sorted(order.payments, key=lambda d: d.date, reverse=True)]
 
     # -----------------------------------------------------------------
     # Leads Inbox (Order-based triage)

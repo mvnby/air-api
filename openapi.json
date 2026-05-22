@@ -19660,6 +19660,111 @@
         ],
         "title": "OutgoingEmailSendPayload"
       },
+      "PaymentBankReceiptResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "received_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Received At"
+          },
+          "amount": {
+            "type": "number",
+            "title": "Amount"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/PaymentCurrency"
+          },
+          "payer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payer Name"
+          },
+          "payer_unp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payer Unp"
+          },
+          "payer_account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payer Account"
+          },
+          "payment_document_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Document Raw"
+          },
+          "payment_document_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Document Number"
+          },
+          "payment_purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Purpose"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "amount",
+          "currency"
+        ],
+        "title": "PaymentBankReceiptResponse"
+      },
       "PaymentCreatePayload": {
         "properties": {
           "amount": {
@@ -19750,6 +19855,16 @@
               }
             ],
             "title": "Bank Receipt Id"
+          },
+          "bank_receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentBankReceiptResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
