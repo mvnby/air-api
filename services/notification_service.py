@@ -106,6 +106,10 @@ class NotificationService:
                 )
             elif receipt.status == "requires_review":
                 status_text = "требует проверки"
+            elif receipt.status == "closed_orders":
+                status_text = "оплата закрытых заказов"
+            elif receipt.status == "non_order_income":
+                status_text = "не относится к заказам"
             else:
                 status_text = receipt.status or "новый"
             lines.extend(

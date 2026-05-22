@@ -24,6 +24,7 @@ class BankReceiptImportResult:
 
 class BankReceiptService:
     EXACT_AMOUNT_TOLERANCE = 0.01
+    RESOLVED_UNMATCHED_STATUSES = {"closed_orders", "non_order_income"}
 
     @staticmethod
     async def list_receipts(
@@ -165,6 +166,17 @@ class BankReceiptService:
         return len(markers) > 1
 
     @staticmethod
+    def _looks_like_non_order_income(purpose: Optional[str]) -> bool:
+        text = " ".join(str(purpose or "").casefold().split())
+        if not text:
+            return False
+        return (
+            "выплата процентов" in text
+            and "временно свободными средствами" in text
+            and "находящимися на счете" in text
+        )
+
+    @staticmethod
     def _document_reference_tokens(number: str) -> set[str]:
         raw = str(number or "").strip()
         if not raw:
@@ -204,6 +216,18 @@ class BankReceiptService:
         if receipt.id and receipt.matched_payment_id:
             return receipt
         base_meta = dict(receipt.match_meta or {})
+        if BankReceiptService._looks_like_non_order_income(receipt.payment_purpose):
+            receipt.status = "non_order_income"
+            receipt.match_meta = {
+                **base_meta,
+                "reason": "bank_interest_income",
+                "candidate_order_ids": [],
+                "exact_order_ids": [],
+                "document_candidates": [],
+            }
+            session.add(receipt)
+            await session.flush()
+            return receipt
         if not receipt.payer_unp or receipt.amount <= 0:
             receipt.status = "requires_review"
             receipt.match_meta = {**base_meta, "reason": "missing_unp_or_amount", "candidate_order_ids": []}
@@ -355,14 +379,14 @@ class BankReceiptService:
             raise ValueError("Bank receipt not found")
 
         normalized_status = str(status or "").strip().lower()
-        if normalized_status not in {"requires_review", "matched", "void", "parse_failed"}:
+        if normalized_status not in {"requires_review", "matched", "void", "parse_failed", "closed_orders", "non_order_income"}:
             raise ValueError("Unsupported bank receipt status")
         if normalized_status == "matched":
             raise ValueError("Use attach action to match a bank receipt")
 
         old_payment_id = receipt.matched_payment_id
         old_order_id = receipt.matched_order_id
-        if normalized_status == "void" and old_payment_id:
+        if normalized_status in {"void", *BankReceiptService.RESOLVED_UNMATCHED_STATUSES} and old_payment_id:
             payment = await session.get(Payment, old_payment_id)
             if payment and payment.bank_receipt_id == receipt.id:
                 await session.delete(payment)
@@ -385,7 +409,7 @@ class BankReceiptService:
             }
         )
         receipt.status = normalized_status
-        if normalized_status in {"void", "requires_review"}:
+        if normalized_status in {"void", "requires_review", *BankReceiptService.RESOLVED_UNMATCHED_STATUSES}:
             receipt.matched_order_id = None
             receipt.matched_payment_id = None
         receipt.match_meta = meta
