@@ -2098,6 +2098,11 @@ class BankReceiptAttachPayload(BaseModel):
     payment_type: str = "postpayment"
 
 
+class BankReceiptStatusPayload(BaseModel):
+    status: str
+    reason: Optional[str] = None
+
+
 class OutgoingEmailSendPayload(BaseModel):
     to_email: str
     subject: str

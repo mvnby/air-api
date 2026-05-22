@@ -176,6 +176,49 @@ async def test_bank_receipt_can_be_manually_attached_to_order(sqlite_session):
 
 
 @pytest.mark.asyncio
+async def test_bank_receipt_can_be_marked_void_and_reverses_linked_payment(sqlite_session):
+    customer = Customer(name="Мегахенд", phone="+375291111113", type="company", inn="192663084")
+    sqlite_session.add(customer)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(customer)
+
+    order = Order(customer_id=customer.id, status="execution")
+    sqlite_session.add(order)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+    sqlite_session.add(OrderServiceLink(order_id=order.id, title="Обслуживание", quantity=1, price=420, cost=0))
+    await sqlite_session.commit()
+
+    raw_body = SAMPLE_BANK_EMAIL.replace("1 015 BYN", "420 BYN").replace("300200572", "192663084")
+    receipt, created = await BankReceiptService.process_email(
+        sqlite_session,
+        sender_email="noreply@service.belapb.by",
+        subject="Поступление средств на счет Индивидуальный предприниматель Янулевич Дмитрий Викторович 08.05.26 14:57",
+        raw_body=raw_body,
+        message_id="<bank-void@example.test>",
+    )
+    assert created is True
+    assert receipt.status == "matched"
+    assert receipt.matched_payment_id is not None
+
+    voided = await BankReceiptService.update_receipt_status(
+        sqlite_session,
+        receipt_id=receipt.id,
+        status="void",
+        reason="Отозван банком",
+    )
+
+    assert voided.status == "void"
+    assert voided.matched_order_id is None
+    assert voided.matched_payment_id is None
+    assert voided.match_meta["manual_reason"] == "Отозван банком"
+    payments = (await sqlite_session.execute(select(Payment))).scalars().all()
+    assert payments == []
+    refreshed_order = await sqlite_session.get(Order, order.id)
+    assert refreshed_order.balance_due == 420
+
+
+@pytest.mark.asyncio
 async def test_bank_receipt_import_notification_goes_to_admins(sqlite_session, monkeypatch):
     receipt = BankReceipt(
         status="requires_review",

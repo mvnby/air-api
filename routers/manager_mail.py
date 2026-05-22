@@ -7,8 +7,10 @@ from core.manager_error_codes import BAD_REQUEST
 from core.security import get_current_username
 from routers.manager_operation_ids import (
     ATTACH_MANAGER_BANK_RECEIPT,
+    DELETE_MANAGER_BANK_RECEIPT,
     IMPORT_MANAGER_BANK_RECEIPTS,
     LIST_MANAGER_BANK_RECEIPTS,
+    PATCH_MANAGER_BANK_RECEIPT_STATUS,
     SEND_MANAGER_ORDER_EMAIL,
     SEND_MANAGER_TEST_EMAIL,
 )
@@ -17,6 +19,7 @@ from schemas import (
     BankReceiptImportResponse,
     BankReceiptListResponse,
     BankReceiptResponse,
+    BankReceiptStatusPayload,
     OrderEmailSendPayload,
     OutgoingEmailResponse,
     OutgoingEmailSendPayload,
@@ -99,6 +102,53 @@ async def attach_manager_bank_receipt(
         raise manager_http_error(
             status_code=400,
             endpoint=ATTACH_MANAGER_BANK_RECEIPT,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.patch(
+    "/bank-receipts/{receipt_id}/status",
+    response_model=BankReceiptResponse,
+    operation_id=PATCH_MANAGER_BANK_RECEIPT_STATUS,
+)
+async def patch_manager_bank_receipt_status(
+    receipt_id: int,
+    payload: BankReceiptStatusPayload,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await BankReceiptService.update_receipt_status(
+            session,
+            receipt_id=receipt_id,
+            status=payload.status,
+            reason=payload.reason,
+        )
+    except Exception as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=PATCH_MANAGER_BANK_RECEIPT_STATUS,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.delete(
+    "/bank-receipts/{receipt_id}",
+    response_model=dict,
+    operation_id=DELETE_MANAGER_BANK_RECEIPT,
+)
+async def delete_manager_bank_receipt(
+    receipt_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        await BankReceiptService.delete_receipt(session, receipt_id=receipt_id)
+        return {"ok": True}
+    except Exception as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=DELETE_MANAGER_BANK_RECEIPT,
             error_code=BAD_REQUEST,
             message=str(exc),
         ) from exc
