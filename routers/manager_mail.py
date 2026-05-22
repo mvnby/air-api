@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
@@ -9,6 +9,7 @@ from routers.manager_operation_ids import (
     ATTACH_MANAGER_BANK_RECEIPT,
     DELETE_MANAGER_BANK_RECEIPT,
     IMPORT_MANAGER_BANK_RECEIPTS,
+    IMPORT_MANAGER_BANK_STATEMENT,
     LIST_MANAGER_BANK_RECEIPTS,
     PATCH_MANAGER_BANK_RECEIPT_STATUS,
     SEND_MANAGER_ORDER_EMAIL,
@@ -20,11 +21,13 @@ from schemas import (
     BankReceiptListResponse,
     BankReceiptResponse,
     BankReceiptStatusPayload,
+    BankStatementImportResponse,
     OrderEmailSendPayload,
     OutgoingEmailResponse,
     OutgoingEmailSendPayload,
 )
 from services.bank_receipt_service import BankReceiptService
+from services.bank_statement_csv_service import BankStatementCsvService
 from services.mail_imap_service import MailImapService
 from services.mail_smtp_service import MailSmtpService
 
@@ -52,6 +55,28 @@ async def import_manager_bank_receipts(
         raise manager_http_error(
             status_code=400,
             endpoint=IMPORT_MANAGER_BANK_RECEIPTS,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/bank-receipts/import-statement",
+    response_model=BankStatementImportResponse,
+    operation_id=IMPORT_MANAGER_BANK_STATEMENT,
+)
+async def import_manager_bank_statement(
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        content = await file.read()
+        result = await BankStatementCsvService.import_statement(session, content)
+        return BankStatementImportResponse(**result.__dict__)
+    except Exception as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=IMPORT_MANAGER_BANK_STATEMENT,
             error_code=BAD_REQUEST,
             message=str(exc),
         ) from exc

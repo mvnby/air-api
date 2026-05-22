@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -9,6 +10,7 @@ from core.config import settings
 from models import BankReceipt, Customer, Order, OrderDocument, OrderServiceLink, OutgoingEmail, Payment, PaymentCurrency
 from services.bank_email_parser_service import BankEmailParserService
 from services.bank_receipt_service import BankReceiptService
+from services.bank_statement_csv_service import BankStatementCsvService
 from services.bot_service import BotService
 from services.mail_smtp_service import MailAttachment, MailSmtpService
 from services.notification_service import NotificationService
@@ -24,6 +26,16 @@ MULTI_ACT_BANK_EMAIL = """
 Добрый день!
 
 Уважаемый клиент Индивидуальный предприниматель Янулевич Дмитрий Викторович, на Ваш банковский счет №BY93BAPB3013W294700100000000 08.05.26 14:57 поступили денежные средства в размере 1 015 BYN от ДОЧЕРНЕЕ КОММУНАЛЬНОЕ УНИТАРНОЕ ПРЕДПРИЯТИЕ "УПРАВЛЕНИЕ КАПИТАЛЬНОГО СТРОИТЕЛЬСТВА Г. ВИТЕБСКА", УНП 300200572 со счета №BY25AKBB30120379400272000000. Реквизиты платежного документа: 1 № 008049, назначение: ОПЛАТА ЗА РЕМОНТ И ОБСЛУЖИВАНИЕ КОНДИЦИОНЕРА СОГЛАСНО АКТУ N7 ОТ 27.04.26, N8 ОТ 30.04.2026 НДС НЕТ. Остаток по счету после зачисления составляет 4 662.26 BYN.
+"""
+
+SAMPLE_STATEMENT_CSV = """;Выписка по счету №BY93BAPB3013W294700100000000 за период с 08.05.2026 по 22.05.2026;
+;
+Код валюты: BYN;
+;
+Код банка;Счет-корреспондент;Номер документа;Обороты: дебет;Обороты: кредит;В эквиваленте;Дата операции;Назначение;Наименование контрагента;УНП контрагента;
+AKBBBY2X;="BY25AKBB30120379400272000000";="008049";;1015,00;1015,00;08.05.2026;OTHR 121601, ОПЛАТА ЗА РЕМОНТ И ОБСЛУЖИВАНИЕ КОНДИЦИОНЕРА СОГЛАСНО АКТУ N7 ОТ 27.04.26, N8 ОТ 30.04.2026 НДС НЕТ;ДОЧЕРНЕЕ КОММУНАЛЬНОЕ УНИТАРНОЕ ПРЕДПРИЯТИЕ "УПРАВЛЕНИЕ КАПИТАЛЬНОГО СТРОИТЕЛЬСТВА Г. ВИТЕБСКА";300200572;
+PJCBBY2X;="BY44PJCB30120493741000000933";="17";;420,00;420,00;22.05.2026;OTHR 190401, ОПЛАТА СОГЛАСНО СЧЕТА 61 ОТ 07.05.2026 ТЕХНИЧЕСКОЕ ОБСЛУЖИВАНИЕ;ООО "МЕГАХЕНД";192663084;
+Итого оборотов;;;;1435,00;;;;;
 """
 
 
@@ -216,6 +228,64 @@ async def test_bank_receipt_can_be_marked_void_and_reverses_linked_payment(sqlit
     assert payments == []
     refreshed_order = await sqlite_session.get(Order, order.id)
     assert refreshed_order.balance_due == 420
+
+
+def test_bank_statement_csv_parser_reads_credit_rows():
+    credits = BankStatementCsvService.parse(SAMPLE_STATEMENT_CSV.encode("cp1251"))
+
+    assert len(credits) == 2
+    assert credits[0].amount == 1015
+    assert credits[0].payer_unp == "300200572"
+    assert credits[0].payment_document_number == "008049"
+    assert credits[0].operation_date.year == 2026
+    assert not credits[0].payment_purpose.startswith("OTHR")
+    assert credits[1].payer_name == 'ООО "МЕГАХЕНД"'
+
+
+@pytest.mark.asyncio
+async def test_bank_statement_import_creates_missing_and_flags_duplicate_receipts(sqlite_session):
+    customer = Customer(name="Мегахенд", phone="+375291111113", type="company", inn="192663084")
+    sqlite_session.add(customer)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(customer)
+
+    order = Order(customer_id=customer.id, status="execution")
+    sqlite_session.add(order)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+    sqlite_session.add(OrderServiceLink(order_id=order.id, title="Обслуживание", quantity=1, price=420, cost=0))
+
+    duplicate_receipt = BankReceipt(
+        status="requires_review",
+        operation_type="incoming_funds",
+        sender_email="noreply@service.belapb.by",
+        subject="Поступление средств на счет",
+        message_id="<duplicate-statement@example.test>",
+        fingerprint="duplicate-statement-fingerprint",
+        received_at=datetime(2026, 5, 8, 15, 0),
+        amount=1015,
+        currency=PaymentCurrency.BYN,
+        payer_name="УКС",
+        payer_unp="300200572",
+        payment_document_number="008049",
+        payment_purpose="ОПЛАТА ЗА РЕМОНТ",
+        raw_body="raw",
+    )
+    sqlite_session.add(duplicate_receipt)
+    await sqlite_session.commit()
+
+    result = await BankStatementCsvService.import_statement(sqlite_session, SAMPLE_STATEMENT_CSV.encode("cp1251"))
+
+    assert result.credit_rows == 2
+    assert result.matched_existing == 1
+    assert result.created == 1
+    assert duplicate_receipt.id in result.matched_receipt_ids
+    receipts = (await sqlite_session.execute(select(BankReceipt))).scalars().all()
+    assert len(receipts) == 2
+    megahand = next(item for item in receipts if item.payer_unp == "192663084")
+    assert megahand.status == "matched"
+    assert megahand.matched_order_id == order.id
+    assert megahand.match_meta["source"] == "bank_statement_csv"
 
 
 @pytest.mark.asyncio

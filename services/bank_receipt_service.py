@@ -203,9 +203,10 @@ class BankReceiptService:
     async def match_receipt(session: AsyncSession, receipt: BankReceipt) -> BankReceipt:
         if receipt.id and receipt.matched_payment_id:
             return receipt
+        base_meta = dict(receipt.match_meta or {})
         if not receipt.payer_unp or receipt.amount <= 0:
             receipt.status = "requires_review"
-            receipt.match_meta = {"reason": "missing_unp_or_amount", "candidate_order_ids": []}
+            receipt.match_meta = {**base_meta, "reason": "missing_unp_or_amount", "candidate_order_ids": []}
             session.add(receipt)
             await session.flush()
             return receipt
@@ -268,6 +269,7 @@ class BankReceiptService:
             receipt.matched_order_id = int(order.id)
             receipt.matched_payment_id = int(existing_payment.id)
             receipt.match_meta = {
+                **base_meta,
                 "reason": "exact_unp_and_balance_due",
                 "candidate_order_ids": candidate_ids,
                 "exact_order_ids": exact_ids,
@@ -277,6 +279,7 @@ class BankReceiptService:
             reason = "multi_document_payment" if BankReceiptService._looks_like_multi_document_payment(receipt.payment_purpose) else "not_exactly_one_candidate"
             receipt.status = "requires_review"
             receipt.match_meta = {
+                **base_meta,
                 "reason": reason,
                 "candidate_order_ids": candidate_ids,
                 "exact_order_ids": exact_ids,

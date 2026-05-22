@@ -15,7 +15,9 @@ export type { BankReceiptImportResponse } from './models/BankReceiptImportRespon
 export type { BankReceiptListResponse } from './models/BankReceiptListResponse';
 export type { BankReceiptResponse } from './models/BankReceiptResponse';
 export type { BankReceiptStatusPayload } from './models/BankReceiptStatusPayload';
+export type { BankStatementImportResponse } from './models/BankStatementImportResponse';
 export type { Body_bulk_upload_local_images } from './models/Body_bulk_upload_local_images';
+export type { Body_import_manager_bank_statement } from './models/Body_import_manager_bank_statement';
 export type { Body_login_access_token } from './models/Body_login_access_token';
 export type { Body_upload_local_images } from './models/Body_upload_local_images';
 export type { Body_upload_manager_customer_contract } from './models/Body_upload_manager_customer_contract';

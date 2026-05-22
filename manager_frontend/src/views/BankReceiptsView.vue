@@ -8,9 +8,11 @@ import { getApiErrorMessage } from '../utils/api-errors';
 const receipts = ref<BankReceiptResponse[]>([]);
 const loading = ref(false);
 const importing = ref(false);
+const importingStatement = ref(false);
 const actionId = ref<number | null>(null);
 const error = ref('');
 const notice = ref('');
+const statementFile = ref<File | null>(null);
 const page = ref(1);
 const limit = ref(50);
 const total = ref(0);
@@ -119,6 +121,31 @@ const importNow = async () => {
   }
 };
 
+const onStatementFileChange = (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  statementFile.value = input.files?.[0] || null;
+};
+
+const importStatement = async () => {
+  if (!statementFile.value) {
+    error.value = 'Выберите CSV-файл выписки.';
+    return;
+  }
+  importingStatement.value = true;
+  error.value = '';
+  notice.value = '';
+  try {
+    const result = await ManagerMailService.importManagerBankStatement({ file: statementFile.value });
+    const suspiciousIds = result.suspicious_receipt_ids?.length ? ` Подозрительные ID: ${result.suspicious_receipt_ids.join(', ')}.` : '';
+    notice.value = `Выписка: кредитных строк ${result.credit_rows || 0}, создано ${result.created || 0}, совпало ${result.matched_existing || 0}, подозрительных ${result.suspicious || 0}.${suspiciousIds}`;
+    await loadReceipts();
+  } catch (err) {
+    error.value = getApiErrorMessage(err);
+  } finally {
+    importingStatement.value = false;
+  }
+};
+
 const markVoid = async (receipt: BankReceiptResponse) => {
   const reason = window.prompt('Причина пометки платежа ошибочным', 'Отозван/ошибочный банковский платеж');
   if (reason === null) return;
@@ -183,14 +210,28 @@ onMounted(loadReceipts);
           <p class="text-sm font-medium text-teal-700 dark:text-teal-300">CRM платежи</p>
           <h1 class="text-2xl font-semibold text-gray-900 dark:text-slate-100">Банковские поступления</h1>
         </div>
-        <button
-          class="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 disabled:opacity-60"
-          :disabled="importing"
-          @click="importNow"
-        >
-          <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': importing }" />
-          Проверить почту
-        </button>
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <label class="inline-flex min-h-10 items-center rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
+            <input class="sr-only" type="file" accept=".csv,text/csv" @change="onStatementFileChange" />
+            {{ statementFile ? statementFile.name : 'Выбрать CSV' }}
+          </label>
+          <button
+            class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-teal-200 px-4 text-sm font-semibold text-teal-700 shadow-sm transition hover:bg-teal-50 disabled:opacity-60 dark:border-teal-500/30 dark:text-teal-200 dark:hover:bg-teal-500/10"
+            :disabled="importingStatement"
+            @click="importStatement"
+          >
+            <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': importingStatement }" />
+            Сверить выписку
+          </button>
+          <button
+            class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 disabled:opacity-60"
+            :disabled="importing"
+            @click="importNow"
+          >
+            <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': importing }" />
+            Проверить почту
+          </button>
+        </div>
       </header>
 
       <section class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
