@@ -15,6 +15,7 @@ from .common import (
 from .customer import Customer, CustomerBranch, CustomerContract, Lead
 from .brand import Brand, ProductSeries
 from .cart import Cart, CartItem
+from .catalog_import import CatalogImportJob
 from .content import Article, GlobalConfig
 from .order import (
     BankReceipt,
@@ -65,6 +66,7 @@ __all__ = [
     "Cart",
     "CartItem",
     "Brand",
+    "CatalogImportJob",
     "Customer",
     "CustomerBranch",
     "CustomerContract",

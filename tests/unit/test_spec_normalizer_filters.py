@@ -72,6 +72,147 @@ def test_wifi_option_value_maps_to_ready():
     assert specs["__filter_wifi_builtin"] is False
 
 
+def test_severcon_keys_are_normalized_for_catalog_filters():
+    specs = normalize_specs(
+        {
+            "Вайфай": "Опционально",
+            "Тип управления компрессором": "Инверторный",
+            "Серия": "BADEN",
+            "Категория поставщика": "Energolux BADEN",
+            "ID предложения Severcon": "123",
+            "URL поставщика": "https://www.severcon.ru/catalog/item.html",
+            "Модель внутреннего блока": "SAS09",
+            "Модель наружного блока": "SAU09",
+            "Гарантированный диапазон рабочих t° наружного воздуха, обогрев": "-15 ~ +24",
+            "Размеры внутреннего блока без упаковки (Ш х В х Г)": "292x788x198",
+        }
+    )
+
+    assert specs["wifi_ready"] == "ready"
+    assert specs["__filter_wifi"] is True
+    assert specs["series"] == "BADEN"
+    assert specs["compressor_type_norm"] == "inverter"
+    assert specs["model_indoor"] == "SAS09"
+    assert specs["model_outdoor"] == "SAU09"
+    assert specs["__filter_min_heat"] == -15
+    assert specs["width_indoor"] == "788"
+    assert specs["height_indoor"] == "292"
+    assert specs["depth_indoor"] == "198"
+    assert "Категория поставщика" not in specs
+    assert "ID предложения Severcon" not in specs
+    assert "URL поставщика" not in specs
+
+
+def test_non_inverter_values_do_not_match_inverter_substring():
+    by_value = normalize_specs({"Инверторный": "неинверторный"})
+    assert by_value["inverter"] is False
+    assert by_value["compressor_type_norm"] == "on_off"
+
+    by_type = normalize_specs({"Тип управления компрессором": "Неинверторный"})
+    assert by_type["compressor_type_norm"] == "on_off"
+
+
+def test_severcon_wall_split_specs_are_normalized_with_source_quirks():
+    specs = normalize_specs(
+        {
+            "Размеры внутреннего блока без упаковки (Ш х В х Г)": "283?690?199",
+            "Размеры наружного блока без упаковки (Ш х В х Г)": "455?650?233",
+            "Максимальный перепад высот": "5",
+            "Потребляемая мощность, охлаждение": "0,83",
+            "Потребляемая мощность, обогрев": "0,76",
+            "Расход воздуха внутреннего блока": "400",
+            "Расход воздуха наружного блока": "1430",
+            "Уровень звукового давления внутреннего блока": "23/26/31/35",
+            "Вес внутреннего блока без упаковки": "6,5",
+            "Вес наружного блока без упаковки": "20,0",
+            "Пульт управления в комплекте": "Да",
+            "Цвет корпуса": "Белый",
+            "Страна производства": "Китай",
+            "Электропитание": "1 фаза, 220 ~ 240 В, 50 Гц",
+            "Сторона подключения": "Внутренний блок",
+            "Гарантия": "48",
+            "Артикул": "SAS09B4-A/SAU09B4-A",
+            "Осушение": "1,3",
+            "EER (коэффициент / класс)": "3,23/А",
+            "COP (коэффициент / класс)": "3,63/A",
+        }
+    )
+
+    assert specs["width_indoor"] == "690"
+    assert specs["height_indoor"] == "283"
+    assert specs["depth_indoor"] == "199"
+    assert specs["width_outdoor"] == "650"
+    assert specs["height_outdoor"] == "455"
+    assert specs["depth_outdoor"] == "233"
+    assert specs["pipe_max_height"] == "5"
+    assert "multi_max_height_diff" not in specs
+    assert specs["power_cons_cooling_kw"] == "0.83"
+    assert specs["power_cons_heating_kw"] == "0.76"
+    assert specs["airflow_max"] == "400"
+    assert specs["airflow_outdoor"] == "1430"
+    assert specs["noise_indoor"] == "23/26/31/35"
+    assert specs["__filter_noise_min"] == 23
+    assert specs["weight_indoor"] == "6.5"
+    assert specs["weight_outdoor"] == "20.0"
+    assert specs["remote_control"] is True
+    assert specs["color"] == "Белый"
+    assert specs["country"] == "Китай"
+    assert specs["power_supply"] == "1 фаза, 220 ~ 240 В, 50 Гц"
+    assert specs["power_supply_location"] == "Внутренний блок"
+    assert specs["warranty_months"] == "48"
+    assert specs["sku"] == "SAS09B4-A/SAU09B4-A"
+    assert specs["dehumidification_l_h"] == "1.3"
+    assert "dehumidification" not in specs
+    assert specs["eer"] == "3.23"
+    assert specs["cop"] == "3.63"
+    assert specs["energy_class_cooling"] == "A"
+    assert specs["energy_class_heating"] == "A"
+
+
+def test_severcon_wall_dimensions_handle_reversed_first_two_numbers():
+    specs = normalize_specs(
+        {
+            "Размеры внутреннего блока без упаковки (Ш х В х Г)": "713?270?195",
+            "Размеры наружного блока без упаковки (Ш х В х Г)": "710?450?293",
+        }
+    )
+
+    assert specs["width_indoor"] == "713"
+    assert specs["height_indoor"] == "270"
+    assert specs["depth_indoor"] == "195"
+    assert specs["width_outdoor"] == "710"
+    assert specs["height_outdoor"] == "450"
+    assert specs["depth_outdoor"] == "293"
+
+
+def test_severcon_semi_industrial_extra_keys_are_normalized():
+    specs = normalize_specs(
+        {
+            "Максимальный рабочий ток, охлаждение": "4,8",
+            "Максимальный рабочий ток, обогрев": "5,6",
+            "Диаметр дренажной трубы: мм (дюйм)": "25",
+            "Размеры внутреннего блока в упаковке (Ш х В х Г)": "290х655x655",
+            "Размеры наружного блока в упаковке (Ш х В х Г)": "615x915x370",
+            "Вес внутреннего блока в упаковке": "17,8",
+            "Вес наружного блока в упаковке": "34,9",
+            "Зимний комплект": "Опционально",
+            "Параметры питающей сети": "220-240",
+            "Установка": "Горизонтальная",
+        }
+    )
+
+    assert specs["current_cooling_max_a"] == "4.8"
+    assert specs["current_heating_max_a"] == "5.6"
+    assert specs["drain_pipe_diameter"] == "25"
+    assert specs["dimensions_indoor_package_mm"] == "290 × 655 × 655"
+    assert specs["dimensions_outdoor_package_mm"] == "615 × 915 × 370"
+    assert specs["weight_indoor_package"] == "17.8"
+    assert specs["weight_outdoor_package"] == "34.9"
+    assert specs["winter_kit"] == "Опционально"
+    assert specs["power_supply_voltage"] == "220-240"
+    assert specs["installation_orientation"] == "Горизонтальная"
+
+
 def test_brand_normalization_and_auto_tag_slug_output():
     auto_slugs = []
     specs = normalize_specs(

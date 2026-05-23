@@ -9,6 +9,8 @@ import type { BulkGalleryDeleteRequest } from '../models/BulkGalleryDeleteReques
 import type { BulkProductIdsRequest } from '../models/BulkProductIdsRequest';
 import type { BulkRoundRequest } from '../models/BulkRoundRequest';
 import type { BulkSpecUpdate } from '../models/BulkSpecUpdate';
+import type { CatalogImportJobStartResponse } from '../models/CatalogImportJobStartResponse';
+import type { CatalogImportJobStatusResponse } from '../models/CatalogImportJobStatusResponse';
 import type { CatalogImportPayload } from '../models/CatalogImportPayload';
 import type { CatalogImportResultResponse } from '../models/CatalogImportResultResponse';
 import type { CommonGalleryImageResponse } from '../models/CommonGalleryImageResponse';
@@ -547,6 +549,58 @@ export class ManagerService {
             url: '/api/manager/catalog/import',
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Start Catalog Import Job
+     * Start a universal catalog import in the background and return a job id
+     * that can be polled for progress.
+     * @param requestBody
+     * @returns CatalogImportJobStartResponse Successful Response
+     * @throws ApiError
+     */
+    public static startCatalogImportJob(
+        requestBody: CatalogImportPayload,
+    ): CancelablePromise<CatalogImportJobStartResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/catalog/import/jobs',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Current Catalog Import Job Status
+     * @returns CatalogImportJobStatusResponse Successful Response
+     * @throws ApiError
+     */
+    public static getCurrentCatalogImportJobStatus(): CancelablePromise<CatalogImportJobStatusResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/catalog/import/jobs/current',
+        });
+    }
+    /**
+     * Get Catalog Import Job Status
+     * @param jobId
+     * @returns CatalogImportJobStatusResponse Successful Response
+     * @throws ApiError
+     */
+    public static getCatalogImportJobStatus(
+        jobId: string,
+    ): CancelablePromise<CatalogImportJobStatusResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/catalog/import/jobs/{job_id}',
+            path: {
+                'job_id': jobId,
+            },
             errors: {
                 422: `Validation Error`,
             },

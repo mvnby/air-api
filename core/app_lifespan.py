@@ -15,6 +15,12 @@ async def _seed_installation_defaults() -> None:
         await InstallationService.seed_defaults(session)
 
 
+async def _resume_catalog_import_jobs() -> None:
+    from services.catalog_import_runtime_service import catalog_import_runtime_service
+
+    await catalog_import_runtime_service.resume_pending_jobs()
+
+
 def _start_scheduler_loop() -> None:
     from services.scheduler_service import scheduler_service
 
@@ -29,6 +35,7 @@ async def app_lifespan(app: FastAPI):
 
     await init_db()
     await _seed_installation_defaults()
+    await _resume_catalog_import_jobs()
     _start_scheduler_loop()
 
     yield

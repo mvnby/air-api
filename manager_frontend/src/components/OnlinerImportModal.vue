@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { api } from '../api';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { api, type CatalogImportJobStatusResponse } from '../api';
 import { getApiErrorMessage } from '../utils/api-errors';
 
 const emit = defineEmits<{
@@ -14,12 +14,94 @@ const updateExisting = ref(false);
 const loading = ref(false);
 const result = ref<{ success_count: number; error_count: number; errors: string[] } | null>(null);
 const importError = ref('');
+const importJobId = ref('');
+const importProgress = ref<CatalogImportJobStatusResponse | null>(null);
+let pollTimer: ReturnType<typeof window.setInterval> | null = null;
+
+const importPresets = [
+  {
+    id: 'energolux-severcon',
+    label: 'Energolux',
+    source: 'Severcon',
+    url: 'https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php',
+    withRelated: false,
+    updateExisting: true,
+  },
+];
 
 const parsedUrls = () =>
   urlsText.value
     .split('\n')
     .map((u) => u.trim())
     .filter(Boolean);
+
+const progressPercent = computed(() => {
+  const progress = importProgress.value;
+  if (!progress?.total) return 0;
+  return Math.min(100, Math.round(((progress.processed ?? 0) / progress.total) * 100));
+});
+
+const stageLabel = computed(() => {
+  const stage = importProgress.value?.stage;
+  if (stage === 'expanding') return 'Ищем товары';
+  if (stage === 'expanded') return 'Список найден';
+  if (stage === 'importing') return 'Импортируем';
+  if (stage === 'completed') return 'Готово';
+  if (stage === 'failed') return 'Ошибка';
+  return 'В очереди';
+});
+
+const isImportFinished = (status?: string) => status === 'success' || status === 'failed';
+
+const stopPolling = () => {
+  if (pollTimer !== null) {
+    window.clearInterval(pollTimer);
+    pollTimer = null;
+  }
+};
+
+const applyImportStatus = (status: CatalogImportJobStatusResponse) => {
+  importProgress.value = status;
+  importJobId.value = status.job_id;
+  loading.value = !isImportFinished(status.status);
+
+  if (status.status === 'success') {
+    result.value = {
+      success_count: status.success_count ?? 0,
+      error_count: status.error_count ?? 0,
+      errors: status.errors ?? [],
+    };
+  } else if (status.status === 'failed') {
+    importError.value = status.error || 'Импорт завершился с ошибкой';
+  }
+};
+
+const startPolling = () => {
+  stopPolling();
+  pollTimer = window.setInterval(() => {
+    void refreshImportStatus();
+  }, 1500);
+};
+
+const refreshImportStatus = async () => {
+  if (!importJobId.value) return;
+
+  try {
+    const status = await api.getImportProductsJobStatus(importJobId.value);
+    applyImportStatus(status);
+
+    if (isImportFinished(status.status)) {
+      stopPolling();
+      if (status.status === 'success' && (status.success_count ?? 0) > 0) {
+        emit('imported', status.success_count ?? 0);
+      }
+    }
+  } catch (e) {
+    stopPolling();
+    loading.value = false;
+    importError.value = getApiErrorMessage(e);
+  }
+};
 
 const handleImport = async () => {
   const urls = parsedUrls();
@@ -28,23 +110,50 @@ const handleImport = async () => {
   loading.value = true;
   result.value = null;
   importError.value = '';
+  importJobId.value = '';
+  importProgress.value = null;
+  stopPolling();
 
   try {
-    const res = await api.importProducts(urls, withRelated.value, updateExisting.value);
-    result.value = res;
-    if (res.success_count > 0) {
-      emit('imported', res.success_count);
-    }
+    const job = await api.startImportProductsJob(urls, withRelated.value, updateExisting.value);
+    importJobId.value = job.job_id;
+    startPolling();
+    await refreshImportStatus();
   } catch (e) {
     importError.value = getApiErrorMessage(e);
-  } finally {
     loading.value = false;
   }
 };
 
-const handleClose = () => {
-  if (!loading.value) emit('close');
+const applyImportPreset = (preset: (typeof importPresets)[number]) => {
+  if (loading.value) return;
+  urlsText.value = preset.url;
+  withRelated.value = preset.withRelated;
+  updateExisting.value = preset.updateExisting;
+  result.value = null;
+  importError.value = '';
 };
+
+const handleClose = () => {
+  emit('close');
+};
+
+const restoreCurrentImportJob = async () => {
+  try {
+    const status = await api.getCurrentImportProductsJobStatus();
+    applyImportStatus(status);
+    if (!isImportFinished(status.status)) {
+      startPolling();
+    }
+  } catch {
+    // No import job has been started in this app process.
+  }
+};
+
+onMounted(() => {
+  void restoreCurrentImportJob();
+});
+onBeforeUnmount(stopPolling);
 </script>
 
 <template>
@@ -56,7 +165,7 @@ const handleClose = () => {
         @click.self="handleClose"
       >
         <div
-          class="w-full max-w-lg rounded-2xl bg-[#1e293b] border border-slate-700/60 shadow-2xl flex flex-col overflow-hidden"
+          class="w-full max-w-2xl rounded-2xl bg-[#1e293b] border border-slate-700/60 shadow-2xl flex flex-col overflow-hidden"
           style="max-height: 90vh"
         >
           <!-- Header -->
@@ -67,8 +176,7 @@ const handleClose = () => {
             </div>
             <button
               @click="handleClose"
-              :disabled="loading"
-              class="text-slate-400 hover:text-white transition-colors disabled:opacity-40"
+              class="text-slate-400 hover:text-white transition-colors"
             >
               <span class="material-icons-round text-xl">close</span>
             </button>
@@ -76,6 +184,26 @@ const handleClose = () => {
 
           <!-- Body -->
           <div class="px-6 py-5 space-y-5 overflow-y-auto">
+            <div>
+              <p class="block text-sm font-medium text-slate-300 mb-2">Готовые источники</p>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  v-for="preset in importPresets"
+                  :key="preset.id"
+                  type="button"
+                  :disabled="loading"
+                  @click="applyImportPreset(preset)"
+                  class="flex items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-left transition-colors hover:border-teal-500/60 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span>
+                    <span class="block text-sm font-semibold text-slate-100">{{ preset.label }}</span>
+                    <span class="block text-xs text-slate-500 mt-0.5">{{ preset.source }}</span>
+                  </span>
+                  <span class="material-icons-round text-teal-400 text-xl">sync</span>
+                </button>
+              </div>
+            </div>
+
             <!-- URL textarea -->
             <div>
               <label class="block text-sm font-medium text-slate-300 mb-2">
@@ -86,7 +214,7 @@ const handleClose = () => {
                 v-model="urlsText"
                 :disabled="loading"
                 rows="7"
-                placeholder="https://catalog.onliner.by/split_systems/midea/msmb-09hrn8-wifib&#10;https://aircond.by/split-sistemy/mdv-integra-pro-inverter-...&#10;https://tvoy-klimat.by/catalog/bytovye-konditsionery/..."
+                placeholder="https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php&#10;https://catalog.onliner.by/split_systems/midea/msmb-09hrn8-wifib&#10;https://aircond.by/split-sistemy/mdv-integra-pro-inverter-..."
                 class="w-full rounded-xl border border-slate-600 bg-slate-900 text-slate-100 placeholder-slate-600 text-sm px-4 py-3 resize-none outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all disabled:opacity-50"
               />
               <p class="text-xs text-slate-500 mt-1.5">
@@ -141,6 +269,60 @@ const handleClose = () => {
               </div>
             </label>
 
+            <!-- Progress -->
+            <div
+              v-if="loading || importProgress"
+              class="rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-4 text-sm text-slate-200 space-y-3"
+            >
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p class="font-semibold text-slate-100">{{ stageLabel }}</p>
+                  <p v-if="loading" class="text-xs text-teal-300 mt-0.5">
+                    Идёт в фоне, окно можно закрыть и открыть позже
+                  </p>
+                  <p v-if="importProgress?.current_title" class="text-xs text-slate-400 mt-0.5">
+                    {{ importProgress.current_title }}
+                  </p>
+                  <p v-else-if="importProgress?.current_url" class="text-xs text-slate-400 mt-0.5 break-all">
+                    {{ importProgress.current_url }}
+                  </p>
+                </div>
+                <span class="tabular-nums text-lg font-bold text-teal-300">{{ progressPercent }}%</span>
+              </div>
+
+              <div class="h-2 overflow-hidden rounded-full bg-slate-800">
+                <div
+                  class="h-full rounded-full bg-teal-500 transition-all duration-500"
+                  :style="{ width: `${progressPercent}%` }"
+                />
+              </div>
+
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div class="rounded-lg bg-slate-800/70 px-3 py-2">
+                  <p class="text-[11px] uppercase tracking-wide text-slate-500">Найдено</p>
+                  <p class="mt-0.5 font-semibold text-slate-100 tabular-nums">{{ importProgress?.total || 0 }}</p>
+                </div>
+                <div class="rounded-lg bg-slate-800/70 px-3 py-2">
+                  <p class="text-[11px] uppercase tracking-wide text-slate-500">Готово</p>
+                  <p class="mt-0.5 font-semibold text-slate-100 tabular-nums">{{ importProgress?.processed || 0 }}</p>
+                </div>
+                <div class="rounded-lg bg-slate-800/70 px-3 py-2">
+                  <p class="text-[11px] uppercase tracking-wide text-slate-500">Успешно</p>
+                  <p class="mt-0.5 font-semibold text-emerald-300 tabular-nums">{{ importProgress?.success_count || 0 }}</p>
+                </div>
+                <div class="rounded-lg bg-slate-800/70 px-3 py-2">
+                  <p class="text-[11px] uppercase tracking-wide text-slate-500">Ошибки</p>
+                  <p class="mt-0.5 font-semibold text-amber-300 tabular-nums">{{ importProgress?.error_count || 0 }}</p>
+                </div>
+              </div>
+
+              <ul v-if="importProgress?.errors?.length" class="space-y-1 text-xs text-amber-300">
+                <li v-for="(err, i) in importProgress.errors?.slice(-3) || []" :key="i" class="break-words">
+                  {{ err }}
+                </li>
+              </ul>
+            </div>
+
             <!-- Result -->
             <div v-if="result" class="rounded-xl border px-4 py-3 text-sm space-y-1"
               :class="result.error_count === 0
@@ -166,10 +348,9 @@ const handleClose = () => {
           <div class="px-6 py-4 border-t border-slate-700/50 flex justify-end gap-3">
             <button
               @click="handleClose"
-              :disabled="loading"
-              class="px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-700 transition-colors disabled:opacity-40"
+              class="px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
             >
-              Закрыть
+              {{ loading ? 'Скрыть' : 'Закрыть' }}
             </button>
             <button
               @click="handleImport"
@@ -203,10 +384,10 @@ const handleClose = () => {
 .modal-fade-leave-active .w-full {
   transition: transform 0.2s ease;
 }
-.modal-fade-enter-from .max-w-lg {
+.modal-fade-enter-from .max-w-2xl {
   transform: scale(0.96) translateY(8px);
 }
-.modal-fade-leave-to .max-w-lg {
+.modal-fade-leave-to .max-w-2xl {
   transform: scale(0.96) translateY(8px);
 }
 </style>

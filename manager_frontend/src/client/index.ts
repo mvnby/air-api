@@ -30,6 +30,8 @@ export type { BulkSpecUpdate } from './models/BulkSpecUpdate';
 export type { CalendarEventResponse } from './models/CalendarEventResponse';
 export type { CalendarEventType } from './models/CalendarEventType';
 export type { CartItemPayload } from './models/CartItemPayload';
+export type { CatalogImportJobStartResponse } from './models/CatalogImportJobStartResponse';
+export type { CatalogImportJobStatusResponse } from './models/CatalogImportJobStatusResponse';
 export type { CatalogImportPayload } from './models/CatalogImportPayload';
 export type { CatalogImportResultResponse } from './models/CatalogImportResultResponse';
 export type { CatalogResponse } from './models/CatalogResponse';

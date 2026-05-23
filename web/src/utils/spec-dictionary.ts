@@ -9,6 +9,7 @@ export const SPEC_DICT: Record<string, SpecDefinition> = {
     // Basic
     brand: { label: "Бренд" },
     series: { label: "Серия" },
+    sku: { label: "Артикул" },
     release_year: { label: "Год выхода", unit: "г." },
     type: { label: "Тип кондиционера" },
     indoor_type: { label: "Тип внутреннего блока" },
@@ -17,6 +18,7 @@ export const SPEC_DICT: Record<string, SpecDefinition> = {
     wifi_ready: { label: "Wi-Fi", type: "boolean" },
     inverter: { label: "Инвертор", type: "boolean" },
     country: { label: "Страна производства" },
+    warranty_months: { label: "Гарантия", unit: "мес." },
     indoor_units_count: { label: "Кол-во внутренних блоков" },
 
     // Controls & Modes
@@ -28,6 +30,8 @@ export const SPEC_DICT: Record<string, SpecDefinition> = {
     turbo_mode: { label: "Турбо-режим", type: "boolean" },
     sleep_mode: { label: "Режим «Сон»", type: "boolean" },
     dehumidification: { label: "Осушение воздуха", type: "boolean" },
+    dehumidification_l_h: { label: "Осушение", unit: "л/ч" },
+    winter_kit: { label: "Зимний комплект" },
 
     // Performance
     capacity_cooling_kw: { label: "Мощность охлаждения", unit: "кВт" },
@@ -43,6 +47,7 @@ export const SPEC_DICT: Record<string, SpecDefinition> = {
     eer: { label: "EER" },
     cop: { label: "COP" },
     airflow_max: { label: "Расход воздуха", unit: "м³/ч" },
+    airflow_outdoor: { label: "Расход воздуха наружного блока", unit: "м³/ч" },
 
     // Pipes & Installation
     temp_range_cool: { label: "Раб. темп. (охлаждение)", unit: "°C" },
@@ -59,6 +64,8 @@ export const SPEC_DICT: Record<string, SpecDefinition> = {
     depth_outdoor: { label: "Глубина (наруж)", unit: "мм" },
     weight_indoor: { label: "Вес (внутр)", unit: "кг" },
     weight_outdoor: { label: "Вес (наруж)", unit: "кг" },
+    weight_indoor_package: { label: "Вес в упаковке (внутр)", unit: "кг" },
+    weight_outdoor_package: { label: "Вес в упаковке (наруж)", unit: "кг" },
 
     // MDV specific
     model_indoor: { label: "Модель вн. блока" },
@@ -70,6 +77,7 @@ export const SPEC_DICT: Record<string, SpecDefinition> = {
 
     pipe_liquid: { label: "Диаметр трубок (жидкость)", group: "installation" },
     pipe_gas: { label: "Диаметр трубок (газ)", group: "installation" },
+    drain_pipe_diameter: { label: "Дренажная труба", unit: "мм", group: "installation" },
     pipe_max_length: { label: "Макс. длина трассы", unit: "м", group: "installation" },
     pipe_max_height: { label: "Макс. перепад высот", unit: "м", group: "installation" },
 
@@ -78,6 +86,7 @@ export const SPEC_DICT: Record<string, SpecDefinition> = {
     compressor_type: { label: "Тип компрессора", group: "tech" },
     freon_type: { label: "Фреон", group: "tech" },
     power_supply: { label: "Электропитание", group: "installation" },
+    power_supply_voltage: { label: "Напряжение питания", group: "installation" },
 
     // --- ДЛЯ ПРОФИ (Диапазоны) ---
     // Можно вывести, если хочется, или использовать только для фильтров
@@ -115,7 +124,7 @@ const PUBLIC_SPEC_GROUPS: PublicSpecGroup[] = [
     {
         id: "general",
         title: "Общие характеристики",
-        keys: ["brand", "series", "type", "indoor_type", "color", "release_year"],
+        keys: ["brand", "series", "sku", "type", "indoor_type", "color", "country", "warranty_months", "release_year"],
     },
     {
         id: "purpose",
@@ -139,6 +148,8 @@ const PUBLIC_SPEC_GROUPS: PublicSpecGroup[] = [
             "cop",
             "inverter",
             "airflow_max",
+            "airflow_outdoor",
+            "dehumidification_l_h",
         ],
     },
     {
@@ -195,6 +206,9 @@ const PUBLIC_SPEC_GROUPS: PublicSpecGroup[] = [
             "compressor_brand",
             "power_supply_location",
             "power_supply",
+            "power_supply_voltage",
+            "drain_pipe_diameter",
+            "winter_kit",
         ],
     },
     {
@@ -205,10 +219,12 @@ const PUBLIC_SPEC_GROUPS: PublicSpecGroup[] = [
             "height_indoor",
             "depth_indoor",
             "weight_indoor",
+            "weight_indoor_package",
             "width_outdoor",
             "height_outdoor",
             "depth_outdoor",
             "weight_outdoor",
+            "weight_outdoor_package",
         ],
     },
 ];

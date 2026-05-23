@@ -1654,6 +1654,31 @@ class CatalogImportResultResponse(BaseModel):
     errors: List[str]
 
 
+class CatalogImportJobStartResponse(BaseModel):
+    job_id: str
+    status: str
+    stage: str
+
+
+class CatalogImportJobStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    stage: str
+    error: Optional[str] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    input_total: int = 0
+    total: int = 0
+    processed: int = 0
+    pending: int = 0
+    success_count: int = 0
+    error_count: int = 0
+    current_url: Optional[str] = None
+    current_title: Optional[str] = None
+    successes: List[str] = Field(default_factory=list)
+    errors: List[str] = Field(default_factory=list)
+
+
 # Backward-compatible aliases for the legacy import-onliner endpoint
 OnlinerImportPayload = CatalogImportPayload
 OnlinerImportResultResponse = CatalogImportResultResponse

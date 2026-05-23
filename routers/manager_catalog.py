@@ -1,6 +1,6 @@
 from typing import List, Literal, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
@@ -12,6 +12,8 @@ from routers.manager_operation_ids import (
     BULK_SET_RRC_PRICE,
     BULK_DELETE_MANAGER_PRODUCTS,
     CATALOG_IMPORT,
+    GET_CATALOG_IMPORT_JOB_STATUS,
+    GET_CURRENT_CATALOG_IMPORT_JOB_STATUS,
     GET_ALL_TAGS,
     GET_MANAGER_CUSTOMERS,
     GET_MANAGER_CUSTOMER_DETAIL,
@@ -27,11 +29,14 @@ from routers.manager_operation_ids import (
     UPDATE_PRODUCT,
     DELETE_MANAGER_PRODUCT,
     IMPORT_ONLINER,
+    START_CATALOG_IMPORT_JOB,
 )
 from schemas import (
     BulkRoundRequest,
     BulkProductIdsRequest,
     CatalogImportPayload,
+    CatalogImportJobStartResponse,
+    CatalogImportJobStatusResponse,
     CatalogImportResultResponse,
     ManagerActionMessageResponse,
     ManagerCatalogCustomerItemResponse,
@@ -51,6 +56,7 @@ from schemas import (
     OnlinerImportResultResponse,
     ProductUpdate,
 )
+from services.catalog_import_runtime_service import catalog_import_runtime_service
 from services.manager_catalog_service import ManagerCatalogService
 from services.document_service import DocumentService
 from services.importer_service import ImporterService
@@ -576,3 +582,63 @@ async def catalog_import(
         successes=results["success"],
         errors=results["errors"],
     )
+
+
+@router.post(
+    "/catalog/import/jobs",
+    response_model=CatalogImportJobStartResponse,
+    operation_id=START_CATALOG_IMPORT_JOB,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def start_catalog_import_job(
+    payload: CatalogImportPayload,
+    _user: str = Depends(get_current_username),
+):
+    """
+    Start a universal catalog import in the background and return a job id
+    that can be polled for progress.
+    """
+    urls = [u.strip() for u in payload.urls if u.strip()]
+    if not urls:
+        raise HTTPException(status_code=400, detail="No URLs provided")
+
+    job = await catalog_import_runtime_service.start_import(
+        urls=urls,
+        with_related=payload.with_related,
+        update_existing=payload.update_existing,
+    )
+
+    return CatalogImportJobStartResponse(
+        job_id=job["job_id"],
+        status=job["status"],
+        stage=job["stage"],
+    )
+
+
+@router.get(
+    "/catalog/import/jobs/current",
+    response_model=CatalogImportJobStatusResponse,
+    operation_id=GET_CURRENT_CATALOG_IMPORT_JOB_STATUS,
+)
+async def get_current_catalog_import_job_status(
+    _user: str = Depends(get_current_username),
+):
+    job = await catalog_import_runtime_service.get_current_job()
+    if not job:
+        raise HTTPException(status_code=404, detail="Catalog import job not found")
+    return CatalogImportJobStatusResponse(**job)
+
+
+@router.get(
+    "/catalog/import/jobs/{job_id}",
+    response_model=CatalogImportJobStatusResponse,
+    operation_id=GET_CATALOG_IMPORT_JOB_STATUS,
+)
+async def get_catalog_import_job_status(
+    job_id: str,
+    _user: str = Depends(get_current_username),
+):
+    job = await catalog_import_runtime_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Catalog import job not found")
+    return CatalogImportJobStatusResponse(**job)
