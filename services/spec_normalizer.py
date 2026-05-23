@@ -12,11 +12,15 @@ KEY_MAP = {
     "Тип внутреннего блока": "indoor_type",
     "Режим работы": "modes",
     "Режимы работы": "modes",
+    "Артикул": "sku",
+    "Артикул товара": "sku",
     "Обслуживаемая площадь": "area_m2",
     "Обслуживаемая площадь, кв.м": "area_m2",
     "Площадь охлаждения": "area_m2",
     "Площадь помещения": "area_m2",
     "Цвет": "color",
+    "Цвет корпуса": "color",
+    "Страна производства": "country",
     "Хладагент (фреон)": "freon_type",
     "Хладагент": "freon_type",
     "Тип хладагента": "freon_type",
@@ -25,6 +29,7 @@ KEY_MAP = {
     "Инверторное управление": "inverter",
     "Инверторное управление мощностью": "inverter",
     "Инверторный компрессор": "inverter",
+    "Тип управления компрессором": "inverter_type",
     "Бренд": "brand",
     "Марка": "brand",
     "Производитель": "brand",
@@ -38,11 +43,14 @@ KEY_MAP = {
     "Wi-Fi модуль": "wifi_ready",
     "Wi-Fi module": "wifi_ready",
     "Wi-Fi Ready": "wifi_ready",
+    "Вайфай": "wifi_ready",
     "Пульт дистанционного управления": "remote_control",
     "Пульт ДУ": "remote_control",
     "Пульт": "remote_control",
     "Пульт управления": "remote_control",
+    "Пульт управления в комплекте": "remote_control",
     "Внутренний блок: Пульт управления": "remote_control",
+    "Зимний комплект": "winter_kit",
     "Таймер включения/выключения": "timer",
     "Таймер": "timer",
     "Регулировка направления воздушного потока": "airflow_direction",
@@ -55,7 +63,7 @@ KEY_MAP = {
     "Режим «Сон»": "sleep_mode",
     "Ночной режим": "sleep_mode",
     "Осушение воздуха": "dehumidification",
-    "Осушение": "dehumidification",
+    "Осушение": "dehumidification_l_h",
     "Режим осушения воздуха": "dehumidification",
 
     # --- МОЩНОСТЬ ---
@@ -79,12 +87,14 @@ KEY_MAP = {
     "Нагрев максимум, кВт": "capacity_heating_max_kw",
     "Потребляемая мощность при охлаждении": "power_cons_cooling_kw",
     "Потребляемая мощность при охлаждении, кВт": "power_cons_cooling_kw",
+    "Потребляемая мощность, охлаждение": "power_cons_cooling_kw",
     "Потребление электроэнергии в режиме охлаждения (Мин / Ном / Макс), кВт": "power_cons_cooling_kw",
     "Номинальная потребляемая мощность (охлаждение), кВт": "power_cons_cooling_kw",
     "Минимальная потребляемая мощность (охлаждение), кВт": "power_cons_cooling_min_kw",
     "Максимальная потребляемая мощность (охлаждение), кВт": "power_cons_cooling_max_kw",
     "Потребляемая мощность при обогреве": "power_cons_heating_kw",
     "Потребляемая мощность при обогреве, кВт": "power_cons_heating_kw",
+    "Потребляемая мощность, обогрев": "power_cons_heating_kw",
     "Потребление электроэнергии в режиме нагрева (Мин / Ном / Макс), кВт": "power_cons_heating_kw",
     "Номинальная потребляемая мощность (нагрев), кВт": "power_cons_heating_kw",
     "Минимальная потребляемая мощность (нагрев), кВт": "power_cons_heating_min_kw",
@@ -118,6 +128,8 @@ KEY_MAP = {
     "Уровень звукового давления (высокая скорость), дБ, А": "noise_outdoor",
     "Наружный блок: Уровень звукового давления (высокая скорость), дБ, А": "noise_outdoor",
     "Внутренний блок: Уровень звукового давления [дБ(А)], Выс/Ср/Низ/Сверх": "noise_indoor",
+    "Уровень звукового давления внутреннего блока": "noise_indoor",
+    "Уровень звукового давления наружного блока": "noise_outdoor",
     
     # --- ГАБАРИТЫ ВНУТРЕННИЙ ---
     "Ширина внутреннего блока": "width_indoor",
@@ -128,6 +140,7 @@ KEY_MAP = {
     "Чистый вес / Вес в упаковке, кг": "weight_indoor",
     "Внутренний блок: Чистый вес / Вес в упаковке, кг": "weight_indoor",
     "Внутренний блок без упаковки, кг": "weight_indoor",
+    "Вес внутреннего блока без упаковки": "weight_indoor",
     
     # --- ГАБАРИТЫ НАРУЖНЫЙ ---
     "Ширина наружного блока": "width_outdoor",
@@ -141,18 +154,20 @@ KEY_MAP = {
     "Наружный блок: Чистый вес / вес в упаковке, кг": "weight_outdoor",
     "Наружный блок: Чистый вес / Вес в упаковке, кг": "weight_outdoor",
     "Наружный блок без упаковки, кг": "weight_outdoor",
+    "Вес наружного блока без упаковки": "weight_outdoor",
     
     # --- МОНТАЖ ---
     "Максимальная длина магистрали": "pipe_max_length",
     "Максимальная длина коммуникаций": "pipe_max_length",
     "Максимальная длина коммуникаций, м": "pipe_max_length",
+    "Максимальная длина фреонопровода": "pipe_max_length",
     "Макс. длина трассы": "pipe_max_length",
     "Макс. длина трубопроводов без дополнительной заправки, м": "pipe_max_length",
     "Перепад высот": "pipe_max_height",
     "Перепад высот, м": "pipe_max_height",
     "Максимальная длина/перепад высот, м": "pipe_max_length",
     "Максимальная длина/перепад высот, при использовании только в режиме охлаждения, м": "pipe_max_length",
-    "Максимальный перепад высот": "multi_max_height_diff",
+    "Максимальный перепад высот": "pipe_max_height",
     "Максимальное количество внутренних блоков": "multi_max_indoor_units",
     "Максимальная суммарная длина магистрали": "multi_max_total_pipe_length",
     "Диаметр жидкостной трубы": "pipe_liquid",
@@ -167,11 +182,13 @@ KEY_MAP = {
     "Рабочий диапазон температур при охлаждении": "temp_range_cool",
     "Рабочий диапазон температур при охлаждении,°C": "temp_range_cool",
     "Рабочий диапазон температур при охлаждении, °C": "temp_range_cool",
+    "Гарантированный диапазон рабочих t° наружного воздуха, охлаждение": "temp_range_cool",
     "Охлаждение, °С": "temp_range_cool",
     "Рабочая температура при обогреве": "temp_range_heat",
     "Рабочий диапазон температур при обогреве": "temp_range_heat",
     "Рабочий диапазон температур при обогреве,°C": "temp_range_heat",
     "Рабочий диапазон температур при обогреве, °C": "temp_range_heat",
+    "Гарантированный диапазон рабочих t° наружного воздуха, обогрев": "temp_range_heat",
     "Нагрев, °С": "temp_range_heat",
     "Минимальная температура наружного воздуха": "temp_range_heat",
     "Мин. температура (обогрев)": "temp_range_heat",
@@ -191,9 +208,14 @@ KEY_MAP = {
     "EER/COP": "eer",
     "Энергоэффективность SEER/EER": "eer",
     "Энергоэффективность SCOP/COP": "cop",
+    "SEER (коэффициент/класс)": "seer",
+    "EER (коэффициент / класс)": "eer",
+    "COP (коэффициент / класс)": "cop",
     
     "Максимальный расход воздуха внутреннего блока": "airflow_max",
     "Расход воздуха (высокая скорость), м 3 /ч": "airflow_max",
+    "Расход воздуха внутреннего блока": "airflow_max",
+    "Расход воздуха наружного блока": "airflow_outdoor",
 
     # --- ФИЛЬТРЫ И ДОП. ФУНКЦИИ ---
     "Приток свежего воздуха": "fresh_air",
@@ -217,16 +239,32 @@ KEY_MAP = {
     "Компрессор: Неинверторный компрессор": "inverter",
     "Номинальный уровень рабочего тока (охлаждение), А": "current_cooling_nominal_a",
     "Номинальный уровень рабочего тока (нагрев), А": "current_heating_nominal_a",
+    "Максимальный рабочий ток, охлаждение": "current_cooling_max_a",
+    "Максимальный рабочий ток, обогрев": "current_heating_max_a",
     "Дополнительная заправка (г/м)": "refrigerant_additional_g_m",
+    "Дополнительная заправка хладагента": "refrigerant_additional_g_m",
+    "Заводская заправка хладагента": "refrigerant_charge_g",
     "Вес заправляемого хладагента, г": "refrigerant_charge_g",
     "Артикулы товара": "sku_list",
     "Подача питания": "power_supply_location",
     "Подключение питания": "power_supply_location",
+    "Сторона подключения": "power_supply_location",
+    "Электропитание": "power_supply",
     "Электропитание, Ф/В/Гц": "power_supply",
     "Электропитание (Ø / В / Гц)": "power_supply",
+    "Параметры питающей сети": "power_supply_voltage",
+    "Диаметр дренажной трубы: мм (дюйм)": "drain_pipe_diameter",
     "Модель": "model",
+    "Модель внутреннего блока": "model_indoor",
+    "Модель наружного блока": "model_outdoor",
+    "Гарантия": "warranty_months",
+    "Установка": "installation_orientation",
     "Внутренний блок: Габаритные размеры в упаковке (Ш/Г/В), мм": "dimensions_indoor_package_mm",
     "Наружный блок: Габаритные размеры в упаковке (Ш/Г/В), мм": "dimensions_outdoor_package_mm",
+    "Размеры внутреннего блока в упаковке (Ш х В х Г)": "dimensions_indoor_package_mm",
+    "Размеры наружного блока в упаковке (Ш х В х Г)": "dimensions_outdoor_package_mm",
+    "Вес внутреннего блока в упаковке": "weight_indoor_package",
+    "Вес наружного блока в упаковке": "weight_outdoor_package",
     "Габаритные размеры в упаковке (Ш/Г/В), мм": "dimensions_outdoor_package_mm",
 }
 
@@ -245,6 +283,17 @@ _DIMENSIONS_MAP = {
     "Наружный блок: Габаритные размеры без упаковки (Ш/Г/В), мм": ("width_outdoor", "depth_outdoor", "height_outdoor"),
     "Внутренний блок без упаковки (Ш × В × Г), мм": ("width_indoor", "height_indoor", "depth_indoor"),
     "Наружный блок без упаковки (Ш × В × Г), мм": ("width_outdoor", "height_outdoor", "depth_outdoor"),
+    "Размеры внутреннего блока без упаковки (Ш х В х Г)": ("width_indoor", "height_indoor", "depth_indoor"),
+    "Размеры наружного блока без упаковки (Ш х В х Г)": ("width_outdoor", "height_outdoor", "depth_outdoor"),
+    "Размеры внутреннего блока без упаковки (Ш x В x Г)": ("width_indoor", "height_indoor", "depth_indoor"),
+    "Размеры наружного блока без упаковки (Ш x В x Г)": ("width_outdoor", "height_outdoor", "depth_outdoor"),
+}
+
+_UNORDERED_WIDTH_HEIGHT_DIMENSION_KEYS = {
+    "Размеры внутреннего блока без упаковки (Ш х В х Г)",
+    "Размеры наружного блока без упаковки (Ш х В х Г)",
+    "Размеры внутреннего блока без упаковки (Ш x В x Г)",
+    "Размеры наружного блока без упаковки (Ш x В x Г)",
 }
 
 _PREFERRED_NUMERIC_KEYS = {
@@ -259,6 +308,15 @@ _PREFERRED_NUMERIC_KEYS = {
     "area_m2",
     "weight_indoor",
     "weight_outdoor",
+    "weight_indoor_package",
+    "weight_outdoor_package",
+    "dehumidification_l_h",
+    "current_cooling_max_a",
+    "current_heating_max_a",
+    "current_cooling_nominal_a",
+    "current_heating_nominal_a",
+    "warranty_months",
+    "drain_pipe_diameter",
 }
 
 _DROPPED_SPEC_KEYS = {
@@ -266,6 +324,9 @@ _DROPPED_SPEC_KEYS = {
     "source_fx_rub_byn",
     "Цена источника",
     "Курс RUB/BYN (импорт)",
+    "Категория поставщика",
+    "ID предложения Severcon",
+    "URL поставщика",
 }
 
 
@@ -273,7 +334,7 @@ def _split_dimensions(specs: Dict[str, Any]) -> Dict[str, Any]:
     """Split composite dimension values like '940×1250×340' into
     individual width/height/depth keys.
 
-    Handles various separators: ×, x, X, *, х (cyrillic).
+    Handles various separators: ×, x, X, *, х (cyrillic), ?.
     """
     result = dict(specs)
     for raw_key, (w_key, h_key, d_key) in _DIMENSIONS_MAP.items():
@@ -282,7 +343,7 @@ def _split_dimensions(specs: Dict[str, Any]) -> Dict[str, Any]:
             continue
         text = str(val).strip()
         # Normalize separators
-        text = re.sub(r"[×xX*х]", "×", text)
+        text = re.sub(r"[×xX*х?？]", "×", text)
         parts = [p.strip() for p in text.split("×") if p.strip()]
         nums = []
         for p in parts:
@@ -290,6 +351,15 @@ def _split_dimensions(specs: Dict[str, Any]) -> Dict[str, Any]:
             if m:
                 nums.append(m.group(1).replace(",", "."))
         if len(nums) >= 3:
+            if raw_key in _UNORDERED_WIDTH_HEIGHT_DIMENSION_KEYS:
+                first = float(nums[0])
+                second = float(nums[1])
+                width = max(first, second)
+                height = min(first, second)
+                result.setdefault(w_key, str(width).rstrip("0").rstrip("."))
+                result.setdefault(h_key, str(height).rstrip("0").rstrip("."))
+                result.setdefault(d_key, nums[2])
+                continue
             result.setdefault(w_key, nums[0])
             result.setdefault(h_key, nums[1])
             result.setdefault(d_key, nums[2])
@@ -344,6 +414,12 @@ def clean_value(key: str, val: Any, keep_units: bool = True) -> Any:
                 return normalized
         return text
 
+    if key in {"dimensions_indoor_package_mm", "dimensions_outdoor_package_mm"}:
+        text = val.replace("?", "×").replace("？", "×")
+        text = re.sub(r"[xXх]", "×", text)
+        text = re.sub(r"\s*×\s*", " × ", text)
+        return re.sub(r"\s+", " ", text).strip()
+
     # 1. Логика для Булевых (Да/Нет)
     # Сюда попадают: inverter, wifi_ready, remote_control и все режимы
     boolean_keys = [
@@ -396,10 +472,10 @@ def clean_value(key: str, val: Any, keep_units: bool = True) -> Any:
 
     if key in boolean_keys:
         if key == "inverter":
-            if "инвертор" in val_lower or "inverter" in val_lower:
-                return True
             if "неинвертор" in val_lower or "on/off" in val_lower or "on off" in val_lower:
                 return False
+            if "инвертор" in val_lower or "inverter" in val_lower:
+                return True
         if val_lower in {"+", "✓", "✔"}:
             return True
         if "да" in val_lower or "есть" in val_lower or "поддерживается" in val_lower:
@@ -494,7 +570,13 @@ def _normalize_compressor_type(value: Any, inverter_value: Any) -> str | None:
     if text:
         if "full dc" in text or "full-dc" in text or "dc inverter" in text:
             return "full_dc"
-        if "on/off" in text or "on off" in text or "on-off" in text or "onoff" in text:
+        if (
+            "неинвертор" in text
+            or "on/off" in text
+            or "on off" in text
+            or "on-off" in text
+            or "onoff" in text
+        ):
             return "on_off"
         if "inverter" in text or "инвертор" in text:
             return "inverter"
@@ -818,6 +900,26 @@ def normalize_specs(
                     new_specs["scop"] = numbers[0].replace(",", ".")
                     if len(numbers) > 1:
                         new_specs["cop"] = numbers[1].replace(",", ".")
+                if rus_key in new_specs:
+                    del new_specs[rus_key]
+                continue
+
+            if sys_key in {"eer", "cop", "seer", "scop"} and "класс" in rus_key_l and "/" in str(raw_val):
+                numbers = re.findall(r"[-+]?\d+(?:[.,]\d+)?", str(raw_val))
+                if numbers:
+                    new_specs[sys_key] = numbers[0].replace(",", ".")
+                class_match = re.search(r"/\s*([A-Za-zА-Яа-я][+\-]*)", str(raw_val))
+                if class_match:
+                    energy_class = (
+                        class_match.group(1)
+                        .strip()
+                        .replace("А", "A")
+                        .replace("а", "A")
+                    )
+                    if sys_key in {"eer", "seer"}:
+                        new_specs["energy_class_cooling"] = energy_class
+                    else:
+                        new_specs["energy_class_heating"] = energy_class
                 if rus_key in new_specs:
                     del new_specs[rus_key]
                 continue

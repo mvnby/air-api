@@ -59,6 +59,8 @@ import {
     type ManagerBackupRunStatusResponse,
     type ManagerRestoreJobStartResponse,
     type ManagerRestoreJobStatusResponse,
+    type CatalogImportJobStartResponse,
+    type CatalogImportJobStatusResponse,
     type ManagerBrandResponse,
     type ManagerBrandCreatePayload,
     type ManagerBrandUpdatePayload,
@@ -80,6 +82,8 @@ export type {
     ManagerBackupRunStatusResponse,
     ManagerRestoreJobStartResponse,
     ManagerRestoreJobStatusResponse,
+    CatalogImportJobStartResponse,
+    CatalogImportJobStatusResponse,
 };
 export type {
     ManagerInstallEstimateCalculatePayload,
@@ -670,6 +674,26 @@ export const api = {
             with_related: withRelated,
             update_existing: updateExisting,
         });
+    },
+
+    async startImportProductsJob(
+        urls: string[],
+        withRelated: boolean,
+        updateExisting: boolean,
+    ): Promise<CatalogImportJobStartResponse> {
+        return await ManagerService.startCatalogImportJob({
+            urls,
+            with_related: withRelated,
+            update_existing: updateExisting,
+        });
+    },
+
+    async getImportProductsJobStatus(jobId: string): Promise<CatalogImportJobStatusResponse> {
+        return await ManagerService.getCatalogImportJobStatus(jobId);
+    },
+
+    async getCurrentImportProductsJobStatus(): Promise<CatalogImportJobStatusResponse> {
+        return await ManagerService.getCurrentCatalogImportJobStatus();
     },
 
     /** @deprecated Use importProducts() — kept for backward compatibility */

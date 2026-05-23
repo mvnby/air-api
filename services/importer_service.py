@@ -1,6 +1,6 @@
 import logging
 from decimal import Decimal
-from typing import List, Optional
+from typing import Awaitable, Callable, Dict, List, Optional
 
 import slugify
 from sqlalchemy import select
@@ -12,6 +12,7 @@ from parsers.haierproff import HaierProffParser
 from parsers.hobot import HobotParser
 from parsers.lg24 import Lg24Parser
 from parsers.onliner import OnlinerParser
+from parsers.severcon import SeverconEnergoluxParser
 from parsers.tvoy_klimat import TvoyKlimatParser
 from core.database import async_session_maker
 from models import Product, ProductImage, Tag, TagGroup
@@ -30,6 +31,7 @@ from services.brand_series_service import sync_product_brand_series
 
 logger = logging.getLogger(__name__)
 _CATEGORY_TAG_SLUGS = {"cat-household", "cat-multi", "cat-industrial"}
+ImportProgressCallback = Callable[[Dict[str, object]], Awaitable[None]]
 
 
 def _augment_auto_slugs_with_wifi_specs(auto_slugs: List[str], specs: dict) -> List[str]:
@@ -152,6 +154,7 @@ class ImporterService:
             HobotParser(),
             TvoyKlimatParser(),
             OnlinerParser(),
+            SeverconEnergoluxParser(),
         ]
 
     def get_parser(self, url: str) -> Optional[BaseParser]:
@@ -333,7 +336,9 @@ class ImporterService:
                 gallery_image_urls = data.get("images", [])
 
             if existing and update_existing:
-                # Re-import mode: refresh key business fields, keep photos/slug/title intact.
+                # Re-import mode: refresh key business fields, keep photos/slug intact.
+                if data.get("refresh_title_on_update") and data.get("title"):
+                    existing.title = data["title"]
                 existing.description = data.get('description', existing.description)
                 existing.price = data.get('price', existing.price)
                 existing.area = data.get('area', existing.area)
@@ -429,6 +434,7 @@ class ImporterService:
         urls: List[str],
         with_related: bool = False,
         update_existing: bool = False,
+        progress_callback: Optional[ImportProgressCallback] = None,
     ) -> dict:
         """
         Imports multiple products and returns a summary of success/errors.
@@ -436,11 +442,81 @@ class ImporterService:
         """
         results = {"success": [], "errors": []}
         processed_urls = set()
-        pending_urls = [u.strip().replace('\r', '').replace('\n', '') for u in urls if u.strip()]
+        pending_urls: List[str] = []
+
+        async def emit_progress(**payload: object) -> None:
+            if progress_callback:
+                await progress_callback(payload)
+
+        await emit_progress(
+            stage="expanding",
+            input_total=len([u for u in urls if u.strip()]),
+            total=0,
+            processed=0,
+            pending=0,
+            success_count=0,
+            error_count=0,
+        )
+
+        for raw_url in urls:
+            url = raw_url.strip().replace('\r', '').replace('\n', '')
+            if not url:
+                continue
+            parser = self.get_parser(url)
+            expand = getattr(parser, "get_import_urls", None) if parser else None
+            if expand:
+                try:
+                    expanded_urls = await expand(url)
+                    logger.info(
+                        "Expanded import URL %s into %s product URL(s)",
+                        url,
+                        len(expanded_urls or []),
+                    )
+                    pending_urls.extend(expanded_urls or [url])
+                except Exception as exc:
+                    results["errors"].append(f"URL '{url}': {str(exc)}")
+                    await emit_progress(
+                        stage="expanding",
+                        current_url=url,
+                        total=len(pending_urls),
+                        processed=0,
+                        pending=len(pending_urls),
+                        success_count=0,
+                        error_count=len(results["errors"]),
+                    )
+            else:
+                pending_urls.append(url)
+
+        unique_pending_urls: List[str] = []
+        seen_pending_urls = set()
+        for pending_url in pending_urls:
+            if pending_url not in seen_pending_urls:
+                unique_pending_urls.append(pending_url)
+                seen_pending_urls.add(pending_url)
+        pending_urls = unique_pending_urls
+
+        await emit_progress(
+            stage="expanded",
+            total=len(pending_urls),
+            processed=0,
+            pending=len(pending_urls),
+            success_count=0,
+            error_count=len(results["errors"]),
+        )
 
         while pending_urls:
             url = pending_urls.pop(0)
             if url in processed_urls: continue
+
+            await emit_progress(
+                stage="importing",
+                current_url=url,
+                total=len(processed_urls) + len(pending_urls) + 1,
+                processed=len(processed_urls),
+                pending=len(pending_urls) + 1,
+                success_count=len(results["success"]),
+                error_count=len(results["errors"]),
+            )
             
             try:
                 res = await self.import_product(
@@ -459,8 +535,44 @@ class ImporterService:
                     for rel_url in res["related_urls"]:
                         if rel_url not in processed_urls and rel_url not in pending_urls:
                             pending_urls.append(rel_url)
+                await emit_progress(
+                    stage="importing",
+                    current_url=url,
+                    current_title=product.title,
+                    total=len(processed_urls) + len(pending_urls),
+                    processed=len(processed_urls),
+                    pending=len(pending_urls),
+                    success_count=len(results["success"]),
+                    error_count=len(results["errors"]),
+                )
+
+                if len(processed_urls) % 25 == 0:
+                    logger.info(
+                        "Bulk import progress: processed=%s pending=%s success=%s errors=%s",
+                        len(processed_urls),
+                        len(pending_urls),
+                        len(results["success"]),
+                        len(results["errors"]),
+                    )
             except Exception as e:
                 results["errors"].append(f"URL '{url}': {str(e)}")
                 processed_urls.add(url)
+                await emit_progress(
+                    stage="importing",
+                    current_url=url,
+                    total=len(processed_urls) + len(pending_urls),
+                    processed=len(processed_urls),
+                    pending=len(pending_urls),
+                    success_count=len(results["success"]),
+                    error_count=len(results["errors"]),
+                )
 
+        await emit_progress(
+            stage="completed",
+            total=len(processed_urls),
+            processed=len(processed_urls),
+            pending=0,
+            success_count=len(results["success"]),
+            error_count=len(results["errors"]),
+        )
         return results

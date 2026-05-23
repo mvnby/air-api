@@ -92,6 +92,9 @@ GET_MANAGER_CRM_HEALTH_REPORT = "get_manager_crm_health_report"
 GET_DASHBOARD_STATS = "get_dashboard_stats"
 IMPORT_ONLINER = "import_onliner"
 CATALOG_IMPORT = "catalog_import"
+START_CATALOG_IMPORT_JOB = "start_catalog_import_job"
+GET_CATALOG_IMPORT_JOB_STATUS = "get_catalog_import_job_status"
+GET_CURRENT_CATALOG_IMPORT_JOB_STATUS = "get_current_catalog_import_job_status"
 
 GET_MANAGER_INSTALLERS = "get_manager_installers"
 CREATE_MANAGER_INSTALLER = "create_manager_installer"
@@ -315,4 +318,7 @@ ALL_MANAGER_OPERATION_IDS = (
     BULK_CREATE_SUPPLIER_MAPPINGS,
     GET_DOC_TEMPLATES,
     CATALOG_IMPORT,
+    START_CATALOG_IMPORT_JOB,
+    GET_CATALOG_IMPORT_JOB_STATUS,
+    GET_CURRENT_CATALOG_IMPORT_JOB_STATUS,
 )
