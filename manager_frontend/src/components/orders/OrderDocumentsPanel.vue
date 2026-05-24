@@ -127,6 +127,13 @@ const selectedTemplateLabel = computed(() => (
     ? (selectedContractTemplate.value?.name || 'Шаблон договора')
     : 'Оставить по шаблону'
 ));
+const showsDocumentRoleControl = computed(() => selectedDocumentType.value !== 'tn2' && selectedDocumentType.value !== 'ttn1');
+const showsAdditionalConditions = computed(() => (
+  selectedDocumentType.value === 'contract'
+  || selectedDocumentType.value === 'invoice'
+  || selectedDocumentType.value === 'offer'
+));
+const additionalConditionsMode = computed(() => (selectedDocumentType.value === 'contract' ? 'contract' : 'invoice'));
 const contractBindingLabel = computed(() => {
   if (selectedDocumentType.value === 'contract') return 'будет создан разовый договор заказа';
   if (!isCompanyOrder.value) return 'не требуется';
@@ -136,14 +143,24 @@ const contractBindingLabel = computed(() => {
   if (oneTimeContractDocument.value) return `Разовый договор заказа · ${oneTimeContractDocument.value.number}`;
   return 'не выбран';
 });
-const createChecklist = computed(() => [
-  { label: 'Тип', value: selectedDocumentTypeItem.value.label },
-  { label: 'Дата', value: new Date(`${documentDate.value}T00:00:00`).toLocaleDateString('ru-RU') },
-  { label: 'Шаблон', value: selectedTemplateLabel.value },
-  { label: 'Договор', value: contractBindingLabel.value },
-  { label: 'Условия', value: additionalConditions.value.trim() ? 'есть выбранные условия' : 'Оставить по шаблону' },
-  { label: 'Роли', value: selectedDocumentRoleType.value ? getRoleLabel(selectedDocumentRoleType.value) : 'Оставить по шаблону' },
-]);
+const roleChecklistLabel = computed(() => (
+  selectedDocumentRoleType.value ? getRoleLabel(selectedDocumentRoleType.value) : 'Оставить по шаблону'
+));
+const createChecklist = computed(() => {
+  const items = [
+    { label: 'Тип', value: selectedDocumentTypeItem.value.label },
+    { label: 'Дата', value: new Date(`${documentDate.value}T00:00:00`).toLocaleDateString('ru-RU') },
+    { label: 'Шаблон', value: selectedTemplateLabel.value },
+    { label: 'Договор', value: contractBindingLabel.value },
+  ];
+  if (showsAdditionalConditions.value) {
+    items.push({ label: 'Условия', value: additionalConditions.value.trim() ? 'есть выбранные условия' : 'Оставить по шаблону' });
+  }
+  if (showsDocumentRoleControl.value) {
+    items.push({ label: 'Роли', value: roleChecklistLabel.value });
+  }
+  return items;
+});
 
 const datedDocumentTypes = new Set(['contract', 'act', 'defect_act', 'tn2', 'ttn1']);
 const getDocumentDateForType = (type: string) => (
@@ -237,6 +254,10 @@ watch(() => props.order.id, () => {
   void loadCustomerContracts();
 }, { immediate: true });
 
+watch(selectedDocumentType, () => {
+  if (!showsAdditionalConditions.value) showAdvancedSettings.value = false;
+});
+
 watch(() => [
   props.order.customer_contract_id,
   props.order.document_role_type,
@@ -318,6 +339,7 @@ const openDocumentSendModal = () => {
 
 const openCreatePanel = () => {
   selectedDocumentType.value = suggestedDocumentType.value;
+  showAdvancedSettings.value = false;
   isCreatePanelOpen.value = true;
 };
 
@@ -654,6 +676,19 @@ const registerExternalContract = async () => {
             </label>
           </div>
 
+          <div v-if="showsDocumentRoleControl" class="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700/50 dark:bg-slate-800/40">
+            <label class="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">Шаг 2: роли сторон</label>
+            <select
+              v-model="selectedDocumentRoleBinding"
+              class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+            >
+              <option value="">Оставить по шаблону · {{ getRoleLabel(inheritedDocumentRoleType) }}</option>
+              <option v-for="option in DOCUMENT_ROLE_OPTIONS" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+
       <div v-if="needsContractBinding" class="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700/50 dark:bg-slate-800/40">
         <div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <label class="block text-xs font-semibold text-slate-700 dark:text-slate-200">Шаг 2: договор для актов и накладных</label>
@@ -759,35 +794,23 @@ const registerExternalContract = async () => {
         </p>
       </div>
 
-          <div>
+          <div v-if="showsAdditionalConditions">
             <button
               type="button"
               class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
               @click="showAdvancedSettings = !showAdvancedSettings"
             >
               <span class="material-icons-round text-[16px]">{{ showAdvancedSettings ? 'expand_less' : 'tune' }}</span>
-              {{ showAdvancedSettings ? 'Скрыть дополнительные настройки' : 'Дополнительные условия, текст и роли' }}
+              {{ showAdvancedSettings ? 'Скрыть дополнительные условия' : 'Дополнительные условия' }}
             </button>
           </div>
 
-          <div v-if="showAdvancedSettings" class="space-y-3">
+          <div v-if="showAdvancedSettings && showsAdditionalConditions" class="space-y-3">
             <AdditionalConditionsLibrary
               v-model="additionalConditions"
+              :default-mode="additionalConditionsMode"
               :saving="isSavingAdditionalConditions"
             />
-
-            <div class="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700/50 dark:bg-slate-800/40">
-              <label class="mb-1 block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Роли сторон в актах и счетах</label>
-              <select
-                v-model="selectedDocumentRoleBinding"
-                class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-              >
-                <option value="">Оставить по шаблону · {{ getRoleLabel(inheritedDocumentRoleType) }}</option>
-                <option v-for="option in DOCUMENT_ROLE_OPTIONS" :key="option.value" :value="option.value">
-                  {{ option.label }}
-                </option>
-              </select>
-            </div>
           </div>
 
           <div class="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700/50 dark:bg-slate-900/60">
