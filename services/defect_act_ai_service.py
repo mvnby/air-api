@@ -58,6 +58,7 @@ class DefectActAIService:
             "defect_type": payload.defect_type,
             "defect_label": payload.defect_label,
             "allow_assumptions": payload.allow_assumptions,
+            "polish_existing": payload.polish_existing,
             "equipment_name": payload.equipment_name,
             "equipment_brand": payload.equipment_brand,
             "equipment_model": payload.equipment_model,
@@ -87,6 +88,15 @@ class DefectActAIService:
             "- Делай текст цельным и уверенным для дефектного акта, но без лишних технических чисел.\n"
         )
         mode_rules = assumptions_rules if payload.allow_assumptions else strict_rules
+        existing_rules = (
+            "- Если в current_meta уже есть осмысленное значение, можно улучшить его стиль: "
+            "исправить терминологию, сделать формулировку официальной, раскрыть мысль до уровня дефектного акта.\n"
+            "- При улучшении заполненных полей строго сохраняй фактический смысл. Не добавляй новые факты, работы, "
+            "числовые измерения, даты, серийные или инвентарные номера, которых нет во входных данных.\n"
+        ) if payload.polish_existing else (
+            "- Если в current_meta уже есть осмысленное значение, не переписывай это поле и не возвращай его в ответе.\n"
+            "- Заполняй только пустые или явно неполные поля, опираясь на входные данные.\n"
+        )
 
         return (
             "Ты инженер по ремонту систем кондиционирования и составляешь текстовые поля "
@@ -96,7 +106,7 @@ class DefectActAIService:
             "Правила:\n"
             "- Верни только JSON-объект без markdown.\n"
             f"{mode_rules}"
-            "- Если в current_meta уже есть осмысленное значение, сохрани его смысл и аккуратно улучши стиль.\n"
+            f"{existing_rules}"
             "- Итог должен быть пригоден для дефектного акта, но не должен обещать невозможное без диагностики.\n\n"
             "Разрешенные ключи JSON:\n"
             + ", ".join(sorted(DefectActAIService.ALLOWED_REPAIR_META_KEYS))
@@ -184,7 +194,16 @@ class DefectActAIService:
         prompt = DefectActAIService.build_prompt(payload)
         content = await DefectActAIService._request_completion(prompt)
         parsed = DefectActAIService._extract_json_object(content)
-        return DefectActAIService._clean_meta(parsed)
+        meta = DefectActAIService._clean_meta(parsed)
+        if payload.polish_existing:
+            return meta
+
+        existing_meta = DefectActAIService._clean_meta(payload.current_meta or {})
+        return {
+            key: value
+            for key, value in meta.items()
+            if not existing_meta.get(key)
+        }
 
     @staticmethod
     def _deepseek_error_message(response: httpx.Response) -> str:

@@ -278,6 +278,7 @@ const repairComplaintsLoading = ref(false);
 const repairAiDefectType = ref(REPAIR_AI_DEFECT_TYPES[0]?.value || '');
 const repairAiExtraContext = ref('');
 const repairAiAllowAssumptions = ref(false);
+const repairAiPolishExisting = ref(true);
 const repairAiGenerating = ref(false);
 const payments = ref<PaymentResponse[]>([]);
 const bankReceipts = ref<BankReceiptResponse[]>([]);
@@ -1559,6 +1560,7 @@ const generateRepairAiDraft = async () => {
       defect_type: defect.value,
       defect_label: defect.label,
       allow_assumptions: repairAiAllowAssumptions.value,
+      polish_existing: repairAiPolishExisting.value,
       equipment_name: repairMeta.value.equipment_name || orderTitle.value || props.order?.title || '',
       equipment_brand: repairMeta.value.equipment_brand,
       equipment_model: repairMeta.value.equipment_model,
@@ -2360,10 +2362,16 @@ watch(
             </div>
             <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p class="text-xs text-violet-700/80">{{ selectedRepairAiDefect?.hint }}</p>
-              <label class="inline-flex items-center gap-2 rounded-lg bg-white/70 px-2.5 py-1.5 text-xs font-semibold text-violet-800">
-                <input v-model="repairAiAllowAssumptions" type="checkbox" class="h-4 w-4 rounded border-violet-300 text-violet-600 focus:ring-violet-500" />
-                Заполнить на усмотрение
-              </label>
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <label class="inline-flex items-center gap-2 rounded-lg bg-white/70 px-2.5 py-1.5 text-xs font-semibold text-violet-800">
+                  <input v-model="repairAiPolishExisting" type="checkbox" class="h-4 w-4 rounded border-violet-300 text-violet-600 focus:ring-violet-500" />
+                  Причесать заполненное
+                </label>
+                <label class="inline-flex items-center gap-2 rounded-lg bg-white/70 px-2.5 py-1.5 text-xs font-semibold text-violet-800">
+                  <input v-model="repairAiAllowAssumptions" type="checkbox" class="h-4 w-4 rounded border-violet-300 text-violet-600 focus:ring-violet-500" />
+                  Заполнить на усмотрение
+                </label>
+              </div>
             </div>
           </div>
           <label class="field-label md:col-span-2">

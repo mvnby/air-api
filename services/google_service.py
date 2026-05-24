@@ -737,6 +737,23 @@ class GoogleDocsService:
         
         if fill_reqs: docs_service.documents().batchUpdate(documentId=doc_id, body={'requests': fill_reqs}).execute()
 
+        # 2.1. Выравнивание строк с позициями:
+        # № и ед. изм. — по центру, название — влево, количество/цена/сумма — вправо.
+        doc = docs_service.documents().get(documentId=doc_id).execute()
+        table = None
+        for element in doc.get('body').get('content'):
+            if 'table' in element and element.get('startIndex') == table_start_index:
+                table = element.get('table')
+                break
+
+        alignment_reqs = (
+            self._build_standard_table_alignment_requests(table, len(data), has_footer)
+            if table
+            else []
+        )
+        if alignment_reqs:
+            docs_service.documents().batchUpdate(documentId=doc_id, body={'requests': alignment_reqs}).execute()
+
         # 3. ФОРМАТИРОВАНИЕ ПОДВАЛА (Footer)
         if has_footer:
             # Нам нужно снова получить индексы, но для mergeTableCells нам нужен rowIndex
@@ -782,44 +799,87 @@ class GoogleDocsService:
             last_row = table.get('tableRows')[last_row_index]
             cells = last_row.get('tableCells')
             
-            style_reqs = []
-            
-            # Ячейка 1 ("Всего:") - Жирный + По правому краю
-            cell_total_label = cells[0]
-            start = cell_total_label.get('startIndex')
-            end = cell_total_label.get('endIndex')
-            
-            style_reqs.append({
-                'updateTextStyle': {
-                    'range': {'startIndex': start, 'endIndex': end},
-                    'textStyle': {'bold': True},
-                    'fields': 'bold'
-                }
-            })
-            style_reqs.append({
-                'updateParagraphStyle': {
-                    'range': {'startIndex': start, 'endIndex': end},
-                    'paragraphStyle': {'alignment': 'END'}, # По правому краю
-                    'fields': 'alignment'
-                }
-            })
-            
-            # Ячейка 2 (Сумма) - Жирный
-            if len(cells) > 1:
-                cell_amount = cells[1]
-                start_amt = cell_amount.get('startIndex')
-                end_amt = cell_amount.get('endIndex')
-                
-                style_reqs.append({
-                    'updateTextStyle': {
-                        'range': {'startIndex': start_amt, 'endIndex': end_amt},
-                        'textStyle': {'bold': True},
-                        'fields': 'bold'
-                    }
-                })
+            style_reqs = self._build_footer_table_style_requests(cells)
 
             if style_reqs:
                 docs_service.documents().batchUpdate(documentId=doc_id, body={'requests': style_reqs}).execute()
+
+    @staticmethod
+    def _build_standard_table_alignment_requests(
+        table: Dict[str, Any],
+        data_rows_count: int,
+        has_footer: bool,
+    ) -> List[Dict[str, Any]]:
+        if not table or data_rows_count <= 0:
+            return []
+
+        rows = table.get('tableRows') or []
+        body_rows_count = max(data_rows_count - 1, 0) if has_footer else data_rows_count
+        column_alignment = {
+            0: 'CENTER',
+            1: 'START',
+            2: 'CENTER',
+            3: 'END',
+            4: 'END',
+            5: 'END',
+        }
+        requests: List[Dict[str, Any]] = []
+
+        for data_idx in range(body_rows_count):
+            table_row_idx = data_idx + 1  # row 0 is the template header
+            if table_row_idx >= len(rows):
+                continue
+            cells = rows[table_row_idx].get('tableCells') or []
+            for column_idx, alignment in column_alignment.items():
+                if column_idx >= len(cells):
+                    continue
+                cell = cells[column_idx]
+                start = cell.get('startIndex')
+                end = cell.get('endIndex')
+                if start is None or end is None or end <= start:
+                    continue
+                requests.append({
+                    'updateParagraphStyle': {
+                        'range': {'startIndex': start, 'endIndex': end},
+                        'paragraphStyle': {'alignment': alignment},
+                        'fields': 'alignment',
+                    }
+                })
+
+        return requests
+
+    @staticmethod
+    def _build_footer_table_style_requests(cells: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not cells:
+            return []
+
+        requests: List[Dict[str, Any]] = []
+        footer_cells = [cells[0]]
+        if len(cells) > 1:
+            footer_cells.append(cells[-1])
+
+        for cell in footer_cells:
+            start = cell.get('startIndex')
+            end = cell.get('endIndex')
+            if start is None or end is None or end <= start:
+                continue
+            cell_range = {'startIndex': start, 'endIndex': end}
+            requests.append({
+                'updateTextStyle': {
+                    'range': cell_range,
+                    'textStyle': {'bold': True},
+                    'fields': 'bold',
+                }
+            })
+            requests.append({
+                'updateParagraphStyle': {
+                    'range': cell_range,
+                    'paragraphStyle': {'alignment': 'END'},
+                    'fields': 'alignment',
+                }
+            })
+
+        return requests
 
 
     def delete_file(self, file_id: str) -> None:
