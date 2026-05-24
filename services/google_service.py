@@ -799,48 +799,7 @@ class GoogleDocsService:
             last_row = table.get('tableRows')[last_row_index]
             cells = last_row.get('tableCells')
             
-            style_reqs = []
-            
-            # Ячейка 1 ("Всего:") - Жирный + По правому краю
-            cell_total_label = cells[0]
-            start = cell_total_label.get('startIndex')
-            end = cell_total_label.get('endIndex')
-            
-            style_reqs.append({
-                'updateTextStyle': {
-                    'range': {'startIndex': start, 'endIndex': end},
-                    'textStyle': {'bold': True},
-                    'fields': 'bold'
-                }
-            })
-            style_reqs.append({
-                'updateParagraphStyle': {
-                    'range': {'startIndex': start, 'endIndex': end},
-                    'paragraphStyle': {'alignment': 'END'}, # По правому краю
-                    'fields': 'alignment'
-                }
-            })
-            
-            # Ячейка 2 (Сумма) - Жирный
-            if len(cells) > 1:
-                cell_amount = cells[1]
-                start_amt = cell_amount.get('startIndex')
-                end_amt = cell_amount.get('endIndex')
-                
-                style_reqs.append({
-                    'updateTextStyle': {
-                        'range': {'startIndex': start_amt, 'endIndex': end_amt},
-                        'textStyle': {'bold': True},
-                        'fields': 'bold'
-                    }
-                })
-                style_reqs.append({
-                    'updateParagraphStyle': {
-                        'range': {'startIndex': start_amt, 'endIndex': end_amt},
-                        'paragraphStyle': {'alignment': 'END'},
-                        'fields': 'alignment'
-                    }
-                })
+            style_reqs = self._build_footer_table_style_requests(cells)
 
             if style_reqs:
                 docs_service.documents().batchUpdate(documentId=doc_id, body={'requests': style_reqs}).execute()
@@ -886,6 +845,39 @@ class GoogleDocsService:
                         'fields': 'alignment',
                     }
                 })
+
+        return requests
+
+    @staticmethod
+    def _build_footer_table_style_requests(cells: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not cells:
+            return []
+
+        requests: List[Dict[str, Any]] = []
+        footer_cells = [cells[0]]
+        if len(cells) > 1:
+            footer_cells.append(cells[-1])
+
+        for cell in footer_cells:
+            start = cell.get('startIndex')
+            end = cell.get('endIndex')
+            if start is None or end is None or end <= start:
+                continue
+            cell_range = {'startIndex': start, 'endIndex': end}
+            requests.append({
+                'updateTextStyle': {
+                    'range': cell_range,
+                    'textStyle': {'bold': True},
+                    'fields': 'bold',
+                }
+            })
+            requests.append({
+                'updateParagraphStyle': {
+                    'range': cell_range,
+                    'paragraphStyle': {'alignment': 'END'},
+                    'fields': 'alignment',
+                }
+            })
 
         return requests
 

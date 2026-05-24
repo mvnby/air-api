@@ -96,3 +96,39 @@ def test_standard_table_alignment_requests_skip_invalid_ranges():
     ]
 
     assert starts == [200, 230]
+
+
+def test_footer_table_style_requests_align_first_and_last_cells():
+    cells = [_cell(200 + column * 10, 208 + column * 10) for column in range(6)]
+
+    requests = GoogleDocsService._build_footer_table_style_requests(cells)
+
+    text_style_starts = [
+        request["updateTextStyle"]["range"]["startIndex"]
+        for request in requests
+        if "updateTextStyle" in request
+    ]
+    paragraph_styles = {
+        request["updateParagraphStyle"]["range"]["startIndex"]: (
+            request["updateParagraphStyle"]["paragraphStyle"]["alignment"]
+        )
+        for request in requests
+        if "updateParagraphStyle" in request
+    }
+
+    assert text_style_starts == [200, 250]
+    assert paragraph_styles == {200: "END", 250: "END"}
+
+
+def test_footer_table_style_requests_align_two_cell_footer():
+    cells = [_cell(200, 208), _cell(250, 258)]
+
+    requests = GoogleDocsService._build_footer_table_style_requests(cells)
+
+    starts = [
+        request["updateParagraphStyle"]["range"]["startIndex"]
+        for request in requests
+        if "updateParagraphStyle" in request
+    ]
+
+    assert starts == [200, 250]
