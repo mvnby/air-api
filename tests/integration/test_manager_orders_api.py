@@ -1,3 +1,4 @@
+import json
 import pytest
 from datetime import datetime, timedelta
 from sqlmodel import select
@@ -258,6 +259,48 @@ async def test_manager_repair_complaint_presets_crud_and_duplicates(async_client
     updated = update_response.json()
     assert updated["is_favorite"] is True
     assert updated["likely_diagnosis"] == "Засор или перегиб дренажной трубки."
+
+
+@pytest.mark.asyncio
+async def test_manager_repair_act_ai_draft_generates_sanitized_meta(async_client, monkeypatch):
+    captured = {}
+
+    async def _fake_request_completion(prompt: str) -> str:
+        captured["prompt"] = prompt
+        return json.dumps(
+            {
+                "repair_meta": {
+                    "technical_condition": "Теплообменник имеет множественные дефекты, загрязнение и следы коррозии.",
+                    "technical_conclusion": "Эксплуатация оборудования без ремонта не рекомендуется.",
+                    "recommended_decision": "Рассмотреть замену теплообменника или оборудования в сборе.",
+                    "unknown_key": "must be ignored",
+                }
+            },
+            ensure_ascii=False,
+        )
+
+    from services.defect_act_ai_service import DefectActAIService
+
+    monkeypatch.setattr(DefectActAIService, "_request_completion", staticmethod(_fake_request_completion))
+
+    headers = await _auth_headers(async_client)
+    payload = {
+        "defect_type": "multiple_heat_exchanger_defects",
+        "defect_label": "Множественные дефекты теплообменника",
+        "equipment_model": "Daikin FTXB25C",
+        "current_meta": {"customer_complaint": "Плохо холодит"},
+    }
+    response = await async_client.post("/api/manager/repair-complaints/ai-draft", json=payload, headers=headers)
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["provider"] == "deepseek"
+    assert data["prompt_version"] == "defect_act_v1"
+    assert data["repair_meta"]["technical_condition"].startswith("Теплообменник")
+    assert data["repair_meta"]["technical_conclusion"] == "Эксплуатация оборудования без ремонта не рекомендуется."
+    assert "unknown_key" not in data["repair_meta"]
+    assert "Множественные дефекты теплообменника" in captured["prompt"]
+    assert "Daikin FTXB25C" in captured["prompt"]
 
 
 @pytest.mark.asyncio

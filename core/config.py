@@ -77,6 +77,11 @@ class Settings(BaseSettings):
     # Monitoring
     SENTRY_DSN: str = ""
 
+    # AI integrations
+    DEEPSEEK_TOKEN: str = ""
+    DEEPSEEK_MODEL: str = "deepseek-v4-flash"
+    DEEPSEEK_API_URL: str = "https://api.deepseek.com/chat/completions"
+
     # GitHub Actions (for Turbo Rebuilds)
     GITHUB_TOKEN: str = ""
     GITHUB_OWNER: str = "mvnby"

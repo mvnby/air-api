@@ -556,7 +556,7 @@ const registerExternalContract = async () => {
       </div>
     </div>
 
-    <div class="space-y-3">
+    <div class="flex flex-col gap-3">
       <div>
         <p class="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Документы</p>
         <div v-if="documents.length" class="space-y-2">
@@ -620,7 +620,7 @@ const registerExternalContract = async () => {
         </div>
       </div>
 
-      <div v-if="isCreatePanelOpen" class="rounded-xl border border-teal-200 bg-teal-50/30 p-3 dark:border-teal-800/70 dark:bg-teal-950/20">
+      <div v-if="isCreatePanelOpen" class="order-first rounded-xl border border-teal-200 bg-teal-50/30 p-3 dark:border-teal-800/70 dark:bg-teal-950/20">
         <div class="mb-3 flex items-center justify-between gap-3">
           <div>
             <p class="text-[11px] font-bold uppercase tracking-wide text-teal-700 dark:text-teal-300">Создание документа</p>

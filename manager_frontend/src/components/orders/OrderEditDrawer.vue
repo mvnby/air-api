@@ -79,6 +79,11 @@ type RepairMeta = {
   repair_feasibility: string;
   recommended_decision: string;
 };
+type RepairAiDefectType = {
+  value: string;
+  label: string;
+  hint: string;
+};
 
 const WORKFLOW_OPTIONS: Array<{ value: OrderWorkflowType; label: string; hint: string; icon: string }> = [
   { value: 'sales_installation', label: 'Продажа + монтаж', hint: 'товары, КП, монтаж', icon: 'shopping_cart' },
@@ -108,6 +113,39 @@ const emptyRepairMeta = (): RepairMeta => ({
   repair_feasibility: '',
   recommended_decision: '',
 });
+
+const REPAIR_AI_DEFECT_TYPES: RepairAiDefectType[] = [
+  {
+    value: 'multiple_heat_exchanger_defects',
+    label: 'Множественные дефекты теплообменника',
+    hint: 'коррозия, загрязнение, механические повреждения, нарушение теплообмена',
+  },
+  {
+    value: 'compressor_winding_breakdown',
+    label: 'Пробой обмотки компрессора',
+    hint: 'электрическая неисправность компрессора, срабатывание защиты',
+  },
+  {
+    value: 'refrigerant_leak',
+    label: 'Утечка хладагента',
+    hint: 'падение производительности, обмерзание, требуется поиск и устранение утечки',
+  },
+  {
+    value: 'control_board_failure',
+    label: 'Неисправность платы управления',
+    hint: 'ошибки управления, нестабильная работа, отсутствие запуска',
+  },
+  {
+    value: 'fan_motor_failure',
+    label: 'Неисправность двигателя вентилятора',
+    hint: 'шум, отсутствие вращения, перегрев, ошибка вентилятора',
+  },
+  {
+    value: 'drainage_failure',
+    label: 'Нарушение отвода конденсата',
+    hint: 'протечка воды, засор или неправильный уклон дренажа',
+  },
+];
 
 const serviceKindLabels: Record<string, string> = {
   installation: 'монтаж',
@@ -237,6 +275,10 @@ const showEstimateImport = ref(false);
 const repairComplaintPresets = ref<ManagerRepairComplaintPresetResponse[]>([]);
 const repairComplaintSearch = ref('');
 const repairComplaintsLoading = ref(false);
+const repairAiDefectType = ref(REPAIR_AI_DEFECT_TYPES[0]?.value || '');
+const repairAiExtraContext = ref('');
+const repairAiAllowAssumptions = ref(false);
+const repairAiGenerating = ref(false);
 const payments = ref<PaymentResponse[]>([]);
 const bankReceipts = ref<BankReceiptResponse[]>([]);
 const bankReceiptsLoading = ref(false);
@@ -636,6 +678,9 @@ const filteredRepairComplaintPresets = computed(() => {
   });
   return items.slice(0, 12);
 });
+const selectedRepairAiDefect = computed(() => (
+  REPAIR_AI_DEFECT_TYPES.find((item) => item.value === repairAiDefectType.value) || REPAIR_AI_DEFECT_TYPES[0]
+));
 const documentSectionSummary = computed(() => {
   const contractText = hasContract.value ? 'договор есть' : (hasOrderInvoice.value ? 'есть счет' : 'без договора');
   return `${orderDocuments.value.length} док. · ${contractText}`;
@@ -643,8 +688,16 @@ const documentSectionSummary = computed(() => {
 const documentSectionHasError = computed(() => isCompanyOrder.value && !props.order?.customer_contract_id && !hasClosingBaseDocument.value);
 
 const beforeDocumentGenerate = async (type: string) => {
+  if (!props.order?.id) return false;
   if (type === 'offer') {
     await saveCurrentProposalLines();
+  }
+  if (type === 'defect_act') {
+    await ManagerOrdersService.patchManagerOrder(props.order.id, {
+      repair_meta: repairMeta.value as any,
+      measurement_result: measurementResult.value,
+    });
+    emit('reload', props.order.id);
   }
   return true;
 };
@@ -1497,6 +1550,41 @@ const applyRepairComplaintPreset = (preset: ManagerRepairComplaintPresetResponse
   repairMeta.value.likely_diagnosis = preset.likely_diagnosis || repairMeta.value.likely_diagnosis;
 };
 
+const generateRepairAiDraft = async () => {
+  const defect = selectedRepairAiDefect.value;
+  if (!defect || repairAiGenerating.value) return;
+  repairAiGenerating.value = true;
+  try {
+    const response = await ManagerRepairComplaintsService.generateManagerRepairActAiDraft({
+      defect_type: defect.value,
+      defect_label: defect.label,
+      allow_assumptions: repairAiAllowAssumptions.value,
+      equipment_name: repairMeta.value.equipment_name || orderTitle.value || props.order?.title || '',
+      equipment_brand: repairMeta.value.equipment_brand,
+      equipment_model: repairMeta.value.equipment_model,
+      equipment_power: repairMeta.value.equipment_power,
+      customer_complaint: repairMeta.value.customer_complaint,
+      complaint_official: repairMeta.value.complaint_official,
+      likely_diagnosis: repairMeta.value.likely_diagnosis,
+      extra_context: repairAiExtraContext.value || defect.hint,
+      current_meta: repairMeta.value as any,
+    });
+    repairMeta.value = { ...repairMeta.value, ...((response.repair_meta || {}) as Partial<RepairMeta>) };
+    if (props.order?.id) {
+      await ManagerOrdersService.patchManagerOrder(props.order.id, {
+        repair_meta: repairMeta.value as any,
+        measurement_result: measurementResult.value,
+      });
+      emit('reload', props.order.id);
+    }
+    setToast('Черновик дефектного акта заполнен и сохранен', 'success');
+  } catch (error) {
+    setToast(`AI не смог подготовить черновик: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    repairAiGenerating.value = false;
+  }
+};
+
 const loadEstimateOptions = async () => {
   estimateOptionsLoading.value = true;
   try {
@@ -2241,6 +2329,43 @@ watch(
               {{ repairComplaintsLoading ? 'Загружаем пресеты...' : 'Подходящих пресетов пока нет.' }}
             </p>
           </div>
+          <div class="md:col-span-2 rounded-xl border border-violet-100 bg-violet-50/60 p-3">
+            <div class="mb-2 flex flex-col gap-2 lg:flex-row lg:items-end">
+              <label class="field-label flex-1">
+                Базовая неисправность
+                <select v-model="repairAiDefectType" class="field-input bg-white">
+                  <option v-for="item in REPAIR_AI_DEFECT_TYPES" :key="item.value" :value="item.value">
+                    {{ item.label }}
+                  </option>
+                </select>
+              </label>
+              <label class="field-label flex-[1.2]">
+                Детали диагностики
+                <input
+                  v-model="repairAiExtraContext"
+                  class="field-input bg-white"
+                  placeholder="Например: наружный блок не стартует, запах гари, сильная коррозия..."
+                />
+              </label>
+              <button
+                type="button"
+                class="btn-mini h-[42px] justify-center whitespace-nowrap bg-violet-600 hover:bg-violet-700"
+                :disabled="repairAiGenerating"
+                @click="generateRepairAiDraft"
+              >
+                <span v-if="repairAiGenerating" class="material-icons-round animate-spin text-[16px]">loop</span>
+                <span v-else class="material-icons-round text-[16px]">auto_awesome</span>
+                AI-черновик
+              </button>
+            </div>
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p class="text-xs text-violet-700/80">{{ selectedRepairAiDefect?.hint }}</p>
+              <label class="inline-flex items-center gap-2 rounded-lg bg-white/70 px-2.5 py-1.5 text-xs font-semibold text-violet-800">
+                <input v-model="repairAiAllowAssumptions" type="checkbox" class="h-4 w-4 rounded border-violet-300 text-violet-600 focus:ring-violet-500" />
+                Заполнить на усмотрение
+              </label>
+            </div>
+          </div>
           <label class="field-label md:col-span-2">
             Жалоба клиента
             <textarea
@@ -2691,7 +2816,7 @@ watch(
             <!-- B2C Action -->
             <a
               v-if="customer?.type === 'individual'"
-              :href="`https://wa.me/${(customer?.phone || '').replace(/\\D/g, '')}?text=${encodeURIComponent(`Здравствуйте, ${customer?.name}! Расчет по вашему заказу: Итого к оплате ${formatMoney(totalPreview)}. Подтверждаем?`)}`"
+              :href="`https://wa.me/${(customer?.phone || '').replace(/\D/g, '')}?text=${encodeURIComponent(`Здравствуйте, ${customer?.name}! Расчет по вашему заказу: Итого к оплате ${formatMoney(totalPreview)}. Подтверждаем?`)}`"
               target="_blank"
               class="flex items-center gap-1 rounded-xl bg-[#25D366] px-4 py-2 text-sm font-medium text-white shadow hover:bg-[#20BE5A]"
             >
@@ -2699,7 +2824,7 @@ watch(
             </a>
             <a
               v-if="customer?.type === 'individual'"
-              :href="`viber://chat?number=%2B${(customer?.phone || '').replace(/\\D/g, '')}`"
+              :href="`viber://chat?number=%2B${(customer?.phone || '').replace(/\D/g, '')}`"
               target="_blank"
               class="flex items-center gap-1 rounded-xl bg-[#7360f2] px-4 py-2 text-sm font-medium text-white shadow hover:bg-[#5e4cd1]"
             >

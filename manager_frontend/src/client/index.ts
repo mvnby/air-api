@@ -134,6 +134,8 @@ export type { ManagerOrderServiceLinePayload } from './models/ManagerOrderServic
 export type { ManagerOrderUpdatePayload } from './models/ManagerOrderUpdatePayload';
 export type { ManagerQuickTariffListResponse } from './models/ManagerQuickTariffListResponse';
 export type { ManagerQuickTariffResponse } from './models/ManagerQuickTariffResponse';
+export type { ManagerRepairActAiDraftPayload } from './models/ManagerRepairActAiDraftPayload';
+export type { ManagerRepairActAiDraftResponse } from './models/ManagerRepairActAiDraftResponse';
 export type { ManagerRepairComplaintPresetCreatePayload } from './models/ManagerRepairComplaintPresetCreatePayload';
 export type { ManagerRepairComplaintPresetListResponse } from './models/ManagerRepairComplaintPresetListResponse';
 export type { ManagerRepairComplaintPresetResponse } from './models/ManagerRepairComplaintPresetResponse';

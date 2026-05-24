@@ -3,6 +3,8 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ManagerActionMessageResponse } from '../models/ManagerActionMessageResponse';
+import type { ManagerRepairActAiDraftPayload } from '../models/ManagerRepairActAiDraftPayload';
+import type { ManagerRepairActAiDraftResponse } from '../models/ManagerRepairActAiDraftResponse';
 import type { ManagerRepairComplaintPresetCreatePayload } from '../models/ManagerRepairComplaintPresetCreatePayload';
 import type { ManagerRepairComplaintPresetListResponse } from '../models/ManagerRepairComplaintPresetListResponse';
 import type { ManagerRepairComplaintPresetResponse } from '../models/ManagerRepairComplaintPresetResponse';
@@ -55,6 +57,25 @@ export class ManagerRepairComplaintsService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/repair-complaints',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Generate Manager Repair Act Ai Draft
+     * @param requestBody
+     * @returns ManagerRepairActAiDraftResponse Successful Response
+     * @throws ApiError
+     */
+    public static generateManagerRepairActAiDraft(
+        requestBody: ManagerRepairActAiDraftPayload,
+    ): CancelablePromise<ManagerRepairActAiDraftResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/repair-complaints/ai-draft',
             body: requestBody,
             mediaType: 'application/json',
             errors: {
