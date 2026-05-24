@@ -19,6 +19,12 @@ class DocumentService:
     """Сервис для работы с документами заказов через Google Drive"""
 
     ALLOWED_DOC_TYPES = {"contract", "invoice", "work_order", "act", "defect_act", "offer", "tn2", "ttn1"}
+    ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".doc", ".docx"}
+    DEFAULT_UPLOAD_MIME_TYPES = {
+        ".pdf": "application/pdf",
+        ".doc": "application/msword",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }
 
     @staticmethod
     async def get_available_templates(
@@ -209,6 +215,9 @@ class DocumentService:
         if not document:
             return None, None
 
+        if not document.google_file_id:
+            raise ValueError("Для этого документа нет загруженного файла")
+
         try:
             pdf_content = get_google_service().export_file(document.google_file_id, mime_type='application/pdf')
             
@@ -256,25 +265,21 @@ class DocumentService:
         file: "fastapi.UploadFile"
     ) -> OrderDocument:
         """
-        Загружает произвольный PDF в Google Drive и связывает его с заказом.
+        Загружает произвольный документ в Google Drive и связывает его с заказом.
         """
         import os
-        import tempfile
-        import fastapi
-        
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            content = await file.read()
-            tmp.write(content)
-            tmp_path = tmp.name
+
+        original_filename, suffix = DocumentService._validate_upload_file(file)
+        tmp_path = await DocumentService._save_upload_to_temp(file, suffix)
 
         try:
             from services.google_service import get_google_service, DESTINATION_FOLDER_ID
             
-            doc_type = "uploaded_pdf"
+            doc_type = "uploaded_doc"
             file_id = get_google_service().upload_file(
                 file_path=tmp_path,
-                filename=file.filename,
-                mime_type=file.content_type or "application/pdf",
+                filename=original_filename,
+                mime_type=DocumentService._upload_mime_type(file, suffix),
                 folder_id=DESTINATION_FOLDER_ID
             )
             
@@ -303,6 +308,141 @@ class DocumentService:
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
+
+    @staticmethod
+    def _validate_upload_file(file: object) -> tuple[str, str]:
+        import os
+
+        original_filename = str(getattr(file, "filename", None) or "").strip()
+        if not original_filename:
+            raise ValueError("Файл обязателен")
+
+        _, suffix = os.path.splitext(original_filename)
+        suffix = suffix.lower()
+        if suffix not in DocumentService.ALLOWED_UPLOAD_EXTENSIONS:
+            raise ValueError("Поддерживаются только файлы PDF, DOC и DOCX")
+        return original_filename, suffix
+
+    @staticmethod
+    def _upload_mime_type(file: object, suffix: str) -> str:
+        return (
+            str(getattr(file, "content_type", None) or "").strip()
+            or DocumentService.DEFAULT_UPLOAD_MIME_TYPES.get(suffix)
+            or "application/octet-stream"
+        )
+
+    @staticmethod
+    async def _save_upload_to_temp(file: object, suffix: str) -> str:
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            content = await file.read()
+            tmp.write(content)
+            return tmp.name
+
+    @staticmethod
+    async def _upload_document_file(file: object, *, title_prefix: str) -> tuple[str, str]:
+        import os
+
+        original_filename, suffix = DocumentService._validate_upload_file(file)
+        tmp_path = await DocumentService._save_upload_to_temp(file, suffix)
+
+        try:
+            from services.google_service import DESTINATION_FOLDER_ID
+
+            upload_title = f"{title_prefix}{suffix}"
+            file_id = get_google_service().upload_file(
+                file_path=tmp_path,
+                filename=upload_title,
+                mime_type=DocumentService._upload_mime_type(file, suffix),
+                folder_id=DESTINATION_FOLDER_ID,
+            )
+            return file_id, f"https://drive.google.com/file/d/{file_id}/view?usp=sharing"
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    @staticmethod
+    async def attach_file_to_document(
+        session: AsyncSession,
+        doc_id: int,
+        file: "fastapi.UploadFile",
+    ) -> Optional[OrderDocument]:
+        document = await session.get(OrderDocument, doc_id)
+        if not document:
+            return None
+
+        previous_file_id = document.google_file_id
+        title_prefix = f"{DOC_NAMES.get(document.doc_type, 'Документ')} {document.number}"
+        file_id, edit_url = await DocumentService._upload_document_file(file, title_prefix=title_prefix)
+
+        if previous_file_id:
+            try:
+                get_google_service().delete_file(previous_file_id)
+            except Exception as exc:
+                print(f"Error deleting replaced file from Drive: {exc}")
+
+        document.google_file_id = file_id
+        document.google_edit_url = edit_url
+        session.add(document)
+        await session.commit()
+        await session.refresh(document)
+        return document
+
+    @staticmethod
+    async def register_external_contract(
+        session: AsyncSession,
+        *,
+        order_id: int,
+        number: str,
+        contract_date: datetime,
+        external_url: Optional[str] = None,
+        file: object = None,
+    ) -> OrderDocument:
+        """Registers a customer-provided one-time contract for closing docs."""
+        order = await session.get(Order, order_id)
+        if not order:
+            raise ValueError("Order not found")
+
+        cleaned_number = str(number or "").strip()
+        if not cleaned_number:
+            raise ValueError("Номер договора обязателен")
+
+        effective_date = contract_date or datetime.now()
+        if effective_date.tzinfo is not None:
+            effective_date = effective_date.replace(tzinfo=None)
+
+        cleaned_url = str(external_url or "").strip()
+        if cleaned_url:
+            from urllib.parse import urlparse
+
+            parsed_url = urlparse(cleaned_url)
+            if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+                raise ValueError("Ссылка на договор должна начинаться с http:// или https://")
+        file_id = ""
+        edit_url = cleaned_url
+
+        if file is not None and getattr(file, "filename", None):
+            file_id, edit_url = await DocumentService._upload_document_file(
+                file,
+                title_prefix=f"Договор {cleaned_number}",
+            )
+
+        doc = OrderDocument(
+            order_id=order_id,
+            doc_type="contract",
+            number=cleaned_number,
+            date=effective_date,
+            google_file_id=file_id,
+            google_edit_url=edit_url,
+        )
+        order.customer_contract_id = None
+        order.contract_date = effective_date
+        session.add(order)
+        session.add(doc)
+        await session.commit()
+        await session.refresh(doc)
+        return doc
 
     @staticmethod
     async def list_order_documents(

@@ -451,7 +451,8 @@ class ManagerOrderDocumentItem(BaseModel):
     doc_type: str
     number: str
     date: datetime
-    edit_url: str
+    edit_url: Optional[str] = None
+    is_downloadable: bool = True
 
 
 class ManagerOrderDocumentListResponse(BaseModel):
@@ -465,7 +466,8 @@ class ManagerCustomerDocumentItem(BaseModel):
     doc_type: str
     number: str
     date: datetime
-    edit_url: str
+    edit_url: Optional[str] = None
+    is_downloadable: bool = True
 
 
 class ManagerCustomerDocumentListResponse(BaseModel):

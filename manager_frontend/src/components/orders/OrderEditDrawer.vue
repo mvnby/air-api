@@ -63,6 +63,7 @@ type ProductLine = { product_id: number; product_query: string; quantity: number
 type ServiceLine = { service_id?: number | null; title: string; quantity: number; price: number; cost: number };
 type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
 type OrderWorkflowType = 'sales_installation' | 'service_work' | 'maintenance' | 'repair';
+const DOCUMENT_FILE_ACCEPT = '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 type RepairMeta = {
   customer_complaint: string;
   complaint_official: string;
@@ -586,6 +587,12 @@ const docDropdownOpen = ref(false);
 
 const isUploadingDoc = ref(false);
 const fileInputRef = ref<HTMLInputElement | null>(null);
+const externalContractOpen = ref(false);
+const externalContractNumber = ref('');
+const externalContractDate = ref(new Date().toISOString().slice(0, 10));
+const externalContractUrl = ref('');
+const externalContractFile = ref<File | null>(null);
+const isRegisteringExternalContract = ref(false);
 
 const triggerFileUpload = () => {
   fileInputRef.value?.click();
@@ -608,6 +615,69 @@ const handleFileUpload = async (event: Event) => {
   } finally {
     isUploadingDoc.value = false;
     if (fileInputRef.value) fileInputRef.value.value = '';
+  }
+};
+
+const handleAttachDocumentFile = async (doc: ManagerOrderDocumentItem, event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0] as File | undefined;
+  if (!file || !props.order?.id) return;
+
+  processingDocId.value = doc.id;
+  try {
+    await ManagerDocsService.attachManagerDocFile(doc.id, { file });
+    await loadDocuments(props.order.id);
+    setToast('Файл прикреплен', 'success');
+  } catch (error) {
+    setToast(`Ошибка прикрепления: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    processingDocId.value = null;
+    target.value = '';
+  }
+};
+
+const handleExternalContractFile = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  externalContractFile.value = target.files?.[0] || null;
+};
+
+const resetExternalContractForm = () => {
+  externalContractNumber.value = '';
+  externalContractDate.value = new Date().toISOString().slice(0, 10);
+  externalContractUrl.value = '';
+  externalContractFile.value = null;
+};
+
+const registerExternalContract = async () => {
+  if (!props.order?.id) return;
+  const number = externalContractNumber.value.trim();
+  if (!number) {
+    setToast('Укажите номер договора', 'error');
+    return;
+  }
+  if (!externalContractDate.value) {
+    setToast('Укажите дату договора', 'error');
+    return;
+  }
+
+  isRegisteringExternalContract.value = true;
+  try {
+    await ManagerDocsService.registerManagerExternalContract(props.order.id, {
+      number,
+      contract_date: `${externalContractDate.value}T00:00:00`,
+      external_url: externalContractUrl.value.trim() || undefined,
+      file: externalContractFile.value || undefined,
+    });
+    await loadDocuments(props.order.id);
+    selectedCustomerContractId.value = null;
+    externalContractOpen.value = false;
+    resetExternalContractForm();
+    emit('reload', props.order.id);
+    setToast('Внешний договор добавлен', 'success');
+  } catch (error) {
+    setToast(`Ошибка добавления договора: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    isRegisteringExternalContract.value = false;
   }
 };
 
@@ -1331,7 +1401,8 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
       doc_type: d.doc_type,
       number: d.number,
       date: d.date,
-      edit_url: d.edit_url
+      edit_url: d.edit_url,
+      is_downloadable: d.is_downloadable ?? true
   }));
   // Payments
   payments.value = [...(order.payments || [])];
@@ -3040,10 +3111,10 @@ watch(
               <span class="material-icons-round text-[18px]">add_circle</span> Создать
             </button>
 
-            <input type="file" ref="fileInputRef" class="hidden" accept=".pdf" @change="handleFileUpload" />
+            <input type="file" ref="fileInputRef" class="hidden" :accept="DOCUMENT_FILE_ACCEPT" @change="handleFileUpload" />
             <button
                class="flex items-center gap-1 rounded-xl bg-slate-700 px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500/50 disabled:opacity-50"
-               title="Загрузить PDF"
+               title="Загрузить файл"
                :disabled="isUploadingDoc || !!processingDocId || isGeneratingDoc"
                @click="triggerFileUpload"
             >
@@ -3093,7 +3164,17 @@ watch(
         </div>
 
         <div v-if="isCompanyOrder" class="mb-3 rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-slate-700/50 dark:bg-slate-900/40 dark:shadow-none">
-          <label class="mb-1 block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Договор для актов и накладных</label>
+          <div class="mb-1 flex items-center justify-between gap-3">
+            <label class="block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Договор для актов и накладных</label>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              @click="externalContractOpen = !externalContractOpen"
+            >
+              <span class="material-icons-round text-[16px]">post_add</span>
+              Внешний договор
+            </button>
+          </div>
           <select
             v-model="selectedContractBinding"
             class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
@@ -3107,6 +3188,62 @@ watch(
             </option>
           </select>
           <p v-if="oneTimeContractDocument && customerContracts.length" class="mt-2 text-xs text-slate-500 dark:text-slate-400">Выберите, куда ссылать закрывающие документы: на разовый договор заказа или на открытый договор клиента.</p>
+          <form
+            v-if="externalContractOpen"
+            class="mt-3 space-y-3 rounded-lg border border-dashed border-teal-300 bg-teal-50/40 p-3 dark:border-teal-700/70 dark:bg-teal-950/20"
+            @submit.prevent="registerExternalContract"
+          >
+            <div class="grid gap-3 sm:grid-cols-2">
+              <label class="text-xs font-medium text-slate-600 dark:text-slate-300">Номер договора
+                <input
+                  v-model="externalContractNumber"
+                  type="text"
+                  class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  placeholder="Например, 44-ЭА/2026"
+                />
+              </label>
+              <label class="text-xs font-medium text-slate-600 dark:text-slate-300">Дата договора
+                <input
+                  v-model="externalContractDate"
+                  type="date"
+                  class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                />
+              </label>
+            </div>
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-300">Ссылка на договор
+              <input
+                v-model="externalContractUrl"
+                type="url"
+                class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                placeholder="https://..."
+              />
+            </label>
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <label class="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                <span class="material-icons-round text-[18px] text-teal-600 dark:text-teal-400">upload_file</span>
+                <span>{{ externalContractFile?.name || 'Прикрепить файл вместо ссылки' }}</span>
+                  <input type="file" class="hidden" :accept="DOCUMENT_FILE_ACCEPT" @change="handleExternalContractFile" />
+              </label>
+              <div class="flex justify-end gap-2">
+                <button
+                  type="button"
+                  class="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                  @click="externalContractOpen = false"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  class="inline-flex items-center gap-1 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-teal-700 disabled:opacity-60"
+                  :disabled="isRegisteringExternalContract"
+                >
+                  <span v-if="isRegisteringExternalContract" class="material-icons-round animate-spin text-[16px]">loop</span>
+                  <span v-else class="material-icons-round text-[16px]">check</span>
+                  Добавить договор
+                </button>
+              </div>
+            </div>
+          </form>
           <div
             v-if="customerContracts.length === 0"
             class="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300"
@@ -3153,12 +3290,16 @@ watch(
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    <a :href="doc.edit_url" target="_blank" class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white" title="Редактировать">
-                        <span class="material-icons-round text-[18px]">edit</span>
+                    <a v-if="doc.edit_url" :href="doc.edit_url" target="_blank" class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white" title="Открыть">
+                        <span class="material-icons-round text-[18px]">open_in_new</span>
                     </a>
-                    <button class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white" :disabled="processingDocId === doc.id" @click="downloadDocument(doc)" title="Скачать PDF">
+                    <button v-if="doc.is_downloadable" class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white" :disabled="processingDocId === doc.id" @click="downloadDocument(doc)" title="Скачать PDF">
                         <span class="material-icons-round text-[18px]">download</span>
                     </button>
+                    <label v-else class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-teal-600 hover:bg-teal-50 hover:text-teal-700 dark:text-teal-400 dark:hover:bg-teal-900/30 dark:hover:text-teal-300" title="Добавить файл">
+                        <span class="material-icons-round text-[18px]">attach_file</span>
+                        <input type="file" class="hidden" :accept="DOCUMENT_FILE_ACCEPT" :disabled="processingDocId === doc.id" @change="handleAttachDocumentFile(doc, $event)" />
+                    </label>
                     <button class="flex h-8 w-8 items-center justify-center rounded-lg text-red-400 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50" :disabled="processingDocId === doc.id" @click="deleteDocument(doc.id)" title="Удалить">
                         <span class="material-icons-round text-[18px]">delete</span>
                     </button>
