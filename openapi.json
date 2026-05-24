@@ -5845,6 +5845,52 @@
         }
       }
     },
+    "/api/manager/repair-complaints/ai-draft": {
+      "post": {
+        "tags": [
+          "manager/repair-complaints"
+        ],
+        "summary": "Generate Manager Repair Act Ai Draft",
+        "operationId": "generate_manager_repair_act_ai_draft",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerRepairActAiDraftPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerRepairActAiDraftResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/repair-complaints/{preset_id}": {
       "put": {
         "tags": [
@@ -17514,6 +17560,158 @@
           "price"
         ],
         "title": "ManagerQuickTariffResponse"
+      },
+      "ManagerRepairActAiDraftPayload": {
+        "properties": {
+          "defect_type": {
+            "type": "string",
+            "title": "Defect Type"
+          },
+          "defect_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Defect Label"
+          },
+          "allow_assumptions": {
+            "type": "boolean",
+            "title": "Allow Assumptions",
+            "default": false
+          },
+          "equipment_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Name"
+          },
+          "equipment_brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Brand"
+          },
+          "equipment_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Model"
+          },
+          "equipment_power": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Power"
+          },
+          "customer_complaint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Complaint"
+          },
+          "complaint_official": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Complaint Official"
+          },
+          "likely_diagnosis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Likely Diagnosis"
+          },
+          "extra_context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Context"
+          },
+          "current_meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Current Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "defect_type"
+        ],
+        "title": "ManagerRepairActAiDraftPayload"
+      },
+      "ManagerRepairActAiDraftResponse": {
+        "properties": {
+          "repair_meta": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Repair Meta"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider",
+            "default": "deepseek"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version",
+            "default": "defect_act_v1"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model"
+        ],
+        "title": "ManagerRepairActAiDraftResponse"
       },
       "ManagerRepairComplaintPresetCreatePayload": {
         "properties": {

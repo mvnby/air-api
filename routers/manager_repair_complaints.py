@@ -1,3 +1,4 @@
+import httpx
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,16 +7,23 @@ from core.security import get_current_username
 from routers.manager_operation_ids import (
     CREATE_MANAGER_REPAIR_COMPLAINT_PRESET,
     DELETE_MANAGER_REPAIR_COMPLAINT_PRESET,
+    GENERATE_MANAGER_REPAIR_ACT_AI_DRAFT,
     LIST_MANAGER_REPAIR_COMPLAINT_PRESETS,
     UPDATE_MANAGER_REPAIR_COMPLAINT_PRESET,
 )
 from schemas import (
     ManagerActionMessageResponse,
+    ManagerRepairActAiDraftPayload,
+    ManagerRepairActAiDraftResponse,
     ManagerRepairComplaintPresetCreatePayload,
     ManagerRepairComplaintPresetListResponse,
     ManagerRepairComplaintPresetResponse,
     ManagerRepairComplaintPresetUpdatePayload,
 )
+from core.config import settings
+from core.manager_api_errors import manager_http_error
+from core.manager_error_codes import BAD_REQUEST
+from services.defect_act_ai_service import DefectActAIService
 from services.repair_complaint_service import RepairComplaintService
 
 
@@ -57,6 +65,24 @@ async def create_manager_repair_complaint_preset(
     session: AsyncSession = Depends(get_session),
 ):
     return await RepairComplaintService.create_preset(session=session, payload=payload)
+
+
+@router.post(
+    "/ai-draft",
+    response_model=ManagerRepairActAiDraftResponse,
+    operation_id=GENERATE_MANAGER_REPAIR_ACT_AI_DRAFT,
+)
+async def generate_manager_repair_act_ai_draft(payload: ManagerRepairActAiDraftPayload):
+    try:
+        repair_meta = await DefectActAIService.generate_repair_meta(payload)
+    except (ValueError, httpx.HTTPError) as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=GENERATE_MANAGER_REPAIR_ACT_AI_DRAFT,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+    return ManagerRepairActAiDraftResponse(repair_meta=repair_meta, model=settings.DEEPSEEK_MODEL)
 
 
 @router.put(

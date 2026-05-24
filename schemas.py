@@ -1953,6 +1953,28 @@ class ManagerRepairComplaintPresetListResponse(BaseModel):
     items: List[ManagerRepairComplaintPresetResponse]
 
 
+class ManagerRepairActAiDraftPayload(BaseModel):
+    defect_type: str
+    defect_label: Optional[str] = None
+    allow_assumptions: bool = False
+    equipment_name: Optional[str] = None
+    equipment_brand: Optional[str] = None
+    equipment_model: Optional[str] = None
+    equipment_power: Optional[str] = None
+    customer_complaint: Optional[str] = None
+    complaint_official: Optional[str] = None
+    likely_diagnosis: Optional[str] = None
+    extra_context: Optional[str] = None
+    current_meta: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ManagerRepairActAiDraftResponse(BaseModel):
+    repair_meta: Dict[str, str] = Field(default_factory=dict)
+    provider: str = "deepseek"
+    model: str
+    prompt_version: str = "defect_act_v1"
+
+
 # --- SERVICE ESTIMATES ---
 
 class ManagerEstimateRuleInputPayload(BaseModel):
