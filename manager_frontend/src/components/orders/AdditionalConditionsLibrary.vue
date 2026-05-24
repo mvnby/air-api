@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 type ConditionMode = 'contract' | 'invoice';
 type ConditionPreset = {
@@ -16,11 +16,13 @@ type ConditionGroup = {
 
 const props = withDefaults(defineProps<{
   modelValue: string;
+  defaultMode?: ConditionMode;
   saving?: boolean;
   saveDisabled?: boolean;
   showSave?: boolean;
 }>(), {
   modelValue: '',
+  defaultMode: 'contract',
   saving: false,
   saveDisabled: false,
   showSave: false,
@@ -31,7 +33,7 @@ const emit = defineEmits<{
   save: [];
 }>();
 
-const activeMode = ref<ConditionMode>('contract');
+const activeMode = ref<ConditionMode>(props.defaultMode);
 const expandedGroupIds = ref<Set<string>>(new Set());
 
 const conditionGroups: ConditionGroup[] = [
@@ -218,6 +220,10 @@ const clearSelected = () => {
   );
   updateLines(lines.value.filter((line) => !presetKeys.has(normalizedLine(line))));
 };
+
+watch(() => props.defaultMode, (mode) => {
+  activeMode.value = mode;
+});
 </script>
 
 <template>

@@ -1085,7 +1085,6 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   payments.value = [...(order.payments || [])];
   await loadCandidateBankReceipts(order);
 
-
   const customerId = order.customer?.id;
   if (customerId) {
     await loadCustomerBranches(customerId, order.customer_branch?.id ?? null);
@@ -3020,7 +3019,6 @@ watch(
         </div>
       </footer>
     </aside>
-
 
     <div
       v-if="showCustomerModal"
