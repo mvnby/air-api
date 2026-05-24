@@ -247,4 +247,5 @@ export { ManagerServiceEstimatesService } from './services/ManagerServiceEstimat
 export { ManagerSettingsService } from './services/ManagerSettingsService';
 export { ManagerTagsService } from './services/ManagerTagsService';
 export { ManagerTariffsService } from './services/ManagerTariffsService';
+export { ManagerYandexBusinessService } from './services/ManagerYandexBusinessService';
 export { SystemService } from './services/SystemService';

@@ -22,6 +22,7 @@ from routers import manager_service_estimates
 from routers import manager_tariffs
 from routers import manager_tags
 from routers import manager_supply
+from routers import manager_yandex_business
 
 
 router = APIRouter()
@@ -47,3 +48,4 @@ router.include_router(manager_tariffs.router)
 router.include_router(manager_service_estimates.router)
 router.include_router(manager_tags.router)
 router.include_router(manager_supply.router)
+router.include_router(manager_yandex_business.router)
