@@ -1957,6 +1957,7 @@ class ManagerRepairActAiDraftPayload(BaseModel):
     defect_type: str
     defect_label: Optional[str] = None
     allow_assumptions: bool = False
+    polish_existing: bool = True
     equipment_name: Optional[str] = None
     equipment_brand: Optional[str] = None
     equipment_model: Optional[str] = None

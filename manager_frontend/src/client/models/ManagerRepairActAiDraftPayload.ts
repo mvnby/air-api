@@ -6,6 +6,7 @@ export type ManagerRepairActAiDraftPayload = {
     defect_type: string;
     defect_label?: (string | null);
     allow_assumptions?: boolean;
+    polish_existing?: boolean;
     equipment_name?: (string | null);
     equipment_brand?: (string | null);
     equipment_model?: (string | null);

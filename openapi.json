@@ -17583,6 +17583,11 @@
             "title": "Allow Assumptions",
             "default": false
           },
+          "polish_existing": {
+            "type": "boolean",
+            "title": "Polish Existing",
+            "default": true
+          },
           "equipment_name": {
             "anyOf": [
               {
