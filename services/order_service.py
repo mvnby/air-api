@@ -1593,6 +1593,7 @@ class OrderService:
                 "number": doc.number,
                 "date": doc.date,
                 "edit_url": doc.google_edit_url,
+                "is_downloadable": bool(doc.google_file_id),
             }
             for doc in sorted(order.documents, key=lambda d: d.created_at, reverse=True)
         ]

@@ -878,7 +878,7 @@ onMounted(() => {
                     </div>
                 </div>
                 <div class="flex items-center gap-4">
-                    <a :href="doc.edit_url" target="_blank" class="flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors" title="Открыть документ">
+                    <a v-if="doc.edit_url" :href="doc.edit_url" target="_blank" class="flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors" title="Открыть документ">
                         <span class="material-icons-round text-[20px]">open_in_new</span>
                     </a>
                 </div>

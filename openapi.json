@@ -4116,6 +4116,120 @@
         }
       }
     },
+    "/api/manager/orders/{order_id}/documents/external-contract": {
+      "post": {
+        "tags": [
+          "manager-docs"
+        ],
+        "summary": "Register Manager External Contract",
+        "operationId": "register_manager_external_contract",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_register_manager_external_contract"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderDocumentItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/docs/{doc_id}/file": {
+      "post": {
+        "tags": [
+          "manager-docs"
+        ],
+        "summary": "Attach Manager Doc File",
+        "operationId": "attach_manager_doc_file",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "doc_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Doc Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_attach_manager_doc_file"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderDocumentItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/docs/{doc_id}/download": {
       "get": {
         "tags": [
@@ -10462,6 +10576,20 @@
         "type": "object",
         "title": "BankStatementImportResponse"
       },
+      "Body_attach_manager_doc_file": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_attach_manager_doc_file"
+      },
       "Body_bulk_upload_local_images": {
         "properties": {
           "product_ids_json": {
@@ -10567,6 +10695,48 @@
           "password"
         ],
         "title": "Body_login_access_token"
+      },
+      "Body_register_manager_external_contract": {
+        "properties": {
+          "number": {
+            "type": "string",
+            "title": "Number"
+          },
+          "contract_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Contract Date"
+          },
+          "external_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Url"
+          },
+          "file": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "binary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "number",
+          "contract_date"
+        ],
+        "title": "Body_register_manager_external_contract"
       },
       "Body_upload_local_images": {
         "properties": {
@@ -14444,8 +14614,20 @@
             "title": "Date"
           },
           "edit_url": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Edit Url"
+          },
+          "is_downloadable": {
+            "type": "boolean",
+            "title": "Is Downloadable",
+            "default": true
           }
         },
         "type": "object",
@@ -14454,8 +14636,7 @@
           "order_id",
           "doc_type",
           "number",
-          "date",
-          "edit_url"
+          "date"
         ],
         "title": "ManagerCustomerDocumentItem"
       },
@@ -16061,8 +16242,20 @@
             "title": "Date"
           },
           "edit_url": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Edit Url"
+          },
+          "is_downloadable": {
+            "type": "boolean",
+            "title": "Is Downloadable",
+            "default": true
           }
         },
         "type": "object",
@@ -16070,8 +16263,7 @@
           "id",
           "doc_type",
           "number",
-          "date",
-          "edit_url"
+          "date"
         ],
         "title": "ManagerOrderDocumentItem"
       },

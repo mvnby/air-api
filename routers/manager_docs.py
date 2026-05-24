@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Query
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, UploadFile, File, Form, Query
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +11,8 @@ from core.manager_error_codes import DOCUMENT_NOT_FOUND, BAD_REQUEST
 from core.security import get_current_username
 from routers.manager_operation_ids import (
     GET_MANAGER_ORDER_DOCUMENTS,
+    ATTACH_MANAGER_DOC_FILE,
+    REGISTER_MANAGER_EXTERNAL_CONTRACT,
     UPLOAD_MANAGER_ORDER_DOCUMENT,
     GET_MANAGER_DOC_DOWNLOAD,
     DELETE_MANAGER_DOC,
@@ -60,6 +64,7 @@ async def get_manager_order_documents(
                 number=d.number,
                 date=d.date,
                 edit_url=d.google_edit_url,
+                is_downloadable=bool(d.google_file_id),
             )
             for d in docs
         ]
@@ -85,6 +90,85 @@ async def upload_manager_order_document(
         number=doc.number,
         date=doc.date,
         edit_url=doc.google_edit_url,
+        is_downloadable=bool(doc.google_file_id),
+    )
+
+
+@router.post(
+    "/orders/{order_id}/documents/external-contract",
+    response_model=ManagerOrderDocumentItem,
+    operation_id=REGISTER_MANAGER_EXTERNAL_CONTRACT,
+)
+async def register_manager_external_contract(
+    order_id: int,
+    number: str = Form(...),
+    contract_date: datetime = Form(...),
+    external_url: str | None = Form(None),
+    file: UploadFile | None = File(None),
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        doc = await DocumentService.register_external_contract(
+            session,
+            order_id=order_id,
+            number=number,
+            contract_date=contract_date,
+            external_url=external_url,
+            file=file,
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=REGISTER_MANAGER_EXTERNAL_CONTRACT,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+    return ManagerOrderDocumentItem(
+        id=doc.id,
+        proposal_id=doc.proposal_id,
+        doc_type=doc.doc_type,
+        number=doc.number,
+        date=doc.date,
+        edit_url=doc.google_edit_url,
+        is_downloadable=bool(doc.google_file_id),
+    )
+
+
+@router.post(
+    "/docs/{doc_id}/file",
+    response_model=ManagerOrderDocumentItem,
+    operation_id=ATTACH_MANAGER_DOC_FILE,
+)
+async def attach_manager_doc_file(
+    doc_id: int,
+    file: UploadFile = File(...),
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        doc = await DocumentService.attach_file_to_document(session, doc_id, file)
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=ATTACH_MANAGER_DOC_FILE,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+    if not doc:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=ATTACH_MANAGER_DOC_FILE,
+            error_code=DOCUMENT_NOT_FOUND,
+        )
+    return ManagerOrderDocumentItem(
+        id=doc.id,
+        proposal_id=doc.proposal_id,
+        doc_type=doc.doc_type,
+        number=doc.number,
+        date=doc.date,
+        edit_url=doc.google_edit_url,
+        is_downloadable=bool(doc.google_file_id),
     )
 
 

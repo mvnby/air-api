@@ -8,6 +8,7 @@ export type ManagerOrderDocumentItem = {
     doc_type: string;
     number: string;
     date: string;
-    edit_url: string;
+    edit_url?: (string | null);
+    is_downloadable?: boolean;
 };
 

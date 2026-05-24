@@ -2,6 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { Body_attach_manager_doc_file } from '../models/Body_attach_manager_doc_file';
+import type { Body_register_manager_external_contract } from '../models/Body_register_manager_external_contract';
 import type { Body_upload_manager_order_document } from '../models/Body_upload_manager_order_document';
 import type { DocumentTemplateFileListResponse } from '../models/DocumentTemplateFileListResponse';
 import type { DocumentTemplateItem } from '../models/DocumentTemplateItem';
@@ -51,6 +53,54 @@ export class ManagerDocsService {
             url: '/api/manager/orders/{order_id}/documents/upload',
             path: {
                 'order_id': orderId,
+            },
+            formData: formData,
+            mediaType: 'multipart/form-data',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Register Manager External Contract
+     * @param orderId
+     * @param formData
+     * @returns ManagerOrderDocumentItem Successful Response
+     * @throws ApiError
+     */
+    public static registerManagerExternalContract(
+        orderId: number,
+        formData: Body_register_manager_external_contract,
+    ): CancelablePromise<ManagerOrderDocumentItem> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/documents/external-contract',
+            path: {
+                'order_id': orderId,
+            },
+            formData: formData,
+            mediaType: 'multipart/form-data',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Attach Manager Doc File
+     * @param docId
+     * @param formData
+     * @returns ManagerOrderDocumentItem Successful Response
+     * @throws ApiError
+     */
+    public static attachManagerDocFile(
+        docId: number,
+        formData: Body_attach_manager_doc_file,
+    ): CancelablePromise<ManagerOrderDocumentItem> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/docs/{doc_id}/file',
+            path: {
+                'doc_id': docId,
             },
             formData: formData,
             mediaType: 'multipart/form-data',
