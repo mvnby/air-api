@@ -26,6 +26,7 @@ BULK_SET_RRC_PRICE = "bulk_set_rrc_price"
 BULK_DELETE_MANAGER_PRODUCTS = "bulk_delete_manager_products"
 GET_ALL_TAGS = "get_all_tags"
 SMART_SEARCH_PRODUCTS = "smart_search_products"
+GET_MANAGER_YANDEX_BUSINESS_PRICE_LIST = "get_manager_yandex_business_price_list"
 
 BULK_UPDATE_SPECS = "bulk_update_specs"
 NORMALIZE_LEGACY_SPECS = "normalize_legacy_specs"

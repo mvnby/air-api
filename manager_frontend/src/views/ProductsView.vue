@@ -2,7 +2,11 @@
 import { ref, onMounted, watch, computed } from 'vue';
 import { watchDebounced } from '@vueuse/core';
 import { api, type ManagerBrand, type Product } from '../api';
-import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images, Settings, ArrowLeft, LayoutGrid, List, Package, Link2, ExternalLink, Star, SlidersHorizontal, X, Trash2 } from 'lucide-vue-next';
+import {
+    Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images,
+    Settings, ArrowLeft, LayoutGrid, List, Package, Link2, ExternalLink,
+    Star, SlidersHorizontal, X, Trash2, Download,
+} from 'lucide-vue-next';
 import BulkSpecsModal from '../components/BulkSpecsModal.vue';
 import BulkCompatibilityModal from '../components/BulkCompatibilityModal.vue';
 import ProductEditModal from '../components/ProductEditModal.vue';
@@ -30,6 +34,7 @@ const uploadDragActive = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
 const toast = ref('');
 const showOnlinerImportModal = ref(false);
+const yandexPriceListLoading = ref(false);
 
 const setToast = (message: string) => {
     toast.value = message;
@@ -95,6 +100,39 @@ const openPublicProductPage = (product: Product) => {
         return;
     }
     window.open(url, '_blank', 'noopener,noreferrer');
+};
+
+const downloadYandexBusinessPriceList = async () => {
+    if (yandexPriceListLoading.value) return;
+    yandexPriceListLoading.value = true;
+    try {
+        const params = new URLSearchParams({ site_base_url: getPublicSiteBaseUrl() });
+        const response = await fetch(`/api/manager/yandex-business/price-list.yml?${params.toString()}`, {
+            credentials: 'include',
+            headers: {
+                Accept: 'application/xml',
+            },
+        });
+        if (!response.ok) {
+            const message = await response.text();
+            throw new Error(message || `HTTP ${response.status}`);
+        }
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'yandex-business-price-list.yml';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        setToast('Прайс для Яндекс Бизнес сформирован');
+    } catch (e) {
+        setToast(`Ошибка генерации прайса: ${getApiErrorMessage(e)}`);
+        console.error(e);
+    } finally {
+        yandexPriceListLoading.value = false;
+    }
 };
 
 const handleOnlinerImported = async (successCount: number) => {
@@ -1019,6 +1057,15 @@ watchDebounced(
           >
             <span class="material-icons-round text-base leading-none">cloud_download</span>
             Импорт
+          </button>
+          <button
+            @click="downloadYandexBusinessPriceList"
+            :disabled="yandexPriceListLoading"
+            class="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed dark:bg-slate-700 dark:hover:bg-slate-600"
+            title="Скачать YML для Яндекс Бизнес"
+          >
+            <Download class="w-4 h-4" :class="{ 'animate-pulse': yandexPriceListLoading }" />
+            YML
           </button>
       </div>
     </header>
