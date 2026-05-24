@@ -4,30 +4,26 @@ import { useDebounceFn } from '@vueuse/core';
 import { api } from '../../api';
 import DateTimeField from '../ui/DateTimeField.vue';
 import CustomerSummaryCard from '../customers/CustomerSummaryCard.vue';
-import AdditionalConditionsLibrary from './AdditionalConditionsLibrary.vue';
 import DealExecutionTab from './DealExecutionTab.vue';
-import DocumentSendModal from './DocumentSendModal.vue';
+import OrderDocumentsPanel from './OrderDocumentsPanel.vue';
 import OrderDrawerSection from './OrderDrawerSection.vue';
 import type {
   ManagerOrderDetailResponse,
   ManagerOrderUpdatePayload,
-  ManagerCustomerContractItemResponse,
   ManagerCustomerBranchItemResponse,
   ManagerServiceEstimateResponse,
   OrderProductLineResponse,
   OrderProposalResponse,
   OrderServiceLineResponse,
-  ManagerOrderDocumentItem,
   ManagerInstallerResponse,
   ManagerQuickTariffResponse,
   PaymentResponse,
   PaymentCurrency,
   BankReceiptResponse,
   FxRateResponse,
-  DocumentTemplateItem,
   ManagerRepairComplaintPresetResponse,
 } from '../../client';
-import { ManagerDocsService, ManagerOrdersService, ManagerContractsService, ManagerSettingsService, ManagerMailService, ManagerRepairComplaintsService } from '../../client';
+import { ManagerOrdersService, ManagerSettingsService, ManagerMailService, ManagerRepairComplaintsService } from '../../client';
 import { formatMoney } from './order-utils';
 import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../../utils/datetime';
 
@@ -61,9 +57,7 @@ type ProductOption = {
 };
 type ProductLine = { product_id: number; product_query: string; quantity: number; price: number; cost: number };
 type ServiceLine = { service_id?: number | null; title: string; quantity: number; price: number; cost: number };
-type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
 type OrderWorkflowType = 'sales_installation' | 'service_work' | 'maintenance' | 'repair';
-const DOCUMENT_FILE_ACCEPT = '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 type RepairMeta = {
   customer_complaint: string;
   complaint_official: string;
@@ -221,8 +215,6 @@ const measurementRequired = ref(false);
 const measurerId = ref<number | null>(null);
 const measurementResult = ref('');
 const additionalConditions = ref('');
-const additionalConditionsSaved = ref('');
-const isSavingAdditionalConditions = ref(false);
 const proposalStatus = ref<'draft' | 'sent' | 'approved' | 'rejected'>('draft');
 const activeProposalId = ref<number | null>(null);
 const proposalActionLoading = ref(false);
@@ -245,8 +237,6 @@ const showEstimateImport = ref(false);
 const repairComplaintPresets = ref<ManagerRepairComplaintPresetResponse[]>([]);
 const repairComplaintSearch = ref('');
 const repairComplaintsLoading = ref(false);
-const documents = ref<ManagerOrderDocumentItem[]>([]);
-const showDocumentSendModal = ref(false);
 const payments = ref<PaymentResponse[]>([]);
 const bankReceipts = ref<BankReceiptResponse[]>([]);
 const bankReceiptsLoading = ref(false);
@@ -468,10 +458,6 @@ const paymentsSectionSummary = computed(() => (
 ));
 const candidateBankReceipts = computed(() => bankReceipts.value.filter((receipt) => receipt.status === 'requires_review'));
 const hasDebtForBankReceipts = computed(() => balanceDuePreview.value > 0 && Boolean(props.order?.customer?.inn));
-const documentProposalName = (doc: ManagerOrderDocumentItem) => {
-  if (!doc.proposal_id) return '';
-  return orderProposals.value.find((proposal) => proposal.id === doc.proposal_id)?.name || `вариант #${doc.proposal_id}`;
-};
 const draftKey = computed(() => (
   props.order ? `manager_order_drawer_draft_${props.order.id}_${activeProposalId.value || 'default'}` : ''
 ));
@@ -581,117 +567,12 @@ const toggleHold = async () => {
     }
 };
 
-const isGeneratingDoc = ref(false);
-const processingDocId = ref<number | null>(null);
-const docDropdownOpen = ref(false);
-
-const isUploadingDoc = ref(false);
-const fileInputRef = ref<HTMLInputElement | null>(null);
-const externalContractOpen = ref(false);
-const externalContractNumber = ref('');
-const externalContractDate = ref(new Date().toISOString().slice(0, 10));
-const externalContractUrl = ref('');
-const externalContractFile = ref<File | null>(null);
-const isRegisteringExternalContract = ref(false);
-
-const triggerFileUpload = () => {
-  fileInputRef.value?.click();
-};
-
-const handleFileUpload = async (event: Event) => {
-  const target = event.target as HTMLInputElement;
-  if (!target.files || !target.files.length) return;
-  const file = target.files[0] as File;
-  if (!file) return;
-  if (!props.order?.id) return;
-
-  isUploadingDoc.value = true;
-  try {
-    await ManagerDocsService.uploadManagerOrderDocument(props.order.id, { file });
-    await loadDocuments(props.order.id);
-    setToast('Документ загружен', 'success');
-  } catch (error) {
-    setToast(`Ошибка загрузки: ${getApiErrorMessage(error)}`, 'error');
-  } finally {
-    isUploadingDoc.value = false;
-    if (fileInputRef.value) fileInputRef.value.value = '';
-  }
-};
-
-const handleAttachDocumentFile = async (doc: ManagerOrderDocumentItem, event: Event) => {
-  const target = event.target as HTMLInputElement;
-  const file = target.files?.[0] as File | undefined;
-  if (!file || !props.order?.id) return;
-
-  processingDocId.value = doc.id;
-  try {
-    await ManagerDocsService.attachManagerDocFile(doc.id, { file });
-    await loadDocuments(props.order.id);
-    setToast('Файл прикреплен', 'success');
-  } catch (error) {
-    setToast(`Ошибка прикрепления: ${getApiErrorMessage(error)}`, 'error');
-  } finally {
-    processingDocId.value = null;
-    target.value = '';
-  }
-};
-
-const handleExternalContractFile = (event: Event) => {
-  const target = event.target as HTMLInputElement;
-  externalContractFile.value = target.files?.[0] || null;
-};
-
-const resetExternalContractForm = () => {
-  externalContractNumber.value = '';
-  externalContractDate.value = new Date().toISOString().slice(0, 10);
-  externalContractUrl.value = '';
-  externalContractFile.value = null;
-};
-
-const registerExternalContract = async () => {
-  if (!props.order?.id) return;
-  const number = externalContractNumber.value.trim();
-  if (!number) {
-    setToast('Укажите номер договора', 'error');
-    return;
-  }
-  if (!externalContractDate.value) {
-    setToast('Укажите дату договора', 'error');
-    return;
-  }
-
-  isRegisteringExternalContract.value = true;
-  try {
-    await ManagerDocsService.registerManagerExternalContract(props.order.id, {
-      number,
-      contract_date: `${externalContractDate.value}T00:00:00`,
-      external_url: externalContractUrl.value.trim() || undefined,
-      file: externalContractFile.value || undefined,
-    });
-    await loadDocuments(props.order.id);
-    selectedCustomerContractId.value = null;
-    externalContractOpen.value = false;
-    resetExternalContractForm();
-    emit('reload', props.order.id);
-    setToast('Внешний договор добавлен', 'success');
-  } catch (error) {
-    setToast(`Ошибка добавления договора: ${getApiErrorMessage(error)}`, 'error');
-  } finally {
-    isRegisteringExternalContract.value = false;
-  }
-};
-
 const isCompanyOrder = computed(() => props.order?.customer?.type === 'company' || !!props.order?.customer?.inn);
-const hasOrderContract = computed(() => documents.value.some(d => d.doc_type === 'contract'));
-const hasContract = computed(() => (isCompanyOrder.value ? !!selectedCustomerContractId.value : false) || hasOrderContract.value);
-const hasOrderInvoice = computed(() => documents.value.some(d => d.doc_type === 'invoice'));
+const orderDocuments = computed(() => props.order?.documents || []);
+const hasOrderContract = computed(() => orderDocuments.value.some((doc) => doc.doc_type === 'contract'));
+const hasContract = computed(() => (isCompanyOrder.value ? !!props.order?.customer_contract_id : false) || hasOrderContract.value);
+const hasOrderInvoice = computed(() => orderDocuments.value.some((doc) => doc.doc_type === 'invoice'));
 const hasClosingBaseDocument = computed(() => hasContract.value || hasOrderInvoice.value);
-const isDocumentTypeLocked = (type: string) => (
-  type === 'act' ? !hasClosingBaseDocument.value : (type === 'ttn1' || type === 'tn2') && !hasContract.value
-);
-const lockedDocumentTitle = (type: string) => (
-  type === 'act' ? 'Сначала создайте договор или счет' : 'Сначала создайте договор'
-);
 const websiteOrderSummary = computed(() => {
   const lines = websiteProductSummaryLines.value.length + websiteServiceSummaryLines.value.length;
   const parts = [];
@@ -757,269 +638,23 @@ const filteredRepairComplaintPresets = computed(() => {
 });
 const documentSectionSummary = computed(() => {
   const contractText = hasContract.value ? 'договор есть' : (hasOrderInvoice.value ? 'есть счет' : 'без договора');
-  return `${documents.value.length} док. · ${contractText}`;
+  return `${orderDocuments.value.length} док. · ${contractText}`;
 });
-const documentSectionHasError = computed(() => isCompanyOrder.value && !selectedCustomerContractId.value && !hasClosingBaseDocument.value);
+const documentSectionHasError = computed(() => isCompanyOrder.value && !props.order?.customer_contract_id && !hasClosingBaseDocument.value);
 
-const DOCUMENT_TYPES = [
-  { type: 'contract', label: 'Договор' },
-  { type: 'invoice', label: 'Счет' },
-  { type: 'act', label: 'Акт' },
-  { type: 'defect_act', label: 'Дефектный акт' },
-  { type: 'offer', label: 'КП' },
-  { type: 'tn2', label: 'ТН-2' },
-  { type: 'ttn1', label: 'ТТН-1' },
-];
-
-const DOCUMENT_ROLE_OPTIONS: Array<{ value: DocumentRoleType; label: string }> = [
-  { value: 'seller_buyer', label: 'Продавец / Покупатель' },
-  { value: 'executor_customer', label: 'Исполнитель / Заказчик' },
-  { value: 'contractor_customer', label: 'Подрядчик / Заказчик' },
-];
-const normalizeRoleType = (value: unknown): DocumentRoleType => {
-  const raw = String(value || '').trim();
-  if (raw === 'executor_customer' || raw === 'contractor_customer') return raw;
-  return 'seller_buyer';
-};
-const getRoleLabel = (value?: string | null) => (
-  DOCUMENT_ROLE_OPTIONS.find((option) => option.value === normalizeRoleType(value))?.label || 'Продавец / Покупатель'
-);
-
-const contractTemplates = ref<DocumentTemplateItem[]>([]);
-const selectedContractTemplateId = ref<string>('');
-const documentDate = ref(new Date().toISOString().slice(0, 10));
-const customerContracts = ref<ManagerCustomerContractItemResponse[]>([]);
-const selectedCustomerContractId = ref<number | null>(null);
-const selectedDocumentRoleType = ref<string | null>(null);
-const ONE_TIME_CONTRACT_VALUE = 'one-time-contract';
-const datedDocumentTypes = new Set(['contract', 'act', 'defect_act', 'tn2', 'ttn1']);
-const getDocumentDateForType = (type: string) => (
-  datedDocumentTypes.has(type) && documentDate.value ? `${documentDate.value}T00:00:00` : undefined
-);
-const oneTimeContractDocument = computed(() => (
-  [...documents.value]
-    .filter((doc) => doc.doc_type === 'contract')
-    .sort((a, b) => b.id - a.id)[0] || null
-));
-const selectedContractTemplate = computed(() => contractTemplates.value.find((template) => template.id === selectedContractTemplateId.value) || null);
-const selectedOpenContract = computed(() => (
-  customerContracts.value.find((contract) => contract.id === selectedCustomerContractId.value) || null
-));
-const inheritedDocumentRoleType = computed(() => normalizeRoleType(
-  selectedDocumentRoleType.value
-    || selectedOpenContract.value?.document_role_type
-    || selectedContractTemplate.value?.document_role_type
-    || props.order?.effective_document_role_type
-));
-const selectedDocumentRoleBinding = computed({
-  get: () => selectedDocumentRoleType.value || '',
-  set: (value: string) => {
-    void updateDocumentRoleBinding(value);
-  },
-});
-const selectedContractBinding = computed({
-  get: () => {
-    if (selectedCustomerContractId.value) return `open:${selectedCustomerContractId.value}`;
-    if (oneTimeContractDocument.value) return ONE_TIME_CONTRACT_VALUE;
-    return '';
-  },
-  set: (value: string) => {
-    void updateContractBinding(value);
-  },
-});
-
-const loadContractTemplates = async () => {
-  try {
-    const res = await ManagerDocsService.getDocTemplates('contract', props.order?.id);
-    contractTemplates.value = res.items.filter((template) => !template.is_open_contract);
-    if (contractTemplates.value.length > 0 && contractTemplates.value[0]) {
-      selectedContractTemplateId.value = contractTemplates.value[0].id;
-    }
-  } catch (e) {
-    console.warn('Failed to load contract templates', e);
+const beforeDocumentGenerate = async (type: string) => {
+  if (type === 'offer') {
+    await saveCurrentProposalLines();
   }
+  return true;
 };
 
-const loadDocuments = async (orderId: number) => {
-  try {
-    const res = await ManagerDocsService.getManagerOrderDocuments(orderId);
-    documents.value = res.items;
-  } catch (error) {
-    console.error('Failed to load documents', error);
-  }
+const handleDocumentPanelToast = (payload: { message: string; type?: 'success' | 'error' }) => {
+  setToast(payload.message, payload.type || 'success');
 };
 
-const openDocumentSendModal = () => {
-  if (!props.order?.id) return;
-  if (!documents.value.length) {
-    setToast('Сначала создайте или загрузите документ', 'error');
-    return;
-  }
-  showDocumentSendModal.value = true;
-};
-
-const handleDocumentsSent = () => {
-  if (!props.order?.id) return;
-  setToast('Письмо отправлено', 'success');
-  emit('reload', props.order.id);
-};
-
-const saveAdditionalConditions = async (showSuccessToast = false) => {
-  if (!props.order?.id || additionalConditions.value === additionalConditionsSaved.value) return true;
-  const valueToSave = additionalConditions.value;
-  isSavingAdditionalConditions.value = true;
-  try {
-    await ManagerOrdersService.patchManagerOrder(props.order.id, {
-      additional_conditions: valueToSave,
-    });
-    additionalConditionsSaved.value = valueToSave;
-    if (showSuccessToast) setToast('Условия сохранены', 'success');
-    return true;
-  } catch (error) {
-    setToast(`Ошибка сохранения условий: ${getApiErrorMessage(error)}`, 'error');
-    return false;
-  } finally {
-    isSavingAdditionalConditions.value = false;
-  }
-};
-
-const loadCustomerContracts = async (customerId?: number, selectedId?: number | null) => {
-  if (!customerId) {
-    customerContracts.value = [];
-    selectedCustomerContractId.value = null;
-    return;
-  }
-  try {
-    const res = await ManagerContractsService.getManagerCustomerContracts(customerId);
-    customerContracts.value = res.items.filter((contract) => contract.status === 'active');
-    selectedCustomerContractId.value = selectedId || null;
-  } catch (error) {
-    console.error('Failed to load customer contracts', error);
-  }
-};
-
-const openCustomerProfileForContract = () => {
-  const customerId = props.order?.customer?.id;
-  if (!customerId) return;
-  const currentPath = `${window.location.pathname}${window.location.search}`;
-  const target = `/manager/customers/profile?customerId=${customerId}&openContract=1&returnTo=${encodeURIComponent(currentPath)}`;
-  window.history.pushState({}, '', target);
-  window.dispatchEvent(new PopStateEvent('popstate'));
-};
-
-const updateContractBinding = async (value: string) => {
-  if (!props.order?.id) return;
-  const nextCustomerContractId = value.startsWith('open:') ? Number(value.slice(5)) : null;
-  if (nextCustomerContractId !== null && Number.isNaN(nextCustomerContractId)) return;
-  try {
-    selectedCustomerContractId.value = nextCustomerContractId;
-    await ManagerOrdersService.patchManagerOrder(props.order.id, {
-      customer_contract_id: nextCustomerContractId,
-    });
-    emit('reload', props.order.id);
-  } catch (error) {
-    setToast(`Ошибка выбора договора: ${getApiErrorMessage(error)}`, 'error');
-  }
-};
-
-const updateDocumentRoleBinding = async (value: string) => {
-  if (!props.order?.id) return;
-  const nextRole = value ? normalizeRoleType(value) : null;
-  try {
-    selectedDocumentRoleType.value = nextRole;
-    await ManagerOrdersService.patchManagerOrder(props.order.id, {
-      document_role_type: nextRole,
-    });
-    emit('reload', props.order.id);
-  } catch (error) {
-    setToast(`Ошибка выбора ролей: ${getApiErrorMessage(error)}`, 'error');
-  }
-};
-
-const useOneTimeContractForClosingDocs = async () => {
-  if (!props.order?.id || !selectedCustomerContractId.value) return;
-  selectedCustomerContractId.value = null;
-  await ManagerOrdersService.patchManagerOrder(props.order.id, {
-    customer_contract_id: null,
-  });
-};
-
-const generateDocument = async (type: string, template?: DocumentTemplateItem | null, documentDate?: string) => {
-  if (!props.order?.id) return;
-  isGeneratingDoc.value = true;
-  try {
-    if (!(await saveAdditionalConditions(false))) return;
-    if (type === 'contract' && isCompanyOrder.value) {
-      await useOneTimeContractForClosingDocs();
-    }
-    const proposalId = type === 'offer' ? (activeProposalId.value ?? undefined) : undefined;
-    if (type === 'offer') {
-      await saveCurrentProposalLines();
-    }
-    const res = await ManagerOrdersService.generateManagerOrderDocument(
-      props.order.id,
-      type,
-      template?.document_template_id ?? undefined,
-      template && !template.document_template_id ? template.id : undefined,
-      documentDate,
-      proposalId,
-    );
-    window.open(res.edit_url, '_blank');
-    await loadDocuments(props.order.id);
-    setToast('Документ создан', 'success');
-  } catch (error) {
-    setToast(`Ошибка генерации: ${getApiErrorMessage(error)}`, 'error');
-  } finally {
-    isGeneratingDoc.value = false;
-  }
-};
-
-const downloadDocument = async (doc: ManagerOrderDocumentItem) => {
-  processingDocId.value = doc.id;
-  try {
-    const response = await ManagerDocsService.getManagerDocDownload(doc.id);
-
-    // Create blob link to download
-
-    // If we look at ManagerDocsService.ts: returns CancelablePromise<any>.
-    // Let's assume it returns the blob because the browser implementation of fetch/request handles it?
-    // Actually, generated code usually parses JSON.
-    // If I need Blob, I might need to access raw response or ensure generation config handles binary.
-    // Let's implement a fallback or assume naive approach first.
-
-    // Actually, easier way for now: open direct URL in new tab which triggers download?
-    // But we need auth token. Browser simply opening link won't attach header unless cookie.
-    // We use Bearer token.
-
-    // We can use the ApiService.getDownloadLink presumably if we had one, but we have a method returning stream.
-    // Let's try to handle Blob.
-
-    const url = window.URL.createObjectURL(new Blob([response]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `${doc.number}.pdf`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  } catch (error) {
-    setToast('Ошибка скачивания', 'error');
-  } finally {
-    processingDocId.value = null;
-  }
-};
-
-const deleteDocument = async (docId: number) => {
-  if (!confirm('Удалить документ?')) return;
-  processingDocId.value = docId;
-  try {
-    await ManagerDocsService.deleteManagerDoc(docId);
-    if (props.order?.id) await loadDocuments(props.order.id);
-    setToast('Документ удален', 'success');
-  } catch (error) {
-    setToast('Ошибка удаления', 'error');
-  } finally {
-    processingDocId.value = null;
-  }
+const refreshOrderFromDocumentsPanel = () => {
+  if (props.order?.id) emit('reload', props.order.id);
 };
 
 const newPaymentAmount = ref<number | null>(null);
@@ -1362,7 +997,6 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   measurementRequired.value = order.measurement_required ?? false;
   measurerId.value = order.measurer_id ?? null;
   measurementResult.value = order.measurement_result ?? '';
-  additionalConditionsSaved.value = order.additional_conditions ?? '';
   additionalConditions.value = order.additional_conditions ?? '';
   proposalStatus.value = (order.proposal_status as any) || 'draft';
   targetCurrency.value = order.target_currency || null;
@@ -1394,33 +1028,15 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   showEstimateImport.value = false;
   await loadEstimateOptions();
 
-  // Documents
-  documents.value = (order.documents || []).map((d: any) => ({
-      id: d.id,
-      proposal_id: d.proposal_id,
-      doc_type: d.doc_type,
-      number: d.number,
-      date: d.date,
-      edit_url: d.edit_url,
-      is_downloadable: d.is_downloadable ?? true
-  }));
   // Payments
   payments.value = [...(order.payments || [])];
   await loadCandidateBankReceipts(order);
 
-  // Also refresh list to be sure
-  loadDocuments(order.id);
-  loadContractTemplates();
-  selectedCustomerContractId.value = order.customer_contract_id || null;
-  selectedDocumentRoleType.value = order.document_role_type || null;
-
   const customerId = order.customer?.id;
   if (customerId) {
     await loadCustomerBranches(customerId, order.customer_branch?.id ?? null);
-    await loadCustomerContracts(customerId, order.customer_contract_id ?? null);
   } else {
     resetCustomerBranches();
-    await loadCustomerContracts(undefined, null);
   }
 
   productLookupById.value = {};
@@ -3063,6 +2679,7 @@ watch(
 
       <!-- Экшн-зона (Proposal & Docs) -->
       <OrderDrawerSection
+        v-if="status !== 'execution'"
         v-model:expanded="expandedDrawerSections.documents"
         title="Документы"
         :summary="documentSectionSummary"
@@ -3091,224 +2708,14 @@ watch(
           </div>
         </div>
 
-        <div class="mb-2 flex items-center justify-between">
-          <div class="relative ml-auto flex items-center gap-2">
-            <button
-               class="flex items-center gap-1 rounded-xl bg-teal-600 px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500/50 disabled:opacity-50"
-               title="Отправить документы"
-               :disabled="!documents.length || isUploadingDoc || !!processingDocId || isGeneratingDoc"
-               @click="openDocumentSendModal"
-            >
-              <span class="material-icons-round text-[18px]">send</span>
-              Отправить
-            </button>
-
-            <button
-               class="flex items-center gap-1 rounded-xl bg-[#007f80] px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/50 disabled:opacity-50"
-               :disabled="isGeneratingDoc || !!processingDocId || isUploadingDoc"
-               @click="docDropdownOpen = !docDropdownOpen"
-            >
-              <span class="material-icons-round text-[18px]">add_circle</span> Создать
-            </button>
-
-            <input type="file" ref="fileInputRef" class="hidden" :accept="DOCUMENT_FILE_ACCEPT" @change="handleFileUpload" />
-            <button
-               class="flex items-center gap-1 rounded-xl bg-slate-700 px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500/50 disabled:opacity-50"
-               title="Загрузить файл"
-               :disabled="isUploadingDoc || !!processingDocId || isGeneratingDoc"
-               @click="triggerFileUpload"
-            >
-              <span v-if="isUploadingDoc" class="material-icons-round animate-spin text-[18px]">loop</span>
-              <span v-else class="material-icons-round text-[18px]">upload_file</span>
-              Загрузить
-            </button>
-
-            <div
-               v-if="docDropdownOpen"
-               class="absolute right-[100px] top-full z-10 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-1 text-slate-800 shadow-xl dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-            >
-              <!-- Contract template selector -->
-              <div v-if="contractTemplates.length > 1" class="border-b border-slate-200 px-3 py-2 dark:border-slate-700">
-                <label class="mb-1 block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Шаблон договора</label>
-                <select
-                  v-model="selectedContractTemplateId"
-                  class="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
-                  style="border-radius: 12px"
-                >
-                  <option v-for="t in contractTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
-                </select>
-              </div>
-              <div class="border-b border-slate-200 px-3 py-2 dark:border-slate-700">
-                <label class="mb-1 block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Дата документа</label>
-                <input
-                  v-model="documentDate"
-                  type="date"
-                  class="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
-                  style="border-radius: 12px"
-                />
-              </div>
-
-              <button
-                v-for="dtype in DOCUMENT_TYPES"
-                :key="dtype.type"
-                class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:text-slate-400 disabled:opacity-70 disabled:hover:bg-transparent dark:text-slate-200 dark:hover:bg-slate-700 dark:disabled:text-slate-500"
-                :disabled="isDocumentTypeLocked(dtype.type)"
-                :title="isDocumentTypeLocked(dtype.type) ? lockedDocumentTitle(dtype.type) : ''"
-                @click="generateDocument(dtype.type, dtype.type === 'contract' ? selectedContractTemplate : undefined, getDocumentDateForType(dtype.type)); docDropdownOpen = false"
-              >
-                {{ dtype.label }}
-                <span v-if="isDocumentTypeLocked(dtype.type)" class="material-icons-round text-[16px] text-amber-500">lock</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="isCompanyOrder" class="mb-3 rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-slate-700/50 dark:bg-slate-900/40 dark:shadow-none">
-          <div class="mb-1 flex items-center justify-between gap-3">
-            <label class="block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Договор для актов и накладных</label>
-            <button
-              type="button"
-              class="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-              @click="externalContractOpen = !externalContractOpen"
-            >
-              <span class="material-icons-round text-[16px]">post_add</span>
-              Внешний договор
-            </button>
-          </div>
-          <select
-            v-model="selectedContractBinding"
-            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-          >
-            <option value="">Выберите договор</option>
-            <option v-if="oneTimeContractDocument" :value="ONE_TIME_CONTRACT_VALUE">
-              Разовый договор заказа · {{ oneTimeContractDocument.number }}
-            </option>
-            <option v-for="contract in customerContracts" :key="contract.id" :value="`open:${contract.id}`">
-              Открытый договор · {{ contract.number }} · до {{ new Date(contract.valid_until).toLocaleDateString('ru-RU') }}
-            </option>
-          </select>
-          <p v-if="oneTimeContractDocument && customerContracts.length" class="mt-2 text-xs text-slate-500 dark:text-slate-400">Выберите, куда ссылать закрывающие документы: на разовый договор заказа или на открытый договор клиента.</p>
-          <form
-            v-if="externalContractOpen"
-            class="mt-3 space-y-3 rounded-lg border border-dashed border-teal-300 bg-teal-50/40 p-3 dark:border-teal-700/70 dark:bg-teal-950/20"
-            @submit.prevent="registerExternalContract"
-          >
-            <div class="grid gap-3 sm:grid-cols-2">
-              <label class="text-xs font-medium text-slate-600 dark:text-slate-300">Номер договора
-                <input
-                  v-model="externalContractNumber"
-                  type="text"
-                  class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                  placeholder="Например, 44-ЭА/2026"
-                />
-              </label>
-              <label class="text-xs font-medium text-slate-600 dark:text-slate-300">Дата договора
-                <input
-                  v-model="externalContractDate"
-                  type="date"
-                  class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                />
-              </label>
-            </div>
-            <label class="block text-xs font-medium text-slate-600 dark:text-slate-300">Ссылка на договор
-              <input
-                v-model="externalContractUrl"
-                type="url"
-                class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                placeholder="https://..."
-              />
-            </label>
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <label class="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
-                <span class="material-icons-round text-[18px] text-teal-600 dark:text-teal-400">upload_file</span>
-                <span>{{ externalContractFile?.name || 'Прикрепить файл вместо ссылки' }}</span>
-                  <input type="file" class="hidden" :accept="DOCUMENT_FILE_ACCEPT" @change="handleExternalContractFile" />
-              </label>
-              <div class="flex justify-end gap-2">
-                <button
-                  type="button"
-                  class="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                  @click="externalContractOpen = false"
-                >
-                  Отмена
-                </button>
-                <button
-                  type="submit"
-                  class="inline-flex items-center gap-1 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-teal-700 disabled:opacity-60"
-                  :disabled="isRegisteringExternalContract"
-                >
-                  <span v-if="isRegisteringExternalContract" class="material-icons-round animate-spin text-[16px]">loop</span>
-                  <span v-else class="material-icons-round text-[16px]">check</span>
-                  Добавить договор
-                </button>
-              </div>
-            </div>
-          </form>
-          <div
-            v-if="customerContracts.length === 0"
-            class="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300"
-          >
-            <span>У клиента нет открытых договоров.</span>
-            <button
-              type="button"
-              class="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500/50"
-              @click="openCustomerProfileForContract"
-            >
-              Создать открытый договор
-            </button>
-          </div>
-          <p v-else-if="!selectedCustomerContractId && !hasClosingBaseDocument" class="mt-2 text-xs text-amber-600 dark:text-amber-400">Для актов нужен договор или счет, для накладных нужен договор.</p>
-        </div>
-
-        <AdditionalConditionsLibrary v-model="additionalConditions" :saving="isSavingAdditionalConditions" />
-
-        <div class="mb-3 rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-slate-700/50 dark:bg-slate-900/40 dark:shadow-none">
-          <label class="mb-1 block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Роли сторон в актах и счетах</label>
-          <select
-            v-model="selectedDocumentRoleBinding"
-            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-          >
-            <option value="">По договору / шаблону · {{ getRoleLabel(inheritedDocumentRoleType) }}</option>
-            <option v-for="option in DOCUMENT_ROLE_OPTIONS" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
-        </div>
-
-        <div v-if="documents.length" class="space-y-3 mt-3">
-            <div v-for="doc in documents" :key="doc.id" class="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3 text-slate-700 shadow-sm dark:border-slate-700/50 dark:bg-[#1e293b] dark:text-slate-300 dark:shadow-none">
-                <div class="flex items-center gap-3">
-                    <div class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-teal-600 dark:bg-slate-800 dark:text-teal-400">
-                      <span class="material-icons-round text-xl">description</span>
-                    </div>
-                    <div>
-                        <p class="text-sm font-medium text-slate-900 dark:text-white">{{ doc.number || doc.doc_type }}</p>
-                        <p class="text-xs text-slate-500 dark:text-slate-400">
-                          {{ new Date(doc.date).toLocaleDateString() }} · <span class="uppercase">{{ doc.doc_type }}</span>
-                          <span v-if="documentProposalName(doc)"> · {{ documentProposalName(doc) }}</span>
-                        </p>
-                    </div>
-                </div>
-                <div class="flex items-center gap-2">
-                    <a v-if="doc.edit_url" :href="doc.edit_url" target="_blank" class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white" title="Открыть">
-                        <span class="material-icons-round text-[18px]">open_in_new</span>
-                    </a>
-                    <button v-if="doc.is_downloadable" class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white" :disabled="processingDocId === doc.id" @click="downloadDocument(doc)" title="Скачать PDF">
-                        <span class="material-icons-round text-[18px]">download</span>
-                    </button>
-                    <label v-else class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-teal-600 hover:bg-teal-50 hover:text-teal-700 dark:text-teal-400 dark:hover:bg-teal-900/30 dark:hover:text-teal-300" title="Добавить файл">
-                        <span class="material-icons-round text-[18px]">attach_file</span>
-                        <input type="file" class="hidden" :accept="DOCUMENT_FILE_ACCEPT" :disabled="processingDocId === doc.id" @change="handleAttachDocumentFile(doc, $event)" />
-                    </label>
-                    <button class="flex h-8 w-8 items-center justify-center rounded-lg text-red-400 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50" :disabled="processingDocId === doc.id" @click="deleteDocument(doc.id)" title="Удалить">
-                        <span class="material-icons-round text-[18px]">delete</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-        <div v-else class="rounded-xl border border-dashed border-slate-300 py-3 text-center text-sm italic text-slate-500 dark:border-slate-700">
-            Нет сформированных документов
-        </div>
+        <OrderDocumentsPanel
+          v-if="order"
+          :order="order"
+          :active-proposal-id="activeProposalId"
+          :before-generate="beforeDocumentGenerate"
+          @refresh="refreshOrderFromDocumentsPanel"
+          @toast="handleDocumentPanelToast"
+        />
       </OrderDrawerSection>
 
 
@@ -3487,14 +2894,6 @@ watch(
         </div>
       </footer>
     </aside>
-
-    <DocumentSendModal
-      v-if="order"
-      v-model="showDocumentSendModal"
-      :order="order"
-      :documents="documents"
-      @sent="handleDocumentsSent"
-    />
 
     <div
       v-if="showCustomerModal"
