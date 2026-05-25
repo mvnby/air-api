@@ -18,35 +18,53 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _table_exists(inspector: sa.Inspector, table_name: str) -> bool:
+    return table_name in inspector.get_table_names()
+
+
+def _indexes(inspector: sa.Inspector, table_name: str) -> set[str]:
+    if not _table_exists(inspector, table_name):
+        return set()
+    return {index["name"] for index in inspector.get_indexes(table_name)}
+
+
 def upgrade() -> None:
-    op.create_table(
-        "catalog_import_job",
-        sa.Column("job_id", sa.String(), nullable=False),
-        sa.Column("status", sa.String(), nullable=False, server_default="queued"),
-        sa.Column("stage", sa.String(), nullable=False, server_default="queued"),
-        sa.Column("error", sa.String(), nullable=True),
-        sa.Column("input_urls", sa.JSON(), nullable=False),
-        sa.Column("with_related", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-        sa.Column("update_existing", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-        sa.Column("input_total", sa.Integer(), nullable=False, server_default=sa.text("0")),
-        sa.Column("total", sa.Integer(), nullable=False, server_default=sa.text("0")),
-        sa.Column("processed", sa.Integer(), nullable=False, server_default=sa.text("0")),
-        sa.Column("pending", sa.Integer(), nullable=False, server_default=sa.text("0")),
-        sa.Column("success_count", sa.Integer(), nullable=False, server_default=sa.text("0")),
-        sa.Column("error_count", sa.Integer(), nullable=False, server_default=sa.text("0")),
-        sa.Column("current_url", sa.String(), nullable=True),
-        sa.Column("current_title", sa.String(), nullable=True),
-        sa.Column("successes", sa.JSON(), nullable=False),
-        sa.Column("errors", sa.JSON(), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("started_at", sa.DateTime(), nullable=True),
-        sa.Column("finished_at", sa.DateTime(), nullable=True),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
-        sa.PrimaryKeyConstraint("job_id"),
-    )
-    op.create_index("ix_catalog_import_job_status", "catalog_import_job", ["status"], unique=False)
-    op.create_index("ix_catalog_import_job_stage", "catalog_import_job", ["stage"], unique=False)
-    op.create_index("ix_catalog_import_job_created_at", "catalog_import_job", ["created_at"], unique=False)
+    inspector = sa.inspect(op.get_bind())
+    if not _table_exists(inspector, "catalog_import_job"):
+        op.create_table(
+            "catalog_import_job",
+            sa.Column("job_id", sa.String(), nullable=False),
+            sa.Column("status", sa.String(), nullable=False, server_default="queued"),
+            sa.Column("stage", sa.String(), nullable=False, server_default="queued"),
+            sa.Column("error", sa.String(), nullable=True),
+            sa.Column("input_urls", sa.JSON(), nullable=False),
+            sa.Column("with_related", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+            sa.Column("update_existing", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+            sa.Column("input_total", sa.Integer(), nullable=False, server_default=sa.text("0")),
+            sa.Column("total", sa.Integer(), nullable=False, server_default=sa.text("0")),
+            sa.Column("processed", sa.Integer(), nullable=False, server_default=sa.text("0")),
+            sa.Column("pending", sa.Integer(), nullable=False, server_default=sa.text("0")),
+            sa.Column("success_count", sa.Integer(), nullable=False, server_default=sa.text("0")),
+            sa.Column("error_count", sa.Integer(), nullable=False, server_default=sa.text("0")),
+            sa.Column("current_url", sa.String(), nullable=True),
+            sa.Column("current_title", sa.String(), nullable=True),
+            sa.Column("successes", sa.JSON(), nullable=False),
+            sa.Column("errors", sa.JSON(), nullable=False),
+            sa.Column("created_at", sa.DateTime(), nullable=False),
+            sa.Column("started_at", sa.DateTime(), nullable=True),
+            sa.Column("finished_at", sa.DateTime(), nullable=True),
+            sa.Column("updated_at", sa.DateTime(), nullable=False),
+            sa.PrimaryKeyConstraint("job_id"),
+        )
+
+    inspector = sa.inspect(op.get_bind())
+    existing_indexes = _indexes(inspector, "catalog_import_job")
+    if "ix_catalog_import_job_status" not in existing_indexes:
+        op.create_index("ix_catalog_import_job_status", "catalog_import_job", ["status"], unique=False)
+    if "ix_catalog_import_job_stage" not in existing_indexes:
+        op.create_index("ix_catalog_import_job_stage", "catalog_import_job", ["stage"], unique=False)
+    if "ix_catalog_import_job_created_at" not in existing_indexes:
+        op.create_index("ix_catalog_import_job_created_at", "catalog_import_job", ["created_at"], unique=False)
 
 
 def downgrade() -> None:

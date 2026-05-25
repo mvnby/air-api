@@ -18,7 +18,16 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _columns(table_name: str) -> set[str]:
+    inspector = sa.inspect(op.get_bind())
+    if table_name not in inspector.get_table_names():
+        return set()
+    return {column["name"] for column in inspector.get_columns(table_name)}
+
+
 def upgrade() -> None:
+    if "logistics_components" in _columns("order_product_link"):
+        return
     with op.batch_alter_table("order_product_link", schema=None) as batch_op:
         batch_op.add_column(sa.Column("logistics_components", sa.JSON(), nullable=True))
 
