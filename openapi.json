@@ -16879,6 +16879,20 @@
               }
             ],
             "title": "Cost"
+          },
+          "logistics_components": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OrderProductLogisticsComponent"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logistics Components"
           }
         },
         "type": "object",
@@ -19644,6 +19658,31 @@
           "line_total": {
             "type": "integer",
             "title": "Line Total"
+          },
+          "product_country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Country"
+          },
+          "product_logistics_components": {
+            "items": {
+              "$ref": "#/components/schemas/ProductLogisticsComponentTemplate"
+            },
+            "type": "array",
+            "title": "Product Logistics Components"
+          },
+          "logistics_components": {
+            "items": {
+              "$ref": "#/components/schemas/OrderProductLogisticsComponent"
+            },
+            "type": "array",
+            "title": "Logistics Components"
           }
         },
         "type": "object",
@@ -19658,6 +19697,56 @@
           "line_total"
         ],
         "title": "OrderProductLineResponse"
+      },
+      "OrderProductLogisticsComponent": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit",
+            "default": "\u0448\u0442."
+          },
+          "quantity_per_parent": {
+            "type": "integer",
+            "title": "Quantity Per Parent",
+            "default": 1
+          },
+          "unit_price": {
+            "type": "number",
+            "title": "Unit Price",
+            "default": 0.0
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "OrderProductLogisticsComponent"
       },
       "OrderProposalCreatePayload": {
         "properties": {
@@ -20721,6 +20810,56 @@
           "updated_at"
         ],
         "title": "ProductLocalStockResponse"
+      },
+      "ProductLogisticsComponentTemplate": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit",
+            "default": "\u0448\u0442."
+          },
+          "quantity_per_parent": {
+            "type": "integer",
+            "title": "Quantity Per Parent",
+            "default": 1
+          },
+          "price_weight": {
+            "type": "number",
+            "title": "Price Weight",
+            "default": 1.0
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "ProductLogisticsComponentTemplate"
       },
       "ProductManualPayload": {
         "properties": {

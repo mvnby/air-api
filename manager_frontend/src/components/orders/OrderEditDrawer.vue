@@ -54,8 +54,35 @@ type ProductOption = {
   availability_status: string;
   vitebsk_qty: number;
   minsk_qty: number;
+  specs?: Record<string, any>;
 };
-type ProductLine = { product_id: number; product_query: string; quantity: number; price: number; cost: number };
+type LogisticsComponentKind = 'indoor' | 'outdoor' | 'accessory' | 'other';
+type ProductLogisticsTemplateComponent = {
+  title: string;
+  country?: string | null;
+  unit?: string | null;
+  quantity_per_parent?: number | null;
+  price_weight?: number | null;
+  kind?: LogisticsComponentKind | null;
+};
+type OrderLogisticsComponent = {
+  title: string;
+  country?: string | null;
+  unit: string;
+  quantity_per_parent: number;
+  unit_price: number;
+  kind?: LogisticsComponentKind | null;
+};
+type ProductLine = {
+  product_id: number;
+  product_query: string;
+  quantity: number;
+  price: number;
+  cost: number;
+  product_country?: string | null;
+  product_logistics_components?: ProductLogisticsTemplateComponent[];
+  logistics_components?: OrderLogisticsComponent[] | null;
+};
 type ServiceLine = { service_id?: number | null; title: string; quantity: number; price: number; cost: number };
 type OrderWorkflowType = 'sales_installation' | 'service_work' | 'maintenance' | 'repair';
 type RepairMeta = {
@@ -690,7 +717,7 @@ const documentSectionHasError = computed(() => isCompanyOrder.value && !props.or
 
 const beforeDocumentGenerate = async (type: string) => {
   if (!props.order?.id) return false;
-  if (type === 'offer') {
+  if (type === 'offer' || type === 'tn2' || type === 'ttn1') {
     await saveCurrentProposalLines();
   }
   if (type === 'defect_act') {
@@ -914,6 +941,7 @@ const mapSmartSearchItemToOption = (item: any): ProductOption => ({
   availability_status: String(item.availability_status ?? 'out_of_stock'),
   vitebsk_qty: Number(item.vitebsk_qty ?? 0),
   minsk_qty: Number(item.minsk_qty ?? 0),
+  specs: ((item.specs || {}) as Record<string, any>),
 });
 
 const syncProductLookupFromLines = () => {
@@ -981,6 +1009,13 @@ const restoreDraft = () => {
         quantity: Number(line.quantity || 1),
         price: Number(line.price || 0),
         cost: Number(line.cost || 0),
+        product_country: (line as any).product_country || null,
+        product_logistics_components: Array.isArray((line as any).product_logistics_components)
+          ? [...((line as any).product_logistics_components as ProductLogisticsTemplateComponent[])]
+          : [],
+        logistics_components: Array.isArray((line as any).logistics_components)
+          ? [...((line as any).logistics_components as OrderLogisticsComponent[])]
+          : null,
       }));
     }
   } catch (error) {
@@ -1003,6 +1038,13 @@ const mapProductLineFromResponse = (line: OrderProductLineResponse): ProductLine
   quantity: line.quantity,
   price: line.price,
   cost: line.cost,
+  product_country: (line as any).product_country || null,
+  product_logistics_components: Array.isArray((line as any).product_logistics_components)
+    ? ((line as any).product_logistics_components as ProductLogisticsTemplateComponent[])
+    : [],
+  logistics_components: Array.isArray((line as any).logistics_components) && (line as any).logistics_components.length
+    ? ((line as any).logistics_components as OrderLogisticsComponent[])
+    : null,
 });
 
 const mapServiceLineFromResponse = (line: OrderServiceLineResponse): ServiceLine => ({
@@ -1207,6 +1249,9 @@ const selectProductForLine = (index: number, option: ProductOption) => {
   row.product_id = option.id;
   row.product_query = option.title;
   row.price = option.price;
+  row.product_country = getProductCountryFromSpecs(option.specs);
+  row.product_logistics_components = normalizeProductLogisticsTemplate(option.specs?.logistics_components);
+  row.logistics_components = null;
   // Quick selection means the row now follows the selected catalog product.
   if (option.cost && option.cost > 0) {
     row.cost = option.cost;
@@ -1232,7 +1277,16 @@ const openSelectedProduct = (index: number) => {
 };
 
 const addProductLine = () => {
-  productLines.value.push({ product_id: 0, product_query: '', quantity: 1, price: 0, cost: 0 });
+  productLines.value.push({
+    product_id: 0,
+    product_query: '',
+    quantity: 1,
+    price: 0,
+    cost: 0,
+    product_country: null,
+    product_logistics_components: [],
+    logistics_components: null,
+  });
 };
 
 const addServiceLine = () => {
@@ -1262,6 +1316,7 @@ const buildProposalLinesPayload = () => ({
     quantity: Math.trunc(Number(line.quantity) || 0),
     price: Math.round(Number(line.price) || 0),
     cost: (!line.cost && line.cost !== 0) ? null : toIntegerMoney(line.cost),
+    logistics_components: normalizeOrderLogisticsComponents(line.logistics_components),
     link_id: null,
     proposal_id: activeProposalId.value,
   })),
@@ -1670,6 +1725,57 @@ const lineTotal = (line: { quantity: number; price: number }) => Number(line.qua
 const toIntegerMoney = (value: number | null | undefined): number | null => {
   if (value == null || Number.isNaN(Number(value))) return null;
   return Math.round(Number(value));
+};
+const LOGISTICS_COMPONENT_KINDS = new Set(['indoor', 'outdoor', 'accessory', 'other']);
+const normalizeLogisticsKind = (value: unknown): LogisticsComponentKind => {
+  const raw = String(value || '').trim();
+  return LOGISTICS_COMPONENT_KINDS.has(raw) ? (raw as LogisticsComponentKind) : 'other';
+};
+const getProductCountryFromSpecs = (specs?: Record<string, any> | null) => {
+  if (!specs) return null;
+  return String(specs.country || specs.country_of_origin || specs['Страна производства'] || specs['Страна-производитель'] || '').trim() || null;
+};
+const normalizePositiveInteger = (value: unknown, fallback = 1) => {
+  const parsed = Math.trunc(Number(value));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+const normalizePositiveNumber = (value: unknown, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+};
+const normalizeProductLogisticsTemplate = (raw: unknown): ProductLogisticsTemplateComponent[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item): ProductLogisticsTemplateComponent | null => {
+      const source = (item || {}) as Record<string, any>;
+      const title = String(source.title || '').trim();
+      if (!title) return null;
+      return {
+        title,
+        country: String(source.country || '').trim() || null,
+        unit: String(source.unit || '').trim() || 'шт.',
+        quantity_per_parent: normalizePositiveInteger(source.quantity_per_parent, 1),
+        price_weight: normalizePositiveNumber(source.price_weight, 1),
+        kind: normalizeLogisticsKind(source.kind),
+      };
+    })
+    .filter((item): item is ProductLogisticsTemplateComponent => Boolean(item));
+};
+const normalizeOrderLogisticsComponents = (
+  components?: OrderLogisticsComponent[] | null,
+): OrderLogisticsComponent[] | null => {
+  if (!components?.length) return null;
+  const normalized = components
+    .map((component) => ({
+      title: String(component.title || '').trim(),
+      country: String(component.country || '').trim() || 'Китай',
+      unit: String(component.unit || '').trim() || 'шт.',
+      quantity_per_parent: normalizePositiveInteger(component.quantity_per_parent, 1),
+      unit_price: normalizePositiveNumber(component.unit_price, 0),
+      kind: normalizeLogisticsKind(component.kind),
+    }))
+    .filter((component) => Boolean(component.title));
+  return normalized.length ? normalized : null;
 };
 
 const handleSave = () => {
@@ -2845,6 +2951,7 @@ watch(
           v-if="order"
           :order="order"
           :active-proposal-id="activeProposalId"
+          :product-lines="productLines"
           :before-generate="beforeDocumentGenerate"
           @refresh="refreshOrderFromDocumentsPanel"
           @toast="handleDocumentPanelToast"

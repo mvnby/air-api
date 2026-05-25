@@ -174,6 +174,7 @@ export type { OrderCustomerContractBrief } from './models/OrderCustomerContractB
 export type { OrderEmailSendPayload } from './models/OrderEmailSendPayload';
 export type { OrderPayload } from './models/OrderPayload';
 export type { OrderProductLineResponse } from './models/OrderProductLineResponse';
+export type { OrderProductLogisticsComponent } from './models/OrderProductLogisticsComponent';
 export type { OrderProposalCreatePayload } from './models/OrderProposalCreatePayload';
 export type { OrderProposalResponse } from './models/OrderProposalResponse';
 export type { OrderProposalUpdatePayload } from './models/OrderProposalUpdatePayload';
@@ -193,6 +194,7 @@ export type { ProductAvailabilityLeadResponse } from './models/ProductAvailabili
 export type { ProductImageResponse } from './models/ProductImageResponse';
 export type { ProductLocalStockPayload } from './models/ProductLocalStockPayload';
 export type { ProductLocalStockResponse } from './models/ProductLocalStockResponse';
+export type { ProductLogisticsComponentTemplate } from './models/ProductLogisticsComponentTemplate';
 export type { ProductManualPayload } from './models/ProductManualPayload';
 export type { ProductManualResponse } from './models/ProductManualResponse';
 export type { ProductResponse } from './models/ProductResponse';

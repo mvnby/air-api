@@ -6,6 +6,8 @@ import type {
   ManagerCustomerContractItemResponse,
   ManagerOrderDetailResponse,
   ManagerOrderDocumentItem,
+  OrderProductLineResponse,
+  OrderProposalResponse,
 } from '../../client';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import AdditionalConditionsLibrary from './AdditionalConditionsLibrary.vue';
@@ -13,10 +15,43 @@ import DocumentSendModal from './DocumentSendModal.vue';
 
 type ToastType = 'success' | 'error';
 type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
+type LogisticsComponentKind = 'indoor' | 'outdoor' | 'accessory' | 'other';
+
+type ProductLogisticsTemplateComponent = {
+  title: string;
+  country?: string | null;
+  unit?: string | null;
+  quantity_per_parent?: number | null;
+  price_weight?: number | null;
+  kind?: LogisticsComponentKind | null;
+};
+
+type OrderLogisticsComponent = {
+  title: string;
+  country?: string | null;
+  unit: string;
+  quantity_per_parent: number;
+  unit_price: number;
+  kind?: LogisticsComponentKind | null;
+};
+
+type WaybillProductLine = {
+  id?: number | null;
+  proposal_id?: number | null;
+  product_id?: number | null;
+  product_query: string;
+  quantity: number;
+  price: number;
+  cost?: number | null;
+  product_country?: string | null;
+  product_logistics_components?: ProductLogisticsTemplateComponent[];
+  logistics_components?: OrderLogisticsComponent[] | null;
+};
 
 const props = defineProps<{
   order: ManagerOrderDetailResponse;
   activeProposalId?: number | null;
+  productLines?: WaybillProductLine[];
   beforeGenerate?: (type: string) => boolean | void | Promise<boolean | void>;
 }>();
 
@@ -73,11 +108,228 @@ const notify = (message: string, type: ToastType = 'success') => {
   emit('toast', { message, type });
 };
 
+const formatMoney = (value: number | null | undefined) => `${Number(value || 0).toLocaleString('ru-RU')} BYN`;
+
 const normalizeRoleType = (value: unknown): DocumentRoleType => {
   const raw = String(value || '').trim();
   if (raw === 'executor_customer' || raw === 'contractor_customer') return raw;
   return 'seller_buyer';
 };
+
+const isWaybillType = (type: string) => type === 'tn2' || type === 'ttn1';
+const isWaybillDocument = computed(() => isWaybillType(selectedDocumentType.value));
+const hasUsableWaybillProductLine = (line: WaybillProductLine) => (
+  String(line.product_query || '').trim().length > 0
+  && Number(line.quantity || 0) > 0
+);
+const selectedOrderProposal = computed(() => {
+  const proposals = props.order.proposals || [];
+  if (props.activeProposalId) {
+    const byId = proposals.find((proposal) => proposal.id === props.activeProposalId && !proposal.is_archived);
+    if (byId) return byId;
+  }
+  return proposals.find((proposal) => proposal.is_selected && !proposal.is_archived)
+    || proposals.find((proposal) => !proposal.is_archived)
+    || null;
+});
+const mapOrderProductLineToWaybillLine = (line: OrderProductLineResponse): WaybillProductLine => ({
+  id: line.id,
+  proposal_id: line.proposal_id,
+  product_id: line.product_id,
+  product_query: line.product_title || '',
+  quantity: Number(line.quantity || 0),
+  price: Number(line.price || 0),
+  cost: Number(line.cost || 0),
+  product_country: (line as any).product_country || null,
+  product_logistics_components: Array.isArray((line as any).product_logistics_components)
+    ? ((line as any).product_logistics_components as ProductLogisticsTemplateComponent[])
+    : [],
+  logistics_components: Array.isArray((line as any).logistics_components) && (line as any).logistics_components.length
+    ? ((line as any).logistics_components as OrderLogisticsComponent[])
+    : null,
+});
+const orderFallbackProductLines = computed<WaybillProductLine[]>(() => {
+  const proposal = selectedOrderProposal.value as OrderProposalResponse | null;
+  if (proposal?.product_lines?.length) {
+    return proposal.product_lines.map(mapOrderProductLineToWaybillLine);
+  }
+  return (props.order.product_lines || []).map(mapOrderProductLineToWaybillLine);
+});
+const resolvedWaybillProductLines = computed(() => (
+  ((props.productLines || []).some(hasUsableWaybillProductLine)
+    ? (props.productLines || [])
+    : orderFallbackProductLines.value
+  ).filter(hasUsableWaybillProductLine)
+));
+const cloneWaybillProductLine = (line: WaybillProductLine): WaybillProductLine => ({
+  ...line,
+  product_logistics_components: (line.product_logistics_components || []).map((component) => ({ ...component })),
+  logistics_components: line.logistics_components?.length
+    ? line.logistics_components.map((component) => ({ ...component }))
+    : null,
+});
+const waybillProductLines = ref<WaybillProductLine[]>([]);
+const syncWaybillProductLines = () => {
+  waybillProductLines.value = resolvedWaybillProductLines.value.map(cloneWaybillProductLine);
+};
+
+const LOGISTICS_COMPONENT_KINDS = new Set(['indoor', 'outdoor', 'accessory', 'other']);
+const normalizeLogisticsKind = (value: unknown): LogisticsComponentKind => {
+  const raw = String(value || '').trim();
+  return LOGISTICS_COMPONENT_KINDS.has(raw) ? (raw as LogisticsComponentKind) : 'other';
+};
+const normalizePositiveInteger = (value: unknown, fallback = 1) => {
+  const parsed = Math.trunc(Number(value));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+const normalizePositiveNumber = (value: unknown, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+};
+const roundToNearest10 = (value: number) => Math.floor((Number(value || 0) + 5) / 10) * 10;
+const roundMoney = (value: number) => Number(Number(value || 0).toFixed(2));
+const allocateLogisticsPrices = (templates: ProductLogisticsTemplateComponent[], price: number): OrderLogisticsComponent[] => {
+  if (!templates.length) return [];
+  const weights = templates.map((item) => Math.max(0, Number(item.price_weight ?? 1)));
+  const totalWeight = weights.some((item) => item > 0)
+    ? weights.reduce((sum, item) => sum + item, 0)
+    : templates.length;
+  let remaining = Number(price || 0);
+  return templates.map((item, index) => {
+    const quantityPerParent = normalizePositiveInteger(item.quantity_per_parent, 1);
+    const componentTotal = index === templates.length - 1
+      ? remaining
+      : roundToNearest10(Number(price || 0) * ((weights[index] || 1) / totalWeight));
+    if (index !== templates.length - 1) remaining -= componentTotal;
+    return {
+      title: item.title,
+      country: item.country || 'Китай',
+      unit: item.unit || 'шт.',
+      quantity_per_parent: quantityPerParent,
+      unit_price: roundMoney(componentTotal / quantityPerParent),
+      kind: normalizeLogisticsKind(item.kind),
+    };
+  });
+};
+const createDefaultWaybillSplit = (line: WaybillProductLine): OrderLogisticsComponent[] => {
+  const title = String(line.product_query || '').trim();
+  const country = line.product_country || 'Китай';
+  return allocateLogisticsPrices(
+    [
+      {
+        title: title ? `Внутренний блок ${title}` : 'Внутренний блок',
+        country,
+        unit: 'шт.',
+        quantity_per_parent: 1,
+        price_weight: 1,
+        kind: 'indoor',
+      },
+      {
+        title: title ? `Наружный блок ${title}` : 'Наружный блок',
+        country,
+        unit: 'шт.',
+        quantity_per_parent: 1,
+        price_weight: 2,
+        kind: 'outdoor',
+      },
+    ],
+    Number(line.price || 0),
+  );
+};
+const ensureWaybillComponents = (line: WaybillProductLine) => {
+  if (line.logistics_components?.length) return;
+  line.logistics_components = line.product_logistics_components?.length
+    ? allocateLogisticsPrices(line.product_logistics_components, Number(line.price || 0))
+    : createDefaultWaybillSplit(line);
+};
+const ensureAllWaybillComponents = () => {
+  waybillProductLines.value.forEach(ensureWaybillComponents);
+};
+const componentPerParentTotal = (component: OrderLogisticsComponent) => (
+  normalizePositiveNumber(component.unit_price, 0) * normalizePositiveInteger(component.quantity_per_parent, 1)
+);
+const lineLogisticsPerParentTotal = (line: WaybillProductLine) => (
+  (line.logistics_components || []).reduce((sum, component) => sum + componentPerParentTotal(component), 0)
+);
+const chooseBalanceComponentIndex = (components: OrderLogisticsComponent[], changedIndex: number | null) => {
+  if (!components.length) return -1;
+  if (components.length === 1) return 0;
+  const changedKind = changedIndex === null ? null : normalizeLogisticsKind(components[changedIndex]?.kind);
+  const preferredKind = changedKind === 'outdoor' ? 'indoor' : 'outdoor';
+  const preferred = components.findIndex((component, index) => index !== changedIndex && normalizeLogisticsKind(component.kind) === preferredKind);
+  if (preferred >= 0) return preferred;
+  const outdoor = components.findIndex((component, index) => index !== changedIndex && normalizeLogisticsKind(component.kind) === 'outdoor');
+  if (outdoor >= 0) return outdoor;
+  return components.findIndex((_, index) => index !== changedIndex);
+};
+const setComponentTotal = (component: OrderLogisticsComponent, total: number) => {
+  const quantityPerParent = normalizePositiveInteger(component.quantity_per_parent, 1);
+  component.unit_price = roundMoney(Math.max(0, total) / quantityPerParent);
+};
+const rebalanceWaybillLine = (line: WaybillProductLine, changedIndex: number | null = null) => {
+  const components = line.logistics_components || [];
+  if (!components.length) return;
+  const targetIndex = chooseBalanceComponentIndex(components, changedIndex);
+  if (targetIndex < 0) return;
+  const target = components[targetIndex];
+  if (!target) return;
+  const linePrice = Number(line.price || 0);
+
+  if (changedIndex !== null && components[changedIndex]) {
+    const fixedWithoutTargetAndChanged = components.reduce((sum, component, index) => (
+      index === targetIndex || index === changedIndex ? sum : sum + componentPerParentTotal(component)
+    ), 0);
+    const maxChangedTotal = Math.max(0, linePrice - fixedWithoutTargetAndChanged);
+    const changed = components[changedIndex]!;
+    if (componentPerParentTotal(changed) > maxChangedTotal) {
+      setComponentTotal(changed, maxChangedTotal);
+    }
+  }
+
+  const fixedWithoutTarget = components.reduce((sum, component, index) => (
+    index === targetIndex ? sum : sum + componentPerParentTotal(component)
+  ), 0);
+  setComponentTotal(target, linePrice - fixedWithoutTarget);
+};
+const handleWaybillUnitPriceInput = (line: WaybillProductLine, componentIndex: number, event: Event) => {
+  const component = line.logistics_components?.[componentIndex];
+  if (!component) return;
+  component.unit_price = normalizePositiveNumber((event.target as HTMLInputElement).value, 0);
+  rebalanceWaybillLine(line, componentIndex);
+};
+const handleWaybillQuantityInput = (line: WaybillProductLine, componentIndex: number, event: Event) => {
+  const component = line.logistics_components?.[componentIndex];
+  if (!component) return;
+  component.quantity_per_parent = normalizePositiveInteger((event.target as HTMLInputElement).value, 1);
+  rebalanceWaybillLine(line, componentIndex);
+};
+const addWaybillComponent = (line: WaybillProductLine) => {
+  ensureWaybillComponents(line);
+  line.logistics_components = [
+    ...(line.logistics_components || []),
+    {
+      title: '',
+      country: line.product_country || 'Китай',
+      unit: 'шт.',
+      quantity_per_parent: 1,
+      unit_price: 0,
+      kind: 'other',
+    },
+  ];
+  rebalanceWaybillLine(line, null);
+};
+const removeWaybillComponent = (line: WaybillProductLine, componentIndex: number) => {
+  if (!line.logistics_components) return;
+  line.logistics_components.splice(componentIndex, 1);
+  if (!line.logistics_components.length) {
+    line.logistics_components = null;
+    return;
+  }
+  rebalanceWaybillLine(line, null);
+};
+const lineLogisticsHasMismatch = (line: WaybillProductLine) => (
+  Boolean(line.logistics_components?.length) && Math.abs(lineLogisticsPerParentTotal(line) - Number(line.price || 0)) >= 0.01
+);
 
 const getRoleLabel = (value?: string | null) => (
   DOCUMENT_ROLE_OPTIONS.find((option) => option.value === normalizeRoleType(value))?.label || 'Продавец / Покупатель'
@@ -246,6 +498,7 @@ const resetFromOrder = () => {
 
 watch(() => props.order.id, () => {
   resetFromOrder();
+  waybillProductLines.value = [];
   selectedDocumentType.value = suggestedDocumentType.value;
   isCreatePanelOpen.value = false;
   showAdvancedSettings.value = false;
@@ -341,6 +594,47 @@ const openCreatePanel = () => {
   selectedDocumentType.value = suggestedDocumentType.value;
   showAdvancedSettings.value = false;
   isCreatePanelOpen.value = true;
+  if (isWaybillDocument.value) {
+    syncWaybillProductLines();
+    ensureAllWaybillComponents();
+  }
+};
+
+const selectDocumentType = (type: string) => {
+  selectedDocumentType.value = type;
+  if (isWaybillType(type)) {
+    syncWaybillProductLines();
+    ensureAllWaybillComponents();
+  }
+};
+
+const activeWaybillProposalId = computed(() => props.activeProposalId ?? selectedOrderProposal.value?.id ?? null);
+
+const saveWaybillProductLines = async () => {
+  const lines = waybillProductLines.value;
+  if (!lines.length) return true;
+  const missingProduct = lines.find((line) => !Number(line.product_id || 0));
+  if (missingProduct) {
+    notify('Для накладной выберите товар из каталога в товарной строке.', 'error');
+    return false;
+  }
+
+  try {
+    await ManagerOrdersService.patchManagerOrder(props.order.id, {
+      products: lines.map((line) => ({
+        product_id: Number(line.product_id),
+        quantity: Math.trunc(Number(line.quantity) || 0),
+        price: Math.round(Number(line.price) || 0),
+        cost: line.cost == null ? null : Math.round(Number(line.cost) || 0),
+        proposal_id: activeWaybillProposalId.value ?? undefined,
+        logistics_components: line.logistics_components?.length ? line.logistics_components : null,
+      })),
+    });
+    return true;
+  } catch (error) {
+    notify(`Ошибка сохранения состава накладной: ${getApiErrorMessage(error)}`, 'error');
+    return false;
+  }
 };
 
 const handleDocumentsSent = () => {
@@ -351,8 +645,13 @@ const handleDocumentsSent = () => {
 const generateDocument = async (type: string) => {
   isGeneratingDoc.value = true;
   try {
+    if (isWaybillType(type)) {
+      if (!waybillProductLines.value.length) syncWaybillProductLines();
+      ensureAllWaybillComponents();
+    }
     const beforeResult = await props.beforeGenerate?.(type);
     if (beforeResult === false) return;
+    if (isWaybillType(type) && !(await saveWaybillProductLines())) return;
     if (!(await saveAdditionalConditions(false))) return;
     if (type === 'contract' && isCompanyOrder.value) {
       await useOneTimeContractForClosingDocs();
@@ -360,7 +659,7 @@ const generateDocument = async (type: string) => {
     const template = (type === 'contract' && selectedContractTemplateId.value)
       ? selectedContractTemplate.value
       : undefined;
-    const proposalId = type === 'offer' ? (props.activeProposalId ?? undefined) : undefined;
+    const proposalId = (type === 'offer' || isWaybillType(type)) ? (activeWaybillProposalId.value ?? undefined) : undefined;
     const res = await ManagerOrdersService.generateManagerOrderDocument(
       props.order.id,
       type,
@@ -647,7 +946,7 @@ const registerExternalContract = async () => {
                 :class="selectedDocumentType === dtype.type ? 'border-teal-500 bg-white text-teal-700 shadow-sm dark:bg-slate-900 dark:text-teal-300' : 'border-slate-200 bg-white/80 text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300'"
                 :disabled="isDocumentTypeLocked(dtype.type)"
                 :title="isDocumentTypeLocked(dtype.type) ? lockedDocumentTitle(dtype.type) : ''"
-                @click="selectedDocumentType = dtype.type"
+                @click="selectDocumentType(dtype.type)"
               >
                 <span>{{ dtype.label }}</span>
                 <span v-if="isDocumentTypeLocked(dtype.type)" class="material-icons-round text-[16px] text-amber-500">lock</span>
@@ -794,6 +1093,119 @@ const registerExternalContract = async () => {
         </p>
       </div>
 
+          <div
+            v-if="isWaybillDocument"
+            class="rounded-xl border border-teal-200 bg-white p-3 dark:border-teal-800/70 dark:bg-slate-900/70"
+          >
+            <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p class="text-xs font-semibold text-slate-700 dark:text-slate-200">Шаг 3: состав накладной</p>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400">
+                  {{ waybillProductLines.length }} товар. поз. в активном предложении
+                </p>
+              </div>
+            </div>
+
+            <div v-if="waybillProductLines.length" class="space-y-3">
+              <div
+                v-for="(line, lineIndex) in waybillProductLines"
+                :key="`waybill-line-${line.product_id}-${lineIndex}`"
+                class="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700/60 dark:bg-slate-800/40"
+              >
+                <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div class="min-w-0">
+                    <p class="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{{ line.product_query || 'Товар' }}</p>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                      {{ line.logistics_components?.length || 0 }} поз. · {{ formatMoney(line.price) }} за комплект · кол-во {{ line.quantity }}
+                    </p>
+                  </div>
+                  <span
+                    class="w-fit rounded-lg px-2 py-1 text-xs font-semibold"
+                    :class="lineLogisticsHasMismatch(line) ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' : 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300'"
+                  >
+                    {{ lineLogisticsHasMismatch(line) ? 'Проверьте сумму' : 'Сумма совпадает' }}
+                  </span>
+                </div>
+
+                <div class="space-y-2">
+                  <div
+                    v-for="(component, componentIndex) in line.logistics_components || []"
+                    :key="`waybill-component-${line.product_id}-${componentIndex}`"
+                    class="grid gap-2 rounded-lg border border-white bg-white p-2 dark:border-slate-700/60 dark:bg-slate-900/80 md:grid-cols-[1.4fr_100px_70px_80px_95px_32px]"
+                  >
+                    <textarea
+                      v-model="component.title"
+                      class="field-input min-h-[38px] resize-none text-xs"
+                      rows="1"
+                      placeholder="Название позиции"
+                    />
+                    <input v-model="component.country" class="field-input h-9 text-xs" placeholder="Страна" />
+                    <input v-model="component.unit" class="field-input h-9 text-xs" placeholder="Ед." />
+                    <input
+                      :value="component.quantity_per_parent"
+                      type="number"
+                      min="1"
+                      class="field-input h-9 text-xs"
+                      title="Количество на комплект"
+                      @input="handleWaybillQuantityInput(line, componentIndex, $event)"
+                    />
+                    <input
+                      :value="component.unit_price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      class="field-input h-9 text-xs"
+                      title="Цена за единицу"
+                      @input="handleWaybillUnitPriceInput(line, componentIndex, $event)"
+                    />
+                    <button
+                      type="button"
+                      class="flex h-9 w-8 items-center justify-center rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30"
+                      @click="removeWaybillComponent(line, componentIndex)"
+                    >
+                      <span class="material-icons-round text-[18px]">delete</span>
+                    </button>
+                    <select
+                      v-model="component.kind"
+                      class="field-input h-9 text-xs md:col-span-2"
+                      @change="rebalanceWaybillLine(line, null)"
+                    >
+                      <option value="indoor">внутренний блок</option>
+                      <option value="outdoor">наружный блок</option>
+                      <option value="accessory">аксессуар</option>
+                      <option value="other">прочее</option>
+                    </select>
+                    <div class="flex items-center text-xs font-semibold text-slate-600 dark:text-slate-300 md:col-span-4">
+                      По строке: {{ formatMoney(component.unit_price * component.quantity_per_parent * line.quantity) }}
+                    </div>
+                  </div>
+
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <p
+                      v-if="lineLogisticsHasMismatch(line)"
+                      class="text-xs font-semibold text-amber-700 dark:text-amber-300"
+                    >
+                      Состав: {{ formatMoney(lineLogisticsPerParentTotal(line)) }}, товар: {{ formatMoney(line.price) }}.
+                    </p>
+                    <span v-else class="text-xs text-teal-700 dark:text-teal-300">
+                      Состав: {{ formatMoney(lineLogisticsPerParentTotal(line)) }}.
+                    </span>
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                      @click="addWaybillComponent(line)"
+                    >
+                      + позиция
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-4 text-center text-xs font-semibold text-amber-700 dark:border-amber-900/70 dark:bg-amber-950/20 dark:text-amber-300">
+              В активном предложении нет товаров для накладной.
+            </div>
+          </div>
+
           <div v-if="showsAdditionalConditions">
             <button
               type="button"
@@ -814,7 +1226,9 @@ const registerExternalContract = async () => {
           </div>
 
           <div class="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700/50 dark:bg-slate-900/60">
-            <p class="mb-2 text-xs font-semibold text-slate-700 dark:text-slate-200">Шаг 3: проверьте перед созданием</p>
+            <p class="mb-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
+              {{ isWaybillDocument ? 'Шаг 4: проверьте перед созданием' : 'Шаг 3: проверьте перед созданием' }}
+            </p>
             <dl class="grid gap-2 text-xs sm:grid-cols-2">
               <div v-for="item in createChecklist" :key="item.label" class="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/70">
                 <dt class="text-slate-500 dark:text-slate-400">{{ item.label }}</dt>

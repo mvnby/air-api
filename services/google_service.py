@@ -106,7 +106,8 @@ class GoogleDocsService:
                        start_cell_addr: str = None,
                        target_sheet_name: str = None,
                        merge_cols: List[tuple] = None, 
-                       draw_borders: bool = False) -> str:
+                       draw_borders: bool = False,
+                       sheet_format_ranges: Optional[List[Dict[str, Any]]] = None) -> str:
         """
         Генерация документа на основе Google Sheets.
         start_cell_addr: Адрес ячейки (напр. "A12").
@@ -145,7 +146,7 @@ class GoogleDocsService:
             if table_data and len(table_data) > 0:
                 self._fill_sheet_table(sheets_service, new_sheet_id, table_data, 
                                        start_cell_addr, target_sheet_name,
-                                       merge_cols, draw_borders)
+                                       merge_cols, draw_borders, sheet_format_ranges)
 
             return f"https://docs.google.com/spreadsheets/d/{new_sheet_id}/edit"
             
@@ -229,7 +230,8 @@ class GoogleDocsService:
 
     def _fill_sheet_table(self, sheets_service, sheet_id, data: List[List[str]], 
                           start_cell_addr=None, target_sheet_name=None,
-                          merge_cols: List[tuple] = None, draw_borders: bool = False):
+                          merge_cols: List[tuple] = None, draw_borders: bool = False,
+                          sheet_format_ranges: Optional[List[Dict[str, Any]]] = None):
         """
         merge_cols: список кортежей (start_col_idx, end_col_idx) для объединения ВНУТРИ каждой строки данных.
                     Индексы 0-based. start включительно, end исключительно.
@@ -359,6 +361,54 @@ class GoogleDocsService:
                     'innerVertical': {'style': 'SOLID', 'width': 1, 'color': {'red': 0, 'green': 0, 'blue': 0}},
                 }
             })
+
+        # 2.3.1. Выравнивание данных в таблицах Google Sheets.
+        # Диапазоны задаются абсолютными 0-based колонками Google Sheets.
+        for fmt in sheet_format_ranges or []:
+            cols = fmt.get('cols')
+            alignment = fmt.get('alignment')
+            if not cols or len(cols) != 2 or alignment not in {'LEFT', 'CENTER', 'RIGHT'}:
+                continue
+
+            row_mode = fmt.get('rows', 'all')
+            row_start = start_row
+            row_end = start_row + len(data)
+            if row_mode == 'body':
+                row_end = max(row_start, row_end - 1)
+            elif row_mode == 'footer':
+                row_start = max(row_start, row_end - 1)
+
+            if row_end <= row_start:
+                continue
+
+            user_format = {
+                'horizontalAlignment': alignment,
+                'verticalAlignment': 'MIDDLE',
+            }
+            fields = [
+                'userEnteredFormat.horizontalAlignment',
+                'userEnteredFormat.verticalAlignment',
+            ]
+            wrap_strategy = fmt.get('wrap_strategy')
+            if wrap_strategy in {'WRAP', 'OVERFLOW_CELL', 'CLIP'}:
+                user_format['wrapStrategy'] = wrap_strategy
+                fields.append('userEnteredFormat.wrapStrategy')
+
+            reqs.append({
+                'repeatCell': {
+                    'range': {
+                        'sheetId': sht_id,
+                        'startRowIndex': row_start,
+                        'endRowIndex': row_end,
+                        'startColumnIndex': cols[0],
+                        'endColumnIndex': cols[1],
+                    },
+                    'cell': {
+                        'userEnteredFormat': user_format
+                    },
+                    'fields': ','.join(fields),
+                }
+            })
         
         # 2.4 Удаление старой строки-шаблона (которая оказалась ниже вставленных)
         # Она теперь индексируется как start_row + rows_to_insert
@@ -373,6 +423,18 @@ class GoogleDocsService:
                 }
             }
         })
+
+        if sheet_format_ranges:
+            reqs.append({
+                'autoResizeDimensions': {
+                    'dimensions': {
+                        'sheetId': sht_id,
+                        'dimension': 'ROWS',
+                        'startIndex': start_row,
+                        'endIndex': start_row + len(data),
+                    }
+                }
+            })
 
         try:
             sheets_service.spreadsheets().batchUpdate(spreadsheetId=sheet_id, body={'requests': reqs}).execute()

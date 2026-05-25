@@ -2,6 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { OrderProductLogisticsComponent } from './OrderProductLogisticsComponent';
+import type { ProductLogisticsComponentTemplate } from './ProductLogisticsComponentTemplate';
 export type OrderProductLineResponse = {
     id: number;
     proposal_id?: (number | null);
@@ -13,5 +15,8 @@ export type OrderProductLineResponse = {
     is_installation_included: boolean;
     installation_price: number;
     line_total: number;
+    product_country?: (string | null);
+    product_logistics_components?: Array<ProductLogisticsComponentTemplate>;
+    logistics_components?: Array<OrderProductLogisticsComponent>;
 };
 

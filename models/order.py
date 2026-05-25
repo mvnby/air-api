@@ -218,6 +218,7 @@ class OrderProductLink(SQLModel, table=True):
     is_installation_included: bool = Field(default=False)
     installation_price: int = Field(default=0)
     installation_details: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    logistics_components: Optional[List[Dict[str, Any]]] = Field(default=None, sa_column=Column(JSON))
 
     order: "Order" = Relationship(back_populates="product_links")
     proposal: Optional[OrderProposal] = Relationship(back_populates="product_links")

@@ -345,6 +345,70 @@ class OrderCustomerContractBrief(BaseModel):
     edit_url: Optional[str] = None
 
 
+LOGISTICS_COMPONENT_KINDS = {"indoor", "outdoor", "accessory", "other"}
+
+
+class OrderProductLogisticsComponent(BaseModel):
+    title: str
+    country: Optional[str] = None
+    unit: str = "шт."
+    quantity_per_parent: int = 1
+    unit_price: float = 0.0
+    kind: Optional[str] = None
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str) -> str:
+        cleaned = " ".join(str(value or "").split())
+        if not cleaned:
+            raise ValueError("component title is required")
+        return cleaned
+
+    @field_validator("country", mode="before")
+    @classmethod
+    def normalize_country(cls, value: Optional[str]) -> Optional[str]:
+        cleaned = " ".join(str(value or "").split())
+        return cleaned or None
+
+    @field_validator("unit")
+    @classmethod
+    def normalize_unit(cls, value: str) -> str:
+        return " ".join(str(value or "").split()) or "шт."
+
+    @field_validator("quantity_per_parent")
+    @classmethod
+    def validate_quantity_per_parent(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("quantity_per_parent must be greater than zero")
+        return value
+
+    @field_validator("unit_price")
+    @classmethod
+    def validate_unit_price(cls, value: float) -> float:
+        if value < 0:
+            raise ValueError("unit_price must be >= 0")
+        return value
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, value: Optional[str]) -> Optional[str]:
+        cleaned = " ".join(str(value or "").split())
+        if not cleaned:
+            return None
+        if cleaned not in LOGISTICS_COMPONENT_KINDS:
+            raise ValueError("invalid logistics component kind")
+        return cleaned
+
+
+class ProductLogisticsComponentTemplate(BaseModel):
+    title: str
+    country: Optional[str] = None
+    unit: str = "шт."
+    quantity_per_parent: int = 1
+    price_weight: float = 1.0
+    kind: Optional[str] = None
+
+
 class OrderProductLineResponse(BaseModel):
     id: int
     proposal_id: Optional[int] = None
@@ -356,6 +420,9 @@ class OrderProductLineResponse(BaseModel):
     is_installation_included: bool
     installation_price: int
     line_total: int
+    product_country: Optional[str] = None
+    product_logistics_components: List[ProductLogisticsComponentTemplate] = Field(default_factory=list)
+    logistics_components: List[OrderProductLogisticsComponent] = Field(default_factory=list)
 
 
 class OrderServiceLineResponse(BaseModel):
@@ -594,6 +661,7 @@ class ManagerOrderProductLinePayload(BaseModel):
     quantity: int
     price: int
     cost: Optional[int] = None
+    logistics_components: Optional[List[OrderProductLogisticsComponent]] = None
 
 
 class ManagerOrderServiceLinePayload(BaseModel):

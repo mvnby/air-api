@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { OrderProductLogisticsComponent } from './OrderProductLogisticsComponent';
 export type ManagerOrderProductLinePayload = {
     link_id?: (number | null);
     proposal_id?: (number | null);
@@ -9,5 +10,6 @@ export type ManagerOrderProductLinePayload = {
     quantity: number;
     price: number;
     cost?: (number | null);
+    logistics_components?: (Array<OrderProductLogisticsComponent> | null);
 };
 
