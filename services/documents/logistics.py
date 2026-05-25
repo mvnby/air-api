@@ -20,7 +20,8 @@ class LogisticsSheetStrategy(BaseDocumentStrategy):
         doc_number: Optional[str] = None,
         document_date: Optional[datetime] = None,
     ) -> str:
-        await self.fetch_order()
+        if not self.order:
+            await self.fetch_order()
         if not self.order: return "Order not found"
 
         template_id = template_id or TEMPLATES.get(doc_type)

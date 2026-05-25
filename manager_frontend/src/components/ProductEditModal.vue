@@ -1701,7 +1701,7 @@ const unlinkSupplierOffer = async (offer: any) => {
                                         class="text-xs bg-white dark:bg-slate-800 border border-teal-200 dark:border-teal-800 px-2.5 py-1 rounded-lg hover:bg-teal-50 dark:hover:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-bold flex items-center gap-1 transition-colors shadow-sm"
                                         @click="applyTwoBlockLogisticsTemplate"
                                     >
-                                        Внутренний + наружный 1/3
+                                        Внутренний + наружный
                                     </button>
                                     <button
                                         type="button"

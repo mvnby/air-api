@@ -897,6 +897,131 @@ async def test_manager_order_offer_generation_uses_requested_proposal_and_create
 
 
 @pytest.mark.asyncio
+async def test_manager_order_tn2_generation_uses_requested_proposal_logistics_components(async_client, db, monkeypatch):
+    customer = Customer(name="Waybill Proposal", phone="+375296666669", type=CustomerType.individual)
+    p1 = Product(title="Waybill P1", slug="waybill-p1", price=1000, area=25)
+    p2 = Product(title="Waybill P2", slug="waybill-p2", price=1803, area=35)
+    db.add(customer)
+    db.add(p1)
+    db.add(p2)
+    await db.commit()
+    await db.refresh(customer)
+    await db.refresh(p1)
+    await db.refresh(p2)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+    first_resp = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={"products": [{"product_id": p1.id, "quantity": 1, "price": 1000, "cost": 700}], "services": []},
+        headers=headers,
+    )
+    assert first_resp.status_code == 200
+    default_proposal = first_resp.json()["proposals"][0]
+
+    duplicate_resp = await async_client.post(
+        f"/api/manager/orders/{order.id}/proposals/{default_proposal['id']}/duplicate",
+        json={"name": "Накладная"},
+        headers=headers,
+    )
+    assert duplicate_resp.status_code == 200
+    second_proposal = next(item for item in duplicate_resp.json()["proposals"] if item["name"] == "Накладная")
+
+    edit_second_resp = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={
+            "products": [
+                {
+                    "product_id": p2.id,
+                    "quantity": 1,
+                    "price": 1803,
+                    "cost": 1300,
+                    "proposal_id": second_proposal["id"],
+                    "logistics_components": [
+                        {
+                            "title": "Внутренний блок WAY-IN",
+                            "country": "Китай",
+                            "unit": "шт.",
+                            "quantity_per_parent": 1,
+                            "unit_price": 600,
+                            "kind": "indoor",
+                        },
+                        {
+                            "title": "Наружный блок WAY-OUT",
+                            "country": "Китай",
+                            "unit": "шт.",
+                            "quantity_per_parent": 1,
+                            "unit_price": 1203,
+                            "kind": "outdoor",
+                        },
+                    ],
+                },
+            ],
+            "services": [],
+        },
+        headers=headers,
+    )
+    assert edit_second_resp.status_code == 200
+
+    contract = OrderDocument(
+        order_id=order.id,
+        doc_type="contract",
+        number="Д-TEST",
+        date=datetime.now(),
+        google_file_id="contract-file",
+        google_edit_url="https://docs.google.com/document/d/contract-file/edit",
+    )
+    db.add(contract)
+    await db.commit()
+
+    sheet_captures = []
+
+    class _FakeGoogleSheetService:
+        def generate_sheet(
+            self,
+            template_id,
+            doc_title,
+            replacements,
+            table_rows,
+            start_cell_addr,
+            target_sheet_name,
+            merge_cols,
+            draw_borders,
+        ):
+            _ = (template_id, doc_title, replacements, start_cell_addr, target_sheet_name, merge_cols, draw_borders)
+            sheet_captures.append(table_rows)
+            return f"https://docs.google.com/spreadsheets/d/waybill-{len(sheet_captures)}/edit"
+
+    from services.documents import logistics
+
+    monkeypatch.setattr(logistics, "get_google_service", lambda: _FakeGoogleSheetService())
+
+    first_tn2_resp = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/tn2",
+        params={"proposal_id": second_proposal["id"]},
+        headers=headers,
+    )
+    assert first_tn2_resp.status_code == 200, first_tn2_resp.text
+    first_tn2 = first_tn2_resp.json()
+    assert first_tn2["proposal_id"] == second_proposal["id"]
+    assert sheet_captures[-1][0][0].startswith("Внутренний блок WAY-IN")
+    assert sheet_captures[-1][1][0].startswith("Наружный блок WAY-OUT")
+    assert "Waybill P1" not in "\n".join(str(cell) for row in sheet_captures[-1] for cell in row)
+
+    second_tn2_resp = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/tn2",
+        params={"proposal_id": second_proposal["id"]},
+        headers=headers,
+    )
+    assert second_tn2_resp.status_code == 200, second_tn2_resp.text
+    assert second_tn2_resp.json()["doc_id"] != first_tn2["doc_id"]
+
+
+@pytest.mark.asyncio
 async def test_manager_order_patch_validation_errors(async_client, db):
     customer = Customer(name="Validation", phone="+375299999999", type=CustomerType.individual)
     db.add(customer)

@@ -19,6 +19,7 @@ class DocumentService:
     """Сервис для работы с документами заказов через Google Drive"""
 
     ALLOWED_DOC_TYPES = {"contract", "invoice", "work_order", "act", "defect_act", "offer", "tn2", "ttn1"}
+    PROPOSAL_SCOPED_DOC_TYPES = {"offer", "tn2", "ttn1"}
     ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".doc", ".docx"}
     DEFAULT_UPLOAD_MIME_TYPES = {
         ".pdf": "application/pdf",
@@ -137,7 +138,7 @@ class DocumentService:
         Returns:
             OrderDocument объект с данными о документе
         """
-        if doc_type == "offer":
+        if doc_type in DocumentService.PROPOSAL_SCOPED_DOC_TYPES:
             return await DocumentService._create_new_document(
                 session,
                 order_id,
@@ -529,7 +530,11 @@ class DocumentService:
         # 4. Получаем стратегию для подготовки данных
         strategy = DocumentFactory.get_strategy(doc_type, session, order_id)
         await strategy.fetch_order()
-        effective_proposal_id = DocumentService._apply_offer_proposal(strategy.order, proposal_id) if doc_type == "offer" else None
+        effective_proposal_id = (
+            DocumentService._apply_proposal_lines(strategy.order, proposal_id)
+            if doc_type in DocumentService.PROPOSAL_SCOPED_DOC_TYPES
+            else None
+        )
         if doc_type == "contract" and strategy.order:
             if not strategy.order.document_role_type:
                 strategy.order.document_role_type = await DocumentService._get_contract_template_role_type(session, template_id)
@@ -634,7 +639,7 @@ class DocumentService:
         return new_doc
 
     @staticmethod
-    def _apply_offer_proposal(order: Optional[Order], proposal_id: Optional[int]) -> Optional[int]:
+    def _apply_proposal_lines(order: Optional[Order], proposal_id: Optional[int]) -> Optional[int]:
         if not order:
             return None
 
