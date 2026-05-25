@@ -10,3 +10,4 @@ export type OrderProductLogisticsComponent = {
     unit_price?: number;
     kind?: (string | null);
 };
+

@@ -10,3 +10,4 @@ export type ProductLogisticsComponentTemplate = {
     price_weight?: number;
     kind?: (string | null);
 };
+
