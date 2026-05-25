@@ -34,7 +34,7 @@ type OrderLogisticsComponent = {
 };
 
 type WaybillProductLine = {
-  product_id: number;
+  product_id?: number | null;
   product_query: string;
   quantity: number;
   price: number;
@@ -114,7 +114,10 @@ const normalizeRoleType = (value: unknown): DocumentRoleType => {
 const isWaybillType = (type: string) => type === 'tn2' || type === 'ttn1';
 const isWaybillDocument = computed(() => isWaybillType(selectedDocumentType.value));
 const waybillProductLines = computed(() => (
-  (props.productLines || []).filter((line) => line.product_id && Number(line.quantity || 0) > 0)
+  (props.productLines || []).filter((line) => (
+    String(line.product_query || '').trim().length > 0
+    && Number(line.quantity || 0) > 0
+  ))
 ));
 
 const LOGISTICS_COMPONENT_KINDS = new Set(['indoor', 'outdoor', 'accessory', 'other']);
