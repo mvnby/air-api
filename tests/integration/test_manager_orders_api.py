@@ -701,6 +701,7 @@ async def test_manager_order_patch_lines_persists_logistics_components(async_cli
                     {
                         "title": "Внутренний блок TEST-IN",
                         "country": "Китай",
+                        "unit": "шт.",
                         "quantity_per_parent": 1,
                         "unit_price": 600,
                         "kind": "indoor",
@@ -708,6 +709,7 @@ async def test_manager_order_patch_lines_persists_logistics_components(async_cli
                     {
                         "title": "Наружный блок TEST-OUT",
                         "country": "Китай",
+                        "unit": "шт.",
                         "quantity_per_parent": 1,
                         "unit_price": 1203,
                         "kind": "outdoor",
