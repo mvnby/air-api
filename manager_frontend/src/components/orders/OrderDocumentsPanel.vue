@@ -6,6 +6,8 @@ import type {
   ManagerCustomerContractItemResponse,
   ManagerOrderDetailResponse,
   ManagerOrderDocumentItem,
+  OrderProductLineResponse,
+  OrderProposalResponse,
 } from '../../client';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import AdditionalConditionsLibrary from './AdditionalConditionsLibrary.vue';
@@ -34,10 +36,13 @@ type OrderLogisticsComponent = {
 };
 
 type WaybillProductLine = {
+  id?: number | null;
+  proposal_id?: number | null;
   product_id?: number | null;
   product_query: string;
   quantity: number;
   price: number;
+  cost?: number | null;
   product_country?: string | null;
   product_logistics_components?: ProductLogisticsTemplateComponent[];
   logistics_components?: OrderLogisticsComponent[] | null;
@@ -113,11 +118,48 @@ const normalizeRoleType = (value: unknown): DocumentRoleType => {
 
 const isWaybillType = (type: string) => type === 'tn2' || type === 'ttn1';
 const isWaybillDocument = computed(() => isWaybillType(selectedDocumentType.value));
+const hasUsableWaybillProductLine = (line: WaybillProductLine) => (
+  String(line.product_query || '').trim().length > 0
+  && Number(line.quantity || 0) > 0
+);
+const selectedOrderProposal = computed(() => {
+  const proposals = props.order.proposals || [];
+  if (props.activeProposalId) {
+    const byId = proposals.find((proposal) => proposal.id === props.activeProposalId && !proposal.is_archived);
+    if (byId) return byId;
+  }
+  return proposals.find((proposal) => proposal.is_selected && !proposal.is_archived)
+    || proposals.find((proposal) => !proposal.is_archived)
+    || null;
+});
+const mapOrderProductLineToWaybillLine = (line: OrderProductLineResponse): WaybillProductLine => ({
+  id: line.id,
+  proposal_id: line.proposal_id,
+  product_id: line.product_id,
+  product_query: line.product_title || '',
+  quantity: Number(line.quantity || 0),
+  price: Number(line.price || 0),
+  cost: Number(line.cost || 0),
+  product_country: (line as any).product_country || null,
+  product_logistics_components: Array.isArray((line as any).product_logistics_components)
+    ? ((line as any).product_logistics_components as ProductLogisticsTemplateComponent[])
+    : [],
+  logistics_components: Array.isArray((line as any).logistics_components) && (line as any).logistics_components.length
+    ? ((line as any).logistics_components as OrderLogisticsComponent[])
+    : null,
+});
+const orderFallbackProductLines = computed<WaybillProductLine[]>(() => {
+  const proposal = selectedOrderProposal.value as OrderProposalResponse | null;
+  if (proposal?.product_lines?.length) {
+    return proposal.product_lines.map(mapOrderProductLineToWaybillLine);
+  }
+  return (props.order.product_lines || []).map(mapOrderProductLineToWaybillLine);
+});
 const waybillProductLines = computed(() => (
-  (props.productLines || []).filter((line) => (
-    String(line.product_query || '').trim().length > 0
-    && Number(line.quantity || 0) > 0
-  ))
+  ((props.productLines || []).some(hasUsableWaybillProductLine)
+    ? (props.productLines || [])
+    : orderFallbackProductLines.value
+  ).filter(hasUsableWaybillProductLine)
 ));
 
 const LOGISTICS_COMPONENT_KINDS = new Set(['indoor', 'outdoor', 'accessory', 'other']);
@@ -548,6 +590,35 @@ const selectDocumentType = (type: string) => {
   if (isWaybillType(type)) ensureAllWaybillComponents();
 };
 
+const activeWaybillProposalId = computed(() => props.activeProposalId ?? selectedOrderProposal.value?.id ?? null);
+
+const saveWaybillProductLines = async () => {
+  const lines = waybillProductLines.value;
+  if (!lines.length) return true;
+  const missingProduct = lines.find((line) => !Number(line.product_id || 0));
+  if (missingProduct) {
+    notify('Для накладной выберите товар из каталога в товарной строке.', 'error');
+    return false;
+  }
+
+  try {
+    await ManagerOrdersService.patchManagerOrder(props.order.id, {
+      products: lines.map((line) => ({
+        product_id: Number(line.product_id),
+        quantity: Math.trunc(Number(line.quantity) || 0),
+        price: Math.round(Number(line.price) || 0),
+        cost: line.cost == null ? null : Math.round(Number(line.cost) || 0),
+        proposal_id: activeWaybillProposalId.value ?? undefined,
+        logistics_components: line.logistics_components?.length ? line.logistics_components : null,
+      })),
+    });
+    return true;
+  } catch (error) {
+    notify(`Ошибка сохранения состава накладной: ${getApiErrorMessage(error)}`, 'error');
+    return false;
+  }
+};
+
 const handleDocumentsSent = () => {
   notify('Письмо отправлено', 'success');
   emit('refresh');
@@ -559,6 +630,7 @@ const generateDocument = async (type: string) => {
     if (isWaybillType(type)) ensureAllWaybillComponents();
     const beforeResult = await props.beforeGenerate?.(type);
     if (beforeResult === false) return;
+    if (isWaybillType(type) && !(await saveWaybillProductLines())) return;
     if (!(await saveAdditionalConditions(false))) return;
     if (type === 'contract' && isCompanyOrder.value) {
       await useOneTimeContractForClosingDocs();
@@ -566,7 +638,7 @@ const generateDocument = async (type: string) => {
     const template = (type === 'contract' && selectedContractTemplateId.value)
       ? selectedContractTemplate.value
       : undefined;
-    const proposalId = (type === 'offer' || isWaybillType(type)) ? (props.activeProposalId ?? undefined) : undefined;
+    const proposalId = (type === 'offer' || isWaybillType(type)) ? (activeWaybillProposalId.value ?? undefined) : undefined;
     const res = await ManagerOrdersService.generateManagerOrderDocument(
       props.order.id,
       type,
