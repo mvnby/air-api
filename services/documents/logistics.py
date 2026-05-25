@@ -59,7 +59,8 @@ class LogisticsSheetStrategy(BaseDocumentStrategy):
             start_cell_addr=config['start_addr'], 
             target_sheet_name=config['sheet_name'],
             merge_cols=config['merge_list'],
-            draw_borders=True
+            draw_borders=True,
+            sheet_format_ranges=config.get('format_ranges'),
         )
 
     def _get_sheet_config(self, doc_type: str) -> dict:
@@ -81,7 +82,17 @@ class LogisticsSheetStrategy(BaseDocumentStrategy):
                     (22, 24),    # W-X (Seats)
                     (24, 26),    # Y-Z (Mass)
                     (26, 30)     # AA-AD (Note)
-                ]
+                ],
+                "format_ranges": [
+                    {"cols": (1, 9), "alignment": "LEFT", "rows": "body", "wrap_strategy": "WRAP"},
+                    {"cols": (1, 9), "alignment": "CENTER", "rows": "footer"},
+                    {"cols": (9, 10), "alignment": "CENTER"},
+                    {"cols": (10, 11), "alignment": "RIGHT"},
+                    {"cols": (11, 17), "alignment": "RIGHT"},
+                    {"cols": (17, 18), "alignment": "CENTER"},
+                    {"cols": (18, 26), "alignment": "RIGHT"},
+                    {"cols": (26, 30), "alignment": "CENTER"},
+                ],
             }
         else:
              # TN-2
@@ -96,7 +107,17 @@ class LogisticsSheetStrategy(BaseDocumentStrategy):
                 "merge_list": [
                     (1, 9), (11, 14), (14, 18), 
                     (19, 22), (22, 26), (26, 30)
-                ]
+                ],
+                "format_ranges": [
+                    {"cols": (1, 9), "alignment": "LEFT", "rows": "body", "wrap_strategy": "WRAP"},
+                    {"cols": (1, 9), "alignment": "CENTER", "rows": "footer"},
+                    {"cols": (9, 10), "alignment": "CENTER"},
+                    {"cols": (10, 11), "alignment": "RIGHT"},
+                    {"cols": (11, 18), "alignment": "RIGHT"},
+                    {"cols": (18, 19), "alignment": "CENTER"},
+                    {"cols": (19, 26), "alignment": "RIGHT"},
+                    {"cols": (26, 30), "alignment": "CENTER"},
+                ],
             }
 
     def _prepare_sheet_data(self, doc_type: str) -> Tuple[List[List[str]], Dict[str, str]]:

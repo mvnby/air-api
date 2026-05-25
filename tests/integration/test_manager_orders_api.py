@@ -991,8 +991,18 @@ async def test_manager_order_tn2_generation_uses_requested_proposal_logistics_co
             target_sheet_name,
             merge_cols,
             draw_borders,
+            sheet_format_ranges=None,
         ):
-            _ = (template_id, doc_title, replacements, start_cell_addr, target_sheet_name, merge_cols, draw_borders)
+            _ = (
+                template_id,
+                doc_title,
+                replacements,
+                start_cell_addr,
+                target_sheet_name,
+                merge_cols,
+                draw_borders,
+                sheet_format_ranges,
+            )
             sheet_captures.append(table_rows)
             return f"https://docs.google.com/spreadsheets/d/waybill-{len(sheet_captures)}/edit"
 

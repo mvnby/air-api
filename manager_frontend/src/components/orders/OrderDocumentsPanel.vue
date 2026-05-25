@@ -155,12 +155,23 @@ const orderFallbackProductLines = computed<WaybillProductLine[]>(() => {
   }
   return (props.order.product_lines || []).map(mapOrderProductLineToWaybillLine);
 });
-const waybillProductLines = computed(() => (
+const resolvedWaybillProductLines = computed(() => (
   ((props.productLines || []).some(hasUsableWaybillProductLine)
     ? (props.productLines || [])
     : orderFallbackProductLines.value
   ).filter(hasUsableWaybillProductLine)
 ));
+const cloneWaybillProductLine = (line: WaybillProductLine): WaybillProductLine => ({
+  ...line,
+  product_logistics_components: (line.product_logistics_components || []).map((component) => ({ ...component })),
+  logistics_components: line.logistics_components?.length
+    ? line.logistics_components.map((component) => ({ ...component }))
+    : null,
+});
+const waybillProductLines = ref<WaybillProductLine[]>([]);
+const syncWaybillProductLines = () => {
+  waybillProductLines.value = resolvedWaybillProductLines.value.map(cloneWaybillProductLine);
+};
 
 const LOGISTICS_COMPONENT_KINDS = new Set(['indoor', 'outdoor', 'accessory', 'other']);
 const normalizeLogisticsKind = (value: unknown): LogisticsComponentKind => {
@@ -487,6 +498,7 @@ const resetFromOrder = () => {
 
 watch(() => props.order.id, () => {
   resetFromOrder();
+  waybillProductLines.value = [];
   selectedDocumentType.value = suggestedDocumentType.value;
   isCreatePanelOpen.value = false;
   showAdvancedSettings.value = false;
@@ -582,12 +594,18 @@ const openCreatePanel = () => {
   selectedDocumentType.value = suggestedDocumentType.value;
   showAdvancedSettings.value = false;
   isCreatePanelOpen.value = true;
-  if (isWaybillDocument.value) ensureAllWaybillComponents();
+  if (isWaybillDocument.value) {
+    syncWaybillProductLines();
+    ensureAllWaybillComponents();
+  }
 };
 
 const selectDocumentType = (type: string) => {
   selectedDocumentType.value = type;
-  if (isWaybillType(type)) ensureAllWaybillComponents();
+  if (isWaybillType(type)) {
+    syncWaybillProductLines();
+    ensureAllWaybillComponents();
+  }
 };
 
 const activeWaybillProposalId = computed(() => props.activeProposalId ?? selectedOrderProposal.value?.id ?? null);
@@ -627,7 +645,10 @@ const handleDocumentsSent = () => {
 const generateDocument = async (type: string) => {
   isGeneratingDoc.value = true;
   try {
-    if (isWaybillType(type)) ensureAllWaybillComponents();
+    if (isWaybillType(type)) {
+      if (!waybillProductLines.value.length) syncWaybillProductLines();
+      ensureAllWaybillComponents();
+    }
     const beforeResult = await props.beforeGenerate?.(type);
     if (beforeResult === false) return;
     if (isWaybillType(type) && !(await saveWaybillProductLines())) return;
