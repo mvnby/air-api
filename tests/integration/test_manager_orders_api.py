@@ -675,6 +675,56 @@ async def test_manager_order_patch_lines_preserves_installers(async_client, db):
 
 
 @pytest.mark.asyncio
+async def test_manager_order_patch_lines_persists_logistics_components(async_client, db):
+    customer = Customer(name="Logistics", phone="+375296666668", type=CustomerType.individual)
+    product = Product(title="Split Logistics", slug="split-logistics", price=1803, area=30)
+    db.add(customer)
+    db.add(product)
+    await db.commit()
+    await db.refresh(customer)
+    await db.refresh(product)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+    payload = {
+        "products": [
+            {
+                "product_id": product.id,
+                "quantity": 1,
+                "price": 1803,
+                "cost": 1200,
+                "logistics_components": [
+                    {
+                        "title": "Внутренний блок TEST-IN",
+                        "country": "Китай",
+                        "quantity_per_parent": 1,
+                        "unit_price": 600,
+                        "kind": "indoor",
+                    },
+                    {
+                        "title": "Наружный блок TEST-OUT",
+                        "country": "Китай",
+                        "quantity_per_parent": 1,
+                        "unit_price": 1203,
+                        "kind": "outdoor",
+                    },
+                ],
+            }
+        ],
+        "services": [],
+    }
+    response = await async_client.patch(f"/api/manager/orders/{order.id}", json=payload, headers=headers)
+    assert response.status_code == 200
+
+    product_lines = response.json()["product_lines"]
+    assert product_lines[0]["logistics_components"] == payload["products"][0]["logistics_components"]
+
+
+@pytest.mark.asyncio
 async def test_manager_order_proposals_can_duplicate_edit_and_select(async_client, db):
     customer = Customer(name="Proposal Customer", phone="+375296666667", type=CustomerType.individual)
     p1 = Product(title="Proposal P1", slug="proposal-p1", price=1000, area=25)

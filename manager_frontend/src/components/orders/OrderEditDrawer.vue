@@ -54,8 +54,35 @@ type ProductOption = {
   availability_status: string;
   vitebsk_qty: number;
   minsk_qty: number;
+  specs?: Record<string, any>;
 };
-type ProductLine = { product_id: number; product_query: string; quantity: number; price: number; cost: number };
+type LogisticsComponentKind = 'indoor' | 'outdoor' | 'accessory' | 'other';
+type ProductLogisticsTemplateComponent = {
+  title: string;
+  country?: string | null;
+  unit?: string | null;
+  quantity_per_parent?: number | null;
+  price_weight?: number | null;
+  kind?: LogisticsComponentKind | null;
+};
+type OrderLogisticsComponent = {
+  title: string;
+  country?: string | null;
+  unit: string;
+  quantity_per_parent: number;
+  unit_price: number;
+  kind?: LogisticsComponentKind | null;
+};
+type ProductLine = {
+  product_id: number;
+  product_query: string;
+  quantity: number;
+  price: number;
+  cost: number;
+  product_country?: string | null;
+  product_logistics_components?: ProductLogisticsTemplateComponent[];
+  logistics_components?: OrderLogisticsComponent[] | null;
+};
 type ServiceLine = { service_id?: number | null; title: string; quantity: number; price: number; cost: number };
 type OrderWorkflowType = 'sales_installation' | 'service_work' | 'maintenance' | 'repair';
 type RepairMeta = {
@@ -260,6 +287,7 @@ const proposalActionLoading = ref(false);
 const installersList = ref<ManagerInstallerResponse[]>([]);
 
 const productLines = ref<ProductLine[]>([]);
+const expandedLogisticsProductLines = ref<number[]>([]);
 const serviceLines = ref<ServiceLine[]>([]);
 const activeServiceSuggestionIndex = ref<number | null>(null);
 const serviceTariffOptions = ref<ManagerQuickTariffResponse[]>([]);
@@ -690,7 +718,7 @@ const documentSectionHasError = computed(() => isCompanyOrder.value && !props.or
 
 const beforeDocumentGenerate = async (type: string) => {
   if (!props.order?.id) return false;
-  if (type === 'offer') {
+  if (type === 'offer' || type === 'tn2' || type === 'ttn1') {
     await saveCurrentProposalLines();
   }
   if (type === 'defect_act') {
@@ -914,6 +942,7 @@ const mapSmartSearchItemToOption = (item: any): ProductOption => ({
   availability_status: String(item.availability_status ?? 'out_of_stock'),
   vitebsk_qty: Number(item.vitebsk_qty ?? 0),
   minsk_qty: Number(item.minsk_qty ?? 0),
+  specs: ((item.specs || {}) as Record<string, any>),
 });
 
 const syncProductLookupFromLines = () => {
@@ -981,6 +1010,13 @@ const restoreDraft = () => {
         quantity: Number(line.quantity || 1),
         price: Number(line.price || 0),
         cost: Number(line.cost || 0),
+        product_country: (line as any).product_country || null,
+        product_logistics_components: Array.isArray((line as any).product_logistics_components)
+          ? [...((line as any).product_logistics_components as ProductLogisticsTemplateComponent[])]
+          : [],
+        logistics_components: Array.isArray((line as any).logistics_components)
+          ? [...((line as any).logistics_components as OrderLogisticsComponent[])]
+          : null,
       }));
     }
   } catch (error) {
@@ -1003,6 +1039,13 @@ const mapProductLineFromResponse = (line: OrderProductLineResponse): ProductLine
   quantity: line.quantity,
   price: line.price,
   cost: line.cost,
+  product_country: (line as any).product_country || null,
+  product_logistics_components: Array.isArray((line as any).product_logistics_components)
+    ? ((line as any).product_logistics_components as ProductLogisticsTemplateComponent[])
+    : [],
+  logistics_components: Array.isArray((line as any).logistics_components) && (line as any).logistics_components.length
+    ? ((line as any).logistics_components as OrderLogisticsComponent[])
+    : null,
 });
 
 const mapServiceLineFromResponse = (line: OrderServiceLineResponse): ServiceLine => ({
@@ -1079,6 +1122,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
     || (order.proposals || []).find((proposal) => !proposal.is_archived)
     || null;
   loadProposalLines(selectedProposal, order);
+  expandedLogisticsProductLines.value = [];
   showEstimateImport.value = false;
   await loadEstimateOptions();
 
@@ -1207,6 +1251,9 @@ const selectProductForLine = (index: number, option: ProductOption) => {
   row.product_id = option.id;
   row.product_query = option.title;
   row.price = option.price;
+  row.product_country = getProductCountryFromSpecs(option.specs);
+  row.product_logistics_components = normalizeProductLogisticsTemplate(option.specs?.logistics_components);
+  row.logistics_components = null;
   // Quick selection means the row now follows the selected catalog product.
   if (option.cost && option.cost > 0) {
     row.cost = option.cost;
@@ -1232,7 +1279,16 @@ const openSelectedProduct = (index: number) => {
 };
 
 const addProductLine = () => {
-  productLines.value.push({ product_id: 0, product_query: '', quantity: 1, price: 0, cost: 0 });
+  productLines.value.push({
+    product_id: 0,
+    product_query: '',
+    quantity: 1,
+    price: 0,
+    cost: 0,
+    product_country: null,
+    product_logistics_components: [],
+    logistics_components: null,
+  });
 };
 
 const addServiceLine = () => {
@@ -1262,6 +1318,7 @@ const buildProposalLinesPayload = () => ({
     quantity: Math.trunc(Number(line.quantity) || 0),
     price: Math.round(Number(line.price) || 0),
     cost: (!line.cost && line.cost !== 0) ? null : toIntegerMoney(line.cost),
+    logistics_components: normalizeOrderLogisticsComponents(line.logistics_components),
     link_id: null,
     proposal_id: activeProposalId.value,
   })),
@@ -1646,6 +1703,9 @@ const applyEstimateToServices = async () => {
 const removeProductLine = (index: number) => {
   if (!window.confirm('Удалить этот товар из заказа?')) return;
   productLines.value.splice(index, 1);
+  expandedLogisticsProductLines.value = expandedLogisticsProductLines.value
+    .filter((item) => item !== index)
+    .map((item) => (item > index ? item - 1 : item));
   if (activeSuggestionIndex.value === index) {
     activeSuggestionIndex.value = null;
     productOptions.value = [];
@@ -1670,6 +1730,164 @@ const lineTotal = (line: { quantity: number; price: number }) => Number(line.qua
 const toIntegerMoney = (value: number | null | undefined): number | null => {
   if (value == null || Number.isNaN(Number(value))) return null;
   return Math.round(Number(value));
+};
+const LOGISTICS_COMPONENT_KINDS = new Set(['indoor', 'outdoor', 'accessory', 'other']);
+const normalizeLogisticsKind = (value: unknown): LogisticsComponentKind => {
+  const raw = String(value || '').trim();
+  return LOGISTICS_COMPONENT_KINDS.has(raw) ? (raw as LogisticsComponentKind) : 'other';
+};
+const getProductCountryFromSpecs = (specs?: Record<string, any> | null) => {
+  if (!specs) return null;
+  return String(specs.country || specs.country_of_origin || specs['Страна производства'] || specs['Страна-производитель'] || '').trim() || null;
+};
+const normalizePositiveInteger = (value: unknown, fallback = 1) => {
+  const parsed = Math.trunc(Number(value));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+const normalizePositiveNumber = (value: unknown, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+};
+const normalizeProductLogisticsTemplate = (raw: unknown): ProductLogisticsTemplateComponent[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item): ProductLogisticsTemplateComponent | null => {
+      const source = (item || {}) as Record<string, any>;
+      const title = String(source.title || '').trim();
+      if (!title) return null;
+      return {
+        title,
+        country: String(source.country || '').trim() || null,
+        unit: String(source.unit || '').trim() || 'шт.',
+        quantity_per_parent: normalizePositiveInteger(source.quantity_per_parent, 1),
+        price_weight: normalizePositiveNumber(source.price_weight, 1),
+        kind: normalizeLogisticsKind(source.kind),
+      };
+    })
+    .filter((item): item is ProductLogisticsTemplateComponent => Boolean(item));
+};
+const roundToNearest10 = (value: number) => Math.floor((Number(value || 0) + 5) / 10) * 10;
+const allocateLogisticsPrices = (templates: ProductLogisticsTemplateComponent[], price: number): OrderLogisticsComponent[] => {
+  if (!templates.length) return [];
+  const weights = templates.map((item) => Math.max(0, Number(item.price_weight ?? 1)));
+  const totalWeight = weights.some((item) => item > 0)
+    ? weights.reduce((sum, item) => sum + item, 0)
+    : templates.length;
+  let remaining = Number(price || 0);
+  return templates.map((item, index) => {
+    const quantityPerParent = normalizePositiveInteger(item.quantity_per_parent, 1);
+    const componentTotal = index === templates.length - 1
+      ? remaining
+      : roundToNearest10(Number(price || 0) * ((weights[index] || 1) / totalWeight));
+    if (index !== templates.length - 1) remaining -= componentTotal;
+    return {
+      title: item.title,
+      country: item.country || 'Китай',
+      unit: item.unit || 'шт.',
+      quantity_per_parent: quantityPerParent,
+      unit_price: Number((componentTotal / quantityPerParent).toFixed(2)),
+      kind: normalizeLogisticsKind(item.kind),
+    };
+  });
+};
+const createDefaultLogisticsSplit = (line: ProductLine): OrderLogisticsComponent[] => {
+  const title = line.product_query.trim();
+  return allocateLogisticsPrices(
+    [
+      {
+        title: title ? `Внутренний блок ${title}` : 'Внутренний блок',
+        country: line.product_country || 'Китай',
+        unit: 'шт.',
+        quantity_per_parent: 1,
+        price_weight: 1,
+        kind: 'indoor',
+      },
+      {
+        title: title ? `Наружный блок ${title}` : 'Наружный блок',
+        country: line.product_country || 'Китай',
+        unit: 'шт.',
+        quantity_per_parent: 1,
+        price_weight: 2,
+        kind: 'outdoor',
+      },
+    ],
+    Number(line.price || 0),
+  );
+};
+const getLineProductTemplateComponents = (line: ProductLine): ProductLogisticsTemplateComponent[] => {
+  if (line.product_logistics_components?.length) return line.product_logistics_components;
+  const option = productLookupById.value[line.product_id];
+  return normalizeProductLogisticsTemplate(option?.specs?.logistics_components);
+};
+const ensureLineLogisticsComponents = (index: number) => {
+  const line = productLines.value[index];
+  if (!line) return;
+  if (!line.logistics_components?.length) {
+    const template = getLineProductTemplateComponents(line);
+    line.logistics_components = template.length
+      ? allocateLogisticsPrices(template, Number(line.price || 0))
+      : createDefaultLogisticsSplit(line);
+  }
+};
+const toggleLineLogisticsEditor = (index: number) => {
+  if (expandedLogisticsProductLines.value.includes(index)) {
+    expandedLogisticsProductLines.value = expandedLogisticsProductLines.value.filter((item) => item !== index);
+    return;
+  }
+  ensureLineLogisticsComponents(index);
+  expandedLogisticsProductLines.value = [...expandedLogisticsProductLines.value, index];
+};
+const addLineLogisticsComponent = (index: number) => {
+  ensureLineLogisticsComponents(index);
+  const line = productLines.value[index];
+  if (!line) return;
+  line.logistics_components = [
+    ...(line.logistics_components || []),
+    {
+      title: '',
+      country: line.product_country || 'Китай',
+      unit: 'шт.',
+      quantity_per_parent: 1,
+      unit_price: 0,
+      kind: 'other',
+    },
+  ];
+};
+const removeLineLogisticsComponent = (lineIndex: number, componentIndex: number) => {
+  const line = productLines.value[lineIndex];
+  if (!line?.logistics_components) return;
+  line.logistics_components.splice(componentIndex, 1);
+  if (!line.logistics_components.length) line.logistics_components = null;
+};
+const resetLineLogisticsComponents = (index: number) => {
+  const line = productLines.value[index];
+  if (!line) return;
+  line.logistics_components = createDefaultLogisticsSplit(line);
+};
+const lineLogisticsPerParentTotal = (line: ProductLine) => (
+  (line.logistics_components || []).reduce(
+    (sum, component) => sum + normalizePositiveNumber(component.unit_price, 0) * normalizePositiveInteger(component.quantity_per_parent, 1),
+    0,
+  )
+);
+const lineLogisticsHasMismatch = (line: ProductLine) => (
+  Boolean(line.logistics_components?.length) && Math.abs(lineLogisticsPerParentTotal(line) - Number(line.price || 0)) >= 0.01
+);
+const normalizeOrderLogisticsComponents = (
+  components?: OrderLogisticsComponent[] | null,
+): OrderLogisticsComponent[] | null => {
+  if (!components?.length) return null;
+  const normalized = components
+    .map((component) => ({
+      title: String(component.title || '').trim(),
+      country: String(component.country || '').trim() || 'Китай',
+      unit: String(component.unit || '').trim() || 'шт.',
+      quantity_per_parent: normalizePositiveInteger(component.quantity_per_parent, 1),
+      unit_price: normalizePositiveNumber(component.unit_price, 0),
+      kind: normalizeLogisticsKind(component.kind),
+    }))
+    .filter((component) => Boolean(component.title));
+  return normalized.length ? normalized : null;
 };
 
 const handleSave = () => {
@@ -2659,6 +2877,102 @@ watch(
               >
                 Цена строки отличается от каталожной ({{ formatMoney(currentCatalogPrice(line.product_id) || 0) }}).
               </p>
+              <div class="col-span-6 md:col-span-12">
+                <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div class="min-w-0 text-xs text-slate-600">
+                    <span class="font-semibold text-slate-800">Накладная</span>
+                    <span v-if="line.logistics_components?.length">
+                      · {{ line.logistics_components.length }} поз. · {{ formatMoney(lineLogisticsPerParentTotal(line)) }} за комплект
+                    </span>
+                    <span v-else-if="getLineProductTemplateComponents(line).length">
+                      · шаблон товара: {{ getLineProductTemplateComponents(line).length }} поз.
+                    </span>
+                    <span v-else>· одной строкой</span>
+                  </div>
+                  <div class="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      class="btn-mini-outline text-xs"
+                      @click="toggleLineLogisticsEditor(index)"
+                    >
+                      {{ expandedLogisticsProductLines.includes(index) ? 'Скрыть' : 'Накладная' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-mini-outline text-xs"
+                      @click="resetLineLogisticsComponents(index)"
+                    >
+                      Разложить 1/3
+                    </button>
+                  </div>
+                </div>
+
+                <div
+                  v-if="expandedLogisticsProductLines.includes(index)"
+                  class="mt-2 space-y-2 rounded-xl border border-teal-200 bg-teal-50/40 p-3"
+                >
+                  <div
+                    v-for="(component, componentIndex) in line.logistics_components || []"
+                    :key="`line-logistics-${index}-${componentIndex}`"
+                    class="grid gap-2 rounded-lg border border-white bg-white p-2 md:grid-cols-[1.4fr_100px_70px_80px_90px_32px]"
+                  >
+                    <textarea
+                      v-model="component.title"
+                      class="field-input min-h-[38px] resize-none text-xs"
+                      rows="1"
+                      placeholder="Название позиции в накладной"
+                    />
+                    <input v-model="component.country" class="field-input h-9 text-xs" placeholder="Страна" />
+                    <input v-model="component.unit" class="field-input h-9 text-xs" placeholder="Ед." />
+                    <input
+                      v-model.number="component.quantity_per_parent"
+                      type="number"
+                      min="1"
+                      class="field-input h-9 text-xs"
+                      title="Количество на комплект"
+                    />
+                    <input
+                      v-model.number="component.unit_price"
+                      type="number"
+                      min="0"
+                      class="field-input h-9 text-xs"
+                      title="Цена за единицу"
+                    />
+                    <button
+                      type="button"
+                      class="flex h-9 w-8 items-center justify-center rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600"
+                      @click="removeLineLogisticsComponent(index, componentIndex)"
+                    >
+                      <span class="material-icons-round text-[18px]">delete</span>
+                    </button>
+                    <select v-model="component.kind" class="field-input h-9 text-xs md:col-span-2">
+                      <option value="indoor">внутренний блок</option>
+                      <option value="outdoor">наружный блок</option>
+                      <option value="accessory">аксессуар</option>
+                      <option value="other">прочее</option>
+                    </select>
+                    <div class="flex items-center text-xs font-semibold text-slate-600 md:col-span-4">
+                      Итого по позиции: {{ formatMoney(component.unit_price * component.quantity_per_parent * line.quantity) }}
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <p
+                      v-if="lineLogisticsHasMismatch(line)"
+                      class="text-xs font-semibold text-amber-700"
+                    >
+                      Сумма состава за комплект {{ formatMoney(lineLogisticsPerParentTotal(line)) }}, цена товара {{ formatMoney(line.price) }}.
+                    </p>
+                    <span v-else class="text-xs text-teal-700">Сумма состава совпадает с ценой товара.</span>
+                    <button
+                      type="button"
+                      class="btn-mini-outline text-xs"
+                      @click="addLineLogisticsComponent(index)"
+                    >
+                      + позиция
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

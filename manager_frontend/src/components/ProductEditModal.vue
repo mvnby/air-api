@@ -33,6 +33,16 @@ interface MultiComboRule {
 }
 
 type MultiCompatMode = 'free_match' | 'strict';
+type LogisticsComponentKind = 'indoor' | 'outdoor' | 'accessory' | 'other';
+
+interface ProductLogisticsComponent {
+    title: string;
+    country: string;
+    unit: string;
+    quantity_per_parent: number;
+    price_weight: number;
+    kind: LogisticsComponentKind;
+}
 
 const props = defineProps<{
     modelValue: boolean;
@@ -74,12 +84,14 @@ const COMPATIBLE_OUTDOOR_KEY = 'compatible_outdoor_slugs';
 const MULTI_COMBO_RULES_KEY = 'multi_combo_rules';
 const MULTI_COMPAT_MODE_KEY = 'multi_compat_mode';
 const MULTI_CAPACITY_COMBOS_KEY = 'multi_capacity_combos';
+const LOGISTICS_COMPONENTS_KEY = 'logistics_components';
 const COMPATIBILITY_KEYS = new Set([
     COMPATIBLE_INDOOR_KEY,
     COMPATIBLE_OUTDOOR_KEY,
     MULTI_COMBO_RULES_KEY,
     MULTI_COMPAT_MODE_KEY,
     MULTI_CAPACITY_COMBOS_KEY,
+    LOGISTICS_COMPONENTS_KEY,
 ]);
 const compatibilityIndoorSlugs = ref<string[]>([]);
 const compatibilityOutdoorSlugs = ref<string[]>([]);
@@ -92,6 +104,7 @@ const compatibilityLoading = ref(false);
 const compatibilityInfo = ref('');
 const creatingBrand = ref(false);
 const newBrandTitle = ref('');
+const logisticsComponents = ref<ProductLogisticsComponent[]>([]);
 
 const normalizeText = (value: unknown): string => String(value ?? '').toLowerCase().replace(/ё/g, 'е').trim();
 const normalizeBrandToken = (value: unknown): string => normalizeText(value).replace(/[^a-z0-9а-я]/g, '');
@@ -133,6 +146,91 @@ const parseSlugList = (value: unknown): string[] => {
         );
     }
     return [];
+};
+
+const normalizeLogisticsKind = (value: unknown): LogisticsComponentKind => {
+    const raw = String(value || '').trim();
+    if (raw === 'indoor' || raw === 'outdoor' || raw === 'accessory') return raw;
+    return 'other';
+};
+
+const normalizePositiveInteger = (value: unknown, fallback = 1): number => {
+    const parsed = Math.trunc(Number(value));
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const normalizePositiveNumber = (value: unknown, fallback = 1): number => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+};
+
+const parseLogisticsComponents = (value: unknown): ProductLogisticsComponent[] => {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map((item) => {
+            const raw = (item || {}) as Record<string, unknown>;
+            const title = String(raw.title || '').trim();
+            if (!title) return null;
+            return {
+                title,
+                country: String(raw.country || '').trim() || 'Китай',
+                unit: String(raw.unit || '').trim() || 'шт.',
+                quantity_per_parent: normalizePositiveInteger(raw.quantity_per_parent, 1),
+                price_weight: normalizePositiveNumber(raw.price_weight, 1),
+                kind: normalizeLogisticsKind(raw.kind),
+            };
+        })
+        .filter((item): item is ProductLogisticsComponent => Boolean(item));
+};
+
+const serializeLogisticsComponents = (): ProductLogisticsComponent[] => (
+    logisticsComponents.value
+        .map((item) => ({
+            title: item.title.trim(),
+            country: item.country.trim() || 'Китай',
+            unit: item.unit.trim() || 'шт.',
+            quantity_per_parent: normalizePositiveInteger(item.quantity_per_parent, 1),
+            price_weight: normalizePositiveNumber(item.price_weight, 1),
+            kind: normalizeLogisticsKind(item.kind),
+        }))
+        .filter((item) => Boolean(item.title))
+);
+
+const addLogisticsComponent = () => {
+    logisticsComponents.value.push({
+        title: '',
+        country: 'Китай',
+        unit: 'шт.',
+        quantity_per_parent: 1,
+        price_weight: 1,
+        kind: 'other',
+    });
+};
+
+const removeLogisticsComponent = (index: number) => {
+    logisticsComponents.value.splice(index, 1);
+};
+
+const applyTwoBlockLogisticsTemplate = () => {
+    const title = String(form.value.title || props.product?.title || '').trim();
+    logisticsComponents.value = [
+        {
+            title: title ? `Внутренний блок ${title}` : 'Внутренний блок',
+            country: 'Китай',
+            unit: 'шт.',
+            quantity_per_parent: 1,
+            price_weight: 1,
+            kind: 'indoor',
+        },
+        {
+            title: title ? `Наружный блок ${title}` : 'Наружный блок',
+            country: 'Китай',
+            unit: 'шт.',
+            quantity_per_parent: 1,
+            price_weight: 2,
+            kind: 'outdoor',
+        },
+    ];
 };
 
 const normalizeCapacityToken = (value: unknown): string => {
@@ -825,6 +923,7 @@ watch(() => props.modelValue, async (val) => {
         const s = props.product.specs || {};
         compatibilityIndoorSlugs.value = parseSlugList((s as any)[COMPATIBLE_INDOOR_KEY]);
         compatibilityOutdoorSlugs.value = parseSlugList((s as any)[COMPATIBLE_OUTDOOR_KEY]);
+        logisticsComponents.value = parseLogisticsComponents((s as any)[LOGISTICS_COMPONENTS_KEY]);
         multiComboRules.value = parseMultiComboRules((s as any)[MULTI_COMBO_RULES_KEY]);
         multiCompatMode.value = String((s as any)[MULTI_COMPAT_MODE_KEY] || 'free_match') === 'strict'
             ? 'strict'
@@ -961,6 +1060,10 @@ const save = async () => {
     }
     if (compatibilityOutdoorSlugs.value.length > 0) {
         validSpecs[COMPATIBLE_OUTDOOR_KEY] = [...compatibilityOutdoorSlugs.value];
+    }
+    const serializedLogisticsComponents = serializeLogisticsComponents();
+    if (serializedLogisticsComponents.length > 0) {
+        validSpecs[LOGISTICS_COMPONENTS_KEY] = serializedLogisticsComponents;
     }
     validSpecs[MULTI_COMPAT_MODE_KEY] = multiCompatMode.value;
     if (multiCompatMode.value === 'free_match') {
@@ -1579,6 +1682,95 @@ const unlinkSupplierOffer = async (offer: any) => {
                                 <div v-if="manuals.length === 0" class="text-[11px] text-gray-400 dark:text-slate-500">
                                     Ссылки на инструкции не добавлены.
                                 </div>
+                            </div>
+                        </div>
+
+                        <div class="rounded-2xl border border-teal-100 dark:border-teal-900 bg-teal-50/40 dark:bg-teal-950/20 p-3 space-y-3">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <h3 class="text-xs font-bold text-teal-700 dark:text-teal-300 uppercase tracking-widest">
+                                        Состав для накладной
+                                    </h3>
+                                    <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                        Шаблон строк для ТН-2/ТТН-1. Цены в заказе посчитаются по весам.
+                                    </p>
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        class="text-xs bg-white dark:bg-slate-800 border border-teal-200 dark:border-teal-800 px-2.5 py-1 rounded-lg hover:bg-teal-50 dark:hover:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-bold flex items-center gap-1 transition-colors shadow-sm"
+                                        @click="applyTwoBlockLogisticsTemplate"
+                                    >
+                                        Внутренний + наружный 1/3
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="text-xs bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 px-2.5 py-1 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 text-teal-600 dark:text-teal-400 font-bold flex items-center gap-1 transition-colors shadow-sm"
+                                        @click="addLogisticsComponent"
+                                    >
+                                        <Plus class="w-3 h-3" /> Добавить
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div v-if="logisticsComponents.length" class="space-y-2">
+                                <div
+                                    v-for="(component, idx) in logisticsComponents"
+                                    :key="`logistics-component-${idx}`"
+                                    class="grid gap-2 rounded-xl border border-white/70 bg-white/80 p-2 dark:border-slate-700/50 dark:bg-slate-900/70 md:grid-cols-[1.4fr_100px_70px_80px_90px_32px]"
+                                >
+                                    <input
+                                        v-model="component.title"
+                                        type="text"
+                                        class="field-input h-9 text-xs"
+                                        placeholder="Название позиции"
+                                    />
+                                    <input
+                                        v-model="component.country"
+                                        type="text"
+                                        class="field-input h-9 text-xs"
+                                        placeholder="Страна"
+                                    />
+                                    <input
+                                        v-model="component.unit"
+                                        type="text"
+                                        class="field-input h-9 text-xs"
+                                        placeholder="Ед."
+                                    />
+                                    <input
+                                        v-model.number="component.quantity_per_parent"
+                                        type="number"
+                                        min="1"
+                                        class="field-input h-9 text-xs"
+                                        title="Количество на комплект"
+                                    />
+                                    <select v-model="component.kind" class="field-input h-9 text-xs">
+                                        <option value="indoor">внутр.</option>
+                                        <option value="outdoor">наруж.</option>
+                                        <option value="accessory">акс.</option>
+                                        <option value="other">прочее</option>
+                                    </select>
+                                    <button
+                                        type="button"
+                                        class="flex h-9 w-8 items-center justify-center rounded-lg text-gray-300 transition-all hover:bg-red-50 hover:text-red-500"
+                                        @click="removeLogisticsComponent(idx)"
+                                    >
+                                        <Trash2 class="w-3.5 h-3.5" />
+                                    </button>
+                                    <label class="md:col-span-6 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                                        <span class="shrink-0">Вес цены</span>
+                                        <input
+                                            v-model.number="component.price_weight"
+                                            type="number"
+                                            min="0"
+                                            step="0.1"
+                                            class="h-8 w-24 rounded-lg border border-gray-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-800"
+                                        />
+                                    </label>
+                                </div>
+                            </div>
+                            <div v-else class="rounded-xl border border-dashed border-teal-200 bg-white/70 px-3 py-4 text-center text-xs text-slate-500 dark:border-teal-900 dark:bg-slate-900/40">
+                                Состав не задан, накладная будет использовать товар одной строкой.
                             </div>
                         </div>
 

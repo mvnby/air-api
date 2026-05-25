@@ -29,6 +29,104 @@ class OrderService:
         "repair": "Ремонт",
         "dismantling": "Демонтаж",
     }
+    LOGISTICS_COMPONENT_KINDS = {"indoor", "outdoor", "accessory", "other"}
+    DEFAULT_LOGISTICS_COUNTRY = "Китай"
+
+    @staticmethod
+    def _clean_optional_text(value: Any) -> Optional[str]:
+        cleaned = " ".join(str(value or "").split())
+        return cleaned or None
+
+    @staticmethod
+    def _extract_product_country(product: Optional[Product]) -> Optional[str]:
+        specs = getattr(product, "specs", None)
+        if not isinstance(specs, dict):
+            return None
+        for key in ("country", "country_of_origin", "Страна производства", "Страна-производитель"):
+            country = OrderService._clean_optional_text(specs.get(key))
+            if country:
+                return country
+        return None
+
+    @staticmethod
+    def _serialize_product_logistics_components(product: Optional[Product]) -> List[Dict[str, Any]]:
+        specs = getattr(product, "specs", None)
+        if not isinstance(specs, dict):
+            return []
+        raw_components = specs.get("logistics_components")
+        if not isinstance(raw_components, list):
+            return []
+
+        out: List[Dict[str, Any]] = []
+        for item in raw_components:
+            if not isinstance(item, dict):
+                continue
+            title = OrderService._clean_optional_text(item.get("title"))
+            if not title:
+                continue
+            country = OrderService._clean_optional_text(item.get("country"))
+            unit = OrderService._clean_optional_text(item.get("unit")) or "шт."
+            try:
+                quantity_per_parent = max(1, int(float(item.get("quantity_per_parent") or 1)))
+            except (TypeError, ValueError):
+                quantity_per_parent = 1
+            try:
+                price_weight = max(0.0, float(item.get("price_weight") or 1))
+            except (TypeError, ValueError):
+                price_weight = 1.0
+            kind = OrderService._clean_optional_text(item.get("kind"))
+            if kind not in OrderService.LOGISTICS_COMPONENT_KINDS:
+                kind = None
+            out.append(
+                {
+                    "title": title,
+                    "country": country,
+                    "unit": unit,
+                    "quantity_per_parent": quantity_per_parent,
+                    "price_weight": price_weight,
+                    "kind": kind,
+                }
+            )
+        return out
+
+    @staticmethod
+    def _serialize_order_logistics_components(raw_components: Any) -> Optional[List[Dict[str, Any]]]:
+        if not raw_components:
+            return None
+
+        out: List[Dict[str, Any]] = []
+        for item in raw_components:
+            if hasattr(item, "model_dump"):
+                item = item.model_dump()
+            if not isinstance(item, dict):
+                continue
+            title = OrderService._clean_optional_text(item.get("title"))
+            if not title:
+                continue
+            country = OrderService._clean_optional_text(item.get("country"))
+            unit = OrderService._clean_optional_text(item.get("unit")) or "шт."
+            try:
+                quantity_per_parent = max(1, int(float(item.get("quantity_per_parent") or 1)))
+            except (TypeError, ValueError):
+                quantity_per_parent = 1
+            try:
+                unit_price = max(0.0, float(item.get("unit_price") or 0))
+            except (TypeError, ValueError):
+                unit_price = 0.0
+            kind = OrderService._clean_optional_text(item.get("kind"))
+            if kind not in OrderService.LOGISTICS_COMPONENT_KINDS:
+                kind = None
+            out.append(
+                {
+                    "title": title,
+                    "country": country,
+                    "unit": unit,
+                    "quantity_per_parent": quantity_per_parent,
+                    "unit_price": unit_price,
+                    "kind": kind,
+                }
+            )
+        return out or None
 
     @staticmethod
     def _clean_order_title(raw: Any) -> Optional[str]:
@@ -993,7 +1091,10 @@ class OrderService:
                 proposal_id=proposal.id,
                 product_id=p["product_id"],
                 quantity=p["quantity"],
-                price=p["price"] # Цена должна приходить актуальная
+                price=p["price"], # Цена должна приходить актуальная
+                logistics_components=OrderService._serialize_order_logistics_components(
+                    p.get("logistics_components")
+                ),
             )
             session.add(link)
         
@@ -1127,7 +1228,10 @@ class OrderService:
                 proposal_id=proposal.id,
                 product_id=int(prod["product_id"]),
                 quantity=int(prod["quantity"]),
-                price=int(prod["price"])
+                price=int(prod["price"]),
+                logistics_components=OrderService._serialize_order_logistics_components(
+                    prod.get("logistics_components")
+                ),
             )
             session.add(link)
         
@@ -1397,6 +1501,9 @@ class OrderService:
             "is_installation_included": bool(link.is_installation_included),
             "installation_price": int(link.installation_price or 0),
             "line_total": line_total,
+            "product_country": OrderService._extract_product_country(link.product),
+            "product_logistics_components": OrderService._serialize_product_logistics_components(link.product),
+            "logistics_components": OrderService._serialize_order_logistics_components(link.logistics_components) or [],
         }
 
     @staticmethod
@@ -1675,6 +1782,9 @@ class OrderService:
                         is_installation_included=link.is_installation_included,
                         installation_price=link.installation_price,
                         installation_details=link.installation_details,
+                        logistics_components=OrderService._serialize_order_logistics_components(
+                            link.logistics_components
+                        ),
                     )
                 )
             for link in [item for item in order.service_links if item.proposal_id == source.id]:
@@ -2082,6 +2192,9 @@ class OrderService:
                         quantity=product_line.quantity,
                         price=product_line.price,
                         cost=product_line.cost if product_line.cost is not None else defaults["cost"],
+                        logistics_components=OrderService._serialize_order_logistics_components(
+                            product_line.logistics_components
+                        ),
                     )
                     session.add(new_product_link)
 
