@@ -29,9 +29,3 @@ async def trigger_rebuild_web(username: str = Depends(get_current_username)):
         )
         
     return {"message": "Rebuild triggered successfully. The site will be updated in ~2 minutes."}
-@router.get("/health", include_in_schema=False)
-async def health():
-    return {
-        "ok": True,
-        "service": "air-api"
-    }
