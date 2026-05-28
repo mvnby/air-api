@@ -114,6 +114,8 @@ class LeadService:
             "inn": lead.inn,
             "company_name": lead.company_name,
             "request_text": lead.request_text,
+            "source_message_id": lead.source_message_id,
+            "source_fingerprint": lead.source_fingerprint,
             "loss_reason": lead.loss_reason.value if hasattr(lead.loss_reason, "value") else lead.loss_reason,
             "next_followup_date": lead.next_followup_date,
             "archived_at": lead.archived_at,
@@ -142,6 +144,8 @@ class LeadService:
             inn=inn,
             company_name=LeadService._clean_optional(payload.company_name),
             request_text=request_text,
+            source_message_id=LeadService._clean_optional(getattr(payload, "source_message_id", None)),
+            source_fingerprint=LeadService._clean_optional(getattr(payload, "source_fingerprint", None)),
             next_followup_date=LeadService._normalize_naive_datetime(payload.next_followup_date),
         )
         session.add(lead)
@@ -264,6 +268,10 @@ class LeadService:
             if not request_text:
                 raise ValueError("request_text cannot be empty")
             lead.request_text = request_text
+        if "source_message_id" in fields_set:
+            lead.source_message_id = LeadService._clean_optional(payload.source_message_id)
+        if "source_fingerprint" in fields_set:
+            lead.source_fingerprint = LeadService._clean_optional(payload.source_fingerprint)
         if "loss_reason" in fields_set:
             lead.loss_reason = LeadLossReason(payload.loss_reason) if payload.loss_reason else None
         if "next_followup_date" in fields_set:

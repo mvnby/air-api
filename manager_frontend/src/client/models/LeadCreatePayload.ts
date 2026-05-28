@@ -11,6 +11,8 @@ export type LeadCreatePayload = {
     company_name?: (string | null);
     segment_hint?: (string | null);
     request_text: string;
+    source_message_id?: (string | null);
+    source_fingerprint?: (string | null);
     next_followup_date?: (string | null);
 };
 

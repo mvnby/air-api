@@ -8,6 +8,7 @@ export type LeadsInboxItemResponse = {
     is_new: boolean;
     customer_name?: (string | null);
     phone?: (string | null);
+    email?: (string | null);
     source?: (string | null);
     comment?: (string | null);
     no_answer_at?: (string | null);

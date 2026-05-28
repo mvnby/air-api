@@ -1,5 +1,6 @@
 from pathlib import Path
 from datetime import datetime
+from email.message import EmailMessage
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -7,12 +8,14 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
 from core.config import settings
-from models import BankReceipt, Customer, Order, OrderDocument, OrderServiceLink, OutgoingEmail, Payment, PaymentCurrency
+from models import BankReceipt, Customer, LeadSource, Order, OrderDocument, OrderServiceLink, OrderStatus, OutgoingEmail, Payment, PaymentCurrency
 from services.bank_email_parser_service import BankEmailParserService
 from services.bank_receipt_service import BankReceiptService
 from services.bank_statement_csv_service import BankStatementCsvService
 from services.bot_service import BotService
+from services.email_lead_intake_service import EmailLeadIntakeService
 from services.mail_smtp_service import MailAttachment, MailSmtpService
+from services.mail_imap_service import MailImapService
 from services.notification_service import NotificationService
 from services.order_service import OrderService
 
@@ -75,6 +78,129 @@ def test_bank_email_parser_extracts_real_belagroprombank_format():
     assert parsed.payment_document_number == "008049"
     assert "АКТУ N7" in parsed.payment_purpose
     assert parsed.account_balance_after == 4662.26
+
+
+def test_email_lead_keyword_filter_finds_hvac_request_and_skips_bank_email():
+    assert EmailLeadIntakeService.looks_like_lead_candidate(
+        sender_email="client@example.com",
+        subject="Нужен монтаж кондиционера",
+        raw_body="Добрый день, просим подготовить коммерческое предложение.",
+    )
+    assert not EmailLeadIntakeService.looks_like_lead_candidate(
+        sender_email="noreply@service.belapb.by",
+        subject="Поступление средств на счет Индивидуальный предприниматель Янулевич Дмитрий Викторович",
+        raw_body=SAMPLE_BANK_EMAIL,
+    )
+
+
+def test_email_lead_attachment_text_participates_in_keyword_filter():
+    body = "Добрый день, во вложении заявка."
+    msg = EmailMessage()
+    msg["Subject"] = "Документы"
+    msg.set_content(body)
+    msg.add_attachment(
+        "Просим предоставить предложение на ремонт двух кондиционеров.".encode("utf-8"),
+        maintype="text",
+        subtype="plain",
+        filename="request.txt",
+    )
+
+    attachment_text = "\n".join(MailImapService._extract_attachment_texts(msg))
+
+    assert "ремонт двух кондиционеров" in attachment_text
+    assert EmailLeadIntakeService.looks_like_lead_candidate(
+        sender_email="client@example.com",
+        subject=msg["Subject"],
+        raw_body=f"{body}\n{attachment_text}",
+    )
+
+
+@pytest.mark.asyncio
+async def test_email_lead_intake_creates_visible_inbox_order_and_dedupes_by_message_id(sqlite_session, monkeypatch):
+    ai_calls = 0
+
+    async def fake_classify(**_kwargs):
+        nonlocal ai_calls
+        ai_calls += 1
+        return {
+            "is_potential_order": True,
+            "confidence": 0.92,
+            "name": "Иван",
+            "phone": "+375291234567",
+            "email": "ivan@example.com",
+            "inn": "192663084",
+            "company_name": "ООО Мегахенд",
+            "segment_hint": "b2b",
+            "request_text": "Клиент просит подобрать и смонтировать кондиционер в торговом зале.",
+            "reason": "Есть прямой запрос на монтаж кондиционера.",
+        }
+
+    monkeypatch.setattr(EmailLeadIntakeService, "classify_email", fake_classify)
+
+    first = await EmailLeadIntakeService.process_email(
+        sqlite_session,
+        sender_email="sales@example.com",
+        sender_name="Иван",
+        subject="Монтаж кондиционера",
+        raw_body="Добрый день. Нужен монтаж кондиционера в торговом зале.",
+        message_id="<lead-1@example.test>",
+        email_date_raw="Mon, 25 May 2026 12:00:00 +0300",
+    )
+
+    assert first.status == "created"
+    assert first.used_ai is True
+    assert first.order_id is not None
+    assert ai_calls == 1
+
+    duplicate = await EmailLeadIntakeService.process_email(
+        sqlite_session,
+        sender_email="sales@example.com",
+        sender_name="Иван",
+        subject="Монтаж кондиционера",
+        raw_body="Добрый день. Нужен монтаж кондиционера в торговом зале.",
+        message_id="<lead-1@example.test>",
+        email_date_raw="Mon, 25 May 2026 12:00:00 +0300",
+    )
+
+    assert duplicate.status == "duplicate"
+    assert duplicate.order_id == first.order_id
+    assert ai_calls == 1
+
+    orders = (await sqlite_session.execute(select(Order))).scalars().all()
+    assert len(orders) == 1
+    assert orders[0].status == OrderStatus.NEW_LEAD
+    assert orders[0].lead_source == LeadSource.EMAIL
+    assert orders[0].technical_meta["email_source_message_id"] == "<lead-1@example.test>"
+    assert orders[0].technical_meta["email_source_fingerprint"]
+    assert "торговом зале" in (orders[0].comment or "")
+
+
+@pytest.mark.asyncio
+async def test_email_lead_intake_dry_run_does_not_create_order(sqlite_session, monkeypatch):
+    async def fake_classify(**_kwargs):
+        return {
+            "is_potential_order": True,
+            "confidence": 0.9,
+            "request_text": "Клиент просит цену кондиционера.",
+            "segment_hint": "unknown",
+            "reason": "Есть запрос цены.",
+        }
+
+    monkeypatch.setattr(EmailLeadIntakeService, "classify_email", fake_classify)
+
+    result = await EmailLeadIntakeService.process_email(
+        sqlite_session,
+        sender_email="client@example.com",
+        sender_name="Клиент",
+        subject="Цена кондиционера",
+        raw_body="Подскажите стоимость кондиционера с монтажом.",
+        message_id="<dry-run-lead@example.test>",
+        dry_run=True,
+    )
+
+    assert result.status == "would_create"
+    orders = (await sqlite_session.execute(select(Order))).scalars().all()
+    assert orders == []
 
 
 @pytest.mark.asyncio

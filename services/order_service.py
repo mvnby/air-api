@@ -2400,6 +2400,7 @@ class OrderService:
                 ),
                 customer_name=order.customer.name if order.customer else None,
                 phone=order.customer.phone if order.customer else None,
+                email=order.customer.email if order.customer else None,
                 source=(
                     order.lead_source.value
                     if order.lead_source and hasattr(order.lead_source, "value")

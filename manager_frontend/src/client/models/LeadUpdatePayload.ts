@@ -12,6 +12,8 @@ export type LeadUpdatePayload = {
     company_name?: (string | null);
     segment_hint?: (string | null);
     request_text?: (string | null);
+    source_message_id?: (string | null);
+    source_fingerprint?: (string | null);
     loss_reason?: (string | null);
     next_followup_date?: (string | null);
     archived_at?: (string | null);

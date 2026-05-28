@@ -21,6 +21,7 @@ const customerType = ref<'individual' | 'company'>(props.lead.customer_type as a
 const customerName = ref(props.lead.customer_name || '');
 // @ts-ignore (phone exists on the original response dynamically, we handle it if present)
 const customerPhone = ref((props.lead as any).customer_phone || (props.lead as any).phone || '');
+const customerEmail = ref((props.lead as any).customer_email || props.lead.email || '');
 const phoneInputRef = ref<HTMLInputElement | null>(null);
 const { unmaskedValue: unmaskedPhone } = useBelarusPhoneMask(phoneInputRef, customerPhone, { lazy: false });
 const customerCity = ref('Витебск');
@@ -209,6 +210,7 @@ const submitQualify = async () => {
       customer_type: customerType.value,
       customer_name: customerName.value || undefined,
       customer_phone: unmaskedPhone.value || customerPhone.value || undefined,
+      customer_email: customerEmail.value || undefined,
       customer_delivery_address: manualDeliveryAddress || undefined,
       customer_inn: customerType.value === 'company' ? (companyInn.value || undefined) : undefined,
       customer_full_legal_name: customerType.value === 'company' ? (companyFullLegalName.value || companyName.value || undefined) : undefined,
@@ -398,6 +400,10 @@ const submitQualify = async () => {
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1">Телефон</label>
               <input ref="phoneInputRef" v-model="customerPhone" type="text" @input="onSearchInput" class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-teal-500 transition-shadow">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-xs font-semibold text-slate-500 mb-1">Email</label>
+              <input v-model="customerEmail" type="email" class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-teal-500 transition-shadow">
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1">Город</label>

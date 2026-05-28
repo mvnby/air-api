@@ -837,6 +837,8 @@ class LeadResponse(BaseModel):
     inn: Optional[str] = None
     company_name: Optional[str] = None
     request_text: str
+    source_message_id: Optional[str] = None
+    source_fingerprint: Optional[str] = None
     loss_reason: Optional[str] = None
     next_followup_date: Optional[datetime] = None
     archived_at: Optional[datetime] = None
@@ -859,6 +861,8 @@ class LeadCreatePayload(BaseModel):
     company_name: Optional[str] = None
     segment_hint: Optional[str] = None
     request_text: str
+    source_message_id: Optional[str] = None
+    source_fingerprint: Optional[str] = None
     next_followup_date: Optional[datetime] = None
 
     @field_validator("phone")
@@ -887,6 +891,8 @@ class LeadUpdatePayload(BaseModel):
     company_name: Optional[str] = None
     segment_hint: Optional[str] = None
     request_text: Optional[str] = None
+    source_message_id: Optional[str] = None
+    source_fingerprint: Optional[str] = None
     loss_reason: Optional[str] = None
     next_followup_date: Optional[datetime] = None
     archived_at: Optional[datetime] = None
@@ -1693,6 +1699,7 @@ class LeadsInboxItemResponse(BaseModel):
     is_new: bool
     customer_name: Optional[str] = None
     phone: Optional[str] = None
+    email: Optional[str] = None
     source: Optional[str] = None
     comment: Optional[str] = None
     no_answer_at: Optional[datetime] = None
@@ -2224,6 +2231,33 @@ class BankReceiptImportResponse(BaseModel):
     duplicates: int = 0
     failed: int = 0
     receipt_ids: List[int] = []
+
+
+class EmailLeadDecisionResponse(BaseModel):
+    status: str
+    sender_email: str
+    subject: str
+    reason: Optional[str] = None
+    lead_id: Optional[int] = None
+    order_id: Optional[int] = None
+
+
+class EmailLeadImportResponse(BaseModel):
+    processed: int = 0
+    scanned_since: Optional[str] = None
+    last_import_at: Optional[str] = None
+    candidates: int = 0
+    ai_checked: int = 0
+    would_create: int = 0
+    created: int = 0
+    duplicates: int = 0
+    rejected: int = 0
+    failed: int = 0
+    lead_ids: List[int] = []
+    created_lead_ids: List[int] = []
+    order_ids: List[int] = []
+    created_order_ids: List[int] = []
+    decisions: List[EmailLeadDecisionResponse] = []
 
 
 class BankStatementImportResponse(BaseModel):

@@ -3,7 +3,7 @@
 # Syncs local media files to the remote server
 # Usage: ./sync_media.sh
 
-REMOTE_HOST="mvn-api"
+REMOTE_HOST="${REMOTE_HOST:-root@185.250.45.54}"
 REMOTE_DIR="/opt/air-api/media"
 LOCAL_DIR="./media/"
 

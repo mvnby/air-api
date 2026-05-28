@@ -151,6 +151,9 @@ class SchedulerService:
         # Run bank receipt IMAP import loop
         asyncio.create_task(self._bank_mail_import_loop())
 
+        # Run email lead IMAP import loop. Disabled by default to avoid unplanned AI usage.
+        asyncio.create_task(self._email_lead_import_loop())
+
         # Keep the main loop alive 
         while True:
             await asyncio.sleep(3600)
@@ -299,6 +302,49 @@ class SchedulerService:
                 )
             except Exception as e:
                 logger.error(f"❌ Bank mail import loop error: {e}")
+            await asyncio.sleep(interval_minutes * 60)
+
+    async def _email_lead_import_loop(self):
+        while True:
+            interval_value = await self._get_global_config_value(
+                "mail_lead_import_interval_minutes",
+                str(settings.MAIL_IMAP_LEAD_IMPORT_INTERVAL_MINUTES or 20),
+            )
+            try:
+                interval_minutes = max(1, int(interval_value or 20))
+            except (TypeError, ValueError):
+                interval_minutes = max(1, int(settings.MAIL_IMAP_LEAD_IMPORT_INTERVAL_MINUTES or 20))
+            try:
+                enabled_value = await self._get_global_config_value(
+                    "mail_lead_auto_import_enabled",
+                    "true" if settings.MAIL_IMAP_LEAD_AUTO_IMPORT_ENABLED else "false",
+                )
+                enabled = str(enabled_value).strip().lower() in {"1", "true", "yes", "on"}
+                if not enabled:
+                    await asyncio.sleep(interval_minutes * 60)
+                    continue
+                if not settings.MAIL_IMAP_USERNAME or not settings.MAIL_IMAP_PASSWORD:
+                    logger.info("Email lead import skipped: IMAP credentials are not configured.")
+                    await asyncio.sleep(interval_minutes * 60)
+                    continue
+
+                from services.mail_imap_service import MailImapService
+
+                logger.info("⏳ Email lead import job started...")
+                async with async_session_maker() as session:
+                    result = await MailImapService.import_email_leads(session)
+                logger.info(
+                    "✅ Email lead import done. processed=%s candidates=%s ai_checked=%s created=%s duplicates=%s rejected=%s failed=%s",
+                    result.processed,
+                    result.candidates,
+                    result.ai_checked,
+                    result.created,
+                    result.duplicates,
+                    result.rejected,
+                    result.failed,
+                )
+            except Exception as e:
+                logger.error(f"❌ Email lead import loop error: {e}")
             await asyncio.sleep(interval_minutes * 60)
 
 scheduler_service = SchedulerService()

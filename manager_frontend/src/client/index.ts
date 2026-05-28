@@ -49,6 +49,8 @@ export type { DocumentTemplateItem } from './models/DocumentTemplateItem';
 export type { DocumentTemplateListResponse } from './models/DocumentTemplateListResponse';
 export type { DocumentTemplatePayload } from './models/DocumentTemplatePayload';
 export type { DocumentTemplateUpdatePayload } from './models/DocumentTemplateUpdatePayload';
+export type { EmailLeadDecisionResponse } from './models/EmailLeadDecisionResponse';
+export type { EmailLeadImportResponse } from './models/EmailLeadImportResponse';
 export type { FilterRange } from './models/FilterRange';
 export type { FiltersConfigResponse } from './models/FiltersConfigResponse';
 export type { FilterTagOption } from './models/FilterTagOption';

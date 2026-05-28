@@ -5,6 +5,7 @@ import pytest
 from core.config import settings
 from models import BankReceipt, OutgoingEmail, PaymentCurrency
 from services.bank_receipt_service import BankReceiptImportResult
+from services.email_lead_intake_service import EmailLeadImportResult
 
 
 async def _auth_headers(async_client):
@@ -62,6 +63,52 @@ async def test_manager_mail_import_endpoint_uses_imap_service(async_client, monk
         "duplicates": 1,
         "failed": 0,
         "receipt_ids": [10],
+    }
+
+
+@pytest.mark.asyncio
+async def test_manager_mail_lead_import_endpoint_uses_imap_service(async_client, monkeypatch):
+    async def fake_import(_session, *, dry_run=False):
+        assert dry_run is True
+        return EmailLeadImportResult(
+            processed=3,
+            scanned_since="2026-05-23T09:00:00",
+            last_import_at=None,
+            candidates=2,
+            ai_checked=2,
+            would_create=1,
+            created=1,
+            duplicates=1,
+            rejected=0,
+            failed=0,
+            lead_ids=[42, 41],
+            created_lead_ids=[42],
+            order_ids=[52, 51],
+            created_order_ids=[52],
+        )
+
+    monkeypatch.setattr("routers.manager_mail.MailImapService.import_email_leads", fake_import)
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.post("/api/manager/mail/leads/import?dry_run=true", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "processed": 3,
+        "scanned_since": "2026-05-23T09:00:00",
+        "last_import_at": None,
+        "candidates": 2,
+        "ai_checked": 2,
+        "would_create": 1,
+        "created": 1,
+        "duplicates": 1,
+        "rejected": 0,
+        "failed": 0,
+        "lead_ids": [42, 41],
+        "created_lead_ids": [42],
+        "order_ids": [52, 51],
+        "created_order_ids": [52],
+        "decisions": [],
     }
 
 
