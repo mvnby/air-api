@@ -172,6 +172,7 @@ async def test_email_lead_intake_creates_visible_inbox_order_and_dedupes_by_mess
     assert orders[0].lead_source == LeadSource.EMAIL
     assert orders[0].technical_meta["email_source_message_id"] == "<lead-1@example.test>"
     assert orders[0].technical_meta["email_source_fingerprint"]
+    assert orders[0].technical_meta["email_date"] == "2026-05-25T12:00"
     assert "торговом зале" in (orders[0].comment or "")
 
 

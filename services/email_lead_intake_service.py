@@ -433,6 +433,7 @@ class EmailLeadIntakeService:
                 "email_source_fingerprint": fingerprint,
                 "email_sender": sender_email,
                 "email_subject": subject,
+                "email_date": email_date,
                 "email_ai_reason": EmailLeadIntakeService._clean_optional(classification.get("reason"), max_length=300),
             }
         )

@@ -12,6 +12,7 @@ export type LeadsInboxItemResponse = {
     source?: (string | null);
     comment?: (string | null);
     no_answer_at?: (string | null);
+    source_created_at?: (string | null);
     created_at: string;
     customer_type?: string;
     customer_inn?: (string | null);

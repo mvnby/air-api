@@ -74,6 +74,8 @@ const formatEmail = (email: string | null | undefined): string => {
   return (email || '').trim();
 };
 
+const displayDate = computed(() => props.item.source_created_at || props.item.created_at);
+
 const getRelativeTime = (dt: string | null | undefined) => {
   if (!dt) return '';
   const date = new Date(dt);
@@ -164,12 +166,15 @@ const hasLongComment = computed(() => (props.item.comment || '').length > 140);
         <span class="material-icons-round text-[15px]">email</span>
         <span class="min-w-0 break-all">{{ formatEmail(item.email) }}</span>
       </a>
-      <span class="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1">
+      <span
+        v-if="!(item.source === 'email' && formatEmail(item.email))"
+        class="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1"
+      >
         <span class="material-icons-round text-[13px]">{{ getSourceIcon(item.source) }}</span>
         {{ getSourceLabel(item.source) }}
       </span>
       <span class="text-xs text-slate-400 dark:text-slate-500 ml-auto">
-        {{ formatDate(item.created_at) }}
+        {{ formatDate(displayDate) }}
       </span>
     </div>
 

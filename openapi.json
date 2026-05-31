@@ -13327,6 +13327,18 @@
             ],
             "title": "No Answer At"
           },
+          "source_created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Created At"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
