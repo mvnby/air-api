@@ -3,7 +3,7 @@ set -e
 
 # Configuration
 # Assuming remote settings match sync_db.sh or similar patterns
-REMOTE_HOST="mvn-api"
+REMOTE_HOST="${REMOTE_HOST:-root@185.250.45.54}"
 REMOTE_USER="mvnadmin"   # Adjust if needed, usually same as local dev default or from env on server 
 REMOTE_DB="air_conditioners"
 LOCAL_CONTAINER="mvn-db-1"

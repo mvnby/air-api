@@ -10,6 +10,7 @@ from routers.manager_operation_ids import (
     DELETE_MANAGER_BANK_RECEIPT,
     IMPORT_MANAGER_BANK_RECEIPTS,
     IMPORT_MANAGER_BANK_STATEMENT,
+    IMPORT_MANAGER_EMAIL_LEADS,
     LIST_MANAGER_BANK_RECEIPTS,
     PATCH_MANAGER_BANK_RECEIPT_STATUS,
     SEND_MANAGER_ORDER_EMAIL,
@@ -22,6 +23,7 @@ from schemas import (
     BankReceiptResponse,
     BankReceiptStatusPayload,
     BankStatementImportResponse,
+    EmailLeadImportResponse,
     OrderEmailSendPayload,
     OutgoingEmailResponse,
     OutgoingEmailSendPayload,
@@ -55,6 +57,27 @@ async def import_manager_bank_receipts(
         raise manager_http_error(
             status_code=400,
             endpoint=IMPORT_MANAGER_BANK_RECEIPTS,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/leads/import",
+    response_model=EmailLeadImportResponse,
+    operation_id=IMPORT_MANAGER_EMAIL_LEADS,
+)
+async def import_manager_email_leads(
+    dry_run: bool = Query(False),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        result = await MailImapService.import_email_leads(session, dry_run=dry_run)
+        return EmailLeadImportResponse(**result.__dict__)
+    except Exception as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=IMPORT_MANAGER_EMAIL_LEADS,
             error_code=BAD_REQUEST,
             message=str(exc),
         ) from exc

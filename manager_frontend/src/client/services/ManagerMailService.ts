@@ -9,6 +9,7 @@ import type { BankReceiptResponse } from '../models/BankReceiptResponse';
 import type { BankReceiptStatusPayload } from '../models/BankReceiptStatusPayload';
 import type { BankStatementImportResponse } from '../models/BankStatementImportResponse';
 import type { Body_import_manager_bank_statement } from '../models/Body_import_manager_bank_statement';
+import type { EmailLeadImportResponse } from '../models/EmailLeadImportResponse';
 import type { OrderEmailSendPayload } from '../models/OrderEmailSendPayload';
 import type { OutgoingEmailResponse } from '../models/OutgoingEmailResponse';
 import type { OutgoingEmailSendPayload } from '../models/OutgoingEmailSendPayload';
@@ -30,6 +31,26 @@ export class ManagerMailService {
             url: '/api/manager/mail/bank-receipts/import',
             query: {
                 'limit': limit,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Import Manager Email Leads
+     * @param dryRun
+     * @returns EmailLeadImportResponse Successful Response
+     * @throws ApiError
+     */
+    public static importManagerEmailLeads(
+        dryRun: boolean = false,
+    ): CancelablePromise<EmailLeadImportResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/mail/leads/import',
+            query: {
+                'dry_run': dryRun,
             },
             errors: {
                 422: `Validation Error`,

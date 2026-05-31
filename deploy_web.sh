@@ -6,7 +6,7 @@ set -e
 
 # Configuration
 ENVIRONMENT="${1:-dev}"  # Default to 'dev' if no argument provided
-API_HOST="mvn-api"
+API_HOST="${API_HOST:-root@185.250.45.54}"
 LOCAL_WEB_DIR="./web"
 
 # Environment-specific configuration

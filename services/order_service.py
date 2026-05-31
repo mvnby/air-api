@@ -2340,6 +2340,34 @@ class OrderService:
         return count, count > 0
 
     @staticmethod
+    def _parse_lead_inbox_datetime(value: Any) -> Optional[datetime]:
+        if isinstance(value, datetime):
+            return value.replace(tzinfo=None) if value.tzinfo else value
+        raw = str(value or "").strip()
+        if not raw:
+            return None
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
+
+    @staticmethod
+    def _extract_email_source_created_at(order: Order) -> Optional[datetime]:
+        meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
+        parsed = OrderService._parse_lead_inbox_datetime(meta.get("email_date"))
+        if parsed:
+            return parsed
+
+        marker = "Дата письма:"
+        comment = order.comment or ""
+        marker_index = comment.find(marker)
+        if marker_index < 0:
+            return None
+        raw_line = comment[marker_index + len(marker):].strip().splitlines()[0].strip()
+        return OrderService._parse_lead_inbox_datetime(raw_line)
+
+    @staticmethod
     async def get_leads_inbox(
         session: AsyncSession,
         scope: str = "active",
@@ -2400,6 +2428,7 @@ class OrderService:
                 ),
                 customer_name=order.customer.name if order.customer else None,
                 phone=order.customer.phone if order.customer else None,
+                email=order.customer.email if order.customer else None,
                 source=(
                     order.lead_source.value
                     if order.lead_source and hasattr(order.lead_source, "value")
@@ -2411,6 +2440,7 @@ class OrderService:
                     if order.technical_meta and order.technical_meta.get("no_answer_at")
                     else None
                 ),
+                source_created_at=OrderService._extract_email_source_created_at(order),
                 created_at=order.created_at,
                 customer_type=order.customer.type if order.customer else "individual",
                 customer_inn=order.customer.inn if order.customer else None,

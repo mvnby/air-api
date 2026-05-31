@@ -2,7 +2,7 @@
 set -e
 
 # Configuration
-REMOTE_HOST="mvn-api"
+REMOTE_HOST="${REMOTE_HOST:-root@185.250.45.54}"
 REMOTE_USER="mvnadmin" 
 REMOTE_DB="air_conditioners"
 LOCAL_CONTAINER="mvn-db-1"

@@ -17,7 +17,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
   # Secrets needed:
   # SSH_KEY (Private Key for root@api and user@web)
-  # SSH_HOST_API (89.39.120.97)
+  # SSH_HOST_API (185.250.45.54)
   # SSH_HOST_WEB (178.159.240.174)
   # SSH_USER_API (root)
   # SSH_USER_WEB (user2154318)

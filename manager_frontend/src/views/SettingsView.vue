@@ -24,7 +24,7 @@ const toastType = ref<'success' | 'error'>('success');
 // A set to keep track of which settings are currently being saved
 const savingKeys = ref<Set<string>>(new Set());
 type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
-type SettingsTab = 'general' | 'documentTemplates' | 'repairComplaints';
+type SettingsTab = 'general' | 'documentTemplates' | 'repairComplaints' | 'emailLeads';
 type ManagedDocumentType = 'contract' | 'act' | 'invoice' | 'defect_act';
 type DocumentTemplateFileOption = {
     id: string;
@@ -97,6 +97,21 @@ const creating = ref(false);
 const googleAuthStatus = ref<ManagerGoogleAuthStatusResponse | null>(null);
 const googleAuthLoading = ref(false);
 const googleAuthBusy = ref(false);
+const EMAIL_LEAD_AUTO_IMPORT_KEY = 'mail_lead_auto_import_enabled';
+const EMAIL_LEAD_INTERVAL_KEY = 'mail_lead_import_interval_minutes';
+const EMAIL_LEAD_LAST_IMPORT_KEY = 'mail_lead_last_import_at';
+const EMAIL_LEAD_SETTING_KEYS = new Set([
+    EMAIL_LEAD_AUTO_IMPORT_KEY,
+    EMAIL_LEAD_INTERVAL_KEY,
+    EMAIL_LEAD_LAST_IMPORT_KEY,
+    'mail_lead_import_limit',
+]);
+const emailLeadSettings = ref({
+    autoImport: false,
+    intervalMinutes: 20,
+    lastImportAt: '',
+});
+const emailLeadSettingsSaving = ref(false);
 
 const goToBackups = () => {
     if (window.location.pathname !== '/manager/settings/backup') {
@@ -110,6 +125,55 @@ const setToast = (msg: string, type: 'success' | 'error' = 'success') => {
     toastType.value = type;
     window.setTimeout(() => { toast.value = ''; }, 3000);
 }
+
+const isEnabledSettingValue = (value?: string | null) => ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
+
+const parsePositiveIntSetting = (value: string | null | undefined, fallback: number, max = 1000) => {
+    const parsed = Number.parseInt(String(value || ''), 10);
+    return Number.isFinite(parsed) ? Math.min(max, Math.max(1, parsed)) : fallback;
+};
+
+const hydrateEmailLeadSettings = (items: ManagerSettingResponse[]) => {
+    const byKey = new Map(items.map((item) => [item.key, item.value]));
+    emailLeadSettings.value = {
+        autoImport: isEnabledSettingValue(byKey.get(EMAIL_LEAD_AUTO_IMPORT_KEY)),
+        intervalMinutes: parsePositiveIntSetting(byKey.get(EMAIL_LEAD_INTERVAL_KEY), 20, 1440),
+        lastImportAt: byKey.get(EMAIL_LEAD_LAST_IMPORT_KEY) || '',
+    };
+};
+
+const upsertSettingValue = async (key: string, value: string, description: string) => {
+    try {
+        return await ManagerSettingsService.updateManagerSetting(key, { value, description });
+    } catch {
+        return await ManagerSettingsService.createManagerSetting({ key, value, description });
+    }
+};
+
+const saveEmailLeadSettings = async () => {
+    emailLeadSettingsSaving.value = true;
+    error.value = '';
+    const interval = Math.min(1440, Math.max(1, Number(emailLeadSettings.value.intervalMinutes) || 20));
+    try {
+        await upsertSettingValue(
+            EMAIL_LEAD_AUTO_IMPORT_KEY,
+            emailLeadSettings.value.autoImport ? 'true' : 'false',
+            'Автоматически проверять входящую почту и создавать лиды из потенциальных заказов.',
+        );
+        await upsertSettingValue(
+            EMAIL_LEAD_INTERVAL_KEY,
+            String(interval),
+            'Интервал автоматической проверки email-лидов в минутах.',
+        );
+        emailLeadSettings.value.intervalMinutes = interval;
+        setToast('Настройки email-лидов сохранены');
+        await loadSettings();
+    } catch (e) {
+        setToast(getApiErrorMessage(e), 'error');
+    } finally {
+        emailLeadSettingsSaving.value = false;
+    }
+};
 
 const DOCUMENT_TYPE_OPTIONS: Array<{ value: ManagedDocumentType; label: string; addLabel: string }> = [
     { value: 'contract', label: 'Договор', addLabel: 'Договор' },
@@ -254,7 +318,8 @@ const loadSettings = async () => {
     error.value = '';
     try {
         const res = await api.listManagerSettings();
-        settings.value = res.items.filter((setting) => setting.key !== 'contract_templates');
+        hydrateEmailLeadSettings(res.items);
+        settings.value = res.items.filter((setting) => setting.key !== 'contract_templates' && !EMAIL_LEAD_SETTING_KEYS.has(setting.key));
         contractTemplateDrafts.value = Object.fromEntries(
             res.items
                 .filter((setting) => setting.key === 'contract_templates')
@@ -665,6 +730,15 @@ onMounted(() => {
                 <span class="material-icons-round text-[18px]">build_circle</span>
                 Жалобы ремонта
             </button>
+            <button
+                type="button"
+                class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                :class="activeSettingsTab === 'emailLeads' ? 'bg-teal-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'"
+                @click="activeSettingsTab = 'emailLeads'"
+            >
+                <span class="material-icons-round text-[18px]">mark_email_read</span>
+                Email-лиды
+            </button>
         </div>
 
         <div v-if="activeSettingsTab === 'general'" class="mb-6 bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-gray-200 dark:border-slate-700/60 p-6">
@@ -711,6 +785,67 @@ onMounted(() => {
                     <span class="material-icons-round text-[18px]">open_in_new</span>
                     Подключить Google
                 </button>
+            </div>
+        </div>
+
+        <div v-if="activeSettingsTab === 'emailLeads'" class="mb-6 bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-gray-200 dark:border-slate-700/60 p-6">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                    <h3 class="text-base font-semibold text-gray-900 dark:text-slate-200 mb-1 flex items-center gap-2">
+                        <span class="material-icons-round text-teal-500 text-[20px]">mark_email_read</span>
+                        Email-лиды
+                    </h3>
+                    <p class="text-xs text-gray-500 dark:text-slate-400">
+                        Автоматическая проверка входящей почты, вложений и создание лидов через AI.
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    class="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-all text-sm disabled:opacity-60"
+                    :disabled="emailLeadSettingsSaving"
+                    @click="saveEmailLeadSettings"
+                >
+                    <span v-if="emailLeadSettingsSaving" class="material-icons-round text-[18px] animate-spin">refresh</span>
+                    <span v-else class="material-icons-round text-[18px]">save</span>
+                    Сохранить
+                </button>
+            </div>
+
+            <div class="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <label class="flex min-h-[88px] items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
+                    <input
+                        v-model="emailLeadSettings.autoImport"
+                        type="checkbox"
+                        class="h-5 w-5 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                        :disabled="emailLeadSettingsSaving"
+                    />
+                    <span>
+                        <span class="block text-sm font-semibold text-gray-900 dark:text-slate-100">Автоимпорт</span>
+                        <span class="block text-xs text-gray-500 dark:text-slate-400">Создавать входящие лиды без ручного запуска.</span>
+                    </span>
+                </label>
+
+                <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
+                    <label class="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Интервал проверки, минут</label>
+                    <input
+                        v-model.number="emailLeadSettings.intervalMinutes"
+                        type="number"
+                        min="1"
+                        max="1440"
+                        class="w-full bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-teal-500 transition-colors shadow-sm text-sm"
+                        :disabled="emailLeadSettingsSaving"
+                    />
+                </div>
+
+                <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
+                    <div class="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Окно проверки</div>
+                    <div class="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                        {{ emailLeadSettings.lastImportAt ? `После ${formatDate(emailLeadSettings.lastImportAt)}` : 'Первый запуск: последние 5 дней' }}
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                        После успешной проверки дата прохода обновляется автоматически.
+                    </p>
+                </div>
             </div>
         </div>
 

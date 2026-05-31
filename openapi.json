@@ -6497,6 +6497,54 @@
         }
       }
     },
+    "/api/manager/mail/leads/import": {
+      "post": {
+        "tags": [
+          "manager/mail"
+        ],
+        "summary": "Import Manager Email Leads",
+        "operationId": "import_manager_email_leads",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dry_run",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Dry Run"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailLeadImportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/mail/bank-receipts/import-statement": {
       "post": {
         "tags": [
@@ -12187,6 +12235,170 @@
         "type": "object",
         "title": "DocumentTemplateUpdatePayload"
       },
+      "EmailLeadDecisionResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "sender_email": {
+            "type": "string",
+            "title": "Sender Email"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "lead_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Id"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "sender_email",
+          "subject"
+        ],
+        "title": "EmailLeadDecisionResponse"
+      },
+      "EmailLeadImportResponse": {
+        "properties": {
+          "processed": {
+            "type": "integer",
+            "title": "Processed",
+            "default": 0
+          },
+          "scanned_since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scanned Since"
+          },
+          "last_import_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Import At"
+          },
+          "candidates": {
+            "type": "integer",
+            "title": "Candidates",
+            "default": 0
+          },
+          "ai_checked": {
+            "type": "integer",
+            "title": "Ai Checked",
+            "default": 0
+          },
+          "would_create": {
+            "type": "integer",
+            "title": "Would Create",
+            "default": 0
+          },
+          "created": {
+            "type": "integer",
+            "title": "Created",
+            "default": 0
+          },
+          "duplicates": {
+            "type": "integer",
+            "title": "Duplicates",
+            "default": 0
+          },
+          "rejected": {
+            "type": "integer",
+            "title": "Rejected",
+            "default": 0
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed",
+            "default": 0
+          },
+          "lead_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Lead Ids",
+            "default": []
+          },
+          "created_lead_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Created Lead Ids",
+            "default": []
+          },
+          "order_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Order Ids",
+            "default": []
+          },
+          "created_order_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Created Order Ids",
+            "default": []
+          },
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/EmailLeadDecisionResponse"
+            },
+            "type": "array",
+            "title": "Decisions",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "EmailLeadImportResponse"
+      },
       "FilterRange": {
         "properties": {
           "min": {
@@ -12414,6 +12626,28 @@
           "request_text": {
             "type": "string",
             "title": "Request Text"
+          },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "source_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Fingerprint"
           },
           "next_followup_date": {
             "anyOf": [
@@ -12735,6 +12969,28 @@
             "type": "string",
             "title": "Request Text"
           },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "source_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Fingerprint"
+          },
           "loss_reason": {
             "anyOf": [
               {
@@ -12911,6 +13167,28 @@
             ],
             "title": "Request Text"
           },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "source_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Fingerprint"
+          },
           "loss_reason": {
             "anyOf": [
               {
@@ -13004,6 +13282,17 @@
             ],
             "title": "Phone"
           },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
           "source": {
             "anyOf": [
               {
@@ -13037,6 +13326,18 @@
               }
             ],
             "title": "No Answer At"
+          },
+          "source_created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Created At"
           },
           "created_at": {
             "type": "string",

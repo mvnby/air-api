@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue';
 import type { LeadsInboxItemResponse } from '../../api';
 
 const props = defineProps<{
@@ -11,6 +12,8 @@ const emit = defineEmits<{
   (e: 'reject', item: LeadsInboxItemResponse): void;
   (e: 'no-answer', item: LeadsInboxItemResponse): void;
 }>();
+
+const isCommentExpanded = ref(false);
 
 const sourceLabel: Record<string, string> = {
   site: 'Сайт',
@@ -67,6 +70,12 @@ const formatPhone = (phone: string | null | undefined): string => {
   return phone;
 };
 
+const formatEmail = (email: string | null | undefined): string => {
+  return (email || '').trim();
+};
+
+const displayDate = computed(() => props.item.source_created_at || props.item.created_at);
+
 const getRelativeTime = (dt: string | null | undefined) => {
   if (!dt) return '';
   const date = new Date(dt);
@@ -89,6 +98,8 @@ const getRelativeTime = (dt: string | null | undefined) => {
   const diffInDays = Math.floor(diffInHours / 24);
   return rtf.format(-diffInDays, 'day');
 };
+
+const hasLongComment = computed(() => (props.item.comment || '').length > 140);
 </script>
 
 <template>
@@ -137,7 +148,7 @@ const getRelativeTime = (dt: string | null | undefined) => {
     </div>
 
     <!-- Phone & source row -->
-    <div class="flex items-center gap-4 px-4 pb-2">
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-2">
       <a
         v-if="item.phone"
         :href="`tel:${item.phone}`"
@@ -146,12 +157,24 @@ const getRelativeTime = (dt: string | null | undefined) => {
         <span class="material-icons-round text-[15px]">call</span>
         {{ formatPhone(item.phone) }}
       </a>
-      <span class="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1">
+      <a
+        v-if="formatEmail(item.email)"
+        :href="`mailto:${formatEmail(item.email)}`"
+        class="flex min-w-0 items-center gap-1 text-sm text-teal-600 dark:text-teal-400 hover:underline font-medium"
+        :title="formatEmail(item.email)"
+      >
+        <span class="material-icons-round text-[15px]">email</span>
+        <span class="min-w-0 break-all">{{ formatEmail(item.email) }}</span>
+      </a>
+      <span
+        v-if="!(item.source === 'email' && formatEmail(item.email))"
+        class="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1"
+      >
         <span class="material-icons-round text-[13px]">{{ getSourceIcon(item.source) }}</span>
         {{ getSourceLabel(item.source) }}
       </span>
       <span class="text-xs text-slate-400 dark:text-slate-500 ml-auto">
-        {{ formatDate(item.created_at) }}
+        {{ formatDate(displayDate) }}
       </span>
     </div>
 
@@ -160,9 +183,21 @@ const getRelativeTime = (dt: string | null | undefined) => {
       v-if="item.comment"
       class="mx-4 mb-3 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-700"
     >
-      <p class="text-sm text-slate-700 dark:text-slate-200 leading-relaxed line-clamp-3">
+      <p
+        class="whitespace-pre-line text-sm text-slate-700 dark:text-slate-200 leading-relaxed"
+        :class="{ 'line-clamp-3': !isCommentExpanded }"
+      >
         {{ item.comment }}
       </p>
+      <button
+        v-if="hasLongComment"
+        type="button"
+        class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-800 dark:text-teal-300 dark:hover:text-teal-200"
+        @click="isCommentExpanded = !isCommentExpanded"
+      >
+        <span class="material-icons-round text-[15px]">{{ isCommentExpanded ? 'expand_less' : 'expand_more' }}</span>
+        {{ isCommentExpanded ? 'Свернуть' : 'Показать полностью' }}
+      </button>
     </div>
     <div
       v-else

@@ -79,6 +79,7 @@ GET_MANAGER_DOC_DOWNLOAD = "get_manager_doc_download"
 DELETE_MANAGER_DOC = "delete_manager_doc"
 IMPORT_MANAGER_BANK_RECEIPTS = "import_manager_bank_receipts"
 IMPORT_MANAGER_BANK_STATEMENT = "import_manager_bank_statement"
+IMPORT_MANAGER_EMAIL_LEADS = "import_manager_email_leads"
 LIST_MANAGER_BANK_RECEIPTS = "list_manager_bank_receipts"
 ATTACH_MANAGER_BANK_RECEIPT = "attach_manager_bank_receipt"
 PATCH_MANAGER_BANK_RECEIPT_STATUS = "patch_manager_bank_receipt_status"
@@ -243,6 +244,7 @@ ALL_MANAGER_OPERATION_IDS = (
     DELETE_MANAGER_DOC,
     IMPORT_MANAGER_BANK_RECEIPTS,
     IMPORT_MANAGER_BANK_STATEMENT,
+    IMPORT_MANAGER_EMAIL_LEADS,
     LIST_MANAGER_BANK_RECEIPTS,
     ATTACH_MANAGER_BANK_RECEIPT,
     PATCH_MANAGER_BANK_RECEIPT_STATUS,

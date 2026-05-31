@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { api } from '../../api';
+import { ManagerMailService, ManagerSettingsService } from '../../client';
 import DateTimeField from '../ui/DateTimeField.vue';
 import type {
+  EmailLeadImportResponse,
   LeadCreatePayload,
   LeadLossPayload,
   LeadQualifyPayload,
@@ -96,6 +98,12 @@ const qualifyCustomerLookupLoading = ref(false);
 const qualifyCustomerLookupResults = ref<ManagerCatalogCustomerItemResponse[]>([]);
 const pendingOpenLeadId = ref<number | null>(null);
 const openedByUrlLeadId = ref<number | null>(null);
+const emailLeadImportLimit = ref(100);
+const emailLeadImporting = ref(false);
+const emailLeadImportResult = ref<EmailLeadImportResponse | null>(null);
+const emailLeadAutoEnabled = ref(false);
+const emailLeadAutoSaving = ref(false);
+const EMAIL_LEAD_AUTO_IMPORT_KEY = 'mail_lead_auto_import_enabled';
 
 const createForm = ref<LeadCreatePayload>({
   source: 'manager',
@@ -264,6 +272,59 @@ const setToast = (message: string) => {
   window.setTimeout(() => {
     if (toast.value === message) toast.value = '';
   }, 3000);
+};
+
+const isEnabledSettingValue = (value?: string | null) => ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
+
+const loadEmailLeadAutoSetting = async () => {
+  try {
+    const response = await ManagerSettingsService.listManagerSettings();
+    const setting = response.items.find((item) => item.key === EMAIL_LEAD_AUTO_IMPORT_KEY);
+    emailLeadAutoEnabled.value = isEnabledSettingValue(setting?.value);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+const saveEmailLeadAutoSetting = async () => {
+  emailLeadAutoSaving.value = true;
+  const value = emailLeadAutoEnabled.value ? 'true' : 'false';
+  const description = 'Автоматический импорт лидов из входящей почты через keyword-фильтр и AI.';
+  try {
+    try {
+      await ManagerSettingsService.updateManagerSetting(EMAIL_LEAD_AUTO_IMPORT_KEY, { value, description });
+    } catch {
+      await ManagerSettingsService.createManagerSetting({ key: EMAIL_LEAD_AUTO_IMPORT_KEY, value, description });
+    }
+    setToast(emailLeadAutoEnabled.value ? 'Автоимпорт email-лидов включен' : 'Автоимпорт email-лидов выключен');
+  } catch (error) {
+    emailLeadAutoEnabled.value = !emailLeadAutoEnabled.value;
+    setToast(`Не удалось сохранить настройку: ${getApiErrorMessage(error)}`);
+  } finally {
+    emailLeadAutoSaving.value = false;
+  }
+};
+
+const importEmailLeads = async (dryRun: boolean) => {
+  emailLeadImporting.value = true;
+  emailLeadImportResult.value = null;
+  try {
+    const result = await ManagerMailService.importManagerEmailLeads(dryRun);
+    emailLeadImportResult.value = result;
+    const createdText = dryRun
+      ? `можно создать ${result.would_create || 0}`
+      : `создано ${result.created || 0}`;
+    setToast(`Почта: обработано ${result.processed || 0}, кандидатов ${result.candidates || 0}, AI ${result.ai_checked || 0}, ${createdText}.`);
+    if (!dryRun && (result.created || 0) > 0) {
+      source.value = 'email';
+      statusTab.value = 'new';
+      await loadLeads();
+    }
+  } catch (error) {
+    setToast(`Не удалось проверить почту: ${getApiErrorMessage(error)}`);
+  } finally {
+    emailLeadImporting.value = false;
+  }
 };
 
 const formatDate = (value?: string | null) => {
@@ -741,7 +802,7 @@ onMounted(async () => {
       pendingOpenLeadId.value = parsed;
     }
   }
-  await loadLeads();
+  await Promise.all([loadLeads(), loadEmailLeadAutoSetting()]);
   window.addEventListener(CUSTOMER_UPDATED_EVENT, handleCustomerUpdated);
 });
 
@@ -1274,6 +1335,74 @@ const onQualifyIbanBlur = async () => {
           </label>
         </div>
       </header>
+
+      <section class="mb-5 rounded-[2rem] border border-teal-200 bg-white p-5 shadow-sm dark:border-teal-500/20 dark:bg-slate-800">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p class="text-sm font-bold uppercase tracking-wide text-teal-700 dark:text-teal-300">Email-лиды</p>
+            <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">
+              Проверка входящих: ключевые слова, затем AI-классификация письма.
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <label class="inline-flex items-center gap-2 rounded-[12px] border border-gray-200 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">
+              <input
+                v-model="emailLeadAutoEnabled"
+                type="checkbox"
+                :disabled="emailLeadAutoSaving"
+                @change="saveEmailLeadAutoSetting"
+              />
+              Автоимпорт
+            </label>
+            <input
+              v-model.number="emailLeadImportLimit"
+              type="number"
+              min="1"
+              max="100"
+              class="field-input w-24 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            />
+            <button class="btn-mini-outline" :disabled="emailLeadImporting" @click="importEmailLeads(true)">
+              Проверить
+            </button>
+            <button class="btn-mini" :disabled="emailLeadImporting" @click="importEmailLeads(false)">
+              Создать лиды
+            </button>
+          </div>
+        </div>
+        <div
+          v-if="emailLeadImportResult"
+          class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-300"
+        >
+          <span>Обработано: {{ emailLeadImportResult.processed || 0 }}</span>
+          <span>Кандидатов: {{ emailLeadImportResult.candidates || 0 }}</span>
+          <span>AI: {{ emailLeadImportResult.ai_checked || 0 }}</span>
+          <span>Можно создать: {{ emailLeadImportResult.would_create || 0 }}</span>
+          <span>Создано: {{ emailLeadImportResult.created || 0 }}</span>
+          <span>Дубли: {{ emailLeadImportResult.duplicates || 0 }}</span>
+          <span>Отклонено: {{ emailLeadImportResult.rejected || 0 }}</span>
+          <span>Ошибки: {{ emailLeadImportResult.failed || 0 }}</span>
+        </div>
+        <div
+          v-if="emailLeadImportResult?.decisions?.length"
+          class="mt-3 overflow-hidden rounded-[14px] border border-gray-200 dark:border-slate-700"
+        >
+          <div
+            v-for="decision in emailLeadImportResult.decisions"
+            :key="`${decision.sender_email}-${decision.subject}-${decision.status}`"
+            class="grid gap-2 border-b border-gray-100 px-3 py-2 text-sm last:border-b-0 dark:border-slate-700 md:grid-cols-[120px_minmax(0,1fr)_minmax(0,2fr)]"
+          >
+            <span class="font-semibold text-slate-700 dark:text-slate-200">
+              {{ decision.status === 'rejected' ? 'Отклонено' : decision.status === 'would_create' ? 'Кандидат' : decision.status === 'created' ? 'Создан' : decision.status === 'duplicate' ? 'Дубль' : 'Ошибка' }}
+            </span>
+            <span class="min-w-0 truncate text-slate-600 dark:text-slate-300">
+              {{ decision.subject || 'Без темы' }}
+            </span>
+            <span class="min-w-0 text-slate-500 dark:text-slate-400">
+              {{ decision.reason || decision.sender_email }}
+            </span>
+          </div>
+        </div>
+      </section>
 
       <!-- Toast -->
       <Transition name="fade">

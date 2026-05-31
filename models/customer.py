@@ -112,6 +112,8 @@ class Lead(SQLModel, table=True):
     inn: Optional[str] = Field(default=None, index=True)
     company_name: Optional[str] = None
     request_text: str = Field(default="")
+    source_message_id: Optional[str] = Field(default=None, index=True)
+    source_fingerprint: Optional[str] = Field(default=None, index=True)
 
     next_followup_date: Optional[datetime] = None
     archived_at: Optional[datetime] = Field(default=None, index=True)

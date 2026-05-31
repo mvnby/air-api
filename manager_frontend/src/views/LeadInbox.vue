@@ -2,7 +2,7 @@
 import { ref, onMounted, watch } from 'vue';
 import { useDebounceFn } from '@vueuse/core';
 import { api, type LeadsInboxItemResponse } from '../api';
-import { ManagerSettingsService } from '../client';
+import { ManagerMailService, ManagerSettingsService, type EmailLeadImportResponse } from '../client';
 import LeadInboxCard from '../components/leads/LeadInboxCard.vue';
 import LeadQualifyModal from '../components/leads/LeadQualifyModal.vue';
 import { useBelarusPhoneMask } from '../composables/useBelarusPhoneMask';
@@ -15,6 +15,8 @@ const items = ref<LeadsInboxItemResponse[]>([]);
 const total = ref(0);
 const loading = ref(false);
 const toast = ref('');
+const emailLeadImporting = ref(false);
+const emailLeadImportResult = ref<EmailLeadImportResponse | null>(null);
 
 // Qualify / Reject modals
 const qualifyTarget = ref<LeadsInboxItemResponse | null>(null);
@@ -104,6 +106,29 @@ const setToast = (msg: string) => {
   setTimeout(() => { if (toast.value === msg) toast.value = ''; }, 3000);
 };
 
+const getApiErrorMessage = (error: unknown) => {
+  if (error instanceof Error && error.message) return error.message;
+  return 'неизвестная ошибка';
+};
+
+const importEmailLeads = async () => {
+  emailLeadImporting.value = true;
+  emailLeadImportResult.value = null;
+  try {
+    const result = await ManagerMailService.importManagerEmailLeads(false);
+    emailLeadImportResult.value = result;
+    setToast(`Почта: обработано ${result.processed || 0}, кандидатов ${result.candidates || 0}, создано ${result.created || 0}.`);
+    if ((result.created || 0) > 0) {
+      scope.value = 'active';
+      await load();
+    }
+  } catch (error) {
+    setToast(`Не удалось проверить почту: ${getApiErrorMessage(error)}`);
+  } finally {
+    emailLeadImporting.value = false;
+  }
+};
+
 const load = async () => {
   loading.value = true;
   try {
@@ -118,7 +143,9 @@ const load = async () => {
   }
 };
 
-onMounted(load);
+onMounted(async () => {
+  await load();
+});
 watch(scope, load);
 
 // ── Address Suggest ─────────────────────────────────────────────────────────
@@ -323,6 +350,63 @@ const scopeOptions: { value: Scope; label: string }[] = [
         </div>
       </div>
     </div>
+
+    <section class="mb-6 rounded-2xl border border-teal-200 bg-white p-4 shadow-sm dark:border-teal-500/20 dark:bg-slate-800">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p class="text-sm font-bold uppercase tracking-wide text-teal-700 dark:text-teal-300">Email-лиды</p>
+          <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">
+            Проверка новых писем с последнего прохода; при первом запуске берутся последние 5 дней.
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            class="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-700 disabled:opacity-60"
+            :disabled="emailLeadImporting"
+            @click="importEmailLeads"
+          >
+            <span class="material-icons-round text-[18px]" :class="{ 'animate-spin': emailLeadImporting }">
+              {{ emailLeadImporting ? 'refresh' : 'mark_email_read' }}
+            </span>
+            {{ emailLeadImporting ? 'Проверяем...' : 'Проверить почту' }}
+          </button>
+        </div>
+      </div>
+      <div
+        v-if="emailLeadImportResult"
+        class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-300"
+      >
+        <span>Обработано: {{ emailLeadImportResult.processed || 0 }}</span>
+        <span v-if="emailLeadImportResult.scanned_since">С: {{ new Date(emailLeadImportResult.scanned_since).toLocaleString('ru-RU') }}</span>
+        <span>Кандидатов: {{ emailLeadImportResult.candidates || 0 }}</span>
+        <span>AI: {{ emailLeadImportResult.ai_checked || 0 }}</span>
+        <span>Создано: {{ emailLeadImportResult.created || 0 }}</span>
+        <span>Дубли: {{ emailLeadImportResult.duplicates || 0 }}</span>
+        <span>Отклонено: {{ emailLeadImportResult.rejected || 0 }}</span>
+        <span>Ошибки: {{ emailLeadImportResult.failed || 0 }}</span>
+      </div>
+      <div
+        v-if="emailLeadImportResult?.decisions?.length"
+        class="mt-3 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700"
+      >
+        <div
+          v-for="(decision, index) in emailLeadImportResult.decisions"
+          :key="`${decision.sender_email}-${decision.subject}-${decision.status}-${index}`"
+          class="grid gap-2 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 dark:border-slate-700 md:grid-cols-[120px_minmax(0,1fr)_minmax(0,2fr)]"
+        >
+          <span class="font-semibold text-slate-700 dark:text-slate-200">
+            {{ decision.status === 'rejected' ? 'Отклонено' : decision.status === 'would_create' ? 'Кандидат' : decision.status === 'created' ? 'Создан' : decision.status === 'duplicate' ? 'Дубль' : 'Ошибка' }}
+            <span v-if="decision.order_id" class="text-slate-400">#{{ decision.order_id }}</span>
+          </span>
+          <span class="min-w-0 truncate text-slate-600 dark:text-slate-300">
+            {{ decision.subject || 'Без темы' }}
+          </span>
+          <span class="min-w-0 text-slate-500 dark:text-slate-400">
+            {{ decision.reason || decision.sender_email }}
+          </span>
+        </div>
+      </div>
+    </section>
 
     <!-- Loading -->
     <div v-if="loading" class="flex items-center gap-3 text-slate-500 dark:text-slate-400 py-12 justify-center">

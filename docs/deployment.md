@@ -13,8 +13,10 @@
 ### API Server
 - **Host alias:** `mvn-api`
 - **User:** `root`
-- **IP:** `89.39.120.97`
+- **IP:** `185.250.45.54`
 - **SSH Key:** `~/.ssh/id_ed25519`
+- **DNS:** `api.mvn.by` A-record must point to `185.250.45.54`
+- **GitHub secret:** `SSH_HOST_API` must be `185.250.45.54`
 
 ## Local Deployment (Legacy)
 
@@ -27,6 +29,8 @@ Use the deployment script for local builds:
 # Dev deployment  
 ./deploy_web.sh dev
 ```
+
+Local API/data scripts default to `root@185.250.45.54`. Override with `REMOTE_HOST=...` or `API_HOST=...` if you need a local SSH alias.
 
 **What the script does:**
 1. Builds frontend with production API data (`INTERNAL_API_URL` + `PUBLIC_API_URL`)

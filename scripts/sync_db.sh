@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-REMOTE_HOST="mvn-api"
+REMOTE_HOST="${REMOTE_HOST:-root@185.250.45.54}"
 REMOTE_DIR="/opt/air-api"
 BACKUP_DIR="backups"
 
