@@ -193,6 +193,7 @@ async def generate_manager_order_document(
     template_id: Optional[str] = Query(None, description="Google Drive template file ID"),
     contract_date: Optional[str] = Query(None, description="Document/contract date as ISO datetime"),
     proposal_id: Optional[int] = Query(None, description="Order proposal ID for generated commercial offer"),
+    base_document_id: Optional[int] = Query(None, description="Order document ID used as basis for closing documents; 0 means selected open customer contract"),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
 ):
@@ -209,6 +210,7 @@ async def generate_manager_order_document(
             template_id=template_id,
             contract_date=parsed_contract_date,
             proposal_id=proposal_id,
+            base_document_id=base_document_id,
         )
     except ValueError as exc:
         raise manager_http_error(

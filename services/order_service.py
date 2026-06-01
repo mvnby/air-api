@@ -1692,18 +1692,23 @@ class OrderService:
             OrderService._map_order_proposal(order, proposal)
             for proposal in sorted(order.proposals, key=lambda proposal: (proposal.is_archived, proposal.sort_order, proposal.id or 0))
         ]
-        data["documents"] = [
-            {
-                "id": doc.id,
-                "proposal_id": doc.proposal_id,
-                "doc_type": doc.doc_type,
-                "number": doc.number,
-                "date": doc.date,
-                "edit_url": doc.google_edit_url,
-                "is_downloadable": bool(doc.google_file_id),
-            }
-            for doc in sorted(order.documents, key=lambda d: d.created_at, reverse=True)
-        ]
+        from services.document_service import DocumentService
+
+        basis_lookup = await DocumentService.build_document_basis_lookup(session, list(order.documents))
+        data["documents"] = []
+        for doc in sorted(order.documents, key=lambda d: d.created_at, reverse=True):
+            data["documents"].append(
+                {
+                    "id": doc.id,
+                    "proposal_id": doc.proposal_id,
+                    **basis_lookup.get(doc.id, {}),
+                    "doc_type": doc.doc_type,
+                    "number": doc.number,
+                    "date": doc.date,
+                    "edit_url": doc.google_edit_url,
+                    "is_downloadable": bool(doc.google_file_id),
+                }
+            )
         data["payments"] = [OrderService._map_payment(p) for p in sorted(order.payments, key=lambda d: d.date, reverse=True)]
         data["work_stages"] = [
             {

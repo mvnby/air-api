@@ -21,6 +21,16 @@ For acts and invoices only, the generator can replace these words and their comm
 
 The role type can come from the contract template default, the open customer contract, or the order override.
 
+## Base Document
+
+Closing document templates for acts, ТН-2 and ТТН-1 can use a neutral base document reference:
+
+- `{{base_document_type}}`
+- `{{base_document_number}}`
+- `{{base_document_date}}`
+
+When the selected base document is an invoice, `{{invoice_number}}` and `{{invoice_date}}` are also populated. When it is a one-time order contract, `{{contract_number}}` and `{{contract_date}}` use that document.
+
 ## Additional Conditions
 
 Use `{{additional_conditions}}` in contract templates for order-specific terms. The value comes from the manager order document block.

@@ -8,7 +8,7 @@ from sqlmodel import select
 from sqlalchemy.orm import selectinload
 from num2words import num2words
 
-from models import Order, OrderProductLink, OrderServiceLink, CustomerType
+from models import CustomerContract, Order, OrderDocument, OrderProductLink, OrderServiceLink, CustomerType
 from services.document_role_service import DocumentRoleService
 
 # Template IDs
@@ -109,6 +109,8 @@ class BaseDocumentStrategy(ABC):
         doc_number: Optional[str] = None,
         doc_type: Optional[str] = None,
         document_date: Optional[datetime] = None,
+        base_document: Optional[OrderDocument] = None,
+        base_customer_contract: Optional[CustomerContract] = None,
     ) -> Dict[str, str]:
         if not self.order:
             raise ValueError("Order not fetched")
@@ -143,6 +145,11 @@ class BaseDocumentStrategy(ABC):
             "{{contract_date}}": order.contract_date.strftime("%d.%m.%Y") if order.contract_date else "-",
             "{{contract_valid_from}}": order.contract_date.strftime("%d.%m.%Y") if order.contract_date else "-",
             "{{contract_valid_until}}": "-",
+            "{{invoice_number}}": "-",
+            "{{invoice_date}}": "-",
+            "{{base_document_type}}": "-",
+            "{{base_document_number}}": "-",
+            "{{base_document_date}}": "-",
             "{{act_number}}": "1",
             "{{act_sequence_number}}": "1",
             "{{document_role_type}}": DocumentRoleService.effective_role_type(order),
@@ -151,13 +158,15 @@ class BaseDocumentStrategy(ABC):
 
         # A one-time contract document must always use its own generated number/date,
         # even when the order currently points at a reusable customer contract.
+        effective_customer_contract = base_customer_contract or getattr(order, "customer_contract", None)
+
         if doc_type == "contract" and doc_number:
             replacements["{{contract_name}}"] = doc_number
             replacements["{{contract_number}}"] = doc_number
             replacements["{{contract_date}}"] = effective_date.strftime("%d.%m.%Y")
             replacements["{{contract_valid_from}}"] = effective_date.strftime("%d.%m.%Y")
-        elif getattr(order, "customer_contract", None):
-            contract = order.customer_contract
+        elif effective_customer_contract:
+            contract = effective_customer_contract
             replacements["{{contract_name}}"] = contract.number
             replacements["{{contract_number}}"] = contract.number
             replacements["{{contract_date}}"] = contract.valid_from.strftime("%d.%m.%Y") if contract.valid_from else "-"
@@ -165,7 +174,6 @@ class BaseDocumentStrategy(ABC):
             replacements["{{contract_valid_until}}"] = contract.valid_until.strftime("%d.%m.%Y") if contract.valid_until else "-"
         else:
             # Fetch contract document if exists to get contract number
-            from models import OrderDocument
             contract_query = select(OrderDocument).where(
                 OrderDocument.order_id == order.id,
                 OrderDocument.doc_type == "contract"
@@ -181,6 +189,56 @@ class BaseDocumentStrategy(ABC):
                 if not order.contract_date:
                     replacements["{{contract_date}}"] = contract_doc.date.strftime("%d.%m.%Y")
                     replacements["{{contract_valid_from}}"] = contract_doc.date.strftime("%d.%m.%Y")
+
+        if base_customer_contract:
+            replacements["{{base_document_type}}"] = DOC_NAMES.get("contract", "Договор")
+            replacements["{{base_document_number}}"] = base_customer_contract.number
+            replacements["{{base_document_date}}"] = (
+                base_customer_contract.valid_from.strftime("%d.%m.%Y")
+                if base_customer_contract.valid_from
+                else "-"
+            )
+            replacements["{{contract_name}}"] = base_customer_contract.number
+            replacements["{{contract_number}}"] = base_customer_contract.number
+            replacements["{{contract_date}}"] = replacements["{{base_document_date}}"]
+            replacements["{{contract_valid_from}}"] = replacements["{{base_document_date}}"]
+            replacements["{{contract_valid_until}}"] = (
+                base_customer_contract.valid_until.strftime("%d.%m.%Y")
+                if base_customer_contract.valid_until
+                else "-"
+            )
+
+        invoice_doc = None
+        if base_document and base_document.doc_type == "invoice":
+            invoice_doc = base_document
+        else:
+            invoice_query = (
+                select(OrderDocument)
+                .where(OrderDocument.order_id == order.id, OrderDocument.doc_type == "invoice")
+                .order_by(OrderDocument.created_at.desc())
+            )
+            invoice_result = await self.session.execute(invoice_query)
+            invoice_doc = invoice_result.scalars().first()
+
+        if invoice_doc:
+            replacements["{{invoice_number}}"] = invoice_doc.number
+            replacements["{{invoice_date}}"] = invoice_doc.date.strftime("%d.%m.%Y") if invoice_doc.date else "-"
+
+        if base_document:
+            replacements["{{base_document_type}}"] = DOC_NAMES.get(base_document.doc_type, base_document.doc_type)
+            replacements["{{base_document_number}}"] = base_document.number
+            replacements["{{base_document_date}}"] = base_document.date.strftime("%d.%m.%Y") if base_document.date else "-"
+            if base_document.doc_type == "contract":
+                replacements["{{contract_name}}"] = base_document.number
+                replacements["{{contract_number}}"] = base_document.number
+                replacements["{{contract_date}}"] = base_document.date.strftime("%d.%m.%Y") if base_document.date else "-"
+                replacements["{{contract_valid_from}}"] = replacements["{{contract_date}}"]
+            elif base_document.doc_type == "invoice":
+                replacements["{{invoice_number}}"] = base_document.number
+                replacements["{{invoice_date}}"] = base_document.date.strftime("%d.%m.%Y") if base_document.date else "-"
+            elif base_document.doc_type == "offer":
+                replacements["{{offer_number}}"] = base_document.number
+                replacements["{{offer_date}}"] = base_document.date.strftime("%d.%m.%Y") if base_document.date else "-"
 
         # Technical Meta
         if order.technical_meta and isinstance(order.technical_meta, dict):

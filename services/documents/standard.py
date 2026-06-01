@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any, List, Optional
 from services.google_service import get_google_service
 from services.documents.base import BaseDocumentStrategy, TEMPLATES, DOC_NAMES
+from models import CustomerContract, OrderDocument
 
 class GoogleDocStrategy(BaseDocumentStrategy):
     """Base for documents using Google Docs API."""
@@ -13,6 +14,8 @@ class GoogleDocStrategy(BaseDocumentStrategy):
         template_id: Optional[str] = None,
         doc_number: Optional[str] = None,
         document_date: Optional[datetime] = None,
+        base_document: Optional[OrderDocument] = None,
+        base_customer_contract: Optional[CustomerContract] = None,
     ) -> str:
         await self.fetch_order()
         if not self.order:
@@ -26,6 +29,8 @@ class GoogleDocStrategy(BaseDocumentStrategy):
             doc_number=doc_number,
             doc_type=doc_type,
             document_date=document_date,
+            base_document=base_document,
+            base_customer_contract=base_customer_contract,
         )
         table_rows = self._prepare_table_data()
         

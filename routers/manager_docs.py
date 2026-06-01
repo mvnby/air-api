@@ -55,11 +55,13 @@ async def get_manager_order_documents(
     session: AsyncSession = Depends(get_session),
 ):
     docs = await DocumentService.list_order_documents(session, order_id)
+    basis_lookup = await DocumentService.build_document_basis_lookup(session, list(docs))
     return {
         "items": [
             ManagerOrderDocumentItem(
                 id=d.id,
                 proposal_id=d.proposal_id,
+                **basis_lookup.get(d.id, {}),
                 doc_type=d.doc_type,
                 number=d.number,
                 date=d.date,
@@ -86,6 +88,8 @@ async def upload_manager_order_document(
     return ManagerOrderDocumentItem(
         id=doc.id,
         proposal_id=doc.proposal_id,
+        base_document_id=doc.base_document_id,
+        base_customer_contract_id=doc.base_customer_contract_id,
         doc_type=doc.doc_type,
         number=doc.number,
         date=doc.date,
@@ -127,6 +131,8 @@ async def register_manager_external_contract(
     return ManagerOrderDocumentItem(
         id=doc.id,
         proposal_id=doc.proposal_id,
+        base_document_id=doc.base_document_id,
+        base_customer_contract_id=doc.base_customer_contract_id,
         doc_type=doc.doc_type,
         number=doc.number,
         date=doc.date,
@@ -164,6 +170,8 @@ async def attach_manager_doc_file(
     return ManagerOrderDocumentItem(
         id=doc.id,
         proposal_id=doc.proposal_id,
+        base_document_id=doc.base_document_id,
+        base_customer_contract_id=doc.base_customer_contract_id,
         doc_type=doc.doc_type,
         number=doc.number,
         date=doc.date,

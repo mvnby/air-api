@@ -13,6 +13,7 @@ from models import (
     DocumentTemplateCustomerLink,
     GlobalConfig,
     Order,
+    OrderDocument,
 )
 from services.document_role_service import DocumentRoleService
 from services.documents.base import DOC_NAMES, TEMPLATES
@@ -371,6 +372,7 @@ class DocumentTemplateService:
         doc_type: str,
         document_template_id: Optional[int] = None,
         template_id: Optional[str] = None,
+        base_document_id: Optional[int] = None,
     ) -> tuple[Optional[int], str]:
         normalized_doc_type = str(doc_type or "").strip()
         if normalized_doc_type not in DocumentTemplateService.MANAGED_TYPES:
@@ -388,7 +390,11 @@ class DocumentTemplateService:
             return None, template_id
 
         if normalized_doc_type == "act":
-            base_doc = await DocumentTemplateService._latest_order_document(session, order_id, {"contract", "invoice"})
+            base_doc = await session.get(OrderDocument, base_document_id) if base_document_id else None
+            if base_doc and base_doc.order_id != order_id:
+                base_doc = None
+            if not base_doc:
+                base_doc = await DocumentTemplateService._latest_order_document(session, order_id, {"contract", "invoice"})
             contract_template_id = base_doc.document_template_id if base_doc else None
             order = await session.get(Order, order_id)
             relevant = await DocumentTemplateService.get_relevant_templates(

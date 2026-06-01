@@ -5,6 +5,11 @@
 export type ManagerOrderDocumentItem = {
     id: number;
     proposal_id?: (number | null);
+    base_document_id?: (number | null);
+    base_customer_contract_id?: (number | null);
+    base_document_type?: (string | null);
+    base_document_number?: (string | null);
+    base_document_date?: (string | null);
     doc_type: string;
     number: string;
     date: string;

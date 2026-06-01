@@ -1081,8 +1081,9 @@ async def test_manager_order_generate_document(async_client, db, monkeypatch):
         template_id=None,
         contract_date=None,
         proposal_id=None,
+        base_document_id=None,
     ):
-        _ = (session, order_id, doc_type, document_template_id, template_id, proposal_id)
+        _ = (session, order_id, doc_type, document_template_id, template_id, proposal_id, base_document_id)
         captured["contract_date"] = contract_date
         return _FakeDoc()
 
@@ -1100,6 +1101,331 @@ async def test_manager_order_generate_document(async_client, db, monkeypatch):
     assert data["doc_type"] == "contract"
     assert data["edit_url"].startswith("https://docs.google.com")
     assert captured["contract_date"] == datetime(2026, 4, 20)
+
+
+@pytest.mark.asyncio
+async def test_document_numbering_uses_shared_prefix_sequence_per_year(db):
+    from services.document_service import DocumentService
+
+    customer = Customer(name="Numbering", phone="+375297777777", type=CustomerType.individual)
+    order = Order(customer=customer, status=OrderStatus.NEGOTIATION)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    db.add_all(
+        [
+            OrderDocument(
+                order_id=order.id,
+                doc_type="contract",
+                number="Д-2026-001",
+                date=datetime(2026, 1, 10),
+                google_file_id="contract-a",
+                google_edit_url="https://example.com/contract-a",
+            ),
+            OrderDocument(
+                order_id=order.id,
+                doc_type="contract",
+                number="Д-2025-999",
+                date=datetime(2025, 12, 31),
+                google_file_id="contract-old",
+                google_edit_url="https://example.com/contract-old",
+            ),
+        ]
+    )
+    await db.commit()
+
+    assert await DocumentService._get_next_number(db, "contract", datetime(2026, 5, 1)) == "Д-2026-002"
+    assert await DocumentService._get_next_number(db, "contract", datetime(2027, 1, 1)) == "Д-2027-001"
+
+
+@pytest.mark.asyncio
+async def test_manager_order_act_can_use_invoice_as_base_document(async_client, db, monkeypatch):
+    customer = Customer(name="Invoice Base", phone="+375297777777", type=CustomerType.individual)
+    order = Order(customer=customer, status=OrderStatus.NEGOTIATION, total_amount=200)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    invoice = OrderDocument(
+        order_id=order.id,
+        doc_type="invoice",
+        number="С-2026-005",
+        date=datetime(2026, 5, 10),
+        google_file_id="invoice-file",
+        google_edit_url="https://example.com/invoice",
+    )
+    db.add(invoice)
+    await db.commit()
+    await db.refresh(invoice)
+
+    captured = {}
+
+    class _FakeGoogleService:
+        def copy_template(self, template_id, title):
+            captured["template_id"] = template_id
+            captured["title"] = title
+            return {"file_id": "fake-act", "edit_url": "https://docs.google.com/document/d/fake-act/edit"}
+
+        def replace_placeholders(self, file_id, replacements):
+            captured["file_id"] = file_id
+            captured["replacements"] = replacements
+
+    from services import document_service
+
+    monkeypatch.setattr(document_service, "get_google_service", lambda: _FakeGoogleService())
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/act",
+        params={"contract_date": "2026-05-20T00:00:00", "base_document_id": invoice.id},
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["base_document_id"] == invoice.id
+    replacements = captured["replacements"]
+    assert replacements["{{base_document_type}}"] == "Счет"
+    assert replacements["{{base_document_number}}"] == "С-2026-005"
+    assert replacements["{{base_document_date}}"] == "10.05.2026"
+    assert replacements["{{invoice_number}}"] == "С-2026-005"
+
+    result = await db.execute(select(OrderDocument).where(OrderDocument.doc_type == "act"))
+    act = result.scalars().first()
+    assert act.base_document_id == invoice.id
+
+
+@pytest.mark.asyncio
+async def test_manager_order_waybills_can_use_invoice_as_base_document(async_client, db, monkeypatch):
+    customer = Customer(name="Waybill Base", phone="+375297777777", type=CustomerType.individual)
+    product = Product(title="Кондиционер", slug="base-waybill-product", price=1000)
+    order = Order(customer=customer, status=OrderStatus.NEGOTIATION, total_amount=1000)
+    db.add_all([customer, product, order])
+    await db.commit()
+    await db.refresh(order)
+    await db.refresh(product)
+
+    db.add(OrderProductLink(order_id=order.id, product_id=product.id, quantity=1, price=1000, cost=700))
+    invoice = OrderDocument(
+        order_id=order.id,
+        doc_type="invoice",
+        number="С-2026-006",
+        date=datetime(2026, 5, 11),
+        google_file_id="invoice-file",
+        google_edit_url="https://example.com/invoice",
+    )
+    db.add(invoice)
+    await db.commit()
+    await db.refresh(invoice)
+
+    captured = {}
+
+    class _FakeGoogleService:
+        def generate_sheet(
+            self,
+            template_id,
+            doc_title,
+            replacements,
+            table_rows,
+            start_cell_addr,
+            target_sheet_name,
+            merge_cols,
+            draw_borders=True,
+            sheet_format_ranges=None,
+        ):
+            captured.setdefault("calls", []).append(
+                {
+                    "template_id": template_id,
+                    "title": doc_title,
+                    "replacements": replacements,
+                    "table_rows": table_rows,
+                    "sheet": target_sheet_name,
+                }
+            )
+            return f"https://docs.google.com/spreadsheets/d/fake-{target_sheet_name}/edit"
+
+    from services.documents import logistics
+
+    monkeypatch.setattr(logistics, "get_google_service", lambda: _FakeGoogleService())
+
+    headers = await _auth_headers(async_client)
+    for doc_type in ("tn2", "ttn1"):
+        response = await async_client.post(
+            f"/api/manager/orders/{order.id}/documents/{doc_type}",
+            params={"contract_date": "2026-05-21T00:00:00", "base_document_id": invoice.id},
+            headers=headers,
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["base_document_id"] == invoice.id
+
+    assert [call["replacements"]["{{base_document_number}}"] for call in captured["calls"]] == [
+        "С-2026-006",
+        "С-2026-006",
+    ]
+    result = await db.execute(select(OrderDocument).where(OrderDocument.doc_type.in_(["tn2", "ttn1"])))
+    docs = result.scalars().all()
+    assert {doc.base_document_id for doc in docs} == {invoice.id}
+
+
+@pytest.mark.asyncio
+async def test_manager_order_requires_selected_base_document_when_multiple_exist(async_client, db, monkeypatch):
+    customer = Customer(name="Multi Base", phone="+375297777777", type=CustomerType.individual)
+    order = Order(customer=customer, status=OrderStatus.NEGOTIATION)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    invoice_a = OrderDocument(
+        order_id=order.id,
+        doc_type="invoice",
+        number="С-2026-007",
+        date=datetime(2026, 5, 12),
+        google_file_id="invoice-a",
+        google_edit_url="https://example.com/invoice-a",
+    )
+    invoice_b = OrderDocument(
+        order_id=order.id,
+        doc_type="invoice",
+        number="С-2026-008",
+        date=datetime(2026, 5, 13),
+        google_file_id="invoice-b",
+        google_edit_url="https://example.com/invoice-b",
+    )
+    db.add_all([invoice_a, invoice_b])
+    await db.commit()
+    await db.refresh(invoice_b)
+
+    class _FakeGoogleService:
+        def copy_template(self, template_id, title):
+            return {"file_id": "fake-act-selected", "edit_url": "https://docs.google.com/document/d/fake-act-selected/edit"}
+
+        def replace_placeholders(self, file_id, replacements):
+            pass
+
+    from services import document_service
+
+    monkeypatch.setattr(document_service, "get_google_service", lambda: _FakeGoogleService())
+
+    headers = await _auth_headers(async_client)
+    missing_response = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/act",
+        params={"contract_date": "2026-05-22T00:00:00"},
+        headers=headers,
+    )
+    assert missing_response.status_code == 400
+    assert "основание" in missing_response.json()["detail"]["message"]
+
+    selected_response = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/act",
+        params={"contract_date": "2026-05-22T00:00:00", "base_document_id": invoice_b.id},
+        headers=headers,
+    )
+    assert selected_response.status_code == 200, selected_response.text
+    assert selected_response.json()["base_document_id"] == invoice_b.id
+
+
+@pytest.mark.asyncio
+async def test_manager_order_closing_doc_keeps_open_contract_base_after_order_contract_changes(async_client, db, monkeypatch):
+    customer = Customer(name='ООО "Стабильность"', phone="+375297777777", type=CustomerType.company)
+    contract_a = CustomerContract(
+        customer=customer,
+        number="ОД-2026-А",
+        valid_from=datetime(2026, 1, 15),
+        valid_until=datetime(2027, 1, 15),
+        status="active",
+    )
+    contract_b = CustomerContract(
+        customer=customer,
+        number="ОД-2026-Б",
+        valid_from=datetime(2026, 2, 20),
+        valid_until=datetime(2027, 2, 20),
+        status="active",
+    )
+    order = Order(customer=customer, customer_contract=contract_a, status=OrderStatus.NEGOTIATION)
+    db.add_all([customer, contract_a, contract_b, order])
+    await db.commit()
+    await db.refresh(order)
+    await db.refresh(contract_a)
+    await db.refresh(contract_b)
+
+    captured = {}
+
+    class _FakeGoogleService:
+        def copy_template(self, template_id, title):
+            return {"file_id": "fake-act-open-contract", "edit_url": "https://docs.google.com/document/d/fake-act-open-contract/edit"}
+
+        def replace_placeholders(self, file_id, replacements):
+            captured["replacements"] = replacements
+
+    from services import document_service
+
+    monkeypatch.setattr(document_service, "get_google_service", lambda: _FakeGoogleService())
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/act",
+        params={"contract_date": "2026-05-23T00:00:00", "base_document_id": 0},
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["base_customer_contract_id"] == contract_a.id
+    assert captured["replacements"]["{{base_document_number}}"] == "ОД-2026-А"
+    assert captured["replacements"]["{{base_document_date}}"] == "15.01.2026"
+
+    result = await db.execute(select(OrderDocument).where(OrderDocument.doc_type == "act"))
+    act_doc = result.scalars().first()
+    assert act_doc.base_customer_contract_id == contract_a.id
+    order_id = order.id
+    customer_id = customer.id
+    contract_a_id = contract_a.id
+    contract_b_id = contract_b.id
+    act_doc_id = act_doc.id
+    act_doc_number = act_doc.number
+    act_doc_date = act_doc.date
+    act_base_customer_contract_id = act_doc.base_customer_contract_id
+
+    order.customer_contract_id = contract_b_id
+    db.add(order)
+    await db.commit()
+    db.expire_all()
+
+    docs_response = await async_client.get(f"/api/manager/orders/{order_id}/documents", headers=headers)
+    assert docs_response.status_code == 200
+    act_item = next(item for item in docs_response.json()["items"] if item["id"] == act_doc_id)
+    assert act_item["base_customer_contract_id"] == contract_a_id
+    assert act_item["base_document_type"] == "contract"
+    assert act_item["base_document_number"] == "ОД-2026-А"
+    assert act_item["base_document_date"].startswith("2026-01-15")
+
+    detail_response = await async_client.get(f"/api/manager/orders/{order_id}", headers=headers)
+    assert detail_response.status_code == 200
+    detail_act_item = next(item for item in detail_response.json()["documents"] if item["id"] == act_doc_id)
+    assert detail_act_item["base_customer_contract_id"] == contract_a_id
+    assert detail_act_item["base_document_type"] == "contract"
+    assert detail_act_item["base_document_number"] == "ОД-2026-А"
+    assert detail_act_item["base_document_date"].startswith("2026-01-15")
+
+    customer_docs_response = await async_client.get(f"/api/manager/customers/{customer_id}/docs", headers=headers)
+    assert customer_docs_response.status_code == 200
+    customer_act_item = next(item for item in customer_docs_response.json()["items"] if item["id"] == act_doc_id)
+    assert customer_act_item["base_customer_contract_id"] == contract_a_id
+    assert customer_act_item["base_document_type"] == "contract"
+    assert customer_act_item["base_document_number"] == "ОД-2026-А"
+    assert customer_act_item["base_document_date"].startswith("2026-01-15")
+
+    from services.documents.standard import ActStrategy
+
+    strategy = ActStrategy(db, order_id)
+    await strategy.fetch_order()
+    base_contract = await db.get(CustomerContract, act_base_customer_contract_id)
+    replacements_after_switch = await strategy._prepare_base_variables(
+        doc_number=act_doc_number,
+        doc_type="act",
+        document_date=act_doc_date,
+        base_customer_contract=base_contract,
+    )
+    assert replacements_after_switch["{{base_document_number}}"] == "ОД-2026-А"
+    assert replacements_after_switch["{{contract_number}}"] == "ОД-2026-А"
 
 
 @pytest.mark.asyncio

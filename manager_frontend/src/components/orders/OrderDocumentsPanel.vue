@@ -61,7 +61,10 @@ const emit = defineEmits<{
 }>();
 
 const DOCUMENT_FILE_ACCEPT = '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-const ONE_TIME_CONTRACT_VALUE = 'one-time-contract';
+const OPEN_CONTRACT_PREFIX = 'open:';
+const ORDER_DOCUMENT_PREFIX = 'doc:';
+const BASE_DOCUMENT_TYPES = new Set(['offer', 'contract', 'invoice']);
+const CLOSING_DOCUMENT_TYPES = new Set(['act', 'tn2', 'ttn1']);
 
 const DOCUMENT_TYPES = [
   { type: 'contract', label: 'Договор' },
@@ -85,6 +88,7 @@ const contractTemplates = ref<DocumentTemplateItem[]>([]);
 const selectedCustomerContractId = ref<number | null>(props.order.customer_contract_id || null);
 const selectedDocumentRoleType = ref<string | null>(props.order.document_role_type || null);
 const selectedContractTemplateId = ref<string>('');
+const selectedBaseDocumentValue = ref<string>('');
 const additionalConditions = ref(props.order.additional_conditions || '');
 const additionalConditionsSaved = ref(props.order.additional_conditions || '');
 const isSavingAdditionalConditions = ref(false);
@@ -117,7 +121,9 @@ const normalizeRoleType = (value: unknown): DocumentRoleType => {
 };
 
 const isWaybillType = (type: string) => type === 'tn2' || type === 'ttn1';
+const isClosingDocumentType = (type: string) => CLOSING_DOCUMENT_TYPES.has(type);
 const isWaybillDocument = computed(() => isWaybillType(selectedDocumentType.value));
+const documentTypeLabel = (type?: string | null) => DOCUMENT_TYPES.find((item) => item.type === type)?.label || type || 'Документ';
 const hasUsableWaybillProductLine = (line: WaybillProductLine) => (
   String(line.product_query || '').trim().length > 0
   && Number(line.quantity || 0) > 0
@@ -344,7 +350,28 @@ const oneTimeContractDocument = computed(() => (
 const hasOrderContract = computed(() => !!oneTimeContractDocument.value);
 const hasContract = computed(() => (isCompanyOrder.value ? !!selectedCustomerContractId.value : false) || hasOrderContract.value);
 const hasOrderInvoice = computed(() => documents.value.some((doc) => doc.doc_type === 'invoice'));
-const hasClosingBaseDocument = computed(() => hasContract.value || hasOrderInvoice.value);
+const baseOrderDocuments = computed(() => (
+  [...documents.value]
+    .filter((doc) => BASE_DOCUMENT_TYPES.has(doc.doc_type))
+    .sort((a, b) => b.id - a.id)
+));
+const baseDocumentOptions = computed(() => {
+  const options: Array<{ value: string; label: string }> = [];
+  for (const contract of customerContracts.value) {
+    options.push({
+      value: `${OPEN_CONTRACT_PREFIX}${contract.id}`,
+      label: `Открытый договор · ${contract.number}`,
+    });
+  }
+  for (const doc of baseOrderDocuments.value) {
+    options.push({
+      value: `${ORDER_DOCUMENT_PREFIX}${doc.id}`,
+      label: `${documentTypeLabel(doc.doc_type)} · ${doc.number}`,
+    });
+  }
+  return options;
+});
+const hasClosingBaseDocument = computed(() => baseDocumentOptions.value.length > 0);
 const selectedContractTemplate = computed(() => contractTemplates.value.find((template) => template.id === selectedContractTemplateId.value) || null);
 const selectedDocumentTypeItem = computed(() => DOCUMENT_TYPES.find((item) => item.type === selectedDocumentType.value) || DOCUMENT_TYPES[0]!);
 const selectedOpenContract = computed(() => (
@@ -357,7 +384,7 @@ const inheritedDocumentRoleType = computed(() => normalizeRoleType(
     || props.order.effective_document_role_type
 ));
 const documentSummary = computed(() => {
-  const base = hasContract.value ? 'договор есть' : (hasOrderInvoice.value ? 'есть счет' : 'без договора');
+  const base = hasContract.value ? 'договор есть' : (hasOrderInvoice.value ? 'есть счет' : (hasClosingBaseDocument.value ? 'есть основание' : 'без основания'));
   return `${documents.value.length} док. · ${base}`;
 });
 const hasDocumentSetupWarning = computed(() => isCompanyOrder.value && !selectedCustomerContractId.value && !hasClosingBaseDocument.value);
@@ -368,11 +395,7 @@ const suggestedDocumentType = computed(() => {
   return 'act';
 });
 const needsContractBinding = computed(() => (
-  isCompanyOrder.value && (
-    selectedDocumentType.value === 'tn2'
-    || selectedDocumentType.value === 'ttn1'
-    || (selectedDocumentType.value === 'act' && !hasOrderInvoice.value)
-  )
+  isClosingDocumentType(selectedDocumentType.value)
 ));
 const selectedTemplateLabel = computed(() => (
   selectedDocumentType.value === 'contract'
@@ -388,12 +411,8 @@ const showsAdditionalConditions = computed(() => (
 const additionalConditionsMode = computed(() => (selectedDocumentType.value === 'contract' ? 'contract' : 'invoice'));
 const contractBindingLabel = computed(() => {
   if (selectedDocumentType.value === 'contract') return 'будет создан разовый договор заказа';
-  if (!isCompanyOrder.value) return 'не требуется';
-  if (selectedDocumentType.value === 'act' && hasOrderInvoice.value) return 'Счет как основание для акта';
   if (!needsContractBinding.value) return 'не требуется';
-  if (selectedCustomerContractId.value) return selectedOpenContract.value ? `Открытый договор · ${selectedOpenContract.value.number}` : 'Открытый договор';
-  if (oneTimeContractDocument.value) return `Разовый договор заказа · ${oneTimeContractDocument.value.number}`;
-  return 'не выбран';
+  return baseDocumentOptions.value.find((option) => option.value === selectedBaseDocumentValue.value)?.label || 'не выбран';
 });
 const roleChecklistLabel = computed(() => (
   selectedDocumentRoleType.value ? getRoleLabel(selectedDocumentRoleType.value) : 'Оставить по шаблону'
@@ -420,10 +439,10 @@ const getDocumentDateForType = (type: string) => (
 );
 
 const isDocumentTypeLocked = (type: string) => (
-  type === 'act' ? !hasClosingBaseDocument.value : (type === 'ttn1' || type === 'tn2') && !hasContract.value
+  isClosingDocumentType(type) && !hasClosingBaseDocument.value
 );
 const lockedDocumentTitle = (type: string) => (
-  type === 'act' ? 'Сначала создайте договор или счет' : 'Сначала создайте договор'
+  isClosingDocumentType(type) ? 'Сначала создайте договор, счет или оферту' : ''
 );
 
 const documentProposalName = (doc: ManagerOrderDocumentItem) => {
@@ -432,14 +451,29 @@ const documentProposalName = (doc: ManagerOrderDocumentItem) => {
   return proposal?.name || `вариант #${doc.proposal_id}`;
 };
 
-const selectedContractBinding = computed({
-  get: () => {
-    if (selectedCustomerContractId.value) return `open:${selectedCustomerContractId.value}`;
-    if (oneTimeContractDocument.value) return ONE_TIME_CONTRACT_VALUE;
-    return '';
-  },
+const syncBaseDocumentSelection = () => {
+  if (!isClosingDocumentType(selectedDocumentType.value)) {
+    selectedBaseDocumentValue.value = '';
+    return;
+  }
+  const options = baseDocumentOptions.value;
+  if (selectedBaseDocumentValue.value && options.some((option) => option.value === selectedBaseDocumentValue.value)) {
+    return;
+  }
+  if (selectedCustomerContractId.value) {
+    const openValue = `${OPEN_CONTRACT_PREFIX}${selectedCustomerContractId.value}`;
+    if (options.some((option) => option.value === openValue)) {
+      selectedBaseDocumentValue.value = openValue;
+      return;
+    }
+  }
+  selectedBaseDocumentValue.value = options.length === 1 ? options[0]!.value : '';
+};
+
+const selectedBaseDocumentBinding = computed({
+  get: () => selectedBaseDocumentValue.value,
   set: (value: string) => {
-    void updateContractBinding(value);
+    void updateBaseDocumentBinding(value);
   },
 });
 
@@ -457,6 +491,7 @@ const loadDocuments = async () => {
     const res = await ManagerDocsService.getManagerOrderDocuments(props.order.id);
     documents.value = res.items;
     if (!isCreatePanelOpen.value) selectedDocumentType.value = suggestedDocumentType.value;
+    syncBaseDocumentSelection();
   } catch (error) {
     console.error('Failed to load documents', error);
   }
@@ -478,12 +513,14 @@ const loadCustomerContracts = async () => {
   if (!props.order.customer?.id) {
     customerContracts.value = [];
     selectedCustomerContractId.value = null;
+    syncBaseDocumentSelection();
     return;
   }
   try {
     const res = await ManagerContractsService.getManagerCustomerContracts(props.order.customer.id);
     customerContracts.value = res.items.filter((contract) => contract.status === 'active');
     selectedCustomerContractId.value = props.order.customer_contract_id || null;
+    syncBaseDocumentSelection();
   } catch (error) {
     console.error('Failed to load customer contracts', error);
   }
@@ -500,6 +537,7 @@ watch(() => props.order.id, () => {
   resetFromOrder();
   waybillProductLines.value = [];
   selectedDocumentType.value = suggestedDocumentType.value;
+  selectedBaseDocumentValue.value = '';
   isCreatePanelOpen.value = false;
   showAdvancedSettings.value = false;
   void loadDocuments();
@@ -509,6 +547,7 @@ watch(() => props.order.id, () => {
 
 watch(selectedDocumentType, () => {
   if (!showsAdditionalConditions.value) showAdvancedSettings.value = false;
+  syncBaseDocumentSelection();
 });
 
 watch(() => [
@@ -544,19 +583,23 @@ const useOneTimeContractForClosingDocs = async () => {
   await ManagerOrdersService.patchManagerOrder(props.order.id, {
     customer_contract_id: null,
   });
+  syncBaseDocumentSelection();
 };
 
-const updateContractBinding = async (value: string) => {
-  const nextCustomerContractId = value.startsWith('open:') ? Number(value.slice(5)) : null;
+const updateBaseDocumentBinding = async (value: string) => {
+  const nextCustomerContractId = value.startsWith(OPEN_CONTRACT_PREFIX) ? Number(value.slice(OPEN_CONTRACT_PREFIX.length)) : null;
   if (nextCustomerContractId !== null && Number.isNaN(nextCustomerContractId)) return;
   try {
+    selectedBaseDocumentValue.value = value;
     selectedCustomerContractId.value = nextCustomerContractId;
-    await ManagerOrdersService.patchManagerOrder(props.order.id, {
-      customer_contract_id: nextCustomerContractId,
-    });
-    emit('refresh');
+    if (value.startsWith(OPEN_CONTRACT_PREFIX) || props.order.customer_contract_id) {
+      await ManagerOrdersService.patchManagerOrder(props.order.id, {
+        customer_contract_id: nextCustomerContractId,
+      });
+      emit('refresh');
+    }
   } catch (error) {
-    notify(`Ошибка выбора договора: ${getApiErrorMessage(error)}`, 'error');
+    notify(`Ошибка выбора основания: ${getApiErrorMessage(error)}`, 'error');
   }
 };
 
@@ -594,6 +637,7 @@ const openCreatePanel = () => {
   selectedDocumentType.value = suggestedDocumentType.value;
   showAdvancedSettings.value = false;
   isCreatePanelOpen.value = true;
+  syncBaseDocumentSelection();
   if (isWaybillDocument.value) {
     syncWaybillProductLines();
     ensureAllWaybillComponents();
@@ -602,6 +646,7 @@ const openCreatePanel = () => {
 
 const selectDocumentType = (type: string) => {
   selectedDocumentType.value = type;
+  syncBaseDocumentSelection();
   if (isWaybillType(type)) {
     syncWaybillProductLines();
     ensureAllWaybillComponents();
@@ -609,6 +654,17 @@ const selectDocumentType = (type: string) => {
 };
 
 const activeWaybillProposalId = computed(() => props.activeProposalId ?? selectedOrderProposal.value?.id ?? null);
+
+const getSelectedBaseDocumentId = (type: string) => {
+  if (!isClosingDocumentType(type)) return undefined;
+  const value = selectedBaseDocumentValue.value;
+  if (value.startsWith(ORDER_DOCUMENT_PREFIX)) {
+    const docId = Number(value.slice(ORDER_DOCUMENT_PREFIX.length));
+    return Number.isFinite(docId) ? docId : undefined;
+  }
+  if (value.startsWith(OPEN_CONTRACT_PREFIX)) return 0;
+  return undefined;
+};
 
 const saveWaybillProductLines = async () => {
   const lines = waybillProductLines.value;
@@ -645,6 +701,11 @@ const handleDocumentsSent = () => {
 const generateDocument = async (type: string) => {
   isGeneratingDoc.value = true;
   try {
+    syncBaseDocumentSelection();
+    if (isClosingDocumentType(type) && !selectedBaseDocumentValue.value) {
+      notify('Выберите документ-основание', 'error');
+      return;
+    }
     if (isWaybillType(type)) {
       if (!waybillProductLines.value.length) syncWaybillProductLines();
       ensureAllWaybillComponents();
@@ -660,6 +721,7 @@ const generateDocument = async (type: string) => {
       ? selectedContractTemplate.value
       : undefined;
     const proposalId = (type === 'offer' || isWaybillType(type)) ? (activeWaybillProposalId.value ?? undefined) : undefined;
+    const baseDocumentId = getSelectedBaseDocumentId(type);
     const res = await ManagerOrdersService.generateManagerOrderDocument(
       props.order.id,
       type,
@@ -667,6 +729,7 @@ const generateDocument = async (type: string) => {
       template && !template.document_template_id ? template.id : undefined,
       getDocumentDateForType(type),
       proposalId,
+      baseDocumentId,
     );
     window.open(res.edit_url, '_blank');
     await loadDocuments();
@@ -874,6 +937,9 @@ const registerExternalContract = async () => {
                   {{ new Date(doc.date).toLocaleDateString('ru-RU') }} · <span class="uppercase">{{ doc.doc_type }}</span>
                   <span v-if="documentProposalName(doc)"> · {{ documentProposalName(doc) }}</span>
                 </p>
+                <p v-if="doc.base_document_number" class="truncate text-[11px] text-slate-400 dark:text-slate-500">
+                  Основание: {{ documentTypeLabel(doc.base_document_type) }} · {{ doc.base_document_number }}
+                </p>
               </div>
             </div>
             <div class="flex shrink-0 items-center gap-1 sm:gap-2">
@@ -990,7 +1056,7 @@ const registerExternalContract = async () => {
 
       <div v-if="needsContractBinding" class="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700/50 dark:bg-slate-800/40">
         <div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-200">Шаг 2: договор для актов и накладных</label>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-200">Шаг 2: документ-основание</label>
           <button
             type="button"
             class="inline-flex w-fit items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -1002,20 +1068,17 @@ const registerExternalContract = async () => {
         </div>
 
         <select
-          v-model="selectedContractBinding"
+          v-model="selectedBaseDocumentBinding"
           class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
         >
-          <option value="">Выберите договор</option>
-          <option v-if="oneTimeContractDocument" :value="ONE_TIME_CONTRACT_VALUE">
-            Использовать разовый договор заказа · {{ oneTimeContractDocument.number }}
-          </option>
-          <option v-for="contract in customerContracts" :key="contract.id" :value="`open:${contract.id}`">
-            Открытый договор · {{ contract.number }} · до {{ new Date(contract.valid_until).toLocaleDateString('ru-RU') }}
+          <option value="">Выберите основание</option>
+          <option v-for="option in baseDocumentOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
           </option>
         </select>
 
-        <p v-if="oneTimeContractDocument && customerContracts.length" class="mt-2 text-xs text-slate-500 dark:text-slate-400">
-          Выберите, куда ссылать закрывающие документы: на разовый договор заказа или на открытый договор клиента.
+        <p v-if="baseDocumentOptions.length > 1" class="mt-2 text-xs text-slate-500 dark:text-slate-400">
+          Если в заказе несколько счетов, договоров или оферт, закрывающий документ будет привязан к выбранному основанию.
         </p>
 
         <form
@@ -1088,8 +1151,8 @@ const registerExternalContract = async () => {
             Создать открытый договор
           </button>
         </div>
-        <p v-else-if="!selectedCustomerContractId && !hasClosingBaseDocument" class="mt-2 text-xs text-amber-600 dark:text-amber-400">
-          Для актов нужен договор или счет, для накладных нужен договор.
+        <p v-else-if="!hasClosingBaseDocument" class="mt-2 text-xs text-amber-600 dark:text-amber-400">
+          Для актов и накладных нужен договор, счет или оферта.
         </p>
       </div>
 
