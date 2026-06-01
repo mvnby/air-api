@@ -7,7 +7,7 @@ from sqlmodel import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
-from models import CustomerType, OrderDocument, Order, GlobalConfig
+from models import CustomerContract, CustomerType, OrderDocument, Order, GlobalConfig
 from services.google_service import get_google_service
 from services.documents.base import TEMPLATES, DOC_NAMES, BaseDocumentStrategy
 from services.documents.factory import DocumentFactory
@@ -20,6 +20,18 @@ class DocumentService:
 
     ALLOWED_DOC_TYPES = {"contract", "invoice", "work_order", "act", "defect_act", "offer", "tn2", "ttn1"}
     PROPOSAL_SCOPED_DOC_TYPES = {"offer", "tn2", "ttn1"}
+    CLOSING_DOC_TYPES = {"act", "tn2", "ttn1"}
+    BASE_DOC_TYPES = {"offer", "contract", "invoice"}
+    DOC_NUMBER_PREFIXES = {
+        "contract": "Д",
+        "offer": "КП",
+        "invoice": "С",
+        "act": "А",
+        "defect_act": "ДА",
+        "work_order": "НЗ",
+        "tn2": "ТН2",
+        "ttn1": "ТТН1",
+    }
     ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".doc", ".docx"}
     DEFAULT_UPLOAD_MIME_TYPES = {
         ".pdf": "application/pdf",
@@ -125,6 +137,7 @@ class DocumentService:
         template_id: Optional[str] = None,
         contract_date: Optional[datetime] = None,
         proposal_id: Optional[int] = None,
+        base_document_id: Optional[int] = None,
     ) -> OrderDocument:
         """
         Создает документ или возвращает существующий.
@@ -138,7 +151,7 @@ class DocumentService:
         Returns:
             OrderDocument объект с данными о документе
         """
-        if doc_type in DocumentService.PROPOSAL_SCOPED_DOC_TYPES:
+        if doc_type in DocumentService.PROPOSAL_SCOPED_DOC_TYPES or doc_type in DocumentService.CLOSING_DOC_TYPES:
             return await DocumentService._create_new_document(
                 session,
                 order_id,
@@ -147,6 +160,7 @@ class DocumentService:
                 template_id=template_id,
                 contract_date=contract_date,
                 proposal_id=proposal_id,
+                base_document_id=base_document_id,
             )
 
         # 1. Проверяем, есть ли уже такой документ
@@ -170,6 +184,7 @@ class DocumentService:
             template_id=template_id,
             contract_date=contract_date,
             proposal_id=proposal_id,
+            base_document_id=base_document_id,
         )
 
     @staticmethod
@@ -181,6 +196,7 @@ class DocumentService:
         template_id: Optional[str] = None,
         contract_date: Optional[datetime] = None,
         proposal_id: Optional[int] = None,
+        base_document_id: Optional[int] = None,
     ) -> dict:
         if doc_type not in DocumentService.ALLOWED_DOC_TYPES:
             raise ValueError(f"Unsupported document type: {doc_type}")
@@ -193,10 +209,13 @@ class DocumentService:
             template_id=template_id,
             contract_date=contract_date,
             proposal_id=proposal_id,
+            base_document_id=base_document_id,
         )
         return {
             "doc_id": doc.id,
             "proposal_id": getattr(doc, "proposal_id", None),
+            "base_document_id": getattr(doc, "base_document_id", None),
+            "base_customer_contract_id": getattr(doc, "base_customer_contract_id", None),
             "doc_type": doc.doc_type,
             "edit_url": doc.google_edit_url,
         }
@@ -471,6 +490,107 @@ class DocumentService:
         result = await session.execute(query)
         return result.scalars().all()
 
+    @staticmethod
+    async def _resolve_base_document(
+        session: AsyncSession,
+        *,
+        order_id: int,
+        doc_type: str,
+        base_document_id: Optional[int],
+    ) -> tuple[Optional[OrderDocument], Optional[CustomerContract]]:
+        if doc_type not in DocumentService.CLOSING_DOC_TYPES:
+            return None, None
+
+        order = await session.get(Order, order_id)
+        if not order:
+            raise ValueError("Order not found")
+
+        if base_document_id == 0:
+            if not order.customer_contract_id:
+                raise ValueError("Открытый договор-основание не выбран")
+            base_customer_contract = await session.get(CustomerContract, order.customer_contract_id)
+            if not base_customer_contract:
+                raise ValueError("Открытый договор-основание не найден")
+            return None, base_customer_contract
+
+        if base_document_id is not None:
+            base_document = await session.get(OrderDocument, base_document_id)
+            if not base_document or base_document.order_id != order_id:
+                raise ValueError("Документ-основание не найден в этом заказе")
+            if base_document.doc_type not in DocumentService.BASE_DOC_TYPES:
+                raise ValueError("Документ-основание должен быть договором, счетом или офертой")
+            return base_document, None
+
+        query = (
+            select(OrderDocument)
+            .where(
+                OrderDocument.order_id == order_id,
+                OrderDocument.doc_type.in_(DocumentService.BASE_DOC_TYPES),
+            )
+            .order_by(OrderDocument.created_at.desc())
+        )
+        result = await session.execute(query)
+        candidates = list(result.scalars().all())
+        base_customer_contract = None
+        if order.customer_contract_id:
+            base_customer_contract = await session.get(CustomerContract, order.customer_contract_id)
+
+        if len(candidates) + (1 if base_customer_contract else 0) == 0:
+            return None, None
+        if len(candidates) + (1 if base_customer_contract else 0) > 1:
+            raise ValueError("Выберите документ-основание для акта или накладной")
+        if candidates:
+            return candidates[0], None
+        return None, base_customer_contract
+
+    @staticmethod
+    async def build_document_basis_lookup(
+        session: AsyncSession,
+        documents: list[OrderDocument],
+    ) -> dict[int, dict]:
+        docs_by_id = {doc.id: doc for doc in documents if doc.id is not None}
+        contract_ids = {
+            doc.base_customer_contract_id
+            for doc in documents
+            if getattr(doc, "base_customer_contract_id", None) is not None
+        }
+        contracts_by_id: dict[int, CustomerContract] = {}
+        if contract_ids:
+            result = await session.execute(select(CustomerContract).where(CustomerContract.id.in_(contract_ids)))
+            contracts_by_id = {contract.id: contract for contract in result.scalars().all() if contract.id is not None}
+
+        lookup: dict[int, dict] = {}
+        for doc in documents:
+            if doc.id is None:
+                continue
+            base_doc = docs_by_id.get(doc.base_document_id)
+            base_contract = contracts_by_id.get(doc.base_customer_contract_id)
+            if base_doc:
+                lookup[doc.id] = {
+                    "base_document_id": base_doc.id,
+                    "base_customer_contract_id": None,
+                    "base_document_type": base_doc.doc_type,
+                    "base_document_number": base_doc.number,
+                    "base_document_date": base_doc.date,
+                }
+            elif base_contract:
+                lookup[doc.id] = {
+                    "base_document_id": None,
+                    "base_customer_contract_id": base_contract.id,
+                    "base_document_type": "contract",
+                    "base_document_number": base_contract.number,
+                    "base_document_date": base_contract.valid_from,
+                }
+            else:
+                lookup[doc.id] = {
+                    "base_document_id": None,
+                    "base_customer_contract_id": None,
+                    "base_document_type": None,
+                    "base_document_number": None,
+                    "base_document_date": None,
+                }
+        return lookup
+
     
     @staticmethod
     async def _create_new_document(
@@ -481,10 +601,18 @@ class DocumentService:
         template_id: Optional[str] = None,
         contract_date: Optional[datetime] = None,
         proposal_id: Optional[int] = None,
+        base_document_id: Optional[int] = None,
     ) -> OrderDocument:
         """Создает новый документ в Google Drive и сохраняет в БД"""
-        
-        if doc_type in ["act", "tn2", "ttn1"]:
+
+        base_document, base_customer_contract = await DocumentService._resolve_base_document(
+            session,
+            order_id=order_id,
+            doc_type=doc_type,
+            base_document_id=base_document_id,
+        )
+
+        if doc_type in DocumentService.CLOSING_DOC_TYPES:
             order_result = await session.execute(
                 select(Order)
                 .where(Order.id == order_id)
@@ -493,17 +621,11 @@ class DocumentService:
             order = order_result.scalars().first()
             if not order:
                 raise ValueError("Order not found")
-            base_doc_types = ["contract", "invoice"] if doc_type == "act" else ["contract"]
-            contract_query = select(OrderDocument).where(
-                OrderDocument.order_id == order_id,
-                OrderDocument.doc_type.in_(base_doc_types)
-            )
-            result = await session.execute(contract_query)
-            has_one_time_base_doc = result.scalars().first() is not None
+            has_stable_base = base_document is not None or base_customer_contract is not None
             if order.customer and order.customer.type == CustomerType.company:
-                if not order.customer_contract_id and not has_one_time_base_doc:
+                if not has_stable_base:
                     raise ValueError("Невозможно создать акт/накладную: выберите открытый договор клиента или создайте договор/счет заказа")
-            elif not has_one_time_base_doc:
+            elif not has_stable_base:
                 raise ValueError("Невозможно создать акт/накладную: отсутствует договор или счет")
 
         # 1. Получаем template_id (managed template, legacy query param or default)
@@ -513,6 +635,7 @@ class DocumentService:
             doc_type=doc_type,
             document_template_id=document_template_id,
             template_id=template_id,
+            base_document_id=base_document.id if base_document else None,
         )
         if not template_id:
             raise ValueError(f"Unknown document type: {doc_type}")
@@ -544,6 +667,8 @@ class DocumentService:
             doc_number=doc_number,
             doc_type=doc_type,
             document_date=effective_doc_date,
+            base_document=base_document,
+            base_customer_contract=base_customer_contract,
         )
         if doc_type == "act":
             act_number = await DocumentService._get_act_number_for_order_contract(session, strategy.order)
@@ -571,6 +696,8 @@ class DocumentService:
                     template_id=template_id,
                     doc_number=doc_number,
                     document_date=effective_doc_date,
+                    base_document=base_document,
+                    base_customer_contract=base_customer_contract,
                 )
                 
                 # Извлекаем file_id из URL
@@ -614,6 +741,8 @@ class DocumentService:
         new_doc = OrderDocument(
             order_id=order_id,
             proposal_id=effective_proposal_id,
+            base_document_id=base_document.id if base_document else None,
+            base_customer_contract_id=base_customer_contract.id if base_customer_contract else None,
             document_template_id=document_template_id,
             template_id=template_id,
             doc_type=doc_type,
@@ -680,42 +809,25 @@ class DocumentService:
         Формат: Д-2024-001 (для договоров), КП-2024-001 (для КП), и т.д.
         """
         current_year = (base_date or datetime.now()).year
-        
-        # Получаем последний документ этого типа за текущий год
-        query = select(OrderDocument).where(
-            OrderDocument.doc_type == doc_type
-        ).order_by(OrderDocument.id.desc())
-        
+
+        prefix = DocumentService.DOC_NUMBER_PREFIXES.get(doc_type, doc_type.upper()[:2])
+        number_prefix = f"{prefix}-{current_year}-"
+
+        query = (
+            select(OrderDocument)
+            .where(OrderDocument.number.like(f"{number_prefix}%"))
+            .order_by(OrderDocument.id.desc())
+        )
         result = await session.execute(query)
-        last_doc = result.scalars().first()
-        
-        # Определяем префикс
-        prefix_map = {
-            "contract": "Д",
-            "offer": "КП",
-            "invoice": "С",
-            "act": "А",
-            "defect_act": "ДА",
-            "work_order": "НЗ",
-            "tn2": "ТН2",
-            "ttn1": "ТТН1"
-        }
-        prefix = prefix_map.get(doc_type, doc_type.upper()[:2])
-        
-        # Вычисляем следующий номер
-        if last_doc and str(current_year) in last_doc.number:
-            # Извлекаем номер из формата "Д-2024-001"
+        docs = list(result.scalars().all())
+
+        next_num = 1
+        for doc in docs:
             try:
-                parts = last_doc.number.split('-')
-                if len(parts) >= 3:
-                    last_num = int(parts[-1])
-                    next_num = last_num + 1
-                else:
-                    next_num = 1
+                next_num = int(str(doc.number).split("-")[-1]) + 1
+                break
             except (ValueError, IndexError):
-                next_num = 1
-        else:
-            next_num = 1
+                continue
         
         return f"{prefix}-{current_year}-{next_num:03d}"
 

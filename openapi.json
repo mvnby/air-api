@@ -5381,6 +5381,24 @@
               "title": "Proposal Id"
             },
             "description": "Order proposal ID for generated commercial offer"
+          },
+          {
+            "name": "base_document_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Order document ID used as basis for closing documents; 0 means selected open customer contract",
+              "title": "Base Document Id"
+            },
+            "description": "Order document ID used as basis for closing documents; 0 means selected open customer contract"
           }
         ],
         "responses": {
@@ -14997,6 +15015,62 @@
             ],
             "title": "Proposal Id"
           },
+          "base_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Document Id"
+          },
+          "base_customer_contract_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Customer Contract Id"
+          },
+          "base_document_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Document Type"
+          },
+          "base_document_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Document Number"
+          },
+          "base_document_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Document Date"
+          },
           "doc_type": {
             "type": "string",
             "title": "Doc Type"
@@ -16625,6 +16699,62 @@
             ],
             "title": "Proposal Id"
           },
+          "base_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Document Id"
+          },
+          "base_customer_contract_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Customer Contract Id"
+          },
+          "base_document_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Document Type"
+          },
+          "base_document_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Document Number"
+          },
+          "base_document_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Document Date"
+          },
           "doc_type": {
             "type": "string",
             "title": "Doc Type"
@@ -16696,6 +16826,28 @@
               }
             ],
             "title": "Proposal Id"
+          },
+          "base_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Document Id"
+          },
+          "base_customer_contract_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Customer Contract Id"
           },
           "doc_type": {
             "type": "string",

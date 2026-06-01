@@ -172,12 +172,14 @@ async def get_customer_docs_for_manager(
     _user: str = Depends(get_current_username),
 ):
     docs = await DocumentService.get_customer_documents(session, customer_id)
+    basis_lookup = await DocumentService.build_document_basis_lookup(session, list(docs))
     return {
         "items": [
             {
                 "id": doc.id,
                 "order_id": doc.order_id,
                 "proposal_id": doc.proposal_id,
+                **basis_lookup.get(doc.id, {}),
                 "doc_type": doc.doc_type,
                 "number": doc.number,
                 "date": doc.date,

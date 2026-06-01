@@ -515,6 +515,11 @@ class ManagerOrderListItemResponse(BaseModel):
 class ManagerOrderDocumentItem(BaseModel):
     id: int
     proposal_id: Optional[int] = None
+    base_document_id: Optional[int] = None
+    base_customer_contract_id: Optional[int] = None
+    base_document_type: Optional[str] = None
+    base_document_number: Optional[str] = None
+    base_document_date: Optional[datetime] = None
     doc_type: str
     number: str
     date: datetime
@@ -530,6 +535,11 @@ class ManagerCustomerDocumentItem(BaseModel):
     id: int
     order_id: int
     proposal_id: Optional[int] = None
+    base_document_id: Optional[int] = None
+    base_customer_contract_id: Optional[int] = None
+    base_document_type: Optional[str] = None
+    base_document_number: Optional[str] = None
+    base_document_date: Optional[datetime] = None
     doc_type: str
     number: str
     date: datetime
@@ -756,6 +766,8 @@ class ManagerOrderCreatePayload(BaseModel):
 class ManagerOrderDocumentResponse(BaseModel):
     doc_id: int
     proposal_id: Optional[int] = None
+    base_document_id: Optional[int] = None
+    base_customer_contract_id: Optional[int] = None
     doc_type: str
     edit_url: str
 

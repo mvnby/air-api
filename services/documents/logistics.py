@@ -5,6 +5,7 @@ from num2words import num2words
 
 from services.google_service import get_google_service
 from services.documents.base import BaseDocumentStrategy, TEMPLATES, DOC_NAMES
+from models import CustomerContract, OrderDocument
 
 class LogisticsSheetStrategy(BaseDocumentStrategy):
     """Strategy for TN-2 and TTN-1 using Google Sheets API."""
@@ -19,6 +20,8 @@ class LogisticsSheetStrategy(BaseDocumentStrategy):
         template_id: Optional[str] = None,
         doc_number: Optional[str] = None,
         document_date: Optional[datetime] = None,
+        base_document: Optional[OrderDocument] = None,
+        base_customer_contract: Optional[CustomerContract] = None,
     ) -> str:
         if not self.order:
             await self.fetch_order()
@@ -29,6 +32,8 @@ class LogisticsSheetStrategy(BaseDocumentStrategy):
             doc_number=doc_number,
             doc_type=doc_type,
             document_date=document_date,
+            base_document=base_document,
+            base_customer_contract=base_customer_contract,
         )
         
         # Add TTN specific empty placeholders if TTN-1

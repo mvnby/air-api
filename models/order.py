@@ -504,6 +504,8 @@ class OrderDocument(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     order_id: int = Field(foreign_key="order.id", index=True)
     proposal_id: Optional[int] = Field(default=None, foreign_key="order_proposal.id", index=True)
+    base_document_id: Optional[int] = Field(default=None, foreign_key="order_document.id", index=True)
+    base_customer_contract_id: Optional[int] = Field(default=None, foreign_key="customer_contract.id", index=True)
     document_template_id: Optional[int] = Field(default=None, foreign_key="document_template.id", index=True)
     template_id: Optional[str] = Field(default=None, index=True)
     doc_type: str = Field(index=True)
@@ -517,6 +519,10 @@ class OrderDocument(SQLModel, table=True):
 
     order: "Order" = Relationship(back_populates="documents")
     proposal: Optional[OrderProposal] = Relationship()
+    base_document: Optional["OrderDocument"] = Relationship(
+        sa_relationship_kwargs={"remote_side": "OrderDocument.id"}
+    )
+    base_customer_contract: Optional["CustomerContract"] = Relationship()
     document_template: Optional["DocumentTemplate"] = Relationship()
 
     def __str__(self):
