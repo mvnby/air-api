@@ -10,6 +10,7 @@ export type DocumentTemplateItem = {
     is_open_contract?: boolean;
     doc_type?: string;
     description?: (string | null);
+    base_document_type_label?: (string | null);
     is_default?: boolean;
     is_active?: boolean;
     client_restricted?: boolean;

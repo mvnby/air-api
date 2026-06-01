@@ -8,6 +8,7 @@ export type DocumentTemplatePayload = {
     google_template_id: string;
     document_role_type?: (string | null);
     description?: (string | null);
+    base_document_type_label?: (string | null);
     is_default?: boolean;
     is_active?: boolean;
     is_open_contract?: boolean;

@@ -351,6 +351,7 @@ async def get_doc_templates(
                 is_open_contract=bool(t.get("is_open_contract")),
                 doc_type=t.get("doc_type", doc_type),
                 description=t.get("description"),
+                base_document_type_label=t.get("base_document_type_label"),
                 is_default=bool(t.get("is_default")),
                 is_active=bool(t.get("is_active", True)),
                 client_restricted=bool(t.get("client_restricted")),

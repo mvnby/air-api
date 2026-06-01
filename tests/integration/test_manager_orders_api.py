@@ -10,6 +10,7 @@ from models import (
     CustomerBranch,
     CustomerContract,
     CustomerType,
+    DocumentTemplate,
     GlobalConfig,
     Installer,
     Order,
@@ -1183,6 +1184,16 @@ async def test_manager_order_act_can_use_invoice_as_base_document(async_client, 
         google_file_id="invoice-file",
         google_edit_url="https://example.com/invoice",
     )
+    invoice_template = DocumentTemplate(
+        name="Счет-договор",
+        doc_type="invoice",
+        google_template_id="invoice-template",
+        base_document_type_label="Счет-договор",
+    )
+    db.add(invoice_template)
+    await db.commit()
+    await db.refresh(invoice_template)
+    invoice.document_template_id = invoice_template.id
     db.add(invoice)
     await db.commit()
     await db.refresh(invoice)
@@ -1213,7 +1224,7 @@ async def test_manager_order_act_can_use_invoice_as_base_document(async_client, 
     assert response.status_code == 200, response.text
     assert response.json()["base_document_id"] == invoice.id
     replacements = captured["replacements"]
-    assert replacements["{{base_document_type}}"] == "Счет"
+    assert replacements["{{base_document_type}}"] == "Счет-договор"
     assert replacements["{{base_document_number}}"] == "С-2026-005"
     assert replacements["{{base_document_date}}"] == "10.05.2026"
     assert replacements["{{invoice_number}}"] == "С-2026-005"
@@ -1221,6 +1232,29 @@ async def test_manager_order_act_can_use_invoice_as_base_document(async_client, 
     result = await db.execute(select(OrderDocument).where(OrderDocument.doc_type == "act"))
     act = result.scalars().first()
     assert act.base_document_id == invoice.id
+    order_id = order.id
+    customer_id = customer.id
+    act_id = act.id
+
+    docs_response = await async_client.get(f"/api/manager/orders/{order_id}/documents", headers=headers)
+    assert docs_response.status_code == 200
+    act_item = next(item for item in docs_response.json()["items"] if item["id"] == act_id)
+    assert act_item["base_document_type"] == "invoice"
+    assert act_item["base_document_type_label"] == "Счет-договор"
+
+    db.expire_all()
+
+    detail_response = await async_client.get(f"/api/manager/orders/{order_id}", headers=headers)
+    assert detail_response.status_code == 200
+    detail_act_item = next(item for item in detail_response.json()["documents"] if item["id"] == act_id)
+    assert detail_act_item["base_document_type"] == "invoice"
+    assert detail_act_item["base_document_type_label"] == "Счет-договор"
+
+    customer_docs_response = await async_client.get(f"/api/manager/customers/{customer_id}/docs", headers=headers)
+    assert customer_docs_response.status_code == 200
+    customer_act_item = next(item for item in customer_docs_response.json()["items"] if item["id"] == act_id)
+    assert customer_act_item["base_document_type"] == "invoice"
+    assert customer_act_item["base_document_type_label"] == "Счет-договор"
 
 
 @pytest.mark.asyncio
@@ -1422,6 +1456,7 @@ async def test_manager_order_closing_doc_keeps_open_contract_base_after_order_co
     act_item = next(item for item in docs_response.json()["items"] if item["id"] == act_doc_id)
     assert act_item["base_customer_contract_id"] == contract_a_id
     assert act_item["base_document_type"] == "contract"
+    assert act_item["base_document_type_label"] == "Договор"
     assert act_item["base_document_number"] == "ОД-2026-А"
     assert act_item["base_document_date"].startswith("2026-01-15")
 
@@ -1430,6 +1465,7 @@ async def test_manager_order_closing_doc_keeps_open_contract_base_after_order_co
     detail_act_item = next(item for item in detail_response.json()["documents"] if item["id"] == act_doc_id)
     assert detail_act_item["base_customer_contract_id"] == contract_a_id
     assert detail_act_item["base_document_type"] == "contract"
+    assert detail_act_item["base_document_type_label"] == "Договор"
     assert detail_act_item["base_document_number"] == "ОД-2026-А"
     assert detail_act_item["base_document_date"].startswith("2026-01-15")
 
@@ -1438,6 +1474,7 @@ async def test_manager_order_closing_doc_keeps_open_contract_base_after_order_co
     customer_act_item = next(item for item in customer_docs_response.json()["items"] if item["id"] == act_doc_id)
     assert customer_act_item["base_customer_contract_id"] == contract_a_id
     assert customer_act_item["base_document_type"] == "contract"
+    assert customer_act_item["base_document_type_label"] == "Договор"
     assert customer_act_item["base_document_number"] == "ОД-2026-А"
     assert customer_act_item["base_document_date"].startswith("2026-01-15")
 

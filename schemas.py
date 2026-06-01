@@ -518,6 +518,7 @@ class ManagerOrderDocumentItem(BaseModel):
     base_document_id: Optional[int] = None
     base_customer_contract_id: Optional[int] = None
     base_document_type: Optional[str] = None
+    base_document_type_label: Optional[str] = None
     base_document_number: Optional[str] = None
     base_document_date: Optional[datetime] = None
     doc_type: str
@@ -538,6 +539,7 @@ class ManagerCustomerDocumentItem(BaseModel):
     base_document_id: Optional[int] = None
     base_customer_contract_id: Optional[int] = None
     base_document_type: Optional[str] = None
+    base_document_type_label: Optional[str] = None
     base_document_number: Optional[str] = None
     base_document_date: Optional[datetime] = None
     doc_type: str
@@ -780,6 +782,7 @@ class DocumentTemplateItem(BaseModel):
     is_open_contract: bool = False
     doc_type: str = "contract"
     description: Optional[str] = None
+    base_document_type_label: Optional[str] = None
     is_default: bool = False
     is_active: bool = True
     client_restricted: bool = False
@@ -810,6 +813,7 @@ class DocumentTemplatePayload(BaseModel):
     google_template_id: str
     document_role_type: Optional[str] = None
     description: Optional[str] = None
+    base_document_type_label: Optional[str] = None
     is_default: bool = False
     is_active: bool = True
     is_open_contract: bool = False
@@ -826,6 +830,7 @@ class DocumentTemplateUpdatePayload(BaseModel):
     google_template_id: Optional[str] = None
     document_role_type: Optional[str] = None
     description: Optional[str] = None
+    base_document_type_label: Optional[str] = None
     is_default: Optional[bool] = None
     is_active: Optional[bool] = None
     is_open_contract: Optional[bool] = None

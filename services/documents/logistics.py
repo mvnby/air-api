@@ -50,6 +50,7 @@ class LogisticsSheetStrategy(BaseDocumentStrategy):
         
         # Enriched Replacements with Totals
         replacements.update(totals)
+        self._append_placeholder_aliases(replacements)
         
         doc_title = f"{DOC_NAMES.get(doc_type, 'Док')} {doc_number or f'#{self.order.id}'} {replacements.get('{{client_name}}', '')}"
         
