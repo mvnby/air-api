@@ -46,6 +46,7 @@ class DocumentTemplateService:
             "doc_type": template.doc_type,
             "document_role_type": DocumentRoleService.normalize_role_type(template.document_role_type),
             "description": template.description,
+            "base_document_type_label": template.base_document_type_label,
             "is_default": bool(template.is_default),
             "is_active": bool(template.is_active),
             "is_open_contract": bool(template.is_open_contract),
@@ -73,6 +74,7 @@ class DocumentTemplateService:
             "doc_type": "contract",
             "document_role_type": DocumentRoleService.normalize_role_type(item.get("document_role_type")),
             "description": None,
+            "base_document_type_label": None,
             "is_default": index == 0,
             "is_active": True,
             "is_open_contract": DocumentTemplateService._normalize_bool(item.get("is_open_contract")),
@@ -210,6 +212,8 @@ class DocumentTemplateService:
             template.document_role_type = DocumentRoleService.normalize_role_type(payload.document_role_type)
         if should_set("description"):
             template.description = str(payload.description or "").strip() or None
+        if should_set("base_document_type_label"):
+            template.base_document_type_label = str(payload.base_document_type_label or "").strip() or None
         if should_set("is_default"):
             template.is_default = bool(payload.is_default)
         if should_set("is_active"):
@@ -352,6 +356,7 @@ class DocumentTemplateService:
                         "doc_type": normalized_doc_type,
                         "document_role_type": DocumentRoleService.normalize_role_type(None),
                         "description": None,
+                        "base_document_type_label": None,
                         "is_default": True,
                         "is_active": True,
                         "is_open_contract": False,

@@ -938,7 +938,7 @@ const registerExternalContract = async () => {
                   <span v-if="documentProposalName(doc)"> · {{ documentProposalName(doc) }}</span>
                 </p>
                 <p v-if="doc.base_document_number" class="truncate text-[11px] text-slate-400 dark:text-slate-500">
-                  Основание: {{ documentTypeLabel(doc.base_document_type) }} · {{ doc.base_document_number }}
+                  Основание: {{ doc.base_document_type_label || documentTypeLabel(doc.base_document_type) }} · {{ doc.base_document_number }}
                 </p>
               </div>
             </div>

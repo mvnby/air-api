@@ -7,7 +7,7 @@ from sqlmodel import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
-from models import CustomerContract, CustomerType, OrderDocument, Order, GlobalConfig
+from models import CustomerContract, CustomerType, DocumentTemplate, OrderDocument, Order, GlobalConfig
 from services.google_service import get_google_service
 from services.documents.base import TEMPLATES, DOC_NAMES, BaseDocumentStrategy
 from services.documents.factory import DocumentFactory
@@ -558,6 +558,15 @@ class DocumentService:
         if contract_ids:
             result = await session.execute(select(CustomerContract).where(CustomerContract.id.in_(contract_ids)))
             contracts_by_id = {contract.id: contract for contract in result.scalars().all() if contract.id is not None}
+        template_ids = {
+            doc.document_template_id
+            for doc in docs_by_id.values()
+            if getattr(doc, "document_template_id", None) is not None
+        }
+        templates_by_id: dict[int, DocumentTemplate] = {}
+        if template_ids:
+            result = await session.execute(select(DocumentTemplate).where(DocumentTemplate.id.in_(template_ids)))
+            templates_by_id = {template.id: template for template in result.scalars().all() if template.id is not None}
 
         lookup: dict[int, dict] = {}
         for doc in documents:
@@ -566,10 +575,13 @@ class DocumentService:
             base_doc = docs_by_id.get(doc.base_document_id)
             base_contract = contracts_by_id.get(doc.base_customer_contract_id)
             if base_doc:
+                template = templates_by_id.get(base_doc.document_template_id)
+                custom_type = str(getattr(template, "base_document_type_label", "") or "").strip()
                 lookup[doc.id] = {
                     "base_document_id": base_doc.id,
                     "base_customer_contract_id": None,
                     "base_document_type": base_doc.doc_type,
+                    "base_document_type_label": custom_type or DOC_NAMES.get(base_doc.doc_type, base_doc.doc_type),
                     "base_document_number": base_doc.number,
                     "base_document_date": base_doc.date,
                 }
@@ -578,6 +590,7 @@ class DocumentService:
                     "base_document_id": None,
                     "base_customer_contract_id": base_contract.id,
                     "base_document_type": "contract",
+                    "base_document_type_label": DOC_NAMES.get("contract", "Договор"),
                     "base_document_number": base_contract.number,
                     "base_document_date": base_contract.valid_from,
                 }
@@ -586,6 +599,7 @@ class DocumentService:
                     "base_document_id": None,
                     "base_customer_contract_id": None,
                     "base_document_type": None,
+                    "base_document_type_label": None,
                     "base_document_number": None,
                     "base_document_date": None,
                 }
@@ -678,10 +692,12 @@ class DocumentService:
         # Добавляем номер документа в замены
         replacements["{{doc_number}}"] = doc_number
         replacements["{{number}}"] = doc_number
+        strategy._append_placeholder_aliases(replacements)
         
         # Добавляем специфичные для типа документа замены
         if hasattr(strategy, '_add_specific_replacements'):
             strategy._add_specific_replacements(replacements)
+            strategy._append_placeholder_aliases(replacements)
         
         # 5. Определяем тип документа (Docs или Sheets)
         is_sheet = doc_type in ["tn2", "ttn1"]

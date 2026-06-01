@@ -36,6 +36,7 @@ class GoogleDocStrategy(BaseDocumentStrategy):
         
         # Additional Replacements specific to doc logic
         self._add_specific_replacements(replacements)
+        self._append_placeholder_aliases(replacements)
 
         doc_title = f"{DOC_NAMES.get(doc_type, 'Док')} #{self.order.id} {replacements.get('{{client_name}}', '')}"
         

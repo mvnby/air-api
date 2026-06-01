@@ -266,6 +266,7 @@ class DocumentTemplate(SQLModel, table=True):
     google_template_id: str = Field(index=True)
     document_role_type: Optional[DocumentRoleType] = Field(default=None, sa_column=Column(String, nullable=True))
     description: Optional[str] = None
+    base_document_type_label: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
 
     is_default: bool = Field(default=False, index=True)
     is_active: bool = Field(default=True, index=True)

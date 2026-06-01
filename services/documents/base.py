@@ -8,7 +8,7 @@ from sqlmodel import select
 from sqlalchemy.orm import selectinload
 from num2words import num2words
 
-from models import CustomerContract, Order, OrderDocument, OrderProductLink, OrderServiceLink, CustomerType
+from models import CustomerContract, DocumentTemplate, Order, OrderDocument, OrderProductLink, OrderServiceLink, CustomerType
 from services.document_role_service import DocumentRoleService
 
 # Template IDs
@@ -160,6 +160,16 @@ class BaseDocumentStrategy(ABC):
         # even when the order currently points at a reusable customer contract.
         effective_customer_contract = base_customer_contract or getattr(order, "customer_contract", None)
 
+        if doc_number:
+            replacements["{{doc_number}}"] = doc_number
+            replacements["{{number}}"] = doc_number
+        if doc_type == "invoice" and doc_number:
+            replacements["{{invoice_number}}"] = doc_number
+            replacements["{{invoice_date}}"] = effective_date.strftime("%d.%m.%Y")
+        if doc_type == "offer" and doc_number:
+            replacements["{{offer_number}}"] = doc_number
+            replacements["{{offer_date}}"] = effective_date.strftime("%d.%m.%Y")
+
         if doc_type == "contract" and doc_number:
             replacements["{{contract_name}}"] = doc_number
             replacements["{{contract_number}}"] = doc_number
@@ -225,7 +235,7 @@ class BaseDocumentStrategy(ABC):
             replacements["{{invoice_date}}"] = invoice_doc.date.strftime("%d.%m.%Y") if invoice_doc.date else "-"
 
         if base_document:
-            replacements["{{base_document_type}}"] = DOC_NAMES.get(base_document.doc_type, base_document.doc_type)
+            replacements["{{base_document_type}}"] = await self._base_document_type_label(base_document)
             replacements["{{base_document_number}}"] = base_document.number
             replacements["{{base_document_date}}"] = base_document.date.strftime("%d.%m.%Y") if base_document.date else "-"
             if base_document.doc_type == "contract":
@@ -245,7 +255,28 @@ class BaseDocumentStrategy(ABC):
             for key, value in order.technical_meta.items():
                 replacements[f"{{{{meta_{key}}}}}"] = str(value)
 
-        return self._append_customer_variables(replacements, c)
+        return self._append_placeholder_aliases(self._append_customer_variables(replacements, c))
+
+    async def _base_document_type_label(self, base_document: OrderDocument) -> str:
+        default_label = DOC_NAMES.get(base_document.doc_type, base_document.doc_type)
+        if not base_document.document_template_id:
+            return default_label
+        template = base_document.__dict__.get("document_template")
+        if not template:
+            template = await self.session.get(DocumentTemplate, base_document.document_template_id)
+        custom_label = str(getattr(template, "base_document_type_label", "") or "").strip()
+        return custom_label or default_label
+
+    @staticmethod
+    def _append_placeholder_aliases(replacements: Dict[str, str]) -> Dict[str, str]:
+        for key, value in list(replacements.items()):
+            if not (key.startswith("{{") and key.endswith("}}")):
+                continue
+            name = key[2:-2]
+            if not name or name.upper() == name:
+                continue
+            replacements[f"{{{{{name.upper()}}}}}"] = value
+        return replacements
 
     def _append_customer_variables(self, replacements: Dict[str, str], c: Any) -> Dict[str, str]:
         # Customer Real Data

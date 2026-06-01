@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
-from models import Customer, CustomerContract, Order, OrderDocument
+from models import Customer, CustomerContract, DocumentTemplate, Order, OrderDocument
 from services.document_service import DocumentService
 from services.documents.standard import ActStrategy
 
@@ -138,6 +138,73 @@ async def test_base_document_placeholders_support_invoice(sqlite_session):
     assert replacements["{{base_document_date}}"] == "03.05.2026"
     assert replacements["{{invoice_number}}"] == "С-2026-003"
     assert replacements["{{invoice_date}}"] == "03.05.2026"
+    assert replacements["{{INVOICE_NUMBER}}"] == "С-2026-003"
+    assert replacements["{{INVOICE_DATE}}"] == "03.05.2026"
+
+
+@pytest.mark.asyncio
+async def test_current_invoice_placeholders_use_generated_number_and_uppercase_aliases(sqlite_session):
+    customer = Customer(name="Invoice Self", phone="+375291111111")
+    order = Order(customer=customer, total_amount=120)
+    sqlite_session.add(order)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+
+    strategy = ActStrategy(sqlite_session, order.id)
+    await strategy.fetch_order()
+    replacements = await strategy._prepare_base_variables(
+        doc_number="С-2026-004",
+        doc_type="invoice",
+        document_date=datetime(2026, 6, 1),
+    )
+
+    assert replacements["{{invoice_number}}"] == "С-2026-004"
+    assert replacements["{{invoice_date}}"] == "01.06.2026"
+    assert replacements["{{INVOICE_NUMBER}}"] == "С-2026-004"
+    assert replacements["{{INVOICE_DATE}}"] == "01.06.2026"
+    assert replacements["{{DOC_NUMBER}}"] == "С-2026-004"
+
+
+@pytest.mark.asyncio
+async def test_base_document_type_uses_invoice_template_label(sqlite_session):
+    customer = Customer(name="Invoice Label", phone="+375291111111")
+    order = Order(customer=customer, total_amount=120)
+    template = DocumentTemplate(
+        name="Счет-договор",
+        doc_type="invoice",
+        google_template_id="invoice-template",
+        base_document_type_label="Счет-договор",
+    )
+    sqlite_session.add_all([order, template])
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+    await sqlite_session.refresh(template)
+
+    invoice = OrderDocument(
+        order_id=order.id,
+        document_template_id=template.id,
+        doc_type="invoice",
+        number="С-2026-005",
+        date=datetime(2026, 6, 1),
+        google_file_id="invoice-d",
+        google_edit_url="https://example.com/d",
+    )
+    sqlite_session.add(invoice)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(invoice)
+
+    strategy = ActStrategy(sqlite_session, order.id)
+    await strategy.fetch_order()
+    replacements = await strategy._prepare_base_variables(
+        doc_number="А-2026-003",
+        doc_type="act",
+        document_date=datetime(2026, 6, 2),
+        base_document=invoice,
+    )
+
+    assert replacements["{{base_document_type}}"] == "Счет-договор"
+    assert replacements["{{BASE_DOCUMENT_TYPE}}"] == "Счет-договор"
+    assert replacements["{{base_document_number}}"] == "С-2026-005"
 
 
 @pytest.mark.asyncio

@@ -45,6 +45,7 @@ type DocumentTemplateForm = {
     google_template_id: string;
     document_role_type: DocumentRoleType;
     description: string;
+    base_document_type_label: string;
     is_default: boolean;
     is_active: boolean;
     is_open_contract: boolean;
@@ -199,6 +200,7 @@ const emptyDocumentTemplate = (docType: ManagedDocumentType = 'contract'): Docum
     google_template_id: '',
     document_role_type: 'seller_buyer',
     description: '',
+    base_document_type_label: '',
     is_default: false,
     is_active: true,
     is_open_contract: false,
@@ -216,6 +218,7 @@ const mapTemplateItemToForm = (item: DocumentTemplateItem): DocumentTemplateForm
     google_template_id: item.id || '',
     document_role_type: normalizeRoleType(item.document_role_type),
     description: item.description || '',
+    base_document_type_label: item.base_document_type_label || '',
     is_default: item.is_default === true,
     is_active: item.is_active !== false,
     is_open_contract: item.is_open_contract === true,
@@ -267,6 +270,7 @@ const documentTemplatePayload = (template: DocumentTemplateForm): DocumentTempla
     google_template_id: template.google_template_id.trim(),
     document_role_type: normalizeRoleType(template.document_role_type),
     description: template.description.trim() || undefined,
+    base_document_type_label: template.base_document_type_label.trim() || undefined,
     is_default: template.is_default,
     is_active: template.is_active,
     is_open_contract: template.doc_type === 'contract' ? template.is_open_contract : false,
@@ -965,12 +969,21 @@ onMounted(() => {
                     </div>
 
                     <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
-                        <textarea
-                            v-model="template.description"
-                            rows="3"
-                            class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
-                            placeholder="Комментарий для менеджера"
-                        />
+                        <div class="space-y-2">
+                            <textarea
+                                v-model="template.description"
+                                rows="3"
+                                class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                                placeholder="Комментарий для менеджера"
+                            />
+                            <input
+                                v-if="template.doc_type === 'contract' || template.doc_type === 'invoice'"
+                                v-model="template.base_document_type_label"
+                                type="text"
+                                class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                                placeholder="Тип основания: Счет-договор"
+                            />
+                        </div>
                         <div>
                             <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Доступность</label>
                             <div class="rounded-lg border border-gray-300 bg-white p-3 shadow-sm dark:border-slate-600 dark:bg-slate-900">
