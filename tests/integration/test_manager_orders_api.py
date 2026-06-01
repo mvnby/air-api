@@ -470,6 +470,7 @@ async def test_manager_order_contract_selection_and_act_guard(async_client, db, 
         params={"contract_date": "2026-04-26T00:00:00"},
     )
     assert one_time_contract_with_open_selected.status_code == 200
+    one_time_contract_id = one_time_contract_with_open_selected.json()["doc_id"]
     assert captured_replacements[-1]["{{contract_number}}"].startswith("Д-2026-")
     assert captured_replacements[-1]["{{contract_number}}"] != "ОД-2026-777"
     assert captured_replacements[-1]["{{contract_date}}"] == "26.04.2026"
@@ -494,10 +495,24 @@ async def test_manager_order_contract_selection_and_act_guard(async_client, db, 
     assert captured_replacements[-1]["{{act_number}}"] == "1"
 
     first_act = await async_client.post(f"/api/manager/orders/{order.id}/documents/act", headers=headers)
+    assert first_act.status_code == 400
+    assert "основан" in first_act.json()["detail"]["message"].lower()
+
+    first_act = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/act",
+        headers=headers,
+        params={"base_document_id": 0},
+    )
     assert first_act.status_code == 200
+    assert first_act.json()["base_document_id"] is None
+    assert first_act.json()["base_customer_contract_id"] == contract.id
     assert captured_replacements[-1]["{{act_number}}"] == "1"
     assert captured_replacements[-1]["{{act_sequence_number}}"] == "1"
     assert captured_replacements[-1]["{{object_address}}"] == "Минск, объект 1"
+    first_act_doc = await db.get(OrderDocument, first_act.json()["doc_id"])
+    assert first_act_doc is not None
+    assert first_act_doc.base_document_id is None
+    assert first_act_doc.base_customer_contract_id == contract.id
 
     second_order = Order(customer_id=customer.id, customer_contract_id=contract.id, status=OrderStatus.NEW_LEAD)
     db.add(second_order)
@@ -508,6 +523,19 @@ async def test_manager_order_contract_selection_and_act_guard(async_client, db, 
     assert second_act.status_code == 200
     assert captured_replacements[-1]["{{act_number}}"] == "2"
     assert captured_replacements[-1]["{{act_sequence_number}}"] == "2"
+
+    one_time_contract_act = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/act",
+        headers=headers,
+        params={"base_document_id": one_time_contract_id},
+    )
+    assert one_time_contract_act.status_code == 200
+    assert one_time_contract_act.json()["base_document_id"] == one_time_contract_id
+    assert one_time_contract_act.json()["base_customer_contract_id"] is None
+    one_time_contract_act_doc = await db.get(OrderDocument, one_time_contract_act.json()["doc_id"])
+    assert one_time_contract_act_doc is not None
+    assert one_time_contract_act_doc.base_document_id == one_time_contract_id
+    assert one_time_contract_act_doc.base_customer_contract_id is None
 
 
 @pytest.mark.asyncio
