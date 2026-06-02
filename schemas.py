@@ -2278,6 +2278,21 @@ class EmailLeadImportResponse(BaseModel):
     decisions: List[EmailLeadDecisionResponse] = []
 
 
+class EmailLeadImportJobResponse(BaseModel):
+    status: str
+    source: Optional[str] = None
+    dry_run: bool = False
+    lookback_days: Optional[int] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    last_import_at: Optional[str] = None
+    notified_admins: int = 0
+    already_running: bool = False
+    error: Optional[str] = None
+    message: Optional[str] = None
+    result: Optional[EmailLeadImportResponse] = None
+
+
 class BankStatementImportResponse(BaseModel):
     rows: int = 0
     credit_rows: int = 0

@@ -5,6 +5,7 @@ import pytest
 from core.config import settings
 from models import BankReceipt, OutgoingEmail, PaymentCurrency
 from services.bank_receipt_service import BankReceiptImportResult
+from services.email_lead_import_job_service import EmailLeadImportJobSnapshot
 from services.email_lead_intake_service import EmailLeadImportResult
 
 
@@ -68,10 +69,10 @@ async def test_manager_mail_import_endpoint_uses_imap_service(async_client, monk
 
 @pytest.mark.asyncio
 async def test_manager_mail_lead_import_endpoint_uses_imap_service(async_client, monkeypatch):
-    async def fake_import(_session, *, dry_run=False, lookback_days=None):
+    async def fake_start(*, dry_run=False, lookback_days=None):
         assert dry_run is True
         assert lookback_days == 7
-        return EmailLeadImportResult(
+        result = EmailLeadImportResult(
             processed=3,
             scanned_since="2026-05-23T09:00:00",
             last_import_at=None,
@@ -87,29 +88,50 @@ async def test_manager_mail_lead_import_endpoint_uses_imap_service(async_client,
             order_ids=[52, 51],
             created_order_ids=[52],
         )
+        return EmailLeadImportJobSnapshot(
+            status="running",
+            source="manual",
+            dry_run=dry_run,
+            lookback_days=lookback_days,
+            message="Импорт email-лидов запущен в фоне.",
+            result=result,
+        )
 
-    monkeypatch.setattr("routers.manager_mail.MailImapService.import_email_leads", fake_import)
+    monkeypatch.setattr("routers.manager_mail.EmailLeadImportJobService.start_manual_import", fake_start)
 
     headers = await _auth_headers(async_client)
     response = await async_client.post("/api/manager/mail/leads/import?dry_run=true&lookback_days=7", headers=headers)
 
     assert response.status_code == 200
     assert response.json() == {
-        "processed": 3,
-        "scanned_since": "2026-05-23T09:00:00",
+        "status": "running",
+        "source": "manual",
+        "dry_run": True,
+        "lookback_days": 7,
+        "started_at": None,
+        "finished_at": None,
         "last_import_at": None,
-        "candidates": 2,
-        "ai_checked": 2,
-        "would_create": 1,
-        "created": 1,
-        "duplicates": 1,
-        "rejected": 0,
-        "failed": 0,
-        "lead_ids": [42, 41],
-        "created_lead_ids": [42],
-        "order_ids": [52, 51],
-        "created_order_ids": [52],
-        "decisions": [],
+        "notified_admins": 0,
+        "already_running": False,
+        "error": None,
+        "message": "Импорт email-лидов запущен в фоне.",
+        "result": {
+            "processed": 3,
+            "scanned_since": "2026-05-23T09:00:00",
+            "last_import_at": None,
+            "candidates": 2,
+            "ai_checked": 2,
+            "would_create": 1,
+            "created": 1,
+            "duplicates": 1,
+            "rejected": 0,
+            "failed": 0,
+            "lead_ids": [42, 41],
+            "created_lead_ids": [42],
+            "order_ids": [52, 51],
+            "created_order_ids": [52],
+            "decisions": [],
+        },
     }
 
 

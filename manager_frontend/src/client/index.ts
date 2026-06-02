@@ -50,6 +50,7 @@ export type { DocumentTemplateListResponse } from './models/DocumentTemplateList
 export type { DocumentTemplatePayload } from './models/DocumentTemplatePayload';
 export type { DocumentTemplateUpdatePayload } from './models/DocumentTemplateUpdatePayload';
 export type { EmailLeadDecisionResponse } from './models/EmailLeadDecisionResponse';
+export type { EmailLeadImportJobResponse } from './models/EmailLeadImportJobResponse';
 export type { EmailLeadImportResponse } from './models/EmailLeadImportResponse';
 export type { FilterRange } from './models/FilterRange';
 export type { FiltersConfigResponse } from './models/FiltersConfigResponse';

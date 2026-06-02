@@ -140,3 +140,59 @@ class NotificationService:
         return sent
 
     notify_admins_bank_receipts_requires_review = notify_admins_bank_receipts_imported
+
+    @staticmethod
+    async def notify_admins_email_leads_imported(
+        session: AsyncSession,
+        order_ids: list[int],
+    ) -> int:
+        if not settings.admin_list or not order_ids:
+            return 0
+
+        stmt = (
+            select(Order)
+            .where(Order.id.in_(order_ids))
+            .order_by(Order.created_at.desc())
+        )
+        result = await session.execute(stmt)
+        orders = list(result.scalars().all())
+        if not orders:
+            return 0
+
+        lines = [f"🔔 <b>Новые email-заказы: {len(orders)}</b>", ""]
+        for order in orders[:10]:
+            meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
+            sender = str(meta.get("email_sender") or "отправитель не распознан")
+            subject = str(meta.get("email_subject") or "без темы")
+            reason = str(meta.get("email_ai_reason") or "").strip()
+            comment = (order.comment or "").strip()
+            if len(comment) > 220:
+                comment = f"{comment[:217]}..."
+            if len(reason) > 180:
+                reason = f"{reason[:177]}..."
+
+            lines.extend(
+                [
+                    f"📩 <b>Заказ #{order.id}</b>",
+                    f"От: {escape(sender)}",
+                    f"Тема: {escape(subject)}",
+                ]
+            )
+            if reason:
+                lines.append(f"AI: {escape(reason)}")
+            if comment:
+                lines.append(f"<i>{escape(comment)}</i>")
+            lines.append("")
+
+        if len(orders) > 10:
+            lines.append(f"Еще {len(orders) - 10} email-заказов видно в менеджере.")
+
+        text = "\n".join(lines).strip()
+        sent = 0
+        for admin_id in settings.admin_list:
+            try:
+                await BotService.send_message(admin_id, text)
+                sent += 1
+            except Exception:
+                logger.exception("NOTIFY_EMAIL_LEADS_SEND_FAILED admin_id=%s", admin_id)
+        return sent
