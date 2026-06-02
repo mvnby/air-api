@@ -254,6 +254,7 @@ jobs:
   deploy-frontend:
     if: ${{ github.event_name == 'push' || github.event.inputs.deploy_frontend == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: deploy-backend # Wait for API to be ready
     
     steps:
@@ -300,17 +301,64 @@ jobs:
 
       - name: Setup SSH Key for Web Server
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.SSH_HOST_WEB }} >> ~/.ssh/known_hosts || true
+          ssh-keyscan -T 10 -H ${{ secrets.SSH_HOST_WEB }} >> ~/.ssh/known_hosts || true
 
       - name: Deploy to Web Server
         run: |
-          # Upload files using rsync over SSH with retries
-          rsync -avz --delete \
-            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ConnectionAttempts=10" \
-            web/dist/ \
-            ${{ secrets.SSH_USER_WEB }}@${{ secrets.SSH_HOST_WEB }}:/var/www/user2154318/data/www/mvn.by/
-          
-          echo "✅ Frontend deployment completed!"
+          set -euo pipefail
+
+          WEB_HOST="${{ secrets.SSH_HOST_WEB }}"
+          WEB_USER="${{ secrets.SSH_USER_WEB }}"
+          WEB_TARGET="/var/www/${{ secrets.SSH_USER_WEB }}/data/www/mvn.by/"
+          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+          MAX_ATTEMPTS=5
+
+          for attempt in $(seq 1 "${MAX_ATTEMPTS}"); do
+            echo "🚀 Frontend deploy attempt ${attempt}/${MAX_ATTEMPTS}"
+
+            if nc -z -w 10 "${WEB_HOST}" 22; then
+              echo "✅ Web SSH port is reachable"
+            else
+              echo "::warning::Web SSH port 22 is not reachable before rsync attempt ${attempt}"
+            fi
+
+            if ssh ${SSH_OPTS} "${WEB_USER}@${WEB_HOST}" "true"; then
+              if rsync -avz --delete \
+                -e "ssh ${SSH_OPTS}" \
+                web/dist/ \
+                "${WEB_USER}@${WEB_HOST}:${WEB_TARGET}"; then
+                echo "✅ Frontend deployment completed on attempt ${attempt}!"
+                {
+                  echo "## Frontend Deploy Summary"
+                  echo "- target: ${WEB_USER}@${WEB_HOST}:${WEB_TARGET}"
+                  echo "- attempts_used: ${attempt}"
+                  echo "- status: success"
+                } >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+              fi
+
+              echo "::warning::rsync failed on attempt ${attempt}"
+            else
+              echo "::warning::SSH login preflight failed on attempt ${attempt}"
+            fi
+
+            if [ "${attempt}" -lt "${MAX_ATTEMPTS}" ]; then
+              sleep_seconds=$((attempt * 20))
+              echo "⏳ Waiting ${sleep_seconds}s before retry..."
+              sleep "${sleep_seconds}"
+            fi
+          done
+
+          {
+            echo "## Frontend Deploy Summary"
+            echo "- target: ${WEB_USER}@${WEB_HOST}:${WEB_TARGET}"
+            echo "- attempts_used: ${MAX_ATTEMPTS}"
+            echo "- status: failed"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "::error::Frontend deployment failed after ${MAX_ATTEMPTS} attempts. Web SSH connectivity is likely unstable from GitHub Actions."
+          exit 1
