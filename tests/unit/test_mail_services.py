@@ -783,6 +783,45 @@ async def test_bank_receipt_import_notification_goes_to_admins(sqlite_session, m
     assert "разнесено в заказ #61" in sent[0][1]
 
 
+@pytest.mark.asyncio
+async def test_email_lead_import_notification_goes_to_admins(sqlite_session, monkeypatch):
+    order = Order(
+        status=OrderStatus.NEW_LEAD,
+        lead_source=LeadSource.EMAIL,
+        comment="Просим подготовить коммерческое предложение на обслуживание кондиционеров.",
+        technical_meta={
+            "email_sender": "client@example.com",
+            "email_subject": "Обслуживание кондиционеров",
+            "email_ai_reason": "Запрос цены на обслуживание HVAC.",
+        },
+    )
+    sqlite_session.add(order)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+
+    sent: list[tuple[int, str]] = []
+
+    async def fake_send_message(user_id: int, text: str):
+        sent.append((user_id, text))
+
+    monkeypatch.setattr(settings, "ADMIN_IDS", "101,202")
+    monkeypatch.setattr(settings, "ADMIN_ID", 0)
+    monkeypatch.setattr(BotService, "send_message", fake_send_message)
+
+    sent_count = await NotificationService.notify_admins_email_leads_imported(
+        sqlite_session,
+        [order.id],
+    )
+
+    assert sent_count == 2
+    assert [item[0] for item in sent] == [101, 202]
+    assert "Новые email-заказы: 1" in sent[0][1]
+    assert f"Заказ #{order.id}" in sent[0][1]
+    assert "client@example.com" in sent[0][1]
+    assert "Обслуживание кондиционеров" in sent[0][1]
+    assert "Запрос цены на обслуживание HVAC." in sent[0][1]
+
+
 def test_smtp_builds_utf8_message_and_sanitizes_errors(monkeypatch):
     monkeypatch.setattr(settings, "MAIL_SMTP_USERNAME", "a@mvn.by")
     monkeypatch.setattr(settings, "MAIL_SMTP_PASSWORD", "super-secret")

@@ -9,7 +9,7 @@ import type { BankReceiptResponse } from '../models/BankReceiptResponse';
 import type { BankReceiptStatusPayload } from '../models/BankReceiptStatusPayload';
 import type { BankStatementImportResponse } from '../models/BankStatementImportResponse';
 import type { Body_import_manager_bank_statement } from '../models/Body_import_manager_bank_statement';
-import type { EmailLeadImportResponse } from '../models/EmailLeadImportResponse';
+import type { EmailLeadImportJobResponse } from '../models/EmailLeadImportJobResponse';
 import type { OrderEmailSendPayload } from '../models/OrderEmailSendPayload';
 import type { OutgoingEmailResponse } from '../models/OutgoingEmailResponse';
 import type { OutgoingEmailSendPayload } from '../models/OutgoingEmailSendPayload';
@@ -41,13 +41,13 @@ export class ManagerMailService {
      * Import Manager Email Leads
      * @param dryRun
      * @param lookbackDays
-     * @returns EmailLeadImportResponse Successful Response
+     * @returns EmailLeadImportJobResponse Successful Response
      * @throws ApiError
      */
     public static importManagerEmailLeads(
         dryRun: boolean = false,
         lookbackDays?: (number | null),
-    ): CancelablePromise<EmailLeadImportResponse> {
+    ): CancelablePromise<EmailLeadImportJobResponse> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/mail/leads/import',
@@ -58,6 +58,17 @@ export class ManagerMailService {
             errors: {
                 422: `Validation Error`,
             },
+        });
+    }
+    /**
+     * Get Manager Email Lead Import Status
+     * @returns EmailLeadImportJobResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerEmailLeadImportStatus(): CancelablePromise<EmailLeadImportJobResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/mail/leads/import/status',
         });
     }
     /**

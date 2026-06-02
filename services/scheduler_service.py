@@ -328,13 +328,21 @@ class SchedulerService:
                     await asyncio.sleep(interval_minutes * 60)
                     continue
 
-                from services.mail_imap_service import MailImapService
+                from services.email_lead_import_job_service import EmailLeadImportJobService
 
                 logger.info("⏳ Email lead import job started...")
-                async with async_session_maker() as session:
-                    result = await MailImapService.import_email_leads(session)
+                snapshot = await EmailLeadImportJobService.run_scheduled_import()
+                result = snapshot.result
+                if snapshot.already_running:
+                    logger.info("Email lead import skipped: another import is already running.")
+                    await asyncio.sleep(interval_minutes * 60)
+                    continue
+                if not result:
+                    logger.warning("Email lead import finished without result. status=%s error=%s", snapshot.status, snapshot.error)
+                    await asyncio.sleep(interval_minutes * 60)
+                    continue
                 logger.info(
-                    "✅ Email lead import done. processed=%s candidates=%s ai_checked=%s created=%s duplicates=%s rejected=%s failed=%s",
+                    "✅ Email lead import done. processed=%s candidates=%s ai_checked=%s created=%s duplicates=%s rejected=%s failed=%s notified_admins=%s",
                     result.processed,
                     result.candidates,
                     result.ai_checked,
@@ -342,6 +350,7 @@ class SchedulerService:
                     result.duplicates,
                     result.rejected,
                     result.failed,
+                    snapshot.notified_admins,
                 )
             except Exception as e:
                 logger.error(f"❌ Email lead import loop error: {e}")

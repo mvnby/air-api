@@ -4,6 +4,7 @@ import { api } from '../../api';
 import { ManagerMailService, ManagerSettingsService } from '../../client';
 import DateTimeField from '../ui/DateTimeField.vue';
 import type {
+  EmailLeadImportJobResponse,
   EmailLeadImportResponse,
   LeadCreatePayload,
   LeadLossPayload,
@@ -99,8 +100,8 @@ const qualifyCustomerLookupLoading = ref(false);
 const qualifyCustomerLookupResults = ref<ManagerCatalogCustomerItemResponse[]>([]);
 const pendingOpenLeadId = ref<number | null>(null);
 const openedByUrlLeadId = ref<number | null>(null);
-const emailLeadImportLimit = ref(100);
 const emailLeadImporting = ref(false);
+const emailLeadImportJob = ref<EmailLeadImportJobResponse | null>(null);
 const emailLeadImportResult = ref<EmailLeadImportResponse | null>(null);
 const emailLeadAutoEnabled = ref(false);
 const emailLeadAutoSaving = ref(false);
@@ -306,21 +307,61 @@ const saveEmailLeadAutoSetting = async () => {
   }
 };
 
+const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const handleEmailLeadImportJob = async (job: EmailLeadImportJobResponse, dryRun: boolean) => {
+  emailLeadImportJob.value = job;
+  if (job.result) {
+    emailLeadImportResult.value = job.result;
+  }
+  if (job.status === 'failed') {
+    setToast(`Почта: ошибка импорта${job.error ? `: ${job.error}` : ''}`);
+    return;
+  }
+  if (job.status === 'running' || job.already_running) {
+    setToast(job.already_running ? 'Почта уже проверяется, жду результат.' : 'Проверка почты запущена в фоне.');
+    await pollEmailLeadImportStatus(dryRun);
+    return;
+  }
+  const result = job.result;
+  if (!result) {
+    setToast(job.message || 'Почта: задача завершена.');
+    return;
+  }
+  const createdText = dryRun
+    ? `можно создать ${result.would_create || 0}`
+    : `создано ${result.created || 0}`;
+  setToast(`Почта: обработано ${result.processed || 0}, кандидатов ${result.candidates || 0}, AI ${result.ai_checked || 0}, ${createdText}.`);
+  if (!dryRun && (result.created || 0) > 0) {
+    source.value = 'email';
+    statusTab.value = 'new';
+    await loadLeads();
+  }
+};
+
+const pollEmailLeadImportStatus = async (dryRun: boolean) => {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    await sleep(3000);
+    const job = await ManagerMailService.getManagerEmailLeadImportStatus();
+    emailLeadImportJob.value = job;
+    if (job.result) {
+      emailLeadImportResult.value = job.result;
+    }
+    if (job.status !== 'running') {
+      await handleEmailLeadImportJob(job, dryRun);
+      return;
+    }
+  }
+  setToast('Проверка почты ещё выполняется в фоне.');
+};
+
 const importEmailLeads = async (dryRun: boolean) => {
   emailLeadImporting.value = true;
+  emailLeadImportJob.value = null;
   emailLeadImportResult.value = null;
   try {
-    const result = await ManagerMailService.importManagerEmailLeads(dryRun, EMAIL_LEAD_MANUAL_LOOKBACK_DAYS);
-    emailLeadImportResult.value = result;
-    const createdText = dryRun
-      ? `можно создать ${result.would_create || 0}`
-      : `создано ${result.created || 0}`;
-    setToast(`Почта: обработано ${result.processed || 0}, кандидатов ${result.candidates || 0}, AI ${result.ai_checked || 0}, ${createdText}.`);
-    if (!dryRun && (result.created || 0) > 0) {
-      source.value = 'email';
-      statusTab.value = 'new';
-      await loadLeads();
-    }
+    const job = await ManagerMailService.importManagerEmailLeads(dryRun, EMAIL_LEAD_MANUAL_LOOKBACK_DAYS);
+    await handleEmailLeadImportJob(job, dryRun);
   } catch (error) {
     setToast(`Не удалось проверить почту: ${getApiErrorMessage(error)}`);
   } finally {
@@ -1355,13 +1396,6 @@ const onQualifyIbanBlur = async () => {
               />
               Автоимпорт
             </label>
-            <input
-              v-model.number="emailLeadImportLimit"
-              type="number"
-              min="1"
-              max="100"
-              class="field-input w-24 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
             <button class="btn-mini-outline" :disabled="emailLeadImporting" @click="importEmailLeads(true)">
               Проверить
             </button>
@@ -1371,9 +1405,17 @@ const onQualifyIbanBlur = async () => {
           </div>
         </div>
         <div
+          v-if="emailLeadImportJob && !emailLeadImportResult"
+          class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-300"
+        >
+          <span>{{ emailLeadImportJob.message || 'Проверка почты выполняется.' }}</span>
+          <span v-if="emailLeadImportJob.started_at">Старт: {{ new Date(emailLeadImportJob.started_at).toLocaleString('ru-RU') }}</span>
+        </div>
+        <div
           v-if="emailLeadImportResult"
           class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-300"
         >
+          <span v-if="emailLeadImportJob?.status">Статус: {{ emailLeadImportJob.status }}</span>
           <span>Обработано: {{ emailLeadImportResult.processed || 0 }}</span>
           <span>Кандидатов: {{ emailLeadImportResult.candidates || 0 }}</span>
           <span>AI: {{ emailLeadImportResult.ai_checked || 0 }}</span>

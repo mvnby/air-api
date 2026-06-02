@@ -11,6 +11,7 @@ from routers.manager_operation_ids import (
     IMPORT_MANAGER_BANK_RECEIPTS,
     IMPORT_MANAGER_BANK_STATEMENT,
     IMPORT_MANAGER_EMAIL_LEADS,
+    GET_MANAGER_EMAIL_LEAD_IMPORT_STATUS,
     LIST_MANAGER_BANK_RECEIPTS,
     PATCH_MANAGER_BANK_RECEIPT_STATUS,
     SEND_MANAGER_ORDER_EMAIL,
@@ -23,6 +24,8 @@ from schemas import (
     BankReceiptResponse,
     BankReceiptStatusPayload,
     BankStatementImportResponse,
+    EmailLeadDecisionResponse,
+    EmailLeadImportJobResponse,
     EmailLeadImportResponse,
     OrderEmailSendPayload,
     OutgoingEmailResponse,
@@ -30,6 +33,7 @@ from schemas import (
 )
 from services.bank_receipt_service import BankReceiptService
 from services.bank_statement_csv_service import BankStatementCsvService
+from services.email_lead_import_job_service import EmailLeadImportJobService, EmailLeadImportJobSnapshot
 from services.mail_imap_service import MailImapService
 from services.mail_smtp_service import MailSmtpService
 
@@ -39,6 +43,33 @@ router = APIRouter(
     tags=["manager/mail"],
     dependencies=[Depends(get_current_username)],
 )
+
+
+def _email_lead_import_response(result) -> EmailLeadImportResponse | None:
+    if not result:
+        return None
+    payload = {
+        **result.__dict__,
+        "decisions": [EmailLeadDecisionResponse(**item.__dict__) for item in result.decisions],
+    }
+    return EmailLeadImportResponse(**payload)
+
+
+def _email_lead_import_job_response(snapshot: EmailLeadImportJobSnapshot) -> EmailLeadImportJobResponse:
+    return EmailLeadImportJobResponse(
+        status=snapshot.status,
+        source=snapshot.source,
+        dry_run=snapshot.dry_run,
+        lookback_days=snapshot.lookback_days,
+        started_at=snapshot.started_at,
+        finished_at=snapshot.finished_at,
+        last_import_at=snapshot.last_import_at,
+        notified_admins=snapshot.notified_admins,
+        already_running=snapshot.already_running,
+        error=snapshot.error,
+        message=snapshot.message,
+        result=_email_lead_import_response(snapshot.result),
+    )
 
 
 @router.post(
@@ -64,21 +95,19 @@ async def import_manager_bank_receipts(
 
 @router.post(
     "/leads/import",
-    response_model=EmailLeadImportResponse,
+    response_model=EmailLeadImportJobResponse,
     operation_id=IMPORT_MANAGER_EMAIL_LEADS,
 )
 async def import_manager_email_leads(
     dry_run: bool = Query(False),
     lookback_days: int | None = Query(None, ge=1, le=30),
-    session: AsyncSession = Depends(get_session),
 ):
     try:
-        result = await MailImapService.import_email_leads(
-            session,
+        snapshot = await EmailLeadImportJobService.start_manual_import(
             dry_run=dry_run,
             lookback_days=lookback_days,
         )
-        return EmailLeadImportResponse(**result.__dict__)
+        return _email_lead_import_job_response(snapshot)
     except Exception as exc:
         raise manager_http_error(
             status_code=400,
@@ -86,6 +115,16 @@ async def import_manager_email_leads(
             error_code=BAD_REQUEST,
             message=str(exc),
         ) from exc
+
+
+@router.get(
+    "/leads/import/status",
+    response_model=EmailLeadImportJobResponse,
+    operation_id=GET_MANAGER_EMAIL_LEAD_IMPORT_STATUS,
+)
+async def get_manager_email_lead_import_status():
+    snapshot = await EmailLeadImportJobService.get_status()
+    return _email_lead_import_job_response(snapshot)
 
 
 @router.post(
