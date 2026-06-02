@@ -1,7 +1,11 @@
 import email
 import imaplib
 import re
+import shutil
+import subprocess
+import tempfile
 import zipfile
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from email.header import decode_header
 from email.message import Message
@@ -19,8 +23,16 @@ from services.bank_receipt_service import BankReceiptImportResult, BankReceiptSe
 from services.email_lead_intake_service import EmailLeadDecision, EmailLeadImportResult, EmailLeadIntakeService
 
 
+@dataclass(frozen=True)
+class AttachmentTextExtraction:
+    text: str = ""
+    diagnostic: Optional[str] = None
+
+
 class MailImapService:
     EMAIL_LEAD_LAST_IMPORT_KEY = "mail_lead_last_import_at"
+    LEGACY_DOC_MAX_BYTES = 5 * 1024 * 1024
+    LEGACY_DOC_TIMEOUT_SECONDS = 8
 
     @staticmethod
     def _decode_header_value(raw: Optional[str]) -> str:
@@ -119,7 +131,59 @@ class MailImapService:
         return re.sub(r"[ \t]+", " ", text).strip()
 
     @staticmethod
-    def _extract_attachment_text(filename: str, content_type: str, content: bytes, *, max_chars: int = 4000) -> str:
+    def _decode_extracted_bytes(content: bytes) -> str:
+        for encoding in ("utf-8", "cp1251", "cp866"):
+            try:
+                return content.decode(encoding)
+            except UnicodeDecodeError:
+                continue
+        return content.decode("utf-8", errors="replace")
+
+    @staticmethod
+    def _extract_legacy_doc_text(content: bytes, *, max_chars: int = 4000) -> AttachmentTextExtraction:
+        if len(content) > MailImapService.LEGACY_DOC_MAX_BYTES:
+            size_mb = MailImapService.LEGACY_DOC_MAX_BYTES // (1024 * 1024)
+            return AttachmentTextExtraction(diagnostic=f"legacy .doc не распознан: размер вложения больше {size_mb} МБ")
+
+        antiword_path = shutil.which("antiword")
+        if not antiword_path:
+            return AttachmentTextExtraction(diagnostic="legacy .doc не распознан: antiword не установлен в runtime")
+
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".doc") as tmp:
+                tmp.write(content)
+                tmp.flush()
+                completed = subprocess.run(
+                    [antiword_path, tmp.name],
+                    capture_output=True,
+                    timeout=MailImapService.LEGACY_DOC_TIMEOUT_SECONDS,
+                    check=False,
+                )
+        except subprocess.TimeoutExpired:
+            return AttachmentTextExtraction(diagnostic="legacy .doc не распознан: истекло время обработки antiword")
+        except OSError as exc:
+            detail = str(exc).strip()
+            return AttachmentTextExtraction(diagnostic=f"legacy .doc не распознан: ошибка запуска antiword ({detail})")
+
+        if completed.returncode != 0:
+            detail = MailImapService._decode_extracted_bytes(completed.stderr or b"").strip()
+            suffix = f": {detail[:180]}" if detail else ""
+            return AttachmentTextExtraction(diagnostic=f"legacy .doc не распознан: antiword вернул код {completed.returncode}{suffix}")
+
+        text = MailImapService._decode_extracted_bytes(completed.stdout or b"")
+        text = re.sub(r"\s+", " ", text).strip()[:max_chars].strip()
+        if not text:
+            return AttachmentTextExtraction(diagnostic="legacy .doc не распознан: antiword не извлек текст")
+        return AttachmentTextExtraction(text=text)
+
+    @staticmethod
+    def _extract_attachment_text_result(
+        filename: str,
+        content_type: str,
+        content: bytes,
+        *,
+        max_chars: int = 4000,
+    ) -> AttachmentTextExtraction:
         lower_name = filename.lower()
         content_type = str(content_type or "").lower()
         text = ""
@@ -134,12 +198,23 @@ class MailImapService:
             or lower_name.endswith(".docx")
         ):
             text = MailImapService._extract_docx_text(content)
+        elif content_type in {"application/msword", "application/vnd.ms-word"} or lower_name.endswith(".doc"):
+            return MailImapService._extract_legacy_doc_text(content, max_chars=max_chars)
         elif lower_name.endswith(".rtf"):
             text = content.decode("utf-8", errors="replace")
             text = re.sub(r"\\'[0-9a-fA-F]{2}", " ", text)
             text = re.sub(r"[{}\\][a-zA-Z0-9*'-]+ ?", " ", text)
         text = re.sub(r"\s+", " ", text).strip()
-        return text[:max_chars].strip()
+        return AttachmentTextExtraction(text=text[:max_chars].strip())
+
+    @staticmethod
+    def _extract_attachment_text(filename: str, content_type: str, content: bytes, *, max_chars: int = 4000) -> str:
+        return MailImapService._extract_attachment_text_result(
+            filename=filename,
+            content_type=content_type,
+            content=content,
+            max_chars=max_chars,
+        ).text
 
     @staticmethod
     def _extract_attachment_texts(msg: Message) -> list[str]:
@@ -154,13 +229,15 @@ class MailImapService:
             payload = part.get_payload(decode=True)
             if not payload:
                 continue
-            attachment_text = MailImapService._extract_attachment_text(
+            extraction = MailImapService._extract_attachment_text_result(
                 filename=filename or "attachment",
                 content_type=part.get_content_type(),
                 content=payload,
             )
-            if attachment_text:
-                texts.append(f"Вложение {filename or 'attachment'}:\n{attachment_text}")
+            if extraction.text:
+                texts.append(f"Вложение {filename or 'attachment'}:\n{extraction.text}")
+            elif extraction.diagnostic:
+                texts.append(f"Вложение {filename or 'attachment'}: {extraction.diagnostic}")
             elif filename:
                 texts.append(f"Вложение {filename}: текст не извлечен")
         return texts
@@ -331,6 +408,7 @@ class MailImapService:
                 attachment_texts = MailImapService._extract_attachment_texts(msg)
                 if attachment_texts:
                     raw_body = f"{raw_body}\n\nТекст вложений:\n" + "\n\n".join(attachment_texts)
+                attachment_diagnostics = [item for item in attachment_texts if "legacy .doc не распознан" in item]
 
                 try:
                     outcome = await EmailLeadIntakeService.process_email(
@@ -365,6 +443,15 @@ class MailImapService:
                             reason=outcome.reason,
                             lead_id=outcome.lead_id,
                             order_id=outcome.order_id,
+                        )
+                    )
+                elif dry_run and attachment_diagnostics:
+                    result.decisions.append(
+                        EmailLeadDecision(
+                            status=outcome.status,
+                            sender_email=sender_email,
+                            subject=subject,
+                            reason="; ".join(attachment_diagnostics)[:300],
                         )
                     )
                 if outcome.used_ai:
