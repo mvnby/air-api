@@ -133,6 +133,32 @@ class DefectActStrategy(GoogleDocStrategy):
                 return text
         return default
 
+    @staticmethod
+    def _is_explicit_negative_repair_text(value: Any) -> bool:
+        text = str(value or "").strip().lower()
+        if not text:
+            return False
+        return any(
+            marker in text
+            for marker in (
+                "невозмож",
+                "не возмож",
+                "нецелесообраз",
+                "не целесообраз",
+                "нерентаб",
+                "не рентаб",
+                "списан",
+                "списани",
+                "вывести из эксплуатации",
+            )
+        )
+
+    @staticmethod
+    def _bool_text(value: Any) -> str:
+        if isinstance(value, bool):
+            return "Да" if value else "Нет"
+        return ""
+
     def _meta_text(self, *keys: str, default: str = "") -> str:
         meta = self.order.technical_meta if self.order and isinstance(self.order.technical_meta, dict) else {}
         repair_meta = meta.get("repair") if isinstance(meta.get("repair"), dict) else {}
@@ -143,6 +169,58 @@ class DefectActStrategy(GoogleDocStrategy):
             text = str(meta.get(key) or "").strip()
             if text:
                 return text
+        return default
+
+    def _meta_value(self, key: str) -> Any:
+        meta = self.order.technical_meta if self.order and isinstance(self.order.technical_meta, dict) else {}
+        repair_meta = meta.get("repair") if isinstance(meta.get("repair"), dict) else {}
+        if key in repair_meta:
+            return repair_meta.get(key)
+        return meta.get(key)
+
+    def _repair_possible_text(self, default: str = "") -> str:
+        canonical = self._meta_value("repair_possible")
+        bool_text = self._bool_text(canonical)
+        if bool_text:
+            return bool_text
+        canonical_text = self._first_text(canonical)
+        if canonical_text:
+            return canonical_text
+
+        legacy = self._meta_value("repair_feasibility")
+        bool_text = self._bool_text(legacy)
+        if bool_text:
+            return bool_text
+        legacy_text = self._first_text(legacy)
+        if legacy_text and not self._is_explicit_negative_repair_text(legacy_text):
+            return legacy_text
+        return default
+
+    def _repair_not_viable_text(self, default: str = "") -> str:
+        canonical = self._meta_value("repair_not_viable")
+        bool_text = self._bool_text(canonical)
+        if bool_text:
+            return bool_text
+        canonical_text = self._first_text(canonical)
+        if canonical_text:
+            return canonical_text
+
+        legacy = self._meta_value("repair_feasibility")
+        if isinstance(legacy, bool):
+            return "Нет" if legacy else "Да"
+        legacy_text = self._first_text(legacy)
+        if legacy_text and self._is_explicit_negative_repair_text(legacy_text):
+            return legacy_text
+        return default
+
+    def _repair_not_viable_reason_text(self, default: str = "") -> str:
+        canonical = self._meta_text("repair_not_viable_reason")
+        if canonical:
+            return canonical
+        legacy = self._meta_value("repair_feasibility")
+        legacy_text = self._first_text(legacy)
+        if legacy_text and self._is_explicit_negative_repair_text(legacy_text):
+            return legacy_text
         return default
 
     def _first_equipment_title(self) -> str:
@@ -212,7 +290,12 @@ class DefectActStrategy(GoogleDocStrategy):
                     default="_________________",
                 ),
                 "{{technical_condition}}": technical_condition,
-                "{{customer_complaint}}": self._meta_text("customer_complaint", "complaint_text", default="_________________"),
+                "{{customer_complaint}}": self._meta_text(
+                    "customer_complaint",
+                    "complaint_official",
+                    "complaint_text",
+                    default="_________________",
+                ),
                 "{{complaint_official}}": self._meta_text("complaint_official", default="_________________"),
                 "{{likely_diagnosis}}": self._meta_text("likely_diagnosis", default="_________________"),
                 "{{inspection_work_done}}": self._meta_text(
@@ -227,6 +310,14 @@ class DefectActStrategy(GoogleDocStrategy):
                 ),
                 "{{compressor_check_result}}": self._meta_text("compressor_check_result", default="_________________"),
                 "{{measurement_result}}": self._meta_text(
+                    "diagnostic_result",
+                    "measurement_result",
+                    "defect_measurement_result",
+                    "diagnostic_measurement_result",
+                    default=(getattr(self.order, "measurement_result", None) if self.order else None) or "_________________",
+                ),
+                "{{diagnostic_result}}": self._meta_text(
+                    "diagnostic_result",
                     "measurement_result",
                     "defect_measurement_result",
                     "diagnostic_measurement_result",
@@ -243,20 +334,38 @@ class DefectActStrategy(GoogleDocStrategy):
                     default="_________________",
                 ),
                 "{{technical_conclusion}}": self._meta_text(
+                    "repair_recommendation",
                     "technical_conclusion",
+                    "recommended_decision",
                     "defect_conclusion",
                     default="_________________",
                 ),
                 "{{repair_feasibility}}": self._meta_text(
                     "repair_feasibility",
                     "repair_feasibility_text",
-                    default="_________________",
+                    default=self._repair_possible_text(default="_________________"),
                 ),
                 "{{recommended_decision}}": self._meta_text(
+                    "repair_recommendation",
                     "recommended_decision",
+                    "technical_conclusion",
                     "defect_recommendation",
                     default="_________________",
                 ),
+                "{{repair_recommendation}}": self._meta_text(
+                    "repair_recommendation",
+                    "technical_conclusion",
+                    "recommended_decision",
+                    "defect_conclusion",
+                    "defect_recommendation",
+                    default="_________________",
+                ),
+                "{{repair_possible}}": self._repair_possible_text(default="_________________"),
+                "{{refrigerant_type}}": self._meta_text("refrigerant_type", default="_________________"),
+                "{{refrigerant_amount}}": self._meta_text("refrigerant_amount", default="_________________"),
+                "{{refrigerant_pricing_mode}}": self._meta_text("refrigerant_pricing_mode", default="_________________"),
+                "{{repair_not_viable}}": self._repair_not_viable_text(default="_________________"),
+                "{{repair_not_viable_reason}}": self._repair_not_viable_reason_text(default="_________________"),
             }
         )
 
