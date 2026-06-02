@@ -93,6 +93,14 @@ def test_email_lead_keyword_filter_finds_hvac_request_and_skips_bank_email():
     )
 
 
+def test_email_lead_keyword_filter_finds_inflected_service_offer_for_blocks():
+    assert EmailLeadIntakeService.looks_like_lead_candidate(
+        sender_email="client@example.com",
+        subject="Ценовое предложение",
+        raw_body="Добрый день. Просим предоставить ценовое предложение на обслуживание нескольких блоков.",
+    )
+
+
 def test_email_lead_attachment_text_participates_in_keyword_filter():
     body = "Добрый день, во вложении заявка."
     msg = EmailMessage()
@@ -202,6 +210,46 @@ async def test_email_lead_intake_dry_run_does_not_create_order(sqlite_session, m
     assert result.status == "would_create"
     orders = (await sqlite_session.execute(select(Order))).scalars().all()
     assert orders == []
+
+
+@pytest.mark.asyncio
+async def test_email_lead_import_dry_run_reports_keyword_filtered_message(sqlite_session, monkeypatch):
+    class FakeImapClient:
+        def select(self, *_args, **_kwargs):
+            return "OK", []
+
+        def search(self, *_args):
+            return "OK", [b"1"]
+
+        def fetch(self, *_args):
+            msg = EmailMessage()
+            msg["Subject"] = "Документы"
+            msg["From"] = "client@example.com"
+            msg["Date"] = "Mon, 01 Jun 2026 12:00:00 +0300"
+            msg["Message-ID"] = "<filtered-lead@example.test>"
+            msg.set_content("Добрый день. Во вложении документы.")
+            return "OK", [(b"RFC822", msg.as_bytes())]
+
+        def close(self):
+            pass
+
+        def logout(self):
+            pass
+
+    async def fake_scan_since(_session):
+        return datetime(2026, 5, 31, 0, 0, 0)
+
+    monkeypatch.setattr(MailImapService, "_connect", lambda: FakeImapClient())
+    monkeypatch.setattr(MailImapService, "_email_lead_scan_since", fake_scan_since)
+
+    result = await MailImapService.import_email_leads(sqlite_session, dry_run=True)
+
+    assert result.processed == 1
+    assert result.candidates == 0
+    assert result.ai_checked == 0
+    assert len(result.decisions) == 1
+    assert result.decisions[0].status == "filtered"
+    assert result.decisions[0].reason == "keyword_filter"
 
 
 @pytest.mark.asyncio

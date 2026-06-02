@@ -6537,6 +6537,24 @@
               "default": false,
               "title": "Dry Run"
             }
+          },
+          {
+            "name": "lookback_days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 30,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lookback Days"
+            }
           }
         ],
         "responses": {

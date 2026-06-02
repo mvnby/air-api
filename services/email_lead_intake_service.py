@@ -87,6 +87,41 @@ class EmailLeadIntakeService:
         "счет",
         "счёт",
     )
+    HVAC_CONTEXT_STEMS = (
+        "кондиц",
+        "сплит",
+        "вентиляц",
+        "чиллер",
+        "теплов",
+        "климат",
+        "кассетн",
+        "канальн",
+        "фанкойл",
+        "внутренн",
+        "наружн",
+        "блок",
+    )
+    LEAD_INTENT_STEMS = (
+        "цен",
+        "стоим",
+        "предложен",
+        "коммерческ",
+        "кп",
+        "счет",
+        "счёт",
+        "заявк",
+        "заказ",
+        "просим",
+        "подготов",
+        "обслуживан",
+        "ремонт",
+        "монтаж",
+        "установ",
+        "демонтаж",
+        "диагност",
+        "заправ",
+        "сервис",
+    )
 
     @staticmethod
     def _configured_keywords() -> tuple[str, ...]:
@@ -105,6 +140,10 @@ class EmailLeadIntakeService:
         return text[:max_length].strip()
 
     @staticmethod
+    def _has_any_stem(haystack: str, stems: tuple[str, ...]) -> bool:
+        return any(stem in haystack for stem in stems)
+
+    @staticmethod
     def looks_like_lead_candidate(*, sender_email: str, subject: str, raw_body: str) -> bool:
         sender = str(sender_email or "").strip().lower()
         clean_subject = EmailLeadIntakeService.normalize_text(subject, max_length=500).casefold()
@@ -116,7 +155,18 @@ class EmailLeadIntakeService:
             return False
 
         haystack = f"{clean_subject} {clean_body}"
-        return any(keyword in haystack for keyword in EmailLeadIntakeService._configured_keywords())
+        if any(keyword in haystack for keyword in EmailLeadIntakeService._configured_keywords()):
+            return True
+
+        has_hvac_context = EmailLeadIntakeService._has_any_stem(
+            haystack,
+            EmailLeadIntakeService.HVAC_CONTEXT_STEMS,
+        )
+        has_lead_intent = EmailLeadIntakeService._has_any_stem(
+            haystack,
+            EmailLeadIntakeService.LEAD_INTENT_STEMS,
+        )
+        return has_hvac_context and has_lead_intent
 
     @staticmethod
     def build_fingerprint(

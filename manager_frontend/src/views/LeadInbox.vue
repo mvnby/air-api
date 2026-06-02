@@ -9,6 +9,7 @@ import { useBelarusPhoneMask } from '../composables/useBelarusPhoneMask';
 import { useB2BLookup } from '../composables/useB2BLookup';
 
 type Scope = 'active' | 'archive';
+const EMAIL_LEAD_MANUAL_LOOKBACK_DAYS = 14;
 
 const scope = ref<Scope>('active');
 const items = ref<LeadsInboxItemResponse[]>([]);
@@ -115,7 +116,7 @@ const importEmailLeads = async () => {
   emailLeadImporting.value = true;
   emailLeadImportResult.value = null;
   try {
-    const result = await ManagerMailService.importManagerEmailLeads(false);
+    const result = await ManagerMailService.importManagerEmailLeads(false, EMAIL_LEAD_MANUAL_LOOKBACK_DAYS);
     emailLeadImportResult.value = result;
     setToast(`Почта: обработано ${result.processed || 0}, кандидатов ${result.candidates || 0}, создано ${result.created || 0}.`);
     if ((result.created || 0) > 0) {
@@ -356,7 +357,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
         <div>
           <p class="text-sm font-bold uppercase tracking-wide text-teal-700 dark:text-teal-300">Email-лиды</p>
           <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Проверка новых писем с последнего прохода; при первом запуске берутся последние 5 дней.
+            Ручная проверка берёт последние 14 дней; автоимпорт идёт с последнего прохода.
           </p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
@@ -395,14 +396,14 @@ const scopeOptions: { value: Scope; label: string }[] = [
           class="grid gap-2 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 dark:border-slate-700 md:grid-cols-[120px_minmax(0,1fr)_minmax(0,2fr)]"
         >
           <span class="font-semibold text-slate-700 dark:text-slate-200">
-            {{ decision.status === 'rejected' ? 'Отклонено' : decision.status === 'would_create' ? 'Кандидат' : decision.status === 'created' ? 'Создан' : decision.status === 'duplicate' ? 'Дубль' : 'Ошибка' }}
+            {{ decision.status === 'rejected' ? 'Отклонено' : decision.status === 'would_create' ? 'Кандидат' : decision.status === 'created' ? 'Создан' : decision.status === 'duplicate' ? 'Дубль' : decision.status === 'filtered' ? 'Не кандидат' : 'Ошибка' }}
             <span v-if="decision.order_id" class="text-slate-400">#{{ decision.order_id }}</span>
           </span>
           <span class="min-w-0 truncate text-slate-600 dark:text-slate-300">
             {{ decision.subject || 'Без темы' }}
           </span>
           <span class="min-w-0 text-slate-500 dark:text-slate-400">
-            {{ decision.reason || decision.sender_email }}
+            {{ decision.reason === 'keyword_filter' ? 'Не прошло быстрый фильтр' : decision.reason || decision.sender_email }}
           </span>
         </div>
       </div>

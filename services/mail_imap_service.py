@@ -294,10 +294,18 @@ class MailImapService:
             client.logout()
 
     @staticmethod
-    async def import_email_leads(session: AsyncSession, *, dry_run: bool = False) -> EmailLeadImportResult:
+    async def import_email_leads(
+        session: AsyncSession,
+        *,
+        dry_run: bool = False,
+        lookback_days: Optional[int] = None,
+    ) -> EmailLeadImportResult:
         result = EmailLeadImportResult()
         scan_started_at = datetime.now()
-        scan_since = await MailImapService._email_lead_scan_since(session)
+        if lookback_days is not None:
+            scan_since = scan_started_at - timedelta(days=max(1, min(30, int(lookback_days))))
+        else:
+            scan_since = await MailImapService._email_lead_scan_since(session)
         result.scanned_since = scan_since.isoformat(timespec="seconds")
         client = MailImapService._connect()
         try:
@@ -357,6 +365,7 @@ class MailImapService:
 
                 if outcome.is_candidate:
                     result.candidates += 1
+                if outcome.is_candidate or (dry_run and outcome.status == "filtered"):
                     result.decisions.append(
                         EmailLeadDecision(
                             status=outcome.status,

@@ -69,10 +69,15 @@ async def import_manager_bank_receipts(
 )
 async def import_manager_email_leads(
     dry_run: bool = Query(False),
+    lookback_days: int | None = Query(None, ge=1, le=30),
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        result = await MailImapService.import_email_leads(session, dry_run=dry_run)
+        result = await MailImapService.import_email_leads(
+            session,
+            dry_run=dry_run,
+            lookback_days=lookback_days,
+        )
         return EmailLeadImportResponse(**result.__dict__)
     except Exception as exc:
         raise manager_http_error(
