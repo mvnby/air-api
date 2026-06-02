@@ -444,23 +444,17 @@ class MailImapService:
                 if outcome.is_candidate:
                     result.candidates += 1
                 if outcome.is_candidate or (dry_run and outcome.status == "filtered"):
+                    decision_reason = outcome.reason
+                    if dry_run and outcome.status == "filtered" and attachment_diagnostics:
+                        decision_reason = "; ".join(attachment_diagnostics)[:300]
                     result.decisions.append(
                         EmailLeadDecision(
                             status=outcome.status,
                             sender_email=sender_email,
                             subject=subject,
-                            reason=outcome.reason,
+                            reason=decision_reason,
                             lead_id=outcome.lead_id,
                             order_id=outcome.order_id,
-                        )
-                    )
-                elif dry_run and attachment_diagnostics:
-                    result.decisions.append(
-                        EmailLeadDecision(
-                            status=outcome.status,
-                            sender_email=sender_email,
-                            subject=subject,
-                            reason="; ".join(attachment_diagnostics)[:300],
                         )
                     )
                 if outcome.used_ai:
