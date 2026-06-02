@@ -66,3 +66,46 @@ async def test_defect_act_ai_can_leave_existing_fields_untouched(monkeypatch):
 
     assert "measurement_result" not in result
     assert result["technical_conclusion"] == "Компрессор неисправен."
+
+
+@pytest.mark.asyncio
+async def test_defect_act_ai_sanitization_keeps_canonical_repair_keys(monkeypatch):
+    async def _fake_request_completion(prompt: str) -> str:
+        assert "diagnostic_result" in prompt
+        assert "repair_recommendation" in prompt
+        return json.dumps(
+            {
+                "repair_meta": {
+                    "diagnostic_result": "Диагностика выявила недостаток хладагента.",
+                    "repair_recommendation": "Проверить контур на утечку и дозаправить.",
+                    "repair_possible": "Да",
+                    "refrigerant_type": "R32",
+                    "refrigerant_amount": "0,35 кг",
+                    "refrigerant_pricing_mode": "по фактической массе",
+                    "repair_not_viable": "Нет",
+                    "repair_not_viable_reason": "Критических повреждений не выявлено.",
+                    "unknown_key": "must be dropped",
+                }
+            },
+            ensure_ascii=False,
+        )
+
+    monkeypatch.setattr(DefectActAIService, "_request_completion", staticmethod(_fake_request_completion))
+
+    result = await DefectActAIService.generate_repair_meta(
+        ManagerRepairActAiDraftPayload(
+            defect_type="refrigerant_leak",
+            polish_existing=True,
+            current_meta={},
+        )
+    )
+
+    assert result["diagnostic_result"] == "Диагностика выявила недостаток хладагента."
+    assert result["repair_recommendation"] == "Проверить контур на утечку и дозаправить."
+    assert result["repair_possible"] == "Да"
+    assert result["refrigerant_type"] == "R32"
+    assert result["refrigerant_amount"] == "0,35 кг"
+    assert result["refrigerant_pricing_mode"] == "по фактической массе"
+    assert result["repair_not_viable"] == "Нет"
+    assert result["repair_not_viable_reason"] == "Критических повреждений не выявлено."
+    assert "unknown_key" not in result

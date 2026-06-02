@@ -8,7 +8,7 @@ from sqlmodel import SQLModel
 
 from models import Customer, CustomerContract, DocumentTemplate, Order, OrderDocument
 from services.document_service import DocumentService
-from services.documents.standard import ActStrategy
+from services.documents.standard import ActStrategy, DefectActStrategy
 
 
 @pytest.fixture()
@@ -143,6 +143,51 @@ async def test_base_document_placeholders_support_invoice(sqlite_session):
 
 
 @pytest.mark.asyncio
+async def test_base_document_placeholders_support_offer(sqlite_session):
+    customer = Customer(name="Offer Customer", phone="+375291111111")
+    order = Order(customer=customer, total_amount=120)
+    sqlite_session.add(order)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+
+    offer = OrderDocument(
+        order_id=order.id,
+        doc_type="offer",
+        number="КП-2026-003",
+        date=datetime(2026, 5, 3),
+        google_file_id="offer-c",
+        google_edit_url="https://example.com/offer-c",
+    )
+    sqlite_session.add(offer)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(offer)
+
+    resolved_document, resolved_customer_contract = await DocumentService._resolve_base_document(
+        sqlite_session,
+        order_id=order.id,
+        doc_type="act",
+        base_document_id=offer.id,
+    )
+    assert resolved_document.id == offer.id
+    assert resolved_customer_contract is None
+
+    strategy = ActStrategy(sqlite_session, order.id)
+    await strategy.fetch_order()
+    replacements = await strategy._prepare_base_variables(
+        doc_number="А-2026-001",
+        doc_type="act",
+        document_date=datetime(2026, 5, 4),
+        base_document=offer,
+    )
+
+    assert replacements["{{base_document_type}}"] == "КП"
+    assert replacements["{{base_document_number}}"] == "КП-2026-003"
+    assert replacements["{{base_document_date}}"] == "03.05.2026"
+    assert replacements["{{offer_number}}"] == "КП-2026-003"
+    assert replacements["{{offer_date}}"] == "03.05.2026"
+
+
+@pytest.mark.asyncio
 async def test_current_invoice_placeholders_use_generated_number_and_uppercase_aliases(sqlite_session):
     customer = Customer(name="Invoice Self", phone="+375291111111")
     order = Order(customer=customer, total_amount=120)
@@ -246,3 +291,124 @@ async def test_open_customer_contract_can_be_stable_base(sqlite_session):
     assert replacements["{{base_document_number}}"] == "ОД-2026-010"
     assert replacements["{{base_document_date}}"] == "15.01.2026"
     assert replacements["{{contract_number}}"] == "ОД-2026-010"
+
+
+@pytest.mark.asyncio
+async def test_defect_act_canonical_repair_placeholders_from_repair_meta(sqlite_session):
+    customer = Customer(name="Repair Canonical", phone="+375291111111")
+    order = Order(
+        customer=customer,
+        title="Кондиционер",
+        technical_meta={
+            "repair": {
+                "customer_complaint": "Не охлаждает",
+                "diagnostic_result": "Диагностика выявила утечку хладагента.",
+                "repair_recommendation": "Устранить утечку и дозаправить контур.",
+                "repair_possible": "Да",
+                "refrigerant_type": "R32",
+                "refrigerant_amount": "0,45 кг",
+                "refrigerant_pricing_mode": "по фактической массе",
+                "repair_not_viable": "Нет",
+                "repair_not_viable_reason": "Оснований для списания не выявлено.",
+            },
+        },
+    )
+    sqlite_session.add(order)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+
+    strategy = DefectActStrategy(sqlite_session, order.id)
+    await strategy.fetch_order()
+    replacements = await strategy._prepare_base_variables(
+        doc_number="ДА-2026-001",
+        doc_type="defect_act",
+        document_date=datetime(2026, 5, 14),
+    )
+    strategy._add_specific_replacements(replacements)
+
+    assert replacements["{{customer_complaint}}"] == "Не охлаждает"
+    assert replacements["{{diagnostic_result}}"] == "Диагностика выявила утечку хладагента."
+    assert replacements["{{measurement_result}}"] == "Диагностика выявила утечку хладагента."
+    assert replacements["{{repair_recommendation}}"] == "Устранить утечку и дозаправить контур."
+    assert replacements["{{technical_conclusion}}"] == "Устранить утечку и дозаправить контур."
+    assert replacements["{{recommended_decision}}"] == "Устранить утечку и дозаправить контур."
+    assert replacements["{{repair_possible}}"] == "Да"
+    assert replacements["{{repair_feasibility}}"] == "Да"
+    assert replacements["{{refrigerant_type}}"] == "R32"
+    assert replacements["{{refrigerant_amount}}"] == "0,45 кг"
+    assert replacements["{{refrigerant_pricing_mode}}"] == "по фактической массе"
+    assert replacements["{{repair_not_viable}}"] == "Нет"
+    assert replacements["{{repair_not_viable_reason}}"] == "Оснований для списания не выявлено."
+
+
+@pytest.mark.asyncio
+async def test_defect_act_legacy_repair_aliases_feed_canonical_placeholders(sqlite_session):
+    customer = Customer(name="Repair Legacy", phone="+375291111111")
+    order = Order(
+        customer=customer,
+        title="Кондиционер",
+        technical_meta={
+            "repair": {
+                "complaint_official": "Отсутствие охлаждения в рабочем режиме.",
+                "measurement_result": "При осмотре выявлены признаки утечки.",
+                "technical_conclusion": "Эксплуатация без ремонта не рекомендуется.",
+                "repair_feasibility": "Ремонт экономически нецелесообразен.",
+            },
+        },
+    )
+    sqlite_session.add(order)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+
+    strategy = DefectActStrategy(sqlite_session, order.id)
+    await strategy.fetch_order()
+    replacements = await strategy._prepare_base_variables(
+        doc_number="ДА-2026-002",
+        doc_type="defect_act",
+        document_date=datetime(2026, 5, 15),
+    )
+    strategy._add_specific_replacements(replacements)
+
+    assert replacements["{{customer_complaint}}"] == "Отсутствие охлаждения в рабочем режиме."
+    assert replacements["{{diagnostic_result}}"] == "При осмотре выявлены признаки утечки."
+    assert replacements["{{measurement_result}}"] == "При осмотре выявлены признаки утечки."
+    assert replacements["{{repair_recommendation}}"] == "Эксплуатация без ремонта не рекомендуется."
+    assert replacements["{{technical_conclusion}}"] == "Эксплуатация без ремонта не рекомендуется."
+    assert replacements["{{repair_feasibility}}"] == "Ремонт экономически нецелесообразен."
+    assert replacements["{{repair_possible}}"] == "_________________"
+    assert replacements["{{repair_not_viable}}"] == "Ремонт экономически нецелесообразен."
+    assert replacements["{{repair_not_viable_reason}}"] == "Ремонт экономически нецелесообразен."
+
+
+@pytest.mark.asyncio
+async def test_defect_act_legacy_conclusion_placeholder_prefers_legacy_value(sqlite_session):
+    customer = Customer(name="Repair Mixed", phone="+375291111111")
+    order = Order(
+        customer=customer,
+        title="Кондиционер",
+        technical_meta={
+            "repair": {
+                "technical_conclusion": "Компрессор неисправен, эксплуатация запрещена.",
+                "recommended_decision": "Вывести оборудование из эксплуатации.",
+                "repair_recommendation": "Заменить компрессор при наличии экономической целесообразности.",
+            },
+        },
+    )
+    sqlite_session.add(order)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+
+    strategy = DefectActStrategy(sqlite_session, order.id)
+    await strategy.fetch_order()
+    replacements = await strategy._prepare_base_variables(
+        doc_number="ДА-2026-003",
+        doc_type="defect_act",
+        document_date=datetime(2026, 5, 16),
+    )
+    strategy._add_specific_replacements(replacements)
+
+    assert replacements["{{technical_conclusion}}"] == "Компрессор неисправен, эксплуатация запрещена."
+    assert replacements["{{recommended_decision}}"] == "Вывести оборудование из эксплуатации."
+    assert replacements["{{repair_recommendation}}"] == (
+        "Заменить компрессор при наличии экономической целесообразности."
+    )

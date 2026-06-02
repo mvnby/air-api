@@ -23,11 +23,19 @@ class DefectActAIService:
         "startup_check_result",
         "compressor_check_result",
         "measurement_result",
+        "diagnostic_result",
         "further_use_assessment",
         "operation_restrictions",
         "technical_conclusion",
         "repair_feasibility",
         "recommended_decision",
+        "repair_recommendation",
+        "repair_possible",
+        "refrigerant_type",
+        "refrigerant_amount",
+        "refrigerant_pricing_mode",
+        "repair_not_viable",
+        "repair_not_viable_reason",
         "inspection_work_done",
     }
 
@@ -119,11 +127,19 @@ class DefectActAIService:
             "startup_check_result - результат проверки запуска; "
             "compressor_check_result - проверка компрессора; "
             "measurement_result - результаты диагностики/замеров без выдуманных чисел; "
+            "diagnostic_result - канонический результат диагностики; "
             "further_use_assessment - возможность дальнейшей эксплуатации; "
             "operation_restrictions - ограничения эксплуатации; "
             "technical_conclusion - итоговое техническое заключение; "
             "repair_feasibility - целесообразность ремонта; "
             "recommended_decision - рекомендованное решение; "
+            "repair_recommendation - каноническая рекомендация по ремонту; "
+            "repair_possible - возможен ли ремонт; "
+            "refrigerant_type - тип хладагента; "
+            "refrigerant_amount - объем хладагента; "
+            "refrigerant_pricing_mode - способ расчета хладагента; "
+            "repair_not_viable - ремонт невозможен или нецелесообразен; "
+            "repair_not_viable_reason - причина невозможности или нецелесообразности ремонта; "
             "inspection_work_done - выполненные диагностические действия.\n\n"
             "Входные данные:\n"
             f"{json.dumps(inputs, ensure_ascii=False, indent=2)}"
