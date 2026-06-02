@@ -88,6 +88,7 @@ type OrderWorkflowType = 'sales_installation' | 'service_work' | 'maintenance' |
 type RepairMeta = {
   customer_complaint: string;
   complaint_official: string;
+  complaint_text?: string;
   likely_diagnosis: string;
   equipment_name: string;
   equipment_brand: string;
@@ -100,11 +101,19 @@ type RepairMeta = {
   startup_check_result: string;
   compressor_check_result: string;
   measurement_result: string;
+  diagnostic_result: string;
   further_use_assessment: string;
   operation_restrictions: string;
   technical_conclusion: string;
   repair_feasibility: string;
   recommended_decision: string;
+  repair_recommendation: string;
+  repair_possible: string;
+  refrigerant_type: string;
+  refrigerant_amount: string;
+  refrigerant_pricing_mode: string;
+  repair_not_viable: string;
+  repair_not_viable_reason: string;
 };
 type RepairAiDefectType = {
   value: string;
@@ -134,12 +143,78 @@ const emptyRepairMeta = (): RepairMeta => ({
   startup_check_result: '',
   compressor_check_result: '',
   measurement_result: '',
+  diagnostic_result: '',
   further_use_assessment: '',
   operation_restrictions: '',
   technical_conclusion: '',
   repair_feasibility: '',
   recommended_decision: '',
+  repair_recommendation: '',
+  repair_possible: '',
+  refrigerant_type: '',
+  refrigerant_amount: '',
+  refrigerant_pricing_mode: '',
+  repair_not_viable: '',
+  repair_not_viable_reason: '',
 });
+
+const REPAIR_CHOICE_OPTIONS = ['', 'Да', 'Нет'];
+const REFRIGERANT_PRICING_MODE_OPTIONS = [
+  'по фактической массе',
+  'включен в стоимость ремонта',
+  'отдельной строкой сметы',
+  'не требуется',
+];
+
+const textValue = (value: unknown) => String(value ?? '').trim();
+
+const choiceText = (value: unknown) => {
+  if (typeof value === 'boolean') return value ? 'Да' : 'Нет';
+  return textValue(value);
+};
+
+const isExplicitNegativeRepairText = (value: unknown) => {
+  const text = textValue(value).toLowerCase();
+  if (!text) return false;
+  return [
+    'невозмож',
+    'не возмож',
+    'нецелесообраз',
+    'не целесообраз',
+    'нерентаб',
+    'не рентаб',
+    'списан',
+    'списани',
+    'вывести из эксплуатации',
+  ].some((marker) => text.includes(marker));
+};
+
+const normalizeRepairMeta = (raw: Partial<RepairMeta> | Record<string, any> | null | undefined): RepairMeta => {
+  const meta = { ...emptyRepairMeta(), ...((raw || {}) as Partial<RepairMeta>) };
+  if (!textValue(meta.customer_complaint)) {
+    meta.customer_complaint = textValue(meta.complaint_official) || textValue(meta.complaint_text);
+  }
+  if (!textValue(meta.diagnostic_result)) {
+    meta.diagnostic_result = textValue(meta.measurement_result);
+  }
+  if (!textValue(meta.repair_recommendation)) {
+    meta.repair_recommendation = textValue(meta.recommended_decision) || textValue(meta.technical_conclusion);
+  }
+  meta.repair_possible = choiceText(meta.repair_possible);
+  meta.repair_not_viable = choiceText(meta.repair_not_viable);
+  const legacyFeasibility = textValue(meta.repair_feasibility);
+  if (legacyFeasibility && isExplicitNegativeRepairText(legacyFeasibility)) {
+    if (!textValue(meta.repair_not_viable)) meta.repair_not_viable = 'Да';
+    if (!textValue(meta.repair_not_viable_reason)) meta.repair_not_viable_reason = legacyFeasibility;
+  }
+  return meta;
+};
+
+const selectOptionsWithCurrent = (baseOptions: string[], current: unknown) => {
+  const currentValue = textValue(current);
+  if (!currentValue || baseOptions.includes(currentValue)) return baseOptions;
+  return [...baseOptions, currentValue];
+};
 
 const REPAIR_AI_DEFECT_TYPES: RepairAiDefectType[] = [
   {
@@ -690,7 +765,8 @@ const repairSectionSummary = computed(() => {
   const serial = repairMeta.value.equipment_serial_number.trim() || repairMeta.value.equipment_inventory_number.trim();
   if (serial) parts.push(serial);
   if (repairMeta.value.customer_complaint.trim()) parts.push('есть жалоба');
-  if (repairMeta.value.technical_conclusion.trim()) parts.push('есть вывод');
+  if (repairMeta.value.diagnostic_result.trim()) parts.push('есть диагностика');
+  if (repairMeta.value.repair_recommendation.trim() || repairMeta.value.technical_conclusion.trim()) parts.push('есть вывод');
   return parts.join(' · ') || 'данные для диагностики и дефектного акта';
 });
 const filteredRepairComplaintPresets = computed(() => {
@@ -709,6 +785,9 @@ const filteredRepairComplaintPresets = computed(() => {
 const selectedRepairAiDefect = computed(() => (
   REPAIR_AI_DEFECT_TYPES.find((item) => item.value === repairAiDefectType.value) || REPAIR_AI_DEFECT_TYPES[0]
 ));
+const repairPossibleOptions = computed(() => selectOptionsWithCurrent(REPAIR_CHOICE_OPTIONS, repairMeta.value.repair_possible));
+const repairNotViableOptions = computed(() => selectOptionsWithCurrent(REPAIR_CHOICE_OPTIONS, repairMeta.value.repair_not_viable));
+const buildRepairMetaPayload = () => normalizeRepairMeta(repairMeta.value);
 const documentSectionSummary = computed(() => {
   const contractText = hasContract.value ? 'договор есть' : (hasOrderInvoice.value ? 'есть счет' : 'без договора');
   return `${orderDocuments.value.length} док. · ${contractText}`;
@@ -721,8 +800,9 @@ const beforeDocumentGenerate = async (type: string) => {
     await saveCurrentProposalLines();
   }
   if (type === 'defect_act') {
+    repairMeta.value = buildRepairMetaPayload();
     await ManagerOrdersService.patchManagerOrder(props.order.id, {
-      repair_meta: repairMeta.value as any,
+      repair_meta: buildRepairMetaPayload() as any,
       measurement_result: measurementResult.value,
     });
     emit('reload', props.order.id);
@@ -1075,7 +1155,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   status.value = order.status;
   orderTitle.value = order.title ?? '';
   workflowType.value = normalizeWorkflowType((order as any).workflow_type);
-  repairMeta.value = { ...emptyRepairMeta(), ...(((order as any).repair_meta || {}) as Partial<RepairMeta>) };
+  repairMeta.value = normalizeRepairMeta(((order as any).repair_meta || {}) as Partial<RepairMeta>);
   repairComplaintSearch.value = '';
   if (workflowType.value === 'repair' && !repairComplaintPresets.value.length) {
     void loadRepairComplaintPresets();
@@ -1626,10 +1706,10 @@ const generateRepairAiDraft = async () => {
       extra_context: repairAiExtraContext.value || defect.hint,
       current_meta: repairMeta.value as any,
     });
-    repairMeta.value = { ...repairMeta.value, ...((response.repair_meta || {}) as Partial<RepairMeta>) };
+    repairMeta.value = normalizeRepairMeta({ ...repairMeta.value, ...((response.repair_meta || {}) as Partial<RepairMeta>) });
     if (props.order?.id) {
       await ManagerOrdersService.patchManagerOrder(props.order.id, {
-        repair_meta: repairMeta.value as any,
+        repair_meta: buildRepairMetaPayload() as any,
         measurement_result: measurementResult.value,
       });
       emit('reload', props.order.id);
@@ -1847,11 +1927,12 @@ const handleSave = () => {
 
   clearDraft();
   const linePayload = buildProposalLinesPayload();
+  repairMeta.value = buildRepairMetaPayload();
   const payload: ManagerOrderUpdatePayload = {
     status: status.value,
     title: orderTitle.value,
     workflow_type: workflowType.value as any,
-    repair_meta: repairMeta.value as any,
+    repair_meta: buildRepairMetaPayload() as any,
     manager_labels: managerLabels.value,
     next_followup_date: fromLocalDateTimeInput(nextFollowupDate.value),
     measurement_date: fromLocalDateTimeInput(assessmentDate.value),
@@ -2502,6 +2583,66 @@ watch(
               v-model="repairMeta.likely_diagnosis"
               class="field-input min-h-[72px]"
               placeholder="Предварительная причина неисправности"
+            />
+          </label>
+          <label class="field-label">
+            Результат диагностики
+            <textarea
+              v-model="repairMeta.diagnostic_result"
+              class="field-input min-h-[88px]"
+              placeholder="Что выявлено при диагностике, без лишних чисел и предположений"
+            />
+          </label>
+          <label class="field-label">
+            Рекомендация по ремонту
+            <textarea
+              v-model="repairMeta.repair_recommendation"
+              class="field-input min-h-[88px]"
+              placeholder="Что сделать: устранить утечку, заменить узел, дозаправить..."
+            />
+          </label>
+          <label class="field-label">
+            Возможен ремонт
+            <select v-model="repairMeta.repair_possible" class="field-input">
+              <option v-for="option in repairPossibleOptions" :key="`repair-possible-${option || 'empty'}`" :value="option">
+                {{ option || 'Не указано' }}
+              </option>
+            </select>
+          </label>
+          <label class="field-label">
+            Ремонт невозможен / нецелесообразен
+            <select v-model="repairMeta.repair_not_viable" class="field-input">
+              <option v-for="option in repairNotViableOptions" :key="`repair-not-viable-${option || 'empty'}`" :value="option">
+                {{ option || 'Не указано' }}
+              </option>
+            </select>
+          </label>
+          <label class="field-label">
+            Хладагент
+            <input v-model="repairMeta.refrigerant_type" class="field-input" placeholder="R32, R410A..." />
+          </label>
+          <label class="field-label">
+            Количество хладагента
+            <input v-model="repairMeta.refrigerant_amount" class="field-input" placeholder="0,45 кг или по факту" />
+          </label>
+          <label class="field-label md:col-span-2">
+            Расчет хладагента
+            <input
+              v-model="repairMeta.refrigerant_pricing_mode"
+              list="refrigerant-pricing-mode-options"
+              class="field-input"
+              placeholder="по фактической массе, включен в стоимость..."
+            />
+            <datalist id="refrigerant-pricing-mode-options">
+              <option v-for="option in REFRIGERANT_PRICING_MODE_OPTIONS" :key="option" :value="option" />
+            </datalist>
+          </label>
+          <label class="field-label md:col-span-2">
+            Причина неремонтопригодности
+            <textarea
+              v-model="repairMeta.repair_not_viable_reason"
+              class="field-input min-h-[72px]"
+              placeholder="Заполняйте, если ремонт невозможен или экономически нецелесообразен"
             />
           </label>
 
