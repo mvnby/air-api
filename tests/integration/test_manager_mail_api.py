@@ -68,8 +68,9 @@ async def test_manager_mail_import_endpoint_uses_imap_service(async_client, monk
 
 @pytest.mark.asyncio
 async def test_manager_mail_lead_import_endpoint_uses_imap_service(async_client, monkeypatch):
-    async def fake_import(_session, *, dry_run=False):
+    async def fake_import(_session, *, dry_run=False, lookback_days=None):
         assert dry_run is True
+        assert lookback_days == 7
         return EmailLeadImportResult(
             processed=3,
             scanned_since="2026-05-23T09:00:00",
@@ -90,7 +91,7 @@ async def test_manager_mail_lead_import_endpoint_uses_imap_service(async_client,
     monkeypatch.setattr("routers.manager_mail.MailImapService.import_email_leads", fake_import)
 
     headers = await _auth_headers(async_client)
-    response = await async_client.post("/api/manager/mail/leads/import?dry_run=true", headers=headers)
+    response = await async_client.post("/api/manager/mail/leads/import?dry_run=true&lookback_days=7", headers=headers)
 
     assert response.status_code == 200
     assert response.json() == {

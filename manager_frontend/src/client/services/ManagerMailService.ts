@@ -40,17 +40,20 @@ export class ManagerMailService {
     /**
      * Import Manager Email Leads
      * @param dryRun
+     * @param lookbackDays
      * @returns EmailLeadImportResponse Successful Response
      * @throws ApiError
      */
     public static importManagerEmailLeads(
         dryRun: boolean = false,
+        lookbackDays?: (number | null),
     ): CancelablePromise<EmailLeadImportResponse> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/mail/leads/import',
             query: {
                 'dry_run': dryRun,
+                'lookback_days': lookbackDays,
             },
             errors: {
                 422: `Validation Error`,
