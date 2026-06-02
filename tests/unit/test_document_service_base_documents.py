@@ -378,3 +378,37 @@ async def test_defect_act_legacy_repair_aliases_feed_canonical_placeholders(sqli
     assert replacements["{{repair_possible}}"] == "_________________"
     assert replacements["{{repair_not_viable}}"] == "Ремонт экономически нецелесообразен."
     assert replacements["{{repair_not_viable_reason}}"] == "Ремонт экономически нецелесообразен."
+
+
+@pytest.mark.asyncio
+async def test_defect_act_legacy_conclusion_placeholder_prefers_legacy_value(sqlite_session):
+    customer = Customer(name="Repair Mixed", phone="+375291111111")
+    order = Order(
+        customer=customer,
+        title="Кондиционер",
+        technical_meta={
+            "repair": {
+                "technical_conclusion": "Компрессор неисправен, эксплуатация запрещена.",
+                "recommended_decision": "Вывести оборудование из эксплуатации.",
+                "repair_recommendation": "Заменить компрессор при наличии экономической целесообразности.",
+            },
+        },
+    )
+    sqlite_session.add(order)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+
+    strategy = DefectActStrategy(sqlite_session, order.id)
+    await strategy.fetch_order()
+    replacements = await strategy._prepare_base_variables(
+        doc_number="ДА-2026-003",
+        doc_type="defect_act",
+        document_date=datetime(2026, 5, 16),
+    )
+    strategy._add_specific_replacements(replacements)
+
+    assert replacements["{{technical_conclusion}}"] == "Компрессор неисправен, эксплуатация запрещена."
+    assert replacements["{{recommended_decision}}"] == "Вывести оборудование из эксплуатации."
+    assert replacements["{{repair_recommendation}}"] == (
+        "Заменить компрессор при наличии экономической целесообразности."
+    )
