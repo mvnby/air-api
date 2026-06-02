@@ -1,6 +1,7 @@
 from pathlib import Path
 from datetime import datetime
 from email.message import EmailMessage
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -13,7 +14,7 @@ from services.bank_email_parser_service import BankEmailParserService
 from services.bank_receipt_service import BankReceiptService
 from services.bank_statement_csv_service import BankStatementCsvService
 from services.bot_service import BotService
-from services.email_lead_intake_service import EmailLeadIntakeService
+from services.email_lead_intake_service import EmailLeadIntakeService, EmailLeadProcessResult
 from services.mail_smtp_service import MailAttachment, MailSmtpService
 from services.mail_imap_service import MailImapService
 from services.notification_service import NotificationService
@@ -121,6 +122,131 @@ def test_email_lead_attachment_text_participates_in_keyword_filter():
         subject=msg["Subject"],
         raw_body=f"{body}\n{attachment_text}",
     )
+
+
+def test_email_lead_legacy_doc_attachment_text_participates_in_keyword_filter(monkeypatch):
+    body = "Добрый день, во вложении заявка."
+    msg = EmailMessage()
+    msg["Subject"] = "Документы"
+    msg.set_content(body)
+    msg.add_attachment(
+        b"legacy-doc-bytes",
+        maintype="application",
+        subtype="msword",
+        filename="request.doc",
+    )
+
+    def fake_run(command, **kwargs):
+        assert command[0] == "/usr/bin/antiword"
+        assert command[1].endswith(".doc")
+        assert kwargs["timeout"] == MailImapService.LEGACY_DOC_TIMEOUT_SECONDS
+        assert kwargs["capture_output"] is True
+        return SimpleNamespace(
+            returncode=0,
+            stdout="Просим предоставить ценовое предложение на обслуживание кондиционеров.".encode("utf-8"),
+            stderr=b"",
+        )
+
+    monkeypatch.setattr(
+        "services.mail_imap_service.shutil.which",
+        lambda name: "/usr/bin/antiword" if name == "antiword" else None,
+    )
+    monkeypatch.setattr("services.mail_imap_service.subprocess.run", fake_run)
+
+    attachment_text = "\n".join(MailImapService._extract_attachment_texts(msg))
+
+    assert "обслуживание кондиционеров" in attachment_text
+    assert EmailLeadIntakeService.looks_like_lead_candidate(
+        sender_email="client@example.com",
+        subject=msg["Subject"],
+        raw_body=f"{body}\n{attachment_text}",
+    )
+
+
+def test_legacy_doc_attachment_reports_missing_runtime_dependency(monkeypatch):
+    monkeypatch.setattr("services.mail_imap_service.shutil.which", lambda _name: None)
+
+    extraction = MailImapService._extract_attachment_text_result(
+        filename="request.doc",
+        content_type="application/msword",
+        content=b"legacy-doc-bytes",
+    )
+
+    assert extraction.text == ""
+    assert extraction.diagnostic == "legacy .doc не распознан: antiword не установлен в runtime"
+
+
+def test_legacy_doc_attachment_size_limit_skips_converter(monkeypatch):
+    called = False
+
+    def fake_run(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("antiword should not be called for an oversized attachment")
+
+    monkeypatch.setattr(MailImapService, "LEGACY_DOC_MAX_BYTES", 4)
+    monkeypatch.setattr(
+        "services.mail_imap_service.shutil.which",
+        lambda name: "/usr/bin/antiword" if name == "antiword" else None,
+    )
+    monkeypatch.setattr("services.mail_imap_service.subprocess.run", fake_run)
+
+    extraction = MailImapService._extract_attachment_text_result(
+        filename="request.doc",
+        content_type="application/msword",
+        content=b"12345",
+    )
+
+    assert called is False
+    assert extraction.text == ""
+    assert "размер вложения больше" in (extraction.diagnostic or "")
+
+
+@pytest.mark.asyncio
+async def test_email_lead_dry_run_reports_unrecognized_legacy_doc(sqlite_session, monkeypatch):
+    msg = EmailMessage()
+    msg["Subject"] = "Документы"
+    msg["From"] = "client@example.com"
+    msg.set_content("Добрый день, во вложении заявка.")
+    msg.add_attachment(
+        b"legacy-doc-bytes",
+        maintype="application",
+        subtype="msword",
+        filename="request.doc",
+    )
+
+    class FakeImapClient:
+        def select(self, *_args, **_kwargs):
+            return "OK", []
+
+        def search(self, *_args):
+            return "OK", [b"1"]
+
+        def fetch(self, *_args):
+            return "OK", [(b"RFC822", msg.as_bytes())]
+
+        def close(self):
+            pass
+
+        def logout(self):
+            pass
+
+    async def fake_process_email(_session, **kwargs):
+        assert "legacy .doc не распознан" in kwargs["raw_body"]
+        return EmailLeadProcessResult(status="filtered", is_candidate=False, reason="keyword_filter")
+
+    monkeypatch.setattr("services.mail_imap_service.shutil.which", lambda _name: None)
+    monkeypatch.setattr(MailImapService, "_connect", lambda: FakeImapClient())
+    monkeypatch.setattr(EmailLeadIntakeService, "process_email", fake_process_email)
+
+    result = await MailImapService.import_email_leads(sqlite_session, dry_run=True)
+
+    assert result.processed == 1
+    assert result.candidates == 0
+    assert len(result.decisions) == 1
+    assert result.decisions[0].status == "filtered"
+    assert result.decisions[0].reason
+    assert "antiword не установлен" in result.decisions[0].reason
 
 
 @pytest.mark.asyncio
