@@ -82,7 +82,7 @@ const submit = async () => {
                 <div class="modal-content bg-white dark:bg-[#1e293b] rounded-xl shadow-xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-slate-700/60 flex flex-col">
                     <div class="px-6 py-4 border-b border-gray-200 dark:border-slate-700/50 flex justify-between items-center bg-gray-50 dark:bg-slate-800/50">
                         <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-                            {{ installer ? 'Редактировать Монтажника' : 'Новый Монтажник' }}
+                            {{ installer ? 'Редактировать сотрудника' : 'Новый сотрудник' }}
                         </h3>
                         <button @click="close" class="text-gray-400 hover:text-gray-600 dark:text-slate-400 dark:hover:text-white transition-colors" :disabled="loading">
                             <span class="material-icons-round text-xl">close</span>
@@ -95,7 +95,7 @@ const submit = async () => {
                         </div>
 
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Имя бригады / монтажника *</label>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Имя сотрудника или бригады *</label>
                             <input
                                 v-model="formData.name"
                                 type="text"
@@ -136,7 +136,7 @@ const submit = async () => {
                                      :class="{'translate-x-4': formData.is_active}"></div>
                             </div>
                             <span class="text-sm font-medium text-gray-700 dark:text-slate-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
-                                Активен (может получать заказы)
+                                Активен (доступен для новых назначений)
                             </span>
                         </label>
                     </div>

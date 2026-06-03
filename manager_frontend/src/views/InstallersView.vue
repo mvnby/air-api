@@ -13,6 +13,16 @@ const toast = ref('');
 const showModal = ref(false);
 const editingInstaller = ref<ManagerInstallerResponse | null>(null);
 
+const getEmployeeStatusLabel = (inst: ManagerInstallerResponse) => (
+    inst.is_active ? 'Активен' : 'В архиве'
+);
+
+const getEmployeeStatusClasses = (inst: ManagerInstallerResponse) => (
+    inst.is_active
+        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/30'
+        : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700/60 dark:text-slate-300 dark:border-slate-600'
+);
+
 const setToast = (msg: string) => {
     toast.value = msg;
     window.setTimeout(() => { toast.value = ''; }, 3000);
@@ -42,7 +52,7 @@ const openEditModal = (inst: ManagerInstallerResponse) => {
 };
 
 const handleSuccess = () => {
-    setToast('Монтажник сохранен');
+    setToast('Сотрудник сохранен');
     loadInstallers();
 };
 
@@ -75,10 +85,10 @@ onMounted(() => {
             <div>
                 <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
                     <span class="material-icons-round text-teal-600 dark:text-teal-400">engineering</span>
-                    Бригады монтажников
+                    Сотрудники
                 </h1>
                 <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">
-                    Управление монтажниками, их ставками и доступностью для заказов
+                    Управление сотрудниками-исполнителями, ставками и доступностью для заказов
                 </p>
             </div>
             
@@ -113,7 +123,7 @@ onMounted(() => {
                             Базовая ставка
                         </th>
                         <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                            Активен
+                            Статус
                         </th>
                         <th class="px-6 py-4 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                             Действия
@@ -132,6 +142,11 @@ onMounted(() => {
                                     <div class="text-xs text-gray-500 dark:text-slate-500 sm:hidden mt-0.5">
                                         {{ inst.default_rate ? inst.default_rate + ' BYN' : 'Ставка не задана' }}
                                     </div>
+                                    <div class="mt-1 sm:hidden">
+                                        <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium" :class="getEmployeeStatusClasses(inst)">
+                                            {{ getEmployeeStatusLabel(inst) }}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </td>
@@ -148,10 +163,15 @@ onMounted(() => {
                             </div>
                         </td>
                         <td class="px-6 py-4">
-                            <label class="relative inline-flex items-center cursor-pointer" @click.prevent="toggleActive(inst)">
-                                <input type="checkbox" :checked="inst.is_active" class="sr-only peer" />
-                                <div class="w-9 h-5 bg-gray-200 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-500 transition-colors"></div>
-                            </label>
+                            <div class="flex items-center gap-3">
+                                <span class="hidden sm:inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium" :class="getEmployeeStatusClasses(inst)">
+                                    {{ getEmployeeStatusLabel(inst) }}
+                                </span>
+                                <label class="relative inline-flex items-center cursor-pointer" @click.prevent="toggleActive(inst)" :title="inst.is_active ? 'Перевести в архив' : 'Вернуть в активные'">
+                                    <input type="checkbox" :checked="inst.is_active" class="sr-only peer" />
+                                    <div class="w-9 h-5 bg-gray-200 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-500 transition-colors"></div>
+                                </label>
+                            </div>
                         </td>
                         <td class="px-6 py-4 text-right">
                             <button
@@ -166,7 +186,7 @@ onMounted(() => {
                     
                     <tr v-if="installers.length === 0 && !loading">
                         <td colspan="5" class="px-6 py-12 text-center text-gray-500 dark:text-slate-400">
-                            Монтажники не найдены. Создайте первую бригаду!
+                            Сотрудники не найдены. Добавьте первого сотрудника.
                         </td>
                     </tr>
                 </tbody>
