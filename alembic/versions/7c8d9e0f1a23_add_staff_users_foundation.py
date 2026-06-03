@@ -1,7 +1,7 @@
 """Add staff users foundation
 
-Revision ID: 6c7d8e9f0a12
-Revises: 5a6b7c8d9e10
+Revision ID: 7c8d9e0f1a23
+Revises: 6c7d8e9f0a12
 Create Date: 2026-06-03 00:00:00.000000
 
 """
@@ -14,8 +14,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = "6c7d8e9f0a12"
-down_revision: Union[str, Sequence[str], None] = "5a6b7c8d9e10"
+revision: str = "7c8d9e0f1a23"
+down_revision: Union[str, Sequence[str], None] = "6c7d8e9f0a12"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

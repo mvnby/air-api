@@ -29,7 +29,7 @@ def test_staff_users_migration_backfills_existing_installers(monkeypatch):
             ],
         )
 
-        migration_path = Path("alembic/versions/6c7d8e9f0a12_add_staff_users_foundation.py")
+        migration_path = Path("alembic/versions/7c8d9e0f1a23_add_staff_users_foundation.py")
         spec = importlib.util.spec_from_file_location("staff_users_migration", migration_path)
         assert spec and spec.loader
         migration = importlib.util.module_from_spec(spec)
