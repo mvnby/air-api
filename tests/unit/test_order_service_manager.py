@@ -6,7 +6,19 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 from sqlmodel import select
 
-from models import BankReceipt, Customer, CustomerType, Order, OrderProposal, OrderStatus, OutgoingEmail, PaymentCurrency, Product, Service
+from models import (
+    BankReceipt,
+    Customer,
+    CustomerType,
+    Order,
+    OrderProposal,
+    OrderStatus,
+    OutgoingEmail,
+    PaymentCurrency,
+    Product,
+    Service,
+    ServiceTariff,
+)
 from schemas import ManagerOrderUpdatePayload
 from services.order_service import OrderService
 
@@ -46,6 +58,109 @@ def test_service_json_text_search_variants_include_escaped_cyrillic():
         "\\u0430\\u0434\\u0440\\u0435\\u0441",
         "\\\\u0430\\\\u0434\\\\u0440\\\\u0435\\\\u0441",
     ]
+
+
+def test_service_repair_meta_normalizes_status_and_booleanish_values():
+    meta = OrderService.normalize_repair_meta(
+        {
+            "repair_status": "Awaiting Customer Approval",
+            "customer_complaint": "  Не охлаждает  ",
+            "diagnostic_result": "Недостаток хладагента.",
+            "repair_recommendation": "Проверить контур на утечку.",
+            "repair_possible": "Да",
+            "repair_not_viable": " нет ",
+            "empty": "   ",
+        },
+        default_status=OrderService.REPAIR_DEFAULT_STATUS,
+    )
+
+    assert meta["repair_status"] == "awaiting_customer_approval"
+    assert meta["customer_complaint"] == "Не охлаждает"
+    assert meta["diagnostic_result"] == "Недостаток хладагента."
+    assert meta["repair_recommendation"] == "Проверить контур на утечку."
+    assert meta["repair_possible"] is True
+    assert meta["repair_not_viable"] is False
+    assert "empty" not in meta
+
+    with pytest.raises(ValueError, match="Invalid repair_status"):
+        OrderService.normalize_repair_meta({"repair_status": "waiting_for_magic"})
+
+
+def test_service_repair_meta_preserves_canonical_and_refrigerant_fields():
+    meta = OrderService.normalize_repair_meta(
+        {
+            "customer_complaint": "Не запускается",
+            "complaint_official": "Отсутствие запуска оборудования",
+            "additional_conditions": "Работы после согласования.",
+            "customer_approval_status": "pending",
+            "customer_approval_note": "Ждет звонка.",
+            "parts_status": "ordered",
+            "refrigerant_type": " R32 ",
+            "refrigerant_amount": " 0,35 кг ",
+            "refrigerant_pricing_mode": " по фактической массе ",
+        },
+        default_status=OrderService.REPAIR_DEFAULT_STATUS,
+    )
+
+    assert meta["repair_status"] == "new"
+    assert meta["complaint_official"] == "Отсутствие запуска оборудования"
+    assert meta["additional_conditions"] == "Работы после согласования."
+    assert meta["customer_approval_status"] == "pending"
+    assert meta["customer_approval_note"] == "Ждет звонка."
+    assert meta["parts_status"] == "ordered"
+    assert meta["refrigerant_type"] == "R32"
+    assert meta["refrigerant_amount"] == "0,35 кг"
+    assert meta["refrigerant_pricing_mode"] == "по фактической массе"
+
+
+def test_service_repair_transition_helpers_complete_without_global_status_change():
+    order = Order(status=OrderStatus.NEW_LEAD, workflow_type="repair")
+
+    OrderService.set_repair_workflow_status(order, "new", {"customer_complaint": "Не охлаждает"})
+    OrderService.mark_repair_diagnostic_in_progress(order)
+    OrderService.record_repair_diagnostic_result(
+        order,
+        "Выявлена утечка хладагента.",
+        repair_recommendation="Устранить утечку и дозаправить контур.",
+        repair_possible="да",
+    )
+    OrderService.mark_repair_approved_for_repair(order, note="Клиент согласовал ремонт.")
+    OrderService.mark_repair_in_progress(order)
+    final_meta = OrderService.mark_repair_completed(order, note="Работы выполнены.")
+
+    assert order.status == OrderStatus.NEW_LEAD
+    assert final_meta["repair_status"] == "completed"
+    assert final_meta["customer_complaint"] == "Не охлаждает"
+    assert final_meta["diagnostic_result"] == "Выявлена утечка хладагента."
+    assert final_meta["repair_recommendation"] == "Устранить утечку и дозаправить контур."
+    assert final_meta["repair_possible"] is True
+    assert final_meta["customer_approval_status"] == "approved"
+    assert final_meta["repair_completion_note"] == "Работы выполнены."
+
+
+def test_service_repair_transition_helpers_support_not_repairable_path():
+    order = Order(status=OrderStatus.NEGOTIATION, workflow_type="repair")
+
+    OrderService.set_repair_workflow_status(order, "new", {"customer_complaint": "Не запускается"})
+    meta = OrderService.mark_repair_not_repairable(
+        order,
+        "Компрессор разрушен, ремонт экономически нецелесообразен.",
+        diagnostic_result="Диагностика подтвердила критический отказ компрессора.",
+    )
+
+    assert order.status == OrderStatus.NEGOTIATION
+    assert meta["repair_status"] == "not_repairable"
+    assert meta["repair_possible"] is False
+    assert meta["repair_not_viable"] is True
+    assert meta["repair_not_viable_reason"] == "Компрессор разрушен, ремонт экономически нецелесообразен."
+    assert meta["diagnostic_result"] == "Диагностика подтвердила критический отказ компрессора."
+
+
+def test_service_repair_transition_helpers_reject_non_repair_orders():
+    order = Order(status=OrderStatus.NEW_LEAD, workflow_type="sales_installation")
+
+    with pytest.raises(ValueError, match="repair orders"):
+        OrderService.mark_repair_in_progress(order)
 
 
 @pytest.mark.asyncio
@@ -186,6 +301,39 @@ async def test_service_update_order_for_manager_title_and_labels(db):
     assert cleared is not None
     assert cleared["title"] is None
     assert cleared["manager_labels"] == []
+
+
+@pytest.mark.asyncio
+async def test_service_non_repair_update_has_no_repair_side_effects(db):
+    customer = Customer(name="No Repair", phone="+375294444446", type=CustomerType.individual)
+    tariff = ServiceTariff(
+        service_kind="repair",
+        selector_label="Диагностика кондиционера",
+        estimate_template="Диагностика кондиционера",
+        category="diagnostic",
+        base_price=80,
+        is_active=True,
+    )
+    db.add(customer)
+    db.add(tariff)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD, workflow_type="sales_installation")
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    data = await OrderService.update_order_for_manager(
+        db,
+        order.id,
+        ManagerOrderUpdatePayload(comment="Обычная заявка без ремонта"),
+    )
+
+    assert data is not None
+    assert data["workflow_type"] == "sales_installation"
+    assert data["repair_meta"] == {}
+    assert data["service_lines"] == []
 
 
 @pytest.mark.asyncio

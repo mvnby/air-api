@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from sqlalchemy import func, or_, and_, not_, cast, String, delete, inspect
 from sqlalchemy.orm import selectinload
-from sqlalchemy.orm.attributes import NO_VALUE
+from sqlalchemy.orm.attributes import NO_VALUE, flag_modified
 
 from crud.order import OrderDAO
 from crud.product import ProductDAO
@@ -21,6 +21,26 @@ class OrderService:
     MANAGER_LABELS_META_KEY = "manager_labels"
     LEGACY_WEBSITE_TITLE_PREFIX = "Заказ с сайта от "
     ORDER_WORKFLOW_TYPES = {"sales_installation", "service_work", "maintenance", "repair"}
+    REPAIR_META_KEY = "repair"
+    REPAIR_STATUS_KEY = "repair_status"
+    REPAIR_DEFAULT_STATUS = "new"
+    REPAIR_WORKFLOW_STATUSES = (
+        "new",
+        "scheduled",
+        "diagnostic_in_progress",
+        "awaiting_diagnostic_result",
+        "awaiting_customer_approval",
+        "approved_for_repair",
+        "repair_in_progress",
+        "awaiting_parts",
+        "completed",
+        "not_repairable",
+        "cancelled",
+    )
+    REPAIR_WORKFLOW_STATUS_SET = set(REPAIR_WORKFLOW_STATUSES)
+    REPAIR_BOOLEAN_META_KEYS = {"repair_possible", "repair_not_viable"}
+    REPAIR_TRUE_VALUES = {"1", "true", "yes", "y", "да", "д", "истина"}
+    REPAIR_FALSE_VALUES = {"0", "false", "no", "n", "нет", "н", "ложь"}
     SERVICE_TYPE_TITLE_MAP = {
         "turnkey": "Продажа + монтаж",
         "install_only": "Монтаж",
@@ -265,27 +285,191 @@ class OrderService:
         return fallback
 
     @staticmethod
-    def _get_repair_meta(order: Order) -> Dict[str, Any]:
-        meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
-        repair_meta = meta.get("repair")
-        return dict(repair_meta) if isinstance(repair_meta, dict) else {}
+    def normalize_repair_status(raw: Any, fallback: Optional[str] = None) -> str:
+        value = str(raw or "").strip()
+        if not value:
+            if fallback is not None:
+                return OrderService.normalize_repair_status(fallback)
+            raise ValueError(f"{OrderService.REPAIR_STATUS_KEY} is required")
+
+        normalized = "_".join(value.casefold().replace("-", "_").split())
+        if normalized not in OrderService.REPAIR_WORKFLOW_STATUS_SET:
+            allowed = ", ".join(OrderService.REPAIR_WORKFLOW_STATUSES)
+            raise ValueError(f"Invalid {OrderService.REPAIR_STATUS_KEY}: {raw}. Allowed: {allowed}")
+        return normalized
 
     @staticmethod
-    def _set_repair_meta(order: Order, raw_meta: Any) -> None:
-        meta = dict(order.technical_meta or {}) if isinstance(order.technical_meta, dict) else {}
-        if isinstance(raw_meta, dict):
-            cleaned = {
-                str(key): value
-                for key, value in raw_meta.items()
-                if value is not None and not (isinstance(value, str) and not value.strip())
-            }
+    def _normalize_repair_boolish(raw: Any) -> Any:
+        if isinstance(raw, bool):
+            return raw
+        if isinstance(raw, str):
+            value = raw.strip()
+            lowered = value.casefold()
+            if lowered in OrderService.REPAIR_TRUE_VALUES:
+                return True
+            if lowered in OrderService.REPAIR_FALSE_VALUES:
+                return False
+            return value
+        return raw
+
+    @staticmethod
+    def normalize_repair_meta(raw_meta: Any, default_status: Optional[str] = None) -> Dict[str, Any]:
+        if not isinstance(raw_meta, dict):
+            cleaned: Dict[str, Any] = {}
         else:
             cleaned = {}
+            for raw_key, raw_value in raw_meta.items():
+                key = str(raw_key or "").strip()
+                if not key or raw_value is None:
+                    continue
+                if isinstance(raw_value, str):
+                    value: Any = raw_value.strip()
+                    if not value:
+                        continue
+                else:
+                    value = raw_value
+
+                if key == OrderService.REPAIR_STATUS_KEY:
+                    cleaned[key] = OrderService.normalize_repair_status(value, fallback=default_status)
+                elif key in OrderService.REPAIR_BOOLEAN_META_KEYS:
+                    cleaned[key] = OrderService._normalize_repair_boolish(value)
+                else:
+                    cleaned[key] = value
+
+        if OrderService.REPAIR_STATUS_KEY not in cleaned and default_status is not None:
+            cleaned[OrderService.REPAIR_STATUS_KEY] = OrderService.normalize_repair_status(default_status)
+        return cleaned
+
+    @staticmethod
+    def _get_repair_meta(order: Order) -> Dict[str, Any]:
+        meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
+        repair_meta = meta.get(OrderService.REPAIR_META_KEY)
+        raw = dict(repair_meta) if isinstance(repair_meta, dict) else {}
+        if OrderService._normalize_workflow_type(getattr(order, "workflow_type", None)) != "repair":
+            return raw
+        try:
+            return OrderService.normalize_repair_meta(raw, default_status=OrderService.REPAIR_DEFAULT_STATUS)
+        except ValueError:
+            logger.warning("Order %s has invalid repair meta status", getattr(order, "id", None))
+            return raw
+
+    @staticmethod
+    def _set_repair_meta(
+        order: Order,
+        raw_meta: Any,
+        default_status: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        meta = dict(order.technical_meta or {}) if isinstance(order.technical_meta, dict) else {}
+        cleaned = OrderService.normalize_repair_meta(raw_meta, default_status=default_status)
         if cleaned:
-            meta["repair"] = cleaned
+            meta[OrderService.REPAIR_META_KEY] = cleaned
         else:
-            meta.pop("repair", None)
+            meta.pop(OrderService.REPAIR_META_KEY, None)
         order.technical_meta = meta
+        return cleaned
+
+    @staticmethod
+    def _ensure_repair_meta_defaults(order: Order) -> Dict[str, Any]:
+        if OrderService._normalize_workflow_type(getattr(order, "workflow_type", None)) != "repair":
+            return OrderService._get_repair_meta(order)
+        return OrderService._set_repair_meta(
+            order,
+            OrderService._get_repair_meta(order),
+            default_status=OrderService.REPAIR_DEFAULT_STATUS,
+        )
+
+    @staticmethod
+    def _ensure_repair_workflow(order: Order) -> None:
+        if OrderService._normalize_workflow_type(getattr(order, "workflow_type", None)) != "repair":
+            raise ValueError("Repair workflow transitions can only be applied to repair orders")
+
+    @staticmethod
+    def set_repair_workflow_status(
+        order: Order,
+        status: Any,
+        extra_meta: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        OrderService._ensure_repair_workflow(order)
+        repair_meta = OrderService._get_repair_meta(order)
+        if extra_meta:
+            repair_meta.update(extra_meta)
+        repair_meta[OrderService.REPAIR_STATUS_KEY] = status
+        return OrderService._set_repair_meta(
+            order,
+            repair_meta,
+            default_status=OrderService.REPAIR_DEFAULT_STATUS,
+        )
+
+    @staticmethod
+    def mark_repair_diagnostic_in_progress(order: Order) -> Dict[str, Any]:
+        return OrderService.set_repair_workflow_status(order, "diagnostic_in_progress")
+
+    @staticmethod
+    def mark_repair_awaiting_diagnostic_result(order: Order) -> Dict[str, Any]:
+        return OrderService.set_repair_workflow_status(order, "awaiting_diagnostic_result")
+
+    @staticmethod
+    def record_repair_diagnostic_result(
+        order: Order,
+        diagnostic_result: Any,
+        *,
+        repair_recommendation: Any = None,
+        repair_possible: Any = None,
+        next_status: str = "awaiting_customer_approval",
+    ) -> Dict[str, Any]:
+        updates = {"diagnostic_result": diagnostic_result}
+        if repair_recommendation is not None:
+            updates["repair_recommendation"] = repair_recommendation
+        if repair_possible is not None:
+            updates["repair_possible"] = repair_possible
+        return OrderService.set_repair_workflow_status(order, next_status, updates)
+
+    @staticmethod
+    def mark_repair_awaiting_customer_approval(order: Order, note: Any = None) -> Dict[str, Any]:
+        updates = {"customer_approval_status": "pending"}
+        if note is not None:
+            updates["customer_approval_note"] = note
+        return OrderService.set_repair_workflow_status(order, "awaiting_customer_approval", updates)
+
+    @staticmethod
+    def mark_repair_approved_for_repair(order: Order, note: Any = None) -> Dict[str, Any]:
+        updates = {"customer_approval_status": "approved"}
+        if note is not None:
+            updates["customer_approval_note"] = note
+        return OrderService.set_repair_workflow_status(order, "approved_for_repair", updates)
+
+    @staticmethod
+    def mark_repair_in_progress(order: Order) -> Dict[str, Any]:
+        return OrderService.set_repair_workflow_status(order, "repair_in_progress")
+
+    @staticmethod
+    def mark_repair_awaiting_parts(order: Order, note: Any = None) -> Dict[str, Any]:
+        updates = {"parts_status": "awaiting"}
+        if note is not None:
+            updates["parts_note"] = note
+        return OrderService.set_repair_workflow_status(order, "awaiting_parts", updates)
+
+    @staticmethod
+    def mark_repair_completed(order: Order, note: Any = None) -> Dict[str, Any]:
+        updates = {"repair_completion_note": note} if note is not None else None
+        return OrderService.set_repair_workflow_status(order, "completed", updates)
+
+    @staticmethod
+    def mark_repair_not_repairable(
+        order: Order,
+        reason: Any = None,
+        *,
+        diagnostic_result: Any = None,
+    ) -> Dict[str, Any]:
+        updates: Dict[str, Any] = {
+            "repair_possible": False,
+            "repair_not_viable": True,
+        }
+        if reason is not None:
+            updates["repair_not_viable_reason"] = reason
+        if diagnostic_result is not None:
+            updates["diagnostic_result"] = diagnostic_result
+        return OrderService.set_repair_workflow_status(order, "not_repairable", updates)
 
     @staticmethod
     def _set_manager_labels(order: Order, raw_labels: Any) -> None:
@@ -568,12 +752,16 @@ class OrderService:
             changed = True
 
         if payload.service_type:
-            from sqlalchemy.orm.attributes import flag_modified
-
             order.technical_meta = dict(order.technical_meta or {})
             order.technical_meta["service_type"] = payload.service_type
             order.workflow_type = OrderService._workflow_type_from_service_type(payload.service_type, order.workflow_type)
             flag_modified(order, "technical_meta")
+            changed = True
+
+        if order.workflow_type == "repair":
+            OrderService._ensure_repair_meta_defaults(order)
+            flag_modified(order, "technical_meta")
+            await OrderService._maybe_add_default_repair_diagnostic(session, order)
             changed = True
 
         if changed:
@@ -1945,6 +2133,8 @@ class OrderService:
         if fields_set is None:
             fields_set = getattr(payload, "__fields_set__", set())
 
+        previous_workflow_type = OrderService._normalize_workflow_type(getattr(order, "workflow_type", None))
+
         if "status" in fields_set and payload.status is not None:
             try:
                 order.status = OrderStatus(payload.status)
@@ -1952,14 +2142,16 @@ class OrderService:
                 raise ValueError(f"Invalid status: {payload.status}") from exc
         if "title" in fields_set:
             order.title = OrderService._clean_order_title(payload.title)
-        workflow_type_changed = False
         if "workflow_type" in fields_set and payload.workflow_type is not None:
             next_workflow_type = OrderService._normalize_workflow_type(payload.workflow_type, order.workflow_type)
-            workflow_type_changed = next_workflow_type != order.workflow_type
             order.workflow_type = next_workflow_type
         if "repair_meta" in fields_set:
-            OrderService._set_repair_meta(order, payload.repair_meta)
-            from sqlalchemy.orm.attributes import flag_modified
+            default_status = (
+                OrderService.REPAIR_DEFAULT_STATUS
+                if OrderService._normalize_workflow_type(order.workflow_type) == "repair"
+                else None
+            )
+            OrderService._set_repair_meta(order, payload.repair_meta, default_status=default_status)
             flag_modified(order, "technical_meta")
         if "manager_labels" in fields_set:
             OrderService._set_manager_labels(order, payload.manager_labels)
@@ -2182,7 +2374,11 @@ class OrderService:
                     if field == "service_type" and "workflow_type" not in fields_set:
                         order.workflow_type = OrderService._workflow_type_from_service_type(val, order.workflow_type)
             order.technical_meta = new_meta
-            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(order, "technical_meta")
+
+        current_workflow_type = OrderService._normalize_workflow_type(getattr(order, "workflow_type", None))
+        if current_workflow_type == "repair":
+            OrderService._ensure_repair_meta_defaults(order)
             flag_modified(order, "technical_meta")
 
         if "products" in fields_set or "services" in fields_set:
@@ -2266,7 +2462,8 @@ class OrderService:
             await session.flush()
             await OrderService._refresh_order_financials(session, order)
 
-        if workflow_type_changed and order.workflow_type == "repair" and "services" not in fields_set:
+        transitioned_to_repair = previous_workflow_type != "repair" and current_workflow_type == "repair"
+        if transitioned_to_repair and "services" not in fields_set:
             await OrderService._maybe_add_default_repair_diagnostic(session, order)
 
         session.add(order)

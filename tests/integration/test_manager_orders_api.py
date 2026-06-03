@@ -206,9 +206,95 @@ async def test_manager_order_patch_repair_workflow_adds_diagnostic_and_meta(asyn
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["workflow_type"] == "repair"
+    assert data["repair_meta"]["repair_status"] == "new"
     assert data["repair_meta"]["customer_complaint"] == "Не охлаждает"
     assert data["repair_meta"]["equipment_serial_number"] == "SN-REPAIR-1"
-    assert any("Диагностика кондиционера" in line["service_title"] for line in data["service_lines"])
+    diagnostic_lines = [
+        line for line in data["service_lines"]
+        if "Диагностика кондиционера" in line["service_title"]
+    ]
+    assert len(diagnostic_lines) == 1
+
+    second_response = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={"workflow_type": "repair", "repair_meta": {"repair_status": "scheduled"}},
+        headers=headers,
+    )
+    assert second_response.status_code == 200, second_response.text
+    second_data = second_response.json()
+    assert second_data["repair_meta"]["repair_status"] == "scheduled"
+    diagnostic_lines = [
+        line for line in second_data["service_lines"]
+        if "Диагностика кондиционера" in line["service_title"]
+    ]
+    assert len(diagnostic_lines) == 1
+
+
+@pytest.mark.asyncio
+async def test_manager_order_patch_rejects_invalid_repair_status(async_client, db):
+    customer = Customer(name="Repair Invalid Status", phone="+375295555559", type=CustomerType.company)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={
+            "workflow_type": "repair",
+            "repair_meta": {"repair_status": "waiting_for_magic"},
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 400
+    assert "Invalid repair_status" in response.text
+
+
+@pytest.mark.asyncio
+async def test_manager_order_create_repair_sets_default_status_and_diagnostic(async_client, db):
+    tariff = ServiceTariff(
+        service_kind="repair",
+        selector_label="Диагностика кондиционера на объекте",
+        estimate_template="Диагностика кондиционера на объекте",
+        category="diagnostic",
+        power_range="",
+        base_price=80,
+        is_active=True,
+        sort_order=1,
+    )
+    db.add(tariff)
+    await db.commit()
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.post(
+        "/api/manager/orders",
+        json={
+            "source": "manager",
+            "request_text": "Клиент просит ремонт кондиционера, не охлаждает.",
+            "service_type": "repair",
+            "customer_type": "individual",
+            "name": "Repair Create",
+            "phone": "+375295555560",
+            "address": "Минск",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["workflow_type"] == "repair"
+    assert data["repair_meta"]["repair_status"] == "new"
+    diagnostic_lines = [
+        line for line in data["service_lines"]
+        if "Диагностика кондиционера" in line["service_title"]
+    ]
+    assert len(diagnostic_lines) == 1
 
 
 @pytest.mark.asyncio
