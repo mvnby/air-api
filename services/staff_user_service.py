@@ -90,6 +90,10 @@ class StaffUserService:
         )
 
     @classmethod
+    def can_use_bot_admin(cls, staff_user: StaffUser) -> bool:
+        return cls.can_receive_admin_notifications(staff_user)
+
+    @classmethod
     def can_be_executor(cls, staff_user: StaffUser, role: str) -> bool:
         return cls.is_active(staff_user) and cls.has_role(staff_user, role)
 
@@ -149,6 +153,53 @@ class StaffUserService:
             recipient_ids.append(telegram_id)
 
         return recipient_ids or settings.admin_list
+
+    @classmethod
+    async def is_active_owner_admin_telegram_user(
+        cls,
+        session: AsyncSession,
+        telegram_id: int | str | None,
+    ) -> bool:
+        if telegram_id is None:
+            return False
+
+        try:
+            normalized_telegram_id = int(telegram_id)
+        except (TypeError, ValueError):
+            return False
+
+        try:
+            result = await session.execute(
+                select(StaffUser)
+                .where(StaffUser.telegram_id == normalized_telegram_id)
+                .order_by(StaffUser.id.asc())
+            )
+            users = list(result.scalars().all())
+        except Exception:
+            logger.debug("STAFF_ADMIN_CHECK_DB_LOOKUP_FAILED using legacy ADMIN_IDS fallback", exc_info=True)
+            return settings.is_admin_user(normalized_telegram_id)
+
+        if not users:
+            return settings.is_admin_user(normalized_telegram_id)
+
+        return any(cls.can_use_bot_admin(user) for user in users)
+
+    @classmethod
+    async def get_active_executor_telegram_id_for_legacy_installer(
+        cls,
+        session: AsyncSession,
+        installer: Installer,
+    ) -> int | None:
+        if installer.id is not None:
+            staff_user = await cls.get_by_legacy_installer_id(session, int(installer.id))
+            if staff_user is not None:
+                if not cls.can_be_any_executor(staff_user) or not staff_user.telegram_id:
+                    return None
+                return int(staff_user.telegram_id)
+
+        if not installer.is_active or not installer.telegram_id:
+            return None
+        return int(installer.telegram_id)
 
     @classmethod
     async def get_by_legacy_installer_id(

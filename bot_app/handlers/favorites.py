@@ -1,8 +1,8 @@
 from aiogram import Router, types, F
 from aiogram.types import CallbackQuery
-from core.config import settings
 from core.database import async_session_maker
 from services.favorite_service import FavoriteService
+from services.staff_user_service import StaffUserService
 from ..utils import send_product_card, format_caption
 from ..keyboards import get_product_keyboard
 
@@ -14,13 +14,13 @@ async def show_favorites(message: types.Message):
     
     async with async_session_maker() as session:
         favs = await FavoriteService.get_favorites(session, user_id)
+        is_admin = await StaffUserService.is_active_owner_admin_telegram_user(session, user_id)
     
     if not favs:
         await message.answer("У вас пока нет избранных товаров.")
         return
         
     await message.answer(f"⭐ Ваши избранные товары ({len(favs)}):")
-    is_admin = settings.is_admin_user(user_id)
     for product in favs:
         await send_product_card(message, product, is_admin)
 
@@ -31,11 +31,11 @@ async def process_fav_toggle(callback: CallbackQuery):
     
     async with async_session_maker() as session:
         is_added = await FavoriteService.toggle(session, user_id, product_id)
+        is_admin = await StaffUserService.is_active_owner_admin_telegram_user(session, user_id)
     
     status_msg = "Добавлено в избранное! ❤️" if is_added else "Удалено из избранного. 💔"
     
     # Update the keyboard on the existing message
-    is_admin = settings.is_admin_user(user_id)
     new_kb = get_product_keyboard(product_id, is_admin, in_favorites=is_added)
     
     try:

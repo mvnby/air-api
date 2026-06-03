@@ -38,9 +38,18 @@ class Settings(BaseSettings):
     @property
     def admin_list(self) -> list[int]:
         ids = []
+        seen = set()
         if self.ADMIN_IDS:
-            ids.extend([int(x.strip()) for x in self.ADMIN_IDS.split(",") if x.strip()])
-        if self.ADMIN_ID and self.ADMIN_ID not in ids:
+            for raw_id in self.ADMIN_IDS.split(","):
+                value = raw_id.strip()
+                if not value:
+                    continue
+                admin_id = int(value)
+                if admin_id in seen:
+                    continue
+                seen.add(admin_id)
+                ids.append(admin_id)
+        if self.ADMIN_ID and int(self.ADMIN_ID) not in seen:
             ids.append(int(self.ADMIN_ID))
         return ids
 

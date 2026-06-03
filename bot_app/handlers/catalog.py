@@ -6,9 +6,9 @@ from aiogram import Router, types, F
 from aiogram.filters import Command, StateFilter
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
-from core.config import settings
 from core.database import async_session_maker
 from services.product_service import ProductService
+from services.staff_user_service import StaffUserService
 from ..keyboards import area_selection_kb, type_selection_kb, winter_selection_kb, wifi_selection_kb
 from ..utils import send_product_card
 from ..states import ShopState
@@ -63,7 +63,11 @@ async def _render_search_results(message: types.Message, query: str, products: l
         f"🔎 Нашел {len(selected_products)} вариантов по запросу «{html.escape(query)}».",
         parse_mode="HTML",
     )
-    is_admin = settings.is_admin_user(message.from_user.id if message.from_user else None)
+    async with async_session_maker() as session:
+        is_admin = await StaffUserService.is_active_owner_admin_telegram_user(
+            session,
+            message.from_user.id if message.from_user else None,
+        )
     for product in selected_products:
         await send_product_card(message, product, is_admin)
 
@@ -158,8 +162,7 @@ async def process_wifi_and_show_results(callback: CallbackQuery, state: FSMConte
             tag_slugs=tag_slugs if tag_slugs else None,
             limit=5  # Максимум 5 результатов
         )
-    
-    is_admin = settings.is_admin_user(callback.from_user.id)
+        is_admin = await StaffUserService.is_active_owner_admin_telegram_user(session, callback.from_user.id)
     
     if not products:
         await callback.message.answer(
@@ -189,12 +192,12 @@ async def search_details(callback: CallbackQuery):
     product_id = int(callback.data.split("_")[-1])
     async with async_session_maker() as session:
         product = await ProductService.get_by_id(session, product_id)
+        is_admin = await StaffUserService.is_active_owner_admin_telegram_user(session, callback.from_user.id)
 
     if not product:
         await callback.answer("Товар не найден", show_alert=True)
         return
 
-    is_admin = settings.is_admin_user(callback.from_user.id)
     await send_product_card(callback, product, is_admin)
     await callback.answer()
 
