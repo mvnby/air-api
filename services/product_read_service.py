@@ -98,6 +98,7 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
             limit=limit,
             is_published=True,
             search_query=search,
+            load_image_variants=True,
         )
         total = await ProductDAO.count_filtered(
             session,
@@ -205,10 +206,18 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
     @staticmethod
     async def get_product_by_identifier(session: AsyncSession, identifier: str) -> Optional[Product]:
         if identifier.isdigit():
-            product = await ProductDAO.get_by_id(session, int(identifier))
+            product = await ProductDAO.get_by_id(
+                session,
+                int(identifier),
+                load_image_variants=True,
+            )
             if product:
                 return product
-        return await ProductDAO.get_by_slug(session, identifier)
+        return await ProductDAO.get_by_slug(
+            session,
+            identifier,
+            load_image_variants=True,
+        )
 
     @staticmethod
     async def get_all(session: AsyncSession) -> List[Dict[str, Any]]:

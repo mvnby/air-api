@@ -47,6 +47,8 @@ class ProductBase(BaseModel):
     is_inverter: bool
     power_cooling: Optional[float]
     main_image: Optional[str]
+    card_image: Optional[str] = None
+    full_image: Optional[str] = None
     is_published: bool
     created_at: datetime
 
@@ -68,6 +70,8 @@ class ProductImageResponse(BaseModel):
     id: int
     url: str
     is_installation_photo: bool
+    card_variant_url: Optional[str] = None
+    full_variant_url: Optional[str] = None
 
 
 class ProductManualResponse(BaseModel):

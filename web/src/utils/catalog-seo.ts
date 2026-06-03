@@ -4,6 +4,7 @@ type CatalogSeoProduct = {
     slug?: string | null;
     price?: number | null;
     main_image?: string | null;
+    card_image?: string | null;
     availability_status?: string | null;
     vitebsk_qty?: number | null;
     minsk_qty?: number | null;
@@ -38,7 +39,7 @@ export function buildCatalogItemListSchema(products: CatalogSeoProduct[], origin
                 "@type": "Product",
                 name: product.title,
                 url: absoluteUrl(product.slug ? `/product/${product.slug}` : undefined, origin),
-                image: absoluteUrl(product.main_image, origin),
+                image: absoluteUrl(product.card_image || product.main_image, origin),
                 sku: product.id ? String(product.id) : undefined,
                 offers: {
                     "@type": "Offer",

@@ -23004,6 +23004,28 @@
           "is_installation_photo": {
             "type": "boolean",
             "title": "Is Installation Photo"
+          },
+          "card_variant_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Variant Url"
+          },
+          "full_variant_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Variant Url"
           }
         },
         "type": "object",
@@ -23512,6 +23534,28 @@
               }
             ],
             "title": "Main Image"
+          },
+          "card_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Image"
+          },
+          "full_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Image"
           },
           "is_published": {
             "type": "boolean",

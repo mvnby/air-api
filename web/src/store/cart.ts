@@ -169,7 +169,7 @@ export async function refreshPrices() {
                     price: fresh.price,
                     productId: fresh.id, // Update numeric ID just in case
                     name: fresh.title, // Sync name if changed
-                    image: fresh.main_image // Sync image
+                    image: fresh.card_image || fresh.main_image // Sync image
                 };
             }
             return item;

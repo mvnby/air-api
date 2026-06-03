@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from models import Product, Tag
+from models import Product, ProductImage, Tag
 from models.supplier import ProductLocalStock
 
 
@@ -32,7 +32,7 @@ class CatalogService:
             .join(ProductLocalStock, Product.id == ProductLocalStock.product_id)
             .options(
                 selectinload(Product.tags).selectinload(Tag.group),
-                selectinload(Product.gallery_images),
+                selectinload(Product.gallery_images).selectinload(ProductImage.variants),
                 selectinload(Product.attachments),
             )
             .where(

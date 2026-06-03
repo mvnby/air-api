@@ -1,8 +1,13 @@
 import pytest
 from httpx import AsyncClient
 from datetime import datetime, timedelta
-from models import Brand, Product
+from models import Brand, Product, ProductImage, ProductImageVariant
 from crud.supplier import ProductLocalStockDAO
+from services.product_image_processing_contract import (
+    ProductImageManualQualityStatus,
+    ProductImageProcessingStatus,
+    ProductImageVariantType,
+)
 from services.spec_normalizer import normalize_specs
 
 @pytest.fixture
@@ -44,6 +49,71 @@ async def test_product_detail(async_client: AsyncClient, seed_product):
     assert data["id"] == seed_product.id
     assert data["title"] == seed_product.title
     assert data["slug"] == seed_product.slug
+
+
+@pytest.mark.asyncio
+async def test_public_product_payload_exposes_approved_ready_image_variants(async_client: AsyncClient, db):
+    product = Product(
+        title="Approved Variant Product",
+        slug="approved-variant-product",
+        price=1500,
+        area=25,
+        is_published=True,
+        main_image="/media/products/source.webp",
+    )
+    db.add(product)
+    await db.commit()
+    await db.refresh(product)
+
+    image = ProductImage(
+        product_id=product.id,
+        url="/media/products/source.webp",
+        is_installation_photo=False,
+    )
+    db.add(image)
+    await db.commit()
+    await db.refresh(image)
+
+    db.add_all(
+        [
+            ProductImageVariant(
+                product_image_id=image.id,
+                variant_type=ProductImageVariantType.CARD.value,
+                url="/media/products/variants/card/source.webp",
+                processing_status=ProductImageProcessingStatus.READY.value,
+                manual_quality_status=ProductImageManualQualityStatus.APPROVED.value,
+            ),
+            ProductImageVariant(
+                product_image_id=image.id,
+                variant_type=ProductImageVariantType.FULL.value,
+                url="/media/products/variants/full/source.webp",
+                processing_status=ProductImageProcessingStatus.READY.value,
+                manual_quality_status=ProductImageManualQualityStatus.APPROVED.value,
+            ),
+        ]
+    )
+    await db.commit()
+
+    catalog_response = await async_client.get("/api/v1/products", params={"limit": 20})
+    assert catalog_response.status_code == 200, catalog_response.text
+    catalog_item = next(
+        item
+        for item in catalog_response.json()["items"]
+        if item["slug"] == product.slug
+    )
+    assert catalog_item["main_image"] == "/media/products/source.webp"
+    assert catalog_item["card_image"] == "/media/products/variants/card/source.webp"
+    assert catalog_item["full_image"] == "/media/products/variants/full/source.webp"
+
+    detail_response = await async_client.get(f"/api/v1/products/{product.slug}")
+    assert detail_response.status_code == 200, detail_response.text
+    detail = detail_response.json()
+    assert detail["main_image"] == "/media/products/source.webp"
+    assert detail["card_image"] == "/media/products/variants/card/source.webp"
+    assert detail["full_image"] == "/media/products/variants/full/source.webp"
+    assert detail["gallery_images"][0]["url"] == "/media/products/source.webp"
+    assert detail["gallery_images"][0]["card_variant_url"] == "/media/products/variants/card/source.webp"
+    assert detail["gallery_images"][0]["full_variant_url"] == "/media/products/variants/full/source.webp"
 
 @pytest.mark.asyncio
 async def test_product_not_found(async_client: AsyncClient):
