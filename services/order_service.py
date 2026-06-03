@@ -1333,6 +1333,7 @@ class OrderService:
         """
         from models import OrderInstaller, Installer
         from services.bot_service import BotService
+        from services.staff_user_service import StaffUserService
         
         # 1. Забираем текущие назначения чтобы понять, кто новый
         existing = await session.execute(select(OrderInstaller).where(OrderInstaller.order_id == order_id))
@@ -1382,9 +1383,13 @@ class OrderService:
             installers_to_notify = res.scalars().all()
             
             for inst in installers_to_notify:
-                if inst.telegram_id:
+                telegram_id = await StaffUserService.get_active_executor_telegram_id_for_legacy_installer(
+                    session,
+                    inst,
+                )
+                if telegram_id:
                     await BotService.notify_installer_new_order(
-                        installer_tg_id=inst.telegram_id,
+                        installer_tg_id=telegram_id,
                         order_id=order_id,
                         address=order.delivery_address or "Адрес не указан",
                         date_str=order.installation_date.strftime("%d.%m.%Y") if order.installation_date else "Не назначена",

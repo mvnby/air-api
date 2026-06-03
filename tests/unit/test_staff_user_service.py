@@ -1,4 +1,6 @@
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -87,6 +89,55 @@ async def test_admin_recipients_use_active_db_owner_admin_before_legacy_fallback
 
 
 @pytest.mark.asyncio
+async def test_telegram_admin_check_uses_active_owner_admin_and_blocks_non_admin_staff(
+    sqlite_staff_session,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "ADMIN_IDS", "404,505", raising=False)
+    monkeypatch.setattr(settings, "ADMIN_ID", 0, raising=False)
+
+    sqlite_staff_session.add(StaffUser(display_name="Owner", status="active", roles=["owner"], telegram_id=101))
+    sqlite_staff_session.add(StaffUser(display_name="Admin", status="active", roles=["admin"], telegram_id=202))
+    sqlite_staff_session.add(StaffUser(display_name="Blocked", status="blocked", roles=["admin"], telegram_id=303))
+    sqlite_staff_session.add(StaffUser(display_name="Manager", status="active", roles=["manager"], telegram_id=404))
+    sqlite_staff_session.add(StaffUser(display_name="Inactive", status="inactive", roles=["owner"], telegram_id=505))
+    await sqlite_staff_session.commit()
+
+    assert await StaffUserService.is_active_owner_admin_telegram_user(sqlite_staff_session, 101)
+    assert await StaffUserService.is_active_owner_admin_telegram_user(sqlite_staff_session, 202)
+    assert not await StaffUserService.is_active_owner_admin_telegram_user(sqlite_staff_session, 303)
+    assert not await StaffUserService.is_active_owner_admin_telegram_user(sqlite_staff_session, 404)
+    assert not await StaffUserService.is_active_owner_admin_telegram_user(sqlite_staff_session, 505)
+    assert not await StaffUserService.is_active_owner_admin_telegram_user(sqlite_staff_session, 606)
+
+
+@pytest.mark.asyncio
+async def test_telegram_admin_check_keeps_legacy_fallback_when_no_staff_match(
+    sqlite_staff_session,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "ADMIN_IDS", "707", raising=False)
+    monkeypatch.setattr(settings, "ADMIN_ID", 808, raising=False)
+
+    sqlite_staff_session.add(StaffUser(display_name="Owner", status="active", roles=["owner"], telegram_id=101))
+    await sqlite_staff_session.commit()
+
+    assert await StaffUserService.is_active_owner_admin_telegram_user(sqlite_staff_session, 707)
+    assert await StaffUserService.is_active_owner_admin_telegram_user(sqlite_staff_session, 808)
+    assert not await StaffUserService.is_active_owner_admin_telegram_user(sqlite_staff_session, 909)
+
+
+@pytest.mark.asyncio
+async def test_telegram_admin_check_falls_back_to_legacy_when_db_lookup_fails(monkeypatch):
+    monkeypatch.setattr(settings, "ADMIN_IDS", "909", raising=False)
+    monkeypatch.setattr(settings, "ADMIN_ID", 0, raising=False)
+    session = SimpleNamespace(execute=AsyncMock(side_effect=RuntimeError("db down")))
+
+    assert await StaffUserService.is_active_owner_admin_telegram_user(session, 909)
+    assert not await StaffUserService.is_active_owner_admin_telegram_user(session, 101)
+
+
+@pytest.mark.asyncio
 async def test_admin_recipients_fall_back_to_legacy_admin_ids_when_db_has_none(sqlite_staff_session, monkeypatch):
     monkeypatch.setattr(settings, "ADMIN_IDS", "901,902", raising=False)
     monkeypatch.setattr(settings, "ADMIN_ID", 903, raising=False)
@@ -112,3 +163,52 @@ async def test_ensure_for_installer_creates_compatibility_staff_user(sqlite_staf
     assert staff_user.status == "active"
     assert staff_user.roles == ["installer"]
     assert staff_user.telegram_id == 777
+
+
+@pytest.mark.asyncio
+async def test_executor_notification_telegram_prefers_active_staff_and_skips_blocked(
+    sqlite_staff_session,
+):
+    active = Installer(name="Active Legacy", is_active=True, telegram_id=1001)
+    blocked = Installer(name="Blocked Legacy", is_active=True, telegram_id=1002)
+    orphan = Installer(name="Orphan Legacy", is_active=True, telegram_id=1003)
+    inactive_orphan = Installer(name="Inactive Orphan", is_active=False, telegram_id=1004)
+    sqlite_staff_session.add_all([active, blocked, orphan, inactive_orphan])
+    await sqlite_staff_session.flush()
+
+    sqlite_staff_session.add(
+        StaffUser(
+            display_name="Active Staff",
+            status="active",
+            roles=["installer"],
+            telegram_id=2001,
+            legacy_installer_id=active.id,
+        )
+    )
+    sqlite_staff_session.add(
+        StaffUser(
+            display_name="Blocked Staff",
+            status="blocked",
+            roles=["installer"],
+            telegram_id=2002,
+            legacy_installer_id=blocked.id,
+        )
+    )
+    await sqlite_staff_session.commit()
+
+    assert await StaffUserService.get_active_executor_telegram_id_for_legacy_installer(
+        sqlite_staff_session,
+        active,
+    ) == 2001
+    assert await StaffUserService.get_active_executor_telegram_id_for_legacy_installer(
+        sqlite_staff_session,
+        blocked,
+    ) is None
+    assert await StaffUserService.get_active_executor_telegram_id_for_legacy_installer(
+        sqlite_staff_session,
+        orphan,
+    ) == 1003
+    assert await StaffUserService.get_active_executor_telegram_id_for_legacy_installer(
+        sqlite_staff_session,
+        inactive_orphan,
+    ) is None

@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -117,6 +118,40 @@ async def test_new_order_assignment_rejects_blocked_staff_user(sqlite_installer_
             order.id,
             [{"installer_id": installer.id, "agreed_pay": 100}],
         )
+
+
+@pytest.mark.asyncio
+async def test_new_order_assignment_notification_uses_active_staff_telegram_id(
+    sqlite_installer_session,
+    monkeypatch,
+):
+    installer = Installer(name="Active Installer", is_active=True, telegram_id=1001)
+    order = Order(delivery_address="Vitebsk")
+    sqlite_installer_session.add(installer)
+    sqlite_installer_session.add(order)
+    await sqlite_installer_session.flush()
+    sqlite_installer_session.add(
+        StaffUser(
+            display_name="Active Staff",
+            status="active",
+            roles=["installer"],
+            telegram_id=2001,
+            legacy_installer_id=installer.id,
+        )
+    )
+    await sqlite_installer_session.commit()
+
+    notify_mock = AsyncMock()
+    monkeypatch.setattr("services.bot_service.BotService.notify_installer_new_order", notify_mock)
+
+    await OrderService.update_order_installers(
+        sqlite_installer_session,
+        order.id,
+        [{"installer_id": installer.id, "agreed_pay": 100}],
+    )
+
+    notify_mock.assert_awaited_once()
+    assert notify_mock.await_args.kwargs["installer_tg_id"] == 2001
 
 
 @pytest.mark.asyncio

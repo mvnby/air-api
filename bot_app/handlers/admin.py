@@ -1,16 +1,23 @@
 from aiogram import Router, types, F
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
-from core.config import settings
 from core.database import async_session_maker
 from services.product_service import ProductService
+from services.staff_user_service import StaffUserService
 from ..states import ShopState
 
 router = Router()
 
+
+async def _is_admin_user(user_id: int | None) -> bool:
+    async with async_session_maker() as session:
+        return await StaffUserService.is_active_owner_admin_telegram_user(session, user_id)
+
+
 @router.callback_query(F.data.startswith("edit_price_"))
 async def edit_price_start(callback: CallbackQuery, state: FSMContext):
-    if not settings.is_admin_user(callback.from_user.id): return
+    if not await _is_admin_user(callback.from_user.id):
+        return
     await state.update_data(product_id=callback.data.split("_")[-1])
     await state.set_state(ShopState.edit_price)
     await callback.message.answer("Новая цена (число):")
@@ -18,6 +25,10 @@ async def edit_price_start(callback: CallbackQuery, state: FSMContext):
 
 @router.message(ShopState.edit_price)
 async def edit_price_finish(message: types.Message, state: FSMContext):
+    if not await _is_admin_user(message.from_user.id if message.from_user else None):
+        await state.clear()
+        return
+
     if not message.text.isdigit():
         await message.answer("Цена должна быть числом.")
         return
@@ -36,7 +47,8 @@ async def edit_price_finish(message: types.Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("del_confirm_"))
 async def delete_item(callback: CallbackQuery):
-    if not settings.is_admin_user(callback.from_user.id): return
+    if not await _is_admin_user(callback.from_user.id):
+        return
     
     async with async_session_maker() as session:
         try:
