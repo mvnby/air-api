@@ -21,3 +21,4 @@ export type ManagerEquipmentDetailResponse = {
     updated_at?: (string | null);
     recent_history?: Array<ManagerEquipmentServiceHistoryItemResponse>;
 };
+

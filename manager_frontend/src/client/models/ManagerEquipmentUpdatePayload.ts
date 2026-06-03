@@ -15,3 +15,4 @@ export type ManagerEquipmentUpdatePayload = {
     notes?: (string | null);
     is_archived?: (boolean | null);
 };
+
