@@ -22,8 +22,12 @@ import type {
   BankReceiptResponse,
   FxRateResponse,
   ManagerRepairComplaintPresetResponse,
+  EquipmentServiceEventType,
+  ManagerEquipmentDetailResponse,
+  ManagerEquipmentItemResponse,
+  ManagerEquipmentHistoryFromRepairOrderPayload,
 } from '../../client';
-import { ManagerOrdersService, ManagerSettingsService, ManagerMailService, ManagerRepairComplaintsService } from '../../client';
+import { ManagerOrdersService, ManagerSettingsService, ManagerMailService, ManagerRepairComplaintsService, ManagerEquipmentService } from '../../client';
 import { formatMoney } from './order-utils';
 import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../../utils/datetime';
 
@@ -207,6 +211,16 @@ const REFRIGERANT_PRICING_MODE_OPTIONS = [
   'включен в стоимость ремонта',
   'отдельной строкой сметы',
   'не требуется',
+];
+const EQUIPMENT_EVENT_OPTIONS: Array<{ value: EquipmentServiceEventType; label: string }> = [
+  { value: 'diagnostic', label: 'Диагностика' },
+  { value: 'repair', label: 'Ремонт' },
+  { value: 'maintenance', label: 'Обслуживание' },
+  { value: 'refrigerant_charge', label: 'Заправка хладагентом' },
+  { value: 'leak', label: 'Утечка' },
+  { value: 'recommendation', label: 'Рекомендация' },
+  { value: 'not_repairable', label: 'Не ремонтируется' },
+  { value: 'other', label: 'Другое' },
 ];
 
 const textValue = (value: unknown) => String(value ?? '').trim();
@@ -446,6 +460,16 @@ const repairAiExtraContext = ref('');
 const repairAiAllowAssumptions = ref(false);
 const repairAiPolishExisting = ref(true);
 const repairAiGenerating = ref(false);
+const repairEquipment = ref<ManagerEquipmentItemResponse[]>([]);
+const repairEquipmentLoading = ref(false);
+const repairEquipmentError = ref('');
+const selectedRepairEquipmentId = ref<number | null>(null);
+const selectedRepairEquipmentDetail = ref<ManagerEquipmentDetailResponse | null>(null);
+const repairEquipmentHistoryLoading = ref(false);
+const creatingRepairEquipment = ref(false);
+const recordingRepairHistory = ref(false);
+const repairHistoryEventType = ref<EquipmentServiceEventType | ''>('');
+const repairHistoryNotes = ref('');
 const payments = ref<PaymentResponse[]>([]);
 const bankReceipts = ref<BankReceiptResponse[]>([]);
 const bankReceiptsLoading = ref(false);
@@ -592,6 +616,132 @@ const createCustomerBranch = async () => {
   }
 };
 
+const resetRepairEquipment = () => {
+  repairEquipment.value = [];
+  selectedRepairEquipmentId.value = null;
+  selectedRepairEquipmentDetail.value = null;
+  repairEquipmentError.value = '';
+  repairHistoryEventType.value = '';
+  repairHistoryNotes.value = '';
+};
+
+const loadRepairEquipmentDetail = async (equipmentId: number) => {
+  repairEquipmentHistoryLoading.value = true;
+  repairEquipmentError.value = '';
+  try {
+    selectedRepairEquipmentDetail.value = await ManagerEquipmentService.getManagerEquipment(equipmentId, 10);
+  } catch (error) {
+    selectedRepairEquipmentDetail.value = null;
+    repairEquipmentError.value = `Не удалось загрузить историю оборудования: ${getApiErrorMessage(error)}`;
+  } finally {
+    repairEquipmentHistoryLoading.value = false;
+  }
+};
+
+const selectRepairEquipment = async (equipmentId: number) => {
+  selectedRepairEquipmentId.value = equipmentId;
+  await loadRepairEquipmentDetail(equipmentId);
+};
+
+const loadRepairEquipment = async () => {
+  const customerId = customer.value?.id;
+  if (!customerId || !isRepairWorkflow.value) {
+    resetRepairEquipment();
+    return;
+  }
+  repairEquipmentLoading.value = true;
+  repairEquipmentError.value = '';
+  try {
+    const branchId = customerBranchId.value || null;
+    const response = await ManagerEquipmentService.listManagerEquipment(customerId, branchId, 1, 50, false);
+    repairEquipment.value = response.items || [];
+    if (selectedRepairEquipmentId.value && !repairEquipment.value.some((item) => item.id === selectedRepairEquipmentId.value)) {
+      selectedRepairEquipmentId.value = null;
+      selectedRepairEquipmentDetail.value = null;
+    }
+    if (!selectedRepairEquipmentId.value && repairEquipment.value.length) {
+      await selectRepairEquipment(repairEquipment.value[0]!.id);
+    } else if (selectedRepairEquipmentId.value) {
+      await loadRepairEquipmentDetail(selectedRepairEquipmentId.value);
+    }
+  } catch (error) {
+    repairEquipment.value = [];
+    selectedRepairEquipmentDetail.value = null;
+    repairEquipmentError.value = `Не удалось загрузить оборудование клиента: ${getApiErrorMessage(error)}`;
+  } finally {
+    repairEquipmentLoading.value = false;
+  }
+};
+
+const createRepairEquipmentFromMeta = async () => {
+  const customerId = customer.value?.id;
+  if (!customerId || creatingRepairEquipment.value) return;
+  const meta = repairMeta.value;
+  const displayName = trimOrNull(meta.equipment_name) || trimOrNull(orderTitle.value) || trimOrNull(props.order?.title || '');
+  const hasPassportData = Boolean(
+    displayName
+    || trimOrNull(meta.equipment_brand)
+    || trimOrNull(meta.equipment_model)
+    || trimOrNull(meta.equipment_serial_number)
+    || trimOrNull(meta.equipment_inventory_number),
+  );
+  if (!hasPassportData) {
+    repairEquipmentError.value = 'Заполните название, бренд, модель, серийный или инвентарный номер';
+    return;
+  }
+  creatingRepairEquipment.value = true;
+  repairEquipmentError.value = '';
+  try {
+    const notes = [
+      meta.equipment_power ? `Мощность: ${meta.equipment_power}` : '',
+      meta.equipment_commissioning_date ? `Ввод в эксплуатацию: ${meta.equipment_commissioning_date}` : '',
+    ].filter(Boolean).join('\n') || null;
+    const created = await ManagerEquipmentService.createManagerEquipment({
+      customer_id: customerId,
+      customer_branch_id: customerBranchId.value || null,
+      equipment_type: 'hvac',
+      display_name: displayName,
+      brand: trimOrNull(meta.equipment_brand),
+      model: trimOrNull(meta.equipment_model),
+      serial: trimOrNull(meta.equipment_serial_number),
+      inventory_number: trimOrNull(meta.equipment_inventory_number),
+      location_hint: trimOrNull(compactObjectAddress.value),
+      refrigerant_type: trimOrNull(meta.refrigerant_type),
+      notes,
+    });
+    selectedRepairEquipmentId.value = created.id;
+    await loadRepairEquipment();
+    await loadRepairEquipmentDetail(created.id);
+    setToast('Оборудование создано из полей ремонта', 'success');
+  } catch (error) {
+    repairEquipmentError.value = `Не удалось создать оборудование: ${getApiErrorMessage(error)}`;
+  } finally {
+    creatingRepairEquipment.value = false;
+  }
+};
+
+const recordRepairHistoryFromOrder = async () => {
+  if (!props.order?.id || !selectedRepairEquipmentId.value || recordingRepairHistory.value) return;
+  recordingRepairHistory.value = true;
+  repairEquipmentError.value = '';
+  try {
+    const payload: ManagerEquipmentHistoryFromRepairOrderPayload = {
+      order_id: props.order.id,
+      event_type: repairHistoryEventType.value || null,
+      notes: trimOrNull(repairHistoryNotes.value),
+    };
+    await ManagerEquipmentService.createManagerEquipmentHistoryFromRepairOrder(selectedRepairEquipmentId.value, payload);
+    repairHistoryEventType.value = '';
+    repairHistoryNotes.value = '';
+    await loadRepairEquipmentDetail(selectedRepairEquipmentId.value);
+    setToast('Событие записано в историю оборудования', 'success');
+  } catch (error) {
+    repairEquipmentError.value = `Не удалось записать историю: ${getApiErrorMessage(error)}`;
+  } finally {
+    recordingRepairHistory.value = false;
+  }
+};
+
 const customer = computed(() => props.order?.customer ?? null);
 const isWebsiteOrder = computed(() => props.order?.lead_source === 'site');
 const isB2cCustomer = computed(() => {
@@ -613,6 +763,9 @@ const selectedCustomerBranch = computed(() => (
   customerBranches.value.find((branch) => branch.id === customerBranchId.value)
   || props.order?.customer_branch
   || null
+));
+const selectedRepairEquipment = computed(() => (
+  repairEquipment.value.find((item) => item.id === selectedRepairEquipmentId.value) || null
 ));
 const compactObjectAddress = computed(() => (
   customerDeliveryAddress.value.trim()
@@ -721,6 +874,49 @@ const formatDateTime = (value?: string | null) => {
     hour: '2-digit',
     minute: '2-digit',
   });
+};
+
+const trimOrNull = (value: string) => {
+  const normalized = value.trim();
+  return normalized || null;
+};
+
+const equipmentEventLabel = (value?: EquipmentServiceEventType | null) => (
+  EQUIPMENT_EVENT_OPTIONS.find((option) => option.value === value)?.label || 'Другое'
+);
+
+const equipmentTitle = (item?: Pick<ManagerEquipmentItemResponse, 'display_name' | 'brand' | 'model' | 'serial' | 'inventory_number'> | null) => {
+  if (!item) return 'Оборудование';
+  const name = item.display_name?.trim();
+  if (name) return name;
+  const parts = [item.brand, item.model, item.serial || item.inventory_number].map((value) => value?.trim()).filter(Boolean);
+  return parts.join(' ') || 'Оборудование';
+};
+
+const equipmentSubtitle = (item: ManagerEquipmentItemResponse | ManagerEquipmentDetailResponse) => {
+  const parts = [
+    item.brand,
+    item.model,
+    item.serial ? `SN ${item.serial}` : '',
+    item.inventory_number ? `Инв. ${item.inventory_number}` : '',
+    item.location_hint,
+    item.refrigerant_type,
+  ].map((value) => value?.trim()).filter(Boolean);
+  return parts.join(' · ') || 'Паспортные данные не заполнены';
+};
+
+const repairHistoryLine = (item: NonNullable<ManagerEquipmentDetailResponse['recent_history']>[number]) => {
+  const parts = [
+    item.complaint_snapshot,
+    item.diagnostic_result,
+    item.repair_recommendation,
+    item.refrigerant_type ? `Хладагент ${item.refrigerant_type}` : '',
+    item.refrigerant_amount,
+    item.not_repairable ? 'Не ремонтируется' : '',
+    item.not_repairable_reason,
+    item.notes,
+  ].map((value) => value?.trim()).filter(Boolean);
+  return parts.join(' · ') || 'Без подробностей';
 };
 
 const copyText = async (value: string | null | undefined, label: string) => {
@@ -1293,6 +1489,11 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   } else {
     resetCustomerBranches();
   }
+  if (workflowType.value === 'repair') {
+    await loadRepairEquipment();
+  } else {
+    resetRepairEquipment();
+  }
 
   productLookupById.value = {};
 
@@ -1358,6 +1559,12 @@ watch(
     if (props.modelValue) await initForm(value);
   },
 );
+
+watch(customerBranchId, () => {
+  if (props.modelValue && isRepairWorkflow.value && customer.value?.id) {
+    void loadRepairEquipment();
+  }
+});
 
 const onProductChanged = (index: number, applyCatalogPrice = false) => {
   const row = productLines.value[index];
@@ -1743,7 +1950,10 @@ const setWorkflowType = async (next: OrderWorkflowType) => {
   if (next === 'repair') {
     repairMeta.value = normalizeRepairMeta(repairMeta.value, { defaultRepairStatus: true });
     void loadRepairComplaintPresets();
+    void loadRepairEquipment();
     await addDefaultRepairDiagnostic();
+  } else {
+    resetRepairEquipment();
   }
 };
 
@@ -2810,6 +3020,119 @@ watch(
             Дата ввода в эксплуатацию
             <input v-model="repairMeta.equipment_commissioning_date" class="field-input" placeholder="Например: 2021 г. или 12.05.2021" />
           </label>
+
+          <div class="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div class="min-w-0">
+                <p class="text-sm font-semibold text-slate-900">Карточка оборудования и история</p>
+                <p class="mt-1 text-xs text-slate-600">
+                  История оборудования записывается отдельным действием и не меняет CRM/Kanban статус заказа.
+                </p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  class="btn-mini-outline justify-center whitespace-nowrap text-xs"
+                  :disabled="repairEquipmentLoading"
+                  @click="loadRepairEquipment"
+                >
+                  Обновить
+                </button>
+                <button
+                  type="button"
+                  class="btn-mini justify-center whitespace-nowrap text-xs"
+                  :disabled="creatingRepairEquipment || !customer?.id"
+                  @click="createRepairEquipmentFromMeta"
+                >
+                  {{ creatingRepairEquipment ? 'Создаем...' : 'Создать из полей' }}
+                </button>
+              </div>
+            </div>
+
+            <p v-if="repairEquipmentError" class="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {{ repairEquipmentError }}
+            </p>
+
+            <div v-if="!customer?.id" class="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-4 text-center text-xs text-slate-500">
+              Выберите клиента, чтобы вести оборудование.
+            </div>
+            <div v-else-if="repairEquipmentLoading" class="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-4 text-xs text-slate-500">
+              Загружаем оборудование клиента...
+            </div>
+            <div v-else class="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+              <div class="space-y-2">
+                <button
+                  v-for="item in repairEquipment"
+                  :key="item.id"
+                  type="button"
+                  class="w-full rounded-lg border px-3 py-2 text-left text-xs transition"
+                  :class="selectedRepairEquipmentId === item.id
+                    ? 'border-teal-400 bg-white text-teal-900 shadow-sm'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-teal-200'"
+                  @click="selectRepairEquipment(item.id)"
+                >
+                  <span class="block break-words font-semibold">{{ equipmentTitle(item) }}</span>
+                  <span class="mt-1 block break-words text-slate-500">{{ equipmentSubtitle(item) }}</span>
+                </button>
+                <div v-if="!repairEquipment.length" class="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-4 text-center text-xs text-slate-500">
+                  {{ customerBranchId ? 'Для выбранного филиала оборудование не найдено.' : 'Оборудование клиента пока не заведено.' }}
+                </div>
+              </div>
+
+              <div class="rounded-lg border border-slate-200 bg-white p-3">
+                <div v-if="repairEquipmentHistoryLoading" class="text-xs text-slate-500">Загружаем историю...</div>
+                <template v-else-if="selectedRepairEquipment">
+                  <div class="mb-3">
+                    <p class="break-words text-sm font-semibold text-slate-900">{{ equipmentTitle(selectedRepairEquipment) }}</p>
+                    <p class="mt-1 break-words text-xs text-slate-500">{{ equipmentSubtitle(selectedRepairEquipment) }}</p>
+                  </div>
+                  <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                    <label class="field-label !mb-0">
+                      Тип записи из заказа
+                      <select v-model="repairHistoryEventType" class="field-input bg-white">
+                        <option value="">Определить автоматически</option>
+                        <option v-for="option in EQUIPMENT_EVENT_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+                      </select>
+                    </label>
+                    <label class="field-label !mb-0">
+                      Заметка
+                      <input v-model="repairHistoryNotes" class="field-input bg-white" placeholder="Например: закрыто после согласования" />
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn-mini mt-2 w-full justify-center text-xs"
+                    :disabled="recordingRepairHistory || !selectedRepairEquipmentId || !order?.id"
+                    @click="recordRepairHistoryFromOrder"
+                  >
+                    {{ recordingRepairHistory ? 'Записываем...' : 'Записать историю из этого ремонта' }}
+                  </button>
+                  <p class="mt-2 text-[11px] text-slate-500">
+                    Действие создаст запись истории оборудования из repair meta текущего заказа. Статус заказа и этап ремонта останутся отдельными.
+                  </p>
+
+                  <div class="mt-3 max-h-56 space-y-2 overflow-y-auto pr-1">
+                    <div
+                      v-for="entry in selectedRepairEquipmentDetail?.recent_history || []"
+                      :key="entry.id"
+                      class="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs"
+                    >
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="rounded-full bg-teal-50 px-2 py-0.5 font-semibold text-teal-700">{{ equipmentEventLabel(entry.event_type) }}</span>
+                        <span class="text-slate-500">{{ formatDateTime(entry.event_date) || 'Без даты' }}</span>
+                        <span v-if="entry.order_id" class="text-slate-500">Заказ #{{ entry.order_id }}</span>
+                      </div>
+                      <p class="mt-1 break-words text-slate-600">{{ repairHistoryLine(entry) }}</p>
+                    </div>
+                    <div v-if="!(selectedRepairEquipmentDetail?.recent_history || []).length" class="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-center text-xs text-slate-500">
+                      История пока пустая
+                    </div>
+                  </div>
+                </template>
+                <div v-else class="text-xs text-slate-500">Выберите оборудование слева или создайте карточку из полей ремонта.</div>
+              </div>
+            </div>
+          </div>
 
           <label class="field-label">
             Техническое состояние

@@ -3,7 +3,23 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { ArrowLeft, Building2, Mail, Phone, Plus, ReceiptText, Save, UserRound, X } from 'lucide-vue-next';
 import CreateOrderModal from '../components/CreateOrderModal.vue';
 import { api } from '../api';
-import { ManagerContractsService, ManagerDocsService, ManagerService, type DocumentTemplateItem, type ManagerCatalogCustomerItemResponse, type ManagerCustomerContractItemResponse, type ManagerCustomerDocumentItem } from '../client';
+import {
+  ManagerContractsService,
+  ManagerDocsService,
+  ManagerEquipmentService,
+  ManagerService,
+  type DocumentTemplateItem,
+  type EquipmentServiceEventType,
+  type ManagerCatalogCustomerItemResponse,
+  type ManagerCustomerContractItemResponse,
+  type ManagerCustomerDocumentItem,
+  type ManagerEquipmentCreatePayload,
+  type ManagerEquipmentDetailResponse,
+  type ManagerEquipmentItemResponse,
+  type ManagerEquipmentServiceHistoryCreatePayload,
+  type ManagerEquipmentServiceHistoryItemResponse,
+  type ManagerEquipmentUpdatePayload,
+} from '../client';
 import { useBelarusPhoneMask } from '../composables/useBelarusPhoneMask';
 import { useB2BLookup } from '../composables/useB2BLookup';
 import { dispatchCustomerUpdated } from '../utils/customer-events';
@@ -36,6 +52,32 @@ type CustomerForm = {
   acting_basis: string;
 };
 
+type EquipmentForm = {
+  customer_branch_id: number | null;
+  equipment_type: string;
+  display_name: string;
+  brand: string;
+  model: string;
+  serial: string;
+  inventory_number: string;
+  location_hint: string;
+  refrigerant_type: string;
+  notes: string;
+};
+
+type EquipmentHistoryForm = {
+  event_type: EquipmentServiceEventType;
+  event_date: string;
+  complaint_snapshot: string;
+  diagnostic_result: string;
+  repair_recommendation: string;
+  refrigerant_type: string;
+  refrigerant_amount: string;
+  not_repairable: boolean;
+  not_repairable_reason: string;
+  notes: string;
+};
+
 const customer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const loading = ref(false);
 const saving = ref(false);
@@ -63,6 +105,16 @@ const DOCUMENT_ROLE_OPTIONS: Array<{ value: DocumentRoleType; label: string }> =
 ];
 const contractTemplates = ref<DocumentTemplateItem[]>([]);
 const openContractTemplates = computed(() => contractTemplates.value.filter((template) => template.is_open_contract));
+const EQUIPMENT_EVENT_OPTIONS: Array<{ value: EquipmentServiceEventType; label: string }> = [
+  { value: 'diagnostic', label: 'Диагностика' },
+  { value: 'repair', label: 'Ремонт' },
+  { value: 'maintenance', label: 'Обслуживание' },
+  { value: 'refrigerant_charge', label: 'Заправка хладагентом' },
+  { value: 'leak', label: 'Утечка' },
+  { value: 'recommendation', label: 'Рекомендация' },
+  { value: 'not_repairable', label: 'Не ремонтируется' },
+  { value: 'other', label: 'Другое' },
+];
 
 const normalizeRoleType = (value: unknown): DocumentRoleType => {
   const raw = String(value || '').trim();
@@ -159,11 +211,129 @@ const contractUploadForm = ref({
   file: null as File | null,
 });
 
+const emptyEquipmentForm = (): EquipmentForm => ({
+  customer_branch_id: null,
+  equipment_type: 'hvac',
+  display_name: '',
+  brand: '',
+  model: '',
+  serial: '',
+  inventory_number: '',
+  location_hint: '',
+  refrigerant_type: '',
+  notes: '',
+});
+
+const emptyHistoryForm = (): EquipmentHistoryForm => ({
+  event_type: 'diagnostic',
+  event_date: toInputDate(new Date()),
+  complaint_snapshot: '',
+  diagnostic_result: '',
+  repair_recommendation: '',
+  refrigerant_type: '',
+  refrigerant_amount: '',
+  not_repairable: false,
+  not_repairable_reason: '',
+  notes: '',
+});
+
+const equipment = ref<ManagerEquipmentItemResponse[]>([]);
+const equipmentLoading = ref(false);
+const equipmentSaving = ref(false);
+const equipmentActionId = ref<number | null>(null);
+const equipmentError = ref('');
+const includeArchivedEquipment = ref(true);
+const showEquipmentForm = ref(false);
+const editingEquipmentId = ref<number | null>(null);
+const equipmentForm = ref<EquipmentForm>(emptyEquipmentForm());
+const selectedEquipmentId = ref<number | null>(null);
+const selectedEquipmentDetail = ref<ManagerEquipmentDetailResponse | null>(null);
+const equipmentHistoryLoading = ref(false);
+const historySaving = ref(false);
+const showHistoryForm = ref(false);
+const historyForm = ref<EquipmentHistoryForm>(emptyHistoryForm());
+
 const setToast = (message: string) => {
   toast.value = message;
   window.setTimeout(() => {
     if (toast.value === message) toast.value = '';
   }, 3500);
+};
+
+const trimOrNull = (value: string) => {
+  const normalized = value.trim();
+  return normalized || null;
+};
+
+const equipmentBranchLabel = (branchId?: number | null) => {
+  if (!branchId) return 'Без филиала';
+  const branch = customer.value?.branches?.find((item) => item.id === branchId);
+  return branch?.name || branch?.delivery_address || `Филиал #${branchId}`;
+};
+
+const equipmentEventLabel = (value?: EquipmentServiceEventType | null) => (
+  EQUIPMENT_EVENT_OPTIONS.find((option) => option.value === value)?.label || 'Другое'
+);
+
+const equipmentTitle = (item?: Pick<ManagerEquipmentItemResponse, 'display_name' | 'brand' | 'model' | 'serial' | 'inventory_number'> | null) => {
+  if (!item) return 'Оборудование';
+  const name = item.display_name?.trim();
+  if (name) return name;
+  const parts = [item.brand, item.model, item.serial || item.inventory_number].map((value) => value?.trim()).filter(Boolean);
+  return parts.join(' ') || 'Оборудование';
+};
+
+const equipmentSubtitle = (item: ManagerEquipmentItemResponse | ManagerEquipmentDetailResponse) => {
+  const parts = [
+    item.equipment_type || 'hvac',
+    item.brand,
+    item.model,
+    item.serial ? `SN ${item.serial}` : '',
+    item.inventory_number ? `Инв. ${item.inventory_number}` : '',
+    item.location_hint,
+    item.refrigerant_type,
+  ].map((value) => value?.trim()).filter(Boolean);
+  return parts.join(' · ') || 'Паспортные данные не заполнены';
+};
+
+const equipmentFormPayload = (): ManagerEquipmentCreatePayload | ManagerEquipmentUpdatePayload => ({
+  customer_branch_id: equipmentForm.value.customer_branch_id,
+  equipment_type: trimOrNull(equipmentForm.value.equipment_type) || 'hvac',
+  display_name: trimOrNull(equipmentForm.value.display_name),
+  brand: trimOrNull(equipmentForm.value.brand),
+  model: trimOrNull(equipmentForm.value.model),
+  serial: trimOrNull(equipmentForm.value.serial),
+  inventory_number: trimOrNull(equipmentForm.value.inventory_number),
+  location_hint: trimOrNull(equipmentForm.value.location_hint),
+  refrigerant_type: trimOrNull(equipmentForm.value.refrigerant_type),
+  notes: trimOrNull(equipmentForm.value.notes),
+});
+
+const historyPayload = (): ManagerEquipmentServiceHistoryCreatePayload => ({
+  event_type: historyForm.value.event_type,
+  event_date: historyForm.value.event_date ? `${historyForm.value.event_date}T00:00:00` : null,
+  complaint_snapshot: trimOrNull(historyForm.value.complaint_snapshot),
+  diagnostic_result: trimOrNull(historyForm.value.diagnostic_result),
+  repair_recommendation: trimOrNull(historyForm.value.repair_recommendation),
+  refrigerant_type: trimOrNull(historyForm.value.refrigerant_type),
+  refrigerant_amount: trimOrNull(historyForm.value.refrigerant_amount),
+  not_repairable: historyForm.value.not_repairable,
+  not_repairable_reason: trimOrNull(historyForm.value.not_repairable_reason),
+  notes: trimOrNull(historyForm.value.notes),
+});
+
+const historyLine = (item: ManagerEquipmentServiceHistoryItemResponse) => {
+  const parts = [
+    item.complaint_snapshot,
+    item.diagnostic_result,
+    item.repair_recommendation,
+    item.refrigerant_type ? `Хладагент ${item.refrigerant_type}` : '',
+    item.refrigerant_amount,
+    item.not_repairable ? 'Не ремонтируется' : '',
+    item.not_repairable_reason,
+    item.notes,
+  ].map((value) => value?.trim()).filter(Boolean);
+  return parts.join(' · ') || 'Без подробностей';
 };
 
 const toForm = (item: ManagerCatalogCustomerItemResponse): CustomerForm => ({
@@ -274,6 +444,152 @@ const loadCustomerContracts = async () => {
     console.error('Failed to load customer contracts', e);
   } finally {
     contractsLoading.value = false;
+  }
+};
+
+const loadEquipmentDetail = async (equipmentId: number) => {
+  equipmentHistoryLoading.value = true;
+  equipmentError.value = '';
+  try {
+    selectedEquipmentDetail.value = await ManagerEquipmentService.getManagerEquipment(equipmentId, 10);
+  } catch (e) {
+    console.error('Failed to load equipment detail', e);
+    equipmentError.value = `Не удалось загрузить историю: ${getApiErrorMessage(e)}`;
+    selectedEquipmentDetail.value = null;
+  } finally {
+    equipmentHistoryLoading.value = false;
+  }
+};
+
+const selectEquipment = async (equipmentId: number) => {
+  selectedEquipmentId.value = equipmentId;
+  showHistoryForm.value = false;
+  historyForm.value = emptyHistoryForm();
+  await loadEquipmentDetail(equipmentId);
+};
+
+const loadCustomerEquipment = async () => {
+  if (!customerId.value) return;
+  equipmentLoading.value = true;
+  equipmentError.value = '';
+  try {
+    const res = await ManagerEquipmentService.listManagerEquipment(
+      customerId.value,
+      null,
+      1,
+      100,
+      includeArchivedEquipment.value,
+    );
+    equipment.value = res.items || [];
+    if (selectedEquipmentId.value && !equipment.value.some((item) => item.id === selectedEquipmentId.value)) {
+      selectedEquipmentId.value = null;
+      selectedEquipmentDetail.value = null;
+    }
+    if (!selectedEquipmentId.value && equipment.value.length) {
+      await selectEquipment(equipment.value[0]!.id);
+    } else if (selectedEquipmentId.value) {
+      await loadEquipmentDetail(selectedEquipmentId.value);
+    }
+  } catch (e) {
+    console.error('Failed to load customer equipment', e);
+    equipmentError.value = `Не удалось загрузить оборудование: ${getApiErrorMessage(e)}`;
+  } finally {
+    equipmentLoading.value = false;
+  }
+};
+
+const openEquipmentCreateForm = () => {
+  equipmentForm.value = emptyEquipmentForm();
+  editingEquipmentId.value = null;
+  showEquipmentForm.value = true;
+};
+
+const openEquipmentEditForm = (item: ManagerEquipmentItemResponse) => {
+  equipmentForm.value = {
+    customer_branch_id: item.customer_branch_id ?? null,
+    equipment_type: item.equipment_type || 'hvac',
+    display_name: item.display_name || '',
+    brand: item.brand || '',
+    model: item.model || '',
+    serial: item.serial || '',
+    inventory_number: item.inventory_number || '',
+    location_hint: item.location_hint || '',
+    refrigerant_type: item.refrigerant_type || '',
+    notes: item.notes || '',
+  };
+  editingEquipmentId.value = item.id;
+  showEquipmentForm.value = true;
+};
+
+const saveEquipment = async () => {
+  if (!customerId.value || equipmentSaving.value) return;
+  const payload = equipmentFormPayload();
+  if (!payload.display_name && !payload.brand && !payload.model && !payload.serial && !payload.inventory_number) {
+    equipmentError.value = 'Укажите название, бренд, модель, серийный или инвентарный номер';
+    return;
+  }
+  equipmentSaving.value = true;
+  equipmentError.value = '';
+  try {
+    if (editingEquipmentId.value) {
+      const updated = await ManagerEquipmentService.patchManagerEquipment(editingEquipmentId.value, payload);
+      selectedEquipmentId.value = updated.id;
+      setToast('Оборудование обновлено');
+    } else {
+      const created = await ManagerEquipmentService.createManagerEquipment({
+        ...(payload as ManagerEquipmentCreatePayload),
+        customer_id: customerId.value,
+      });
+      selectedEquipmentId.value = created.id;
+      setToast('Оборудование создано');
+    }
+    showEquipmentForm.value = false;
+    editingEquipmentId.value = null;
+    await loadCustomerEquipment();
+  } catch (e) {
+    equipmentError.value = `Не удалось сохранить оборудование: ${getApiErrorMessage(e)}`;
+  } finally {
+    equipmentSaving.value = false;
+  }
+};
+
+const toggleEquipmentArchive = async (item: ManagerEquipmentItemResponse) => {
+  if (equipmentActionId.value) return;
+  equipmentActionId.value = item.id;
+  equipmentError.value = '';
+  try {
+    await ManagerEquipmentService.patchManagerEquipment(item.id, { is_archived: !item.is_archived });
+    setToast(item.is_archived ? 'Оборудование возвращено из архива' : 'Оборудование архивировано');
+    await loadCustomerEquipment();
+  } catch (e) {
+    equipmentError.value = `Не удалось изменить архив: ${getApiErrorMessage(e)}`;
+  } finally {
+    equipmentActionId.value = null;
+  }
+};
+
+const openHistoryCreateForm = () => {
+  historyForm.value = {
+    ...emptyHistoryForm(),
+    refrigerant_type: selectedEquipmentDetail.value?.refrigerant_type || '',
+  };
+  showHistoryForm.value = true;
+};
+
+const createEquipmentHistory = async () => {
+  if (!selectedEquipmentId.value || historySaving.value) return;
+  historySaving.value = true;
+  equipmentError.value = '';
+  try {
+    await ManagerEquipmentService.createManagerEquipmentHistory(selectedEquipmentId.value, historyPayload());
+    setToast('Событие истории добавлено');
+    showHistoryForm.value = false;
+    historyForm.value = emptyHistoryForm();
+    await loadEquipmentDetail(selectedEquipmentId.value);
+  } catch (e) {
+    equipmentError.value = `Не удалось добавить событие: ${getApiErrorMessage(e)}`;
+  } finally {
+    historySaving.value = false;
   }
 };
 
@@ -600,13 +916,19 @@ watch(customerId, () => {
   void loadCustomer();
   void loadCustomerDocs();
   void loadCustomerContracts();
+  void loadCustomerEquipment();
   void loadContractTemplates();
+});
+
+watch(includeArchivedEquipment, () => {
+  void loadCustomerEquipment();
 });
 
 onMounted(() => {
   void loadCustomer();
   void loadCustomerDocs();
   void loadCustomerContracts();
+  void loadCustomerEquipment();
   void loadContractTemplates();
 });
 </script>
@@ -850,6 +1172,209 @@ onMounted(() => {
           </div>
           <div v-else class="text-sm text-[var(--mv-text-muted)] italic py-5 text-center rounded-2xl border border-dashed border-[var(--mv-border)]">
             Открытые договоры пока не созданы
+          </div>
+        </section>
+
+        <section v-if="!editMode" class="mt-8 mb-6">
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 class="flex items-center gap-2 text-lg font-bold">
+              <span class="material-icons-round text-teal-500">precision_manufacturing</span>
+              Оборудование клиента
+              <span v-if="equipment.length" class="flex h-6 min-w-6 items-center justify-center rounded-full bg-teal-500/20 px-2 text-xs text-teal-400">{{ equipment.length }}</span>
+            </h2>
+            <div class="flex flex-wrap items-center gap-2">
+              <label class="inline-flex items-center gap-2 rounded-xl border border-[var(--mv-border)] px-3 py-2 text-xs text-[var(--mv-text-muted)]">
+                <input v-model="includeArchivedEquipment" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
+                Архив
+              </label>
+              <button class="btn-mini-outline" type="button" :disabled="equipmentLoading" @click="loadCustomerEquipment">
+                Обновить
+              </button>
+              <button class="btn-mini" type="button" @click="openEquipmentCreateForm">
+                Создать оборудование
+              </button>
+            </div>
+          </div>
+
+          <p v-if="equipmentError" class="mb-3 rounded-xl border border-red-500/40 bg-red-900/20 px-4 py-3 text-sm text-red-200">
+            {{ equipmentError }}
+          </p>
+
+          <form v-if="showEquipmentForm" class="mb-4 rounded-2xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-4" @submit.prevent="saveEquipment">
+            <div class="grid gap-3 md:grid-cols-3">
+              <label class="field-label">
+                Филиал
+                <select v-model="equipmentForm.customer_branch_id" class="field-input">
+                  <option :value="null">Без филиала</option>
+                  <option v-for="branch in customer.branches || []" :key="branch.id" :value="branch.id">
+                    {{ branch.name || branch.delivery_address || `Филиал #${branch.id}` }}
+                  </option>
+                </select>
+              </label>
+              <label class="field-label">
+                Тип
+                <input v-model="equipmentForm.equipment_type" class="field-input" placeholder="hvac, chiller..." />
+              </label>
+              <label class="field-label">
+                Название
+                <input v-model="equipmentForm.display_name" class="field-input" placeholder="Кондиционер серверной" />
+              </label>
+              <label class="field-label">
+                Бренд
+                <input v-model="equipmentForm.brand" class="field-input" placeholder="Gree, LG..." />
+              </label>
+              <label class="field-label">
+                Модель
+                <input v-model="equipmentForm.model" class="field-input" placeholder="Модель блока" />
+              </label>
+              <label class="field-label">
+                Серийный номер
+                <input v-model="equipmentForm.serial" class="field-input" placeholder="SN..." />
+              </label>
+              <label class="field-label">
+                Инвентарный номер
+                <input v-model="equipmentForm.inventory_number" class="field-input" placeholder="Инв. номер клиента" />
+              </label>
+              <label class="field-label">
+                Локация
+                <input v-model="equipmentForm.location_hint" class="field-input" placeholder="Серверная, 2 этаж" />
+              </label>
+              <label class="field-label">
+                Хладагент
+                <input v-model="equipmentForm.refrigerant_type" class="field-input" placeholder="R32, R410A" />
+              </label>
+              <label class="field-label md:col-span-3">
+                Заметки
+                <textarea v-model="equipmentForm.notes" class="field-input min-h-[72px]" placeholder="Особенности доступа, состояние, монтаж..." />
+              </label>
+            </div>
+            <div class="mt-3 flex flex-wrap justify-end gap-2">
+              <button class="btn-mini-outline" type="button" :disabled="equipmentSaving" @click="showEquipmentForm = false">Отмена</button>
+              <button class="btn-mini" type="submit" :disabled="equipmentSaving">
+                {{ equipmentSaving ? 'Сохраняем...' : (editingEquipmentId ? 'Сохранить' : 'Создать') }}
+              </button>
+            </div>
+          </form>
+
+          <div v-if="equipmentLoading" class="rounded-2xl border border-dashed border-[var(--mv-border)] p-5 text-sm text-[var(--mv-text-muted)]">
+            Загрузка оборудования...
+          </div>
+          <div v-else-if="equipment.length" class="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+            <div class="space-y-3">
+              <button
+                v-for="item in equipment"
+                :key="item.id"
+                type="button"
+                class="w-full rounded-xl border p-4 text-left shadow-sm transition"
+                :class="selectedEquipmentId === item.id ? 'border-teal-400 bg-teal-500/10' : 'border-[var(--mv-border)] bg-[var(--mv-surface)] hover:border-teal-400/60'"
+                @click="selectEquipment(item.id)"
+              >
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <p class="break-words text-sm font-semibold text-[var(--mv-text)]">{{ equipmentTitle(item) }}</p>
+                      <span v-if="item.is_archived" class="rounded-full bg-slate-500/20 px-2 py-0.5 text-[11px] font-semibold text-slate-400">Архив</span>
+                    </div>
+                    <p class="mt-1 break-words text-xs text-[var(--mv-text-muted)]">{{ equipmentSubtitle(item) }}</p>
+                    <p class="mt-1 text-xs text-[var(--mv-text-muted)]">{{ equipmentBranchLabel(item.customer_branch_id) }}</p>
+                  </div>
+                  <div class="flex shrink-0 flex-wrap gap-2">
+                    <button class="btn-mini-outline text-xs" type="button" @click.stop="openEquipmentEditForm(item)">Править</button>
+                    <button class="btn-mini-outline text-xs" type="button" :disabled="equipmentActionId === item.id" @click.stop="toggleEquipmentArchive(item)">
+                      {{ equipmentActionId === item.id ? '...' : (item.is_archived ? 'Вернуть' : 'Архив') }}
+                    </button>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            <div class="rounded-2xl border border-[var(--mv-border)] bg-[var(--mv-surface)] p-4">
+              <div v-if="equipmentHistoryLoading" class="text-sm text-[var(--mv-text-muted)]">Загрузка истории...</div>
+              <template v-else-if="selectedEquipmentDetail">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div class="min-w-0">
+                    <p class="break-words text-base font-semibold">{{ equipmentTitle(selectedEquipmentDetail) }}</p>
+                    <p class="mt-1 break-words text-xs text-[var(--mv-text-muted)]">{{ equipmentSubtitle(selectedEquipmentDetail) }}</p>
+                  </div>
+                  <button class="btn-mini whitespace-nowrap text-xs" type="button" @click="openHistoryCreateForm">Добавить событие</button>
+                </div>
+
+                <form v-if="showHistoryForm" class="mt-4 rounded-xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-3" @submit.prevent="createEquipmentHistory">
+                  <div class="grid gap-3 md:grid-cols-2">
+                    <label class="field-label">
+                      Тип события
+                      <select v-model="historyForm.event_type" class="field-input">
+                        <option v-for="option in EQUIPMENT_EVENT_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+                      </select>
+                    </label>
+                    <label class="field-label">
+                      Дата
+                      <input v-model="historyForm.event_date" class="field-input" type="date" />
+                    </label>
+                    <label class="field-label md:col-span-2">
+                      Жалоба / причина
+                      <textarea v-model="historyForm.complaint_snapshot" class="field-input min-h-[58px]" />
+                    </label>
+                    <label class="field-label">
+                      Диагностика
+                      <textarea v-model="historyForm.diagnostic_result" class="field-input min-h-[70px]" />
+                    </label>
+                    <label class="field-label">
+                      Рекомендация
+                      <textarea v-model="historyForm.repair_recommendation" class="field-input min-h-[70px]" />
+                    </label>
+                    <label class="field-label">
+                      Хладагент
+                      <input v-model="historyForm.refrigerant_type" class="field-input" />
+                    </label>
+                    <label class="field-label">
+                      Количество
+                      <input v-model="historyForm.refrigerant_amount" class="field-input" />
+                    </label>
+                    <label class="inline-flex items-center gap-2 text-xs text-[var(--mv-text-muted)] md:col-span-2">
+                      <input v-model="historyForm.not_repairable" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
+                      Оборудование не ремонтируется
+                    </label>
+                    <label class="field-label md:col-span-2">
+                      Причина / заметки
+                      <textarea v-model="historyForm.not_repairable_reason" class="field-input min-h-[58px]" placeholder="Причина неремонтопригодности" />
+                    </label>
+                    <label class="field-label md:col-span-2">
+                      Внутренние заметки
+                      <textarea v-model="historyForm.notes" class="field-input min-h-[58px]" />
+                    </label>
+                  </div>
+                  <div class="mt-3 flex flex-wrap justify-end gap-2">
+                    <button class="btn-mini-outline" type="button" :disabled="historySaving" @click="showHistoryForm = false">Отмена</button>
+                    <button class="btn-mini" type="submit" :disabled="historySaving">
+                      {{ historySaving ? 'Добавляем...' : 'Добавить' }}
+                    </button>
+                  </div>
+                </form>
+
+                <div class="mt-4 space-y-2">
+                  <div
+                    v-for="entry in selectedEquipmentDetail.recent_history || []"
+                    :key="entry.id"
+                    class="rounded-xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-3 text-sm"
+                  >
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="rounded-full bg-teal-500/10 px-2 py-0.5 text-xs font-semibold text-teal-400">{{ equipmentEventLabel(entry.event_type) }}</span>
+                      <span class="text-xs text-[var(--mv-text-muted)]">{{ formatDate(entry.event_date) }}</span>
+                      <span v-if="entry.order_id" class="text-xs text-[var(--mv-text-muted)]">Заказ #{{ entry.order_id }}</span>
+                    </div>
+                    <p class="mt-2 break-words text-[var(--mv-text-muted)]">{{ historyLine(entry) }}</p>
+                  </div>
+                  <div v-if="!(selectedEquipmentDetail.recent_history || []).length" class="rounded-xl border border-dashed border-[var(--mv-border)] px-3 py-4 text-center text-sm text-[var(--mv-text-muted)]">
+                    История обслуживания пока пустая
+                  </div>
+                </div>
+              </template>
+              <div v-else class="text-sm text-[var(--mv-text-muted)]">Выберите оборудование слева.</div>
+            </div>
+          </div>
+          <div v-else class="rounded-2xl border border-dashed border-[var(--mv-border)] py-5 text-center text-sm italic text-[var(--mv-text-muted)]">
+            Оборудование пока не заведено
           </div>
         </section>
 
