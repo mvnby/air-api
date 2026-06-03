@@ -8,6 +8,7 @@ from sqlmodel import SQLModel
 
 from models import Customer, CustomerContract, DocumentTemplate, Order, OrderDocument
 from services.document_service import DocumentService
+from services.documents.factory import DocumentFactory
 from services.documents.standard import ActStrategy, DefectActStrategy
 
 
@@ -294,17 +295,63 @@ async def test_open_customer_contract_can_be_stable_base(sqlite_session):
 
 
 @pytest.mark.asyncio
+async def test_repair_order_existing_document_types_prepare_replacements(sqlite_session):
+    customer = Customer(name="Repair Docs", phone="+375291111111")
+    order = Order(
+        customer=customer,
+        workflow_type="repair",
+        title="Кондиционер",
+        total_amount=120,
+        additional_conditions="1. Диагностика согласована клиентом.",
+        technical_meta={
+            "repair": {
+                "repair_status": "scheduled",
+                "customer_approval_status": "pending",
+                "parts_status": "awaiting",
+            },
+        },
+    )
+    sqlite_session.add(order)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+
+    for doc_type in ("contract", "invoice", "offer", "act", "defect_act"):
+        strategy = DocumentFactory.get_strategy(doc_type, sqlite_session, order.id)
+        await strategy.fetch_order()
+        replacements = await strategy._prepare_base_variables(
+            doc_number=f"{DocumentService.DOC_NUMBER_PREFIXES[doc_type]}-2026-001",
+            doc_type=doc_type,
+            document_date=datetime(2026, 5, 20),
+        )
+        strategy._add_specific_replacements(replacements)
+
+        assert replacements["{{client_name}}"] == "Repair Docs"
+        assert replacements["{{additional_conditions}}"] == "Диагностика согласована клиентом."
+        if doc_type == "defect_act":
+            assert replacements["{{repair_status}}"] == "scheduled"
+            assert replacements["{{customer_approval_status}}"] == "pending"
+            assert replacements["{{parts_status}}"] == "awaiting"
+
+
+@pytest.mark.asyncio
 async def test_defect_act_canonical_repair_placeholders_from_repair_meta(sqlite_session):
     customer = Customer(name="Repair Canonical", phone="+375291111111")
     order = Order(
         customer=customer,
         title="Кондиционер",
+        additional_conditions="1. Работы выполнять после согласования.\n- Доступ предоставить с 9:00.",
         technical_meta={
             "repair": {
                 "customer_complaint": "Не охлаждает",
                 "diagnostic_result": "Диагностика выявила утечку хладагента.",
                 "repair_recommendation": "Устранить утечку и дозаправить контур.",
                 "repair_possible": "Да",
+                "repair_status": "awaiting_parts",
+                "customer_approval_status": "approved",
+                "customer_approval_note": "Клиент согласовал ремонт по телефону.",
+                "parts_status": "awaiting",
+                "parts_note": "Ожидается поставка датчика температуры.",
+                "repair_completion_note": "Ремонт будет завершен после поставки запчастей.",
                 "refrigerant_type": "R32",
                 "refrigerant_amount": "0,45 кг",
                 "refrigerant_pricing_mode": "по фактической массе",
@@ -334,11 +381,20 @@ async def test_defect_act_canonical_repair_placeholders_from_repair_meta(sqlite_
     assert replacements["{{recommended_decision}}"] == "Устранить утечку и дозаправить контур."
     assert replacements["{{repair_possible}}"] == "Да"
     assert replacements["{{repair_feasibility}}"] == "Да"
+    assert replacements["{{repair_status}}"] == "awaiting_parts"
+    assert replacements["{{customer_approval_status}}"] == "approved"
+    assert replacements["{{customer_approval_note}}"] == "Клиент согласовал ремонт по телефону."
+    assert replacements["{{parts_status}}"] == "awaiting"
+    assert replacements["{{parts_note}}"] == "Ожидается поставка датчика температуры."
+    assert replacements["{{repair_completion_note}}"] == "Ремонт будет завершен после поставки запчастей."
     assert replacements["{{refrigerant_type}}"] == "R32"
     assert replacements["{{refrigerant_amount}}"] == "0,45 кг"
     assert replacements["{{refrigerant_pricing_mode}}"] == "по фактической массе"
     assert replacements["{{repair_not_viable}}"] == "Нет"
     assert replacements["{{repair_not_viable_reason}}"] == "Оснований для списания не выявлено."
+    assert replacements["{{additional_conditions}}"] == (
+        "Работы выполнять после согласования.\nДоступ предоставить с 9:00."
+    )
 
 
 @pytest.mark.asyncio
@@ -376,6 +432,12 @@ async def test_defect_act_legacy_repair_aliases_feed_canonical_placeholders(sqli
     assert replacements["{{technical_conclusion}}"] == "Эксплуатация без ремонта не рекомендуется."
     assert replacements["{{repair_feasibility}}"] == "Ремонт экономически нецелесообразен."
     assert replacements["{{repair_possible}}"] == "_________________"
+    assert replacements["{{repair_status}}"] == "_________________"
+    assert replacements["{{customer_approval_status}}"] == "_________________"
+    assert replacements["{{customer_approval_note}}"] == "_________________"
+    assert replacements["{{parts_status}}"] == "_________________"
+    assert replacements["{{parts_note}}"] == "_________________"
+    assert replacements["{{repair_completion_note}}"] == "_________________"
     assert replacements["{{repair_not_viable}}"] == "Ремонт экономически нецелесообразен."
     assert replacements["{{repair_not_viable_reason}}"] == "Ремонт экономически нецелесообразен."
 
