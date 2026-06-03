@@ -64,6 +64,10 @@ import {
     type ManagerBrandResponse,
     type ManagerBrandCreatePayload,
     type ManagerBrandUpdatePayload,
+    type ProductImageVariantBatchProcessResponse,
+    type ProductImageVariantCandidateResponse,
+    type ProductImageVariantCandidatesResponse,
+    type ProductImageVariantResponse,
 } from './client';
 import { ManagerTagsService } from './client/services/ManagerTagsService';
 import { ManagerLeadsInboxService } from './client/services/ManagerLeadsInboxService';
@@ -105,6 +109,12 @@ export type {
     ManagerBrand,
     ManagerBrandCreatePayload,
     ManagerBrandUpdatePayload,
+};
+export type {
+    ProductImageVariantBatchProcessResponse,
+    ProductImageVariantCandidateResponse,
+    ProductImageVariantCandidatesResponse,
+    ProductImageVariantResponse,
 };
 
 export interface ManagerProductFilterOptions {
@@ -436,6 +446,30 @@ export const api = {
 
     async cleanupMedia(dryRun: boolean) {
         return await ManagerService.cleanupMedia(dryRun);
+    },
+
+    async getImageVariantCandidates(variantType = 'card', limit = 100, includeInstallation = false) {
+        return await ManagerService.getImageVariantCandidates(variantType, limit, includeInstallation);
+    },
+
+    async processMissingImageVariants(
+        variantType = 'card',
+        limit = 100,
+        includeInstallation = false,
+        dryRun = true,
+        provider = 'noop',
+    ) {
+        return await ManagerService.processMissingImageVariants(
+            variantType,
+            limit,
+            includeInstallation,
+            dryRun,
+            provider,
+        );
+    },
+
+    async reprocessImageVariant(imageId: number, variantType = 'card', provider = 'noop') {
+        return await ManagerService.reprocessImageVariant(imageId, variantType, provider);
     },
 
     async getManagerProducts(

@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue';
 import { watchDebounced } from '@vueuse/core';
-import { api, type ManagerBrand, type Product } from '../api';
+import {
+    api,
+    type ManagerBrand,
+    type Product,
+    type ProductImageVariantBatchProcessResponse,
+    type ProductImageVariantCandidateResponse,
+    type ProductImageVariantResponse,
+} from '../api';
 import {
     Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images,
     Settings, ArrowLeft, LayoutGrid, List, Package, Link2, ExternalLink,
@@ -35,6 +42,15 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const toast = ref('');
 const showOnlinerImportModal = ref(false);
 const yandexPriceListLoading = ref(false);
+const variantLimit = ref(50);
+const includeInstallationVariants = ref(false);
+const variantProvider = ref<'noop' | 'manual' | 'rembg'>('noop');
+const variantCandidatesLoading = ref(false);
+const variantProcessingLoading = ref(false);
+const variantReprocessingImageId = ref<number | null>(null);
+const variantCandidates = ref<ProductImageVariantCandidateResponse[]>([]);
+const variantRecordsByImageId = ref<Record<number, ProductImageVariantResponse[]>>({});
+const variantBatchResult = ref<ProductImageVariantBatchProcessResponse | null>(null);
 
 const setToast = (message: string) => {
     toast.value = message;
@@ -499,6 +515,7 @@ watch(showModal, (val) => {
   } else {
     document.body.style.overflow = '';
     confirmDeleteUrl.value = null;
+    resetVariantState();
   }
 });
 
@@ -679,8 +696,10 @@ const openSearchModal = (product: Product) => {
   selectedProduct.value = product;
   imageQuery.value = product.title;
   imageSearchResults.value = [];
+  resetVariantState();
   showModal.value = true;
   handleImageSearch();
+  loadVariantCandidates();
 };
 
 const openEditModal = (product: Product) => {
@@ -716,6 +735,181 @@ const getImageUrl = (path: string) => {
     if (path.startsWith('http')) return path;
     if (path.startsWith('/')) return path;
     return '/' + path;
+};
+
+type GalleryImage = Product['gallery_images'][number];
+type VariantStatus = 'ready' | 'failed' | 'skipped' | 'pending' | 'unknown';
+
+const boundedVariantLimit = computed(() => {
+    const parsed = Number(variantLimit.value);
+    if (!Number.isFinite(parsed)) return 50;
+    return Math.min(100, Math.max(1, Math.trunc(parsed)));
+});
+
+const variantCandidateByImageId = computed(() => {
+    const map = new Map<number, ProductImageVariantCandidateResponse>();
+    variantCandidates.value.forEach((candidate) => {
+        map.set(candidate.product_image_id, candidate);
+    });
+    return map;
+});
+
+const displayedGalleryImages = computed<GalleryImage[]>(() => (
+    selectedProduct.value?.gallery_images || []
+).filter((image) => includeInstallationVariants.value || !image.is_installation_photo));
+
+const mergeVariantRecords = (variants: ProductImageVariantResponse[] = []) => {
+    const next: Record<number, ProductImageVariantResponse[]> = { ...variantRecordsByImageId.value };
+
+    variants.forEach((variant) => {
+        const imageId = variant.product_image_id;
+        const existing = next[imageId] || [];
+        const index = existing.findIndex((item) => item.variant_type === variant.variant_type);
+        const updated = [...existing];
+        if (index >= 0) {
+            updated[index] = variant;
+        } else {
+            updated.push(variant);
+        }
+        next[imageId] = updated;
+    });
+
+    variantRecordsByImageId.value = next;
+};
+
+const removeCandidateForImage = (imageId: number) => {
+    variantCandidates.value = variantCandidates.value.filter((candidate) => candidate.product_image_id !== imageId);
+};
+
+const getVariantRecord = (imageId: number, variantType = 'card') => (
+    (variantRecordsByImageId.value[imageId] || []).find((variant) => variant.variant_type === variantType)
+);
+
+const normalizeVariantStatus = (status?: string | null): VariantStatus => {
+    if (status === 'ready' || status === 'failed' || status === 'skipped' || status === 'pending') {
+        return status;
+    }
+    return 'unknown';
+};
+
+const getCardVariantStatus = (image: GalleryImage): VariantStatus => {
+    const variant = getVariantRecord(image.id, 'card');
+    if (variant) return normalizeVariantStatus(variant.processing_status);
+    if (variantCandidateByImageId.value.has(image.id)) return 'pending';
+    return 'unknown';
+};
+
+const getCardVariantLabel = (image: GalleryImage) => {
+    const status = getCardVariantStatus(image);
+    if (status === 'ready') return 'card готов';
+    if (status === 'failed') return 'card ошибка';
+    if (status === 'skipped') return 'card пропуск';
+    if (status === 'pending') return 'нужен card';
+    return 'card не проверен';
+};
+
+const variantStatusClass = (status: VariantStatus) => {
+    if (status === 'ready') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (status === 'failed') return 'bg-red-50 text-red-700 border-red-200';
+    if (status === 'skipped') return 'bg-amber-50 text-amber-800 border-amber-200';
+    if (status === 'pending') return 'bg-sky-50 text-sky-700 border-sky-200';
+    return 'bg-gray-50 text-gray-600 border-gray-200';
+};
+
+const formatVariantDate = (value?: string | null) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+    }).format(date);
+};
+
+const getCardVariantMeta = (image: GalleryImage) => {
+    const variant = getVariantRecord(image.id, 'card');
+    if (variant) {
+        const pieces = [
+            variant.processing_provider || variant.storage_provider || null,
+            formatVariantDate(variant.processed_at),
+        ].filter(Boolean);
+        return pieces.join(' · ');
+    }
+
+    const candidate = variantCandidateByImageId.value.get(image.id);
+    return candidate?.reason || '';
+};
+
+const getCardVariantError = (image: GalleryImage) => getVariantRecord(image.id, 'card')?.processing_error || '';
+
+const resetVariantState = () => {
+    variantCandidates.value = [];
+    variantRecordsByImageId.value = {};
+    variantBatchResult.value = null;
+    variantCandidatesLoading.value = false;
+    variantProcessingLoading.value = false;
+    variantReprocessingImageId.value = null;
+};
+
+const loadVariantCandidates = async () => {
+    variantCandidatesLoading.value = true;
+    try {
+        const result = await api.getImageVariantCandidates('card', boundedVariantLimit.value, includeInstallationVariants.value);
+        variantCandidates.value = result.candidates || [];
+        variantBatchResult.value = {
+            dry_run: true,
+            variant_type: result.variant_type,
+            total_candidates: result.total_candidates,
+            returned: result.returned,
+            candidates: result.candidates,
+        };
+        setToast(`Проверка card: найдено ${result.total_candidates}, показано ${result.returned}`);
+    } catch (e) {
+        setToast(`Ошибка проверки вариантов: ${getApiErrorMessage(e)}`);
+        console.error(e);
+    } finally {
+        variantCandidatesLoading.value = false;
+    }
+};
+
+const processMissingCardVariants = async () => {
+    variantProcessingLoading.value = true;
+    try {
+        const result = await api.processMissingImageVariants(
+            'card',
+            boundedVariantLimit.value,
+            includeInstallationVariants.value,
+            false,
+            variantProvider.value,
+        );
+        variantBatchResult.value = result;
+        mergeVariantRecords(result.variants || []);
+        (result.variants || []).forEach((variant) => removeCandidateForImage(variant.product_image_id));
+        setToast(`Обработка card: ${result.processed || 0}, ошибок ${result.errors?.length || 0}`);
+    } catch (e) {
+        setToast(`Ошибка обработки вариантов: ${getApiErrorMessage(e)}`);
+        console.error(e);
+    } finally {
+        variantProcessingLoading.value = false;
+    }
+};
+
+const reprocessCardVariant = async (imageId: number) => {
+    if (variantReprocessingImageId.value) return;
+    variantReprocessingImageId.value = imageId;
+    try {
+        const variant = await api.reprocessImageVariant(imageId, 'card', variantProvider.value);
+        mergeVariantRecords([variant]);
+        removeCandidateForImage(imageId);
+        setToast('Вариант card обновлен');
+    } catch (e) {
+        setToast(`Ошибка повторной обработки: ${getApiErrorMessage(e)}`);
+        console.error(e);
+    } finally {
+        variantReprocessingImageId.value = null;
+    }
 };
 
 const uploadingImageId = ref<string | null>(null);
@@ -1623,9 +1817,63 @@ watchDebounced(
           </div>
           
           <!-- Current Product Gallery Preview (Footer) -->
-          <div class="h-44 bg-white border-t p-4 overflow-x-auto flex gap-4 shrink-0">
-              <div class="w-56 shrink-0 flex items-center justify-center text-gray-400 border-r pr-4 text-sm">
-                  {{ isBulkMode ? 'Общая галерея (все выбранные)' : 'Текущая галерея' }}
+          <div class="h-60 bg-white border-t p-4 overflow-x-auto flex gap-4 shrink-0">
+              <div class="w-72 shrink-0 border-r pr-4 text-sm">
+                  <div class="font-semibold text-gray-700">
+                      {{ isBulkMode ? 'Общая галерея' : 'Текущая галерея' }}
+                  </div>
+                  <div class="mt-1 text-xs text-gray-500">
+                      Обработка создает/обновляет variant card, оригинал и main_image не меняются.
+                  </div>
+                  <div class="mt-3 flex flex-wrap items-center gap-2">
+                      <label class="flex items-center gap-1 text-xs text-gray-600">
+                          Лимит
+                          <input
+                              v-model.number="variantLimit"
+                              type="number"
+                              min="1"
+                              max="100"
+                              class="h-8 w-16 rounded-md border border-gray-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+                          />
+                      </label>
+                      <select
+                          v-model="variantProvider"
+                          class="h-8 rounded-md border border-gray-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+                          title="Провайдер обработки variant card"
+                      >
+                          <option value="noop">noop</option>
+                          <option value="manual">manual</option>
+                          <option value="rembg">rembg</option>
+                      </select>
+                      <label class="flex items-center gap-1 text-xs text-gray-600">
+                          <input v-model="includeInstallationVariants" type="checkbox" class="rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+                          монтажные
+                      </label>
+                  </div>
+                  <div class="mt-2 flex flex-wrap gap-2">
+                      <button
+                          @click="loadVariantCandidates"
+                          :disabled="variantCandidatesLoading || variantProcessingLoading"
+                          class="rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                      >
+                          {{ variantCandidatesLoading ? 'Проверка...' : 'Проверить card' }}
+                      </button>
+                      <button
+                          @click="processMissingCardVariants"
+                          :disabled="variantProcessingLoading || variantCandidatesLoading"
+                          class="rounded-md bg-teal-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+                      >
+                          {{ variantProcessingLoading ? 'Обработка...' : 'Создать card variants' }}
+                      </button>
+                  </div>
+                  <div v-if="variantBatchResult" class="mt-2 text-[11px] text-gray-500">
+                      <span v-if="variantBatchResult.dry_run">
+                          Кандидаты: {{ variantBatchResult.total_candidates ?? 0 }} / показано {{ variantBatchResult.returned ?? 0 }}
+                      </span>
+                      <span v-else>
+                          Обработано: {{ variantBatchResult.processed ?? 0 }} · ошибок: {{ variantBatchResult.errors?.length || 0 }}
+                      </span>
+                  </div>
               </div>
               <template v-if="isBulkMode">
                   <div v-if="commonGalleryLoading" class="text-sm text-gray-500 flex items-center">
@@ -1650,16 +1898,55 @@ watchDebounced(
               </template>
               <template v-else>
                   <!-- Main Image -->
-                  <div v-if="selectedProduct?.main_image" class="relative group w-32 shrink-0 border-2 border-teal-500 rounded-lg overflow-hidden">
+                  <div v-if="selectedProduct?.main_image" class="relative group w-36 shrink-0 border-2 border-teal-500 rounded-lg overflow-hidden">
                       <img :src="getImageUrl(selectedProduct.main_image)" class="w-full h-full object-cover" />
                       <span class="absolute top-0 left-0 bg-teal-500 text-white text-[10px] px-1.5 py-0.5 rounded-br-md">Главное</span>
+                      <span class="absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-1 text-[10px] font-medium text-white">Оригинал URL</span>
                   </div>
 
                   <!-- Gallery Items -->
-                  <div v-if="selectedProduct?.gallery_images" v-for="img in selectedProduct.gallery_images.filter(i => !i.is_installation_photo)" :key="img.id" class="relative group w-32 shrink-0 border rounded-lg overflow-hidden">
+                  <div v-for="img in displayedGalleryImages" :key="img.id" class="relative group w-36 shrink-0 border rounded-lg overflow-hidden">
                       <img :src="getImageUrl(img.url)" class="w-full h-full object-cover" />
+                      <div class="absolute left-1.5 top-1.5 flex max-w-[132px] flex-wrap gap-1">
+                          <span class="rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">Оригинал</span>
+                          <span v-if="img.is_installation_photo" class="rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-medium text-white">Монтаж</span>
+                      </div>
+                      <div class="absolute bottom-0 left-0 right-0 bg-white/95 px-1.5 py-1 shadow-sm">
+                          <div class="flex items-center gap-1">
+                              <span
+                                  class="min-w-0 truncate rounded border px-1.5 py-0.5 text-[10px] font-semibold"
+                                  :class="variantStatusClass(getCardVariantStatus(img))"
+                                  :title="getCardVariantError(img) || getCardVariantMeta(img) || getCardVariantLabel(img)"
+                              >
+                                  {{ getCardVariantLabel(img) }}
+                              </span>
+                              <a
+                                  v-if="getVariantRecord(img.id, 'card')?.url"
+                                  :href="getImageUrl(getVariantRecord(img.id, 'card')!.url!)"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  class="rounded border border-gray-200 px-1 py-0.5 text-[10px] font-medium text-gray-600 hover:bg-gray-50"
+                                  title="Открыть generated card variant"
+                              >
+                                  URL
+                              </a>
+                          </div>
+                          <div v-if="getCardVariantMeta(img)" class="mt-0.5 truncate text-[10px] text-gray-500" :title="getCardVariantMeta(img)">
+                              {{ getCardVariantMeta(img) }}
+                          </div>
+                          <div v-if="getCardVariantError(img)" class="mt-0.5 truncate text-[10px] text-red-600" :title="getCardVariantError(img)">
+                              {{ getCardVariantError(img) }}
+                          </div>
+                      </div>
                       <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-1 p-2 transition-opacity">
                            <button @click="setAsMain(img.id)" class="text-[10px] bg-white text-black px-2 py-1 rounded hover:bg-gray-200 w-full">Сделать главным</button>
+                           <button
+                              @click="reprocessCardVariant(img.id)"
+                              :disabled="variantReprocessingImageId === img.id || variantProcessingLoading"
+                              class="text-[10px] bg-teal-600 text-white px-2 py-1 rounded hover:bg-teal-700 disabled:opacity-60 w-full"
+                           >
+                              {{ variantReprocessingImageId === img.id ? 'variant...' : 'Обновить card variant' }}
+                           </button>
                            <button
                               @click="removeFromGallery(img.id)"
                               class="text-[10px] text-white px-2 py-1 rounded w-full transition-colors"
