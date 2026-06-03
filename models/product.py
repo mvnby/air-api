@@ -111,10 +111,40 @@ class ProductImage(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.now)
 
     product: "Product" = Relationship(back_populates="gallery_images")
+    variants: List["ProductImageVariant"] = Relationship(back_populates="image")
 
     def __str__(self):
         photo_type = "Installation" if self.is_installation_photo else "Gallery"
         return f"{photo_type} photo for product #{self.product_id}"
+
+
+class ProductImageVariant(SQLModel, table=True):
+    __tablename__ = "product_image_variant"
+    __table_args__ = (
+        UniqueConstraint(
+            "product_image_id",
+            "variant_type",
+            name="uq_product_image_variant_image_type",
+        ),
+    )
+    id: Optional[int] = Field(default=None, primary_key=True)
+    product_image_id: int = Field(foreign_key="product_image.id", index=True)
+    variant_type: str = Field(index=True)
+    url: Optional[str] = Field(default=None)
+    storage_provider: str = Field(default="local", index=True)
+    processing_status: str = Field(default="pending", index=True)
+    processing_stage: str = Field(default="original_ingest", index=True)
+    processing_provider: Optional[str] = Field(default=None, index=True)
+    manual_quality_status: str = Field(default="unreviewed", index=True)
+    content_hash: Optional[str] = Field(default=None, index=True)
+    width: Optional[int] = None
+    height: Optional[int] = None
+    processing_error: Optional[str] = Field(default=None, sa_column=Column(String))
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
+    processed_at: Optional[datetime] = None
+
+    image: "ProductImage" = Relationship(back_populates="variants")
 
 
 class ProductAttachment(SQLModel, table=True):

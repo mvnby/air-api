@@ -1381,6 +1381,50 @@ class ManagerMediaImageLinkResponse(BaseModel):
     url: str
 
 
+class ProductImageVariantResponse(BaseModel):
+    id: Optional[int] = None
+    product_image_id: int
+    variant_type: str
+    url: Optional[str] = None
+    storage_provider: str = "local"
+    processing_status: str
+    processing_stage: str
+    processing_provider: Optional[str] = None
+    manual_quality_status: str = "unreviewed"
+    content_hash: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    processing_error: Optional[str] = None
+    processed_at: Optional[datetime] = None
+
+
+class ProductImageVariantCandidateResponse(BaseModel):
+    product_image_id: int
+    product_id: int
+    url: str
+    is_installation_photo: bool
+    reason: str
+
+
+class ProductImageVariantCandidatesResponse(BaseModel):
+    dry_run: bool = True
+    variant_type: str
+    total_candidates: int
+    returned: int
+    candidates: List[ProductImageVariantCandidateResponse] = []
+
+
+class ProductImageVariantBatchProcessResponse(BaseModel):
+    dry_run: bool
+    variant_type: str
+    total_candidates: int = 0
+    returned: int = 0
+    candidates: List[ProductImageVariantCandidateResponse] = []
+    processed: int = 0
+    errors: List[Dict[str, Any]] = []
+    variants: List[ProductImageVariantResponse] = []
+
+
 class ManagerMediaSetMainImageResponse(ManagerActionMessageResponse):
     url: str
 

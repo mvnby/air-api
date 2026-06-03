@@ -42,6 +42,9 @@ import type { ManagerMediaSetMainImageResponse } from '../models/ManagerMediaSet
 import type { ManagerMediaUploadLocalImagesResponse } from '../models/ManagerMediaUploadLocalImagesResponse';
 import type { ManagerNormalizeLegacySpecsResponse } from '../models/ManagerNormalizeLegacySpecsResponse';
 import type { ManagerTagGroupResponse } from '../models/ManagerTagGroupResponse';
+import type { ProductImageVariantBatchProcessResponse } from '../models/ProductImageVariantBatchProcessResponse';
+import type { ProductImageVariantCandidatesResponse } from '../models/ProductImageVariantCandidatesResponse';
+import type { ProductImageVariantResponse } from '../models/ProductImageVariantResponse';
 import type { ProductLocalStockPayload } from '../models/ProductLocalStockPayload';
 import type { ProductLocalStockResponse } from '../models/ProductLocalStockResponse';
 import type { ProductUpdate } from '../models/ProductUpdate';
@@ -730,6 +733,33 @@ export class ManagerService {
         });
     }
     /**
+     * Get Image Variant Candidates
+     * Dry-run candidate selection for images missing a requested variant.
+     * @param variantType Variant to check: original, processed, card, full
+     * @param limit
+     * @param includeInstallation
+     * @returns ProductImageVariantCandidatesResponse Successful Response
+     * @throws ApiError
+     */
+    public static getImageVariantCandidates(
+        variantType: string = 'card',
+        limit: number = 100,
+        includeInstallation: boolean = false,
+    ): CancelablePromise<ProductImageVariantCandidatesResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/gallery/variant-candidates',
+            query: {
+                'variant_type': variantType,
+                'limit': limit,
+                'include_installation': includeInstallation,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Link Search Result
      * Add a search result image to gallery (download and link). Does NOT set as main image.
      * @param url URL of the image
@@ -874,6 +904,68 @@ export class ManagerService {
             url: '/api/manager/gallery/bulk-delete-common',
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Process Missing Image Variants
+     * Dry-run or explicitly process a bounded batch of missing image variants.
+     * @param variantType Variant to process: processed, card, full
+     * @param limit
+     * @param includeInstallation
+     * @param dryRun
+     * @param provider Processing provider: noop, manual, rembg
+     * @returns ProductImageVariantBatchProcessResponse Successful Response
+     * @throws ApiError
+     */
+    public static processMissingImageVariants(
+        variantType: string = 'card',
+        limit: number = 100,
+        includeInstallation: boolean = false,
+        dryRun: boolean = true,
+        provider: string = 'noop',
+    ): CancelablePromise<ProductImageVariantBatchProcessResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/gallery/variants/process-missing',
+            query: {
+                'variant_type': variantType,
+                'limit': limit,
+                'include_installation': includeInstallation,
+                'dry_run': dryRun,
+                'provider': provider,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Reprocess Image Variant
+     * Retry/reprocess a failed or skipped image variant.
+     * @param imageId
+     * @param variantType Variant to reprocess: processed, card, full
+     * @param provider Processing provider: noop, manual, rembg
+     * @returns ProductImageVariantResponse Successful Response
+     * @throws ApiError
+     */
+    public static reprocessImageVariant(
+        imageId: number,
+        variantType: string = 'card',
+        provider: string = 'noop',
+    ): CancelablePromise<ProductImageVariantResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/gallery/{image_id}/variants/reprocess',
+            path: {
+                'image_id': imageId,
+            },
+            query: {
+                'variant_type': variantType,
+                'provider': provider,
+            },
             errors: {
                 422: `Validation Error`,
             },

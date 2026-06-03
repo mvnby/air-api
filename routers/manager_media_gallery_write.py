@@ -13,7 +13,9 @@ from routers.manager_operation_ids import (
     CLEANUP_MEDIA,
     DELETE_IMAGE,
     LINK_SEARCH_RESULT,
+    PROCESS_MISSING_IMAGE_VARIANTS,
     REUSE_IMAGE,
+    REPROCESS_IMAGE_VARIANT,
     SET_MAIN_IMAGE,
 )
 from schemas import (
@@ -27,9 +29,12 @@ from schemas import (
     ManagerMediaImageLinkResponse,
     ManagerMediaReuseImageResponse,
     ManagerMediaSetMainImageResponse,
+    ProductImageVariantBatchProcessResponse,
+    ProductImageVariantResponse,
 )
 from services.manager_media_orchestrator_service import ManagerMediaOrchestratorService
 from services.manager_media_service import ManagerMediaService
+from services.product_image_variant_service import ProductImageVariantService
 
 
 router = APIRouter(prefix="/api/manager", tags=["manager"])
@@ -187,6 +192,60 @@ async def bulk_delete_common_gallery_images(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=exc.args[0]) from exc
+
+
+@router.post(
+    "/gallery/variants/process-missing",
+    response_model=ProductImageVariantBatchProcessResponse,
+    operation_id=PROCESS_MISSING_IMAGE_VARIANTS,
+)
+async def process_missing_image_variants(
+    variant_type: str = Query("card", description="Variant to process: processed, card, full"),
+    limit: int = Query(100, ge=1, le=100),
+    include_installation: bool = Query(False),
+    dry_run: bool = Query(True),
+    provider: str = Query("noop", description="Processing provider: noop, manual, rembg"),
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username),
+):
+    """Dry-run or explicitly process a bounded batch of missing image variants."""
+    try:
+        return await ProductImageVariantService.process_missing_variants(
+            session=session,
+            variant_type=variant_type,
+            limit=limit,
+            include_installation=include_installation,
+            dry_run=dry_run,
+            provider=provider,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post(
+    "/gallery/{image_id}/variants/reprocess",
+    response_model=ProductImageVariantResponse,
+    operation_id=REPROCESS_IMAGE_VARIANT,
+)
+async def reprocess_image_variant(
+    image_id: int,
+    variant_type: str = Query("card", description="Variant to reprocess: processed, card, full"),
+    provider: str = Query("noop", description="Processing provider: noop, manual, rembg"),
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username),
+):
+    """Retry/reprocess a failed or skipped image variant."""
+    try:
+        return await ProductImageVariantService.reprocess_variant(
+            session=session,
+            product_image_id=image_id,
+            variant_type=variant_type,
+            provider=provider,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post(
