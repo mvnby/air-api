@@ -8,13 +8,13 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import select
 
-from core.config import settings
 from crud.product import ProductDAO
 from models import LeadSource, Order, OrderStatus, Product
 from schemas import ProductAvailabilityLeadPayload, ProductAvailabilityLeadResponse
 from services.bot_service import BotService
 from services.lead_service import LeadService
 from services.order_service import OrderService
+from services.staff_user_service import StaffUserService
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +200,8 @@ class WebsiteLeadService:
         now: datetime,
         is_repeat: bool,
     ) -> None:
-        if not settings.admin_list:
+        admin_ids = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(session)
+        if not admin_ids:
             return
 
         message_lines = [
@@ -214,7 +215,7 @@ class WebsiteLeadService:
             message_lines.insert(4, f"👤 {payload.name.strip()}")
 
         admin_text = "\n".join(message_lines)
-        for admin_id in settings.admin_list:
+        for admin_id in admin_ids:
             try:
                 await BotService.send_message(admin_id, admin_text)
             except Exception as exc:

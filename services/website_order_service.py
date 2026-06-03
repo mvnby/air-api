@@ -4,11 +4,11 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.config import settings
 from models import LeadSource, Order, OrderStatus
 from schemas import OrderPayload, OrderResponse
 from services.bot_service import BotService
 from services.order_service import OrderService
+from services.staff_user_service import StaffUserService
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,8 @@ class WebsiteOrderService:
 
     @staticmethod
     async def _notify_admins(session: AsyncSession, order: Order, payload: OrderPayload) -> None:
-        if not settings.admin_list:
+        admin_ids = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(session)
+        if not admin_ids:
             return
 
         await session.refresh(order, ["product_links", "service_links", "customer"])
@@ -115,7 +116,7 @@ class WebsiteOrderService:
         message_lines.append(f"💰 <b>Итого: {order.total_amount} руб.</b>")
         admin_text = "\n".join(message_lines)
 
-        for admin_id in settings.admin_list:
+        for admin_id in admin_ids:
             try:
                 await BotService.send_message(admin_id, admin_text)
             except Exception as exc:

@@ -41,7 +41,6 @@ async def test_notify_admins_new_order_skips_when_no_admins(monkeypatch):
         customer_phone="+123",
     )
 
-    session.execute.assert_not_called()
     send_mock.assert_not_called()
 
 
