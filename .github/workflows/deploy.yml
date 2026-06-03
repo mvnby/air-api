@@ -24,6 +24,87 @@ env:
 
 jobs:
   # ======================================================
+  # 0. FRONTEND CHANGE DETECTION
+  # ======================================================
+  detect-frontend-changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      web_changed: ${{ steps.detect.outputs.web_changed }}
+      reason: ${{ steps.detect.outputs.reason }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect storefront-relevant changes
+        id: detect
+        run: |
+          set -euo pipefail
+
+          web_changed=false
+          reason="no storefront-relevant changes detected"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ github.event.inputs.deploy_frontend }}" = "true" ]; then
+              web_changed=true
+              reason="manual dispatch requested deploy_frontend=true"
+            else
+              reason="manual dispatch did not request frontend deploy"
+            fi
+          else
+            before="${{ github.event.before }}"
+            after="${{ github.sha }}"
+            zero_sha="0000000000000000000000000000000000000000"
+
+            if [ "${before}" = "${zero_sha}" ]; then
+              web_changed=true
+              reason="first push has no reliable before SHA; deploying frontend conservatively"
+            else
+              if ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
+                git fetch --no-tags --depth=1 origin "${before}" || true
+              fi
+
+              if ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
+                web_changed=true
+                reason="before SHA is unavailable locally; deploying frontend conservatively"
+              elif git diff --name-only "${before}" "${after}" | grep -E '^(web/|\.github/workflows/(deploy|rebuild-web|check-web-ssh)\.yml$)' >/dev/null; then
+                web_changed=true
+                reason="storefront-relevant files changed"
+              fi
+            fi
+          fi
+
+          echo "web_changed=${web_changed}" >> "$GITHUB_OUTPUT"
+          echo "reason=${reason}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Frontend Deploy Decision"
+            echo "- web_changed: ${web_changed}"
+            echo "- reason: ${reason}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  frontend-deploy-decision:
+    runs-on: ubuntu-latest
+    needs: detect-frontend-changes
+    steps:
+      - name: Report frontend deploy decision
+        run: |
+          {
+            echo "## Frontend Deploy Decision"
+            echo "- web_changed: ${{ needs.detect-frontend-changes.outputs.web_changed }}"
+            echo "- reason: ${{ needs.detect-frontend-changes.outputs.reason }}"
+            if [ "${{ needs.detect-frontend-changes.outputs.web_changed }}" != "true" ]; then
+              echo "- result: deploy-frontend will be skipped; backend deploy can still make this workflow green"
+            else
+              echo "- result: deploy-frontend is eligible to run after backend deploy"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ======================================================
   # 1. BACKEND DEPLOYMENT (Docker -> mvn-api)
   # ======================================================
   deploy-backend:
@@ -252,10 +333,12 @@ jobs:
   # 2. FRONTEND DEPLOYMENT (Static -> mvn-web)
   # ======================================================
   deploy-frontend:
-    if: ${{ github.event_name == 'push' || github.event.inputs.deploy_frontend == 'true' }}
+    if: ${{ needs.detect-frontend-changes.outputs.web_changed == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: deploy-backend # Wait for API to be ready
+    needs:
+      - deploy-backend # Wait for API to be ready
+      - detect-frontend-changes
     
     steps:
       - name: Checkout
