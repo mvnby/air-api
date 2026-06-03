@@ -86,6 +86,12 @@ type ProductLine = {
 type ServiceLine = { service_id?: number | null; title: string; quantity: number; price: number; cost: number };
 type OrderWorkflowType = 'sales_installation' | 'service_work' | 'maintenance' | 'repair';
 type RepairMeta = {
+  repair_status: string;
+  customer_approval_status: string;
+  customer_approval_note: string;
+  parts_status: string;
+  parts_note: string;
+  repair_completion_note: string;
   customer_complaint: string;
   complaint_official: string;
   complaint_text?: string;
@@ -128,7 +134,44 @@ const WORKFLOW_OPTIONS: Array<{ value: OrderWorkflowType; label: string; hint: s
   { value: 'repair', label: 'Ремонт', hint: 'диагностика и дефектный акт', icon: 'build_circle' },
 ];
 
+const REPAIR_WORKFLOW_STATUS_OPTIONS = [
+  { value: 'new', label: 'Новая' },
+  { value: 'scheduled', label: 'Запланирован' },
+  { value: 'diagnostic_in_progress', label: 'Диагностика идет' },
+  { value: 'awaiting_diagnostic_result', label: 'Ждем диагностику' },
+  { value: 'awaiting_customer_approval', label: 'На согласовании' },
+  { value: 'approved_for_repair', label: 'Ремонт согласован' },
+  { value: 'repair_in_progress', label: 'Ремонт идет' },
+  { value: 'awaiting_parts', label: 'Ждем запчасти' },
+  { value: 'completed', label: 'Завершен' },
+  { value: 'not_repairable', label: 'Не ремонтируется' },
+  { value: 'cancelled', label: 'Отменен' },
+];
+const REPAIR_WORKFLOW_STATUS_VALUES = new Set(REPAIR_WORKFLOW_STATUS_OPTIONS.map((item) => item.value));
+
+const CUSTOMER_APPROVAL_STATUS_OPTIONS = [
+  { value: '', label: 'Не указано' },
+  { value: 'pending', label: 'Ожидает согласования' },
+  { value: 'approved', label: 'Согласовано' },
+  { value: 'rejected', label: 'Отказано' },
+];
+
+const PARTS_STATUS_OPTIONS = [
+  { value: '', label: 'Не указано' },
+  { value: 'not_required', label: 'Не требуются' },
+  { value: 'awaiting', label: 'Ожидаются' },
+  { value: 'ordered', label: 'Заказаны' },
+  { value: 'received', label: 'Получены' },
+  { value: 'installed', label: 'Установлены' },
+];
+
 const emptyRepairMeta = (): RepairMeta => ({
+  repair_status: '',
+  customer_approval_status: '',
+  customer_approval_note: '',
+  parts_status: '',
+  parts_note: '',
+  repair_completion_note: '',
   customer_complaint: '',
   complaint_official: '',
   likely_diagnosis: '',
@@ -168,6 +211,12 @@ const REFRIGERANT_PRICING_MODE_OPTIONS = [
 
 const textValue = (value: unknown) => String(value ?? '').trim();
 
+const normalizeRepairWorkflowStatus = (value: unknown) => {
+  const raw = textValue(value);
+  const normalized = raw.toLowerCase().replace(/-/g, '_').split(/\s+/).filter(Boolean).join('_');
+  return REPAIR_WORKFLOW_STATUS_VALUES.has(normalized) ? normalized : '';
+};
+
 const choiceText = (value: unknown) => {
   if (typeof value === 'boolean') return value ? 'Да' : 'Нет';
   return textValue(value);
@@ -189,8 +238,17 @@ const isExplicitNegativeRepairText = (value: unknown) => {
   ].some((marker) => text.includes(marker));
 };
 
-const normalizeRepairMeta = (raw: Partial<RepairMeta> | Record<string, any> | null | undefined): RepairMeta => {
+const normalizeRepairMeta = (
+  raw: Partial<RepairMeta> | Record<string, any> | null | undefined,
+  options: { defaultRepairStatus?: boolean } = {},
+): RepairMeta => {
   const meta = { ...emptyRepairMeta(), ...((raw || {}) as Partial<RepairMeta>) };
+  meta.repair_status = normalizeRepairWorkflowStatus(meta.repair_status) || (options.defaultRepairStatus ? 'new' : '');
+  meta.customer_approval_status = textValue(meta.customer_approval_status);
+  meta.customer_approval_note = textValue(meta.customer_approval_note);
+  meta.parts_status = textValue(meta.parts_status);
+  meta.parts_note = textValue(meta.parts_note);
+  meta.repair_completion_note = textValue(meta.repair_completion_note);
   if (!textValue(meta.customer_complaint)) {
     meta.customer_complaint = textValue(meta.complaint_official) || textValue(meta.complaint_text);
   }
@@ -214,6 +272,12 @@ const selectOptionsWithCurrent = (baseOptions: string[], current: unknown) => {
   const currentValue = textValue(current);
   if (!currentValue || baseOptions.includes(currentValue)) return baseOptions;
   return [...baseOptions, currentValue];
+};
+
+const labeledOptionsWithCurrent = (baseOptions: Array<{ value: string; label: string }>, current: unknown) => {
+  const currentValue = textValue(current);
+  if (!currentValue || baseOptions.some((item) => item.value === currentValue)) return baseOptions;
+  return [...baseOptions, { value: currentValue, label: currentValue }];
 };
 
 const REPAIR_AI_DEFECT_TYPES: RepairAiDefectType[] = [
@@ -766,8 +830,12 @@ const workDateLabel = computed(() => {
   if (workflowType.value === 'service_work') return 'Дата работ';
   return 'Дата монтажа';
 });
+const repairWorkflowStatusLabel = computed(() => (
+  REPAIR_WORKFLOW_STATUS_OPTIONS.find((item) => item.value === repairMeta.value.repair_status)?.label || ''
+));
 const repairSectionSummary = computed(() => {
   const parts = [];
+  if (repairWorkflowStatusLabel.value) parts.push(repairWorkflowStatusLabel.value);
   if (repairMeta.value.equipment_name.trim()) parts.push(repairMeta.value.equipment_name.trim());
   const serial = repairMeta.value.equipment_serial_number.trim() || repairMeta.value.equipment_inventory_number.trim();
   if (serial) parts.push(serial);
@@ -794,7 +862,9 @@ const selectedRepairAiDefect = computed(() => (
 ));
 const repairPossibleOptions = computed(() => selectOptionsWithCurrent(REPAIR_CHOICE_OPTIONS, repairMeta.value.repair_possible));
 const repairNotViableOptions = computed(() => selectOptionsWithCurrent(REPAIR_CHOICE_OPTIONS, repairMeta.value.repair_not_viable));
-const buildRepairMetaPayload = () => normalizeRepairMeta(repairMeta.value);
+const customerApprovalStatusOptions = computed(() => labeledOptionsWithCurrent(CUSTOMER_APPROVAL_STATUS_OPTIONS, repairMeta.value.customer_approval_status));
+const partsStatusOptions = computed(() => labeledOptionsWithCurrent(PARTS_STATUS_OPTIONS, repairMeta.value.parts_status));
+const buildRepairMetaPayload = () => normalizeRepairMeta(repairMeta.value, { defaultRepairStatus: isRepairWorkflow.value });
 const documentSectionSummary = computed(() => {
   const contractText = hasContract.value ? 'договор есть' : (hasOrderInvoice.value ? 'есть счет' : 'без договора');
   return `${orderDocuments.value.length} док. · ${contractText}`;
@@ -1162,7 +1232,9 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   status.value = order.status;
   orderTitle.value = order.title ?? '';
   workflowType.value = normalizeWorkflowType((order as any).workflow_type);
-  repairMeta.value = normalizeRepairMeta(((order as any).repair_meta || {}) as Partial<RepairMeta>);
+  repairMeta.value = normalizeRepairMeta(((order as any).repair_meta || {}) as Partial<RepairMeta>, {
+    defaultRepairStatus: workflowType.value === 'repair',
+  });
   repairComplaintSearch.value = '';
   if (workflowType.value === 'repair' && !repairComplaintPresets.value.length) {
     void loadRepairComplaintPresets();
@@ -1669,6 +1741,7 @@ const setWorkflowType = async (next: OrderWorkflowType) => {
   serviceTariffOptions.value = [];
   activeServiceSuggestionIndex.value = null;
   if (next === 'repair') {
+    repairMeta.value = normalizeRepairMeta(repairMeta.value, { defaultRepairStatus: true });
     void loadRepairComplaintPresets();
     await addDefaultRepairDiagnostic();
   }
@@ -2566,6 +2639,62 @@ watch(
                   Заполнить на усмотрение
                 </label>
               </div>
+            </div>
+          </div>
+          <div class="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div class="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <p class="text-sm font-semibold text-slate-900">Статусы ремонта</p>
+              <p class="text-xs text-slate-600">Этап ремонта; CRM/Kanban статус заказа отдельно.</p>
+            </div>
+            <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <label class="field-label">
+                Этап ремонта
+                <select v-model="repairMeta.repair_status" class="field-input bg-white">
+                  <option v-for="option in REPAIR_WORKFLOW_STATUS_OPTIONS" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
+              </label>
+              <label class="field-label">
+                Согласование клиента
+                <select v-model="repairMeta.customer_approval_status" class="field-input bg-white">
+                  <option v-for="option in customerApprovalStatusOptions" :key="`approval-${option.value || 'empty'}`" :value="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
+              </label>
+              <label class="field-label">
+                Запчасти
+                <select v-model="repairMeta.parts_status" class="field-input bg-white">
+                  <option v-for="option in partsStatusOptions" :key="`parts-${option.value || 'empty'}`" :value="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
+              </label>
+              <label class="field-label">
+                Комментарий согласования
+                <textarea
+                  v-model="repairMeta.customer_approval_note"
+                  class="field-input min-h-[64px] bg-white"
+                  placeholder="Кто согласовал, когда, условия"
+                />
+              </label>
+              <label class="field-label">
+                Комментарий по запчастям
+                <textarea
+                  v-model="repairMeta.parts_note"
+                  class="field-input min-h-[64px] bg-white"
+                  placeholder="Что нужно, сроки, поставщик"
+                />
+              </label>
+              <label class="field-label">
+                Итог ремонта
+                <textarea
+                  v-model="repairMeta.repair_completion_note"
+                  class="field-input min-h-[64px] bg-white"
+                  placeholder="Что выполнено или почему закрыто"
+                />
+              </label>
             </div>
           </div>
           <label class="field-label md:col-span-2">
