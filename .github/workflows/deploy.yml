@@ -316,6 +316,9 @@ jobs:
           WEB_TARGET="/var/www/${{ secrets.SSH_USER_WEB }}/data/www/mvn.by/"
           SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
           MAX_ATTEMPTS=5
+          PORT_FAILURES=0
+          LOGIN_FAILURES=0
+          RSYNC_FAILURES=0
 
           for attempt in $(seq 1 "${MAX_ATTEMPTS}"); do
             echo "🚀 Frontend deploy attempt ${attempt}/${MAX_ATTEMPTS}"
@@ -323,6 +326,7 @@ jobs:
             if nc -z -w 10 "${WEB_HOST}" 22; then
               echo "✅ Web SSH port is reachable"
             else
+              PORT_FAILURES=$((PORT_FAILURES + 1))
               echo "::warning::Web SSH port 22 is not reachable before rsync attempt ${attempt}"
             fi
 
@@ -334,15 +338,24 @@ jobs:
                 echo "✅ Frontend deployment completed on attempt ${attempt}!"
                 {
                   echo "## Frontend Deploy Summary"
+                  echo "- job: deploy-frontend"
                   echo "- target: ${WEB_USER}@${WEB_HOST}:${WEB_TARGET}"
                   echo "- attempts_used: ${attempt}"
                   echo "- status: success"
+                  echo "- backend_dependency: deploy-backend completed before frontend deploy"
+                  echo "- build_status: success"
+                  echo "- failure_kind: n/a"
+                  echo "- ssh_port_failures: ${PORT_FAILURES}"
+                  echo "- ssh_login_failures: ${LOGIN_FAILURES}"
+                  echo "- rsync_failures: ${RSYNC_FAILURES}"
                 } >> "$GITHUB_STEP_SUMMARY"
                 exit 0
               fi
 
+              RSYNC_FAILURES=$((RSYNC_FAILURES + 1))
               echo "::warning::rsync failed on attempt ${attempt}"
             else
+              LOGIN_FAILURES=$((LOGIN_FAILURES + 1))
               echo "::warning::SSH login preflight failed on attempt ${attempt}"
             fi
 
@@ -353,12 +366,28 @@ jobs:
             fi
           done
 
+          if [ "${PORT_FAILURES}" -gt 0 ] || [ "${LOGIN_FAILURES}" -gt 0 ]; then
+            FAILURE_KIND="web_ssh_connectivity"
+          elif [ "${RSYNC_FAILURES}" -gt 0 ]; then
+            FAILURE_KIND="rsync_transfer"
+          else
+            FAILURE_KIND="unknown"
+          fi
+
           {
             echo "## Frontend Deploy Summary"
+            echo "- job: deploy-frontend"
             echo "- target: ${WEB_USER}@${WEB_HOST}:${WEB_TARGET}"
             echo "- attempts_used: ${MAX_ATTEMPTS}"
             echo "- status: failed"
+            echo "- backend_dependency: deploy-backend completed before frontend deploy"
+            echo "- build_status: success"
+            echo "- failure_kind: ${FAILURE_KIND}"
+            echo "- ssh_port_failures: ${PORT_FAILURES}"
+            echo "- ssh_login_failures: ${LOGIN_FAILURES}"
+            echo "- rsync_failures: ${RSYNC_FAILURES}"
+            echo "- next_step: run the manual Web SSH Connectivity Check workflow or choose a more reliable web deploy architecture"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          echo "::error::Frontend deployment failed after ${MAX_ATTEMPTS} attempts. Web SSH connectivity is likely unstable from GitHub Actions."
+          echo "::error::Frontend deployment failed after ${MAX_ATTEMPTS} attempts (${FAILURE_KIND}). Backend deploy/smoke already completed; this failure is scoped to the web deploy path."
           exit 1

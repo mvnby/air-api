@@ -1,0 +1,91 @@
+name: Web SSH Connectivity Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      attempts:
+        description: "Probe attempts, 1-10"
+        type: string
+        required: false
+        default: "5"
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Setup SSH Key for Web Server
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -T 10 -H ${{ secrets.SSH_HOST_WEB }} >> ~/.ssh/known_hosts || true
+
+      - name: Probe Web SSH Connectivity
+        run: |
+          set -euo pipefail
+
+          WEB_HOST="${{ secrets.SSH_HOST_WEB }}"
+          WEB_USER="${{ secrets.SSH_USER_WEB }}"
+          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+          MAX_ATTEMPTS="${{ inputs.attempts }}"
+          PORT_FAILURES=0
+          LOGIN_FAILURES=0
+
+          if ! [[ "${MAX_ATTEMPTS}" =~ ^[0-9]+$ ]] || [ "${MAX_ATTEMPTS}" -lt 1 ] || [ "${MAX_ATTEMPTS}" -gt 10 ]; then
+            echo "::error::attempts must be an integer from 1 to 10"
+            exit 1
+          fi
+
+          for attempt in $(seq 1 "${MAX_ATTEMPTS}"); do
+            echo "Web SSH probe attempt ${attempt}/${MAX_ATTEMPTS}"
+
+            if nc -z -w 10 "${WEB_HOST}" 22; then
+              echo "Web SSH port is reachable"
+            else
+              PORT_FAILURES=$((PORT_FAILURES + 1))
+              echo "::warning::Web SSH port 22 is not reachable on probe attempt ${attempt}"
+            fi
+
+            if ssh ${SSH_OPTS} "${WEB_USER}@${WEB_HOST}" "true"; then
+              {
+                echo "## Web SSH Connectivity Check"
+                echo "- target: ${WEB_USER}@${WEB_HOST}:22"
+                echo "- attempts_used: ${attempt}"
+                echo "- status: success"
+                echo "- failure_kind: n/a"
+                echo "- ssh_port_failures: ${PORT_FAILURES}"
+                echo "- ssh_login_failures: ${LOGIN_FAILURES}"
+                echo "- deploy_performed: false"
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+
+            LOGIN_FAILURES=$((LOGIN_FAILURES + 1))
+            echo "::warning::SSH login preflight failed on probe attempt ${attempt}"
+
+            if [ "${attempt}" -lt "${MAX_ATTEMPTS}" ]; then
+              sleep_seconds=$((attempt * 20))
+              echo "Waiting ${sleep_seconds}s before retry..."
+              sleep "${sleep_seconds}"
+            fi
+          done
+
+          {
+            echo "## Web SSH Connectivity Check"
+            echo "- target: ${WEB_USER}@${WEB_HOST}:22"
+            echo "- attempts_used: ${MAX_ATTEMPTS}"
+            echo "- status: failed"
+            echo "- failure_kind: web_ssh_connectivity"
+            echo "- ssh_port_failures: ${PORT_FAILURES}"
+            echo "- ssh_login_failures: ${LOGIN_FAILURES}"
+            echo "- deploy_performed: false"
+            echo "- next_step: inspect web host SSH/firewall/rate-limits or choose a pull-based/static-hosting deploy architecture"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "::error::Web SSH connectivity failed after ${MAX_ATTEMPTS} probe attempts."
+          exit 1

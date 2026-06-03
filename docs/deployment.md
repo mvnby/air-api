@@ -70,7 +70,19 @@ The workflow requires these env vars in the build step:
 ### Deployment Steps
 
 1. **deploy-backend:** Builds and pushes Docker image, deploys to API server
-2. **deploy-frontend:** Builds Astro site, uploads to web server via SCP
+2. **deploy-frontend:** Builds Astro site, uploads to web server via rsync over SSH
+
+### Web SSH Reliability
+
+`deploy-frontend` and the manual `rebuild-web.yml` workflow use bounded SSH port/login preflight checks before rsync. They retry 5 times with backoff and write a summary with separate `ssh_port_failures`, `ssh_login_failures`, `rsync_failures`, and `failure_kind` fields.
+
+If `deploy-backend` and backend smoke-check are green but `deploy-frontend` fails with `failure_kind: web_ssh_connectivity`, treat it as web-host SSH/network instability from GitHub-hosted runners, not an Astro/backend build failure.
+
+Use the manual **Web SSH Connectivity Check** workflow to probe `SSH_HOST_WEB` from GitHub Actions without building or deploying files. If the probe is flaky too, the next decision should be architectural rather than adding more retries:
+
+- move the static site to a managed static hosting/CDN deploy path;
+- move web hosting to infrastructure with stable SSH from GitHub Actions;
+- switch to a pull-based deploy where the web host fetches a release artifact instead of GitHub Actions opening inbound SSH to the host.
 
 ## Manager Frontend Env Model
 
@@ -161,11 +173,13 @@ After apply, smoke-check:
 - **Mac:** `Cmd + Shift + R`
 - **Windows:** `Ctrl + Shift + R`
 
-### Issue: rsync connection timeout
+### Issue: web SSH or rsync timeout
 
-**Symptoms:** `rsync: error: unexpected end of file`
+**Symptoms:** `ssh: connect to host ... port 22: Connection timed out`, `rsync error: unexplained error (code 255)`, or deploy summary `failure_kind: web_ssh_connectivity`.
 
-**Fix:** Use GitHub Actions deployment instead of local rsync for large updates
+**Checks:** Confirm whether backend deploy and smoke-check were green, then run the manual **Web SSH Connectivity Check** workflow. A flaky probe means the web SSH path is unstable before file transfer starts.
+
+**Fix direction:** Do not keep increasing retries. Pick a more reliable deploy architecture: managed static hosting/CDN, web hosting with stable SSH from GitHub Actions, or pull-based artifact deployment from the web host.
 
 ## Verification
 
