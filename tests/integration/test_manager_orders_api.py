@@ -1592,12 +1592,26 @@ async def test_manager_order_generate_defect_act_placeholders(async_client, db, 
     order = Order(
         customer_id=customer.id,
         status=OrderStatus.NEW_LEAD,
+        additional_conditions="- Работы выполнять после согласования с администратором.",
         technical_meta={
             "equipment_serial_number": "SN-001",
             "equipment_inventory_number": "INV-777",
             "technical_condition": "Компрессор отключается по защите.",
             "technical_conclusion": "Компрессор подлежит замене.",
             "recommended_decision": "Вывести из эксплуатации.",
+            "repair": {
+                "repair_status": "awaiting_customer_approval",
+                "customer_approval_status": "pending",
+                "customer_approval_note": "Ожидается согласование сметы.",
+                "parts_status": "awaiting",
+                "parts_note": "Требуется заказать компрессор.",
+                "repair_completion_note": "Завершение после согласования и поставки.",
+                "refrigerant_type": "R410A",
+                "refrigerant_amount": "0,60 кг",
+                "refrigerant_pricing_mode": "по фактической массе",
+                "repair_not_viable": "Да",
+                "repair_not_viable_reason": "Стоимость ремонта сопоставима с заменой оборудования.",
+            },
         },
     )
     db.add(order)
@@ -1642,6 +1656,18 @@ async def test_manager_order_generate_defect_act_placeholders(async_client, db, 
     assert replacements["{{technical_condition}}"] == "Компрессор отключается по защите."
     assert replacements["{{technical_conclusion}}"] == "Компрессор подлежит замене."
     assert replacements["{{recommended_decision}}"] == "Вывести из эксплуатации."
+    assert replacements["{{repair_status}}"] == "awaiting_customer_approval"
+    assert replacements["{{customer_approval_status}}"] == "pending"
+    assert replacements["{{customer_approval_note}}"] == "Ожидается согласование сметы."
+    assert replacements["{{parts_status}}"] == "awaiting"
+    assert replacements["{{parts_note}}"] == "Требуется заказать компрессор."
+    assert replacements["{{repair_completion_note}}"] == "Завершение после согласования и поставки."
+    assert replacements["{{refrigerant_type}}"] == "R410A"
+    assert replacements["{{refrigerant_amount}}"] == "0,60 кг"
+    assert replacements["{{refrigerant_pricing_mode}}"] == "по фактической массе"
+    assert replacements["{{repair_not_viable}}"] == "Да"
+    assert replacements["{{repair_not_viable_reason}}"] == "Стоимость ремонта сопоставима с заменой оборудования."
+    assert replacements["{{additional_conditions}}"] == "Работы выполнять после согласования с администратором."
 
 
 @pytest.mark.asyncio
