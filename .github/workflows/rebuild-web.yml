@@ -10,6 +10,7 @@ env:
 jobs:
   rebuild:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -51,19 +52,93 @@ jobs:
           curl -fsS --retry 10 --retry-delay 3 http://127.0.0.1:18000/api/v1/config >/dev/null
           npm run build
 
-      - name: Setup SSH Key
+      - name: Setup SSH Key for Web Server
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ env.SSH_HOST_WEB }} >> ~/.ssh/known_hosts
+          ssh-keyscan -T 10 -H ${{ env.SSH_HOST_WEB }} >> ~/.ssh/known_hosts || true
 
       - name: Deploy to Web Server
         run: |
-          # Upload files using rsync over SSH
-          rsync -avz --delete \
-            -e "ssh -i ~/.ssh/deploy_key" \
-            web/dist/ \
-            ${{ env.SSH_USER_WEB }}@${{ env.SSH_HOST_WEB }}:/var/www/user2154318/data/www/mvn.by/
-          
-          echo "✅ Turbo Rebuild completed!"
+          set -euo pipefail
+
+          WEB_HOST="${SSH_HOST_WEB}"
+          WEB_USER="${SSH_USER_WEB}"
+          WEB_TARGET="/var/www/${SSH_USER_WEB}/data/www/mvn.by/"
+          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+          MAX_ATTEMPTS=5
+          PORT_FAILURES=0
+          LOGIN_FAILURES=0
+          RSYNC_FAILURES=0
+
+          for attempt in $(seq 1 "${MAX_ATTEMPTS}"); do
+            echo "Frontend rebuild deploy attempt ${attempt}/${MAX_ATTEMPTS}"
+
+            if nc -z -w 10 "${WEB_HOST}" 22; then
+              echo "Web SSH port is reachable"
+            else
+              PORT_FAILURES=$((PORT_FAILURES + 1))
+              echo "::warning::Web SSH port 22 is not reachable before rsync attempt ${attempt}"
+            fi
+
+            if ssh ${SSH_OPTS} "${WEB_USER}@${WEB_HOST}" "true"; then
+              if rsync -avz --delete \
+                -e "ssh ${SSH_OPTS}" \
+                web/dist/ \
+                "${WEB_USER}@${WEB_HOST}:${WEB_TARGET}"; then
+                echo "Manual web rebuild completed on attempt ${attempt}."
+                {
+                  echo "## Manual Web Rebuild Summary"
+                  echo "- job: rebuild-web"
+                  echo "- target: ${WEB_USER}@${WEB_HOST}:${WEB_TARGET}"
+                  echo "- attempts_used: ${attempt}"
+                  echo "- status: success"
+                  echo "- build_status: success"
+                  echo "- failure_kind: n/a"
+                  echo "- ssh_port_failures: ${PORT_FAILURES}"
+                  echo "- ssh_login_failures: ${LOGIN_FAILURES}"
+                  echo "- rsync_failures: ${RSYNC_FAILURES}"
+                } >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+              fi
+
+              RSYNC_FAILURES=$((RSYNC_FAILURES + 1))
+              echo "::warning::rsync failed on attempt ${attempt}"
+            else
+              LOGIN_FAILURES=$((LOGIN_FAILURES + 1))
+              echo "::warning::SSH login preflight failed on attempt ${attempt}"
+            fi
+
+            if [ "${attempt}" -lt "${MAX_ATTEMPTS}" ]; then
+              sleep_seconds=$((attempt * 20))
+              echo "Waiting ${sleep_seconds}s before retry..."
+              sleep "${sleep_seconds}"
+            fi
+          done
+
+          if [ "${PORT_FAILURES}" -gt 0 ] || [ "${LOGIN_FAILURES}" -gt 0 ]; then
+            FAILURE_KIND="web_ssh_connectivity"
+          elif [ "${RSYNC_FAILURES}" -gt 0 ]; then
+            FAILURE_KIND="rsync_transfer"
+          else
+            FAILURE_KIND="unknown"
+          fi
+
+          {
+            echo "## Manual Web Rebuild Summary"
+            echo "- job: rebuild-web"
+            echo "- target: ${WEB_USER}@${WEB_HOST}:${WEB_TARGET}"
+            echo "- attempts_used: ${MAX_ATTEMPTS}"
+            echo "- status: failed"
+            echo "- build_status: success"
+            echo "- failure_kind: ${FAILURE_KIND}"
+            echo "- ssh_port_failures: ${PORT_FAILURES}"
+            echo "- ssh_login_failures: ${LOGIN_FAILURES}"
+            echo "- rsync_failures: ${RSYNC_FAILURES}"
+            echo "- next_step: run the manual Web SSH Connectivity Check workflow or choose a more reliable web deploy architecture"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "::error::Manual web rebuild failed after ${MAX_ATTEMPTS} attempts (${FAILURE_KIND})."
+          exit 1
