@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref } from 'vue';
-import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Wrench, Settings, Wallet, ChevronLeft, ChevronRight, Tags, FileSpreadsheet, Link2, Award, Database, Calculator, ReceiptText } from 'lucide-vue-next';
+import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Settings, Wallet, ChevronLeft, ChevronRight, Tags, FileSpreadsheet, Link2, Award, Database, Calculator, ReceiptText } from 'lucide-vue-next';
 import { api } from './api';
 import { getApiErrorMessage } from './utils/api-errors';
 
@@ -46,7 +46,7 @@ const navItems = [
   { path: '/manager/calendar', label: 'Календарь', icon: Calendar },
   { path: '/manager/products', label: 'Кондиционеры', icon: Package },
   { path: '/manager/customers', label: 'Клиенты', icon: Users },
-  { path: '/manager/installers', label: 'Монтажники', icon: Wrench },
+  { path: '/manager/installers', label: 'Сотрудники', icon: Users },
   { path: '/manager/tariffs', label: 'Тарифы услуг', icon: Wallet },
   { path: '/manager/service-estimates', label: 'Сметы услуг', icon: Calculator },
   { path: '/manager/payments', label: 'Платежи', icon: ReceiptText },

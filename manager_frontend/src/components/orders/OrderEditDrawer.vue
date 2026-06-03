@@ -385,6 +385,13 @@ const repairAiGenerating = ref(false);
 const payments = ref<PaymentResponse[]>([]);
 const bankReceipts = ref<BankReceiptResponse[]>([]);
 const bankReceiptsLoading = ref(false);
+
+const executorOptions = computed(() => {
+  const selectedIds = new Set<number>();
+  if (installerId.value !== null) selectedIds.add(installerId.value);
+  if (measurerId.value !== null) selectedIds.add(measurerId.value);
+  return installersList.value.filter((inst) => inst.is_active || selectedIds.has(inst.id));
+});
 const attachingReceiptId = ref<number | null>(null);
 const localServerErrors = ref<Record<string, string>>({});
 
@@ -1193,7 +1200,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
 
   if (installersList.value.length === 0) {
     api.getManagerInstallers(1, 100).then(res => {
-      installersList.value = res.items.filter(i => i.is_active || i.id === installerId.value);
+      installersList.value = res.items;
     }).catch(e => console.error("Failed to load installers", e));
   }
 
@@ -2439,7 +2446,7 @@ watch(
                 {{ isRepairWorkflow ? 'Специалист' : 'Замерщик' }}
                 <select v-model="measurerId" class="field-input">
                   <option :value="null">Не назначен</option>
-                  <option v-for="inst in installersList" :key="inst.id" :value="inst.id">
+                  <option v-for="inst in executorOptions" :key="inst.id" :value="inst.id">
                     {{ inst.name }} {{ !inst.is_active ? '(в архиве)' : '' }}
                   </option>
                 </select>
@@ -2458,7 +2465,7 @@ watch(
               {{ isRepairWorkflow ? 'Исполнитель ремонта' : 'Монтажник' }}
               <select v-model="installerId" class="field-input">
                 <option :value="null">Не назначен</option>
-                <option v-for="inst in installersList" :key="inst.id" :value="inst.id">
+                <option v-for="inst in executorOptions" :key="inst.id" :value="inst.id">
                   {{ inst.name }} {{ !inst.is_active ? '(в архиве)' : '' }}
                 </option>
               </select>
