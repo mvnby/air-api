@@ -9,6 +9,7 @@ from routers import manager_crm
 from routers import manager_contracts
 from routers import manager_dashboard
 from routers import manager_docs
+from routers import manager_equipment
 from routers import manager_google_auth
 from routers import manager_leads
 from routers import manager_mail
@@ -34,6 +35,7 @@ router.include_router(manager_specs.router)
 router.include_router(manager_auth.router)
 router.include_router(manager_docs.router)
 router.include_router(manager_orders.router)
+router.include_router(manager_equipment.router)
 router.include_router(manager_repair_complaints.router)
 router.include_router(manager_leads.router)
 router.include_router(manager_mail.router)

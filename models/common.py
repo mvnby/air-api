@@ -90,3 +90,14 @@ class EquipmentStatus(str, Enum):
     PENDING = "pending"
     RESERVED = "reserved"
     ISSUED = "issued"
+
+
+class EquipmentServiceEventType(str, Enum):
+    DIAGNOSTIC = "diagnostic"
+    REPAIR = "repair"
+    MAINTENANCE = "maintenance"
+    REFRIGERANT_CHARGE = "refrigerant_charge"
+    LEAK = "leak"
+    RECOMMENDATION = "recommendation"
+    NOT_REPAIRABLE = "not_repairable"
+    OTHER = "other"
