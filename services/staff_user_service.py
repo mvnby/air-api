@@ -14,15 +14,30 @@ logger = logging.getLogger(__name__)
 class StaffUserService:
     ROLE_OWNER = "owner"
     ROLE_ADMIN = "admin"
+    ROLE_MANAGER = "manager"
     ROLE_INSTALLER = "installer"
+    ROLE_MAINTENANCE = "maintenance"
+    ROLE_REPAIR = "repair"
+    # Extra legacy-compatible executor role for the current manager measurer_id flow;
+    # this does not replace the issue-defined maintenance/repair roles.
     ROLE_MEASURER = "measurer"
 
     STATUS_ACTIVE = "active"
     STATUS_INACTIVE = "inactive"
     STATUS_BLOCKED = "blocked"
 
+    ROLES = {
+        ROLE_OWNER,
+        ROLE_ADMIN,
+        ROLE_MANAGER,
+        ROLE_INSTALLER,
+        ROLE_MAINTENANCE,
+        ROLE_REPAIR,
+        ROLE_MEASURER,
+    }
     OWNER_ADMIN_ROLES = {ROLE_OWNER, ROLE_ADMIN}
-    EXECUTOR_ROLES = {ROLE_INSTALLER, ROLE_MEASURER}
+    MANAGEMENT_ROLES = {ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER}
+    EXECUTOR_ROLES = {ROLE_INSTALLER, ROLE_MAINTENANCE, ROLE_REPAIR, ROLE_MEASURER}
     STATUSES = {STATUS_ACTIVE, STATUS_INACTIVE, STATUS_BLOCKED}
 
     @classmethod
@@ -77,6 +92,10 @@ class StaffUserService:
     @classmethod
     def can_be_executor(cls, staff_user: StaffUser, role: str) -> bool:
         return cls.is_active(staff_user) and cls.has_role(staff_user, role)
+
+    @classmethod
+    def can_be_any_executor(cls, staff_user: StaffUser) -> bool:
+        return cls.is_active(staff_user) and cls.has_any_role(staff_user, cls.EXECUTOR_ROLES)
 
     @classmethod
     async def find_active_executors_by_role(

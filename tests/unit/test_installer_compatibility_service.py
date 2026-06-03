@@ -6,6 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
 from models import Installer, Order, OrderInstaller, StaffUser
+from schemas import ManagerOrderUpdatePayload
 from services.installer_service import ManagerInstallerService
 from services.order_service import OrderService
 
@@ -151,3 +152,57 @@ async def test_existing_historical_blocked_assignment_can_still_update(sqlite_in
     link = await sqlite_installer_session.get(OrderInstaller, (order.id, installer.id))
     assert link is not None
     assert link.agreed_pay == 125
+
+
+@pytest.mark.asyncio
+async def test_new_manager_measurer_assignment_rejects_blocked_staff_user(sqlite_installer_session):
+    installer = Installer(name="Blocked Measurer", is_active=True)
+    order = Order(comment="before")
+    sqlite_installer_session.add(installer)
+    sqlite_installer_session.add(order)
+    await sqlite_installer_session.flush()
+    sqlite_installer_session.add(
+        StaffUser(
+            display_name="Blocked Measurer",
+            status="blocked",
+            roles=["installer"],
+            legacy_installer_id=installer.id,
+        )
+    )
+    await sqlite_installer_session.commit()
+
+    with pytest.raises(ValueError, match="inactive or blocked"):
+        await OrderService.update_order_for_manager(
+            sqlite_installer_session,
+            order.id,
+            ManagerOrderUpdatePayload(measurer_id=installer.id),
+        )
+
+
+@pytest.mark.asyncio
+async def test_unchanged_historical_blocked_measurer_can_still_save(sqlite_installer_session):
+    installer = Installer(name="Historical Measurer", is_active=True)
+    order = Order(measurer_id=None, comment="before")
+    sqlite_installer_session.add(installer)
+    sqlite_installer_session.add(order)
+    await sqlite_installer_session.flush()
+    order.measurer_id = installer.id
+    sqlite_installer_session.add(
+        StaffUser(
+            display_name="Historical Measurer",
+            status="blocked",
+            roles=["installer"],
+            legacy_installer_id=installer.id,
+        )
+    )
+    await sqlite_installer_session.commit()
+
+    data = await OrderService.update_order_for_manager(
+        sqlite_installer_session,
+        order.id,
+        ManagerOrderUpdatePayload(measurer_id=installer.id, comment="after"),
+    )
+
+    assert data is not None
+    assert data["measurer_id"] == installer.id
+    assert data["comment"] == "after"

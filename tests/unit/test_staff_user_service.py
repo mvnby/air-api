@@ -27,12 +27,28 @@ def test_staff_role_and_status_helpers():
     active_admin = StaffUser(display_name="Owner", status="active", roles=["owner"], telegram_id=101)
     blocked_admin = StaffUser(display_name="Blocked", status="blocked", roles=["admin"], telegram_id=102)
     inactive_installer = StaffUser(display_name="Inactive", status="inactive", roles=["installer"])
+    maintenance_executor = StaffUser(display_name="Maintenance", status="active", roles=["maintenance"])
+    repair_executor = StaffUser(display_name="Repair", status="active", roles=["repair"])
+    manager = StaffUser(display_name="Manager", status="active", roles=["manager"])
     json_roles_admin = StaffUser(display_name="JSON Admin", status="active", roles='["admin"]', telegram_id=103)
 
+    assert StaffUserService.ROLES == {
+        "owner",
+        "admin",
+        "manager",
+        "installer",
+        "maintenance",
+        "repair",
+        "measurer",
+    }
+    assert StaffUserService.EXECUTOR_ROLES == {"installer", "maintenance", "repair", "measurer"}
     assert StaffUserService.has_role(active_admin, "owner")
     assert StaffUserService.can_receive_admin_notifications(active_admin)
     assert not StaffUserService.can_receive_admin_notifications(blocked_admin)
     assert not StaffUserService.can_be_executor(inactive_installer, "installer")
+    assert StaffUserService.can_be_any_executor(maintenance_executor)
+    assert StaffUserService.can_be_any_executor(repair_executor)
+    assert not StaffUserService.can_be_any_executor(manager)
     assert StaffUserService.has_role(json_roles_admin, "admin")
 
 
