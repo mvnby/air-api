@@ -1823,7 +1823,7 @@ watchDebounced(
                       {{ isBulkMode ? 'Общая галерея' : 'Текущая галерея' }}
                   </div>
                   <div class="mt-1 text-xs text-gray-500">
-                      Batch-кнопки ниже работают глобально по всей галерее в пределах лимита. Оригинал и main_image не меняются.
+                      Кнопки ниже запускают глобальную проверку/батч по всей галерее в пределах лимита. Оригинал и main_image не меняются.
                   </div>
                   <div class="mt-3 flex flex-wrap items-center gap-2">
                       <label class="flex items-center gap-1 text-xs text-gray-600">
@@ -1856,18 +1856,18 @@ watchDebounced(
                           :disabled="variantCandidatesLoading || variantProcessingLoading"
                           class="rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                       >
-                          {{ variantCandidatesLoading ? 'Проверка...' : 'Проверить global card' }}
+                          {{ variantCandidatesLoading ? 'Проверка...' : 'Проверить всю галерею' }}
                       </button>
                       <button
                           @click="processMissingCardVariants"
                           :disabled="variantProcessingLoading || variantCandidatesLoading"
                           class="rounded-md bg-teal-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
                       >
-                          {{ variantProcessingLoading ? 'Обработка...' : 'Создать missing card batch' }}
+                          {{ variantProcessingLoading ? 'Обработка...' : 'Создать card batch' }}
                       </button>
                   </div>
                   <div class="mt-1 text-[11px] leading-snug text-gray-500">
-                      Это не только текущий товар; карточки ниже обновляются по одной кнопкой на изображении.
+                      Это не только текущий товар; карточки ниже обновляются отдельно, по одной картинке.
                   </div>
                   <div v-if="variantBatchResult" class="mt-2 text-[11px] text-gray-500">
                       <span v-if="variantBatchResult.dry_run">
