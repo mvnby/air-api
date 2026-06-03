@@ -16,4 +16,3 @@ export type ManagerEquipmentServiceHistoryCreatePayload = {
     not_repairable_reason?: (string | null);
     notes?: (string | null);
 };
-

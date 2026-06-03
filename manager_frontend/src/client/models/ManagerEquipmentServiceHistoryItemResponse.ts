@@ -20,4 +20,3 @@ export type ManagerEquipmentServiceHistoryItemResponse = {
     created_at: string;
     updated_at?: (string | null);
 };
-

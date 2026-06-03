@@ -8,4 +8,3 @@ export type ManagerEquipmentServiceHistoryListResponse = {
     items: Array<ManagerEquipmentServiceHistoryItemResponse>;
     meta: Meta;
 };
-

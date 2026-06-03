@@ -16,4 +16,3 @@ export type ManagerEquipmentCreatePayload = {
     notes?: (string | null);
     is_archived?: boolean;
 };
-

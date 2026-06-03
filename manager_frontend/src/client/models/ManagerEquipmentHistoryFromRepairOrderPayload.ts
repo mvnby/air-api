@@ -9,4 +9,3 @@ export type ManagerEquipmentHistoryFromRepairOrderPayload = {
     event_date?: (string | null);
     notes?: (string | null);
 };
-
