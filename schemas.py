@@ -10,7 +10,7 @@ from core.input_validation import (
     validate_optional_unp,
     validate_required_phone,
 )
-from models import PaymentCurrency
+from models import EquipmentServiceEventType, PaymentCurrency
 
 # --- SHARED ---
 
@@ -1080,6 +1080,166 @@ class ManagerCustomerBranchItemResponse(BaseModel):
 
 class ManagerCustomerBranchListResponse(BaseModel):
     items: List[ManagerCustomerBranchItemResponse]
+
+
+class ManagerEquipmentServiceHistoryItemResponse(BaseModel):
+    id: int
+    equipment_id: int
+    order_id: Optional[int] = None
+    event_type: EquipmentServiceEventType = EquipmentServiceEventType.OTHER
+    event_date: datetime
+    complaint_snapshot: Optional[str] = None
+    diagnostic_result: Optional[str] = None
+    repair_recommendation: Optional[str] = None
+    refrigerant_type: Optional[str] = None
+    refrigerant_amount: Optional[str] = None
+    not_repairable: bool = False
+    not_repairable_reason: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class ManagerEquipmentItemResponse(BaseModel):
+    id: int
+    customer_id: int
+    customer_branch_id: Optional[int] = None
+    equipment_type: str = "hvac"
+    display_name: Optional[str] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    serial: Optional[str] = None
+    inventory_number: Optional[str] = None
+    location_hint: Optional[str] = None
+    refrigerant_type: Optional[str] = None
+    notes: Optional[str] = None
+    is_archived: bool = False
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class ManagerEquipmentDetailResponse(ManagerEquipmentItemResponse):
+    recent_history: List[ManagerEquipmentServiceHistoryItemResponse] = Field(default_factory=list)
+
+
+class ManagerEquipmentListResponse(BaseModel):
+    items: List[ManagerEquipmentItemResponse]
+    meta: Meta
+
+
+class ManagerEquipmentServiceHistoryListResponse(BaseModel):
+    items: List[ManagerEquipmentServiceHistoryItemResponse]
+    meta: Meta
+
+
+class ManagerEquipmentCreatePayload(BaseModel):
+    customer_id: int
+    customer_branch_id: Optional[int] = None
+    equipment_type: Optional[str] = "hvac"
+    display_name: Optional[str] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    serial: Optional[str] = None
+    inventory_number: Optional[str] = None
+    location_hint: Optional[str] = None
+    refrigerant_type: Optional[str] = None
+    notes: Optional[str] = None
+    is_archived: bool = False
+
+    @field_validator(
+        "equipment_type",
+        "display_name",
+        "brand",
+        "model",
+        "serial",
+        "inventory_number",
+        "location_hint",
+        "refrigerant_type",
+        "notes",
+    )
+    @classmethod
+    def _trim_string_fields(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+
+class ManagerEquipmentUpdatePayload(BaseModel):
+    customer_branch_id: Optional[int] = None
+    equipment_type: Optional[str] = None
+    display_name: Optional[str] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    serial: Optional[str] = None
+    inventory_number: Optional[str] = None
+    location_hint: Optional[str] = None
+    refrigerant_type: Optional[str] = None
+    notes: Optional[str] = None
+    is_archived: Optional[bool] = None
+
+    @field_validator(
+        "equipment_type",
+        "display_name",
+        "brand",
+        "model",
+        "serial",
+        "inventory_number",
+        "location_hint",
+        "refrigerant_type",
+        "notes",
+    )
+    @classmethod
+    def _trim_string_fields(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+
+class ManagerEquipmentServiceHistoryCreatePayload(BaseModel):
+    event_type: EquipmentServiceEventType = EquipmentServiceEventType.OTHER
+    event_date: Optional[datetime] = None
+    order_id: Optional[int] = None
+    complaint_snapshot: Optional[str] = None
+    diagnostic_result: Optional[str] = None
+    repair_recommendation: Optional[str] = None
+    refrigerant_type: Optional[str] = None
+    refrigerant_amount: Optional[str] = None
+    not_repairable: bool = False
+    not_repairable_reason: Optional[str] = None
+    notes: Optional[str] = None
+
+    @field_validator(
+        "complaint_snapshot",
+        "diagnostic_result",
+        "repair_recommendation",
+        "refrigerant_type",
+        "refrigerant_amount",
+        "not_repairable_reason",
+        "notes",
+    )
+    @classmethod
+    def _trim_string_fields(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+
+class ManagerEquipmentHistoryFromRepairOrderPayload(BaseModel):
+    order_id: int
+    event_type: Optional[EquipmentServiceEventType] = None
+    event_date: Optional[datetime] = None
+    notes: Optional[str] = None
+
+    @field_validator("notes")
+    @classmethod
+    def _trim_notes(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
 
 
 class ManagerCustomerContractItemResponse(BaseModel):

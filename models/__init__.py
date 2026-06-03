@@ -1,6 +1,7 @@
 from .common import (
     CustomerType,
     DocumentRoleType,
+    EquipmentServiceEventType,
     LeadIntakeSource,
     LeadLossReason,
     LeadSegmentHint,
@@ -13,6 +14,7 @@ from .common import (
     PaymentType,
 )
 from .customer import Customer, CustomerBranch, CustomerContract, Lead
+from .equipment import CustomerEquipment, EquipmentServiceHistory
 from .brand import Brand, ProductSeries
 from .cart import Cart, CartItem
 from .catalog_import import CatalogImportJob
@@ -77,6 +79,9 @@ __all__ = [
     "DocumentTemplate",
     "DocumentTemplateActLink",
     "DocumentTemplateCustomerLink",
+    "CustomerEquipment",
+    "EquipmentServiceEventType",
+    "EquipmentServiceHistory",
     "Favorite",
     "GlobalConfig",
     "InstallationRate",
