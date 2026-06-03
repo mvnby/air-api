@@ -5,14 +5,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from core.config import settings
 from models.order import BankReceipt, Order, OrderProductLink
 from services.bot_service import BotService
+from services.staff_user_service import StaffUserService
 
 logger = logging.getLogger(__name__)
 
 
 class NotificationService:
+    @staticmethod
+    async def _admin_recipient_ids(session: AsyncSession) -> list[int]:
+        return await StaffUserService.get_active_owner_admin_telegram_recipient_ids(session)
+
     @staticmethod
     async def notify_admins_new_order(
         session: AsyncSession,
@@ -21,7 +25,8 @@ class NotificationService:
         customer_username: str | None,
         customer_phone: str | None,
     ) -> None:
-        if not settings.admin_list:
+        admin_ids = await NotificationService._admin_recipient_ids(session)
+        if not admin_ids:
             return
 
         stmt = (
@@ -55,7 +60,7 @@ class NotificationService:
         message_lines.append(f"💰 <b>Итого: {order.total_amount} руб.</b>")
         admin_text = "\n".join(message_lines)
 
-        for admin_id in settings.admin_list:
+        for admin_id in admin_ids:
             try:
                 await BotService.send_message(admin_id, admin_text)
             except Exception:
@@ -66,7 +71,8 @@ class NotificationService:
         session: AsyncSession,
         receipt_ids: list[int],
     ) -> int:
-        if not settings.admin_list or not receipt_ids:
+        admin_ids = await NotificationService._admin_recipient_ids(session)
+        if not admin_ids or not receipt_ids:
             return 0
 
         stmt = (
@@ -131,7 +137,7 @@ class NotificationService:
 
         text = "\n".join(lines).strip()
         sent = 0
-        for admin_id in settings.admin_list:
+        for admin_id in admin_ids:
             try:
                 await BotService.send_message(admin_id, text)
                 sent += 1
@@ -146,7 +152,8 @@ class NotificationService:
         session: AsyncSession,
         order_ids: list[int],
     ) -> int:
-        if not settings.admin_list or not order_ids:
+        admin_ids = await NotificationService._admin_recipient_ids(session)
+        if not admin_ids or not order_ids:
             return 0
 
         stmt = (
@@ -189,7 +196,7 @@ class NotificationService:
 
         text = "\n".join(lines).strip()
         sent = 0
-        for admin_id in settings.admin_list:
+        for admin_id in admin_ids:
             try:
                 await BotService.send_message(admin_id, text)
                 sent += 1

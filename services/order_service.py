@@ -1121,6 +1121,24 @@ class OrderService:
         await session.commit()
 
     @staticmethod
+    async def _ensure_assignable_legacy_executor(
+        session: AsyncSession,
+        installer_id: int,
+    ) -> None:
+        from models import Installer
+        from services.staff_user_service import StaffUserService
+
+        staff_user = await StaffUserService.get_by_legacy_installer_id(session, installer_id)
+        if staff_user is not None:
+            if not StaffUserService.can_be_any_executor(staff_user):
+                raise ValueError("Selected installer is inactive or blocked")
+            return
+
+        installer = await session.get(Installer, installer_id)
+        if not installer or not installer.is_active:
+            raise ValueError("Selected installer is inactive or blocked")
+
+    @staticmethod
     async def update_order_installers(session: AsyncSession, order_id: int, installers_data: List[Dict[str, Any]]) -> None:
         """
         Updates installers for an order and triggers notifications for NEW assignments.
@@ -1148,6 +1166,7 @@ class OrderService:
         for i_data in installers_data:
             i_id = int(i_data['installer_id'])
             if i_id not in existing_map:
+                await OrderService._ensure_assignable_legacy_executor(session, i_id)
                 # Это новый!
                 item = OrderInstaller(
                     order_id=order_id,
@@ -1253,6 +1272,7 @@ class OrderService:
         
         # 4. Add installers
         for inst in items_data.get("installers", []):
+            await OrderService._ensure_assignable_legacy_executor(session, int(inst["installer_id"]))
             new_inst = OrderInstaller(
                 order_id=order_id,
                 installer_id=int(inst["installer_id"]),
@@ -1969,6 +1989,8 @@ class OrderService:
         if "measurement_required" in fields_set and payload.measurement_required is not None:
             order.measurement_required = payload.measurement_required
         if "measurer_id" in fields_set:
+            if payload.measurer_id is not None and payload.measurer_id != order.measurer_id:
+                await OrderService._ensure_assignable_legacy_executor(session, int(payload.measurer_id))
             order.measurer_id = payload.measurer_id
         if "measurement_result" in fields_set:
             order.measurement_result = payload.measurement_result
@@ -2023,6 +2045,12 @@ class OrderService:
 
         if "installer_id" in fields_set:
             from models import OrderInstaller
+            existing_installer_ids_res = await session.execute(
+                select(OrderInstaller.installer_id).where(OrderInstaller.order_id == order_id)
+            )
+            existing_installer_ids = set(existing_installer_ids_res.scalars().all())
+            if getattr(payload, "installer_id", None) is not None and payload.installer_id not in existing_installer_ids:
+                await OrderService._ensure_assignable_legacy_executor(session, int(payload.installer_id))
             await session.execute(delete(OrderInstaller).where(OrderInstaller.order_id == order_id))
             if getattr(payload, "installer_id", None) is not None:
                 new_installer_link = OrderInstaller(
