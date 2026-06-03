@@ -81,6 +81,26 @@ import ContactForm from "../components/ContactForm.vue";
                 </ul>
             </div>
 
+            <section class="filter-link-card mb-8" aria-labelledby="service-filter-options-title">
+                <div class="filter-link-card__icon" aria-hidden="true">
+                    <span class="material-icons-round">filter_air</span>
+                </div>
+                <div class="filter-link-card__content">
+                    <p class="filter-link-card__eyebrow">Дополнительные опции</p>
+                    <h2 id="service-filter-options-title">Сменные фильтры при обслуживании</h2>
+                    <p>
+                        Во время ТО можно уточнить наличие дополнительных фильтров:
+                        угольных, антибактериальных, катехиновых, с ионами серебра
+                        или комбинированных. Подберём вариант, если он совместим с
+                        вашей моделью кондиционера.
+                    </p>
+                    <a href="/blog/filtry-v-kondicionere-kakie-byvayut#dopolnitelnye-filtry-dlya-obsluzhivaniya">
+                        Посмотреть варианты фильтров
+                        <span class="material-icons-round" aria-hidden="true">arrow_forward</span>
+                    </a>
+                </div>
+            </section>
+
             <div class="article-content prose">
                 <section class="mb-12">
                     <h2>Что входит в обслуживание? (13 этапов)</h2>
@@ -286,9 +306,80 @@ import ContactForm from "../components/ContactForm.vue";
         margin-top: 4px;
     }
     .check-icon .material-icons-round {
-        color: #fff !important;
+        color: var(--panel-active-text) !important;
         font-size: 16px !important;
         font-weight: 900;
+    }
+
+    .filter-link-card {
+        box-sizing: border-box;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 1rem;
+        align-items: flex-start;
+        max-width: 100%;
+        padding: 1.25rem;
+        border: 1px solid var(--panel-glass-border);
+        border-radius: 8px;
+        background: var(--panel-glass-bg);
+        box-shadow: var(--panel-glass-shadow);
+    }
+    .filter-link-card__icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 48px;
+        height: 48px;
+        border-radius: 8px;
+        background: var(--panel-active-gradient);
+        color: var(--panel-active-text);
+    }
+    .filter-link-card__icon .material-icons-round {
+        font-size: 28px;
+    }
+    .filter-link-card__content {
+        display: grid;
+        gap: 0.65rem;
+        min-width: 0;
+    }
+    .filter-link-card__eyebrow,
+    .filter-link-card h2,
+    .filter-link-card p {
+        margin: 0;
+    }
+    .filter-link-card__eyebrow {
+        color: var(--primary);
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+    .filter-link-card h2 {
+        color: var(--text);
+        font-size: 1.35rem;
+        font-weight: 800;
+        line-height: 1.25;
+    }
+    .filter-link-card p {
+        color: var(--text-muted);
+        line-height: 1.65;
+    }
+    .filter-link-card a {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        width: fit-content;
+        max-width: 100%;
+        color: var(--primary);
+        font-weight: 800;
+        text-decoration: none;
+        overflow-wrap: anywhere;
+    }
+    .filter-link-card a:hover {
+        text-decoration: underline;
+    }
+    .filter-link-card a .material-icons-round {
+        font-size: 18px;
     }
 
     .steps-grid {
@@ -349,6 +440,9 @@ import ContactForm from "../components/ContactForm.vue";
         }
         .sidebar {
             order: 2;
+        }
+        .filter-link-card {
+            grid-template-columns: 1fr;
         }
     }
 </style>

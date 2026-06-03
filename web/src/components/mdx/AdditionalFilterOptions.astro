@@ -1,0 +1,242 @@
+---
+const filters = [
+  {
+    title: "Фотокаталитический фильтр",
+    image: "/img/blog/filters/photocatalytic-mhi-filter.webp",
+    alt: "Фотокаталитический фильтр для кондиционера",
+    text: "Помогает снижать бытовые запахи, табачный дым и часть летучих органических соединений. Встречается как сменная вставка или фирменный элемент для отдельных моделей.",
+    tags: ["запахи", "VOC", "свежесть"],
+  },
+  {
+    title: "Антибактериальный и противогрибковый фильтр",
+    image: "/img/blog/filters/antibacterial-antifungal-filter.webp",
+    alt: "Антибактериальный и противогрибковый фильтр для кондиционера",
+    text: "Дополнительный слой тонкой очистки, который рассчитан на микропыль, смог, бактерии, плесень и аллергены. Обычно относится к расходникам и требует периодической замены.",
+    tags: ["микропыль", "плесень", "аллергены"],
+  },
+  {
+    title: "Суперстерилизационный фильтр",
+    image: "/img/blog/filters/supersterilization-carbon-filter.webp",
+    alt: "Суперстерилизационный фильтр для кондиционера",
+    text: "Комбинированный элемент с угольным или композитным слоем. Может помогать с неприятными запахами, смогом и летучими органическими соединениями.",
+    tags: ["уголь", "смог", "запахи"],
+  },
+  {
+    title: "Фильтр с ионами серебра",
+    image: "/img/blog/filters/silver-ion-filter.webp",
+    alt: "Антибактериальный фильтр с ионами серебра для кондиционера",
+    text: "Ионы серебра применяют как дополнительную гигиеническую защиту фильтрующего элемента. Такой фильтр поддерживает чистоту воздушного потока, но не заменяет сервисную чистку блока.",
+    tags: ["Ag+", "бактерии", "плесень"],
+  },
+  {
+    title: "Катехиновый фильтр",
+    image: "/img/blog/filters/catechin-filter.webp",
+    alt: "Катехиновый фильтр для кондиционера",
+    text: "Фильтр с экстрактом зеленого чая используют для снижения неприятных запахов и активности части аллергенов. Подходит как мягкая бытовая опция для свежести воздуха.",
+    tags: ["зеленый чай", "аллергены", "запахи"],
+  },
+  {
+    title: "Фильтр 3 в 1",
+    image: "/img/blog/filters/three-in-one-filter.webp",
+    alt: "Комбинированный фильтр 3 в 1 для кондиционера",
+    text: "Комбинирует несколько слоев: фотокаталитический, угольный и антибактериальный. Удобен, когда нужна одна сменная вставка для запахов, пыли и дополнительной гигиены.",
+    tags: ["3 уровня", "уголь", "бактерии"],
+  },
+  {
+    title: "Энзимный фильтр",
+    image: "/img/blog/filters/enzyme-filter.webp",
+    alt: "Энзимный фильтр для кондиционера",
+    text: "Содержит ферментный слой, который производители используют для подавления бактерий, плесени и части неприятных запахов. Как и другие вставки, работает лучше при регулярной замене.",
+    tags: ["энзимы", "плесень", "запахи"],
+  },
+];
+---
+
+<section id="dopolnitelnye-filtry-dlya-obsluzhivaniya" class="filter-options not-prose">
+  <div class="filter-options__intro">
+    <p class="filter-options__kicker">Дополнительные опции при сервисе</p>
+    <h2>Какие сменные фильтры можно спросить при обслуживании</h2>
+    <p>
+      Кроме обычных моющихся сеток у кондиционеров встречаются сменные вставки:
+      антибактериальные, угольные, катехиновые, с ионами серебра и комбинированные.
+      Наличие зависит от модели внутреннего блока, но мы можем подобрать подходящий
+      вариант и предложить его как дополнительную опцию во время обслуживания.
+    </p>
+  </div>
+
+  <div class="filter-options__grid">
+    {filters.map((filter) => (
+      <article class="filter-card">
+        <img
+          src={filter.image}
+          alt={filter.alt}
+          width="1200"
+          height="800"
+          loading="lazy"
+          decoding="async"
+        />
+        <div class="filter-card__body">
+          <h3>{filter.title}</h3>
+          <p>{filter.text}</p>
+          <div class="filter-card__tags" aria-label={`Особенности: ${filter.title}`}>
+            {filter.tags.map((tag) => <span>{tag}</span>)}
+          </div>
+        </div>
+      </article>
+    ))}
+  </div>
+
+  <div class="filter-options__note">
+    <div>
+      <strong>Важно:</strong> сменные фильтры не являются медицинской защитой и не
+      заменяют чистку теплообменника, крыльчатки и дренажа. Это полезные расходники
+      для свежести воздуха, если они совместимы с вашей моделью.
+    </div>
+    <a href="/obslujivanie-kondicionerov">Спросить при обслуживании</a>
+  </div>
+</section>
+
+<style>
+  .filter-options {
+    margin: 3rem 0;
+    padding: 1.25rem;
+    border: 1px solid var(--panel-glass-border);
+    border-radius: 8px;
+    background: var(--panel-glass-bg);
+    box-shadow: var(--panel-glass-shadow);
+  }
+
+  .filter-options__intro {
+    display: grid;
+    gap: 0.85rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .filter-options__kicker {
+    margin: 0;
+    color: var(--primary);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .filter-options h2,
+  .filter-options h3,
+  .filter-options p {
+    margin: 0;
+  }
+
+  .filter-options h2 {
+    color: var(--text);
+    font-size: clamp(1.65rem, 4vw, 2.25rem);
+    line-height: 1.15;
+    font-weight: 850;
+  }
+
+  .filter-options__intro p:not(.filter-options__kicker),
+  .filter-card p,
+  .filter-options__note {
+    color: var(--text-muted);
+    line-height: 1.65;
+  }
+
+  .filter-options__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .filter-card {
+    overflow: hidden;
+    border: 1px solid var(--panel-chip-border);
+    border-radius: 8px;
+    background: var(--panel-chip-bg);
+  }
+
+  .filter-card img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 3 / 2;
+    object-fit: cover;
+  }
+
+  .filter-card__body {
+    display: grid;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+
+  .filter-card h3 {
+    color: var(--text);
+    font-size: 1.05rem;
+    line-height: 1.25;
+    font-weight: 800;
+  }
+
+  .filter-card p {
+    font-size: 0.95rem;
+  }
+
+  .filter-card__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .filter-card__tags span {
+    padding: 0.3rem 0.55rem;
+    border: 1px solid var(--panel-chip-border);
+    border-radius: 999px;
+    background: var(--panel-pill-bg);
+    color: var(--primary);
+    font-size: 0.78rem;
+    font-weight: 750;
+  }
+
+  .filter-options__note {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1rem;
+    align-items: center;
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--panel-chip-border);
+    border-radius: 8px;
+    background: var(--panel-pill-bg);
+    font-size: 0.95rem;
+  }
+
+  .filter-options__note strong {
+    color: var(--text);
+  }
+
+  .filter-options__note a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0.8rem 1rem;
+    border-radius: 8px;
+    background: var(--panel-active-gradient);
+    color: var(--panel-active-text);
+    font-weight: 800;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 760px) {
+    .filter-options {
+      padding: 1rem;
+    }
+
+    .filter-options__grid,
+    .filter-options__note {
+      grid-template-columns: 1fr;
+    }
+
+    .filter-options__note a {
+      width: 100%;
+    }
+  }
+</style>
