@@ -8,6 +8,7 @@ interface Props {
     price: number;
     slug: string;
     main_image?: string;
+    card_image?: string | null;
     description?: string; // For hero card
     id?: number;
     vitebsk_qty?: number;
@@ -56,6 +57,7 @@ const pricingProps = {
 };
 
 const formatPrice = (price: number) => price.toLocaleString();
+const productCardImage = product.card_image || product.main_image;
 
 // --- Logic for Tags & Badges ---
 
@@ -133,7 +135,7 @@ const showAreaBadge = !!product.area;
     <div class="product-item card group">
       <a href={`/product/${product.slug}`} class="p-img-box">
         <img
-          src={resolveImageUrl(product.main_image)}
+          src={resolveImageUrl(productCardImage)}
           alt={product.title}
           width="640"
           height="480"
@@ -199,7 +201,7 @@ const showAreaBadge = !!product.area;
             id={product.slug}
             productId={product.id}
             title={product.title}
-            image={resolveImageUrl(product.main_image)}
+            image={resolveImageUrl(productCardImage)}
             vitebskQty={product.vitebsk_qty}
             minskQty={product.minsk_qty}
             availabilityStatus={product.availability_status}
@@ -216,7 +218,7 @@ const showAreaBadge = !!product.area;
   variant === "hero" && (
     <div class="featured-card">
       <img
-        src={resolveImageUrl(product.main_image)}
+        src={resolveImageUrl(productCardImage)}
         alt={product.title}
         class="featured-img"
         width="960"
@@ -263,7 +265,7 @@ const showAreaBadge = !!product.area;
             id={product.slug}
             productId={product.id}
             title={product.title}
-            image={resolveImageUrl(product.main_image)}
+            image={resolveImageUrl(productCardImage)}
             vitebskQty={product.vitebsk_qty}
             minskQty={product.minsk_qty}
             availabilityStatus={product.availability_status}
@@ -281,7 +283,7 @@ const showAreaBadge = !!product.area;
     <a href={`/product/${product.slug}`} class="minimal-card card">
       <div class="m-img-box">
         <img
-          src={resolveImageUrl(product.main_image)}
+          src={resolveImageUrl(productCardImage)}
           alt={product.title}
           width="128"
           height="128"
@@ -340,6 +342,7 @@ const showAreaBadge = !!product.area;
     max-height: 100%;
     object-fit: contain;
     transition: transform 0.4s;
+    filter: drop-shadow(0 12px 14px rgb(15 23 42 / 0.1));
   }
   .product-item:hover .p-img-box img {
     transform: scale(1.1);
@@ -511,6 +514,7 @@ const showAreaBadge = !!product.area;
     object-fit: contain;
     padding: 2.5rem; /* More generous padding */
     background: var(--bg);
+    filter: drop-shadow(0 14px 18px rgb(15 23 42 / 0.1));
   }
   .featured-info {
     padding: 2rem;

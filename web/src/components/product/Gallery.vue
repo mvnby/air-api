@@ -7,6 +7,7 @@
         alt="Product Image"
         class="main-img"
         @click="zoomImage"
+        @error="handleImageError(activeImage)"
       />
       <div v-else class="image-placeholder">
           <span class="material-icons-round placeholder-icon">image_not_supported</span>
@@ -91,18 +92,18 @@ const zoomImage = () => {
   position: relative;
   width: 100%;
   aspect-ratio: 4/3.5; /* Keeping it slightly rectangular */
-  background: var(--surface, #fff);
+  background: var(--surface);
   border-radius: 2rem;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+  box-shadow: var(--panel-glass-shadow);
   border: 1px solid var(--border);
 }
 
 :global(.dark) .main-image-wrapper {
-    background: rgba(255,255,255,0.02);
+    background: var(--panel-chip-bg);
 }
 
 .main-img {
@@ -112,6 +113,7 @@ const zoomImage = () => {
   transition: transform 0.3s ease;
   cursor: zoom-in;
   padding: 1.5rem;
+  filter: drop-shadow(0 16px 18px rgb(15 23 42 / 0.12));
 }
 
 .main-img:hover {
@@ -151,7 +153,7 @@ const zoomImage = () => {
   overflow: hidden;
   border: 2px solid transparent;
   cursor: pointer;
-  background: var(--surface, white);
+  background: var(--surface);
   transition: all 0.2s ease;
   border: 1px solid var(--border);
   user-select: none;
@@ -165,7 +167,7 @@ const zoomImage = () => {
 }
 
 .thumb-item.active {
-  border-color: #007f80; /* Teal Brand Color */
+  border-color: var(--primary);
   transform: translateY(-2px);
   box-shadow: 0 4px 10px rgba(0, 127, 128, 0.2);
 }

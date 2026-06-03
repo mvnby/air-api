@@ -16,6 +16,8 @@ export type ProductResponse = {
     is_inverter: boolean;
     power_cooling: (number | null);
     main_image: (string | null);
+    card_image?: (string | null);
+    full_image?: (string | null);
     is_published: boolean;
     created_at: string;
     vitebsk_qty?: number;

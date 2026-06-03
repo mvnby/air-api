@@ -108,13 +108,14 @@ const displayFeatureTags = computed(() => {
 
 // Fallback for legacy props if no tags present
 const showAreaBadge = computed(() => Boolean(props.product.area));
+const productCardImage = computed(() => props.product.card_image || props.product.main_image);
 </script>
 
 <template>
   <div v-if="variant === 'default'" class="product-item card group">
     <a :href="`/product/${product.slug}`" class="product-link">
       <div class="p-img-box">
-        <img :src="resolveImageUrl(product.main_image)" :alt="product.title" />
+        <img :src="resolveImageUrl(productCardImage)" :alt="product.title" />
 
         <!-- Top Left: Functionality Badges + Inverter -->
         <div class="p-badge-list">
@@ -157,7 +158,7 @@ const showAreaBadge = computed(() => Boolean(props.product.area));
           :id="product.slug"
           :productId="product.id"
           :title="product.title"
-          :image="resolveImageUrl(product.main_image)"
+          :image="resolveImageUrl(productCardImage)"
           :vitebskQty="product.vitebsk_qty"
           :minskQty="product.minsk_qty"
           :availabilityStatus="product.availability_status"
@@ -201,6 +202,7 @@ const showAreaBadge = computed(() => Boolean(props.product.area));
     max-height: 100%;
     object-fit: contain;
     transition: transform 0.4s;
+    filter: drop-shadow(0 12px 14px rgb(15 23 42 / 0.1));
   }
   .product-item:hover .p-img-box img {
     transform: scale(1.1);

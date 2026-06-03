@@ -48,12 +48,12 @@ const manuals = (product.manuals || [])
     }))
     .filter((item: any) => Boolean(item.url));
 const galleryUrls = product.gallery_images?.length
-    ? product.gallery_images.map((img: any) => img.url)
+    ? product.gallery_images.map((img: any) => img.full_variant_url || img.url)
     : [];
 
 // 3. Собираем всё вместе: Главное фото + Галерея
 // Исключаем legacy product.images так как они низкого качества
-const images = [product.main_image, ...galleryUrls]
+const images = [product.full_image || product.main_image, ...galleryUrls]
     .filter(Boolean) // Убираем null/undefined
     .map(resolveImageUrl); // Превращаем в полные ссылки
 
@@ -875,11 +875,11 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
 
     /* 🌙 ТЕМНАЯ ТЕМА (Dark Mode) - если используешь класс .dark на <html> или <body> */
     .dark {
-        --dim-stroke: rgba(255, 255, 255, 0.65);
-        --dim-stroke-light: rgba(255, 255, 255, 0.35);
-        --dim-fill-body: rgba(255, 255, 255, 0.08);
-        --dim-fill-accent: rgba(255, 255, 255, 0.12);
-        --dim-text: rgba(255, 255, 255, 0.92);
+        --dim-stroke: var(--text-muted);
+        --dim-stroke-light: var(--border);
+        --dim-fill-body: var(--panel-pill-bg);
+        --dim-fill-accent: var(--panel-input-bg);
+        --dim-text: var(--text);
     }
 
     /* ✨ Добавим плавность при переключении темы */
@@ -991,9 +991,9 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
     }
 
     .dark .badge {
-        background: rgba(255, 255, 255, 0.05);
-        color: rgba(255, 255, 255, 0.7);
-        border-color: rgba(255, 255, 255, 0.1);
+        background: var(--panel-pill-bg);
+        color: var(--text-muted);
+        border-color: var(--panel-chip-border);
     }
     .dark .badge.primary {
         background: rgba(45, 212, 191, 0.12);

@@ -11,7 +11,51 @@ from schemas import (
     TagGroupResponse,
     TagResponse,
 )
+from services.product_image_processing_contract import (
+    ProductImageManualQualityStatus,
+    ProductImageProcessingStatus,
+    ProductImageVariantType,
+)
 from services.product_serialization import parse_legacy_images, sanitize_specs
+
+
+def _is_same_image_url(left: Optional[str], right: Optional[str]) -> bool:
+    if not left or not right:
+        return False
+    return left == right or left.strip("/") == right.strip("/")
+
+
+def _approved_ready_variant_url(image: Any, variant_type: ProductImageVariantType) -> Optional[str]:
+    for variant in getattr(image, "variants", None) or []:
+        if (
+            variant.variant_type == variant_type.value
+            and variant.processing_status == ProductImageProcessingStatus.READY.value
+            and variant.manual_quality_status == ProductImageManualQualityStatus.APPROVED.value
+            and variant.url
+        ):
+            return variant.url
+    return None
+
+
+def _main_image_variant_or_fallback(
+    product: Product,
+    variant_type: ProductImageVariantType,
+) -> Optional[str]:
+    if not product.main_image:
+        return None
+
+    source_image = next(
+        (
+            image
+            for image in (product.gallery_images or [])
+            if _is_same_image_url(image.url, product.main_image)
+        ),
+        None,
+    )
+    if not source_image:
+        return product.main_image
+
+    return _approved_ready_variant_url(source_image, variant_type) or product.main_image
 
 
 def map_product_to_response(
@@ -52,6 +96,14 @@ def map_product_to_response(
                     id=img.id,
                     url=img.url,
                     is_installation_photo=img.is_installation_photo,
+                    card_variant_url=_approved_ready_variant_url(
+                        img,
+                        ProductImageVariantType.CARD,
+                    ),
+                    full_variant_url=_approved_ready_variant_url(
+                        img,
+                        ProductImageVariantType.FULL,
+                    ),
                 )
             )
 
@@ -91,6 +143,8 @@ def map_product_to_response(
         is_inverter=product.is_inverter,
         power_cooling=product.power_cooling,
         main_image=product.main_image,
+        card_image=_main_image_variant_or_fallback(product, ProductImageVariantType.CARD),
+        full_image=_main_image_variant_or_fallback(product, ProductImageVariantType.FULL),
         is_published=product.is_published,
         created_at=product.created_at,
         vitebsk_qty=int((supply_metrics or {}).get("vitebsk_qty", 0) or 0),

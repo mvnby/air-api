@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from models import Brand, Product, Tag, TagGroup, ProductTagLink
+from models import Brand, Product, ProductImage, Tag, TagGroup, ProductTagLink
 from models.product_constants import BTU_MAPPING
 from models.supplier import ProductLocalStock, ProductSupplierMapping, SupplierOffer
 
@@ -34,41 +34,67 @@ CATALOG_RANKING_WEIGHTS = {
 
 class ProductDAO:
     @staticmethod
-    async def get_by_id(session: AsyncSession, product_id: int) -> Optional[Product]:
+    def _gallery_images_option(*, load_image_variants: bool = False):
+        option = selectinload(Product.gallery_images)
+        if load_image_variants:
+            return option.selectinload(ProductImage.variants)
+        return option
+
+    @staticmethod
+    async def get_by_id(
+        session: AsyncSession,
+        product_id: int,
+        *,
+        load_image_variants: bool = False,
+    ) -> Optional[Product]:
         stmt = select(Product).where(Product.id == product_id).options(
             selectinload(Product.tags).selectinload(Tag.group),
-            selectinload(Product.gallery_images),
+            ProductDAO._gallery_images_option(load_image_variants=load_image_variants),
             selectinload(Product.attachments),
         )
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_by_slug(session: AsyncSession, slug: str) -> Optional[Product]:
+    async def get_by_slug(
+        session: AsyncSession,
+        slug: str,
+        *,
+        load_image_variants: bool = False,
+    ) -> Optional[Product]:
         stmt = select(Product).where(Product.slug == slug).options(
             selectinload(Product.tags).selectinload(Tag.group),
-            selectinload(Product.gallery_images),
+            ProductDAO._gallery_images_option(load_image_variants=load_image_variants),
             selectinload(Product.attachments),
         )
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_all_published(session: AsyncSession) -> List[Product]:
+    async def get_all_published(
+        session: AsyncSession,
+        *,
+        load_image_variants: bool = False,
+    ) -> List[Product]:
         stmt = select(Product).where(Product.is_published == True).options(
             selectinload(Product.tags).selectinload(Tag.group),
-            selectinload(Product.gallery_images),
+            ProductDAO._gallery_images_option(load_image_variants=load_image_variants),
             selectinload(Product.attachments),
         )
         result = await session.execute(stmt)
         return list(result.scalars().all())
 
     @staticmethod
-    async def get_by_ids(session: AsyncSession, product_ids: List[int]) -> List[Product]:
+    async def get_by_ids(
+        session: AsyncSession,
+        product_ids: List[int],
+        *,
+        load_image_variants: bool = False,
+    ) -> List[Product]:
         if not product_ids:
             return []
         stmt = select(Product).where(Product.id.in_(product_ids)).options(
-            selectinload(Product.gallery_images),
+            ProductDAO._gallery_images_option(load_image_variants=load_image_variants),
             selectinload(Product.attachments),
         )
         result = await session.execute(stmt)
@@ -418,10 +444,11 @@ class ProductDAO:
         limit: int = 20,
         faceted_tag_ids: Optional[dict[int, list[int]]] = None,
         search_query: Optional[str] = None,
+        load_image_variants: bool = False,
     ) -> List[Product]:
         stmt = select(Product).options(
             selectinload(Product.tags).selectinload(Tag.group),
-            selectinload(Product.gallery_images),
+            ProductDAO._gallery_images_option(load_image_variants=load_image_variants),
             selectinload(Product.attachments),
         )
 
@@ -577,7 +604,7 @@ class ProductDAO:
     ) -> tuple[List[Product], int]:
         normalized_category_status = (category_status or "").strip().lower()
         stmt = select(Product).options(
-            selectinload(Product.gallery_images),
+            ProductDAO._gallery_images_option(),
             selectinload(Product.tags).selectinload(Tag.group),
             selectinload(Product.attachments),
         )
