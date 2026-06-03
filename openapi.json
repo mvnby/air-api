@@ -3481,6 +3481,79 @@
         }
       }
     },
+    "/api/manager/gallery/variant-candidates": {
+      "get": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Get Image Variant Candidates",
+        "description": "Dry-run candidate selection for images missing a requested variant.",
+        "operationId": "get_image_variant_candidates",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "variant_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Variant to check: original, processed, card, full",
+              "default": "card",
+              "title": "Variant Type"
+            },
+            "description": "Variant to check: original, processed, card, full"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "include_installation",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Installation"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductImageVariantCandidatesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/gallery/link-search-result": {
       "post": {
         "tags": [
@@ -3836,6 +3909,173 @@
             "OAuth2PasswordBearer": []
           }
         ]
+      }
+    },
+    "/api/manager/gallery/variants/process-missing": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Process Missing Image Variants",
+        "description": "Dry-run or explicitly process a bounded batch of missing image variants.",
+        "operationId": "process_missing_image_variants",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "variant_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Variant to process: processed, card, full",
+              "default": "card",
+              "title": "Variant Type"
+            },
+            "description": "Variant to process: processed, card, full"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "include_installation",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Installation"
+            }
+          },
+          {
+            "name": "dry_run",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Dry Run"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Processing provider: noop, manual, rembg",
+              "default": "noop",
+              "title": "Provider"
+            },
+            "description": "Processing provider: noop, manual, rembg"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductImageVariantBatchProcessResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/gallery/{image_id}/variants/reprocess": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Reprocess Image Variant",
+        "description": "Retry/reprocess a failed or skipped image variant.",
+        "operationId": "reprocess_image_variant",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Image Id"
+            }
+          },
+          {
+            "name": "variant_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Variant to reprocess: processed, card, full",
+              "default": "card",
+              "title": "Variant Type"
+            },
+            "description": "Variant to reprocess: processed, card, full"
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Processing provider: noop, manual, rembg",
+              "default": "noop",
+              "title": "Provider"
+            },
+            "description": "Processing provider: noop, manual, rembg"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductImageVariantResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/manager/cleanup-media": {
@@ -21423,6 +21663,260 @@
           "is_installation_photo"
         ],
         "title": "ProductImageResponse"
+      },
+      "ProductImageVariantBatchProcessResponse": {
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run"
+          },
+          "variant_type": {
+            "type": "string",
+            "title": "Variant Type"
+          },
+          "total_candidates": {
+            "type": "integer",
+            "title": "Total Candidates",
+            "default": 0
+          },
+          "returned": {
+            "type": "integer",
+            "title": "Returned",
+            "default": 0
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ProductImageVariantCandidateResponse"
+            },
+            "type": "array",
+            "title": "Candidates",
+            "default": []
+          },
+          "processed": {
+            "type": "integer",
+            "title": "Processed",
+            "default": 0
+          },
+          "errors": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Errors",
+            "default": []
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/ProductImageVariantResponse"
+            },
+            "type": "array",
+            "title": "Variants",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "dry_run",
+          "variant_type"
+        ],
+        "title": "ProductImageVariantBatchProcessResponse"
+      },
+      "ProductImageVariantCandidateResponse": {
+        "properties": {
+          "product_image_id": {
+            "type": "integer",
+            "title": "Product Image Id"
+          },
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "is_installation_photo": {
+            "type": "boolean",
+            "title": "Is Installation Photo"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_image_id",
+          "product_id",
+          "url",
+          "is_installation_photo",
+          "reason"
+        ],
+        "title": "ProductImageVariantCandidateResponse"
+      },
+      "ProductImageVariantCandidatesResponse": {
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": true
+          },
+          "variant_type": {
+            "type": "string",
+            "title": "Variant Type"
+          },
+          "total_candidates": {
+            "type": "integer",
+            "title": "Total Candidates"
+          },
+          "returned": {
+            "type": "integer",
+            "title": "Returned"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ProductImageVariantCandidateResponse"
+            },
+            "type": "array",
+            "title": "Candidates",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "variant_type",
+          "total_candidates",
+          "returned"
+        ],
+        "title": "ProductImageVariantCandidatesResponse"
+      },
+      "ProductImageVariantResponse": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "product_image_id": {
+            "type": "integer",
+            "title": "Product Image Id"
+          },
+          "variant_type": {
+            "type": "string",
+            "title": "Variant Type"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "storage_provider": {
+            "type": "string",
+            "title": "Storage Provider",
+            "default": "local"
+          },
+          "processing_status": {
+            "type": "string",
+            "title": "Processing Status"
+          },
+          "processing_stage": {
+            "type": "string",
+            "title": "Processing Stage"
+          },
+          "processing_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Provider"
+          },
+          "manual_quality_status": {
+            "type": "string",
+            "title": "Manual Quality Status",
+            "default": "unreviewed"
+          },
+          "content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Hash"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height"
+          },
+          "processing_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Error"
+          },
+          "processed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_image_id",
+          "variant_type",
+          "processing_status",
+          "processing_stage"
+        ],
+        "title": "ProductImageVariantResponse"
       },
       "ProductLocalStockPayload": {
         "properties": {

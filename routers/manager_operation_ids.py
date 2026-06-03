@@ -45,6 +45,9 @@ BULK_ADD_GALLERY_IMAGES = "bulk_add_gallery_images"
 BULK_UPLOAD_LOCAL_IMAGES = "bulk_upload_local_images"
 BULK_DELETE_COMMON_GALLERY_IMAGES = "bulk_delete_common_gallery_images"
 CLEANUP_MEDIA = "cleanup_media"
+GET_IMAGE_VARIANT_CANDIDATES = "get_image_variant_candidates"
+PROCESS_MISSING_IMAGE_VARIANTS = "process_missing_image_variants"
+REPROCESS_IMAGE_VARIANT = "reprocess_image_variant"
 
 GET_MANAGER_LEADS = "get_manager_leads"
 CREATE_MANAGER_LEAD = "create_manager_lead"
@@ -214,6 +217,9 @@ ALL_MANAGER_OPERATION_IDS = (
     BULK_UPLOAD_LOCAL_IMAGES,
     BULK_DELETE_COMMON_GALLERY_IMAGES,
     CLEANUP_MEDIA,
+    GET_IMAGE_VARIANT_CANDIDATES,
+    PROCESS_MISSING_IMAGE_VARIANTS,
+    REPROCESS_IMAGE_VARIANT,
     GET_MANAGER_LEADS,
     CREATE_MANAGER_LEAD,
     PATCH_MANAGER_LEAD,

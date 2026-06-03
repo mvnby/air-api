@@ -5,9 +5,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.security import get_current_username
-from routers.manager_operation_ids import GET_COMMON_GALLERY_IMAGES, REUSE_SEARCH
-from schemas import CommonGalleryImageResponse, ManagerMediaReuseSearchItemResponse
+from routers.manager_operation_ids import (
+    GET_COMMON_GALLERY_IMAGES,
+    GET_IMAGE_VARIANT_CANDIDATES,
+    REUSE_SEARCH,
+)
+from schemas import (
+    CommonGalleryImageResponse,
+    ManagerMediaReuseSearchItemResponse,
+    ProductImageVariantCandidatesResponse,
+)
 from services.manager_media_service import ManagerMediaService
+from services.product_image_variant_service import ProductImageVariantService
 
 
 router = APIRouter(prefix="/api/manager", tags=["manager"])
@@ -50,3 +59,27 @@ async def get_common_gallery_images(
         CommonGalleryImageResponse(url=url, product_count=len(product_ids))
         for url in sorted(common_urls)
     ]
+
+
+@router.get(
+    "/gallery/variant-candidates",
+    response_model=ProductImageVariantCandidatesResponse,
+    operation_id=GET_IMAGE_VARIANT_CANDIDATES,
+)
+async def get_image_variant_candidates(
+    variant_type: str = Query("card", description="Variant to check: original, processed, card, full"),
+    limit: int = Query(100, ge=1, le=100),
+    include_installation: bool = Query(False),
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username),
+):
+    """Dry-run candidate selection for images missing a requested variant."""
+    try:
+        return await ProductImageVariantService.get_missing_variant_candidates(
+            session=session,
+            variant_type=variant_type,
+            limit=limit,
+            include_installation=include_installation,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

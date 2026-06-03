@@ -14,7 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
 from sqlmodel import select, update
 
-from models import Product, ProductImage
+from models import Product, ProductImage, ProductImageVariant
+from services.product_image_variant_service import ProductImageVariantService
 
 
 class ManagerMediaService:
@@ -45,12 +46,24 @@ class ManagerMediaService:
             statement = update(Product).where(Product.id == product.id).values(main_image=None)
             await session.execute(statement)
 
+        variant_rows = (
+            await session.execute(
+                select(ProductImageVariant).where(ProductImageVariant.product_image_id == image.id)
+            )
+        ).scalars().all()
+        variant_urls = [variant.url for variant in variant_rows if variant.url]
+        for variant in variant_rows:
+            await session.delete(variant)
+
         await session.delete(image)
+        await session.flush()
         if product:
             await ManagerMediaService.sync_legacy_images(session, product.id)
 
         await session.commit()
         await ManagerMediaService.remove_file_if_unreferenced(session, image_url)
+        for variant_url in variant_urls:
+            await ManagerMediaService.remove_file_if_unreferenced(session, variant_url)
         return {"message": "Image deleted"}
 
     @staticmethod
@@ -72,6 +85,8 @@ class ManagerMediaService:
         )
         existing = (await session.execute(existing_stmt)).scalar_one_or_none()
         if existing:
+            await ProductImageVariantService.ensure_original_variant(session, existing)
+            await session.commit()
             return {"message": "Image already linked", "id": existing.id}
 
         new_image = ProductImage(
@@ -80,6 +95,8 @@ class ManagerMediaService:
             is_installation_photo=False,
         )
         session.add(new_image)
+        await session.flush()
+        await ProductImageVariantService.ensure_original_variant(session, new_image)
         await ManagerMediaService.sync_legacy_images(session, product_id)
         await session.commit()
         return {"message": "Image linked", "id": new_image.id}
@@ -197,6 +214,8 @@ class ManagerMediaService:
             session.add(new_image)
         else:
             new_image = existing_link
+        await session.flush()
+        await ProductImageVariantService.ensure_original_variant(session, new_image)
 
         if set_main and not is_installation:
             statement = update(Product).where(Product.id == product_id).values(main_image=relative_url)
@@ -231,7 +250,12 @@ class ManagerMediaService:
         main_ref_stmt = select(func.count()).select_from(Product).where(Product.main_image == url)
         main_refs = (await session.execute(main_ref_stmt)).scalar_one()
 
-        if gallery_refs > 0 or main_refs > 0:
+        variant_ref_stmt = select(func.count()).select_from(ProductImageVariant).where(
+            ProductImageVariant.url == url
+        )
+        variant_refs = (await session.execute(variant_ref_stmt)).scalar_one()
+
+        if gallery_refs > 0 or main_refs > 0 or variant_refs > 0:
             return
         if not url.startswith("/media/"):
             return
@@ -306,13 +330,14 @@ class ManagerMediaService:
                     skipped += 1
                     continue
                 if not existing:
-                    session.add(
-                        ProductImage(
-                            product_id=product_id,
-                            url=url,
-                            is_installation_photo=is_installation,
-                        )
+                    image = ProductImage(
+                        product_id=product_id,
+                        url=url,
+                        is_installation_photo=is_installation,
                     )
+                    session.add(image)
+                    await session.flush()
+                    await ProductImageVariantService.ensure_original_variant(session, image)
                     added += 1
                 else:
                     skipped += 1
@@ -448,6 +473,10 @@ class ManagerMediaService:
         stmt_gallery = select(ProductImage.url)
         res_gallery = await session.execute(stmt_gallery)
         known_urls.update(res_gallery.scalars().all())
+
+        stmt_variants = select(ProductImageVariant.url).where(ProductImageVariant.url != None)
+        res_variants = await session.execute(stmt_variants)
+        known_urls.update(res_variants.scalars().all())
 
         base_dir = os.path.join("media", "products")
         deleted_count = 0

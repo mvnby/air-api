@@ -19,6 +19,7 @@ from models import Product, ProductImage, Tag, TagGroup
 from services.fx_rate_service import FxRateService
 from services.import_media_service import ImportMediaService
 from services.product_attachment_service import replace_manuals
+from services.product_image_variant_service import ProductImageVariantService
 from services.spec_normalizer import normalize_specs
 from services.tag_logic import (
     CATEGORY_TAG_TITLES,
@@ -419,6 +420,8 @@ class ImporterService:
                                 is_installation_photo=False,
                             )
                             session.add(pi)
+                            await session.flush()
+                            await ProductImageVariantService.ensure_original_variant(session, pi)
                             existing_gallery_urls.add(local_path)
                     except Exception as exc:
                         logger.warning(
