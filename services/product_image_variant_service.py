@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from PIL import Image
-from sqlalchemy import exists, func
+from sqlalchemy import exists, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -67,35 +67,56 @@ class ProductImageVariantService:
         variant_type: str = ProductImageVariantType.CARD.value,
         limit: int = 100,
         include_installation: bool = False,
+        product_id: int | None = None,
+        only_missing: bool = True,
+        retry_failed: bool = False,
     ) -> dict[str, Any]:
-        """Return dry-run candidates whose requested variant is absent or retryable."""
+        """Return dry-run candidates whose requested variant is absent or failed."""
         normalized_type = normalize_variant_type(variant_type).value
         safe_limit = max(1, min(int(limit), 100))
 
-        retryable_statuses = {
-            ProductImageProcessingStatus.FAILED.value,
-            ProductImageProcessingStatus.SKIPPED.value,
-        }
-        retryable_variant_ids = select(ProductImageVariant.product_image_id).where(
-            ProductImageVariant.variant_type == normalized_type,
-            ProductImageVariant.processing_status.in_(retryable_statuses),
-        )
-        ready_or_inflight_exists = exists(
+        any_variant_exists = exists(
             select(ProductImageVariant.id).where(
                 ProductImageVariant.product_image_id == ProductImage.id,
                 ProductImageVariant.variant_type == normalized_type,
-                ProductImageVariant.processing_status.notin_(retryable_statuses),
+            )
+        )
+        failed_variant_exists = exists(
+            select(ProductImageVariant.id).where(
+                ProductImageVariant.product_image_id == ProductImage.id,
+                ProductImageVariant.variant_type == normalized_type,
+                ProductImageVariant.processing_status == ProductImageProcessingStatus.FAILED.value,
             )
         )
 
-        count_stmt = select(func.count()).select_from(ProductImage).where(~ready_or_inflight_exists)
-        stmt = select(ProductImage).where(~ready_or_inflight_exists)
+        candidate_conditions = []
+        if only_missing or not retry_failed:
+            candidate_conditions.append(~any_variant_exists)
+        if retry_failed:
+            candidate_conditions.append(failed_variant_exists)
+
+        candidate_filter = or_(*candidate_conditions)
+        count_stmt = select(func.count()).select_from(ProductImage).where(candidate_filter)
+        stmt = select(ProductImage).where(candidate_filter)
+
+        if product_id is not None:
+            count_stmt = count_stmt.where(ProductImage.product_id == product_id)
+            stmt = stmt.where(ProductImage.product_id == product_id)
 
         if not include_installation:
             count_stmt = count_stmt.where(ProductImage.is_installation_photo == False)  # noqa: E712
             stmt = stmt.where(ProductImage.is_installation_photo == False)  # noqa: E712
 
-        retryable_ids = set((await session.execute(retryable_variant_ids)).scalars().all())
+        failed_variant_ids_stmt = select(ProductImageVariant.product_image_id).where(
+            ProductImageVariant.variant_type == normalized_type,
+            ProductImageVariant.processing_status == ProductImageProcessingStatus.FAILED.value,
+        )
+        if product_id is not None:
+            failed_variant_ids_stmt = failed_variant_ids_stmt.join(ProductImage).where(
+                ProductImage.product_id == product_id
+            )
+
+        failed_variant_ids = set((await session.execute(failed_variant_ids_stmt)).scalars().all())
         total = int((await session.execute(count_stmt)).scalar_one() or 0)
         rows = (await session.execute(stmt.order_by(ProductImage.id).limit(safe_limit))).scalars().all()
 
@@ -105,7 +126,7 @@ class ProductImageVariantService:
                 "product_id": image.product_id,
                 "url": image.url,
                 "is_installation_photo": image.is_installation_photo,
-                "reason": "retryable_status" if image.id in retryable_ids else "missing_variant",
+                "reason": "failed_variant" if image.id in failed_variant_ids else "missing_variant",
             }
             for image in rows
         ]
@@ -128,18 +149,25 @@ class ProductImageVariantService:
         provider: str = ProductImageProcessingProvider.NOOP.value,
         storage: ProductMediaStorage | None = None,
         processor: ProductImageProcessor | None = None,
+        product_id: int | None = None,
+        only_missing: bool = True,
+        retry_failed: bool = False,
     ) -> dict[str, Any]:
         candidates = await ProductImageVariantService.get_missing_variant_candidates(
             session,
             variant_type=variant_type,
             limit=limit,
             include_installation=include_installation,
+            product_id=product_id,
+            only_missing=only_missing,
+            retry_failed=retry_failed,
         )
         if dry_run:
             return candidates
 
         processed: list[dict[str, Any]] = []
         errors: list[dict[str, Any]] = []
+        variants: list[dict[str, Any]] = []
         for item in candidates["candidates"]:
             image_id = item["product_image_id"]
             try:
@@ -152,7 +180,17 @@ class ProductImageVariantService:
                     processor=processor,
                     commit=False,
                 )
-                processed.append(result)
+                variants.append(result)
+                if result.get("processing_status") == ProductImageProcessingStatus.READY.value:
+                    processed.append(result)
+                elif result.get("processing_status") == ProductImageProcessingStatus.FAILED.value:
+                    errors.append(
+                        {
+                            "product_image_id": image_id,
+                            "status": result.get("processing_status"),
+                            "error": result.get("processing_error"),
+                        }
+                    )
             except Exception as exc:
                 await ProductImageVariantService._record_processing_error(
                     session,
@@ -169,9 +207,12 @@ class ProductImageVariantService:
         return {
             "dry_run": False,
             "variant_type": normalize_variant_type(variant_type).value,
+            "total_candidates": candidates["total_candidates"],
+            "returned": candidates["returned"],
+            "candidates": candidates["candidates"],
             "processed": len(processed),
             "errors": errors,
-            "variants": processed,
+            "variants": variants,
         }
 
     @staticmethod
