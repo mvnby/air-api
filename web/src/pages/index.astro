@@ -4,7 +4,10 @@ import ProductGroup from "../components/ProductGroup.astro";
 import FeaturedArticles from "../components/blog/FeaturedArticles.astro";
 import { getInstallationPricingInfo } from "../utils/api";
 
-const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
+const { minStandardPrice, minBundlePrice, discount } =
+	await getInstallationPricingInfo();
+const hasBundleDiscount =
+	Number.isFinite(discount) && discount > 0 && minBundlePrice < minStandardPrice;
 
 const heroServices = [
 	"Подбор и продажа",
@@ -166,11 +169,19 @@ const installIncluded = [
 						<span class="metric-label">установленных систем за год</span>
 					</div>
 					<div class="metric-card accent">
+						<span class="metric-kicker">при покупке кондиционера</span>
 						<span class="metric-value">
-							{minStandardPrice}
+							от {minBundlePrice}
 							<span class="price-byn"></span>
 						</span>
-						<span class="metric-label">монтаж под ключ от</span>
+						<span class="metric-label">стандартный монтаж у нас</span>
+						{
+							hasBundleDiscount && (
+								<span class="metric-note">
+									скидка {discount} BYN от базовой цены {minStandardPrice} BYN
+								</span>
+							)
+						}
 					</div>
 					<div class="metric-card">
 						<span class="metric-value">Витебск</span>
@@ -272,14 +283,22 @@ const installIncluded = [
 			<div class="offer-main glass">
 				<div class="offer-copy">
 					<p class="section-kicker">Монтаж под ключ</p>
-					<h2>Понятный оффер по монтажу без скрытых сюрпризов</h2>
+					<h2>Стандартный монтаж выгоднее вместе с кондиционером</h2>
 					<p class="offer-text">
-						Если оборудование покупаете у нас, стоимость стандартного
-						монтажа начинается от <strong>{minBundlePrice}</strong>
-						<span class="price-byn"></span>. Базовая цена стандартного
-						монтажа отдельно от покупки начинается от
+						При покупке кондиционера у нас стоимость стандартного монтажа
+						начинается от <strong>{minBundlePrice}</strong>
+						<span class="price-byn"></span>. Если нужен только монтаж без
+						покупки техники, базовая цена начинается от
 						<strong> {minStandardPrice}</strong> <span class="price-byn"></span>.
 					</p>
+					{
+						hasBundleDiscount && (
+							<p class="offer-discount-note">
+								Скидка {discount} BYN от базовой цены {minStandardPrice} BYN
+								уже учтена в цене при покупке кондиционера.
+							</p>
+						)
+					}
 					<ul class="offer-list">
 						{
 							installIncluded.map((item) => (
@@ -601,8 +620,22 @@ const installIncluded = [
 		color: var(--panel-active-text);
 	}
 
+	.metric-card.accent .price-byn {
+		margin-left: 0.14em;
+	}
+
 	.metric-card.accent .metric-label {
-		color: #d7f7ef;
+		color: currentColor;
+		opacity: 0.84;
+	}
+
+	.metric-kicker {
+		font-size: 0.72rem;
+		line-height: 1.35;
+		font-weight: 800;
+		letter-spacing: 0;
+		text-transform: uppercase;
+		opacity: 0.78;
 	}
 
 	.metric-value {
@@ -617,6 +650,13 @@ const installIncluded = [
 		font-size: 0.9rem;
 		line-height: 1.5;
 		color: var(--text-muted);
+	}
+
+	.metric-note {
+		font-size: 0.76rem;
+		line-height: 1.35;
+		opacity: 0.86;
+		overflow-wrap: anywhere;
 	}
 
 	.section-heading {
@@ -820,6 +860,19 @@ const installIncluded = [
 		line-height: 1.7;
 	}
 
+	.offer-discount-note {
+		display: inline-flex;
+		width: fit-content;
+		max-width: 100%;
+		padding: 0.72rem 0.9rem;
+		border-radius: 1rem;
+		background: var(--success-bg);
+		color: var(--success-text);
+		font-weight: 700;
+		line-height: 1.45;
+		overflow-wrap: anywhere;
+	}
+
 	.offer-list {
 		display: grid;
 		gap: 0.8rem;
@@ -1014,6 +1067,11 @@ const installIncluded = [
 
 		.metric-value {
 			font-size: 1.45rem;
+		}
+
+		.metric-kicker,
+		.metric-note {
+			font-size: 0.72rem;
 		}
 
 		.metric-label {
@@ -1265,6 +1323,10 @@ const installIncluded = [
 
 		.metric-label {
 			font-size: 0.85rem;
+		}
+
+		.metric-note {
+			font-size: 0.74rem;
 		}
 	}
 

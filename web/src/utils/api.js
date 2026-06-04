@@ -306,7 +306,8 @@ export async function getInstallationPricingInfo() {
         ? Math.min(...wallRates.map(r => r.base_price))
         : 600; // Fallback
 
-    const discount = parseInt(config.install_discount || "100", 10);
+    const parsedDiscount = parseInt(config.install_discount || "100", 10);
+    const discount = Number.isFinite(parsedDiscount) ? parsedDiscount : 0;
     const minBundlePrice = Math.max(0, minStandardPrice - discount);
 
     return {
