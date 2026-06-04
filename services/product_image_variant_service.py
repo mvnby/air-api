@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import ProductImage, ProductImageVariant
-from services.media_storage_service import LocalProductMediaStorage, ProductMediaStorage
+from services.media_storage_service import ProductMediaStorage, get_product_media_storage
 from services.product_image_processing_contract import (
     CATALOG_VARIANT_TYPES,
     ProductImageManualQualityStatus,
@@ -268,7 +268,7 @@ class ProductImageVariantService:
             return ProductImageVariantService.serialize_variant(variant)
 
         active_processor = processor or get_product_image_processor(normalized_provider)
-        active_storage = storage or LocalProductMediaStorage()
+        active_storage = storage or get_product_media_storage()
         try:
             source_content = source_path.read_bytes()
             processed = await active_processor.process(
