@@ -473,7 +473,11 @@ const submitOrderHandler = async () => {
                     <button type="submit" class="btn btn-primary btn-block big" :disabled="isSubmitting">
                         {{ isSubmitting ? 'Отправка...' : 'Подтвердить заказ' }}
                     </button>
-                    <p class="privacy-note">Нажимая кнопку, вы соглашаетесь с условиями обработки персональных данных</p>
+                    <p class="privacy-note">
+                        Нажимая кнопку, вы соглашаетесь с
+                        <a href="/offer">публичной офертой</a> и
+                        <a href="/privacy">политикой обработки персональных данных</a>.
+                    </p>
                 </div>
             </form>
         </div>
@@ -498,7 +502,11 @@ const submitOrderHandler = async () => {
                     <button @click="submitOrderHandler" class="btn btn-primary btn-block big" :disabled="isSubmitting">
                          {{ isSubmitting ? 'Отправка...' : 'Подтвердить заказ' }}
                     </button>
-                     <p class="privacy-note">Нажимая кнопку, вы соглашаетесь с условиями обработки персональных данных</p>
+                     <p class="privacy-note">
+                        Нажимая кнопку, вы соглашаетесь с
+                        <a href="/offer">публичной офертой</a> и
+                        <a href="/privacy">политикой обработки персональных данных</a>.
+                     </p>
                 </div>
             </div>
             
@@ -619,6 +627,13 @@ input.invalid {
     margin-top: 1rem;
     text-align: center;
     line-height: 1.4;
+}
+.privacy-note a {
+    color: var(--primary);
+    font-weight: 600;
+}
+.privacy-note a:hover {
+    color: var(--primary-dark);
 }
 
 .back-link {
