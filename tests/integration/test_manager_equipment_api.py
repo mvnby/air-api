@@ -3,7 +3,15 @@ from datetime import datetime
 from sqlmodel import select
 
 from core.config import settings
-from models import Customer, CustomerBranch, CustomerType, EquipmentServiceHistory, Order, OrderStatus
+from models import (
+    Customer,
+    CustomerBranch,
+    CustomerType,
+    EquipmentServiceEventType,
+    EquipmentServiceHistory,
+    Order,
+    OrderStatus,
+)
 
 
 async def _auth_headers(async_client):
@@ -180,6 +188,187 @@ async def test_manager_equipment_history_from_repair_order_maps_meta_and_allows_
     assert history["refrigerant_type"] == "R32"
     assert history["refrigerant_amount"] == "0,35 кг"
     assert history["notes"] == "Ремонт завершен."
+
+    repeat_resp = await async_client.post(
+        f"/api/manager/equipment/{equipment_id}/history/from-repair-order",
+        headers=headers,
+        json={"order_id": order.id},
+    )
+    assert repeat_resp.status_code == 201, repeat_resp.text
+    repeat_history = repeat_resp.json()
+    assert repeat_history["id"] == history["id"]
+    assert repeat_history["order_id"] == order.id
+
+    history_result = await db.execute(
+        select(EquipmentServiceHistory).where(EquipmentServiceHistory.order_id == order.id)
+    )
+    history_rows = history_result.scalars().all()
+    assert len(history_rows) == 1
+    assert history_rows[0].id == history["id"]
+
+
+@pytest.mark.asyncio
+async def test_manager_equipment_history_from_repair_order_preserves_omitted_overrides_on_repeat(async_client, db):
+    headers = await _auth_headers(async_client)
+    customer = Customer(name="Repair Sync Owner", phone="+375291110112", type=CustomerType.company)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    equipment_resp = await async_client.post(
+        "/api/manager/equipment",
+        headers=headers,
+        json={
+            "customer_id": customer.id,
+            "equipment_type": "split",
+            "brand": "Gree",
+            "model": "Bora",
+            "serial": "SN-SYNC-1",
+        },
+    )
+    assert equipment_resp.status_code == 201, equipment_resp.text
+    equipment_id = equipment_resp.json()["id"]
+
+    order = Order(
+        customer_id=customer.id,
+        customer_branch_id=None,
+        status=OrderStatus.NEGOTIATION,
+        workflow_type="repair",
+        updated_at=datetime(2026, 3, 5, 10, 0, 0),
+        technical_meta={
+            "repair": {
+                "repair_status": "completed",
+                "customer_complaint": "Шумит наружный блок",
+                "diagnostic_result": "Ослаблено крепление вентилятора.",
+                "repair_completion_note": "Крепление подтянуто.",
+            }
+        },
+    )
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    first_resp = await async_client.post(
+        f"/api/manager/equipment/{equipment_id}/history/from-repair-order",
+        headers=headers,
+        json={
+            "order_id": order.id,
+            "event_type": "recommendation",
+            "event_date": "2026-03-05T08:00:00",
+            "notes": "Ручная заметка менеджера.",
+        },
+    )
+    assert first_resp.status_code == 201, first_resp.text
+    first_history = first_resp.json()
+    assert first_history["event_type"] == "recommendation"
+    assert first_history["event_date"] == "2026-03-05T08:00:00"
+    assert first_history["notes"] == "Ручная заметка менеджера."
+
+    order.technical_meta = {
+        "repair": {
+            "repair_status": "completed",
+            "customer_complaint": "Шумит наружный блок",
+            "diagnostic_result": "Вентилятор закреплен, вибрация устранена.",
+            "repair_completion_note": "Повторная проверка без замечаний.",
+        }
+    }
+    order.updated_at = datetime(2026, 3, 6, 11, 0, 0)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    sync_resp = await async_client.post(
+        f"/api/manager/equipment/{equipment_id}/history/from-repair-order",
+        headers=headers,
+        json={"order_id": order.id},
+    )
+    assert sync_resp.status_code == 201, sync_resp.text
+    synced_history = sync_resp.json()
+    assert synced_history["id"] == first_history["id"]
+    assert synced_history["event_type"] == "recommendation"
+    assert synced_history["event_date"] == "2026-03-05T08:00:00"
+    assert synced_history["diagnostic_result"] == "Вентилятор закреплен, вибрация устранена."
+    assert synced_history["notes"] == "Ручная заметка менеджера."
+
+    history_result = await db.execute(
+        select(EquipmentServiceHistory).where(EquipmentServiceHistory.order_id == order.id)
+    )
+    assert len(history_result.scalars().all()) == 1
+
+
+@pytest.mark.asyncio
+async def test_manager_equipment_history_from_repair_order_rejects_existing_history_on_other_equipment(
+    async_client,
+    db,
+):
+    headers = await _auth_headers(async_client)
+    customer = Customer(name="Repair Conflict Owner", phone="+375291110113", type=CustomerType.company)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    first_equipment_resp = await async_client.post(
+        "/api/manager/equipment",
+        headers=headers,
+        json={
+            "customer_id": customer.id,
+            "equipment_type": "split",
+            "brand": "Daikin",
+            "serial": "SN-CONFLICT-1",
+        },
+    )
+    assert first_equipment_resp.status_code == 201, first_equipment_resp.text
+    first_equipment_id = first_equipment_resp.json()["id"]
+
+    second_equipment_resp = await async_client.post(
+        "/api/manager/equipment",
+        headers=headers,
+        json={
+            "customer_id": customer.id,
+            "equipment_type": "split",
+            "brand": "Daikin",
+            "serial": "SN-CONFLICT-2",
+        },
+    )
+    assert second_equipment_resp.status_code == 201, second_equipment_resp.text
+    second_equipment_id = second_equipment_resp.json()["id"]
+
+    order = Order(
+        customer_id=customer.id,
+        customer_branch_id=None,
+        status=OrderStatus.NEGOTIATION,
+        workflow_type="repair",
+        technical_meta={"repair": {"repair_status": "completed", "customer_complaint": "Не охлаждает"}},
+    )
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    existing_history = EquipmentServiceHistory(
+        equipment_id=first_equipment_id,
+        order_id=order.id,
+        event_type=EquipmentServiceEventType.REPAIR,
+        event_date=datetime(2026, 3, 7, 9, 0, 0),
+        notes="Already synced to first equipment.",
+    )
+    db.add(existing_history)
+    await db.commit()
+    await db.refresh(existing_history)
+
+    conflict_resp = await async_client.post(
+        f"/api/manager/equipment/{second_equipment_id}/history/from-repair-order",
+        headers=headers,
+        json={"order_id": order.id},
+    )
+    assert conflict_resp.status_code == 400
+    assert f"already belongs to equipment #{first_equipment_id}" in conflict_resp.text
+
+    history_result = await db.execute(
+        select(EquipmentServiceHistory).where(EquipmentServiceHistory.order_id == order.id)
+    )
+    history_rows = history_result.scalars().all()
+    assert len(history_rows) == 1
+    assert history_rows[0].equipment_id == first_equipment_id
 
 
 @pytest.mark.asyncio

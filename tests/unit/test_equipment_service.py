@@ -2,7 +2,7 @@ from datetime import datetime
 
 import pytest
 
-from models import EquipmentServiceEventType, Order, OrderStatus
+from models import EquipmentServiceEventType, EquipmentServiceHistory, Order, OrderStatus
 from services.equipment_service import EquipmentService
 
 
@@ -69,3 +69,56 @@ def test_build_history_payload_from_repair_order_rejects_non_repair_order():
 
     with pytest.raises(ValueError, match="Only repair orders"):
         EquipmentService.build_history_payload_from_repair_order(order)
+
+
+@pytest.mark.parametrize(
+    ("repair_status", "expected"),
+    [
+        ("completed", True),
+        ("not_repairable", True),
+        ("cancelled", False),
+        ("diagnostic_in_progress", False),
+        ("awaiting_customer_approval", False),
+    ],
+)
+def test_repair_order_history_sync_eligibility_policy_is_terminal_only(repair_status, expected):
+    order = Order(
+        status=OrderStatus.NEGOTIATION,
+        workflow_type="repair",
+        technical_meta={"repair": {"repair_status": repair_status}},
+    )
+
+    assert EquipmentService.is_repair_order_history_sync_eligible(order) is expected
+
+
+def test_repair_order_history_sync_eligibility_rejects_non_repair_order():
+    order = Order(
+        status=OrderStatus.NEW_LEAD,
+        workflow_type="sales_installation",
+        technical_meta={"repair": {"repair_status": "completed"}},
+    )
+
+    assert EquipmentService.is_repair_order_history_sync_eligible(order) is False
+
+
+def test_resolve_repair_order_history_sync_target_returns_same_equipment_history():
+    history = EquipmentServiceHistory(id=7, equipment_id=3, order_id=42)
+
+    result = EquipmentService.resolve_repair_order_history_sync_target(
+        [history],
+        equipment_id=3,
+        order_id=42,
+    )
+
+    assert result is history
+
+
+def test_resolve_repair_order_history_sync_target_rejects_other_equipment_history():
+    history = EquipmentServiceHistory(id=8, equipment_id=4, order_id=42)
+
+    with pytest.raises(ValueError, match="already belongs to equipment #4"):
+        EquipmentService.resolve_repair_order_history_sync_target(
+            [history],
+            equipment_id=3,
+            order_id=42,
+        )

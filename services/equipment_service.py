@@ -19,6 +19,7 @@ from models import (
 class EquipmentService:
     TRUE_VALUES = {"1", "true", "yes", "y", "да", "д", "истина"}
     FALSE_VALUES = {"0", "false", "no", "n", "нет", "н", "ложь"}
+    REPAIR_HISTORY_AUTO_SYNC_STATUSES = frozenset({"completed", "not_repairable"})
 
     @staticmethod
     def _clean_optional_text(value: Any) -> Optional[str]:
@@ -70,6 +71,25 @@ class EquipmentService:
             if cleaned:
                 return cleaned
         return None
+
+    @staticmethod
+    def is_repair_order_history_sync_eligible(order: Order) -> bool:
+        """Policy for future automation: only terminal repair milestones may sync automatically."""
+        from services.order_service import OrderService
+
+        workflow_type = OrderService._normalize_workflow_type(getattr(order, "workflow_type", None))
+        if workflow_type != "repair":
+            return False
+
+        repair_meta = OrderService._get_repair_meta(order)
+        try:
+            status = OrderService.normalize_repair_status(
+                repair_meta.get(OrderService.REPAIR_STATUS_KEY),
+                fallback=OrderService.REPAIR_DEFAULT_STATUS,
+            )
+        except ValueError:
+            return False
+        return status in EquipmentService.REPAIR_HISTORY_AUTO_SYNC_STATUSES
 
     @staticmethod
     def _default_display_name(data: Dict[str, Any]) -> Optional[str]:
@@ -126,6 +146,91 @@ class EquipmentService:
             "created_at": entry.created_at,
             "updated_at": entry.updated_at,
         }
+
+    @staticmethod
+    def _history_values_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+        order_id = payload.get("order_id")
+        return {
+            "order_id": int(order_id) if order_id is not None else None,
+            "event_type": EquipmentService._normalize_event_type(payload.get("event_type")),
+            "event_date": EquipmentService._normalize_naive_datetime(payload.get("event_date")) or datetime.now(),
+            "complaint_snapshot": EquipmentService._clean_optional_text(payload.get("complaint_snapshot")),
+            "diagnostic_result": EquipmentService._clean_optional_text(payload.get("diagnostic_result")),
+            "repair_recommendation": EquipmentService._clean_optional_text(payload.get("repair_recommendation")),
+            "refrigerant_type": EquipmentService._clean_optional_text(payload.get("refrigerant_type")),
+            "refrigerant_amount": EquipmentService._clean_optional_text(payload.get("refrigerant_amount")),
+            "not_repairable": bool(payload.get("not_repairable", False)),
+            "not_repairable_reason": EquipmentService._clean_optional_text(payload.get("not_repairable_reason")),
+            "notes": EquipmentService._clean_optional_text(payload.get("notes")),
+        }
+
+    @staticmethod
+    def _build_history_entry(*, equipment_id: int, payload: Dict[str, Any]) -> EquipmentServiceHistory:
+        return EquipmentServiceHistory(
+            equipment_id=equipment_id,
+            **EquipmentService._history_values_from_payload(payload),
+        )
+
+    @staticmethod
+    def _history_value_matches(entry: EquipmentServiceHistory, field: str, value: Any) -> bool:
+        current = getattr(entry, field)
+        if field == "event_type":
+            return EquipmentService._enum_value(current) == EquipmentService._enum_value(value)
+        return current == value
+
+    @staticmethod
+    def _apply_history_payload(entry: EquipmentServiceHistory, payload: Dict[str, Any]) -> bool:
+        changed = False
+        for field, value in EquipmentService._history_values_from_payload(payload).items():
+            if EquipmentService._history_value_matches(entry, field, value):
+                continue
+            setattr(entry, field, value)
+            changed = True
+        if changed:
+            entry.updated_at = datetime.now()
+        return changed
+
+    @staticmethod
+    def resolve_repair_order_history_sync_target(
+        existing_histories: list[EquipmentServiceHistory],
+        *,
+        equipment_id: int,
+        order_id: int,
+    ) -> Optional[EquipmentServiceHistory]:
+        """Idempotency policy for explicit repair-order -> equipment-history sync."""
+        histories = [
+            item
+            for item in existing_histories
+            if item.order_id is not None and int(item.order_id) == int(order_id)
+        ]
+        if not histories:
+            return None
+
+        if len(histories) > 1:
+            raise ValueError(f"Multiple equipment service history rows already exist for order #{order_id}")
+
+        existing = histories[0]
+        if int(existing.equipment_id) != int(equipment_id):
+            raise ValueError(
+                f"Equipment service history for order #{order_id} already belongs to "
+                f"equipment #{existing.equipment_id}"
+            )
+        return existing
+
+    @staticmethod
+    def _preserve_omitted_repair_history_overrides(
+        entry: EquipmentServiceHistory,
+        history_payload: Dict[str, Any],
+        request_payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        preserved_payload = dict(history_payload)
+        if "event_type" not in request_payload:
+            preserved_payload["event_type"] = entry.event_type
+        if "event_date" not in request_payload:
+            preserved_payload["event_date"] = entry.event_date
+        if "notes" not in request_payload:
+            preserved_payload["notes"] = entry.notes
+        return preserved_payload
 
     @staticmethod
     async def _ensure_customer_exists(session: AsyncSession, customer_id: int) -> Optional[Customer]:
@@ -365,6 +470,20 @@ class EquipmentService:
         }
 
     @staticmethod
+    async def _lock_order_for_history_sync(session: AsyncSession, *, order_id: int) -> None:
+        await session.execute(select(Order.id).where(Order.id == order_id).with_for_update())
+
+    @staticmethod
+    async def _list_history_for_order(session: AsyncSession, *, order_id: int) -> list[EquipmentServiceHistory]:
+        result = await session.execute(
+            select(EquipmentServiceHistory)
+            .where(EquipmentServiceHistory.order_id == order_id)
+            .order_by(EquipmentServiceHistory.id.asc())
+            .with_for_update()
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
     async def add_history(
         session: AsyncSession,
         *,
@@ -384,19 +503,9 @@ class EquipmentService:
             )
 
         event_type = EquipmentService._normalize_event_type(payload.get("event_type"))
-        entry = EquipmentServiceHistory(
+        entry = EquipmentService._build_history_entry(
             equipment_id=equipment_id,
-            order_id=int(order_id) if order_id is not None else None,
-            event_type=event_type,
-            event_date=EquipmentService._normalize_naive_datetime(payload.get("event_date")) or datetime.now(),
-            complaint_snapshot=EquipmentService._clean_optional_text(payload.get("complaint_snapshot")),
-            diagnostic_result=EquipmentService._clean_optional_text(payload.get("diagnostic_result")),
-            repair_recommendation=EquipmentService._clean_optional_text(payload.get("repair_recommendation")),
-            refrigerant_type=EquipmentService._clean_optional_text(payload.get("refrigerant_type")),
-            refrigerant_amount=EquipmentService._clean_optional_text(payload.get("refrigerant_amount")),
-            not_repairable=bool(payload.get("not_repairable", False)),
-            not_repairable_reason=EquipmentService._clean_optional_text(payload.get("not_repairable_reason")),
-            notes=EquipmentService._clean_optional_text(payload.get("notes")),
+            payload={**payload, "event_type": event_type},
         )
         session.add(entry)
         await session.commit()
@@ -501,14 +610,34 @@ class EquipmentService:
             equipment=equipment,
             order_id=int(payload["order_id"]),
         )
+        order_id = int(order.id)
+        await EquipmentService._lock_order_for_history_sync(session, order_id=order_id)
+        existing_histories = await EquipmentService._list_history_for_order(session, order_id=order_id)
+        existing_history = EquipmentService.resolve_repair_order_history_sync_target(
+            existing_histories,
+            equipment_id=equipment_id,
+            order_id=order_id,
+        )
         history_payload = EquipmentService.build_history_payload_from_repair_order(
             order,
             event_type=payload.get("event_type"),
             event_date=payload.get("event_date"),
             notes=payload.get("notes"),
         )
-        return await EquipmentService.add_history(
-            session,
-            equipment_id=equipment_id,
-            payload=history_payload,
-        )
+        if existing_history is not None:
+            history_payload = EquipmentService._preserve_omitted_repair_history_overrides(
+                existing_history,
+                history_payload,
+                payload,
+            )
+            if EquipmentService._apply_history_payload(existing_history, history_payload):
+                session.add(existing_history)
+                await session.commit()
+                await session.refresh(existing_history)
+            return EquipmentService._to_history_item(existing_history)
+
+        entry = EquipmentService._build_history_entry(equipment_id=equipment_id, payload=history_payload)
+        session.add(entry)
+        await session.commit()
+        await session.refresh(entry)
+        return EquipmentService._to_history_item(entry)
