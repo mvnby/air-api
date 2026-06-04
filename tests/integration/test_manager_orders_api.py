@@ -1,5 +1,6 @@
 import json
 import pytest
+from io import BytesIO
 from datetime import datetime, timedelta
 from sqlmodel import select
 
@@ -1261,6 +1262,51 @@ async def test_manager_order_generate_document(async_client, db, monkeypatch):
     assert data["doc_type"] == "contract"
     assert data["edit_url"].startswith("https://docs.google.com")
     assert captured["contract_date"] == datetime(2026, 4, 20)
+
+
+@pytest.mark.asyncio
+async def test_manager_doc_download_returns_pdf_bytes(async_client, db, monkeypatch):
+    customer = Customer(name="Download", phone="+375297777777", type=CustomerType.individual)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    document = OrderDocument(
+        order_id=order.id,
+        doc_type="contract",
+        number="Д-2026-001",
+        date=datetime(2026, 6, 4),
+        google_file_id="google-doc-id",
+        google_edit_url="https://docs.google.com/document/d/google-doc-id/edit",
+    )
+    db.add(document)
+    await db.commit()
+    await db.refresh(document)
+
+    pdf_bytes = b"%PDF-1.4\n%real pdf bytes\n%%EOF"
+
+    class _FakeGoogleService:
+        def export_file(self, file_id: str, mime_type: str = "application/pdf"):
+            assert file_id == "google-doc-id"
+            assert mime_type == "application/pdf"
+            return BytesIO(pdf_bytes)
+
+    from services import document_service
+
+    monkeypatch.setattr(document_service, "get_google_service", lambda: _FakeGoogleService())
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.get(f"/api/manager/docs/{document.id}/download", headers=headers)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/pdf")
+    assert response.content == pdf_bytes
+    assert "filename*=UTF-8''" in response.headers["content-disposition"]
 
 
 @pytest.mark.asyncio

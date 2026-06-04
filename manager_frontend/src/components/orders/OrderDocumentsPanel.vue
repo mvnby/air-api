@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { ManagerContractsService, ManagerDocsService, ManagerOrdersService } from '../../client';
+import { downloadManagerDocBlob } from '../../api';
 import type {
   DocumentTemplateItem,
   ManagerCustomerContractItemResponse,
@@ -788,17 +789,17 @@ const handleAttachDocumentFile = async (doc: ManagerOrderDocumentItem, event: Ev
 const downloadDocument = async (doc: ManagerOrderDocumentItem) => {
   processingDocId.value = doc.id;
   try {
-    const response = await ManagerDocsService.getManagerDocDownload(doc.id);
-    const url = window.URL.createObjectURL(new Blob([response]));
+    const { blob, filename } = await downloadManagerDocBlob(doc.id);
+    const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `${doc.number || doc.doc_type}.pdf`);
+    link.setAttribute('download', filename || `${doc.number || doc.doc_type}.pdf`);
     document.body.appendChild(link);
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
   } catch (error) {
-    notify('Ошибка скачивания', 'error');
+    notify(`Ошибка скачивания: ${getApiErrorMessage(error)}`, 'error');
   } finally {
     processingDocId.value = null;
   }
