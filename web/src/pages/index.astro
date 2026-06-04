@@ -4,7 +4,10 @@ import ProductGroup from "../components/ProductGroup.astro";
 import FeaturedArticles from "../components/blog/FeaturedArticles.astro";
 import { getInstallationPricingInfo } from "../utils/api";
 
-const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
+const { minStandardPrice, minBundlePrice, discount } =
+	await getInstallationPricingInfo();
+const hasBundleDiscount =
+	Number.isFinite(discount) && discount > 0 && minBundlePrice < minStandardPrice;
 
 const heroServices = [
 	"Подбор и продажа",
@@ -14,10 +17,16 @@ const heroServices = [
 ];
 
 const proofItems = [
-	"Работаем в Витебске",
+	"Витебск + область",
 	"Бесплатный замер",
 	"Гарантия на монтаж",
 	"Обслуживание после установки",
+];
+
+const localPills = [
+	"Витебск",
+	"Витебская область",
+	"Местная команда",
 ];
 
 const serviceCards = [
@@ -83,16 +92,29 @@ const installIncluded = [
 
 		<div class="container hero-shell">
 			<div class="hero-copy">
-				<div class="badge hero-badge">Климатические решения в Витебске</div>
+				<div class="badge hero-badge">Витебск и Витебская область</div>
 				<h1>
-					Продажа, монтаж и сервис кондиционеров
-					<span class="gradient-text">для дома и офиса</span>
+					Кондиционеры в Витебске:
+					<span class="gradient-text">продажа, монтаж и сервис</span>
 				</h1>
 				<p class="hero-lead">
-					Подбираем сплит-системы под вашу задачу, привозим, устанавливаем
-					и остаемся на сервисе после монтажа. На сайте можно быстро понять,
-					что мы делаем и какое решение подойдет именно вам.
+					Мы местная команда: подбираем сплит-системы под квартиры, дома и
+					офисы в Витебске, аккуратно выезжаем по городу и берем понятные
+					объекты по области. После установки остаемся рядом на сервисе.
 				</p>
+
+				<div class="locality-strip" aria-label="География работы">
+					{
+						localPills.map((item) => (
+							<span class="locality-pill">
+								<span class="material-icons-round" aria-hidden="true">
+									location_on
+								</span>
+								<span>{item}</span>
+							</span>
+						))
+					}
+				</div>
 
 				<div class="hero-service-strip" aria-label="Основные направления">
 					{
@@ -150,14 +172,63 @@ const installIncluded = [
 							<li>Монтируем и берем на дальнейший сервис</li>
 						</ul>
 					</div>
-					<img
-						src="/img/services/installation.png"
-						alt="Монтаж кондиционера"
-						class="hero-image"
-						width="960"
-						height="960"
-						fetchpriority="high"
-					/>
+					<div class="local-visual-stack">
+						<div class="local-map-card" aria-label="Схема работы по Витебску и области">
+							<div class="map-copy">
+								<span class="map-kicker">Локально</span>
+								<strong>Витебск и область</strong>
+								<span>выезд, подбор и монтаж без минского ожидания</span>
+							</div>
+							<svg
+								class="region-map"
+								viewBox="0 0 260 220"
+								role="img"
+								aria-label="Схематичная карта Витебской области с точкой Витебск"
+							>
+								<path
+									class="region-shape"
+									d="M89 20 145 29 185 50 218 91 211 133 188 167 142 196 96 187 58 159 35 119 49 65Z"
+								/>
+								<path
+									class="route route-main"
+									d="M126 104 C93 87 72 72 55 48"
+								/>
+								<path
+									class="route"
+									d="M128 105 C162 92 186 75 211 54"
+								/>
+								<path
+									class="route"
+									d="M126 106 C118 137 104 163 84 188"
+								/>
+								<path
+									class="route"
+									d="M129 107 C154 134 178 153 207 171"
+								/>
+								<g class="map-point vitebsk-point">
+									<circle cx="128" cy="106" r="12" />
+									<circle cx="128" cy="106" r="4" />
+								</g>
+								<g class="map-point">
+									<circle cx="55" cy="48" r="5" />
+									<circle cx="211" cy="54" r="5" />
+									<circle cx="84" cy="188" r="5" />
+									<circle cx="207" cy="171" r="5" />
+								</g>
+								<text x="138" y="101">Витебск</text>
+								<text x="33" y="39">север</text>
+								<text x="190" y="45">область</text>
+							</svg>
+						</div>
+						<img
+							src="/img/services/installation.png"
+							alt="Монтаж кондиционера"
+							class="hero-image"
+							width="960"
+							height="960"
+							fetchpriority="high"
+						/>
+					</div>
 				</div>
 
 				<div class="hero-metrics" aria-label="Ключевые показатели">
@@ -166,11 +237,19 @@ const installIncluded = [
 						<span class="metric-label">установленных систем за год</span>
 					</div>
 					<div class="metric-card accent">
+						<span class="metric-kicker">при покупке кондиционера</span>
 						<span class="metric-value">
-							{minStandardPrice}
+							от {minBundlePrice}
 							<span class="price-byn"></span>
 						</span>
-						<span class="metric-label">монтаж под ключ от</span>
+						<span class="metric-label">стандартный монтаж у нас</span>
+						{
+							hasBundleDiscount && (
+								<span class="metric-note">
+									скидка {discount} BYN от базовой цены {minStandardPrice} BYN
+								</span>
+							)
+						}
 					</div>
 					<div class="metric-card">
 						<span class="metric-value">Витебск</span>
@@ -272,14 +351,22 @@ const installIncluded = [
 			<div class="offer-main glass">
 				<div class="offer-copy">
 					<p class="section-kicker">Монтаж под ключ</p>
-					<h2>Понятный оффер по монтажу без скрытых сюрпризов</h2>
+					<h2>Стандартный монтаж выгоднее вместе с кондиционером</h2>
 					<p class="offer-text">
-						Если оборудование покупаете у нас, стоимость стандартного
-						монтажа начинается от <strong>{minBundlePrice}</strong>
-						<span class="price-byn"></span>. Базовая цена стандартного
-						монтажа отдельно от покупки начинается от
+						При покупке кондиционера у нас стоимость стандартного монтажа
+						начинается от <strong>{minBundlePrice}</strong>
+						<span class="price-byn"></span>. Если нужен только монтаж без
+						покупки техники, базовая цена начинается от
 						<strong> {minStandardPrice}</strong> <span class="price-byn"></span>.
 					</p>
+					{
+						hasBundleDiscount && (
+							<p class="offer-discount-note">
+								Скидка {discount} BYN от базовой цены {minStandardPrice} BYN
+								уже учтена в цене при покупке кондиционера.
+							</p>
+						)
+					}
 					<ul class="offer-list">
 						{
 							installIncluded.map((item) => (
@@ -442,7 +529,34 @@ const installIncluded = [
 		line-height: 1.7;
 		max-width: 58ch;
 		color: var(--text-muted);
+		margin-bottom: 1.25rem;
+	}
+
+	.locality-strip {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.65rem;
 		margin-bottom: 1.75rem;
+	}
+
+	.locality-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		padding: 0.54rem 0.78rem;
+		border-radius: 999px;
+		background: var(--panel-pill-bg);
+		border: 1px solid var(--panel-chip-border);
+		box-shadow: var(--panel-glass-shadow);
+		color: var(--primary);
+		font-size: 0.9rem;
+		font-weight: 800;
+		line-height: 1.2;
+	}
+
+	.locality-pill .material-icons-round {
+		font-size: 1rem;
+		flex-shrink: 0;
 	}
 
 	.hero-service-strip {
@@ -528,6 +642,108 @@ const installIncluded = [
 		gap: 1rem;
 	}
 
+	.local-visual-stack {
+		position: relative;
+		display: grid;
+		place-items: center;
+		min-width: 0;
+		padding-top: 0.35rem;
+	}
+
+	.local-map-card {
+		position: relative;
+		width: min(100%, 17rem);
+		padding: 0.9rem;
+		border-radius: 1.35rem;
+		background:
+			radial-gradient(circle at 70% 30%, rgba(45, 212, 191, 0.16), transparent 44%),
+			rgba(var(--surface-rgb), 0.62);
+		border: 1px solid var(--panel-glass-border);
+		box-shadow: var(--panel-glass-shadow);
+		color: var(--primary);
+		overflow: hidden;
+	}
+
+	.map-copy {
+		position: relative;
+		z-index: 1;
+		display: grid;
+		gap: 0.18rem;
+		max-width: 10rem;
+		color: var(--text);
+		font-size: 0.76rem;
+		line-height: 1.35;
+	}
+
+	.map-copy strong {
+		font-family: "Space Grotesk", sans-serif;
+		font-size: 1rem;
+		line-height: 1.15;
+	}
+
+	.map-copy span:last-child {
+		color: var(--text-muted);
+	}
+
+	.map-kicker {
+		font-size: 0.64rem;
+		font-weight: 800;
+		letter-spacing: 0.13em;
+		text-transform: uppercase;
+		color: var(--primary);
+	}
+
+	.region-map {
+		display: block;
+		width: 100%;
+		height: auto;
+		margin-top: -1.5rem;
+		color: var(--primary);
+	}
+
+	.region-shape {
+		fill: currentColor;
+		opacity: 0.12;
+		stroke: currentColor;
+		stroke-width: 2.5;
+	}
+
+	.route {
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 2.5;
+		stroke-linecap: round;
+		stroke-dasharray: 5 7;
+		opacity: 0.58;
+	}
+
+	.route-main {
+		stroke-width: 3.5;
+		opacity: 0.8;
+	}
+
+	.map-point circle:first-child {
+		fill: rgba(var(--surface-rgb), 0.92);
+		stroke: currentColor;
+		stroke-width: 2;
+	}
+
+	.map-point circle:last-child {
+		fill: currentColor;
+	}
+
+	.vitebsk-point circle:first-child {
+		fill: var(--success-bg);
+	}
+
+	.region-map text {
+		fill: currentColor;
+		font-family: "Inter", sans-serif;
+		font-size: 0.72rem;
+		font-weight: 800;
+		letter-spacing: 0;
+	}
+
 	.hero-visual-copy {
 		display: grid;
 		gap: 1rem;
@@ -575,8 +791,9 @@ const installIncluded = [
 	.hero-image {
 		width: 100%;
 		height: auto;
-		max-height: 320px;
+		max-height: 220px;
 		object-fit: contain;
+		margin-top: -1rem;
 		filter: drop-shadow(0 18px 40px rgba(15, 23, 42, 0.22));
 	}
 
@@ -601,8 +818,22 @@ const installIncluded = [
 		color: var(--panel-active-text);
 	}
 
+	.metric-card.accent .price-byn {
+		margin-left: 0.14em;
+	}
+
 	.metric-card.accent .metric-label {
-		color: #d7f7ef;
+		color: currentColor;
+		opacity: 0.84;
+	}
+
+	.metric-kicker {
+		font-size: 0.72rem;
+		line-height: 1.35;
+		font-weight: 800;
+		letter-spacing: 0;
+		text-transform: uppercase;
+		opacity: 0.78;
 	}
 
 	.metric-value {
@@ -617,6 +848,13 @@ const installIncluded = [
 		font-size: 0.9rem;
 		line-height: 1.5;
 		color: var(--text-muted);
+	}
+
+	.metric-note {
+		font-size: 0.76rem;
+		line-height: 1.35;
+		opacity: 0.86;
+		overflow-wrap: anywhere;
 	}
 
 	.section-heading {
@@ -820,6 +1058,19 @@ const installIncluded = [
 		line-height: 1.7;
 	}
 
+	.offer-discount-note {
+		display: inline-flex;
+		width: fit-content;
+		max-width: 100%;
+		padding: 0.72rem 0.9rem;
+		border-radius: 1rem;
+		background: var(--success-bg);
+		color: var(--success-text);
+		font-weight: 700;
+		line-height: 1.45;
+		overflow-wrap: anywhere;
+	}
+
 	.offer-list {
 		display: grid;
 		gap: 0.8rem;
@@ -955,6 +1206,16 @@ const installIncluded = [
 			max-width: 46ch;
 		}
 
+		.locality-strip {
+			gap: 0.55rem;
+			margin-bottom: 1.35rem;
+		}
+
+		.locality-pill {
+			padding: 0.5rem 0.72rem;
+			font-size: 0.84rem;
+		}
+
 		.hero-service-strip {
 			gap: 0.6rem;
 			margin-bottom: 1.35rem;
@@ -991,6 +1252,20 @@ const installIncluded = [
 			grid-template-columns: minmax(0, 1.08fr) minmax(160px, 0.72fr);
 		}
 
+		.local-map-card {
+			width: min(100%, 15.5rem);
+			padding: 0.82rem;
+		}
+
+		.map-copy {
+			font-size: 0.7rem;
+			max-width: 9rem;
+		}
+
+		.map-copy strong {
+			font-size: 0.92rem;
+		}
+
 		.visual-title {
 			font-size: 1.2rem;
 		}
@@ -1001,7 +1276,7 @@ const installIncluded = [
 		}
 
 		.hero-image {
-			max-height: 280px;
+			max-height: 190px;
 		}
 
 		.hero-metrics {
@@ -1014,6 +1289,11 @@ const installIncluded = [
 
 		.metric-value {
 			font-size: 1.45rem;
+		}
+
+		.metric-kicker,
+		.metric-note {
+			font-size: 0.72rem;
 		}
 
 		.metric-label {
@@ -1157,6 +1437,15 @@ const installIncluded = [
 			grid-template-columns: 1fr;
 		}
 
+		.local-visual-stack {
+			width: min(100%, 24rem);
+			justify-self: center;
+		}
+
+		.local-map-card {
+			width: min(100%, 20rem);
+		}
+
 		.hero-image {
 			max-height: 220px;
 		}
@@ -1190,6 +1479,7 @@ const installIncluded = [
 		.hero-badge,
 		.hero-copy h1,
 		.hero-lead,
+		.locality-strip,
 		.hero-actions,
 		.proof-row {
 			grid-column: 1;
@@ -1236,6 +1526,14 @@ const installIncluded = [
 			padding: 1.15rem 1.15rem 1rem;
 		}
 
+		.local-visual-stack {
+			width: 100%;
+		}
+
+		.local-map-card {
+			width: min(100%, 17rem);
+		}
+
 		.hero-visual-copy {
 			gap: 0.85rem;
 		}
@@ -1251,7 +1549,7 @@ const installIncluded = [
 		}
 
 		.hero-image {
-			max-height: 235px;
+			max-height: 185px;
 			justify-self: end;
 		}
 
@@ -1265,6 +1563,10 @@ const installIncluded = [
 
 		.metric-label {
 			font-size: 0.85rem;
+		}
+
+		.metric-note {
+			font-size: 0.74rem;
 		}
 	}
 
@@ -1325,6 +1627,17 @@ const installIncluded = [
 			grid-template-columns: 1fr;
 		}
 
+		.locality-strip {
+			display: grid;
+			grid-template-columns: 1fr;
+			gap: 0.55rem;
+		}
+
+		.locality-pill {
+			width: 100%;
+			justify-content: flex-start;
+		}
+
 		.service-pill {
 			width: 100%;
 			min-width: 0;
@@ -1348,6 +1661,10 @@ const installIncluded = [
 
 		.offer-media {
 			padding: 0 1rem;
+		}
+
+		.local-map-card {
+			width: min(100%, 21rem);
 		}
 
 			.metric-card {
