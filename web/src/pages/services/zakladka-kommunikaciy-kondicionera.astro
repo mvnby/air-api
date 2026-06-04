@@ -1,0 +1,272 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import ContactForm from "../../components/ContactForm.vue";
+---
+
+<Layout
+    title="Закладка коммуникаций под кондиционер в Витебске"
+    description="Закладка трассы, дренажа, кабеля и выводов под будущий монтаж кондиционера на этапе ремонта. До 3 м — 500 BYN, дальше +50 BYN/м."
+>
+    <section class="page-header">
+        <div class="container">
+            <h1 class="gradient-text">Закладка коммуникаций под кондиционер</h1>
+            <p class="breadcrumbs">Главная / Услуги / Закладка коммуникаций</p>
+        </div>
+    </section>
+
+    <section class="container detail-grid">
+        <div class="content">
+            <section class="service-intro">
+                <p class="eyebrow">Монтаж в два этапа</p>
+                <h2>Подготовим трассу на черновом этапе ремонта</h2>
+                <p>
+                    Если ремонт уже идет, кондиционер еще не обязательно должен
+                    быть куплен. Мы заранее закладываем межблочную трассу,
+                    дренаж, кабель и выводы под будущий монтаж, чтобы после
+                    чистовой отделки не штробить стены заново и не портить
+                    интерьер.
+                </p>
+            </section>
+
+            <section class="price-panel" aria-labelledby="preinstall-price-title">
+                <div>
+                    <p class="eyebrow">Базовая цена</p>
+                    <h3 id="preinstall-price-title">до 3 м — 500 <span class="price-byn"></span></h3>
+                    <p>
+                        Для небольших настенных кондиционеров. Каждый следующий
+                        метр трассы — +50 <span class="price-byn"></span>. Штробление
+                        считается отдельно.
+                    </p>
+                </div>
+                <span class="material-icons-round" aria-hidden="true">payments</span>
+            </section>
+
+            <section class="info-grid" aria-label="Что закладываем">
+                <div class="info-card">
+                    <span class="material-icons-round" aria-hidden="true">route</span>
+                    <h3>Межблочная трасса</h3>
+                    <p>
+                        Медные трубки и теплоизоляция под соединение внутреннего
+                        и наружного блока.
+                    </p>
+                </div>
+                <div class="info-card">
+                    <span class="material-icons-round" aria-hidden="true">water_drop</span>
+                    <h3>Дренаж</h3>
+                    <p>
+                        Вывод конденсата с учетом уклона и будущего расположения
+                        внутреннего блока.
+                    </p>
+                </div>
+                <div class="info-card">
+                    <span class="material-icons-round" aria-hidden="true">electrical_services</span>
+                    <h3>Кабель и выводы</h3>
+                    <p>
+                        Подготовка коммуникаций, чтобы финальная установка была
+                        быстрой и аккуратной.
+                    </p>
+                </div>
+            </section>
+
+            <section class="article-content">
+                <h3>Важный бонус при покупке кондиционера у нас</h3>
+                <p>
+                    Если после закладки коммуникаций вы покупаете кондиционер у
+                    «Мастера Воздуха», финальное довешивание и установка блока
+                    выполняются бесплатно. Вы оплачиваете подготовительный этап
+                    заранее, а чистовой монтаж проходит без лишних работ по
+                    отделке.
+                </p>
+
+                <h3>Если модель еще не выбрана</h3>
+                <p>
+                    Мы можем выполнить трассу под типовые параметры небольших
+                    настенных кондиционеров. Но для точного дизайна, правильных
+                    выводов и аккуратного расположения блоков лучше выбрать
+                    модель до закладки коммуникаций или хотя бы согласовать
+                    предполагаемую мощность.
+                </p>
+
+                <div class="note-box">
+                    <span class="material-icons-round" aria-hidden="true">construction</span>
+                    <p>
+                        Нужен полный монтаж после ремонта? Посмотрите условия
+                        <a href="/montaj-konditionerov">установки кондиционера</a>
+                        или оставьте заявку — подскажем оптимальную схему в два
+                        этапа.
+                    </p>
+                </div>
+            </section>
+        </div>
+
+        <div class="sidebar">
+            <ContactForm
+                client:visible
+                title="Заказать закладку"
+                subtitle="Согласуем трассу, длину и черновые работы"
+                buttonText="Оставить заявку"
+                subject="Заказ закладки коммуникаций под кондиционер"
+            />
+        </div>
+    </section>
+</Layout>
+
+<style>
+    .page-header {
+        background: var(--bg);
+        padding: 3rem 0 0;
+        margin-bottom: 2rem;
+    }
+    h1 {
+        font-size: 3rem;
+        font-weight: 800;
+        line-height: 1.15;
+    }
+    .breadcrumbs {
+        color: var(--text-muted);
+    }
+
+    .detail-grid {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 4rem;
+        margin-bottom: 6rem;
+    }
+
+    .service-intro {
+        margin-bottom: 2rem;
+    }
+    .eyebrow {
+        color: var(--primary);
+        font-size: 0.8rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        margin-bottom: 0.75rem;
+        text-transform: uppercase;
+    }
+    .service-intro h2 {
+        font-size: 2rem;
+        font-weight: 800;
+        line-height: 1.2;
+        margin-bottom: 1rem;
+    }
+    .service-intro p,
+    .article-content p {
+        color: var(--text-muted);
+        line-height: 1.7;
+    }
+
+    .price-panel {
+        align-items: center;
+        background: var(--panel-glass-bg);
+        border: 1px solid var(--panel-glass-border);
+        border-radius: 8px;
+        box-shadow: var(--panel-glass-shadow);
+        display: flex;
+        gap: 1.5rem;
+        justify-content: space-between;
+        margin-bottom: 2rem;
+        padding: 1.5rem;
+    }
+    .price-panel h3 {
+        color: var(--primary);
+        font-size: 2rem;
+        font-weight: 800;
+        margin: 0 0 0.5rem;
+    }
+    .price-panel p:last-child {
+        color: var(--text-muted);
+        line-height: 1.6;
+        margin: 0;
+    }
+    .price-panel > .material-icons-round {
+        align-items: center;
+        background: var(--panel-active-gradient);
+        border-radius: 8px;
+        color: var(--panel-active-text);
+        display: flex;
+        flex-shrink: 0;
+        font-size: 2rem;
+        height: 56px;
+        justify-content: center;
+        width: 56px;
+    }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+        margin-bottom: 2.5rem;
+    }
+    .info-card,
+    .note-box {
+        border: 1px solid var(--panel-glass-border);
+        border-radius: 8px;
+        background: var(--panel-glass-bg);
+        box-shadow: var(--panel-glass-shadow);
+    }
+    .info-card {
+        padding: 1.25rem;
+    }
+    .info-card .material-icons-round {
+        color: var(--primary);
+        font-size: 2rem;
+        margin-bottom: 0.75rem;
+    }
+    .info-card h3 {
+        font-size: 1.1rem;
+        font-weight: 800;
+        margin: 0 0 0.5rem;
+    }
+    .info-card p {
+        color: var(--text-muted);
+        font-size: 0.95rem;
+        line-height: 1.55;
+        margin: 0;
+    }
+
+    .article-content h3 {
+        font-size: 1.5rem;
+        font-weight: 800;
+        margin: 2rem 0 1rem;
+    }
+    .note-box {
+        align-items: flex-start;
+        display: flex;
+        gap: 1rem;
+        margin-top: 2rem;
+        padding: 1.25rem;
+    }
+    .note-box .material-icons-round {
+        color: var(--primary);
+        flex-shrink: 0;
+    }
+    .note-box p {
+        margin: 0;
+    }
+    .note-box a {
+        color: var(--primary);
+        font-weight: 800;
+        text-decoration: none;
+    }
+    .note-box a:hover {
+        text-decoration: underline;
+    }
+
+    @media (max-width: 900px) {
+        .detail-grid,
+        .info-grid {
+            grid-template-columns: 1fr;
+        }
+        .detail-grid {
+            gap: 2rem;
+        }
+        .price-panel {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+        .sidebar {
+            order: 2;
+        }
+    }
+</style>
