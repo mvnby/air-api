@@ -846,13 +846,19 @@ async def test_manager_order_proposals_can_duplicate_edit_and_select(async_clien
     customer = Customer(name="Proposal Customer", phone="+375296666667", type=CustomerType.individual)
     p1 = Product(title="Proposal P1", slug="proposal-p1", price=1000, area=25)
     p2 = Product(title="Proposal P2", slug="proposal-p2", price=2000, area=35)
+    s1 = Service(title="Proposal S1", slug="proposal-s1", base_price=100)
+    s2 = Service(title="Proposal S2", slug="proposal-s2", base_price=300)
     db.add(customer)
     db.add(p1)
     db.add(p2)
+    db.add(s1)
+    db.add(s2)
     await db.commit()
     await db.refresh(customer)
     await db.refresh(p1)
     await db.refresh(p2)
+    await db.refresh(s1)
+    await db.refresh(s2)
 
     order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
     db.add(order)
@@ -862,7 +868,10 @@ async def test_manager_order_proposals_can_duplicate_edit_and_select(async_clien
     headers = await _auth_headers(async_client)
     first_resp = await async_client.patch(
         f"/api/manager/orders/{order.id}",
-        json={"products": [{"product_id": p1.id, "quantity": 1, "price": 1000, "cost": 700}], "services": []},
+        json={
+            "products": [{"product_id": p1.id, "quantity": 1, "price": 1000, "cost": 700}],
+            "services": [{"service_id": s1.id, "title": s1.title, "quantity": 1, "price": 100, "cost": 60}],
+        },
         headers=headers,
     )
     assert first_resp.status_code == 200
@@ -870,7 +879,7 @@ async def test_manager_order_proposals_can_duplicate_edit_and_select(async_clien
     assert len(first_data["proposals"]) == 1
     default_proposal = first_data["proposals"][0]
     assert default_proposal["is_selected"] is True
-    assert default_proposal["total_amount"] == 1000
+    assert default_proposal["total_amount"] == 1100
 
     duplicate_resp = await async_client.post(
         f"/api/manager/orders/{order.id}/proposals/{default_proposal['id']}/duplicate",
@@ -880,7 +889,7 @@ async def test_manager_order_proposals_can_duplicate_edit_and_select(async_clien
     assert duplicate_resp.status_code == 200
     duplicate_data = duplicate_resp.json()
     second_proposal = next(item for item in duplicate_data["proposals"] if item["name"] == "Вариант 2")
-    assert second_proposal["total_amount"] == 1000
+    assert second_proposal["total_amount"] == 1100
 
     edit_second_resp = await async_client.patch(
         f"/api/manager/orders/{order.id}",
@@ -888,15 +897,25 @@ async def test_manager_order_proposals_can_duplicate_edit_and_select(async_clien
             "products": [
                 {"product_id": p2.id, "quantity": 1, "price": 2000, "cost": 1300, "proposal_id": second_proposal["id"]},
             ],
-            "services": [],
+            "services": [
+                {
+                    "service_id": s2.id,
+                    "title": s2.title,
+                    "quantity": 1,
+                    "price": 300,
+                    "cost": 120,
+                    "proposal_id": second_proposal["id"],
+                },
+            ],
         },
         headers=headers,
     )
     assert edit_second_resp.status_code == 200
     edit_second_data = edit_second_resp.json()
     updated_second = next(item for item in edit_second_data["proposals"] if item["id"] == second_proposal["id"])
-    assert updated_second["total_amount"] == 2000
+    assert updated_second["total_amount"] == 2300
     assert edit_second_data["product_lines"][0]["product_id"] == p1.id
+    assert edit_second_data["service_lines"][0]["service_id"] == s1.id
 
     select_resp = await async_client.post(
         f"/api/manager/orders/{order.id}/proposals/{second_proposal['id']}/select",
@@ -904,16 +923,42 @@ async def test_manager_order_proposals_can_duplicate_edit_and_select(async_clien
     )
     assert select_resp.status_code == 200
     selected_data = select_resp.json()
-    assert selected_data["total_amount"] == 2000
-    assert selected_data["margin"] == 700
+    assert selected_data["total_amount"] == 2300
+    assert selected_data["margin"] == 880
     assert selected_data["product_lines"][0]["product_id"] == p2.id
+    assert selected_data["service_lines"][0]["service_id"] == s2.id
     assert next(item for item in selected_data["proposals"] if item["id"] == second_proposal["id"])["is_selected"] is True
+
+    first_after_select = next(item for item in selected_data["proposals"] if item["id"] == default_proposal["id"])
+    second_after_select = next(item for item in selected_data["proposals"] if item["id"] == second_proposal["id"])
+    assert [line["product_id"] for line in first_after_select["product_lines"]] == [p1.id]
+    assert [line["service_id"] for line in first_after_select["service_lines"]] == [s1.id]
+    assert [line["product_id"] for line in second_after_select["product_lines"]] == [p2.id]
+    assert [line["service_id"] for line in second_after_select["service_lines"]] == [s2.id]
+
+    select_first_resp = await async_client.post(
+        f"/api/manager/orders/{order.id}/proposals/{default_proposal['id']}/select",
+        headers=headers,
+    )
+    assert select_first_resp.status_code == 200
+    selected_first_data = select_first_resp.json()
+    assert selected_first_data["total_amount"] == 1100
+    assert selected_first_data["margin"] == 340
+    assert selected_first_data["product_lines"][0]["product_id"] == p1.id
+    assert selected_first_data["service_lines"][0]["service_id"] == s1.id
+
+    first_after_return = next(item for item in selected_first_data["proposals"] if item["id"] == default_proposal["id"])
+    second_after_return = next(item for item in selected_first_data["proposals"] if item["id"] == second_proposal["id"])
+    assert [line["product_id"] for line in first_after_return["product_lines"]] == [p1.id]
+    assert [line["service_id"] for line in first_after_return["service_lines"]] == [s1.id]
+    assert [line["product_id"] for line in second_after_return["product_lines"]] == [p2.id]
+    assert [line["service_id"] for line in second_after_return["service_lines"]] == [s2.id]
 
     list_resp = await async_client.get("/api/manager/orders?segment=b2c", headers=headers)
     assert list_resp.status_code == 200
     list_item = next(item for item in list_resp.json()["items"] if item["id"] == order.id)
-    assert list_item["total_amount"] == 2000
-    assert list_item["margin"] == 700
+    assert list_item["total_amount"] == 1100
+    assert list_item["margin"] == 340
 
 
 @pytest.mark.asyncio
