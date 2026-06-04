@@ -117,6 +117,50 @@ export type {
     ProductImageVariantResponse,
 };
 
+const parseContentDispositionFilename = (header: string | null): string | undefined => {
+    if (!header) return undefined;
+
+    const utf8Match = header.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utf8Match?.[1]) {
+        try {
+            return decodeURIComponent(utf8Match[1].trim());
+        } catch {
+            return utf8Match[1].trim();
+        }
+    }
+
+    const asciiMatch = header.match(/filename="?([^";]+)"?/i);
+    return asciiMatch?.[1]?.trim();
+};
+
+export const downloadManagerDocBlob = async (docId: number): Promise<{ blob: Blob; filename?: string }> => {
+    const url = `${OpenAPI.BASE}/api/manager/docs/${encodeURIComponent(String(docId))}/download`;
+    const response = await fetch(url, {
+        method: 'GET',
+        credentials: OpenAPI.WITH_CREDENTIALS ? OpenAPI.CREDENTIALS : 'same-origin',
+        headers: {
+            Accept: 'application/pdf',
+        },
+    });
+
+    if (!response.ok) {
+        let message = `Ошибка скачивания документа (${response.status})`;
+        try {
+            const payload = await response.json();
+            message = payload?.detail?.message || payload?.detail || payload?.message || message;
+        } catch {
+            const text = await response.text();
+            if (text) message = text;
+        }
+        throw new Error(message);
+    }
+
+    return {
+        blob: await response.blob(),
+        filename: parseContentDispositionFilename(response.headers.get('Content-Disposition')),
+    };
+};
+
 export interface ManagerProductFilterOptions {
     heatingMin?: number;
     hasWifi?: boolean;
