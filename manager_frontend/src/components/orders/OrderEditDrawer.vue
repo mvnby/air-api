@@ -1722,23 +1722,22 @@ const saveCurrentProposalLines = async () => {
 };
 
 const setActiveProposal = async (proposal: OrderProposalResponse) => {
-  if (!proposal || activeProposalId.value === proposal.id) return;
+  if (!proposal || activeProposalId.value === proposal.id || proposalActionLoading.value) return;
+  proposalActionLoading.value = true;
   try {
     await saveCurrentProposalLines();
   } catch (error) {
     setToast(`Сначала сохраните текущий вариант: ${getApiErrorMessage(error)}`, 'error');
     return;
+  } finally {
+    proposalActionLoading.value = false;
   }
   loadProposalLines(proposal, props.order);
   productLookupById.value = {};
   syncProductLookupFromLines();
 };
 
-const onProposalClick = (proposal: OrderProposalResponse, event: MouseEvent) => {
-  if (event.detail > 1) {
-    void selectProposalForOrder(proposal);
-    return;
-  }
+const onProposalClick = (proposal: OrderProposalResponse) => {
   void setActiveProposal(proposal);
 };
 
@@ -3197,11 +3196,12 @@ watch(
               v-for="proposal in orderProposals"
               :key="proposal.id"
               type="button"
-              class="shrink-0 rounded-xl border px-3 py-2 text-left text-xs transition"
+              class="shrink-0 rounded-xl border px-3 py-2 text-left text-xs transition disabled:cursor-not-allowed disabled:opacity-60"
               :class="proposal.id === activeProposal?.id
                 ? 'border-teal-500 bg-teal-50 text-teal-900 shadow-sm'
                 : 'border-gray-200 bg-white text-gray-600 hover:border-teal-200 hover:text-teal-800'"
-              @click="onProposalClick(proposal, $event)"
+              :disabled="proposalActionLoading"
+              @click="onProposalClick(proposal)"
             >
               <span class="flex items-center gap-1 font-semibold">
                 {{ proposal.name }}
