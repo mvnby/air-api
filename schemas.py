@@ -1922,6 +1922,7 @@ class LeadsInboxItemResponse(BaseModel):
     id: int
     status: str
     is_new: bool
+    customer_id: Optional[int] = None
     customer_name: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
@@ -1930,9 +1931,14 @@ class LeadsInboxItemResponse(BaseModel):
     no_answer_at: Optional[datetime] = None
     source_created_at: Optional[datetime] = None
     created_at: datetime
-    customer_type: str = "individual"
+    customer_type: Optional[str] = None
     customer_inn: Optional[str] = None
     customer_full_legal_name: Optional[str] = None
+    customer_delivery_address: Optional[str] = None
+    object_type: Optional[str] = None
+    service_type: Optional[str] = None
+    equipment_class: Optional[str] = None
+    marketing_source: Optional[str] = None
 
 
 class LeadsInboxListResponse(BaseModel):

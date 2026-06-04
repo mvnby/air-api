@@ -311,6 +311,58 @@ async def test_email_lead_intake_creates_visible_inbox_order_and_dedupes_by_mess
 
 
 @pytest.mark.asyncio
+async def test_email_lead_intake_marks_b2c_known_and_unknown_hint_unknown(sqlite_session, monkeypatch):
+    async def fake_classify(**kwargs):
+        if "B2C" in kwargs["subject"]:
+            return {
+                "is_potential_order": True,
+                "confidence": 0.9,
+                "name": "Анна",
+                "phone": "+375291111111",
+                "email": "anna@example.com",
+                "segment_hint": "b2c",
+                "request_text": "Частный клиент просит обслуживание кондиционера.",
+                "reason": "Есть запрос на обслуживание.",
+            }
+        return {
+            "is_potential_order": True,
+            "confidence": 0.9,
+            "name": "Клиент",
+            "phone": "+375292222222",
+            "email": "client@example.com",
+            "segment_hint": "unknown",
+            "request_text": "Клиент просит цену кондиционера.",
+            "reason": "Есть запрос цены, тип клиента не ясен.",
+        }
+
+    monkeypatch.setattr(EmailLeadIntakeService, "classify_email", fake_classify)
+
+    await EmailLeadIntakeService.process_email(
+        sqlite_session,
+        sender_email="anna@example.com",
+        sender_name="Анна",
+        subject="B2C обслуживание кондиционера",
+        raw_body="Нужно обслуживание кондиционера дома.",
+        message_id="<b2c-lead@example.test>",
+    )
+    await EmailLeadIntakeService.process_email(
+        sqlite_session,
+        sender_email="client@example.com",
+        sender_name="Клиент",
+        subject="Цена кондиционера",
+        raw_body="Добрый день, нужна цена кондиционера.",
+        message_id="<unknown-lead@example.test>",
+    )
+
+    orders = (await sqlite_session.execute(select(Order).order_by(Order.id))).scalars().all()
+
+    assert orders[0].technical_meta["lead_customer_type_known"] is True
+    assert orders[0].technical_meta["lead_customer_type"] == "individual"
+    assert orders[1].technical_meta["lead_customer_type_known"] is False
+    assert orders[1].technical_meta["lead_customer_type"] is None
+
+
+@pytest.mark.asyncio
 async def test_email_lead_intake_dry_run_does_not_create_order(sqlite_session, monkeypatch):
     async def fake_classify(**_kwargs):
         return {

@@ -2265,6 +2265,16 @@ class OrderService:
                 if new_customer:
                     order.customer_id = payload.customer_id
                     customer_id_changed = True
+                    linked_customer_type = (
+                        new_customer.type.value
+                        if hasattr(new_customer.type, "value")
+                        else str(new_customer.type or "")
+                    )
+                    if linked_customer_type in {"individual", "company"}:
+                        order.technical_meta = dict(order.technical_meta or {})
+                        order.technical_meta["lead_customer_type_known"] = True
+                        order.technical_meta["lead_customer_type"] = linked_customer_type
+                        flag_modified(order, "technical_meta")
 
         # If customer was switched and branch wasn't explicitly provided, prevent stale cross-customer linkage.
         if customer_id_changed and "customer_branch_id" not in fields_set and order.customer_branch_id is not None:
@@ -2357,6 +2367,13 @@ class OrderService:
                     attr_name = customer_field_map[field_name]
                     setattr(customer, attr_name, _clean_optional(getattr(payload, field_name, None)))
                 session.add(customer)
+
+        incoming_customer_type = str(getattr(payload, "customer_type", "") or "").strip()
+        if "customer_type" in fields_set and incoming_customer_type in {"individual", "company"}:
+            order.technical_meta = dict(order.technical_meta or {})
+            order.technical_meta["lead_customer_type_known"] = True
+            order.technical_meta["lead_customer_type"] = incoming_customer_type
+            flag_modified(order, "technical_meta")
 
         # 3. Handle specific Order technical meta qualification updates
         meta_fields_map = {
@@ -2603,6 +2620,36 @@ class OrderService:
         return OrderService._parse_lead_inbox_datetime(raw_line)
 
     @staticmethod
+    def _lead_inbox_customer_type(order: Order) -> Optional[str]:
+        customer = order.customer
+        if not customer:
+            return None
+
+        customer_type = customer.type.value if hasattr(customer.type, "value") else str(customer.type or "")
+        if customer_type == "company" or customer.inn or customer.full_legal_name:
+            return "company"
+
+        meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
+        raw_meta_type = str(meta.get("lead_customer_type") or "").strip()
+        if raw_meta_type == "company":
+            return "company"
+        if raw_meta_type == "individual" and meta.get("lead_customer_type_known") is True:
+            return "individual"
+        if meta.get("lead_customer_type_known") is True and customer_type == "individual":
+            return "individual"
+
+        return None
+
+    @staticmethod
+    def _lead_inbox_meta_text(order: Order, key: str) -> Optional[str]:
+        meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
+        value = meta.get(key)
+        if value is None:
+            return None
+        cleaned = str(value).strip()
+        return cleaned or None
+
+    @staticmethod
     async def get_leads_inbox(
         session: AsyncSession,
         scope: str = "active",
@@ -2661,6 +2708,7 @@ class OrderService:
                     (order.status.value if hasattr(order.status, "value") else str(order.status))
                     == "new_lead"
                 ),
+                customer_id=order.customer_id,
                 customer_name=order.customer.name if order.customer else None,
                 phone=order.customer.phone if order.customer else None,
                 email=order.customer.email if order.customer else None,
@@ -2677,9 +2725,14 @@ class OrderService:
                 ),
                 source_created_at=OrderService._extract_email_source_created_at(order),
                 created_at=order.created_at,
-                customer_type=order.customer.type if order.customer else "individual",
+                customer_type=OrderService._lead_inbox_customer_type(order),
                 customer_inn=order.customer.inn if order.customer else None,
                 customer_full_legal_name=order.customer.full_legal_name if order.customer else None,
+                customer_delivery_address=order.delivery_address,
+                object_type=OrderService._lead_inbox_meta_text(order, "object_type"),
+                service_type=OrderService._lead_inbox_meta_text(order, "service_type"),
+                equipment_class=OrderService._lead_inbox_meta_text(order, "equipment_class"),
+                marketing_source=OrderService._lead_inbox_meta_text(order, "marketing_source"),
             )
             for order in orders
         ]
