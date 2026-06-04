@@ -75,6 +75,20 @@ class Settings(BaseSettings):
     # Static Files
     STATIC_DIR: str = "static"
     UPLOAD_DIR: str = "static/uploads"
+
+    # Product media storage. Default stays local so CI/deploy do not require
+    # R2/S3 secrets unless PRODUCT_MEDIA_STORAGE_PROVIDER is changed.
+    PRODUCT_MEDIA_STORAGE_PROVIDER: str = "local"
+    PRODUCT_MEDIA_LOCAL_VARIANT_DIR: str = "media/products/variants"
+    PRODUCT_MEDIA_LOCAL_VARIANT_PUBLIC_PREFIX: str = "/media/products/variants"
+    PRODUCT_MEDIA_S3_BUCKET: str = ""
+    PRODUCT_MEDIA_S3_ENDPOINT_URL: str = ""
+    PRODUCT_MEDIA_S3_REGION: str = "auto"
+    PRODUCT_MEDIA_S3_ACCESS_KEY_ID: str = ""
+    PRODUCT_MEDIA_S3_SECRET_ACCESS_KEY: str = ""
+    PRODUCT_MEDIA_S3_PUBLIC_BASE_URL: str = ""
+    PRODUCT_MEDIA_S3_KEY_PREFIX: str = "products/variants"
+    PRODUCT_MEDIA_S3_CACHE_CONTROL: str = "public, max-age=31536000, immutable"
     
     # Logging
     LOG_LEVEL: str = "INFO"

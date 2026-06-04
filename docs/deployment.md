@@ -155,6 +155,15 @@ After apply, smoke-check:
 - `/api/v1/products?limit=5`
 - `/api/v1/filters/config`
 
+## Product Media R2/S3 Rollout
+
+Product image variant storage can be switched from local files to R2/S3-compatible
+storage with `PRODUCT_MEDIA_STORAGE_PROVIDER=r2`. Keep it `local` until the
+owner approves rollout and the dry-run migration report has been reviewed.
+
+See `docs/media-storage-r2.md` for URL strategy, cache/versioning behavior,
+manual migration commands, secrets checklist, and rollback notes.
+
 ## Common Issues
 
 ### Issue: Catalog shows "Товары не найдены"
