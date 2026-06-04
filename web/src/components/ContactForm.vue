@@ -139,7 +139,8 @@ const submitForm = async () => {
       </button>
 
       <p class="privacy">
-        Нажимая кнопку, вы соглашаетесь с политикой обработки персональных данных.
+        Нажимая кнопку, вы соглашаетесь с
+        <a href="/privacy">политикой обработки персональных данных</a>.
       </p>
     </form>
   </div>
@@ -234,6 +235,15 @@ input:focus, textarea:focus {
   text-align: center;
   line-height: 1.4;
   opacity: 0.8;
+}
+
+.privacy a {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.privacy a:hover {
+  color: var(--primary-dark);
 }
 
 .success-message {
