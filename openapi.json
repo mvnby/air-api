@@ -14169,6 +14169,17 @@
             "type": "boolean",
             "title": "Is New"
           },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
           "customer_name": {
             "anyOf": [
               {
@@ -14254,9 +14265,15 @@
             "title": "Created At"
           },
           "customer_type": {
-            "type": "string",
-            "title": "Customer Type",
-            "default": "individual"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Type"
           },
           "customer_inn": {
             "anyOf": [
@@ -14279,6 +14296,61 @@
               }
             ],
             "title": "Customer Full Legal Name"
+          },
+          "customer_delivery_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Delivery Address"
+          },
+          "object_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Type"
+          },
+          "service_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Type"
+          },
+          "equipment_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Class"
+          },
+          "marketing_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marketing Source"
           }
         },
         "type": "object",

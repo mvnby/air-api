@@ -485,6 +485,8 @@ class EmailLeadIntakeService:
                 "email_subject": subject,
                 "email_date": email_date,
                 "email_ai_reason": EmailLeadIntakeService._clean_optional(classification.get("reason"), max_length=300),
+                "lead_customer_type_known": segment_hint in {"b2b", "b2c"} or bool(inn or company_name),
+                "lead_customer_type": customer_type if segment_hint in {"b2b", "b2c"} or inn or company_name else None,
             }
         )
         flag_modified(order, "technical_meta")

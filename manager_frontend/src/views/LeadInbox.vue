@@ -294,9 +294,10 @@ const onCreateInnBlur = async () => {
 
 // ── Qualify ───────────────────────────────────────────────────────────────────
 const handleQualifySuccess = async (orderId: number) => {
-  setToast(`Заявка #${orderId} переведена в Замер`);
   qualifyTarget.value = null;
-  await load();
+  setToast(`Сделка #${orderId} создана, открываем карточку`);
+  window.history.pushState({}, '', `/manager/orders/kanban?orderId=${orderId}`);
+  window.dispatchEvent(new PopStateEvent('popstate'));
 };
 
 // ── No Answer (Недозвон) ──────────────────────────────────────────────────────

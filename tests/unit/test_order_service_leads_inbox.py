@@ -2,7 +2,8 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from models import Customer, LeadSource, Order, OrderStatus
+from models import Customer, CustomerType, LeadSource, Order, OrderStatus
+from schemas import ManagerOrderUpdatePayload
 from services.order_service import OrderService
 
 
@@ -72,3 +73,115 @@ async def test_leads_inbox_extracts_legacy_email_date_from_comment(db):
     response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10)
 
     assert response.items[0].source_created_at == datetime(2026, 5, 11, 12, 33)
+
+
+@pytest.mark.asyncio
+async def test_leads_inbox_keeps_unknown_customer_type_and_task_essence_null(db):
+    customer = Customer(name="Default Individual", phone="+375290000001", type=CustomerType.individual)
+    db.add(customer)
+    await db.flush()
+    db.add(
+        Order(
+            customer_id=customer.id,
+            status=OrderStatus.NEW_LEAD,
+            lead_source=LeadSource.MANAGER,
+            comment="Нужно уточнить, кто клиент и что именно требуется.",
+            technical_meta={},
+        )
+    )
+    await db.commit()
+
+    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10)
+
+    assert response.items[0].customer_id == customer.id
+    assert response.items[0].customer_type is None
+    assert response.items[0].service_type is None
+
+
+@pytest.mark.asyncio
+async def test_leads_inbox_returns_known_type_and_task_when_stored(db):
+    customer = Customer(
+        name="ООО Климат",
+        phone="+375293333333",
+        type=CustomerType.company,
+        inn="123456789",
+    )
+    db.add(customer)
+    await db.flush()
+    db.add(
+        Order(
+            customer_id=customer.id,
+            status=OrderStatus.NEW_LEAD,
+            lead_source=LeadSource.MANAGER,
+            delivery_address="Минск, объект 1",
+            technical_meta={
+                "service_type": "maintenance",
+                "object_type": "office",
+                "equipment_class": "standard",
+                "marketing_source": "referral",
+            },
+        )
+    )
+    await db.commit()
+
+    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10)
+    item = response.items[0]
+
+    assert item.customer_type == "company"
+    assert item.service_type == "maintenance"
+    assert item.customer_delivery_address == "Минск, объект 1"
+    assert item.object_type == "office"
+    assert item.equipment_class == "standard"
+    assert item.marketing_source == "referral"
+
+
+@pytest.mark.asyncio
+async def test_leads_inbox_returns_confirmed_individual_customer_type(db):
+    customer = Customer(name="Иван", phone="+375294444444", type=CustomerType.individual)
+    db.add(customer)
+    await db.flush()
+    db.add(
+        Order(
+            customer_id=customer.id,
+            status=OrderStatus.NEW_LEAD,
+            lead_source=LeadSource.MANAGER,
+            technical_meta={
+                "lead_customer_type_known": True,
+                "lead_customer_type": "individual",
+            },
+        )
+    )
+    await db.commit()
+
+    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10)
+
+    assert response.items[0].customer_type == "individual"
+
+
+@pytest.mark.asyncio
+async def test_linking_existing_individual_marks_lead_customer_type_known(db):
+    default_customer = Customer(name="Новый клиент", phone="", type=CustomerType.individual)
+    existing_customer = Customer(name="Постоянный клиент", phone="+375295555555", type=CustomerType.individual)
+    db.add(default_customer)
+    db.add(existing_customer)
+    await db.flush()
+    order = Order(
+        customer_id=default_customer.id,
+        status=OrderStatus.NEW_LEAD,
+        lead_source=LeadSource.MANAGER,
+        technical_meta={},
+    )
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    await OrderService.update_order_for_manager(
+        db,
+        int(order.id),
+        ManagerOrderUpdatePayload(customer_id=int(existing_customer.id)),
+    )
+
+    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10)
+
+    assert response.items[0].customer_id == existing_customer.id
+    assert response.items[0].customer_type == "individual"
