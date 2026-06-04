@@ -45,7 +45,9 @@ const cleanText = (value: unknown) => {
 const isLoading = ref(false);
 const attemptedSubmit = ref(false);
 
-const customerType = ref<CustomerTypeChoice>(isCustomerType(props.lead.customer_type) ? props.lead.customer_type : '');
+const initialCustomerType = isCustomerType(props.lead.customer_type) ? props.lead.customer_type : '';
+const customerType = ref<CustomerTypeChoice>(initialCustomerType);
+const customerTypeChosenByManager = ref(false);
 const serviceType = ref<ServiceTypeChoice>(normalizeServiceType(props.lead.service_type));
 
 const customerName = ref(props.lead.customer_name || props.lead.customer_full_legal_name || '');
@@ -108,6 +110,12 @@ const customerTypeOptions: Array<{ value: Exclude<CustomerTypeChoice, ''>; label
   { value: 'company', label: 'Юрлицо', hint: 'компания или ИП', icon: 'business' },
 ];
 
+const selectCustomerType = (value: Exclude<CustomerTypeChoice, ''>) => {
+  customerType.value = value;
+  customerTypeChosenByManager.value = true;
+  searchCustomer();
+};
+
 const resetBranches = () => {
   customerBranches.value = [];
   selectedBranchId.value = null;
@@ -152,7 +160,16 @@ const searchCustomer = async () => {
       existingCustomerId.value = match.id;
       foundCustomerName.value = match.name || match.full_legal_name || 'Неизвестно';
       searchStatus.value = 'found';
-      if (isCustomerType((match as any).type)) customerType.value = (match as any).type;
+      const matchType = isCustomerType(match.type) ? match.type : '';
+      const matchLooksCompany = matchType === 'company' || Boolean(match.inn || match.full_legal_name);
+      if (matchLooksCompany) {
+        customerType.value = 'company';
+      } else if (
+        matchType === 'individual'
+        && (initialCustomerType === 'individual' || (customerTypeChosenByManager.value && customerType.value === 'individual'))
+      ) {
+        customerType.value = 'individual';
+      }
       if (!customerName.value) customerName.value = match.name || match.full_legal_name || '';
       if (!customerEmail.value) customerEmail.value = match.email || '';
       if (!companyInn.value) companyInn.value = match.inn || '';
@@ -402,7 +419,7 @@ const submitQualify = async () => {
                   : attemptedSubmit && missingCustomerType
                     ? 'border-red-300 bg-red-50 text-slate-700 dark:border-red-500/50 dark:bg-red-500/10 dark:text-slate-200'
                     : 'border-slate-200 bg-white text-slate-700 hover:border-teal-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'"
-                @click="customerType = option.value; searchCustomer()"
+                @click="selectCustomerType(option.value)"
               >
                 <span class="material-icons-round text-[20px]">{{ option.icon }}</span>
                 <span class="min-w-0">
