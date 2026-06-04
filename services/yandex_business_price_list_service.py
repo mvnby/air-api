@@ -26,9 +26,11 @@ class YandexBusinessPriceListService:
         "dismantling": YandexCategory(id=202, title="Демонтаж"),
         "maintenance": YandexCategory(id=203, title="Обслуживание"),
         "repair": YandexCategory(id=204, title="Ремонт"),
+        "pre_install": YandexCategory(id=205, title="Закладка коммуникаций"),
     }
     SERVICE_KIND_URLS = {
         "installation": "/montaj-konditionerov",
+        "pre_install": "/services/zakladka-kommunikaciy-kondicionera",
         "maintenance": "/obslujivanie-kondicionerov",
         "repair": "/services/repair",
         "dismantling": "/services",
@@ -104,7 +106,7 @@ class YandexBusinessPriceListService:
             parts.append(f"Диапазон мощности: {tariff.power_range}.")
         if tariff.category:
             parts.append(f"Категория: {tariff.category}.")
-        if tariff.service_kind == "installation" and float(tariff.included_route_meters or 0) > 0:
+        if TariffsService.supports_route_meters(tariff.service_kind) and float(tariff.included_route_meters or 0) > 0:
             meters = TariffsService._format_number(tariff.included_route_meters)
             parts.append(f"В базовую стоимость включено до {meters} м трассы.")
         return " ".join(part.strip() for part in parts if part and part.strip())

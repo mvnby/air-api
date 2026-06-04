@@ -221,3 +221,50 @@ async def test_calculate_repair_estimate_without_route_specific_lines(db):
     assert result.tariff.service_kind == "repair"
     assert result.subtotal == 200
     assert [line.name for line in result.lines] == ["Ремонт кондиционера", "Диагностика"]
+
+
+@pytest.mark.asyncio
+async def test_calculate_pre_install_estimate_with_extra_route(db):
+    tariff = ServiceTariff(
+        service_kind="pre_install",
+        selector_label="Закладка коммуникаций под кондиционер до 3 м",
+        estimate_template="Закладка межблочной трассы под кондиционер, включая материалы до 3 м",
+        category="Wall",
+        power_range="07-12",
+        base_price=500,
+        included_route_meters=3,
+    )
+    db.add(tariff)
+    await db.commit()
+    await db.refresh(tariff)
+
+    db.add(
+        ServiceTariffRule(
+            tariff_id=tariff.id,
+            rule_type="per_meter_over_included",
+            name="Дополнительная трасса сверх 3 м",
+            line_template="дополнительная трасса {qty} м",
+            unit="м",
+            unit_price=50,
+            is_optional=False,
+            is_active=True,
+            sort_order=10,
+        )
+    )
+    await db.commit()
+
+    payload = ManagerInstallEstimateCalculatePayload(
+        tariff_id=tariff.id,
+        route_length_m=5,
+        quantity=1,
+    )
+
+    result = await ServiceEstimateService.calculate_install_estimate(db, payload)
+
+    assert result.tariff.service_kind == "pre_install"
+    assert result.subtotal == 600
+    assert result.total == 600
+    assert [line.name for line in result.lines] == [
+        "Закладка коммуникаций под кондиционер до 3 м",
+        "дополнительная трасса 2 м",
+    ]

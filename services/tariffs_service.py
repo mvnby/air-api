@@ -22,6 +22,11 @@ logger = logging.getLogger(__name__)
 
 
 class TariffsService:
+    ROUTE_AWARE_SERVICE_KINDS = {
+        ManagerTariffServiceKind.installation.value,
+        ManagerTariffServiceKind.pre_install.value,
+    }
+
     BTU_TO_KW_MAP = {
         7: 2.1,
         9: 2.6,
@@ -41,6 +46,11 @@ class TariffsService:
         if abs(number - round(number)) < 1e-9:
             return str(int(round(number)))
         return f"{number:.2f}".rstrip("0").rstrip(".").replace(".", ",")
+
+    @staticmethod
+    def supports_route_meters(service_kind: ManagerTariffServiceKind | str | None) -> bool:
+        kind_value = service_kind.value if hasattr(service_kind, "value") else str(service_kind or "")
+        return kind_value in TariffsService.ROUTE_AWARE_SERVICE_KINDS
 
     @staticmethod
     def _extract_power_label(power_range: str) -> Optional[str]:
@@ -81,7 +91,7 @@ class TariffsService:
             title = f"{title}, мощностью {power_label}"
 
         included_route = float(tariff.included_route_meters or 0)
-        if tariff.service_kind == ManagerTariffServiceKind.installation.value and included_route > 0 and "трасс" not in title.lower():
+        if TariffsService.supports_route_meters(tariff.service_kind) and included_route > 0 and "трасс" not in title.lower():
             title = f"{title}, включая трассу длиной до {TariffsService._format_number(included_route)} м"
         return title
 
@@ -196,7 +206,7 @@ class TariffsService:
     async def create_tariff(session: AsyncSession, payload: ManagerTariffCreatePayload) -> ServiceTariff:
         included_route_meters = (
             float(payload.included_route_meters or 0)
-            if payload.service_kind == ManagerTariffServiceKind.installation
+            if TariffsService.supports_route_meters(payload.service_kind)
             else 0.0
         )
         tariff = ServiceTariff(
@@ -235,7 +245,7 @@ class TariffsService:
                 setattr(tariff, key, (value or "").strip() or (None if key == "comment" else ""))
                 continue
             setattr(tariff, key, value)
-        if next_service_kind_value != ManagerTariffServiceKind.installation.value:
+        if not TariffsService.supports_route_meters(next_service_kind_value):
             tariff.included_route_meters = 0.0
 
         session.add(tariff)

@@ -55,6 +55,17 @@ async def test_manager_yandex_business_price_list_exports_products_and_tariffs(a
         is_active=True,
         sort_order=1,
     )
+    pre_install_tariff = ServiceTariff(
+        service_kind="pre_install",
+        selector_label="Закладка коммуникаций под кондиционер",
+        estimate_template="Закладка межблочной трассы под кондиционер, включая материалы до 3 м",
+        category="Wall",
+        power_range="07-12",
+        base_price=500,
+        included_route_meters=3,
+        is_active=True,
+        sort_order=2,
+    )
     inactive_tariff = ServiceTariff(
         service_kind="repair",
         selector_label="Архивный ремонт",
@@ -69,10 +80,12 @@ async def test_manager_yandex_business_price_list_exports_products_and_tariffs(a
     db.add(product)
     db.add(hidden_product)
     db.add(active_tariff)
+    db.add(pre_install_tariff)
     db.add(inactive_tariff)
     await db.commit()
     await db.refresh(product)
     await db.refresh(active_tariff)
+    await db.refresh(pre_install_tariff)
 
     headers = await _auth_headers(async_client)
     response = await async_client.get(
@@ -93,6 +106,10 @@ async def test_manager_yandex_business_price_list_exports_products_and_tariffs(a
         name and name.startswith("Монтаж настенного кондиционера")
         for name in offer_names
     )
+    assert any(
+        name and name.startswith("Закладка коммуникаций под кондиционер")
+        for name in offer_names
+    )
     assert "Архивный ремонт" not in offer_names
 
     product_offer = next(offer for offer in offers if offer.findtext("name") == "Daichi Alpha 12")
@@ -109,3 +126,13 @@ async def test_manager_yandex_business_price_list_exports_products_and_tariffs(a
     )
     assert service_offer.findtext("price") == "500"
     assert service_offer.findtext("url") == "https://example.mvn.by/montaj-konditionerov"
+
+    pre_install_offer = next(
+        offer
+        for offer in offers
+        if (offer.findtext("name") or "").startswith("Закладка коммуникаций")
+    )
+    assert pre_install_offer.findtext("price") == "500"
+    assert pre_install_offer.findtext("url") == (
+        "https://example.mvn.by/services/zakladka-kommunikaciy-kondicionera"
+    )

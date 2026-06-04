@@ -37,12 +37,24 @@ async def test_yandex_business_price_list_builds_catalog(monkeypatch):
         included_route_meters=0,
         is_active=True,
     )
+    pre_install_tariff = ServiceTariff(
+        id=4,
+        service_kind="pre_install",
+        selector_label="Закладка коммуникаций под кондиционер",
+        estimate_template="Закладка межблочной трассы под кондиционер, включая материалы до 3 м",
+        category="Wall",
+        power_range="07-12",
+        base_price=500,
+        included_route_meters=3,
+        comment="Штробление оплачивается отдельно.",
+        is_active=True,
+    )
 
     async def load_products(_session):
         return [product]
 
     async def load_tariffs(_session):
-        return [tariff]
+        return [tariff, pre_install_tariff]
 
     monkeypatch.setattr(YandexBusinessPriceListService, "_load_products", load_products)
     monkeypatch.setattr(YandexBusinessPriceListService, "_load_tariffs", load_tariffs)
@@ -59,6 +71,7 @@ async def test_yandex_business_price_list_builds_catalog(monkeypatch):
     }
     assert categories[100007] == "Бытовые кондиционеры"
     assert categories[203] == "Обслуживание"
+    assert categories[205] == "Закладка коммуникаций"
 
     product_offer = root.find("./shop/offers/offer[@id='11']")
     assert product_offer is not None
@@ -73,3 +86,12 @@ async def test_yandex_business_price_list_builds_catalog(monkeypatch):
     assert service_offer.findtext("price") == "120"
     assert service_offer.findtext("currencyId") == "BYN"
     assert service_offer.findtext("url") == "https://example.mvn.by/obslujivanie-kondicionerov"
+
+    pre_install_offer = root.find("./shop/offers/offer[@id='900000004']")
+    assert pre_install_offer is not None
+    assert pre_install_offer.findtext("price") == "500"
+    assert pre_install_offer.findtext("categoryId") == "205"
+    assert pre_install_offer.findtext("url") == (
+        "https://example.mvn.by/services/zakladka-kommunikaciy-kondicionera"
+    )
+    assert "В базовую стоимость включено до 3 м трассы." in (pre_install_offer.findtext("description") or "")

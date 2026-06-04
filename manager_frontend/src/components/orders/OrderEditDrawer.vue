@@ -329,6 +329,7 @@ const REPAIR_AI_DEFECT_TYPES: RepairAiDefectType[] = [
 
 const serviceKindLabels: Record<string, string> = {
   installation: 'монтаж',
+  pre_install: 'закладка трассы',
   dismantling: 'демонтаж',
   maintenance: 'обслуживание',
   repair: 'ремонт',

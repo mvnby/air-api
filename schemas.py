@@ -2082,6 +2082,7 @@ class ManagerSettingListResponse(BaseModel):
 
 class ManagerTariffServiceKind(str, Enum):
     installation = "installation"
+    pre_install = "pre_install"
     dismantling = "dismantling"
     maintenance = "maintenance"
     repair = "repair"
