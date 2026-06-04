@@ -34,6 +34,22 @@ def test_build_quick_add_title_keeps_specific_template_without_duplicate_route()
     assert TariffsService.build_quick_add_title(tariff) == "Монтаж настенного кондиционера до 3,5 кВт с трассой до 3 м"
 
 
+def test_build_quick_add_title_enriches_pre_install_tariff_with_route():
+    tariff = ServiceTariff(
+        service_kind="pre_install",
+        selector_label="Закладка коммуникаций под кондиционер",
+        estimate_template="Закладка межблочной трассы под кондиционер, включая материалы",
+        category="Wall",
+        power_range="07-12",
+        base_price=500,
+        included_route_meters=3,
+    )
+
+    assert TariffsService.build_quick_add_title(tariff) == (
+        "Закладка коммуникаций под кондиционер, мощностью до 3,5 кВт, включая трассу длиной до 3 м"
+    )
+
+
 def test_build_quick_add_title_does_not_add_route_for_repair_tariff():
     tariff = ServiceTariff(
         service_kind="repair",
@@ -94,6 +110,17 @@ async def test_list_quick_add_tariffs_filters_active_search_and_kind(db):
         is_active=True,
         sort_order=2,
     )
+    active_pre_install = ServiceTariff(
+        service_kind="pre_install",
+        selector_label="Закладка коммуникаций под кондиционер",
+        estimate_template="Закладка межблочной трассы под кондиционер, включая материалы",
+        category="Wall",
+        power_range="07-12",
+        base_price=500,
+        included_route_meters=3,
+        is_active=True,
+        sort_order=3,
+    )
     inactive_installation = ServiceTariff(
         service_kind="installation",
         selector_label="Монтаж архивный",
@@ -109,6 +136,7 @@ async def test_list_quick_add_tariffs_filters_active_search_and_kind(db):
     db.add(active_maintenance)
     db.add(active_dismantling)
     db.add(active_repair)
+    db.add(active_pre_install)
     db.add(inactive_installation)
     await db.commit()
 
@@ -124,3 +152,8 @@ async def test_list_quick_add_tariffs_filters_active_search_and_kind(db):
     repair = await TariffsService.list_quick_add_tariffs(db, service_kind="repair", q="ремонт", limit=10)
     assert [item.tariff_id for item in repair] == [active_repair.id]
     assert repair[0].service_kind == "repair"
+
+    pre_install = await TariffsService.list_quick_add_tariffs(db, service_kind="pre_install", q="заклад", limit=10)
+    assert [item.tariff_id for item in pre_install] == [active_pre_install.id]
+    assert pre_install[0].service_kind == "pre_install"
+    assert "трассу длиной до 3 м" in pre_install[0].title

@@ -227,6 +227,57 @@ async def test_manager_tariffs_accept_repair_direction(async_client):
 
 
 @pytest.mark.asyncio
+async def test_manager_tariffs_accept_pre_install_direction_with_route(async_client):
+    headers = await _auth_headers(async_client)
+
+    create_resp = await async_client.post(
+        "/api/manager/tariffs",
+        headers=headers,
+        json={
+            "service_kind": "pre_install",
+            "selector_label": "Закладка коммуникаций под кондиционер",
+            "estimate_template": "Закладка межблочной трассы под кондиционер, включая материалы",
+            "category": "Wall",
+            "power_range": "07-12",
+            "base_price": 500,
+            "included_route_meters": 3,
+            "is_active": True,
+            "sort_order": 5,
+        },
+    )
+    assert create_resp.status_code == 201
+    created = create_resp.json()
+    assert created["service_kind"] == "pre_install"
+    assert created["included_route_meters"] == 3
+
+    rule_resp = await async_client.post(
+        f"/api/manager/tariffs/{created['id']}/rules",
+        headers=headers,
+        json={
+            "rule_type": "per_meter_over_included",
+            "name": "Дополнительная трасса сверх 3 м",
+            "line_template": "дополнительная трасса {qty} м",
+            "unit": "м",
+            "unit_price": 50,
+            "is_optional": False,
+            "is_active": True,
+            "sort_order": 10,
+        },
+    )
+    assert rule_resp.status_code == 201
+
+    quick_resp = await async_client.get(
+        "/api/manager/tariffs/quick-add?q=заклад&service_kind=pre_install",
+        headers=headers,
+    )
+    assert quick_resp.status_code == 200
+    quick_items = quick_resp.json()["items"]
+    assert len(quick_items) == 1
+    assert quick_items[0]["service_kind"] == "pre_install"
+    assert "трассу длиной до 3 м" in quick_items[0]["title"]
+
+
+@pytest.mark.asyncio
 async def test_manager_favorite_tariff_rules_by_direction(async_client):
     headers = await _auth_headers(async_client)
 

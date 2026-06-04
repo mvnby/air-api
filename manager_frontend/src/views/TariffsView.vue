@@ -31,6 +31,7 @@ const selectedTariff = computed(
 
 const serviceKindOptions: Array<{ value: ManagerTariffServiceKind; label: string }> = [
   { value: 'installation', label: 'Монтаж' },
+  { value: 'pre_install', label: 'Закладка коммуникаций' },
   { value: 'dismantling', label: 'Демонтаж' },
   { value: 'maintenance', label: 'Обслуживание' },
   { value: 'repair', label: 'Ремонт' },
@@ -39,7 +40,8 @@ const serviceKindOptions: Array<{ value: ManagerTariffServiceKind; label: string
 const serviceKindLabel = (kind: ManagerTariffServiceKind | string) =>
   serviceKindOptions.find((item) => item.value === kind)?.label ?? String(kind || 'Услуга');
 
-const shouldShowRouteColumn = computed(() => kindFilter.value === 'installation');
+const ROUTE_AWARE_SERVICE_KINDS = new Set<ManagerTariffServiceKind>(['installation', 'pre_install']);
+const shouldShowRouteColumn = computed(() => ROUTE_AWARE_SERVICE_KINDS.has(kindFilter.value));
 
 const setToast = (message: string) => {
   toast.value = message;

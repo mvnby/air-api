@@ -21473,6 +21473,7 @@
         "type": "string",
         "enum": [
           "installation",
+          "pre_install",
           "dismantling",
           "maintenance",
           "repair"

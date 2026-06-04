@@ -109,10 +109,11 @@ const placeholderHints: PlaceholderHint[] = [
 ];
 
 const serviceKind = computed(() => props.tariff?.service_kind ?? 'installation');
-const isInstallation = computed(() => serviceKind.value === 'installation');
-const defaultRuleType = computed<ManagerTariffRuleType>(() => (isInstallation.value ? 'per_unit_manual' : 'fixed_once'));
+const ROUTE_AWARE_SERVICE_KINDS = new Set(['installation', 'pre_install']);
+const isRouteAwareServiceKind = computed(() => ROUTE_AWARE_SERVICE_KINDS.has(String(serviceKind.value)));
+const defaultRuleType = computed<ManagerTariffRuleType>(() => (isRouteAwareServiceKind.value ? 'per_unit_manual' : 'fixed_once'));
 const availableRuleTypeOptions = computed(() => {
-  const allowed = isInstallation.value
+  const allowed = isRouteAwareServiceKind.value
     ? ruleTypeOptions
     : ruleTypeOptions.filter((option) => option.value === 'fixed_once' || option.value === 'per_unit_manual');
   if (!allowed.some((option) => option.value === formData.value.rule_type)) {
@@ -124,7 +125,7 @@ const availableRuleTypeOptions = computed(() => {
   return allowed;
 });
 const displayedPlaceholderHints = computed(() =>
-  isInstallation.value
+  isRouteAwareServiceKind.value
     ? placeholderHints
     : placeholderHints.filter(
         (item) => !['{route_length_m}', '{included_route_meters}', '{extra_route_meters}', '{extra_holes_count}'].includes(item.token)

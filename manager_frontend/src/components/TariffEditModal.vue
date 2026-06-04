@@ -25,6 +25,7 @@ const error = ref('');
 
 const DEFAULT_TEMPLATES: Record<ManagerTariffServiceKind, string> = {
   installation: 'Монтаж сплит-системы, включая расходные материалы',
+  pre_install: 'Закладка межблочной трассы под кондиционер, включая материалы',
   dismantling: 'Демонтаж кондиционера',
   maintenance: 'Техническое обслуживание кондиционера',
   repair: 'Ремонт кондиционера',
@@ -32,23 +33,27 @@ const DEFAULT_TEMPLATES: Record<ManagerTariffServiceKind, string> = {
 
 const serviceKindOptions: Array<{ value: ManagerTariffServiceKind; label: string }> = [
   { value: 'installation', label: 'Монтаж' },
+  { value: 'pre_install', label: 'Закладка коммуникаций' },
   { value: 'dismantling', label: 'Демонтаж' },
   { value: 'maintenance', label: 'Обслуживание' },
   { value: 'repair', label: 'Ремонт' },
 ];
 
-const isInstallation = computed(() => formData.value.service_kind === 'installation');
+const ROUTE_AWARE_SERVICE_KINDS = new Set<ManagerTariffServiceKind>(['installation', 'pre_install']);
+const isRouteAwareServiceKind = computed(() => ROUTE_AWARE_SERVICE_KINDS.has(formData.value.service_kind as ManagerTariffServiceKind));
 
 const categoryPlaceholder = computed(() => {
   if (formData.value.service_kind === 'repair') return 'diagnostics / compressor / leak';
   if (formData.value.service_kind === 'maintenance') return 'split / cassette / duct';
   if (formData.value.service_kind === 'dismantling') return 'Wall / Cassette / Duct';
+  if (formData.value.service_kind === 'pre_install') return 'Wall';
   return 'Wall / Cassette / Duct';
 });
 
 const powerPlaceholder = computed(() => {
   if (formData.value.service_kind === 'repair') return 'бытовой / полупром / до 7 кВт';
   if (formData.value.service_kind === 'maintenance') return 'до 3.5 кВт / до 7 кВт';
+  if (formData.value.service_kind === 'pre_install') return '07-12 / до 3.5 кВт';
   return '07-12 / до 3.5 кВт';
 });
 
@@ -88,7 +93,7 @@ const resetForm = () => {
       category: '',
       power_range: '',
       base_price: 0,
-      included_route_meters: serviceKind === 'installation' ? 3 : 0,
+      included_route_meters: ROUTE_AWARE_SERVICE_KINDS.has(serviceKind) ? 3 : 0,
       is_active: true,
       sort_order: 0,
       comment: null,
@@ -103,7 +108,7 @@ const handleServiceKindChange = () => {
   if (!currentTemplate || Object.values(DEFAULT_TEMPLATES).includes(currentTemplate)) {
     formData.value.estimate_template = DEFAULT_TEMPLATES[serviceKind];
   }
-  if (serviceKind !== 'installation') {
+  if (!ROUTE_AWARE_SERVICE_KINDS.has(serviceKind)) {
     formData.value.included_route_meters = 0;
   } else if (!formData.value.included_route_meters) {
     formData.value.included_route_meters = 3;
@@ -135,7 +140,7 @@ const submit = async () => {
   loading.value = true;
   error.value = '';
   try {
-    const normalizedIncludedRoute = formData.value.service_kind === 'installation'
+    const normalizedIncludedRoute = ROUTE_AWARE_SERVICE_KINDS.has(formData.value.service_kind as ManagerTariffServiceKind)
       ? formData.value.included_route_meters
       : 0;
     if (props.tariff?.id) {
@@ -278,7 +283,7 @@ const submit = async () => {
                   :disabled="loading"
                 />
               </label>
-              <label v-if="isInstallation" class="block">
+              <label v-if="isRouteAwareServiceKind" class="block">
                 <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Включено трассы, м</span>
                 <input
                   v-model.number="formData.included_route_meters"

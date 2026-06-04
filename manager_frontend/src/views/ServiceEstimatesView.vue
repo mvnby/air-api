@@ -53,6 +53,7 @@ const selectedRules = computed(() => selectedTariff.value?.rules || []);
 const totalPages = computed(() => Math.max(1, Math.ceil(listTotal.value / listLimit.value)));
 const serviceKindOptions: Array<{ value: ManagerTariffServiceKind; label: string }> = [
   { value: 'installation', label: 'Монтаж' },
+  { value: 'pre_install', label: 'Закладка коммуникаций' },
   { value: 'dismantling', label: 'Демонтаж' },
   { value: 'maintenance', label: 'Обслуживание' },
   { value: 'repair', label: 'Ремонт' },

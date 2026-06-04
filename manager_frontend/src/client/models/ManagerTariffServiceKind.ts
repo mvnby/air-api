@@ -2,4 +2,4 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type ManagerTariffServiceKind = 'installation' | 'dismantling' | 'maintenance' | 'repair';
+export type ManagerTariffServiceKind = 'installation' | 'pre_install' | 'dismantling' | 'maintenance' | 'repair';
