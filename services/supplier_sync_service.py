@@ -42,7 +42,10 @@ def _parse_decimal(raw: str) -> Optional[Decimal]:
     if not value:
         return None
     value = value.replace(" ", "").replace(",", ".")
-    cleaned = "".join(ch for ch in value if ch.isdigit() or ch in ".-")
+    cleaned = "".join(ch for ch in value if ch.isdigit() or ch in ".-").strip(".")
+    if cleaned.count(".") > 1:
+        whole, fractional = cleaned.rsplit(".", 1)
+        cleaned = f"{whole.replace('.', '')}.{fractional}"
     if not cleaned:
         return None
     try:
