@@ -23,6 +23,20 @@ const services = [
         icon: "engineering",
         image: "/img/services/repair.png",
     },
+    {
+        title: "Демонтаж кондиционера",
+        desc: "Аккуратно снимем внутренний и наружный блок, сохраним оборудование и трассу, когда это возможно.",
+        link: "/services/demontazh-kondicionera",
+        icon: "construction",
+        image: "/img/services/man_repair.png",
+    },
+    {
+        title: "Закладка коммуникаций",
+        desc: "Подготовим трассу, дренаж, кабель и выводы под будущий монтаж кондиционера на этапе ремонта.",
+        link: "/services/zakladka-kommunikaciy-kondicionera",
+        icon: "cable",
+        image: "/img/services/installation.png",
+    },
 ];
 ---
 
@@ -86,7 +100,7 @@ const services = [
 
     .services-grid {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
         gap: 2rem;
     }
 

@@ -114,6 +114,33 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
                 </section>
 
                 <section class="mb-12">
+                    <h3>Если ремонт идет сейчас</h3>
+                    <p>
+                        Монтаж можно разделить на два этапа: сначала заложить
+                        коммуникации в штробу на черновом этапе, а после
+                        чистовой отделки довесить блоки и запустить систему.
+                        Если старый кондиционер мешает ремонту или замене,
+                        его лучше аккуратно снять заранее.
+                    </p>
+                    <div class="planning-links">
+                        <a href="/services/zakladka-kommunikaciy-kondicionera" class="planning-link">
+                            <span class="material-icons-round" aria-hidden="true">route</span>
+                            <span>
+                                <strong>Закладка коммуникаций</strong>
+                                <small>Трасса, дренаж, кабель и выводы под будущий монтаж.</small>
+                            </span>
+                        </a>
+                        <a href="/services/demontazh-kondicionera" class="planning-link">
+                            <span class="material-icons-round" aria-hidden="true">construction</span>
+                            <span>
+                                <strong>Демонтаж кондиционера</strong>
+                                <small>Снимем блоки и по возможности сохраним оборудование.</small>
+                            </span>
+                        </a>
+                    </div>
+                </section>
+
+                <section class="mb-12">
                     <h3>Термины и условия установки</h3>
                     <div class="terms-grid">
                         <div class="term-item">
@@ -295,6 +322,55 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
         font-weight: bold;
     }
 
+    .planning-links {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+        margin-top: 1.5rem;
+    }
+    .planning-link {
+        align-items: flex-start;
+        background: var(--panel-glass-bg);
+        border: 1px solid var(--panel-glass-border);
+        border-radius: 8px;
+        box-shadow: var(--panel-glass-shadow);
+        color: var(--text);
+        display: flex;
+        gap: 1rem;
+        padding: 1.25rem;
+        text-decoration: none;
+        transition: border-color 0.2s, transform 0.2s;
+    }
+    .planning-link:hover {
+        border-color: var(--primary);
+        transform: translateY(-2px);
+    }
+    .planning-link > .material-icons-round {
+        align-items: center;
+        background: var(--panel-active-gradient);
+        border-radius: 8px;
+        color: var(--panel-active-text);
+        display: flex;
+        flex-shrink: 0;
+        height: 44px;
+        justify-content: center;
+        width: 44px;
+    }
+    .planning-link strong,
+    .planning-link small {
+        display: block;
+    }
+    .planning-link strong {
+        color: var(--primary);
+        font-size: 1rem;
+        line-height: 1.3;
+        margin-bottom: 0.35rem;
+    }
+    .planning-link small {
+        color: var(--text-muted);
+        line-height: 1.45;
+    }
+
     .terms-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -341,7 +417,14 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
     }
 
     @media (max-width: 900px) {
+        h1 {
+            font-size: 2.4rem;
+            line-height: 1.15;
+        }
         .detail-grid {
+            grid-template-columns: 1fr;
+        }
+        .planning-links {
             grid-template-columns: 1fr;
         }
         .sidebar {
