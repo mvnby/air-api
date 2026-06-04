@@ -15,6 +15,8 @@ def test_parse_decimal_with_spaces_and_comma():
     assert _parse_decimal("2 670") == Decimal("2670")
     assert _parse_decimal("479,50") == Decimal("479.50")
     assert _parse_decimal(" 1\u00a0234.75 ") == Decimal("1234.75")
+    assert _parse_decimal("2\u00a0089,00р.") == Decimal("2089.00")
+    assert _parse_decimal("1\u00a0595,76 руб.") == Decimal("1595.76")
 
 
 def test_parse_qty_and_currency_normalization():
