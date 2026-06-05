@@ -22,6 +22,7 @@ env:
   # SSH_HOST_WEB (178.159.240.174)
   # SSH_USER_API (root)
   # SSH_USER_WEB (user2154318)
+  # Optional: SSH_WEB_TARGET (defaults to the legacy mvn-web path)
 
 jobs:
   # ======================================================
@@ -397,7 +398,10 @@ jobs:
 
           WEB_HOST="${{ secrets.SSH_HOST_WEB }}"
           WEB_USER="${{ secrets.SSH_USER_WEB }}"
-          WEB_TARGET="/var/www/${{ secrets.SSH_USER_WEB }}/data/www/mvn.by/"
+          WEB_TARGET="${{ secrets.SSH_WEB_TARGET }}"
+          if [ -z "${WEB_TARGET}" ]; then
+            WEB_TARGET="/var/www/${{ secrets.SSH_USER_WEB }}/data/www/mvn.by/"
+          fi
           SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
           MAX_ATTEMPTS=5
           PORT_FAILURES=0
