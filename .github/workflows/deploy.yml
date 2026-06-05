@@ -19,10 +19,10 @@ env:
   # Secrets needed:
   # SSH_KEY (Private Key for root@api and user@web)
   # SSH_HOST_API (185.250.45.54)
-  # SSH_HOST_WEB (178.159.240.174)
+  # SSH_HOST_WEB (153.80.244.78)
   # SSH_USER_API (root)
-  # SSH_USER_WEB (user2154318)
-  # Optional: SSH_WEB_TARGET (defaults to the legacy mvn-web path)
+  # SSH_USER_WEB (deploy)
+  # SSH_WEB_TARGET (/var/www/mvn.by/current/)
 
 jobs:
   # ======================================================
