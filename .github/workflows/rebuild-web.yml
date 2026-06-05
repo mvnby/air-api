@@ -7,6 +7,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
   SSH_HOST_WEB: ${{ secrets.SSH_HOST_WEB }}
   SSH_USER_WEB: ${{ secrets.SSH_USER_WEB }}
+  SSH_WEB_TARGET: ${{ secrets.SSH_WEB_TARGET }}
 
 jobs:
   rebuild:
@@ -67,7 +68,10 @@ jobs:
 
           WEB_HOST="${SSH_HOST_WEB}"
           WEB_USER="${SSH_USER_WEB}"
-          WEB_TARGET="/var/www/${SSH_USER_WEB}/data/www/mvn.by/"
+          WEB_TARGET="${SSH_WEB_TARGET}"
+          if [ -z "${WEB_TARGET}" ]; then
+            WEB_TARGET="/var/www/${SSH_USER_WEB}/data/www/mvn.by/"
+          fi
           SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
           MAX_ATTEMPTS=5
           PORT_FAILURES=0
