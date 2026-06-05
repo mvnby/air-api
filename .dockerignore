@@ -33,6 +33,13 @@ manager_frontend/*
 dist
 build
 
+# Runtime data and local artifacts mounted or generated outside the image
+backups
+.local_backups
+media
+logs
+generated_documents
+
 # Environment files
 .env
 .env.*
