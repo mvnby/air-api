@@ -40,6 +40,9 @@ async def migrate_product_media_storage(
     provider: str | None,
     limit: int,
     product_id: int | None,
+    after_image_id: int | None,
+    from_image_id: int | None,
+    to_image_id: int | None,
     include_originals: bool,
     include_variants: bool,
     variant_types: list[str] | None,
@@ -53,6 +56,9 @@ async def migrate_product_media_storage(
         execute=execute,
         limit=limit,
         product_id=product_id,
+        after_image_id=after_image_id,
+        from_image_id=from_image_id,
+        to_image_id=to_image_id,
         include_originals=include_originals,
         include_variants=include_variants,
         variant_types=variant_types or list(DEFAULT_MIGRATION_VARIANT_TYPES),
@@ -67,6 +73,9 @@ async def run(
     provider: str | None,
     limit: int,
     product_id: int | None,
+    after_image_id: int | None,
+    from_image_id: int | None,
+    to_image_id: int | None,
     include_originals: bool,
     include_variants: bool,
     variant_types: list[str] | None,
@@ -82,6 +91,9 @@ async def run(
             provider=provider,
             limit=limit,
             product_id=product_id,
+            after_image_id=after_image_id,
+            from_image_id=from_image_id,
+            to_image_id=to_image_id,
             include_originals=include_originals,
             include_variants=include_variants,
             variant_types=variant_types,
@@ -129,6 +141,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="Limit migration plan to one product id.",
     )
     parser.add_argument(
+        "--after-image-id",
+        type=int,
+        default=None,
+        help=(
+            "Only inspect ProductImage rows with id greater than this value. "
+            "Use to continue after a previous bounded batch."
+        ),
+    )
+    parser.add_argument(
+        "--from-image-id",
+        type=int,
+        default=None,
+        help="Only inspect ProductImage rows with id greater than or equal to this value.",
+    )
+    parser.add_argument(
+        "--to-image-id",
+        type=int,
+        default=None,
+        help="Only inspect ProductImage rows with id less than or equal to this value.",
+    )
+    parser.add_argument(
         "--include-originals",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -170,6 +203,24 @@ def _validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) ->
         parser.error("--limit must be between 1 and 1000")
     if args.product_id is not None and args.product_id < 1:
         parser.error("--product-id must be a positive integer")
+    for attr in ("after_image_id", "from_image_id", "to_image_id"):
+        value = getattr(args, attr)
+        if value is not None and value < 1:
+            parser.error(f"--{attr.replace('_', '-')} must be a positive integer")
+    if args.after_image_id is not None and args.from_image_id is not None:
+        parser.error("Use either --after-image-id or --from-image-id, not both")
+    if (
+        args.from_image_id is not None
+        and args.to_image_id is not None
+        and args.from_image_id > args.to_image_id
+    ):
+        parser.error("--from-image-id must be less than or equal to --to-image-id")
+    if (
+        args.after_image_id is not None
+        and args.to_image_id is not None
+        and args.after_image_id >= args.to_image_id
+    ):
+        parser.error("--after-image-id must be less than --to-image-id")
     if not args.include_originals and not args.include_variants:
         parser.error("At least one of --include-originals or --include-variants is required")
 
@@ -181,6 +232,9 @@ def _print_result(result: dict[str, Any]) -> None:
     print(f"  storage_provider={result['storage_provider']}")
     print(f"  product_id={result.get('product_id') or 'all'}")
     print(f"  limit={result['limit']}")
+    print(f"  after_image_id={result.get('after_image_id') or 'none'}")
+    print(f"  from_image_id={result.get('from_image_id') or 'none'}")
+    print(f"  to_image_id={result.get('to_image_id') or 'none'}")
     print(f"  include_originals={result['include_originals']}")
     print(f"  include_variants={result['include_variants']}")
     print(f"  variant_types={','.join(result['variant_types'])}")
@@ -238,6 +292,9 @@ def main() -> None:
             provider=args.provider,
             limit=args.limit,
             product_id=args.product_id,
+            after_image_id=args.after_image_id,
+            from_image_id=args.from_image_id,
+            to_image_id=args.to_image_id,
             include_originals=args.include_originals,
             include_variants=args.include_variants,
             variant_types=args.variant_type,

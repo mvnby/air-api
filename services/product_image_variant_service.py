@@ -383,9 +383,13 @@ class ProductImageVariantService:
 
     @staticmethod
     def _local_media_path_for_url(url: str) -> Path | None:
-        if not url or not url.startswith("/media/"):
+        if not url:
             return None
-        return Path(url.lstrip("/"))
+        if url.startswith("/media/"):
+            return Path(url.lstrip("/"))
+        if url.startswith("media/"):
+            return Path(url)
+        return None
 
     @staticmethod
     def _image_size(content: bytes) -> tuple[int | None, int | None]:

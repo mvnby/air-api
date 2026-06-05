@@ -35,6 +35,9 @@ class ProductMediaMigrationService:
         execute: bool,
         limit: int = 50,
         product_id: int | None = None,
+        after_image_id: int | None = None,
+        from_image_id: int | None = None,
+        to_image_id: int | None = None,
         include_originals: bool = True,
         include_variants: bool = True,
         variant_types: list[str] | tuple[str, ...] | None = None,
@@ -49,6 +52,9 @@ class ProductMediaMigrationService:
             storage=storage,
             limit=safe_limit,
             product_id=product_id,
+            after_image_id=after_image_id,
+            from_image_id=from_image_id,
+            to_image_id=to_image_id,
             include_originals=include_originals,
             include_variants=include_variants,
             variant_types=selected_variant_types,
@@ -134,6 +140,9 @@ class ProductMediaMigrationService:
         storage: ProductMediaStorage,
         limit: int,
         product_id: int | None,
+        after_image_id: int | None,
+        from_image_id: int | None,
+        to_image_id: int | None,
         include_originals: bool,
         include_variants: bool,
         variant_types: tuple[str, ...],
@@ -147,6 +156,12 @@ class ProductMediaMigrationService:
 
         if include_originals and remaining > 0:
             stmt = select(ProductImage).order_by(ProductImage.id).limit(remaining)
+            stmt = ProductMediaMigrationService._apply_image_id_bounds(
+                stmt,
+                after_image_id=after_image_id,
+                from_image_id=from_image_id,
+                to_image_id=to_image_id,
+            )
             if product_id is not None:
                 stmt = stmt.where(ProductImage.product_id == product_id)
             rows = (await session.execute(stmt)).scalars().all()
@@ -179,8 +194,14 @@ class ProductMediaMigrationService:
                 .join(ProductImage, ProductImage.id == ProductImageVariant.product_image_id)
                 .where(ProductImageVariant.url.is_not(None))
                 .where(ProductImageVariant.variant_type.in_(variant_types))
-                .order_by(ProductImageVariant.id)
+                .order_by(ProductImage.id, ProductImageVariant.id)
                 .limit(remaining)
+            )
+            stmt = ProductMediaMigrationService._apply_image_id_bounds(
+                stmt,
+                after_image_id=after_image_id,
+                from_image_id=from_image_id,
+                to_image_id=to_image_id,
             )
             if product_id is not None:
                 stmt = stmt.where(ProductImage.product_id == product_id)
@@ -213,6 +234,9 @@ class ProductMediaMigrationService:
             "storage_provider": storage.provider_name,
             "limit": limit,
             "product_id": product_id,
+            "after_image_id": after_image_id,
+            "from_image_id": from_image_id,
+            "to_image_id": to_image_id,
             "include_originals": include_originals,
             "include_variants": include_variants,
             "variant_types": list(variant_types),
@@ -228,6 +252,22 @@ class ProductMediaMigrationService:
             "uploaded_items": [],
             "errors": [],
         }
+
+    @staticmethod
+    def _apply_image_id_bounds(
+        stmt,
+        *,
+        after_image_id: int | None,
+        from_image_id: int | None,
+        to_image_id: int | None,
+    ):
+        if after_image_id is not None:
+            stmt = stmt.where(ProductImage.id > after_image_id)
+        if from_image_id is not None:
+            stmt = stmt.where(ProductImage.id >= from_image_id)
+        if to_image_id is not None:
+            stmt = stmt.where(ProductImage.id <= to_image_id)
+        return stmt
 
     @staticmethod
     def _plan_item(

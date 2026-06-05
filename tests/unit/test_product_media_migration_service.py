@@ -89,10 +89,23 @@ async def sqlite_session(tmp_path: Path):
 async def _make_product_with_media(
     session: AsyncSession,
     tmp_path: Path,
+    *,
+    suffix: str = "",
+    slashless_urls: bool = False,
 ) -> tuple[Product, ProductImage, ProductImageVariant]:
+    slug = "migration-product"
+    title = "Migration product"
+    original_filename = "original.webp"
+    card_filename = "card.webp"
+    if suffix:
+        slug = f"{slug}-{suffix}"
+        title = f"{title} {suffix}"
+        original_filename = f"original-{suffix}.webp"
+        card_filename = f"card-{suffix}.webp"
+
     product = Product(
-        title="Migration product",
-        slug="migration-product",
+        title=title,
+        slug=slug,
         price=1000,
         area=20,
         specs={},
@@ -105,13 +118,14 @@ async def _make_product_with_media(
     variant_dir = tmp_path / "media/products/variants/card"
     shared_dir.mkdir(parents=True, exist_ok=True)
     variant_dir.mkdir(parents=True, exist_ok=True)
-    original_path = shared_dir / "original.webp"
-    card_path = variant_dir / "card.webp"
+    original_path = shared_dir / original_filename
+    card_path = variant_dir / card_filename
     original_path.write_bytes(_image_bytes())
     card_path.write_bytes(_image_bytes((80, 20, 20)))
 
-    original_url = "/media/products/shared/original.webp"
-    card_url = "/media/products/variants/card/card.webp"
+    url_prefix = "" if slashless_urls else "/"
+    original_url = f"{url_prefix}media/products/shared/{original_filename}"
+    card_url = f"{url_prefix}media/products/variants/card/{card_filename}"
     product.main_image = original_url
     product.images = [original_url]
     image = ProductImage(product_id=product.id, url=original_url)
@@ -161,6 +175,9 @@ async def test_media_migration_dry_run_plans_uploads_without_db_writes(
     await sqlite_session.refresh(product)
 
     assert report["dry_run"] is True
+    assert report["after_image_id"] is None
+    assert report["from_image_id"] is None
+    assert report["to_image_id"] is None
     assert report["planned_uploads"] == 2
     assert {item["variant_type"] for item in report["items"]} == {"original", "card"}
     assert storage.uploads == []
@@ -208,3 +225,110 @@ async def test_media_migration_execute_updates_variants_but_preserves_product_ur
     assert product.main_image == "/media/products/shared/original.webp"
     assert product.images == ["/media/products/shared/original.webp"]
     assert image.url == "/media/products/shared/original.webp"
+
+
+@pytest.mark.asyncio
+async def test_media_migration_image_id_bounds_continue_after_previous_window(
+    sqlite_session,
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.chdir(tmp_path)
+    _, first_image, _ = await _make_product_with_media(
+        sqlite_session,
+        tmp_path,
+        suffix="first",
+    )
+    _, second_image, _ = await _make_product_with_media(
+        sqlite_session,
+        tmp_path,
+        suffix="second",
+    )
+    _, third_image, _ = await _make_product_with_media(
+        sqlite_session,
+        tmp_path,
+        suffix="third",
+    )
+    storage = RecordingStorage()
+
+    cursor_report = await ProductMediaMigrationService.migrate_to_storage(
+        sqlite_session,
+        storage=storage,
+        execute=False,
+        limit=10,
+        after_image_id=first_image.id,
+        to_image_id=second_image.id,
+    )
+    ranged_report = await ProductMediaMigrationService.migrate_to_storage(
+        sqlite_session,
+        storage=storage,
+        execute=False,
+        limit=10,
+        from_image_id=second_image.id,
+        to_image_id=third_image.id,
+        include_originals=False,
+    )
+
+    assert cursor_report["after_image_id"] == first_image.id
+    assert cursor_report["to_image_id"] == second_image.id
+    assert cursor_report["inspected"] == 2
+    assert cursor_report["planned_uploads"] == 2
+    assert {item["product_image_id"] for item in cursor_report["items"]} == {
+        second_image.id
+    }
+    assert {item["variant_type"] for item in cursor_report["items"]} == {
+        "original",
+        "card",
+    }
+
+    assert ranged_report["from_image_id"] == second_image.id
+    assert ranged_report["to_image_id"] == third_image.id
+    assert ranged_report["planned_uploads"] == 2
+    assert {
+        item["product_image_id"] for item in ranged_report["items"]
+    } == {second_image.id, third_image.id}
+    assert {item["source_kind"] for item in ranged_report["items"]} == {"variant"}
+    assert first_image.id not in {
+        item["product_image_id"] for item in ranged_report["items"]
+    }
+    assert storage.uploads == []
+
+
+@pytest.mark.asyncio
+async def test_media_migration_plans_slashless_media_products_urls(
+    sqlite_session,
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.chdir(tmp_path)
+    _, image, variant = await _make_product_with_media(
+        sqlite_session,
+        tmp_path,
+        slashless_urls=True,
+    )
+    storage = RecordingStorage()
+
+    report = await ProductMediaMigrationService.migrate_to_storage(
+        sqlite_session,
+        storage=storage,
+        execute=False,
+        limit=10,
+    )
+
+    assert report["planned_uploads"] == 2
+    assert {item["source_url"] for item in report["items"]} == {
+        "media/products/shared/original.webp",
+        "media/products/variants/card/card.webp",
+    }
+    assert {item["source_path"] for item in report["items"]} == {
+        "media/products/shared/original.webp",
+        "media/products/variants/card/card.webp",
+    }
+    assert not [
+        item
+        for item in report["skipped"]
+        if item.get("skip_reason") == "non_local_url"
+    ]
+    assert image.url == "media/products/shared/original.webp"
+    assert variant.url == "media/products/variants/card/card.webp"
+    assert storage.uploads == []
