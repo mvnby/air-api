@@ -287,6 +287,25 @@ After apply, smoke-check:
 - `/api/v1/products?limit=5`
 - `/api/v1/filters/config`
 
+## API VPS Monitoring
+
+Use `scripts/check_api_vps_health.sh` for cheap API VPS monitoring and runbook
+checks. It validates the public API endpoints, and when SSH is configured it
+also checks disk/inodes, Docker services, Postgres readiness, localhost app
+health, nginx TLS expiry, and Google Drive backup freshness from inside the app
+container.
+
+```bash
+# Public API only, safe from any machine
+bash scripts/check_api_vps_health.sh --public-only
+
+# Full VPS + backup freshness checks from a trusted machine
+API_SSH_HOST=mvn-api API_SSH_USER=root bash scripts/check_api_vps_health.sh
+```
+
+See `docs/api-vps-monitoring.md` for cron examples, the manual GitHub Actions
+workflow, alert routing options, and failure triage.
+
 ## Product Media R2/S3 Rollout
 
 Product image variant storage can be switched from local files to R2/S3-compatible
