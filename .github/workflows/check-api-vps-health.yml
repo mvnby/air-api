@@ -1,0 +1,91 @@
+name: API VPS Health Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Check mode"
+        type: choice
+        required: true
+        default: "public-only"
+        options:
+          - public-only
+          - ssh
+      backup_max_age_hours:
+        description: "Backup freshness threshold in hours"
+        type: string
+        required: false
+        default: "36"
+      check_backups:
+        description: "Check Google Drive backup freshness in ssh mode"
+        type: boolean
+        required: false
+        default: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup API SSH Key
+        if: ${{ inputs.mode == 'ssh' }}
+        env:
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
+          SSH_USER_API: ${{ secrets.SSH_USER_API }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_HOST_API}" ] || [ -z "${SSH_USER_API}" ] || [ -z "${SSH_KEY}" ]; then
+            echo "::error::Missing one of required secrets for ssh mode: SSH_HOST_API, SSH_USER_API, SSH_KEY"
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "${SSH_KEY}" > ~/.ssh/api_vps_health_key
+          chmod 600 ~/.ssh/api_vps_health_key
+          ssh-keyscan -T 10 -H "${SSH_HOST_API}" >> ~/.ssh/known_hosts
+
+      - name: Run API VPS Health Check
+        env:
+          BASE_URL: https://api.mvn.by
+          BACKUP_MAX_AGE_HOURS: ${{ inputs.backup_max_age_hours }}
+          CHECK_BACKUPS: ${{ inputs.check_backups }}
+          API_SSH_HOST: ${{ secrets.SSH_HOST_API }}
+          API_SSH_USER: ${{ secrets.SSH_USER_API }}
+        run: |
+          set -euo pipefail
+
+          if [ "${{ inputs.mode }}" = "public-only" ]; then
+            bash scripts/check_api_vps_health.sh --public-only | tee api-vps-health.log
+          else
+            API_SSH_KEY_PATH="${HOME}/.ssh/api_vps_health_key" bash scripts/check_api_vps_health.sh | tee api-vps-health.log
+          fi
+
+      - name: Write Summary
+        if: always()
+        run: |
+          {
+            echo "## API VPS Health Check"
+            echo "- mode: ${{ inputs.mode }}"
+            echo "- base_url: https://api.mvn.by"
+            echo "- backup_max_age_hours: ${{ inputs.backup_max_age_hours }}"
+            echo "- check_backups: ${{ inputs.check_backups }}"
+            echo "- log_artifact: api-vps-health-log-${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Health Log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: api-vps-health-log-${{ github.run_id }}
+          path: api-vps-health.log
+          if-no-files-found: warn

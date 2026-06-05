@@ -1,0 +1,548 @@
+# API Single-VPS Migration Runbook
+
+Owner/operator runbook for moving `api.mvn.by` from the current single API VPS to a new single API VPS.
+
+Related source material:
+
+- [Deployment guide](deployment.md)
+- [`docker-compose.prod.yml`](../docker-compose.prod.yml)
+- [Backend deploy workflow](../.github/workflows/deploy.yml)
+- [`scripts/deploy.sh`](../scripts/deploy.sh)
+- [`scripts/post_deploy_smoke_check.sh`](../scripts/post_deploy_smoke_check.sh)
+- [`services/backup_service.py`](../services/backup_service.py)
+- [`scripts/restore_db.py`](../scripts/restore_db.py)
+
+## Scope And Safety
+
+This runbook is for one production API origin running Docker Compose services:
+
+- `db`: PostgreSQL
+- `app`: FastAPI, static/media serving, manager UI, and in-process scheduler loops
+- `bot`: Telegram bot polling process
+
+Current production assumptions:
+
+- Production directory: `/opt/air-api`
+- Public API domain: `api.mvn.by`
+- Current old API IP from existing docs: `185.250.45.54`
+- Public access goes through Cloudflare/nginx to `127.0.0.1:8000`
+- Compose binds Postgres and FastAPI to localhost on the VPS
+
+Hard safety rules:
+
+- Do not run two active `bot` services against the same bot token.
+- Do not run two active production `app` services after the freeze, because the scheduler is started inside `app` lifecycle and can run price sync, backups, lead archival, supplier sync, and mail imports.
+- During cutover, stop old `app` and `bot` before starting the new production `app`.
+- Start the new `bot` only after the new `app` has passed app-only and public smoke checks.
+- If rollback is needed, stop new `app` and `bot` before restarting old `app` and `bot`.
+
+Issue #433 is expected to add stronger single-active controls later. Until then, the operator must enforce single-active behavior manually.
+
+## Variables
+
+Set these on the operator workstation before running local transfer commands:
+
+```bash
+OLD_API_HOST=185.250.45.54
+NEW_API_HOST=<new-vps-ip>
+API_USER=root
+MIGRATION_ID=api-migration-$(date +%Y%m%d%H%M%S)
+WORKDIR="$HOME/$MIGRATION_ID"
+COMMIT_SHA=<deployed-backend-commit-sha>
+IMAGE="ghcr.io/mvnby/air-api/backend:${COMMIT_SHA}"
+```
+
+Use a commit SHA that has already been built and pushed by GitHub Actions. The deploy workflow publishes both:
+
+```text
+ghcr.io/mvnby/air-api/backend:latest
+ghcr.io/mvnby/air-api/backend:<commit-sha>
+```
+
+Prefer the SHA tag for migration cutover so the old and new hosts run the same known image rather than whatever `latest` points to at the moment of migration.
+
+## Phase 1: Preflight Inventory
+
+Run inventory commands on the old API VPS. These commands avoid printing secret values.
+
+```bash
+ssh "${API_USER}@${OLD_API_HOST}"
+cd /opt/air-api
+```
+
+Confirm compose services and images:
+
+```bash
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml images
+docker compose -f docker-compose.prod.yml config --services
+```
+
+Record `.env` key names without values:
+
+```bash
+awk -F= '/^[A-Za-z_][A-Za-z0-9_]*=/{print $1"=<redacted>"}' .env | sort
+```
+
+Confirm required runtime files exist:
+
+```bash
+for f in .env docker-compose.prod.yml token.json client_secret.json credentials.json; do
+  if [ -f "$f" ]; then
+    stat -c '%n %s bytes mode=%a owner=%U:%G' "$f"
+  else
+    echo "MISSING $f"
+  fi
+done
+```
+
+Inventory media and local backup directories:
+
+```bash
+du -sh media backups 2>/dev/null || true
+find media -type f | wc -l
+find backups -maxdepth 1 -type f -printf '%TY-%Tm-%Td %TH:%TM %s %p\n' 2>/dev/null | sort | tail -20
+```
+
+Inventory Postgres volume and DB size:
+
+```bash
+docker volume ls | grep postgres || true
+docker compose -f docker-compose.prod.yml exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "select pg_size_pretty(pg_database_size(current_database())) as db_size;"'
+```
+
+Inventory Google Drive backup visibility from the app container:
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T app python scripts/restore_db.py --list
+```
+
+This confirms `token.json` is usable and shows available DB/media backups. Do not use Drive backups as the primary migration source unless a direct frozen dump cannot be used; a fresh dump taken after the maintenance freeze is the least stale source of truth.
+
+## Phase 2: New VPS Baseline
+
+Prepare the new VPS before the maintenance window. Do not start production `app` or `bot` yet.
+
+Install baseline packages:
+
+```bash
+ssh "${API_USER}@${NEW_API_HOST}"
+apt-get update
+apt-get install -y ca-certificates curl gnupg nginx certbot python3-certbot-dns-cloudflare
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+chmod a+r /etc/apt/keyrings/docker.gpg
+. /etc/os-release
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" > /etc/apt/sources.list.d/docker.list
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+systemctl enable --now docker nginx
+```
+
+Configure the firewall to expose only SSH and HTTP(S):
+
+```bash
+ufw allow OpenSSH
+ufw allow 80/tcp
+ufw allow 443/tcp
+ufw --force enable
+ufw status verbose
+```
+
+Create the application directory:
+
+```bash
+mkdir -p /opt/air-api
+chmod 700 /opt/air-api
+```
+
+Set up nginx to proxy only to the localhost-bound app:
+
+```bash
+cat >/etc/nginx/sites-available/api.mvn.by <<'NGINX'
+server {
+    listen 80;
+    server_name api.mvn.by;
+
+    client_max_body_size 50m;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+NGINX
+ln -sf /etc/nginx/sites-available/api.mvn.by /etc/nginx/sites-enabled/api.mvn.by
+nginx -t
+systemctl reload nginx
+```
+
+TLS options:
+
+- Preferred: issue the certificate before DNS cutover with Cloudflare DNS-01, so `api.mvn.by` can be tested with `curl --resolve`.
+- Acceptable: issue/refresh TLS immediately after DNS cutover if DNS-01 is not available, but keep the old VPS ready for rollback until HTTPS passes.
+
+For DNS-01, keep the Cloudflare token file outside `/opt/air-api`, mode `600`, and do not print it in logs:
+
+```bash
+chmod 600 /root/cloudflare.ini
+certbot certonly --dns-cloudflare --dns-cloudflare-credentials /root/cloudflare.ini -d api.mvn.by
+```
+
+Then update nginx for HTTPS:
+
+```bash
+cat >/etc/nginx/sites-available/api.mvn.by <<'NGINX'
+server {
+    listen 80;
+    server_name api.mvn.by;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name api.mvn.by;
+
+    ssl_certificate /etc/letsencrypt/live/api.mvn.by/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.mvn.by/privkey.pem;
+
+    client_max_body_size 50m;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+NGINX
+nginx -t
+systemctl reload nginx
+```
+
+## Phase 3: Stage Runtime Files
+
+From the operator workstation, create a local migration directory:
+
+```bash
+mkdir -p "$WORKDIR"
+chmod 700 "$WORKDIR"
+```
+
+Copy non-database runtime files from the old VPS without printing contents:
+
+```bash
+ssh "${API_USER}@${OLD_API_HOST}" '
+  set -euo pipefail
+  cd /opt/air-api
+  install -m 700 -d /root/api-migration-stage
+  tar -czf /root/api-migration-stage/runtime-files.tar.gz \
+    .env docker-compose.prod.yml token.json client_secret.json credentials.json
+  chmod 600 /root/api-migration-stage/runtime-files.tar.gz
+'
+
+scp "${API_USER}@${OLD_API_HOST}:/root/api-migration-stage/runtime-files.tar.gz" "$WORKDIR/"
+scp "$WORKDIR/runtime-files.tar.gz" "${API_USER}@${NEW_API_HOST}:/root/"
+
+ssh "${API_USER}@${NEW_API_HOST}" '
+  set -euo pipefail
+  cd /opt/air-api
+  tar -xzf /root/runtime-files.tar.gz
+  chmod 600 .env token.json client_secret.json credentials.json
+'
+```
+
+Create a SHA-pinned compose file on the new VPS:
+
+```bash
+ssh "${API_USER}@${NEW_API_HOST}" "cd /opt/air-api && COMMIT_SHA='${COMMIT_SHA}' sh -s" <<'SH'
+set -euo pipefail
+test -n "${COMMIT_SHA}"
+sed "s#ghcr.io/mvnby/air-api/backend:latest#ghcr.io/mvnby/air-api/backend:${COMMIT_SHA}#g" \
+  docker-compose.prod.yml > docker-compose.cutover.yml
+grep -n 'image: ghcr.io/mvnby/air-api/backend:' docker-compose.cutover.yml
+SH
+```
+
+Pull the pinned image and start only the database on the new VPS:
+
+```bash
+ssh "${API_USER}@${NEW_API_HOST}"
+cd /opt/air-api
+COMMIT_SHA=<deployed-backend-commit-sha>
+
+read -rsp "GHCR token: " GHCR_PAT
+printf '\n'
+printf '%s' "$GHCR_PAT" | docker login ghcr.io -u <github-username> --password-stdin
+unset GHCR_PAT
+
+docker manifest inspect "ghcr.io/mvnby/air-api/backend:${COMMIT_SHA}" >/dev/null
+docker compose -f docker-compose.cutover.yml pull app
+docker compose -f docker-compose.cutover.yml up -d db
+docker compose -f docker-compose.cutover.yml ps
+```
+
+Do not start `app` or `bot` yet.
+
+## Phase 4: Freeze Old API
+
+Schedule a maintenance window. The freeze starts when old `app` and `bot` are stopped.
+
+Announce the freeze to stakeholders. During the freeze:
+
+- Website/API writes are unavailable.
+- Telegram bot is unavailable.
+- No imports, manager edits, order changes, media uploads, or restore jobs should be started.
+
+On the old VPS:
+
+```bash
+ssh "${API_USER}@${OLD_API_HOST}"
+cd /opt/air-api
+docker compose -f docker-compose.prod.yml stop bot app
+docker compose -f docker-compose.prod.yml ps
+```
+
+Confirm old localhost app is down:
+
+```bash
+curl -fsS http://127.0.0.1:8000/api/health && echo "UNEXPECTED: old app still responds" || echo "old app stopped"
+```
+
+The old `db` remains running only long enough to take the final dump.
+
+## Phase 5: Final DB And Media Backup
+
+On the old VPS, create a final frozen DB dump and media archive:
+
+```bash
+cd /opt/air-api
+install -m 700 -d /root/api-migration-final
+
+docker compose -f docker-compose.prod.yml exec -T db sh -c \
+  'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' \
+  > /root/api-migration-final/db.sql
+
+tar -C /opt/air-api -czf /root/api-migration-final/media.tar.gz media
+chmod 600 /root/api-migration-final/db.sql /root/api-migration-final/media.tar.gz
+
+ls -lh /root/api-migration-final/db.sql /root/api-migration-final/media.tar.gz
+```
+
+Optional but recommended: keep a Drive backup as a second recovery source. This can take longer because it uploads DB and media to Google Drive:
+
+```bash
+docker compose -f docker-compose.prod.yml run -T --rm app python -c \
+  "from services.backup_service import backup_service; backup_service.perform_backup(cleanup=True)"
+```
+
+Only run this optional step if the longer maintenance window is acceptable. Use `docker compose run`, not `up -d app`, so the public old API and scheduler lifecycle do not restart during the freeze.
+
+Transfer final artifacts to the new VPS:
+
+```bash
+scp "${API_USER}@${OLD_API_HOST}:/root/api-migration-final/db.sql" "$WORKDIR/"
+scp "${API_USER}@${OLD_API_HOST}:/root/api-migration-final/media.tar.gz" "$WORKDIR/"
+scp "$WORKDIR/db.sql" "$WORKDIR/media.tar.gz" "${API_USER}@${NEW_API_HOST}:/root/"
+```
+
+## Phase 6: Restore On New VPS
+
+On the new VPS:
+
+```bash
+ssh "${API_USER}@${NEW_API_HOST}"
+cd /opt/air-api
+docker compose -f docker-compose.cutover.yml up -d db
+```
+
+Restore the DB dump:
+
+```bash
+docker compose -f docker-compose.cutover.yml exec -T db sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+  < /root/db.sql
+```
+
+Restore media:
+
+```bash
+rm -rf /opt/air-api/media
+tar -C /opt/air-api -xzf /root/media.tar.gz
+chown -R root:root /opt/air-api/media
+```
+
+Run migrations and required defaults with a one-off container. This does not start the long-running `app` service:
+
+```bash
+docker compose -f docker-compose.cutover.yml run -T --rm app alembic upgrade head
+docker compose -f docker-compose.cutover.yml run -T --rm app python3 scripts/ensure_global_config_defaults.py
+```
+
+## Phase 7: App-Only Smoke On New VPS
+
+At this point old `app` and old `bot` must still be stopped.
+
+Start the new app only:
+
+```bash
+docker compose -f docker-compose.cutover.yml up -d app
+docker compose -f docker-compose.cutover.yml ps
+docker compose -f docker-compose.cutover.yml logs --tail=120 app
+```
+
+Run local app smoke:
+
+```bash
+curl -fsS http://127.0.0.1:8000/api/health
+curl -fsS http://127.0.0.1:8000/api/v1/products?limit=5
+curl -fsS http://127.0.0.1:8000/api/v1/filters/config
+```
+
+Run nginx-origin smoke on the new VPS:
+
+```bash
+curl -fsS -H 'Host: api.mvn.by' http://127.0.0.1/api/health
+```
+
+If TLS was issued before DNS cutover, test from the operator workstation:
+
+```bash
+curl -fsS --resolve "api.mvn.by:443:${NEW_API_HOST}" https://api.mvn.by/api/health
+curl -fsS --resolve "api.mvn.by:443:${NEW_API_HOST}" "https://api.mvn.by/api/v1/products?limit=5"
+curl -fsS --resolve "api.mvn.by:443:${NEW_API_HOST}" https://api.mvn.by/api/v1/filters/config
+```
+
+Do not start `bot` yet.
+
+## Phase 8: DNS And Deploy Target Cutover
+
+In Cloudflare:
+
+1. Update `api.mvn.by` A record from the old IP to `NEW_API_HOST`.
+2. Keep the same proxy mode as the old record unless there is an explicit owner decision to change it.
+3. If using Cloudflare proxied DNS, TTL is automatic. If DNS-only, use the previously agreed low TTL.
+
+In GitHub repository secrets:
+
+1. Update `SSH_HOST_API` to `NEW_API_HOST`.
+2. Keep `SSH_USER_API` unchanged unless the new VPS uses a different deploy user.
+3. Do not run a deployment until public smoke passes unless the deployment itself is part of the approved cutover.
+
+After DNS starts resolving to the new origin, run public smoke from outside the VPS:
+
+```bash
+dig +short api.mvn.by
+curl -fsS https://api.mvn.by/api/health
+curl -fsS "https://api.mvn.by/api/v1/products?limit=5"
+curl -fsS https://api.mvn.by/api/v1/filters/config
+curl -fsS https://api.mvn.by/docs >/dev/null
+```
+
+If the public smoke is green, start the new bot:
+
+```bash
+ssh "${API_USER}@${NEW_API_HOST}" '
+  set -euo pipefail
+  cd /opt/air-api
+  docker compose -f docker-compose.cutover.yml up -d bot
+  docker compose -f docker-compose.cutover.yml ps
+  docker compose -f docker-compose.cutover.yml logs --tail=120 bot
+'
+```
+
+Run one final public smoke:
+
+```bash
+curl -fsS https://api.mvn.by/api/health
+curl -fsS "https://api.mvn.by/api/v1/products?limit=5"
+curl -fsS https://api.mvn.by/api/v1/filters/config
+```
+
+## Phase 9: Post-Cutover Normalization
+
+The migration used `docker-compose.cutover.yml` with a SHA-pinned image. After the owner confirms the migration is stable, choose one of these paths:
+
+- Keep using the SHA-pinned cutover compose until the next planned backend deploy.
+- Run the GitHub backend deploy workflow from the approved branch/commit after `SSH_HOST_API` is updated. The workflow copies `docker-compose.prod.yml`, pulls images, runs migrations/defaults, recreates `app` and `bot`, and runs `scripts/post_deploy_smoke_check.sh`.
+
+Before running GitHub deploy, remember that the repository compose currently uses `backend:latest`. If the goal is to keep production pinned longer, update the deployment model first or continue using the manual cutover compose.
+
+Cleanup after the rollback window:
+
+```bash
+ssh "${API_USER}@${OLD_API_HOST}" 'docker compose -f /opt/air-api/docker-compose.prod.yml ps'
+ssh "${API_USER}@${NEW_API_HOST}" 'rm -f /root/db.sql /root/media.tar.gz /root/runtime-files.tar.gz'
+rm -rf "$WORKDIR"
+```
+
+Do not delete old VPS data or backups until the owner explicitly accepts the migration and the rollback window has ended.
+
+## Rollback
+
+Use rollback if app-only smoke, public smoke, bot startup, or early production monitoring fails.
+
+Critical order:
+
+1. Stop new `bot` and `app`.
+2. Point DNS back to the old IP.
+3. Restart old `app` and `bot`.
+4. Restore GitHub `SSH_HOST_API` to the old IP if it was changed.
+
+Commands:
+
+```bash
+ssh "${API_USER}@${NEW_API_HOST}" '
+  set -euo pipefail
+  cd /opt/air-api
+  docker compose -f docker-compose.cutover.yml stop bot app || true
+  docker compose -f docker-compose.cutover.yml ps
+'
+```
+
+In Cloudflare, set `api.mvn.by` A record back to the old IP, for example `185.250.45.54`.
+
+On the old VPS:
+
+```bash
+ssh "${API_USER}@${OLD_API_HOST}" '
+  set -euo pipefail
+  cd /opt/air-api
+  docker compose -f docker-compose.prod.yml up -d app bot
+  docker compose -f docker-compose.prod.yml ps
+  curl -fsS http://127.0.0.1:8000/api/health
+'
+```
+
+Public rollback smoke:
+
+```bash
+dig +short api.mvn.by
+curl -fsS https://api.mvn.by/api/health
+curl -fsS "https://api.mvn.by/api/v1/products?limit=5"
+curl -fsS https://api.mvn.by/api/v1/filters/config
+```
+
+If the new API accepted writes, orders, imports, media uploads, or bot interactions before rollback, data may diverge. Decide whether to back-transfer a new dump/media archive from the new VPS to the old VPS before restarting old services, or accept losing those writes. The lowest-risk rollback is before the new bot starts and before ending the maintenance window.
+
+## Final Owner Checklist
+
+- Old and new VPS inventory captured.
+- Maintenance window approved.
+- `COMMIT_SHA` selected and confirmed available in GHCR.
+- New VPS has Docker, Compose, nginx, firewall, and TLS ready.
+- `/opt/air-api/.env`, compose, Google credential files, media, and final DB dump restored on new VPS.
+- Old `app` and `bot` stopped before new `app` starts.
+- New `app` passes localhost and nginx-origin smoke.
+- Cloudflare `api.mvn.by` points to new IP.
+- GitHub `SSH_HOST_API` points to new IP.
+- Public smoke passes.
+- New `bot` starts only after public smoke passes.
+- Rollback path remains available until the owner ends the rollback window.
