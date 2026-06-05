@@ -2,23 +2,23 @@
 
 ## Server Configuration
 
-### Current Web Server / Fallback
+### Legacy Web Server / Fallback
 - **Host alias:** `mvn-web`
 - **User:** `user2154318`
 - **IP:** `178.159.240.174`
 - **Production path:** `/var/www/user2154318/data/www/mvn.by`
 - **Dev path:** `/var/www/user2154318/data/www/dev.mvn.by`
 - **SSH Key:** `~/.ssh/id_ed25519`
-- **Role:** current public storefront target and fallback until the new VPS is proven and the owner approves DNS cutover.
+- **Role:** fallback static storefront target. Keep it available for rollback while the new VPS is monitored.
 
-### Future Web VPS
+### Current Web VPS
 - **Host alias:** `mvn`
 - **User:** `deploy` for static deploys, `root` for server administration only
 - **IP:** `153.80.244.78`
 - **Hostname:** `www.mvn.by`
 - **Production path:** `/var/www/mvn.by/current`
 - **Nginx site:** `/etc/nginx/sites-available/mvn.by`
-- **Role:** prepared static nginx target for the future public Astro storefront. Do not point public DNS here until owner/manager cutover approval.
+- **Role:** current public Astro storefront target for `mvn.by` and `www.mvn.by`.
 
 Prepared server baseline:
 - Ubuntu 24.04 LTS
@@ -28,17 +28,29 @@ Prepared server baseline:
 - SSH password authentication disabled after root and deploy key login were verified
 - fail2ban enabled for sshd
 - unattended upgrades enabled
+- Let's Encrypt certificate for `mvn.by` and `www.mvn.by` issued via Cloudflare DNS-01
+- certbot renewal hook reloads nginx after certificate renewal
 
-Pre-cutover checks from a local machine:
+Origin checks from a local machine:
 
 ```bash
 ssh mvn true
 ssh deploy@153.80.244.78 true
 curl -fsS -H 'Host: mvn.by' http://153.80.244.78/healthz
 curl -I -H 'Host: mvn.by' http://153.80.244.78/
+curl -I --resolve mvn.by:443:153.80.244.78 https://mvn.by/
 ```
 
-Because `mvn.by` and `www.mvn.by` still resolve through Cloudflare and not to `153.80.244.78`, do not run normal HTTP-01 certbot issuance before cutover. TLS can be issued after DNS is pointed at the new VPS, or before cutover only with an approved DNS-01/Cloudflare validation token.
+Cloudflare DNS state after the 2026-06-05 cutover:
+
+```text
+mvn.by      A 153.80.244.78 proxied
+www.mvn.by  A 153.80.244.78 proxied
+```
+
+Rollback keeps using the legacy `mvn-web` server: restore the Cloudflare A records
+to `178.159.240.174`, restore the legacy web deploy secrets if needed, and run the
+manual web rebuild workflow.
 
 ### API Server
 - **Host alias:** `mvn-api`
@@ -47,6 +59,56 @@ Because `mvn.by` and `www.mvn.by` still resolve through Cloudflare and not to `1
 - **SSH Key:** `~/.ssh/id_ed25519`
 - **DNS:** `api.mvn.by` A-record must point to `185.250.45.54`
 - **GitHub secret:** `SSH_HOST_API` must be `185.250.45.54`
+- **Public entrypoint:** nginx on `80/443`, proxying `api.mvn.by` to `127.0.0.1:8000`
+- **Health endpoint:** `/api/health`
+
+Production compose binds backend-only ports to localhost:
+
+```yaml
+db:
+  ports:
+    - "127.0.0.1:5432:5432"
+app:
+  ports:
+    - "127.0.0.1:8000:8000"
+```
+
+This keeps nginx and SSH-tunnel workflows working while preventing direct
+internet access to Postgres and the raw FastAPI port. The normal backend deploy
+recreates `app` and `bot`, so the app binding change is applied by the deploy.
+The `db` container is intentionally not force-recreated on every deploy; apply
+the DB port binding during a short maintenance window.
+
+Before merging or deploying a compose hardening change, save the current
+production compose file:
+
+```bash
+ssh mvn-api
+cd /opt/air-api
+cp docker-compose.prod.yml docker-compose.prod.yml.bak-public-ports-$(date +%Y%m%d%H%M%S)
+```
+
+After the hardened compose file is deployed, apply the DB binding and verify:
+
+```bash
+ssh mvn-api
+cd /opt/air-api
+docker compose -f docker-compose.prod.yml up -d db
+curl -fsS https://api.mvn.by/api/health
+curl -fsS http://127.0.0.1:8000/api/health
+nc -vz 185.250.45.54 5432 # should fail from outside
+nc -vz 185.250.45.54 8000 # should fail from outside
+```
+
+Rollback is a compose-file restore plus container recreate:
+
+```bash
+ssh mvn-api
+cd /opt/air-api
+cp docker-compose.prod.yml.bak-public-ports-<timestamp> docker-compose.prod.yml
+docker compose -f docker-compose.prod.yml up -d --force-recreate db app bot
+curl -fsS http://127.0.0.1:8000/api/health
+```
 
 ## Local Deployment (Legacy)
 
@@ -102,9 +164,9 @@ The workflow requires these env vars in the build step:
 1. **deploy-backend:** Builds and pushes Docker image, deploys to API server
 2. **deploy-frontend:** Builds Astro site, uploads to web server via rsync over SSH
 
-### New VPS Staging Deploy
+### Web VPS Deploy Target
 
-The web workflows default to the legacy `mvn-web` path. To stage or cut over the static deploy to the new VPS, set these GitHub secrets deliberately:
+The web workflows deploy to the current VPS when these GitHub secrets are set:
 
 ```text
 SSH_HOST_WEB=153.80.244.78
@@ -112,7 +174,7 @@ SSH_USER_WEB=deploy
 SSH_WEB_TARGET=/var/www/mvn.by/current/
 ```
 
-Keep the old values recorded so rollback is just a secrets revert plus a manual rebuild:
+Legacy fallback values:
 
 ```text
 SSH_HOST_WEB=178.159.240.174
@@ -120,20 +182,27 @@ SSH_USER_WEB=user2154318
 SSH_WEB_TARGET=
 ```
 
-Recommended gated sequence:
+Post-cutover verification:
 
 1. Confirm `check-web-ssh.yml` succeeds against `deploy@153.80.244.78`.
-2. Run `rebuild-web.yml` manually against the new VPS while public DNS still points to the old target.
-3. Verify the staged site by IP with Host header:
+2. Run `rebuild-web.yml` manually against the current VPS.
+3. Verify the origin by IP with Host header:
 
    ```bash
    curl -I -H 'Host: mvn.by' http://153.80.244.78/
    curl -fsS -H 'Host: mvn.by' http://153.80.244.78/catalog/ | head
    ```
 
-4. Request owner approval for DNS cutover. Do not change `mvn.by` or `www.mvn.by` DNS before approval.
-5. After cutover, issue/enable TLS for `mvn.by` and `www.mvn.by`, then verify HTTPS.
-6. Roll back by restoring DNS and/or GitHub secrets to the legacy `mvn-web` values and running the manual rebuild workflow.
+4. Verify public Cloudflare paths:
+
+   ```bash
+   curl -I https://mvn.by/
+   curl -I https://mvn.by/catalog/
+   curl -I https://www.mvn.by/
+   ```
+
+5. Roll back by restoring DNS and/or GitHub secrets to the legacy `mvn-web`
+   values and running the manual rebuild workflow.
 
 ### Web SSH Reliability
 
@@ -214,7 +283,7 @@ bash scripts/ops_post_deploy.sh
 ```
 
 After apply, smoke-check:
-- `/health`
+- `/api/health`
 - `/api/v1/products?limit=5`
 - `/api/v1/filters/config`
 
