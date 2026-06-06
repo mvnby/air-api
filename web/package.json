@@ -4,6 +4,7 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "astro dev",
+    "test:brands": "node tests/brand-markdown.test.mjs",
     "check-api": "node scripts/check-api.js",
     "audit:theme": "bash ../scripts/audit_theme_hardcodes.sh",
     "build": "npm run check-api && astro build",

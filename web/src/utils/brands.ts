@@ -54,15 +54,30 @@ const isSafeMarkdownUrl = (value: string): boolean => {
 };
 
 const renderInlineMarkdown = (value: string): string => {
-    let html = escapeHtml(value);
+    const renderText = (text: string): string => {
+        let html = escapeHtml(text);
+        html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+        html = html.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+        return html;
+    };
 
-    html = html.replace(/\[([^\]]+)]\(([^)]+)\)/g, (match, label: string, url: string) => {
-        const trimmedUrl = url.trim();
-        if (!isSafeMarkdownUrl(trimmedUrl)) return label;
-        return `<a href="${escapeHtml(trimmedUrl)}" rel="noopener noreferrer">${label}</a>`;
-    });
-    html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-    html = html.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+    let html = "";
+    let lastIndex = 0;
+    const linkPattern = /\[([^\]]+)]\(([^)\s]+)\)/g;
+    for (const match of value.matchAll(linkPattern)) {
+        const fullMatch = match[0];
+        const matchIndex = match.index || 0;
+        const label = match[1];
+        const trimmedUrl = match[2].trim();
+
+        html += renderText(value.slice(lastIndex, matchIndex));
+        html += isSafeMarkdownUrl(trimmedUrl)
+            ? `<a href="${escapeHtml(trimmedUrl)}" rel="noopener noreferrer">${renderText(label)}</a>`
+            : renderText(label);
+        lastIndex = matchIndex + fullMatch.length;
+    }
+
+    html += renderText(value.slice(lastIndex));
 
     return html;
 };
