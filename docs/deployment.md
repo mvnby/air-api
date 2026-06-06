@@ -79,6 +79,37 @@ recreates `app` and `bot`, so the app binding change is applied by the deploy.
 The `db` container is intentionally not force-recreated on every deploy; apply
 the DB port binding during a short maintenance window.
 
+### API Runtime Roles
+
+The backend image has single-active runtime controls for future standby work.
+Current production does not need new env values: missing `APP_ROLE`,
+empty `APP_ROLE`, empty `SCHEDULER_ENABLED`, and empty `BOT_ENABLED` are treated
+as the active primary default.
+
+| Host mode | Services | Required env | Behavior |
+| --- | --- | --- | --- |
+| Primary/current production | `db`, `app`, `bot` | `APP_ROLE=primary` or unset; `SCHEDULER_ENABLED`/`BOT_ENABLED` unset or `true` | FastAPI starts scheduler loops; bot starts Telegram polling. |
+| Standby/passive API | `db`, `app` only | `APP_ROLE=standby`, `SCHEDULER_ENABLED=false`, `BOT_ENABLED=false` | FastAPI serves passive health/API checks without scheduler loops; bot must not be started. If started accidentally, it idles without polling. |
+
+`SCHEDULER_ENABLED` and `BOT_ENABLED` are explicit overrides. If either is set
+to `false`, that process stays disabled even when `APP_ROLE=primary`; remove the
+override or set it to `true` before promoting a standby host.
+
+These controls do not enable Cloudflare load balancing, automatic failover, or
+public standby cutover. Do not route public write traffic to a standby host.
+
+Passive standby smoke, without changing Cloudflare or enabling failover:
+
+```bash
+ssh <standby-api-host>
+cd /opt/air-api
+printf '\nAPP_ROLE=standby\nSCHEDULER_ENABLED=false\nBOT_ENABLED=false\n' >> .env
+docker compose -f docker-compose.prod.yml up -d db app
+docker compose -f docker-compose.prod.yml stop bot || true
+docker compose -f docker-compose.prod.yml logs --tail=120 app | grep 'Scheduler startup skipped'
+curl -fsS http://127.0.0.1:8000/api/health
+```
+
 Before merging or deploying a compose hardening change, save the current
 production compose file:
 
