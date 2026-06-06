@@ -52,6 +52,7 @@ class ProductDAO:
         if is_published is not None:
             stmt = stmt.where(Product.is_published == is_published)
         stmt = stmt.options(
+            selectinload(Product.brand),
             selectinload(Product.tags).selectinload(Tag.group),
             ProductDAO._gallery_images_option(load_image_variants=load_image_variants),
             selectinload(Product.attachments),
@@ -71,6 +72,7 @@ class ProductDAO:
         if is_published is not None:
             stmt = stmt.where(Product.is_published == is_published)
         stmt = stmt.options(
+            selectinload(Product.brand),
             selectinload(Product.tags).selectinload(Tag.group),
             ProductDAO._gallery_images_option(load_image_variants=load_image_variants),
             selectinload(Product.attachments),
@@ -85,6 +87,7 @@ class ProductDAO:
         load_image_variants: bool = False,
     ) -> List[Product]:
         stmt = select(Product).where(Product.is_published == True).options(
+            selectinload(Product.brand),
             selectinload(Product.tags).selectinload(Tag.group),
             ProductDAO._gallery_images_option(load_image_variants=load_image_variants),
             selectinload(Product.attachments),
@@ -102,6 +105,7 @@ class ProductDAO:
         if not product_ids:
             return []
         stmt = select(Product).where(Product.id.in_(product_ids)).options(
+            selectinload(Product.brand),
             ProductDAO._gallery_images_option(load_image_variants=load_image_variants),
             selectinload(Product.attachments),
         )
@@ -455,6 +459,7 @@ class ProductDAO:
         load_image_variants: bool = False,
     ) -> List[Product]:
         stmt = select(Product).options(
+            selectinload(Product.brand),
             selectinload(Product.tags).selectinload(Tag.group),
             ProductDAO._gallery_images_option(load_image_variants=load_image_variants),
             selectinload(Product.attachments),

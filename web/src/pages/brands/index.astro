@@ -1,7 +1,7 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import { getPublicBrands, resolveImageUrl } from "../../utils/api";
-import { formatBrandProductCount } from "../../utils/brands";
+import { formatBrandProductCount, getBrandIntro } from "../../utils/brands";
 
 interface PublicBrand {
     id: number;
@@ -65,7 +65,7 @@ const brandListSchema = {
                             </div>
                             <div class="brand-card-copy">
                                 <h2>{brand.title}</h2>
-                                <p>{brand.description || `Кондиционеры ${brand.title}: подбор по площади, продажа, монтаж и обслуживание в Витебске.`}</p>
+                                <p>{getBrandIntro(brand.title, brand.description)}</p>
                                 <span>{formatBrandProductCount(brand.products_count)} в каталоге</span>
                             </div>
                         </a>

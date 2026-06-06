@@ -6,6 +6,7 @@ from models import Product
 from schemas import (
     ProductImageResponse,
     ProductManualResponse,
+    ProductBrandResponse,
     ProductResponse,
     ProductSiblingResponse,
     TagGroupResponse,
@@ -150,6 +151,16 @@ def map_product_to_response(
         vitebsk_qty=int((supply_metrics or {}).get("vitebsk_qty", 0) or 0),
         minsk_qty=int((supply_metrics or {}).get("minsk_qty", 0) or 0),
         availability_status=(supply_metrics or {}).get("availability_status"),
+        brand=(
+            ProductBrandResponse(
+                id=product.brand.id,
+                title=product.brand.title,
+                slug=product.brand.slug,
+                logo_url=product.brand.logo_url,
+            )
+            if product.brand
+            else None
+        ),
         tags=tags_payload,
         specs=specs or {},
         images=images or [],

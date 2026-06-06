@@ -204,6 +204,7 @@ export type { PaymentCurrency } from './models/PaymentCurrency';
 export type { PaymentResponse } from './models/PaymentResponse';
 export type { ProductAvailabilityLeadPayload } from './models/ProductAvailabilityLeadPayload';
 export type { ProductAvailabilityLeadResponse } from './models/ProductAvailabilityLeadResponse';
+export type { ProductBrandResponse } from './models/ProductBrandResponse';
 export type { ProductImageResponse } from './models/ProductImageResponse';
 export type { ProductImageVariantBatchProcessResponse } from './models/ProductImageVariantBatchProcessResponse';
 export type { ProductImageVariantCandidateResponse } from './models/ProductImageVariantCandidateResponse';

@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ProductBrandResponse } from './ProductBrandResponse';
 import type { ProductImageResponse } from './ProductImageResponse';
 import type { ProductManualResponse } from './ProductManualResponse';
 import type { ProductSiblingResponse } from './ProductSiblingResponse';
@@ -23,6 +24,7 @@ export type ProductResponse = {
     vitebsk_qty?: number;
     minsk_qty?: number;
     availability_status?: (string | null);
+    brand?: (ProductBrandResponse | null);
     tags?: Array<TagResponse>;
     specs?: Record<string, any>;
     images?: Array<string>;
