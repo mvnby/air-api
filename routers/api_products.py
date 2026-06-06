@@ -122,7 +122,7 @@ async def get_vitebsk_featured_products(session: AsyncSession = Depends(get_sess
 
 @router.get("/v1/products/{identifier}", response_model=ProductResponse, operation_id="get_product")
 async def get_product_by_identifier(identifier: str, session: AsyncSession = Depends(get_session)):
-    product = await ProductService.get_product_by_identifier(session, identifier)
+    product = await ProductService.get_public_product_by_identifier(session, identifier)
     if not product:
         raise HTTPException(status_code=404, detail=f"Product with identifier '{identifier}' not found")
     siblings = await ProductService.get_series_siblings(session, product, limit=8)

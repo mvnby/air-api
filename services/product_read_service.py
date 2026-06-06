@@ -223,6 +223,24 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
         )
 
     @staticmethod
+    async def get_public_product_by_identifier(session: AsyncSession, identifier: str) -> Optional[Product]:
+        if identifier.isdigit():
+            product = await ProductDAO.get_by_id(
+                session,
+                int(identifier),
+                is_published=True,
+                load_image_variants=True,
+            )
+            if product:
+                return product
+        return await ProductDAO.get_by_slug(
+            session,
+            identifier,
+            is_published=True,
+            load_image_variants=True,
+        )
+
+    @staticmethod
     async def get_all(session: AsyncSession) -> List[Dict[str, Any]]:
         products = await ProductDAO.get_all_published(session)
         return [ProductReadService._to_dict(p) for p in products]
