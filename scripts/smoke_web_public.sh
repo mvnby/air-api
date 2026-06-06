@@ -13,11 +13,19 @@ Environment:
   BRAND_PATH     Optional brand path, for example /brands/mdv/
   ASSET_PATH     Optional asset path, for example /_astro/index.hash.css
   BASIC_AUTH     Optional storefront basic auth as user:password.
+  HOST_HEADER    Optional Host header override for origin-only shadow smoke.
+  REQUIRE_NOINDEX
+                 Set true to require X-Robots-Tag with noindex on storefront responses.
+  REQUIRE_NO_STORE
+                 Set true to require Cache-Control with no-store on storefront responses.
+  REQUIRE_SSR_HEADERS
+                 Set true to require X-Catalog-Revision and X-Web-Data-Cache
+                 on runtime catalog/product/brand pages.
   TIMEOUT_SECONDS curl max time per request. Default: 20
 
 The script does not mutate manager/API/web state.
-When BASE_URL points at SSR staging, diagnostic X-Catalog-Revision and
-X-Web-Data-Cache headers are printed when present.
+When BASE_URL points at SSR staging or shadow runtime, diagnostic
+X-Catalog-Revision and X-Web-Data-Cache headers are printed when present.
 USAGE
 }
 
@@ -29,7 +37,11 @@ fi
 BASE_URL="${BASE_URL:-https://mvn.by}"
 API_ORIGIN_URL="${API_ORIGIN_URL:-https://api.mvn.by}"
 API_V1_URL="${API_V1_URL:-${API_ORIGIN_URL%/}/api/v1}"
-BASIC_AUTH="${BASIC_AUTH:-}"
+BASIC_AUTH="${BASIC_AUTH:-${SSR_SMOKE_BASIC_AUTH:-}}"
+HOST_HEADER="${HOST_HEADER:-}"
+REQUIRE_NOINDEX="${REQUIRE_NOINDEX:-false}"
+REQUIRE_NO_STORE="${REQUIRE_NO_STORE:-false}"
+REQUIRE_SSR_HEADERS="${REQUIRE_SSR_HEADERS:-false}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-20}"
 
 tmpdir="$(mktemp -d)"
@@ -41,6 +53,17 @@ trap cleanup EXIT
 trim_trailing_slash() {
   local value="$1"
   printf '%s' "${value%/}"
+}
+
+is_truthy() {
+  case "${1:-}" in
+    1|true|TRUE|yes|YES|on|ON) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+to_lower() {
+  printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]'
 }
 
 base_path_prefix() {
@@ -121,6 +144,9 @@ fetch_url() {
   if [[ "$auth_scope" == "storefront" && -n "$BASIC_AUTH" ]]; then
     curl_args+=(--user "$BASIC_AUTH")
   fi
+  if [[ "$auth_scope" == "storefront" && -n "$HOST_HEADER" ]]; then
+    curl_args+=(--header "Host: $HOST_HEADER")
+  fi
 
   status="$(
     curl "${curl_args[@]}" "$url"
@@ -146,6 +172,31 @@ fetch_url() {
   [[ -n "$x_robots" ]] && printf '     x-robots-tag: %s\n' "$x_robots"
   [[ -n "$x_catalog_revision" ]] && printf '     x-catalog-revision: %s\n' "$x_catalog_revision"
   [[ -n "$x_web_data_cache" ]] && printf '     x-web-data-cache: %s\n' "$x_web_data_cache"
+
+  if [[ "$auth_scope" == "storefront" ]] && is_truthy "$REQUIRE_NOINDEX"; then
+    if [[ "$(to_lower "$x_robots")" != *noindex* ]]; then
+      echo "FAIL $label: missing required noindex X-Robots-Tag ($url)" >&2
+      return 1
+    fi
+  fi
+
+  if [[ "$auth_scope" == "storefront" ]] && is_truthy "$REQUIRE_NO_STORE"; then
+    if [[ "$(to_lower "$cache_control")" != *no-store* ]]; then
+      echo "FAIL $label: missing required no-store Cache-Control ($url)" >&2
+      return 1
+    fi
+  fi
+
+  if [[ "$auth_scope" == "storefront" ]] && is_truthy "$REQUIRE_SSR_HEADERS"; then
+    case "$label" in
+      catalog|brands|product|brand-page)
+        if [[ -z "$x_catalog_revision" || -z "$x_web_data_cache" ]]; then
+          echo "FAIL $label: missing runtime freshness headers ($url)" >&2
+          return 1
+        fi
+        ;;
+    esac
+  fi
 
   LAST_BODY_FILE="$body_file"
 }
@@ -208,6 +259,7 @@ PY
 }
 
 echo "Storefront smoke: $(trim_trailing_slash "$BASE_URL")"
+[[ -n "$HOST_HEADER" ]] && echo "Storefront Host header: $HOST_HEADER"
 echo "API smoke: $(trim_trailing_slash "$API_ORIGIN_URL")"
 
 fetch_url "home" "$(join_url "$BASE_URL" "/")" "storefront"

@@ -8,6 +8,7 @@ services:
         PUBLIC_API_URL: ${PUBLIC_API_URL:-https://api.mvn.by/api/v1}
         PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://mvn.by}
         PUBLIC_GTM_ID: ${PUBLIC_GTM_ID:-}
+        SSR_BASE_PATH: ${SSR_BASE_PATH:-}
         SSR_STAGING_BASE_PATH: ${SSR_STAGING_BASE_PATH:-/__ssr-staging}
         SSR_RUNTIME_FRESHNESS: ${SSR_RUNTIME_FRESHNESS:-true}
     image: mvn-web-ssr-staging:local
@@ -21,13 +22,51 @@ services:
       INTERNAL_API_URL: ${SSR_INTERNAL_API_URL:-https://api.mvn.by/api/v1}
       PUBLIC_API_URL: ${PUBLIC_API_URL:-https://api.mvn.by/api/v1}
       PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://mvn.by}
+      SSR_BASE_PATH: ${SSR_BASE_PATH:-}
       SSR_STAGING_BASE_PATH: ${SSR_STAGING_BASE_PATH:-/__ssr-staging}
       SSR_RUNTIME_FRESHNESS: ${SSR_RUNTIME_FRESHNESS:-true}
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "node -e \"const p=process.env.SSR_STAGING_BASE_PATH||'/__ssr-staging'; fetch('http://127.0.0.1:'+(process.env.PORT||4321)+p+'/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
+          "node -e \"const raw=process.env.SSR_BASE_PATH||process.env.SSR_STAGING_BASE_PATH||'/__ssr-staging'; const p=raw==='/'?'':raw.replace(/\\/$/,''); fetch('http://127.0.0.1:'+(process.env.PORT||4321)+p+'/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  web-public-shadow:
+    build:
+      context: ./web
+      dockerfile: Dockerfile.prod
+      args:
+        INTERNAL_API_URL: ${WEB_SHADOW_INTERNAL_API_URL:-https://api.mvn.by/api/v1}
+        PUBLIC_API_URL: ${WEB_SHADOW_PUBLIC_API_URL:-https://api.mvn.by/api/v1}
+        PUBLIC_SITE_URL: ${WEB_SHADOW_PUBLIC_SITE_URL:-https://mvn.by}
+        PUBLIC_GTM_ID: ${WEB_SHADOW_PUBLIC_GTM_ID:-}
+        SSR_BASE_PATH: ${WEB_SHADOW_BASE_PATH:-/}
+        SSR_STAGING_BASE_PATH: ${WEB_SHADOW_BASE_PATH:-/}
+        SSR_RUNTIME_FRESHNESS: ${WEB_SHADOW_RUNTIME_FRESHNESS:-true}
+    image: mvn-web-public-shadow:local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${WEB_SHADOW_PORT:-4322}:4321"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 4321
+      INTERNAL_API_URL: ${WEB_SHADOW_INTERNAL_API_URL:-https://api.mvn.by/api/v1}
+      PUBLIC_API_URL: ${WEB_SHADOW_PUBLIC_API_URL:-https://api.mvn.by/api/v1}
+      PUBLIC_SITE_URL: ${WEB_SHADOW_PUBLIC_SITE_URL:-https://mvn.by}
+      SSR_BASE_PATH: ${WEB_SHADOW_BASE_PATH:-/}
+      SSR_STAGING_BASE_PATH: ${WEB_SHADOW_BASE_PATH:-/}
+      SSR_RUNTIME_FRESHNESS: ${WEB_SHADOW_RUNTIME_FRESHNESS:-true}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"const raw=process.env.SSR_BASE_PATH||process.env.SSR_STAGING_BASE_PATH||'/'; const p=raw==='/'?'':raw.replace(/\\/$/,''); fetch('http://127.0.0.1:'+(process.env.PORT||4321)+p+'/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
         ]
       interval: 30s
       timeout: 10s

@@ -37,6 +37,11 @@ design for the new VPS is documented in
 switch public `mvn.by` to Astro runtime without following that runbook's
 staging, shadow, cutover, and rollback gates.
 
+The production shadow runtime workflow for issue #477 is documented in
+[`web-public-shadow-runtime-runbook.md`](web-public-shadow-runtime-runbook.md).
+It binds the Astro runtime to `127.0.0.1:4322`, uses a protected/noindex
+shadow host route, and keeps the public static root untouched.
+
 Origin checks from a local machine:
 
 ```bash

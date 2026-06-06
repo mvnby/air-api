@@ -359,10 +359,12 @@ Staging validation:
 
 Do not route public apex/root traffic yet.
 
-- Add a future `web-runtime` or `web-public` Docker Compose service on the web
-  VPS bound to `127.0.0.1:4322`.
+- Use `docs/web-public-shadow-runtime-runbook.md` for the concrete shadow
+  workflow.
+- Run `web-public-shadow` on the web VPS bound to `127.0.0.1:4322`.
 - Build from `/opt/air-api` at a recorded commit SHA.
-- Expose a protected/noindex shadow hostname or origin-only host header route.
+- Expose only a protected/noindex shadow hostname or origin-only host header
+  route.
 - Run the same route and freshness smoke checks against shadow.
 - Verify Cloudflare cache rules in simulation or on the protected hostname.
 
@@ -417,13 +419,13 @@ GitHub responsibilities:
 - Keep current backend Docker image build/deploy.
 - Keep current static web build/rsync workflows for rollback.
 - After owner approval, add a separate manual `deploy-web-runtime` workflow.
-- The first runtime deploy workflow should send a command to the web VPS rather
-  than rsyncing `web/dist/`:
+- The shadow runtime workflow sends a bounded command to the web VPS rather than
+  rsyncing `web/dist/`:
   - `cd /opt/air-api`
   - `git fetch origin <sha>`
   - `git checkout --detach <sha>`
-  - `docker compose -f docker-compose.web.yml build web-public`
-  - `docker compose -f docker-compose.web.yml up -d --no-deps web-public`
+  - `docker compose -f docker-compose.web.yml build web-public-shadow`
+  - `docker compose -f docker-compose.web.yml up -d --no-deps web-public-shadow`
   - run localhost smoke
   - reload nginx only in the promotion step
 - A later hardening step may build and push a GHCR web image in GitHub and make
@@ -433,7 +435,7 @@ GitHub responsibilities:
 Web VPS `/opt/air-api` responsibilities:
 
 - Repo checkout for runtime build commands.
-- `docker-compose.web.yml` with staging service and future `web-public` service.
+- `docker-compose.web.yml` with staging service and `web-public-shadow` service.
 - `.env.web-runtime` or shell env with:
   - `INTERNAL_API_URL`
   - `PUBLIC_API_URL`

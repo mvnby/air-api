@@ -12,14 +12,16 @@ const normalizeBasePath = (value) => {
   return `/${raw.replace(/^\/+|\/+$/g, '')}`;
 };
 
-const stagingBasePath = normalizeBasePath(process.env.SSR_STAGING_BASE_PATH);
+const runtimeBasePath = normalizeBasePath(
+  process.env.SSR_BASE_PATH || process.env.SSR_STAGING_BASE_PATH,
+);
 process.env.SSR_RUNTIME_FRESHNESS = process.env.SSR_RUNTIME_FRESHNESS || 'true';
 
-// Staging-only Astro Node runtime config for issues #464 and #476.
+// Separate Astro Node runtime config for staging/shadow validation.
 // Keep web/astro.config.mjs and npm run build static until a production cutover is approved.
 export default defineConfig({
   site: process.env.PUBLIC_SITE_URL || 'https://mvn.by',
-  base: stagingBasePath,
+  base: runtimeBasePath,
   integrations: [vue(), mdx(), tailwind(), sitemap({ filter: shouldIncludeSitemapPage })],
   output: 'server',
   adapter: node({ mode: 'standalone' }),
