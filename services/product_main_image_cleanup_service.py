@@ -140,9 +140,14 @@ class ProductMainImageCleanupService:
         session.add(batch)
         await session.commit()
 
+        product_lookup = {int(product.id): product for product in products if product.id is not None}
+
         return {
             "batch": ProductMainImageCleanupService.serialize_batch(batch),
-            "items": [ProductMainImageCleanupService.serialize_item(item) for item in items],
+            "items": ProductMainImageCleanupService.serialize_items(
+                items,
+                product_lookup=product_lookup,
+            ),
             "created_count": len(items),
             "candidate_ready_count": sum(
                 1
@@ -195,7 +200,13 @@ class ProductMainImageCleanupService:
             limit=safe_limit,
             offset=safe_offset,
         )
-        return {"items": [ProductMainImageCleanupService.serialize_item(item) for item in items]}
+        product_lookup = await ProductMainImageCleanupService._product_lookup(session, items)
+        return {
+            "items": ProductMainImageCleanupService.serialize_items(
+                items,
+                product_lookup=product_lookup,
+            )
+        }
 
     @staticmethod
     async def approve_items(
@@ -259,11 +270,15 @@ class ProductMainImageCleanupService:
             )
         else:
             await session.commit()
+        product_lookup = await ProductMainImageCleanupService._product_lookup(session, approved)
         return {
             "updated_count": len(approved),
             "skipped_count": len(skipped),
             "skipped": skipped,
-            "items": [ProductMainImageCleanupService.serialize_item(item) for item in approved],
+            "items": ProductMainImageCleanupService.serialize_items(
+                approved,
+                product_lookup=product_lookup,
+            ),
         }
 
     @staticmethod
@@ -291,11 +306,15 @@ class ProductMainImageCleanupService:
             session.add(item)
             rejected.append(item)
         await session.commit()
+        product_lookup = await ProductMainImageCleanupService._product_lookup(session, rejected)
         return {
             "updated_count": len(rejected),
             "skipped_count": len(skipped),
             "skipped": skipped,
-            "items": [ProductMainImageCleanupService.serialize_item(item) for item in rejected],
+            "items": ProductMainImageCleanupService.serialize_items(
+                rejected,
+                product_lookup=product_lookup,
+            ),
         }
 
     @staticmethod
@@ -321,13 +340,18 @@ class ProductMainImageCleanupService:
             session.add(item)
             skipped_items.append(item)
         await session.commit()
+        product_lookup = await ProductMainImageCleanupService._product_lookup(
+            session,
+            skipped_items,
+        )
         return {
             "updated_count": len(skipped_items),
             "skipped_count": len(skipped),
             "skipped": skipped,
-            "items": [
-                ProductMainImageCleanupService.serialize_item(item) for item in skipped_items
-            ],
+            "items": ProductMainImageCleanupService.serialize_items(
+                skipped_items,
+                product_lookup=product_lookup,
+            ),
         }
 
     @staticmethod
@@ -349,11 +373,37 @@ class ProductMainImageCleanupService:
         }
 
     @staticmethod
-    def serialize_item(item: ProductMainImageCleanupItem) -> dict[str, Any]:
+    def serialize_items(
+        items: list[ProductMainImageCleanupItem],
+        *,
+        product_lookup: dict[int, Product] | None = None,
+    ) -> list[dict[str, Any]]:
+        return [
+            ProductMainImageCleanupService.serialize_item(
+                item,
+                product=product_lookup.get(item.product_id) if product_lookup else None,
+            )
+            for item in items
+        ]
+
+    @staticmethod
+    def serialize_item(
+        item: ProductMainImageCleanupItem,
+        *,
+        product: Product | None = None,
+    ) -> dict[str, Any]:
         return {
             "id": item.id,
             "batch_id": item.batch_id,
             "product_id": item.product_id,
+            "product_title": product.title if product else None,
+            "product_slug": product.slug if product else None,
+            "product_brand_id": product.brand_id if product else None,
+            "product_brand_title": product.brand.title if product and product.brand else None,
+            "product_series_id": product.series_id if product else None,
+            "product_series_title": product.series.title if product and product.series else None,
+            "product_model": ProductMainImageCleanupService._product_model(product),
+            "product_current_main_image": product.main_image if product else None,
             "source_product_image_id": item.source_product_image_id,
             "original_image_url": item.original_image_url,
             "candidate_image_url": item.candidate_image_url,
@@ -456,6 +506,26 @@ class ProductMainImageCleanupService:
         item.status = ProductMainImageCleanupStatus.SKIPPED.value
         item.skip_reason = reason
         item.updated_at = now or datetime.now()
+
+    @staticmethod
+    async def _product_lookup(
+        session: AsyncSession,
+        items: list[ProductMainImageCleanupItem],
+    ) -> dict[int, Product]:
+        product_ids = [item.product_id for item in items]
+        unique_ids = [int(product_id) for product_id in dict.fromkeys(product_ids)]
+        return await ProductMainImageCleanupDAO.list_products_by_ids(session, unique_ids)
+
+    @staticmethod
+    def _product_model(product: Product | None) -> str | None:
+        if not product:
+            return None
+        specs = product.specs or {}
+        for key in ("model", "model_name", "модель", "Модель"):
+            value = specs.get(key)
+            if value:
+                return str(value)
+        return None
 
     @staticmethod
     def _local_media_path_for_url(url: str) -> Path | None:

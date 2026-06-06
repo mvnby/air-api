@@ -68,6 +68,13 @@ import {
     type ProductImageVariantCandidateResponse,
     type ProductImageVariantCandidatesResponse,
     type ProductImageVariantResponse,
+    type ProductMainImageCleanupBatchCreatePayload,
+    type ProductMainImageCleanupBatchCreateResponse,
+    type ProductMainImageCleanupBatchListResponse,
+    type ProductMainImageCleanupBatchResponse,
+    type ProductMainImageCleanupDecisionResponse,
+    type ProductMainImageCleanupItemListResponse,
+    type ProductMainImageCleanupItemResponse,
 } from './client';
 import { ManagerTagsService } from './client/services/ManagerTagsService';
 import { ManagerLeadsInboxService } from './client/services/ManagerLeadsInboxService';
@@ -115,6 +122,15 @@ export type {
     ProductImageVariantCandidateResponse,
     ProductImageVariantCandidatesResponse,
     ProductImageVariantResponse,
+};
+export type {
+    ProductMainImageCleanupBatchCreatePayload,
+    ProductMainImageCleanupBatchCreateResponse,
+    ProductMainImageCleanupBatchListResponse,
+    ProductMainImageCleanupBatchResponse,
+    ProductMainImageCleanupDecisionResponse,
+    ProductMainImageCleanupItemListResponse,
+    ProductMainImageCleanupItemResponse,
 };
 
 const parseContentDispositionFilename = (header: string | null): string | undefined => {
@@ -514,6 +530,26 @@ export const api = {
 
     async reprocessImageVariant(imageId: number, variantType = 'card', provider = 'noop') {
         return await ManagerService.reprocessImageVariant(imageId, variantType, provider);
+    },
+
+    async createMainImageCleanupBatch(payload: ProductMainImageCleanupBatchCreatePayload) {
+        return await ManagerService.createMainImageCleanupBatch(payload);
+    },
+
+    async listMainImageCleanupBatches(limit = 20, offset = 0) {
+        return await ManagerService.listMainImageCleanupBatches(limit, offset);
+    },
+
+    async listMainImageCleanupItems(batchId?: number | null, status?: string | null, limit = 100, offset = 0) {
+        return await ManagerService.listMainImageCleanupItems(batchId ?? null, status ?? null, limit, offset);
+    },
+
+    async approveMainImageCleanupItems(itemIds: number[]) {
+        return await ManagerService.approveMainImageCleanupItems({ item_ids: itemIds });
+    },
+
+    async rejectMainImageCleanupItems(itemIds: number[], reason: string) {
+        return await ManagerService.rejectMainImageCleanupItems({ item_ids: itemIds, reason });
     },
 
     async getManagerProducts(
