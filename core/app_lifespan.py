@@ -21,12 +21,23 @@ async def _resume_catalog_import_jobs() -> None:
     await catalog_import_runtime_service.resume_pending_jobs()
 
 
-def _start_scheduler_loop() -> None:
+def _start_scheduler_loop() -> bool:
+    decision = settings.scheduler_control_decision
+    if not decision.enabled:
+        logger.warning("Scheduler startup skipped: %s.", decision.reason)
+        return False
+
+    logger.info(
+        "Scheduler startup enabled: %s. interval_hours=%s",
+        decision.reason,
+        settings.SCHEDULER_INTERVAL,
+    )
     from services.scheduler_service import scheduler_service
 
     asyncio.create_task(
         scheduler_service.start_loop(interval_hours=settings.SCHEDULER_INTERVAL)
     )
+    return True
 
 
 @asynccontextmanager

@@ -31,12 +31,46 @@ Current production assumptions:
 Hard safety rules:
 
 - Do not run two active `bot` services against the same bot token.
-- Do not run two active production `app` services after the freeze, because the scheduler is started inside `app` lifecycle and can run price sync, backups, lead archival, supplier sync, and mail imports.
-- During cutover, stop old `app` and `bot` before starting the new production `app`.
+- Do not run two active primary `app` services. A passive standby `app` is allowed only with `APP_ROLE=standby`, scheduler disabled, and no bot polling.
+- During cutover, stop old `app` and `bot` before promoting the new production `app`.
 - Start the new `bot` only after the new `app` has passed app-only and public smoke checks.
 - If rollback is needed, stop new `app` and `bot` before restarting old `app` and `bot`.
 
-Issue #433 is expected to add stronger single-active controls later. Until then, the operator must enforce single-active behavior manually.
+Runtime role controls:
+
+| Host mode | Services | Required env | Expected startup logs |
+| --- | --- | --- | --- |
+| Primary/current production | `db`, `app`, `bot` | `APP_ROLE=primary` or unset; `SCHEDULER_ENABLED`/`BOT_ENABLED` unset or `true` | `Scheduler startup enabled`; `Starting bot polling` |
+| Standby/passive API | `db`, `app` only | `APP_ROLE=standby`, `SCHEDULER_ENABLED=false`, `BOT_ENABLED=false` | `Scheduler startup skipped`; no bot polling |
+
+Unset or empty runtime env values follow `APP_ROLE`, and missing `APP_ROLE`
+defaults to `primary` for current production compatibility. `SCHEDULER_ENABLED`
+and `BOT_ENABLED` are explicit overrides. If they are set to `false`, they keep
+the scheduler or bot disabled even when `APP_ROLE=primary`. Remove the override
+or set it to `true` before promotion. If a standby `bot` container is
+accidentally started while `BOT_ENABLED=false` or `APP_ROLE=standby`, it stays
+idle without Telegram polling so Compose `restart: always` does not create a
+restart loop.
+
+These controls do not enable Cloudflare load balancing, automatic failover, or
+public standby cutover. Do not route public write traffic to a standby host.
+
+Passive standby verification is app-only and must not change Cloudflare, DNS, or
+load balancing:
+
+```bash
+ssh "${API_USER}@${NEW_API_HOST}"
+cd /opt/air-api
+printf '\nAPP_ROLE=standby\nSCHEDULER_ENABLED=false\nBOT_ENABLED=false\n' >> .env
+docker compose -f docker-compose.prod.yml up -d db app
+docker compose -f docker-compose.prod.yml stop bot || true
+docker compose -f docker-compose.prod.yml logs --tail=120 app | grep 'Scheduler startup skipped'
+curl -fsS http://127.0.0.1:8000/api/health
+```
+
+Use full `scripts/check_api_vps_health.sh` only for the primary host because it
+expects `app`, `bot`, and `db` to be running. For standby, use public/app-only
+health checks against the standby origin.
 
 ## Variables
 
@@ -291,6 +325,11 @@ docker compose -f docker-compose.cutover.yml ps
 
 Do not start `app` or `bot` yet.
 
+If this host was previously used for passive standby verification, leave
+`APP_ROLE=standby`, `SCHEDULER_ENABLED=false`, and `BOT_ENABLED=false` in place
+until the maintenance freeze. Before Phase 7 promotion, flip them to primary
+values as shown there.
+
 ## Phase 4: Freeze Old API
 
 Schedule a maintenance window. The freeze starts when old `app` and `bot` are stopped.
@@ -390,12 +429,30 @@ docker compose -f docker-compose.cutover.yml run -T --rm app python3 scripts/ens
 
 At this point old `app` and old `bot` must still be stopped.
 
+Promote the new host to primary before starting the long-running app. If standby
+vars were added earlier, remove the explicit disables or set them to `true`:
+
+```bash
+cd /opt/air-api
+python3 - <<'PY'
+from pathlib import Path
+
+path = Path(".env")
+lines = path.read_text(encoding="utf-8").splitlines()
+drop = {"APP_ROLE", "SCHEDULER_ENABLED", "BOT_ENABLED"}
+kept = [line for line in lines if line.split("=", 1)[0].strip() not in drop]
+kept.extend(["APP_ROLE=primary", "SCHEDULER_ENABLED=true", "BOT_ENABLED=true"])
+path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+PY
+```
+
 Start the new app only:
 
 ```bash
 docker compose -f docker-compose.cutover.yml up -d app
 docker compose -f docker-compose.cutover.yml ps
 docker compose -f docker-compose.cutover.yml logs --tail=120 app
+docker compose -f docker-compose.cutover.yml logs --tail=120 app | grep 'Scheduler startup enabled'
 ```
 
 Run local app smoke:
@@ -503,6 +560,16 @@ ssh "${API_USER}@${NEW_API_HOST}" '
   set -euo pipefail
   cd /opt/air-api
   docker compose -f docker-compose.cutover.yml stop bot app || true
+  python3 - <<'"'"'PY'"'"'
+from pathlib import Path
+
+path = Path(".env")
+lines = path.read_text(encoding="utf-8").splitlines()
+drop = {"APP_ROLE", "SCHEDULER_ENABLED", "BOT_ENABLED"}
+kept = [line for line in lines if line.split("=", 1)[0].strip() not in drop]
+kept.extend(["APP_ROLE=standby", "SCHEDULER_ENABLED=false", "BOT_ENABLED=false"])
+path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+PY
   docker compose -f docker-compose.cutover.yml ps
 '
 ```
@@ -540,6 +607,8 @@ If the new API accepted writes, orders, imports, media uploads, or bot interacti
 - New VPS has Docker, Compose, nginx, firewall, and TLS ready.
 - `/opt/air-api/.env`, compose, Google credential files, media, and final DB dump restored on new VPS.
 - Old `app` and `bot` stopped before new `app` starts.
+- If the new host was used as standby, `APP_ROLE=primary`, `SCHEDULER_ENABLED=true`, and `BOT_ENABLED=true` are set before promotion.
+- New `app` logs `Scheduler startup enabled` during cutover.
 - New `app` passes localhost and nginx-origin smoke.
 - Cloudflare `api.mvn.by` points to new IP.
 - GitHub `SSH_HOST_API` points to new IP.

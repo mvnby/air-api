@@ -1,8 +1,15 @@
 import os
 from dotenv import load_dotenv
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from core.runtime_controls import (
+    RuntimeControlDecision,
+    resolve_single_active_control,
+)
+
 load_dotenv()
+
 
 class Settings(BaseSettings):
     # Bot Settings
@@ -11,6 +18,7 @@ class Settings(BaseSettings):
     ADMIN_ID: int = 0
     SECRET_KEY: str
     ENVIRONMENT: str = "local"
+    APP_ROLE: str = "primary"
     
     # CORS Settings
     @property
@@ -96,6 +104,33 @@ class Settings(BaseSettings):
     
     # Automation
     SCHEDULER_INTERVAL: int = 6 # hours
+    SCHEDULER_ENABLED: bool | None = None
+    BOT_ENABLED: bool | None = None
+
+    @field_validator("SCHEDULER_ENABLED", "BOT_ENABLED", mode="before")
+    @classmethod
+    def _blank_runtime_switch_is_unset(cls, value: object) -> object | None:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @property
+    def scheduler_control_decision(self) -> RuntimeControlDecision:
+        return resolve_single_active_control(
+            app_role=self.APP_ROLE,
+            explicit_enabled=self.SCHEDULER_ENABLED,
+            env_var_name="SCHEDULER_ENABLED",
+            process_label="scheduler loops",
+        )
+
+    @property
+    def bot_control_decision(self) -> RuntimeControlDecision:
+        return resolve_single_active_control(
+            app_role=self.APP_ROLE,
+            explicit_enabled=self.BOT_ENABLED,
+            env_var_name="BOT_ENABLED",
+            process_label="Telegram bot polling",
+        )
 
     # Monitoring
     SENTRY_DSN: str = ""
