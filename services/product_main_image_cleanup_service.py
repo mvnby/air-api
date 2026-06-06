@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crud.product_main_image_cleanup import ProductMainImageCleanupDAO
@@ -122,6 +123,13 @@ class ProductMainImageCleanupService:
                 ProductMainImageCleanupService._mark_skipped(
                     item,
                     ProductMainImageCleanupSkipReason.MISSING_LOCAL_SOURCE.value,
+                )
+                items.append(item)
+                continue
+            if ProductMainImageCleanupService._source_is_already_transparent(source_path):
+                ProductMainImageCleanupService._mark_skipped(
+                    item,
+                    ProductMainImageCleanupSkipReason.ALREADY_TRANSPARENT.value,
                 )
                 items.append(item)
                 continue
@@ -536,6 +544,50 @@ class ProductMainImageCleanupService:
         if url.startswith("media/"):
             return Path(url)
         return None
+
+    @staticmethod
+    def _source_is_already_transparent(source_path: Path) -> bool:
+        try:
+            with Image.open(source_path) as image:
+                transposed = ImageOps.exif_transpose(image)
+                has_alpha = transposed.mode in {"RGBA", "LA"} or (
+                    transposed.mode == "P" and "transparency" in transposed.info
+                )
+                if not has_alpha:
+                    return False
+
+                rgba = transposed.convert("RGBA")
+                alpha = rgba.getchannel("A")
+                bbox = alpha.getbbox()
+                if bbox is None:
+                    return True
+
+                full_area = rgba.width * rgba.height
+                if full_area <= 0:
+                    return False
+                bbox_area = max(0, bbox[2] - bbox[0]) * max(0, bbox[3] - bbox[1])
+                transparent_ratio = 1.0 - (bbox_area / full_area)
+                return (
+                    transparent_ratio >= 0.02
+                    and ProductMainImageCleanupService._alpha_border_has_transparency(alpha)
+                )
+        except (OSError, UnidentifiedImageError, ValueError):
+            return False
+
+    @staticmethod
+    def _alpha_border_has_transparency(alpha: Image.Image) -> bool:
+        width, height = alpha.size
+        if width <= 0 or height <= 0:
+            return False
+
+        edge_crops = [alpha.crop((0, 0, width, 1))]
+        if height > 1:
+            edge_crops.append(alpha.crop((0, height - 1, width, height)))
+        if height > 2:
+            edge_crops.append(alpha.crop((0, 1, 1, height - 1)))
+            if width > 1:
+                edge_crops.append(alpha.crop((width - 1, 1, width, height - 1)))
+        return any(crop.getextrema()[0] < 250 for crop in edge_crops)
 
     @staticmethod
     def _normalize_ids(item_ids: list[int]) -> list[int]:

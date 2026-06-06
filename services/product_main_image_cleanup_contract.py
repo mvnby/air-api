@@ -23,6 +23,7 @@ class ProductMainImageCleanupProcessor(str, Enum):
 
 class ProductMainImageCleanupSkipReason(str, Enum):
     ALREADY_PROCESSED = "already_processed"
+    ALREADY_TRANSPARENT = "already_transparent"
     MISSING_MAIN_IMAGE = "missing_main_image"
     MISSING_LOCAL_SOURCE = "missing_local_source"
     REMOTE_SOURCE_UNSUPPORTED = "remote_source_unsupported"

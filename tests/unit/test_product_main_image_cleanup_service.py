@@ -117,6 +117,13 @@ def _write_source(tmp_path: Path, name: str) -> str:
     return f"/media/products/shared/{name}"
 
 
+def _write_transparent_source(tmp_path: Path, name: str) -> str:
+    source_dir = tmp_path / "media/products/shared"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    (source_dir / name).write_bytes(_transparent_border_fixture())
+    return f"/media/products/shared/{name}"
+
+
 @pytest.mark.asyncio
 async def test_safe_bg_cleanup_trims_transparent_fields_to_card_canvas():
     processor = SafeBackgroundCleanupProcessor()
@@ -231,6 +238,36 @@ async def test_create_batch_generates_candidates_and_records_skip_reasons(
     await sqlite_session.refresh(existing)
     assert good.main_image == good_url
     assert existing.main_image == existing_url
+
+
+@pytest.mark.asyncio
+async def test_create_batch_skips_already_transparent_sources(
+    sqlite_session: AsyncSession,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.chdir(tmp_path)
+    transparent_url = _write_transparent_source(tmp_path, "already-clean.png")
+    product = await _make_product(sqlite_session, 4, main_image=transparent_url)
+
+    result = await ProductMainImageCleanupService.create_batch(
+        sqlite_session,
+        limit=10,
+        processor_method=ProductMainImageCleanupProcessor.SAFE_BG_CLEANUP.value,
+        storage=LocalProductMediaStorage(base_dir=tmp_path / "media/products/variants"),
+    )
+
+    assert result["created_count"] == 1
+    assert result["candidate_ready_count"] == 0
+    assert result["skipped_count"] == 1
+    item = result["items"][0]
+    assert item["product_id"] == product.id
+    assert item["status"] == ProductMainImageCleanupStatus.SKIPPED.value
+    assert item["skip_reason"] == "already_transparent"
+    assert item["candidate_image_url"] is None
+
+    await sqlite_session.refresh(product)
+    assert product.main_image == transparent_url
 
 
 @pytest.mark.asyncio
