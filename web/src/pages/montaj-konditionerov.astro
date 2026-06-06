@@ -4,6 +4,8 @@ import ContactForm from "../components/ContactForm.vue";
 import InstallationCalculator from "../components/InstallationCalculator.vue";
 import { getInstallationPricingInfo } from "../utils/api";
 
+export const prerender = true;
+
 const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
 ---
 

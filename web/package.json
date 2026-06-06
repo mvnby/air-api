@@ -7,6 +7,9 @@
     "check-api": "node scripts/check-api.js",
     "audit:theme": "bash ../scripts/audit_theme_hardcodes.sh",
     "build": "npm run check-api && astro build",
+    "build:ssr:staging": "npm run check-api && astro build --config astro.config.ssr.mjs",
+    "start:ssr:staging": "node ./dist/server/entry.mjs",
+    "smoke:ssr:staging": "node scripts/smoke-ssr-staging.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },

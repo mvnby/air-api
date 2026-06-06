@@ -2,6 +2,8 @@
 import Layout from "../layouts/Layout.astro";
 import { getGlobalConfig } from "../utils/api";
 
+export const prerender = true;
+
 const config = await getGlobalConfig();
 const email = config["email"] || "info@mvn.by";
 const address = config["address"] || "г. Витебск";

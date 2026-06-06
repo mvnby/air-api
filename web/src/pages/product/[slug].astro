@@ -17,6 +17,8 @@ import {
 } from "../../utils/spec-dictionary";
 import { generateBentoCards } from "../../utils/bento-cards";
 
+export const prerender = true;
+
 export async function getStaticPaths() {
     const products = await getProducts();
     if (!Array.isArray(products) || products.length === 0) {

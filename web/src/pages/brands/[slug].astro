@@ -6,6 +6,8 @@ import { getCatalog, getFiltersConfig, getPublicBrandBySlug, getPublicBrands, re
 import { formatBrandProductCount } from "../../utils/brands";
 import { buildCatalogItemListSchema } from "../../utils/catalog-seo";
 
+export const prerender = true;
+
 interface PublicBrand {
     id: number;
     title: string;

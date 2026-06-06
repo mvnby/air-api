@@ -2,6 +2,11 @@
 
 Related issue: #461
 
+Issue #464 staging spike implementation now lives in
+[`docs/astro-ssr-staging-runbook.md`](astro-ssr-staging-runbook.md). The
+production recommendation remains unchanged: keep public `mvn.by` static until
+the staging runtime, cache behavior, and rollback path are proven.
+
 This is a planning document for using the new web VPS capabilities safely. It
 does not change production, Cloudflare, DNS, VPS state, secrets, or env.
 
