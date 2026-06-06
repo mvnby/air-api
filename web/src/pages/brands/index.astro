@@ -33,7 +33,7 @@ const brandListSchema = {
 
 <Layout
     title="Бренды кондиционеров в Витебске"
-    description="Каталог брендов кондиционеров: подбор, продажа, монтаж и сервис в Витебске."
+    description="Каталог брендов кондиционеров: подбор, продажа, монтаж и обслуживание в Витебске."
     canonical="/brands"
 >
     <script type="application/ld+json" set:html={JSON.stringify(brandListSchema)} />
@@ -46,8 +46,8 @@ const brandListSchema = {
             </div>
             <h1 class="gradient-text">Бренды кондиционеров в Витебске</h1>
             <p>
-                Подбираем модели под квартиру, дом или офис: продажа, монтаж и сервис с понятной консультацией по
-                мощности, наличию и условиям установки.
+                Подбираем модели под квартиру, дом или офис: учитываем площадь, солнце, наличие на складе и условия
+                монтажа.
             </p>
         </header>
 
@@ -65,7 +65,7 @@ const brandListSchema = {
                             </div>
                             <div class="brand-card-copy">
                                 <h2>{brand.title}</h2>
-                                <p>{brand.description || `Кондиционеры ${brand.title}: подбор, продажа, монтаж и сервис в Витебске.`}</p>
+                                <p>{brand.description || `Кондиционеры ${brand.title}: подбор по площади, продажа, монтаж и обслуживание в Витебске.`}</p>
                                 <span>{formatBrandProductCount(brand.products_count)} в каталоге</span>
                             </div>
                         </a>
