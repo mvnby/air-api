@@ -1,20 +1,18 @@
 """Service-layer helpers for manager media/search workflows."""
 
 import asyncio
-import hashlib
 import os
-from io import BytesIO
 from typing import List, Set
 
 import httpx
 from core.logger import logger
 from duckduckgo_search import DDGS
-from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
 from sqlmodel import select, update
 
 from models import Product, ProductImage, ProductImageVariant
+from services.product_original_media_service import ProductOriginalMediaService
 from services.product_image_variant_service import ProductImageVariantService
 
 
@@ -168,36 +166,12 @@ class ManagerMediaService:
     ) -> dict:
         """Process bytes, deduplicate storage by hash, and attach ProductImage link."""
         try:
-            def process_image(content):
-                img = Image.open(BytesIO(content))
-                if img.mode in ("RGBA", "P"):
-                    img = img.convert("RGB")
-                output = BytesIO()
-                img.save(output, format="WEBP", quality=85)
-                return output.getvalue()
-
-            webp_content = await asyncio.to_thread(process_image, image_content)
+            original = await ProductOriginalMediaService.save_shared_original(image_content)
         except Exception as exc:
             logger.error(f"Failed to process image: {exc}")
             raise ValueError("Invalid image file") from exc
 
-        content_hash = hashlib.sha256(webp_content).hexdigest()
-        shared_dir = os.path.join("media", "products", "shared")
-        os.makedirs(shared_dir, exist_ok=True)
-
-        filename = f"{content_hash}.webp"
-        file_path = os.path.join(shared_dir, filename)
-
-        if not os.path.exists(file_path):
-            try:
-                async with asyncio.Lock():
-                    with open(file_path, "wb") as file_obj:
-                        file_obj.write(webp_content)
-            except Exception as exc:
-                logger.error(f"Failed to save file: {exc}")
-                raise RuntimeError("Failed to save image file") from exc
-
-        relative_url = f"/media/products/shared/{filename}"
+        relative_url = original.url
         existing_stmt = select(ProductImage).where(
             ProductImage.product_id == product_id,
             ProductImage.url == relative_url,
@@ -215,7 +189,14 @@ class ManagerMediaService:
         else:
             new_image = existing_link
         await session.flush()
-        await ProductImageVariantService.ensure_original_variant(session, new_image)
+        await ProductImageVariantService.ensure_original_variant(
+            session,
+            new_image,
+            source_content=original.content,
+            extension="webp",
+            width=original.width,
+            height=original.height,
+        )
 
         if set_main and not is_installation:
             statement = update(Product).where(Product.id == product_id).values(main_image=relative_url)

@@ -1,3 +1,4 @@
+import hashlib
 from io import BytesIO
 from pathlib import Path
 
@@ -9,7 +10,7 @@ from sqlmodel import SQLModel, select
 
 from models import Product, ProductImage, ProductImageVariant
 from services.manager_media_service import ManagerMediaService
-from services.media_storage_service import LocalProductMediaStorage
+from services.media_storage_service import LocalProductMediaStorage, StoredMediaObject
 from services.product_image_processing_contract import (
     ProductImageProcessingStatus,
     ProductImageVariantType,
@@ -36,6 +37,48 @@ def _transparent_product_bytes(*, fmt: str = "PNG") -> bytes:
     output = BytesIO()
     image.save(output, format=fmt)
     return output.getvalue()
+
+
+class _FakeProductMediaStorage:
+    provider_name = "fake_r2"
+
+    def __init__(self):
+        self.calls = []
+
+    def build_product_variant_object(
+        self,
+        *,
+        content_hash: str,
+        variant_type: str,
+        extension: str = "webp",
+    ) -> StoredMediaObject:
+        return StoredMediaObject(
+            url=f"https://cdn.example.test/products/variants/{variant_type}/{content_hash}.{extension}",
+            content_hash=content_hash,
+            storage_provider=self.provider_name,
+            path=f"products/variants/{variant_type}/{content_hash}.{extension}",
+        )
+
+    async def save_product_variant(
+        self,
+        *,
+        content: bytes,
+        variant_type: str,
+        extension: str = "webp",
+    ) -> StoredMediaObject:
+        self.calls.append(
+            {
+                "content": content,
+                "variant_type": variant_type,
+                "extension": extension,
+            }
+        )
+        content_hash = hashlib.sha256(content).hexdigest()
+        return self.build_product_variant_object(
+            content_hash=content_hash,
+            variant_type=variant_type,
+            extension=extension,
+        )
 
 
 async def _sqlite_session(tmp_path: Path):
@@ -136,6 +179,53 @@ async def test_manager_upload_preserves_current_url_and_creates_original_variant
     assert original_variant.url == image.url
     assert original_variant.processing_status == ProductImageProcessingStatus.READY.value
     assert Path(image.url.lstrip("/")).exists()
+
+
+@pytest.mark.asyncio
+async def test_manager_upload_writes_original_variant_through_configured_storage(
+    sqlite_session,
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.chdir(tmp_path)
+    fake_storage = _FakeProductMediaStorage()
+    monkeypatch.setattr(
+        "services.product_image_variant_service.get_product_media_storage",
+        lambda: fake_storage,
+    )
+    product = await _make_product(sqlite_session)
+
+    result = await ManagerMediaService.save_image_from_bytes(
+        image_content=_image_bytes((120, 40, 40)),
+        product_id=product.id,
+        session=sqlite_session,
+        set_main=True,
+        is_installation=False,
+    )
+
+    await sqlite_session.refresh(product)
+    image = (
+        await sqlite_session.execute(select(ProductImage).where(ProductImage.id == result["id"]))
+    ).scalar_one()
+    original_variant = (
+        await sqlite_session.execute(
+            select(ProductImageVariant).where(
+                ProductImageVariant.product_image_id == image.id,
+                ProductImageVariant.variant_type == ProductImageVariantType.ORIGINAL.value,
+            )
+        )
+    ).scalar_one()
+
+    assert product.main_image == image.url
+    assert image.url.startswith("/media/products/shared/")
+    assert original_variant.url.startswith("https://cdn.example.test/products/variants/original/")
+    assert original_variant.storage_provider == "fake_r2"
+    assert original_variant.content_hash
+    assert original_variant.width == 12
+    assert original_variant.height == 10
+    assert len(fake_storage.calls) == 1
+    assert fake_storage.calls[0]["variant_type"] == ProductImageVariantType.ORIGINAL.value
+    assert fake_storage.calls[0]["extension"] == "webp"
 
 
 @pytest.mark.asyncio

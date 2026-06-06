@@ -4,8 +4,10 @@ from pathlib import Path
 import pytest
 
 from services.media_storage_service import (
+    LocalProductOriginalSourceStorage,
     LocalProductMediaStorage,
     S3CompatibleProductMediaStorage,
+    get_product_original_source_storage,
     get_product_media_storage,
 )
 from services.product_image_processing_contract import ProductImageVariantType
@@ -32,6 +34,24 @@ def test_local_storage_builds_existing_fallback_url(tmp_path: Path):
     assert target.storage_provider == "local"
     assert target.url == f"/media/products/variants/card/{content_hash}.webp"
     assert target.path.endswith(f"media/products/variants/card/{content_hash}.webp")
+
+
+def test_local_storage_keeps_original_variants_on_shared_url_path(tmp_path: Path):
+    storage = LocalProductMediaStorage(
+        base_dir=tmp_path / "media/products/variants",
+        original_base_dir=tmp_path / "media/products/shared",
+    )
+    content_hash = "c" * 64
+
+    target = storage.build_product_variant_object(
+        content_hash=content_hash,
+        variant_type=ProductImageVariantType.ORIGINAL.value,
+        extension="webp",
+    )
+
+    assert target.storage_provider == "local"
+    assert target.url == f"/media/products/shared/{content_hash}.webp"
+    assert target.path.endswith(f"media/products/shared/{content_hash}.webp")
 
 
 @pytest.mark.asyncio
@@ -84,6 +104,14 @@ def test_storage_factory_keeps_local_as_default(monkeypatch):
     storage = get_product_media_storage()
 
     assert isinstance(storage, LocalProductMediaStorage)
+
+
+def test_original_source_storage_factory_keeps_local_shared_defaults(monkeypatch):
+    monkeypatch.delenv("PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER", raising=False)
+
+    storage = get_product_original_source_storage()
+
+    assert isinstance(storage, LocalProductOriginalSourceStorage)
 
 
 @pytest.mark.asyncio

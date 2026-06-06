@@ -3,20 +3,18 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
-import os
 from datetime import datetime
-from io import BytesIO
 from typing import Optional
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
-from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import ImportMediaCache
+from services.media_storage_service import ProductOriginalSourceStorage
+from services.product_original_media_service import ProductOriginalMediaService
 
 logger = logging.getLogger(__name__)
 _FILE_WRITE_LOCK = asyncio.Lock()
@@ -34,34 +32,17 @@ class ImportMediaService:
         return urlunsplit((parts.scheme, parts.netloc, parts.path, parts.query, ""))
 
     @staticmethod
-    async def _to_webp_bytes(content: bytes) -> bytes:
-        def process(payload: bytes) -> bytes:
-            img = Image.open(BytesIO(payload))
-            if img.mode in ("RGBA", "P"):
-                img = img.convert("RGB")
-            output = BytesIO()
-            img.save(output, format="WEBP", quality=85)
-            return output.getvalue()
-
-        return await asyncio.to_thread(process, content)
-
-    @staticmethod
-    async def _save_shared_file(content: bytes) -> tuple[str, str]:
-        webp_content = await ImportMediaService._to_webp_bytes(content)
-        content_hash = hashlib.sha256(webp_content).hexdigest()
-
-        shared_dir = os.path.join("media", "products", "shared")
-        os.makedirs(shared_dir, exist_ok=True)
-        filename = f"{content_hash}.webp"
-        file_path = os.path.join(shared_dir, filename)
-
-        if not os.path.exists(file_path):
-            async with _FILE_WRITE_LOCK:
-                if not os.path.exists(file_path):
-                    with open(file_path, "wb") as f:
-                        f.write(webp_content)
-
-        return f"/media/products/shared/{filename}", content_hash
+    async def _save_shared_file(
+        content: bytes,
+        *,
+        source_storage: ProductOriginalSourceStorage | None = None,
+    ) -> tuple[str, str]:
+        async with _FILE_WRITE_LOCK:
+            original = await ProductOriginalMediaService.save_shared_original(
+                content,
+                source_storage=source_storage,
+            )
+        return original.url, original.content_hash
 
     @staticmethod
     async def _upsert_cache_row(
@@ -99,6 +80,7 @@ class ImportMediaService:
         session: AsyncSession,
         *,
         source_url: str,
+        source_storage: ProductOriginalSourceStorage | None = None,
     ) -> Optional[str]:
         normalized_url = ImportMediaService.normalize_source_url(source_url)
         if not normalized_url:
@@ -134,7 +116,10 @@ class ImportMediaService:
             return None
 
         try:
-            local_url, content_hash = await ImportMediaService._save_shared_file(response.content)
+            local_url, content_hash = await ImportMediaService._save_shared_file(
+                response.content,
+                source_storage=source_storage,
+            )
         except Exception as exc:
             logger.warning("Import image processing failed for %s: %s", normalized_url, exc)
             return None

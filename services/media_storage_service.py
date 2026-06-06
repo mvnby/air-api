@@ -1,4 +1,4 @@
-"""Storage contracts for product media variants."""
+"""Storage contracts for product media originals and variants."""
 
 from __future__ import annotations
 
@@ -44,6 +44,81 @@ class ProductMediaStorage(Protocol):
         """Persist a variant and return a DB-safe URL plus provider metadata."""
 
 
+class ProductOriginalSourceStorage(Protocol):
+    provider_name: str
+
+    def build_product_original_object(
+        self,
+        *,
+        content_hash: str,
+        extension: str = "webp",
+    ) -> StoredMediaObject:
+        """Return the deterministic local original target without writing content."""
+
+    async def save_product_original(
+        self,
+        *,
+        content: bytes,
+        extension: str = "webp",
+    ) -> StoredMediaObject:
+        """Persist an original source file and return its public local URL."""
+
+
+class LocalProductOriginalSourceStorage:
+    provider_name = "local"
+
+    def __init__(
+        self,
+        base_dir: str | Path = "media/products/shared",
+        public_prefix: str = "/media/products/shared",
+    ) -> None:
+        self.base_dir = Path(base_dir)
+        self.public_prefix = public_prefix.rstrip("/") or "/media/products/shared"
+        self._write_lock = asyncio.Lock()
+
+    def build_product_original_object(
+        self,
+        *,
+        content_hash: str,
+        extension: str = "webp",
+    ) -> StoredMediaObject:
+        safe_extension = _normalize_extension(extension)
+        safe_hash = _normalize_content_hash(content_hash)
+        target_path = self.base_dir / f"{safe_hash}.{safe_extension}"
+        relative_path = str(target_path).replace(os.sep, "/")
+        public_url = f"{self.public_prefix}/{target_path.name}"
+        return StoredMediaObject(
+            url=public_url,
+            content_hash=safe_hash,
+            storage_provider=self.provider_name,
+            path=relative_path,
+        )
+
+    async def save_product_original(
+        self,
+        *,
+        content: bytes,
+        extension: str = "webp",
+    ) -> StoredMediaObject:
+        if not content:
+            raise ValueError("Cannot store empty media content")
+
+        content_hash = hashlib.sha256(content).hexdigest()
+        stored = self.build_product_original_object(
+            content_hash=content_hash,
+            extension=extension,
+        )
+        target_path = Path(stored.path)
+
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        if not target_path.exists():
+            async with self._write_lock:
+                if not target_path.exists():
+                    target_path.write_bytes(content)
+
+        return stored
+
+
 class LocalProductMediaStorage:
     provider_name = "local"
 
@@ -51,9 +126,15 @@ class LocalProductMediaStorage:
         self,
         base_dir: str | Path = "media/products/variants",
         public_prefix: str = "/media/products/variants",
+        original_base_dir: str | Path = "media/products/shared",
+        original_public_prefix: str = "/media/products/shared",
     ) -> None:
         self.base_dir = Path(base_dir)
         self.public_prefix = public_prefix.rstrip("/") or "/media/products/variants"
+        self.original_base_dir = Path(original_base_dir)
+        self.original_public_prefix = (
+            original_public_prefix.rstrip("/") or "/media/products/shared"
+        )
         self._write_lock = asyncio.Lock()
 
     def build_product_variant_object(
@@ -66,6 +147,17 @@ class LocalProductMediaStorage:
         safe_extension = _normalize_extension(extension)
         safe_variant_type = _safe_path_segment(variant_type)
         safe_hash = _normalize_content_hash(content_hash)
+        if safe_variant_type == "original":
+            target_path = self.original_base_dir / f"{safe_hash}.{safe_extension}"
+            relative_path = str(target_path).replace(os.sep, "/")
+            public_url = f"{self.original_public_prefix}/{target_path.name}"
+            return StoredMediaObject(
+                url=public_url,
+                content_hash=safe_hash,
+                storage_provider=self.provider_name,
+                path=relative_path,
+            )
+
         target_path = self.base_dir / safe_variant_type / f"{safe_hash}.{safe_extension}"
         relative_path = str(target_path).replace(os.sep, "/")
         public_url = f"{self.public_prefix}/{safe_variant_type}/{target_path.name}"
@@ -257,6 +349,11 @@ def get_product_media_storage(
                 "PRODUCT_MEDIA_LOCAL_VARIANT_PUBLIC_PREFIX",
                 "/media/products/variants",
             ),
+            original_base_dir=_env("PRODUCT_MEDIA_LOCAL_ORIGINAL_DIR", "media/products/shared"),
+            original_public_prefix=_env(
+                "PRODUCT_MEDIA_LOCAL_ORIGINAL_PUBLIC_PREFIX",
+                "/media/products/shared",
+            ),
         )
 
     if selected_provider in {"r2", "s3", "s3_compatible"}:
@@ -280,6 +377,34 @@ def get_product_media_storage(
     raise ValueError(
         "Unsupported PRODUCT_MEDIA_STORAGE_PROVIDER="
         f"{selected_provider!r}. Allowed: local, r2, s3, s3_compatible"
+    )
+
+
+def get_product_original_source_storage(
+    provider: str | None = None,
+) -> ProductOriginalSourceStorage:
+    """Build storage for local product original source files.
+
+    During the R2 transition, source-of-truth product URLs remain local
+    `/media/...` URLs. Remote copies of originals are represented as
+    `ProductImageVariant(type=original)` through `get_product_media_storage`.
+    """
+    load_dotenv()
+    selected_provider = (
+        provider or _env("PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER", "local")
+    ).strip().lower()
+    if selected_provider == "local":
+        return LocalProductOriginalSourceStorage(
+            base_dir=_env("PRODUCT_MEDIA_LOCAL_ORIGINAL_DIR", "media/products/shared"),
+            public_prefix=_env(
+                "PRODUCT_MEDIA_LOCAL_ORIGINAL_PUBLIC_PREFIX",
+                "/media/products/shared",
+            ),
+        )
+
+    raise ValueError(
+        "Unsupported PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER="
+        f"{selected_provider!r}. Allowed: local"
     )
 
 
