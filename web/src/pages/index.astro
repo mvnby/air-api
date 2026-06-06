@@ -4,10 +4,7 @@ import ProductGroup from "../components/ProductGroup.astro";
 import FeaturedArticles from "../components/blog/FeaturedArticles.astro";
 import { getInstallationPricingInfo } from "../utils/api";
 
-const { minStandardPrice, minBundlePrice, discount } =
-	await getInstallationPricingInfo();
-const hasBundleDiscount =
-	Number.isFinite(discount) && discount > 0 && minBundlePrice < minStandardPrice;
+const { minBundlePrice } = await getInstallationPricingInfo();
 
 const heroServices = [
 	{
@@ -34,18 +31,18 @@ const heroServices = [
 
 const bundleBenefits = [
 	{
-		title: "Выезд и оценка монтажа",
-		description: "смотрим доступ к наружному блоку, трассу, дренаж и питание",
+		title: "Подскажем по монтажу",
+		description: "в Витебске приедем, удаленно посмотрим фото и видео",
 		icon: "straighten",
 	},
 	{
-		title: "Гарантия по акту",
-		description: "условия фиксируем в документах",
+		title: "Гарантия от одной команды",
+		description: "продаем и ставим сами: если что-то случится, обращаетесь к нам",
 		icon: "verified",
 	},
 	{
-		title: "Стоимость до начала работ",
-		description: "согласуем цену перед установкой",
+		title: "Сумма без сюрпризов",
+		description: "полную стоимость обсуждаем до начала работ",
 		icon: "receipt_long",
 	},
 ];
@@ -95,17 +92,6 @@ const businessBenefits = [
 	"Схема трасс и нескольких внутренних блоков до начала работ",
 ];
 
-const installIncluded = [
-	"Оценка места установки перед работами",
-	"Медная трасса, дренаж и крепеж в согласованной смете",
-	"Запуск кондиционера и проверка режимов после монтажа",
-];
-
-const workflowSteps = [
-	"Уточняем площадь, солнечную сторону, бюджет и пожелания по уровню шума.",
-	"Предлагаем подходящие модели и заранее называем стоимость монтажа.",
-	"Устанавливаем кондиционер, запускаем его, показываем основные режимы и остаемся на связи по сервису.",
-];
 ---
 
 <Layout
@@ -167,6 +153,7 @@ const workflowSteps = [
 			<div class="bundle-stat">
 				<span class="bundle-stat-value">500+</span>
 				<span class="bundle-stat-label">установленных кондиционеров</span>
+				<span class="bundle-stat-proof">20+ лет опыта работы с кондиционерами</span>
 			</div>
 
 			<div class="bundle-benefits" aria-label="Что входит в подготовку монтажа">
@@ -185,14 +172,6 @@ const workflowSteps = [
 				}
 			</div>
 
-			<ul class="bundle-included">
-				{
-					installIncluded.map((item) => (
-						<li>{item}</li>
-					))
-				}
-			</ul>
-
 			<div class="bundle-price-band">
 				<div>
 					<span class="bundle-price-kicker">Стандартный монтаж</span>
@@ -205,53 +184,20 @@ const workflowSteps = [
 					</span>
 				</div>
 				<a href="/contacts" class="btn btn-primary">Заказать расчет</a>
-				{
-					hasBundleDiscount && (
-						<p class="bundle-note">
-							Скидка {discount} BYN от базовой цены {minStandardPrice} BYN уже
-							учтена.
-						</p>
-					)
-				}
 			</div>
 		</div>
 	</section>
 
 	<section class="container workflow-section">
 		<div class="workflow-panel">
-			<div class="workflow-copy">
-				<p class="section-kicker">Как мы работаем</p>
-				<h2>Поможем выбрать, установим и обслужим</h2>
-				<p>
-					Работаем с квартирами, домами, офисами и небольшими коммерческими
-					помещениями в Витебске. Если монтаж за городом, заранее согласуем
-					выезд, сроки и стоимость.
-				</p>
-				<ul class="workflow-steps">
-					{
-						workflowSteps.map((item) => (
-							<li>{item}</li>
-						))
-					}
-				</ul>
-			</div>
-
 			<div class="workflow-media">
 				<div class="coverage-card">
-					<span class="context-kicker">Локально</span>
-					<strong>Витебск, пригород и ближайшие районы области</strong>
+					<span class="context-kicker">Мы из Витебска</span>
+					<strong>Работаем по городу, пригородам и ближайшим районам</strong>
 					<span>
-						Подбор, монтаж, обслуживание, чистка и ремонт кондиционеров.
+						В дальние районы Витебской области выезжаем по договоренности.
 					</span>
 				</div>
-				<img
-					src="/img/services/installation.png"
-					alt="Комплект кондиционера для установки"
-					class="workflow-image"
-					width="960"
-					height="960"
-					fetchpriority="high"
-				/>
 			</div>
 		</div>
 	</section>
@@ -530,9 +476,7 @@ const workflowSteps = [
 	.bundle-card {
 		display: grid;
 		grid-template-columns: minmax(140px, 0.7fr) minmax(0, 1.35fr) minmax(280px, 1fr);
-		grid-template-areas:
-			"stat benefits price"
-			"included included price";
+		grid-template-areas: "stat benefits price";
 		gap: 0.85rem;
 		align-items: stretch;
 		padding: 0.9rem;
@@ -573,6 +517,14 @@ const workflowSteps = [
 		line-height: 1.35;
 	}
 
+	.bundle-stat-proof {
+		margin-top: 0.25rem;
+		color: var(--primary);
+		font-size: 0.86rem;
+		font-weight: 800;
+		line-height: 1.3;
+	}
+
 	.bundle-benefits {
 		grid-area: benefits;
 		display: grid;
@@ -608,34 +560,6 @@ const workflowSteps = [
 		line-height: 1.35;
 	}
 
-	.bundle-included {
-		grid-area: included;
-		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 0.65rem 1rem;
-		padding: 0.25rem 0.2rem 0.1rem;
-	}
-
-	.bundle-included li {
-		position: relative;
-		padding-left: 1.1rem;
-		color: var(--primary);
-		font-size: 0.9rem;
-		font-weight: 700;
-		line-height: 1.35;
-	}
-
-	.bundle-included li::before {
-		content: "";
-		position: absolute;
-		top: 0.58rem;
-		left: 0;
-		width: 0.42rem;
-		height: 0.42rem;
-		border-radius: 999px;
-		background: var(--primary);
-	}
-
 	.bundle-price-band {
 		grid-area: price;
 		display: grid;
@@ -647,8 +571,7 @@ const workflowSteps = [
 	}
 
 	.bundle-price-kicker,
-	.bundle-price-label,
-	.bundle-note {
+	.bundle-price-label {
 		display: block;
 		line-height: 1.35;
 	}
@@ -667,13 +590,8 @@ const workflowSteps = [
 		line-height: 1;
 	}
 
-	.bundle-price-label,
-	.bundle-note {
+	.bundle-price-label {
 		opacity: 0.86;
-	}
-
-	.bundle-note {
-		font-size: 0.8rem;
 	}
 
 	.bundle-price-band .btn {
@@ -689,74 +607,27 @@ const workflowSteps = [
 	.workflow-panel {
 		position: relative;
 		overflow: hidden;
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) minmax(280px, 0.82fr);
-		gap: 1.4rem;
-		align-items: stretch;
-		padding: 1.5rem;
-		border-radius: 2rem;
-		background: var(--panel-glass-bg);
-		border: 1px solid var(--panel-glass-border);
-		box-shadow: var(--panel-glass-shadow);
-	}
-
-	.workflow-copy {
-		display: grid;
-		gap: 0.95rem;
-		align-content: start;
-	}
-
-	.workflow-copy h2 {
-		font-size: 2.45rem;
-		line-height: 1.05;
-		font-weight: 800;
-		text-wrap: balance;
-	}
-
-	.workflow-copy p {
-		color: var(--text-muted);
-		line-height: 1.65;
-	}
-
-	.workflow-steps {
-		display: grid;
-		gap: 0.8rem;
-	}
-
-	.workflow-steps li {
-		position: relative;
-		padding-left: 1.25rem;
-		color: var(--text);
-	}
-
-	.workflow-steps li::before {
-		content: "";
-		position: absolute;
-		top: 0.65rem;
-		left: 0;
-		width: 0.45rem;
-		height: 0.45rem;
-		border-radius: 999px;
-		background: var(--primary);
 	}
 
 	.workflow-media {
 		position: relative;
 		display: grid;
 		align-content: end;
-		justify-items: end;
-		min-height: 19rem;
-		padding: 1rem;
-		border-radius: 1.5rem;
+		justify-items: start;
+		min-height: 25rem;
+		padding: 1.25rem;
+		border-radius: 2rem;
 		overflow: hidden;
 		background:
 			linear-gradient(
 				180deg,
-				rgba(var(--surface-rgb), 0.2),
-				rgba(var(--surface-rgb), 0.7)
+				rgba(var(--surface-rgb), 0.08) 0%,
+				rgba(var(--surface-rgb), 0.18) 42%,
+				rgba(var(--surface-rgb), 0.82) 100%
 			),
-			url("/img/hero/vitebsk-hero.jpg") center right / cover no-repeat;
+			url("/img/hero/vitebsk-tri-shtyka-light.webp") 58% center / cover no-repeat;
 		border: 1px solid var(--panel-glass-border);
+		box-shadow: var(--panel-glass-shadow);
 	}
 
 	.coverage-card {
@@ -791,16 +662,6 @@ const workflowSteps = [
 		letter-spacing: 0.13em;
 		text-transform: uppercase;
 		color: var(--primary);
-	}
-
-	.workflow-image {
-		position: relative;
-		z-index: 1;
-		width: min(62%, 13rem);
-		height: auto;
-		margin-top: 1rem;
-		object-fit: contain;
-		filter: drop-shadow(0 18px 40px rgba(15, 23, 42, 0.2));
 	}
 
 	.section-kicker {
@@ -1138,7 +999,6 @@ const workflowSteps = [
 	:global(.dark) .bundle-card,
 	:global(.dark) .bundle-stat,
 	:global(.dark) .bundle-benefit,
-	:global(.dark) .workflow-panel,
 	:global(.dark) .coverage-card,
 	:global(.dark) .audience-card,
 	:global(.dark) .guide-card,
@@ -1172,7 +1032,7 @@ const workflowSteps = [
 				rgba(2, 6, 23, 0.22),
 				rgba(2, 6, 23, 0.82)
 			),
-			url("/img/hero/vitebsk-night-real.jpg") center / cover no-repeat;
+			url("/img/hero/vitebsk-tri-shtyka-dark.webp") 58% center / cover no-repeat;
 	}
 
 	@media (max-width: 1500px) {
@@ -1295,7 +1155,6 @@ const workflowSteps = [
 
 	@media (max-width: 1180px) {
 		.bundle-card,
-		.workflow-panel,
 		.offer-grid,
 		.offer-main {
 			grid-template-columns: 1fr;
@@ -1305,8 +1164,7 @@ const workflowSteps = [
 			grid-template-areas:
 				"stat"
 				"benefits"
-				"price"
-				"included";
+				"price";
 		}
 
 		.services-grid {
@@ -1387,12 +1245,9 @@ const workflowSteps = [
 			grid-template-columns: 1fr;
 		}
 
-		.bundle-included {
-			grid-template-columns: 1fr;
-		}
-
 		.workflow-media {
-			min-height: 17rem;
+			min-height: 21rem;
+			background-position: 62% center;
 		}
 	}
 
@@ -1434,7 +1289,6 @@ const workflowSteps = [
 		}
 
 		.bundle-card,
-		.workflow-panel,
 		.audience-card,
 		.offer-copy,
 		.guide-card,
@@ -1455,12 +1309,10 @@ const workflowSteps = [
 			width: 100%;
 		}
 
-		.workflow-copy h2 {
-			font-size: 2rem;
-		}
-
 		.workflow-media {
-			min-height: 15rem;
+			min-height: 18rem;
+			padding: 0.9rem;
+			border-radius: 1.35rem;
 		}
 
 		.offer-media {
