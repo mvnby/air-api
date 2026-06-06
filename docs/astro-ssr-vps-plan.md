@@ -7,6 +7,11 @@ Issue #464 staging spike implementation now lives in
 production recommendation remains unchanged: keep public `mvn.by` static until
 the staging runtime, cache behavior, and rollback path are proven.
 
+Issue #471 production runtime freshness design now lives in
+[`docs/web-runtime-freshness-runbook.md`](web-runtime-freshness-runbook.md).
+Use that runbook for Cloudflare cache rules, catalog revision/invalidation,
+runtime route policy, migration phases, and rollback gates.
+
 This is a planning document for using the new web VPS capabilities safely. It
 does not change production, Cloudflare, DNS, VPS state, secrets, or env.
 

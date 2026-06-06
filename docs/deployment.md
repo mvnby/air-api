@@ -31,6 +31,12 @@ Prepared server baseline:
 - Let's Encrypt certificate for `mvn.by` and `www.mvn.by` issued via Cloudflare DNS-01
 - certbot renewal hook reloads nginx after certificate renewal
 
+The production storefront is still static. The hybrid runtime/cache/freshness
+design for the new VPS is documented in
+[`web-runtime-freshness-runbook.md`](web-runtime-freshness-runbook.md). Do not
+switch public `mvn.by` to Astro runtime without following that runbook's
+staging, shadow, cutover, and rollback gates.
+
 Origin checks from a local machine:
 
 ```bash
