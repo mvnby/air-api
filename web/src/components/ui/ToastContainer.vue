@@ -43,8 +43,8 @@ const toasts = useStore(toastStore);
 
 .toast-item {
   pointer-events: auto; /* Enable clicks on toasts */
-  background: var(--surface, #fff);
-  border: 1px solid var(--border, #e2e8f0);
+  background: var(--panel-glass-bg);
+  border: 1px solid var(--panel-glass-border);
   padding: 1rem 1.25rem;
   border-radius: 1rem;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);

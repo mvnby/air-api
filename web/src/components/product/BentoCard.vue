@@ -60,9 +60,9 @@ const isWide = computed(() => props.card.layout === 'wide');
 <style scoped>
 .bento-card {
   --glare-opacity: 0.12;
-  --card-bg: rgba(var(--surface-rgb, 255, 255, 255), 0.7);
+  --card-bg: var(--panel-glass-bg);
   --card-text: var(--text, #0f172a);
-  --glass-border: rgba(255, 255, 255, 0.4);
+  --glass-border: var(--panel-glass-border);
   
   background: var(--card-bg);
   backdrop-filter: blur(16px) saturate(180%);
@@ -73,7 +73,7 @@ const isWide = computed(() => props.card.layout === 'wide');
   box-shadow: 
     0 4px 6px -1px rgba(0, 0, 0, 0.05),
     0 10px 15px -3px rgba(0, 0, 0, 0.03),
-    inset 0 0 20px rgba(255, 255, 255, 0.2);
+    inset 0 0 20px rgba(var(--surface-rgb), 0.2);
   display: flex;
   flex-direction: column;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
@@ -90,7 +90,7 @@ const isWide = computed(() => props.card.layout === 'wide');
     left: -50%;
     width: 200%;
     height: 200%;
-    background: radial-gradient(circle at top left, rgba(255,255,255, var(--glare-opacity)) 0%, transparent 60%);
+    background: radial-gradient(circle at top left, rgba(var(--surface-rgb), var(--glare-opacity)) 0%, transparent 60%);
     pointer-events: none;
     z-index: 1;
 }
@@ -98,44 +98,44 @@ const isWide = computed(() => props.card.layout === 'wide');
 /* Dark Mode base card */
 :global(.dark) .bento-card {
     --glare-opacity: 0.08;
-    --card-bg: rgba(30, 41, 59, 0.7); /* slate-800 focus */
+    --card-bg: var(--panel-glass-bg);
     --card-text: #f1f5f9;
-    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-border: var(--panel-glass-border);
     box-shadow: 
         0 10px 30px -10px rgba(0, 0, 0, 0.5),
-        inset 0 0 10px rgba(255, 255, 255, 0.02);
+        inset 0 0 10px rgba(var(--surface-rgb), 0.02);
 }
 
 /* Type-Specific Styling (Updates variables) */
 .style-orange {
-    --card-bg: linear-gradient(135deg, rgba(255, 247, 237, 0.8) 0%, rgba(255, 255, 255, 0.5) 100%);
+    --card-bg: linear-gradient(135deg, color-mix(in srgb, #fb923c 14%, var(--surface)) 0%, rgba(var(--surface-rgb), 0.5) 100%);
     --card-text: #c2410c; 
     --glass-border: rgba(251, 146, 60, 0.4);
 }
 :global(.dark) .bento-card.style-orange {
-    --card-bg: linear-gradient(135deg, rgba(67, 20, 7, 0.8) 0%, rgba(30, 41, 59, 0.6) 100%) !important;
+    --card-bg: linear-gradient(135deg, color-mix(in srgb, #fb923c 22%, var(--bg)) 0%, rgba(var(--surface-rgb), 0.6) 100%) !important;
     --card-text: #fdba74 !important; /* orange-300 */
     --glass-border: rgba(251, 146, 60, 0.2);
 }
 
 .style-teal {
-    --card-bg: linear-gradient(135deg, rgba(240, 253, 250, 0.8) 0%, rgba(255, 255, 255, 0.5) 100%);
+    --card-bg: linear-gradient(135deg, color-mix(in srgb, #14b8a6 14%, var(--surface)) 0%, rgba(var(--surface-rgb), 0.5) 100%);
     --card-text: #0f766e;
     --glass-border: rgba(20, 184, 166, 0.4);
 }
 :global(.dark) .bento-card.style-teal {
-    --card-bg: linear-gradient(135deg, rgba(17, 94, 89, 0.8) 0%, rgba(15, 23, 42, 0.6) 100%) !important;
+    --card-bg: linear-gradient(135deg, color-mix(in srgb, #14b8a6 22%, var(--bg)) 0%, rgba(var(--surface-rgb), 0.6) 100%) !important;
     --card-text: #99f6e4 !important; /* teal-200 */
     --glass-border: rgba(20, 184, 166, 0.2);
 }
 
 .style-blue {
-    --card-bg: linear-gradient(135deg, rgba(240, 249, 255, 0.8) 0%, rgba(255, 255, 255, 0.5) 100%);
+    --card-bg: linear-gradient(135deg, color-mix(in srgb, #3b82f6 12%, var(--surface)) 0%, rgba(var(--surface-rgb), 0.5) 100%);
     --card-text: #1d4ed8;
     --glass-border: rgba(59, 130, 246, 0.4);
 }
 :global(.dark) .bento-card.style-blue {
-    --card-bg: linear-gradient(135deg, rgba(30, 64, 175, 0.8) 0%, rgba(15, 23, 42, 0.6) 100%) !important;
+    --card-bg: linear-gradient(135deg, color-mix(in srgb, #3b82f6 22%, var(--bg)) 0%, rgba(var(--surface-rgb), 0.6) 100%) !important;
     --card-text: #bfdbfe !important; /* blue-200 */
     --glass-border: rgba(59, 130, 246, 0.2);
 }
@@ -189,9 +189,9 @@ const isWide = computed(() => props.card.layout === 'wide');
     width: 100%;
 }
 :global(.dark) .card-icon-wrapper {
-    background: rgba(255,255,255,0.12);
-    color: #fff;
-    border-color: rgba(255,255,255,0.05);
+    background: rgba(var(--surface-rgb), 0.12);
+    color: var(--panel-active-text);
+    border-color: rgba(var(--surface-rgb), 0.05);
 }
 .card-content {
     container-type: inline-size;
@@ -286,8 +286,8 @@ const isWide = computed(() => props.card.layout === 'wide');
     border: 1px solid rgba(0,0,0,0.03);
 }
 :global(.dark) .bento-badge {
-    background: rgba(255,255,255,0.15);
-    border-color: rgba(255,255,255,0.08);
+    background: rgba(var(--surface-rgb), 0.15);
+    border-color: rgba(var(--surface-rgb), 0.08);
 }
 
 /* Explain Banner */
@@ -309,6 +309,6 @@ const isWide = computed(() => props.card.layout === 'wide');
 }
 :global(.dark) .card-explain-banner {
     background: rgba(0, 0, 0, 0.3);
-    border-color: rgba(255, 255, 255, 0.1);
+    border-color: var(--panel-glass-border);
 }
 </style>
