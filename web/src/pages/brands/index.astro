@@ -18,13 +18,13 @@ const brandListSchema = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
     name: "Бренды кондиционеров в Витебске",
-    url: new URL("/brands", Astro.url.origin).toString(),
+    url: new URL("/brands/", Astro.url.origin).toString(),
     mainEntity: {
         "@type": "ItemList",
         itemListElement: brands.map((brand, index) => ({
             "@type": "ListItem",
             position: index + 1,
-            url: new URL(`/brands/${brand.slug}`, Astro.url.origin).toString(),
+            url: new URL(`/brands/${brand.slug}/`, Astro.url.origin).toString(),
             name: brand.title,
         })),
     },
@@ -34,7 +34,7 @@ const brandListSchema = {
 <Layout
     title="Бренды кондиционеров в Витебске"
     description="Каталог брендов кондиционеров: подбор, продажа, монтаж и обслуживание в Витебске."
-    canonical="/brands"
+    canonical="/brands/"
 >
     <script type="application/ld+json" set:html={JSON.stringify(brandListSchema)} />
     <div class="container brands-page">
@@ -55,7 +55,7 @@ const brandListSchema = {
             brands.length > 0 ? (
                 <section class="brand-grid" aria-label="Список брендов">
                     {brands.map((brand) => (
-                        <a class="brand-card" href={`/brands/${brand.slug}`}>
+                        <a class="brand-card" href={`/brands/${brand.slug}/`}>
                             <div class="brand-card-logo" aria-hidden={!brand.logo_url}>
                                 {brand.logo_url ? (
                                     <img src={resolveImageUrl(brand.logo_url)} alt={brand.title} loading="lazy" />

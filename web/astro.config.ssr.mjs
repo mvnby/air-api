@@ -4,6 +4,7 @@ import mdx from '@astrojs/mdx';
 import tailwind from '@astrojs/tailwind';
 import sitemap from '@astrojs/sitemap';
 import node from '@astrojs/node';
+import { shouldIncludeSitemapPage } from './sitemap-filter.mjs';
 
 const normalizeBasePath = (value) => {
   const raw = String(value || '/__ssr-staging').trim();
@@ -18,7 +19,7 @@ const stagingBasePath = normalizeBasePath(process.env.SSR_STAGING_BASE_PATH);
 export default defineConfig({
   site: process.env.PUBLIC_SITE_URL || 'https://mvn.by',
   base: stagingBasePath,
-  integrations: [vue(), mdx(), tailwind(), sitemap()],
+  integrations: [vue(), mdx(), tailwind(), sitemap({ filter: shouldIncludeSitemapPage })],
   output: 'server',
   adapter: node({ mode: 'standalone' }),
 });

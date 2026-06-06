@@ -38,7 +38,7 @@ export function buildCatalogItemListSchema(products: CatalogSeoProduct[], origin
             item: {
                 "@type": "Product",
                 name: product.title,
-                url: absoluteUrl(product.slug ? `/product/${product.slug}` : undefined, origin),
+                url: absoluteUrl(product.slug ? `/product/${product.slug}/` : undefined, origin),
                 image: absoluteUrl(product.card_image || product.main_image, origin),
                 sku: product.id ? String(product.id) : undefined,
                 offers: {
@@ -46,7 +46,7 @@ export function buildCatalogItemListSchema(products: CatalogSeoProduct[], origin
                     price: Number(product.price || 0),
                     priceCurrency: "BYN",
                     availability: getSchemaAvailability(product),
-                    url: absoluteUrl(product.slug ? `/product/${product.slug}` : undefined, origin),
+                    url: absoluteUrl(product.slug ? `/product/${product.slug}/` : undefined, origin),
                 },
             },
         })),

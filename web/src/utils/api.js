@@ -118,6 +118,13 @@ export async function getCatalog(params = {}) {
     return data;
 }
 
+export async function getCatalogForSsg(params = {}) {
+    if (import.meta.env.SSR) {
+        return await getCatalogStrictForSsg(params);
+    }
+    return await getCatalog(params);
+}
+
 export async function getVitebskFeaturedProducts() {
     const url = `${API_V1}/products/vitebsk-featured`;
     const data = await fetchJson(url);

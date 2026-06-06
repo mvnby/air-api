@@ -4,7 +4,12 @@ import Layout from "../layouts/Layout.astro";
 export const prerender = true;
 ---
 
-<Layout title="Заказ оформлен">
+<Layout
+    title="Заказ оформлен"
+    description="Заявка отправлена в MVN. Эта служебная страница закрыта от индексации."
+    robots="noindex,follow"
+    canonical="/success/"
+>
     <div class="container success-page">
         <div class="success-card">
             <div class="icon-circle">
@@ -32,12 +37,13 @@ export const prerender = true;
     }
 
     .success-card {
-        background: white;
+        background: var(--panel-glass-bg);
+        border: 1px solid var(--panel-glass-border);
         padding: 3rem;
-        border-radius: 2rem;
+        border-radius: 8px;
         text-align: center;
         max-width: 500px;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.05);
+        box-shadow: var(--panel-glass-shadow);
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -47,12 +53,12 @@ export const prerender = true;
     .icon-circle {
         width: 80px;
         height: 80px;
-        background: rgba(16, 185, 129, 0.1);
+        background: var(--success-bg);
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
-        color: #10b981;
+        color: var(--success-text);
     }
     .material-icons-round {
         font-size: 3rem;
@@ -61,18 +67,18 @@ export const prerender = true;
     h1 {
         font-family: "Space Grotesk", sans-serif;
         font-size: 2rem;
-        color: #0f172a;
+        color: var(--text);
         margin: 0;
     }
 
     p {
-        color: #64748b;
+        color: var(--text-muted);
         line-height: 1.6;
     }
 
     .btn-primary {
-        background: #007f80;
-        color: white;
+        background: var(--primary);
+        color: var(--panel-active-text);
         padding: 0.8rem 2rem;
         border-radius: 1rem;
         text-decoration: none;
@@ -82,6 +88,6 @@ export const prerender = true;
         margin-top: 1rem;
     }
     .btn-primary:hover {
-        background: #006b6c;
+        background: var(--primary-dark);
     }
 </style>

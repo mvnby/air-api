@@ -68,7 +68,7 @@ const hasIndustrialCategory = tag_slugs.includes("cat-industrial");
 const initialCategorySlug =
     tag_slugs.find((slug) => categorySlugs.has(slug)) || "cat-household";
 
-let canonicalPath = "/catalog";
+let canonicalPath = "/catalog/";
 let robotsValue: string | undefined;
 
 if (hasQueryParams) {
@@ -84,7 +84,7 @@ if (hasQueryParams) {
             area_max: parsedAreaMax,
         });
     if (matchedVirtual) {
-        canonicalPath = `/catalog/${matchedVirtual.slug}`;
+        canonicalPath = `/catalog/${matchedVirtual.slug}/`;
     }
     robotsValue = "noindex,follow";
 }
