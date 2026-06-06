@@ -11,7 +11,7 @@ const props = defineProps({
   },
   subtitle: {
     type: String,
-    default: 'Перезвоним в течение 15 минут'
+    default: 'Свяжемся в рабочее время и уточним детали'
   },
   buttonText: {
     type: String,

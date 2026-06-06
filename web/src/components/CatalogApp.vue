@@ -474,21 +474,21 @@ const multiIndoorFilterHint = computed(() => {
     messages.push(`Показаны внутренние блоки бренда ${outdoorBrand.value}.`);
   }
   if (hasOutdoorCompatRestriction.value) {
-    messages.push('Дополнительно применен список явной совместимости для выбранного наружного.');
+    messages.push('Для выбранного наружного блока показаны только совместимые внутренние блоки.');
   }
   if (hasOutdoorStrictComboRestriction.value) {
-    messages.push('Режим strict: доступны только заранее заданные конфигурации конкретных моделей.');
+    messages.push('Доступны совместимые комплекты из списка производителя.');
   }
   if (hasOutdoorCapacityComboRestriction.value) {
-    messages.push('Режим free match: проверяем комбинацию по мощностным классам (09+12 и т.д.).');
+    messages.push('Проверяем допустимые сочетания по мощностным классам (09+12 и т.д.).');
   }
   return messages.join(' ');
 });
 
 const multiValidationHint = computed(() => {
-  if (hasOutdoorStrictComboRestriction.value) return 'v3 strict: exact slug-конфигурации + порты/бренд';
-  if (hasOutdoorCapacityComboRestriction.value) return 'v3 free match: таблица мощностей + порты/бренд';
-  return 'v2: порты/мощность/бренд';
+  if (hasOutdoorStrictComboRestriction.value) return 'Совместимые комплекты: модели и количество блоков проверяются по списку производителя';
+  if (hasOutdoorCapacityComboRestriction.value) return 'Допустимые сочетания блоков: проверяем мощностные классы и количество портов';
+  return 'Подбор по портам, мощности и бренду';
 });
 
 const multiValidation = computed(() => {
@@ -516,13 +516,13 @@ const multiValidation = computed(() => {
     reasons.push('Для выбранного наружного блока добавьте совместимые внутренние блоки из списка ниже.');
   }
   if (hasOutdoorStrictComboRestriction.value && selectedIndoorCount.value > 0 && !matchedComboRule.value) {
-    reasons.push('Выбранная комбинация не входит в строгие допустимые конфигурации.');
+    reasons.push('Выбранная комбинация не входит в список совместимых комплектов.');
   }
   if (hasOutdoorCapacityComboRestriction.value && selectedIndoorCount.value > 0) {
     if (selectedIndoorMissingCapacityCount.value > 0) {
       reasons.push('Для части внутренних блоков не удалось определить мощностной класс (09/12/18).');
     } else if (!matchedCapacityCombo.value) {
-      reasons.push('Выбранная комбинация не входит в допустимую таблицу free match.');
+      reasons.push('Выбранная комбинация не входит в допустимые сочетания по мощности.');
     }
   }
   const matchedConfigText = matchedComboRule.value
@@ -1200,8 +1200,8 @@ onMounted(async () => {
             <div class="multi-rules-label">
               {{
                 hasOutdoorStrictComboRestriction
-                  ? 'Допустимые строгие конфигурации:'
-                  : 'Допустимые комбинации free match:'
+                  ? 'Совместимые комплекты:'
+                  : 'Допустимые сочетания блоков:'
               }}
             </div>
             <div class="multi-rules-list">

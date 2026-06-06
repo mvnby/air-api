@@ -58,6 +58,7 @@ const pricingProps = {
 
 const formatPrice = (price: number) => price.toLocaleString();
 const productCardImage = product.card_image || product.main_image;
+const productDescription = product.description || "Кондиционер из каталога";
 
 // --- Logic for Tags & Badges ---
 
@@ -239,8 +240,8 @@ const showAreaBadge = !!product.area;
           </div>
           <p class="f-title">{product.title}</p>
 
-          <p class="f-desc" title={product.description}>
-            {product.description || "Инверторная сплит-система"}
+          <p class="f-desc" title={productDescription}>
+            {productDescription}
           </p>
         </div>
 
