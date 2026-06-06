@@ -20,6 +20,7 @@ from routers.api_catalog_revision import router as catalog_revision_router
 from routers.api_products import router as api_products_router
 from services.catalog_revision_service import CatalogRevisionService
 from services.manager_brand_service import ManagerBrandService
+from services.product_service import ProductService
 from services.product_write_service import ProductWriteService
 
 
@@ -149,6 +150,85 @@ async def test_product_update_rolls_back_when_revision_bump_fails(sqlite_session
 
     assert product.price == 1000
     assert after == before
+
+
+@pytest.mark.asyncio
+async def test_product_update_purges_after_commit_and_ignores_purge_failure(sqlite_session, monkeypatch):
+    product = Product(
+        title="Post Commit Purge Product",
+        slug="post-commit-purge-product",
+        description="Demo",
+        price=1000,
+        area=25,
+        is_published=True,
+    )
+    sqlite_session.add(product)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(product)
+
+    before = await CatalogRevisionService.get_current(sqlite_session)
+    purge_calls = []
+
+    async def fail_purge(**kwargs):
+        purge_calls.append(
+            {
+                **kwargs,
+                "in_transaction": sqlite_session.in_transaction(),
+            }
+        )
+        raise RuntimeError("cloudflare is temporarily unavailable")
+
+    monkeypatch.setattr(
+        "services.catalog_revision_service.cloudflare_catalog_purge_service.purge_after_revision",
+        fail_purge,
+    )
+
+    result = await ProductWriteService.update_product(
+        sqlite_session,
+        product.id,
+        {"price": 1250},
+    )
+    after = await CatalogRevisionService.get_current(sqlite_session)
+
+    assert result == {"message": "Product updated", "id": product.id}
+    assert after["revision"] == before["revision"] + 1
+    assert len(purge_calls) == 1
+    assert purge_calls[0]["scope"] == "product_update"
+    assert purge_calls[0]["revision"] == after["revision"]
+    assert purge_calls[0]["product_slugs"] == ("post-commit-purge-product",)
+    assert purge_calls[0]["in_transaction"] is False
+
+
+@pytest.mark.asyncio
+async def test_product_price_update_resolves_product_slug_for_purge(sqlite_session, monkeypatch):
+    product = Product(
+        title="Price Purge Product",
+        slug="price-purge-product",
+        description="Demo",
+        price=1000,
+        area=25,
+        is_published=True,
+    )
+    sqlite_session.add(product)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(product)
+
+    purge_calls = []
+
+    async def record_purge(**kwargs):
+        purge_calls.append(kwargs)
+
+    monkeypatch.setattr(
+        "services.catalog_revision_service.cloudflare_catalog_purge_service.purge_after_revision",
+        record_purge,
+    )
+
+    updated = await ProductService.update_price(sqlite_session, product.id, 1300)
+
+    assert updated is True
+    assert len(purge_calls) == 1
+    assert purge_calls[0]["scope"] == "product_price"
+    assert purge_calls[0]["product_slugs"] == ("price-purge-product",)
 
 
 @pytest.mark.asyncio

@@ -289,6 +289,14 @@ Cloudflare purge strategy:
 - Do not use purge-everything for normal manager writes.
 - Rate-limit bulk purge calls and coalesce changes from imports/supplier sync.
 
+Backend purge env contract:
+
+- `CLOUDFLARE_PURGE_ENABLED=false` by default.
+- `CLOUDFLARE_PURGE_DRY_RUN=true` by default.
+- `CLOUDFLARE_ZONE_ID` for the `mvn.by` zone.
+- `CLOUDFLARE_API_TOKEN` with cache purge permission only.
+- `PUBLIC_SITE_URL=https://mvn.by` for exact storefront URL generation.
+
 Nginx policy:
 
 - Do not enable nginx HTML caching in the first public runtime cutover.

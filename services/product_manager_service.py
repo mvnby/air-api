@@ -283,6 +283,10 @@ class ProductManagerService:
         if not product:
             return False
         product_slug = product.slug
+        brand_slugs = await CatalogRevisionService.get_product_brand_slugs(
+            session,
+            [product_id],
+        )
             
         # Check if product is used in any orders
         link_check = await session.execute(
@@ -315,13 +319,13 @@ class ProductManagerService:
         )
         
         await session.delete(product)
-        await CatalogRevisionService.bump(
+        await CatalogRevisionService.bump_commit_and_purge(
             session,
             scope="product_delete",
             product_ids=[product_id],
             slugs=[product_slug] if product_slug else None,
+            brand_slugs=brand_slugs,
         )
-        await session.commit()
         return True
 
     @staticmethod
