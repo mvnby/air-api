@@ -147,6 +147,63 @@ class ProductImageVariant(SQLModel, table=True):
     image: "ProductImage" = Relationship(back_populates="variants")
 
 
+class ProductMainImageCleanupBatch(SQLModel, table=True):
+    __tablename__ = "product_main_image_cleanup_batch"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    status: str = Field(default="processing", index=True)
+    requested_limit: int = Field(default=50)
+    processor_method: str = Field(default="noop", index=True)
+    processor_version: Optional[str] = Field(default=None, index=True)
+    created_by: Optional[str] = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
+    completed_at: Optional[datetime] = None
+
+
+class ProductMainImageCleanupItem(SQLModel, table=True):
+    __tablename__ = "product_main_image_cleanup_item"
+    __table_args__ = (
+        UniqueConstraint(
+            "product_id",
+            "original_image_url",
+            name="uq_main_image_cleanup_product_original",
+        ),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    batch_id: Optional[int] = Field(
+        default=None,
+        foreign_key="product_main_image_cleanup_batch.id",
+        index=True,
+    )
+    product_id: int = Field(foreign_key="product.id", index=True)
+    source_product_image_id: Optional[int] = Field(
+        default=None,
+        foreign_key="product_image.id",
+        index=True,
+    )
+    original_image_url: str = Field(index=True)
+    candidate_image_url: Optional[str] = Field(default=None)
+    approved_image_url: Optional[str] = Field(default=None)
+    status: str = Field(default="pending", index=True)
+    skip_reason: Optional[str] = Field(default=None, sa_column=Column(String))
+    reject_reason: Optional[str] = Field(default=None, sa_column=Column(String))
+    failure_reason: Optional[str] = Field(default=None, sa_column=Column(String))
+    processor_method: Optional[str] = Field(default=None, index=True)
+    processor_version: Optional[str] = Field(default=None, index=True)
+    confidence_score: Optional[float] = None
+    quality_score: Optional[float] = None
+    candidate_storage_provider: Optional[str] = Field(default=None, index=True)
+    candidate_content_hash: Optional[str] = Field(default=None, index=True)
+    candidate_width: Optional[int] = None
+    candidate_height: Optional[int] = None
+    approved_by: Optional[str] = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
+    approved_at: Optional[datetime] = None
+
+
 class ProductAttachment(SQLModel, table=True):
     __tablename__ = "product_attachment"
     __table_args__ = (
