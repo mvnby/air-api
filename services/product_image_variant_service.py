@@ -37,8 +37,13 @@ class ProductImageVariantService:
         image: ProductImage,
         *,
         storage_provider: str = "local",
+        storage: ProductMediaStorage | None = None,
+        source_content: bytes | None = None,
+        extension: str = "webp",
+        width: int | None = None,
+        height: int | None = None,
     ) -> ProductImageVariant:
-        """Create a ready `original` variant pointer without changing ProductImage.url."""
+        """Create a ready `original` variant without changing ProductImage.url."""
         if image.id is None:
             await session.flush()
 
@@ -48,8 +53,27 @@ class ProductImageVariantService:
             variant_type=ProductImageVariantType.ORIGINAL.value,
         )
         now = datetime.now()
-        variant.url = image.url
-        variant.storage_provider = storage_provider
+        if source_content is not None:
+            active_storage = storage or get_product_media_storage()
+            stored = await active_storage.save_product_variant(
+                content=source_content,
+                variant_type=ProductImageVariantType.ORIGINAL.value,
+                extension=extension,
+            )
+            variant.url = stored.url
+            variant.storage_provider = stored.storage_provider
+            variant.content_hash = stored.content_hash
+            if width is None or height is None:
+                detected_width, detected_height = ProductImageVariantService._image_size(
+                    source_content
+                )
+                width = width or detected_width
+                height = height or detected_height
+            variant.width = width
+            variant.height = height
+        elif not variant.url:
+            variant.url = image.url
+            variant.storage_provider = storage_provider
         variant.processing_status = ProductImageProcessingStatus.READY.value
         variant.processing_stage = ProductImageProcessingStage.ORIGINAL_INGEST.value
         variant.processing_provider = ProductImageProcessingProvider.MANUAL.value
