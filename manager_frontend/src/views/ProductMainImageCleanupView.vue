@@ -147,8 +147,21 @@ const productMeta = (item: ProductMainImageCleanupItemResponse) => {
   return [item.product_brand_title, item.product_series_title, item.product_model].filter(Boolean).join(' / ');
 };
 
+const getPublicSiteBaseUrl = () => {
+  const configured = String(import.meta.env.WEBSITE_URL || '').trim();
+  if (configured) {
+    return configured.replace(/\/+$/, '');
+  }
+
+  const { protocol, hostname, host } = window.location;
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return `${protocol}//${hostname}:4321`;
+  }
+  return `${protocol}//${host}`;
+};
+
 const productLink = (item: ProductMainImageCleanupItemResponse) => {
-  return item.product_slug ? `/products/${item.product_slug}` : '';
+  return item.product_slug ? `${getPublicSiteBaseUrl()}/product/${item.product_slug}/` : '';
 };
 
 const reasonText = (item: ProductMainImageCleanupItemResponse) => {
