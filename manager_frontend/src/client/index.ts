@@ -217,6 +217,7 @@ export type { ProductManualResponse } from './models/ProductManualResponse';
 export type { ProductResponse } from './models/ProductResponse';
 export type { ProductSiblingResponse } from './models/ProductSiblingResponse';
 export type { ProductUpdate } from './models/ProductUpdate';
+export type { PublicBrandResponse } from './models/PublicBrandResponse';
 export type { ServiceResponse } from './models/ServiceResponse';
 export type { SpecsKeysResponse } from './models/SpecsKeysResponse';
 export type { SupplierCreatePayload } from './models/SupplierCreatePayload';

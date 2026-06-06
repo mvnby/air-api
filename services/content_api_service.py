@@ -4,10 +4,11 @@ from typing import Any, Dict, List
 
 from bs4 import BeautifulSoup
 
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import GlobalConfig, Service
+from models import Brand, GlobalConfig, Product, Service
 
 
 class ContentApiService:
@@ -76,6 +77,18 @@ class ContentApiService:
         }
 
     @staticmethod
+    def _serialize_brand(brand: Brand, *, products_count: int) -> Dict[str, Any]:
+        return {
+            "id": brand.id,
+            "title": brand.title,
+            "slug": brand.slug,
+            "logo_url": brand.logo_url,
+            "description": brand.description,
+            "products_count": int(products_count or 0),
+            "sort_order": brand.sort_order,
+        }
+
+    @staticmethod
     async def get_active_services(session: AsyncSession) -> List[Dict[str, Any]]:
         stmt = select(Service).where(Service.is_active == True).order_by(Service.id)
         result = await session.execute(stmt)
@@ -94,6 +107,40 @@ class ContentApiService:
         )
         result = await session.execute(stmt)
         return [ContentApiService._serialize_service(service) for service in result.scalars().all()]
+
+    @staticmethod
+    async def get_public_brands(session: AsyncSession) -> List[Dict[str, Any]]:
+        stmt = (
+            select(Brand, func.count(Product.id).label("products_count"))
+            .join(Product, Product.brand_id == Brand.id)
+            .where(Brand.is_published == True)
+            .where(Product.is_published == True)
+            .group_by(Brand.id)
+            .having(func.count(Product.id) > 0)
+            .order_by(Brand.sort_order.asc(), Brand.title.asc())
+        )
+        result = await session.execute(stmt)
+        return [
+            ContentApiService._serialize_brand(brand, products_count=products_count)
+            for brand, products_count in result.all()
+        ]
+
+    @staticmethod
+    async def get_public_brand_by_slug(session: AsyncSession, slug: str) -> Dict[str, Any] | None:
+        stmt = (
+            select(Brand, func.count(Product.id).label("products_count"))
+            .join(Product, Product.brand_id == Brand.id)
+            .where(Brand.is_published == True)
+            .where(Brand.slug == slug)
+            .where(Product.is_published == True)
+            .group_by(Brand.id)
+            .having(func.count(Product.id) > 0)
+        )
+        row = (await session.execute(stmt)).one_or_none()
+        if row is None:
+            return None
+        brand, products_count = row
+        return ContentApiService._serialize_brand(brand, products_count=products_count)
 
     @staticmethod
     async def get_global_config_map(session: AsyncSession) -> Dict[str, str]:

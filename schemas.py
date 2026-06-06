@@ -190,6 +190,16 @@ class ServiceResponse(BaseModel):
     description: Optional[str]
     base_price: int
 
+
+class PublicBrandResponse(BaseModel):
+    id: int
+    title: str
+    slug: str
+    logo_url: Optional[str] = None
+    description: Optional[str] = None
+    products_count: int
+    sort_order: int
+
 # --- ORDERS ---
 
 class CalendarEventType(str, Enum):

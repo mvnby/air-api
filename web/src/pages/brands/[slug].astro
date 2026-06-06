@@ -1,0 +1,305 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import CatalogApp from "../../components/CatalogApp.vue";
+import ProductCard from "../../components/ProductCard.astro";
+import { getCatalog, getFiltersConfig, getPublicBrandBySlug, getPublicBrands, resolveImageUrl } from "../../utils/api";
+import { buildCatalogItemListSchema } from "../../utils/catalog-seo";
+
+interface PublicBrand {
+    id: number;
+    title: string;
+    slug: string;
+    logo_url?: string | null;
+    description?: string | null;
+    products_count: number;
+    sort_order: number;
+}
+
+interface Product {
+    id?: number;
+    title: string;
+    price: number;
+    slug: string;
+    main_image?: string;
+    card_image?: string | null;
+    description?: string;
+    vitebsk_qty?: number;
+    minsk_qty?: number;
+    availability_status?: string | null;
+    is_inverter?: boolean;
+    area?: number;
+    badges?: Array<{ text: string; class?: string }>;
+    tags?: Array<{
+        title: string;
+        slug: string;
+        is_public: boolean;
+        sort_order?: number;
+        group?: {
+            slug: string;
+            is_public: boolean;
+        };
+    }>;
+}
+
+export async function getStaticPaths() {
+    const brands = (await getPublicBrands()) as PublicBrand[];
+    return brands.map((brand) => ({
+        params: { slug: brand.slug },
+        props: { brand },
+    }));
+}
+
+interface Props {
+    brand: PublicBrand;
+}
+
+const { brand: initialBrand } = Astro.props as Props;
+const brand = initialBrand || (await getPublicBrandBySlug(Astro.params.slug || ""));
+if (!brand) {
+    return Astro.redirect("/404");
+}
+
+const catalogParams = {
+    page: 1,
+    limit: 20,
+    sort: "recommended",
+    brand_slugs: [brand.slug],
+};
+const data = await getCatalog(catalogParams);
+const popularData = await getCatalog({
+    ...catalogParams,
+    limit: 80,
+});
+const products = (data.items || []) as Product[];
+const popularProducts = (popularData.items || []) as Product[];
+const filtersConfig = await getFiltersConfig();
+const meta = data.meta || { total: brand.products_count || 0, page: 1, limit: 20, pages: 1 };
+const catalogSchema = buildCatalogItemListSchema(products, Astro.url.origin);
+const h1 = `Кондиционеры ${brand.title} в Витебске`;
+const seoDescription = `${h1}: подбор, продажа, монтаж и сервис. В каталоге ${brand.products_count} моделей с актуальными характеристиками.`;
+const logoUrl = brand.logo_url ? resolveImageUrl(brand.logo_url) : "";
+const lockedFilters = { brand_slugs: [brand.slug] };
+---
+
+<Layout
+    title={h1}
+    description={seoDescription}
+    image={logoUrl || undefined}
+    canonical={`/brands/${brand.slug}`}
+>
+    <script type="application/ld+json" set:html={JSON.stringify(catalogSchema)} />
+    <div class="container brand-page catalog-page">
+        <header class="brand-header catalog-header">
+            <div class="breadcrumb">
+                <a href="/">Главная</a>
+                <span class="sep">/</span>
+                <a href="/brands">Бренды</a>
+                <span class="sep">/</span>
+                <span>{brand.title}</span>
+            </div>
+            <div class="brand-hero">
+                <div class="brand-hero-copy">
+                    <h1 class="gradient-text">{h1}</h1>
+                    <p class="header-description">
+                        {brand.description || `Модели ${brand.title} для квартиры, дома и офиса: подбор по площади, продажа, монтаж и сервис в Витебске.`}
+                    </p>
+                    <div class="brand-hero-meta">
+                        <span>{brand.products_count} моделей</span>
+                        <span>подбор, продажа, монтаж и сервис</span>
+                    </div>
+                </div>
+                <div class="brand-logo-panel" aria-label={`Логотип ${brand.title}`}>
+                    {logoUrl ? <img src={logoUrl} alt={brand.title} /> : <span>{brand.title.slice(0, 2).toUpperCase()}</span>}
+                </div>
+            </div>
+        </header>
+
+        <CatalogApp
+            client:idle
+            initialProducts={products}
+            initialMeta={meta}
+            initialPopularProducts={popularProducts}
+            initialFilters={lockedFilters}
+            forcedTitle={h1}
+            forcedDescription={seoDescription}
+            lockedInitialFilters={lockedFilters}
+            initialCategorySlug=""
+            initialBrands={filtersConfig?.brands || []}
+        >
+            <div class="catalog-static-content">
+                {
+                    products.length > 0 ? (
+                        <section class="catalog-section all-products-section" aria-labelledby="brand-products-title">
+                            <div class="catalog-section-head">
+                                <h2 id="brand-products-title">Модели {brand.title}</h2>
+                            </div>
+                            <div class="catalog-grid">
+                                {products.map((product) => (
+                                    <ProductCard
+                                        product={product}
+                                        variant="default"
+                                        showInstallation={true}
+                                        refreshProductOnMount={false}
+                                    />
+                                ))}
+                            </div>
+                        </section>
+                    ) : (
+                        <div class="empty-status card">
+                            <span class="material-icons-round large">search_off</span>
+                            <h3>Товары не найдены</h3>
+                            <p>У бренда нет опубликованных моделей в каталоге.</p>
+                        </div>
+                    )
+                }
+
+                <section class="catalog-seo-block">
+                    <h2>{h1}: выбор и монтаж</h2>
+                    <p>
+                        Поможем сравнить модели {brand.title} по мощности, уровню шума, режимам обогрева и наличию на
+                        складах. Перед монтажом уточняем трассу, место установки наружного блока и условия обслуживания.
+                    </p>
+                    <p>
+                        Для Витебска и области подбираем решение под конкретное помещение: от небольшой спальни до
+                        офиса или торговой зоны.
+                    </p>
+                </section>
+            </div>
+        </CatalogApp>
+    </div>
+</Layout>
+
+<style>
+    .brand-page {
+        padding: 2rem 1.5rem;
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+    .brand-header {
+        margin-bottom: 2rem;
+    }
+    .breadcrumb {
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 500;
+        flex-wrap: wrap;
+    }
+    .breadcrumb a:hover {
+        color: var(--primary);
+    }
+    .sep {
+        opacity: 0.5;
+    }
+    .brand-hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 180px;
+        gap: 1.5rem;
+        align-items: center;
+    }
+    .brand-hero h1 {
+        font-size: clamp(2rem, 4vw, 3rem);
+        margin-bottom: 0.75rem;
+        font-weight: 800;
+        line-height: 1.1;
+    }
+    .header-description {
+        max-width: 780px;
+        color: var(--text-muted);
+        margin: 0;
+        line-height: 1.7;
+    }
+    .brand-hero-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.65rem;
+        margin-top: 1rem;
+    }
+    .brand-hero-meta span {
+        display: inline-flex;
+        align-items: center;
+        min-height: 34px;
+        padding: 0.35rem 0.7rem;
+        border-radius: 8px;
+        background: var(--panel-chip-bg);
+        border: 1px solid var(--panel-chip-border);
+        color: var(--text);
+        font-size: 0.9rem;
+        font-weight: 700;
+    }
+    .brand-logo-panel {
+        min-height: 140px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--panel-glass-bg);
+        border: 1px solid var(--panel-glass-border);
+        border-radius: 8px;
+        box-shadow: var(--panel-glass-shadow);
+        color: var(--primary);
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 2rem;
+        font-weight: 800;
+    }
+    .brand-logo-panel img {
+        max-width: 132px;
+        max-height: 78px;
+        object-fit: contain;
+    }
+    .catalog-static-content,
+    .catalog-section {
+        display: flex;
+        flex-direction: column;
+        gap: 1.4rem;
+    }
+    .catalog-section-head h2,
+    .catalog-seo-block h2 {
+        margin: 0;
+        color: var(--text);
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.35rem;
+        line-height: 1.2;
+    }
+    .catalog-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1.3rem;
+    }
+    .empty-status {
+        text-align: center;
+        padding: 4rem 1rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    .large {
+        font-size: 4rem;
+        color: var(--text-muted);
+        opacity: 0.55;
+    }
+    .catalog-seo-block {
+        margin-top: 2.2rem;
+        padding-top: 1.6rem;
+        border-top: 1px solid var(--panel-glass-border);
+        color: var(--text-muted);
+    }
+    .catalog-seo-block p {
+        max-width: 880px;
+        margin: 0.75rem 0 0;
+        line-height: 1.7;
+    }
+    @media (max-width: 720px) {
+        .brand-hero {
+            grid-template-columns: 1fr;
+        }
+        .brand-logo-panel {
+            min-height: 108px;
+            justify-content: flex-start;
+            padding: 1rem;
+        }
+    }
+</style>

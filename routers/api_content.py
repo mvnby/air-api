@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from core.database import get_session
-from schemas import ArticleResponse, ServiceResponse
+from schemas import ArticleResponse, PublicBrandResponse, ServiceResponse
 from services.article_service import ArticleService
 from services.content_api_service import ContentApiService
 from services.installation_service import InstallationService
@@ -32,6 +32,25 @@ async def get_article(slug: str, session: AsyncSession = Depends(get_session)):
 async def get_services(session: AsyncSession = Depends(get_session)):
     """Get list of all available services."""
     return await ContentApiService.get_active_services(session)
+
+
+@router.get("/v1/content/brands", response_model=List[PublicBrandResponse], operation_id="get_public_brands")
+async def get_public_brands(session: AsyncSession = Depends(get_session)):
+    """Get published brands that have at least one published product."""
+    return await ContentApiService.get_public_brands(session)
+
+
+@router.get(
+    "/v1/content/brands/{slug}",
+    response_model=PublicBrandResponse,
+    operation_id="get_public_brand",
+)
+async def get_public_brand(slug: str, session: AsyncSession = Depends(get_session)):
+    """Get a published brand by slug if it has published products."""
+    brand = await ContentApiService.get_public_brand_by_slug(session, slug)
+    if not brand:
+        raise HTTPException(status_code=404, detail=f"Brand with slug '{slug}' not found")
+    return brand
 
 
 @router.get("/v1/services/options", response_model=List[ServiceResponse])

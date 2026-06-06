@@ -129,6 +129,16 @@ export async function getFiltersConfig() {
     return data || { price: { min: null, max: null }, area: { min: null, max: null }, brands: [], expert_tags: [] };
 }
 
+export async function getPublicBrands() {
+    const data = await fetchJson(`${API_V1}/content/brands`);
+    return Array.isArray(data) ? data : [];
+}
+
+export async function getPublicBrandBySlug(slug) {
+    if (!slug) return null;
+    return await fetchJson(`${API_V1}/content/brands/${encodeURIComponent(slug)}`);
+}
+
 export async function getProducts() {
     // During SSG we require a strict fetch to avoid silently dropping product routes.
     if (import.meta.env.SSR) {

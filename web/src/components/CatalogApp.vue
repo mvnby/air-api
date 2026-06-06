@@ -64,7 +64,12 @@ const props = defineProps({
 
 const initialActiveTags = Array.isArray(props.lockedInitialFilters?.tag_slugs)
   ? [...props.lockedInitialFilters.tag_slugs]
-  : [props.initialCategorySlug || 'cat-household'];
+  : (Array.isArray(props.lockedInitialFilters?.brand_slugs) && props.lockedInitialFilters.brand_slugs.length > 0
+    ? []
+    : [props.initialCategorySlug || 'cat-household']);
+const initialBrandSlugs = Array.isArray(props.lockedInitialFilters?.brand_slugs)
+  ? [...props.lockedInitialFilters.brand_slugs]
+  : (Array.isArray(props.initialFilters?.brand_slugs) ? [...props.initialFilters.brand_slugs] : []);
 const products = ref(props.initialProducts || []);
 const popularProducts = ref(props.initialPopularProducts || []);
 const meta = ref(props.initialMeta || { total: 0, page: 1, limit: BASE_LIMIT, pages: 1 });
@@ -87,6 +92,7 @@ const currentHasWifi = ref(props.initialFilters?.has_wifi ?? null);
 const currentHasFreshAir = ref(props.initialFilters?.has_fresh_air ?? null);
 const currentHeatingMin = ref(props.initialFilters?.heating_min ?? null);
 const currentIndoorTypes = ref([...(props.initialFilters?.indoor_types || [])]);
+const currentBrandSlugs = ref([...new Set(initialBrandSlugs.map((slug) => String(slug || '').trim()).filter(Boolean))]);
 const selectedOutdoorSlug = ref('');
 const selectedIndoorQuantities = ref({});
 
@@ -105,7 +111,14 @@ const getBrandLogo = (brand) => {
 const lockedFilters = computed(() => props.lockedInitialFilters || null);
 const knownBrandSlugs = computed(() => new Set(availableBrands.value.map((brand) => brand.slug)));
 const activeCategorySlug = computed(() => activeTags.value.find((slug) => CATEGORY_SLUGS.has(slug)) || null);
-const activeBrandSlug = computed(() => activeTags.value.find((slug) => knownBrandSlugs.value.has(slug)) || null);
+const activeBrandSlug = computed(() => (
+  currentBrandSlugs.value[0]
+  || activeTags.value.find((slug) => knownBrandSlugs.value.has(slug))
+  || null
+));
+const hasLockedBrandFilter = computed(() => (
+  Array.isArray(lockedFilters.value?.brand_slugs) && lockedFilters.value.brand_slugs.length > 0
+));
 const isHouseholdCategory = computed(() => activeCategorySlug.value === 'cat-household');
 const isIndustrialCategory = computed(() => activeCategorySlug.value === 'cat-industrial');
 const isMultiCategory = computed(() => activeCategorySlug.value === 'cat-multi');
@@ -629,6 +642,7 @@ const getParamsFromUrl = () => {
     sort: sp.get('sort') || CATALOG_DEFAULT_SORT,
     q: sp.get('q') || '',
     tag_slugs: tags,
+    brand_slugs: sp.getAll('brand_slugs').flatMap((value) => value.split(',')).map((v) => v.trim()).filter(Boolean),
     area_min: sp.get('area_min') || null,
     area_max: sp.get('area_max') || null,
     is_inverter: sp.get('is_inverter') === 'true'
@@ -658,8 +672,14 @@ const applyLockedFilters = (params) => {
   const lockedTagSlugs = Array.isArray(lockedFilters.value.tag_slugs)
     ? lockedFilters.value.tag_slugs
     : [];
+  const lockedBrandSlugs = Array.isArray(lockedFilters.value.brand_slugs)
+    ? lockedFilters.value.brand_slugs
+    : [];
 
   merged.tag_slugs = [...new Set([...(params.tag_slugs || []), ...lockedTagSlugs])];
+  if (lockedBrandSlugs.length > 0) {
+    merged.brand_slugs = [...new Set(lockedBrandSlugs)];
+  }
 
   const scalarKeys = [
     'area_min',
@@ -686,6 +706,7 @@ const syncStateFromUrl = () => {
   const params = applyLockedFilters(rawParams);
 
   activeTags.value = [...params.tag_slugs];
+  currentBrandSlugs.value = [...new Set((params.brand_slugs || []).map((slug) => String(slug || '').trim()).filter(Boolean))];
   searchQuery.value = params.q;
   sort.value = params.sort;
 
@@ -697,7 +718,7 @@ const syncStateFromUrl = () => {
   currentIndoorTypes.value = [...params.indoor_types];
   currentHeatingMin.value = params.heating_min;
 
-  if (!activeTags.value.some((slug) => CATEGORY_SLUGS.has(slug))) {
+  if (!activeTags.value.some((slug) => CATEGORY_SLUGS.has(slug)) && !hasLockedBrandFilter.value) {
     const lockedCategory = (Array.isArray(lockedFilters.value?.tag_slugs)
       ? lockedFilters.value.tag_slugs
       : []
@@ -736,6 +757,7 @@ const buildApiParams = (page = 1) => {
     limit: BASE_LIMIT,
     sort: sort.value,
     tag_slugs: [...activeTags.value],
+    brand_slugs: currentBrandSlugs.value.length > 0 ? [...currentBrandSlugs.value] : undefined,
     q: searchQuery.value.trim() || undefined,
     area_min: currentAreaMin.value || undefined,
     area_max: currentAreaMax.value || undefined,
@@ -764,6 +786,9 @@ const syncUrlFromState = (page = 1, { replace = false } = {}) => {
 
   if (params.tag_slugs && params.tag_slugs.length > 0) {
     sp.set('tag_slugs', params.tag_slugs.join(','));
+  }
+  if (params.brand_slugs && params.brand_slugs.length > 0) {
+    sp.set('brand_slugs', params.brand_slugs.join(','));
   }
   if (page > 1) sp.set('page', String(page));
   if (params.sort && params.sort !== CATALOG_DEFAULT_SORT) sp.set('sort', params.sort);
@@ -945,9 +970,11 @@ const clearMultiConfig = () => {
 };
 
 const toggleBrand = async (brandSlug) => {
+  if (hasLockedBrandFilter.value) return;
   const brandSet = knownBrandSlugs.value;
   if (brandSlug === '__all__') {
     activeTags.value = activeTags.value.filter((slug) => !brandSet.has(slug));
+    currentBrandSlugs.value = [];
     syncUrlFromState(1);
     await fetchProducts({ page: 1, append: false });
     return;
@@ -956,8 +983,9 @@ const toggleBrand = async (brandSlug) => {
   const isActive = activeBrandSlug.value === brandSlug;
 
   activeTags.value = activeTags.value.filter((slug) => !brandSet.has(slug));
+  currentBrandSlugs.value = isActive ? [] : [brandSlug];
   if (!isActive) {
-    activeTags.value.push(brandSlug);
+    activeTags.value = activeTags.value.filter((slug) => slug !== brandSlug);
   }
 
   syncUrlFromState(1);
