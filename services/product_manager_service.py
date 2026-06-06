@@ -8,6 +8,7 @@ from sqlmodel import select
 
 from crud.product import ProductDAO
 from models.product import Product, Tag
+from services.catalog_revision_service import CatalogRevisionService
 from services.product_serialization import sanitize_specs
 from services.product_supply_metrics_service import ProductSupplyMetricsService
 
@@ -281,6 +282,7 @@ class ProductManagerService:
         product = await session.get(Product, product_id)
         if not product:
             return False
+        product_slug = product.slug
             
         # Check if product is used in any orders
         link_check = await session.execute(
@@ -314,6 +316,12 @@ class ProductManagerService:
         
         await session.delete(product)
         await session.commit()
+        await CatalogRevisionService.bump(
+            session,
+            scope="product_delete",
+            product_ids=[product_id],
+            slugs=[product_slug] if product_slug else None,
+        )
         return True
 
     @staticmethod

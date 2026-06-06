@@ -250,6 +250,28 @@
         }
       }
     },
+    "/api/v1/catalog/revision": {
+      "get": {
+        "tags": [
+          "api",
+          "api"
+        ],
+        "summary": "Get Catalog Revision",
+        "operationId": "get_catalog_revision",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogRevisionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/content/articles": {
       "get": {
         "tags": [
@@ -12322,6 +12344,25 @@
           "meta"
         ],
         "title": "CatalogResponse"
+      },
+      "CatalogRevisionResponse": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "revision",
+          "updated_at"
+        ],
+        "title": "CatalogRevisionResponse"
       },
       "CommonGalleryImageResponse": {
         "properties": {

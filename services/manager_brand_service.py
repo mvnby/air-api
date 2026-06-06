@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Brand, Product, ProductSeries, ProductTagLink, Tag, TagGroup
+from services.catalog_revision_service import CatalogRevisionService
 
 
 class ManagerBrandService:
@@ -60,6 +61,11 @@ class ManagerBrandService:
 
         await session.commit()
         await session.refresh(brand)
+        await CatalogRevisionService.bump(
+            session,
+            scope="brand_create",
+            brand_slugs=[brand.slug],
+        )
         return ManagerBrandService._serialize_brand(brand, products_count=0)
 
     @staticmethod
@@ -115,6 +121,14 @@ class ManagerBrandService:
 
         await session.commit()
         await session.refresh(brand)
+        changed_slugs = [previous_slug]
+        if brand.slug != previous_slug:
+            changed_slugs.append(brand.slug)
+        await CatalogRevisionService.bump(
+            session,
+            scope="brand_update",
+            brand_slugs=changed_slugs,
+        )
 
         products_count = (
             await session.execute(
@@ -176,8 +190,15 @@ class ManagerBrandService:
                 )
             await session.delete(brand_tag)
 
+        brand_slug = brand.slug
+
         await session.delete(brand)
         await session.commit()
+        await CatalogRevisionService.bump(
+            session,
+            scope="brand_delete",
+            brand_slugs=[brand_slug],
+        )
 
     @staticmethod
     def _serialize_brand(brand: Brand, *, products_count: int = 0) -> Dict[str, Any]:

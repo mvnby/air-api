@@ -573,6 +573,7 @@ class ProductDAO:
         product_id: int,
         update_data: Dict[str, Any],
         tag_ids: Optional[List[int]] = None,
+        commit: bool = True,
     ) -> Optional[Product]:
         stmt = (
             select(Product)
@@ -593,8 +594,11 @@ class ProductDAO:
             product.tags = list(tag_result.scalars().all())
 
         session.add(product)
-        await session.commit()
-        await session.refresh(product)
+        if commit:
+            await session.commit()
+            await session.refresh(product)
+        else:
+            await session.flush()
         return product
 
     @staticmethod

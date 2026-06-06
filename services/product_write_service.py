@@ -9,6 +9,7 @@ from sqlmodel import select
 from crud.product import ProductDAO
 from models import Product, ProductImage, Tag
 from services.brand_series_service import sync_product_brand_series
+from services.catalog_revision_service import CatalogRevisionService
 from services.product_attachment_service import replace_manuals
 from services.spec_normalizer import normalize_specs
 from services.product_supply_metrics_service import ProductSupplyMetricsService
@@ -38,6 +39,12 @@ class ProductWriteService:
         product.main_image = ImageService.get_web_path(db_path)
         session.add(product)
         await session.commit()
+        await CatalogRevisionService.bump(
+            session,
+            scope="product_media",
+            product_ids=[product.id],
+            slugs=[product.slug],
+        )
         return {"message": "Product updated", "id": product.id}
 
     @staticmethod
@@ -78,7 +85,7 @@ class ProductWriteService:
                 title=payload.get("title") or (existing_product.title if existing_product else ""),
             )
 
-        product = await ProductDAO.update_full(session, product_id, payload, tag_ids)
+        product = await ProductDAO.update_full(session, product_id, payload, tag_ids, commit=False)
         if not product:
             return None
 
@@ -101,12 +108,20 @@ class ProductWriteService:
             explicit_brand_override=explicit_brand_override,
         )
         await session.commit()
+        await CatalogRevisionService.bump(
+            session,
+            scope="product_update",
+            product_ids=[product.id],
+            slugs=[product.slug],
+        )
         return {"message": "Product updated", "id": product.id}
 
     @staticmethod
     async def bulk_round_prices(session: AsyncSession, product_ids: List[int]) -> Dict[str, Any]:
         products = await ProductDAO.get_by_ids(session, product_ids)
         updated_count = 0
+        updated_product_ids: List[int] = []
+        updated_slugs: List[str] = []
 
         for product in products:
             new_price = (product.price // 50) * 50
@@ -114,9 +129,19 @@ class ProductWriteService:
                 product.price = new_price
                 session.add(product)
                 updated_count += 1
+                if product.id is not None:
+                    updated_product_ids.append(int(product.id))
+                if product.slug:
+                    updated_slugs.append(product.slug)
 
         if updated_count > 0:
             await session.commit()
+            await CatalogRevisionService.bump(
+                session,
+                scope="product_price_bulk_round",
+                product_ids=updated_product_ids,
+                slugs=updated_slugs,
+            )
 
         return {"message": "Prices rounded", "updated_count": updated_count}
 
@@ -126,6 +151,8 @@ class ProductWriteService:
         metrics = await ProductSupplyMetricsService.compute_for_products(session, products)
         updated_count = 0
         skipped_count = 0
+        updated_product_ids: List[int] = []
+        updated_slugs: List[str] = []
 
         for product in products:
             recommended_price = metrics.get(product.id, {}).get("recommended_price_byn")
@@ -142,9 +169,19 @@ class ProductWriteService:
                 product.price = new_price
                 session.add(product)
                 updated_count += 1
+                if product.id is not None:
+                    updated_product_ids.append(int(product.id))
+                if product.slug:
+                    updated_slugs.append(product.slug)
 
         if updated_count > 0:
             await session.commit()
+            await CatalogRevisionService.bump(
+                session,
+                scope="product_price_bulk_rrc",
+                product_ids=updated_product_ids,
+                slugs=updated_slugs,
+            )
 
         processed_count = len(products)
         unchanged_count = processed_count - updated_count - skipped_count
@@ -186,6 +223,13 @@ class ProductWriteService:
             created_ids.append(product_image.id)
 
         await session.commit()
+        if created_ids:
+            await CatalogRevisionService.bump(
+                session,
+                scope="product_gallery",
+                product_ids=[product.id],
+                slugs=[product.slug],
+            )
         return created_ids
 
     @staticmethod
@@ -211,4 +255,11 @@ class ProductWriteService:
                 product.tags = [tag for tag in product.tags if tag.id not in tag_ids]
 
         await session.commit()
+        if products:
+            await CatalogRevisionService.bump(
+                session,
+                scope="product_tags",
+                product_ids=[product.id for product in products if product.id is not None],
+                slugs=[product.slug for product in products if product.slug],
+            )
         return len(products)
