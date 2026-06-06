@@ -549,13 +549,21 @@ class ProductDAO:
         return result.scalar_one() or 0
 
     @staticmethod
-    async def update_price(session: AsyncSession, product_id: int, new_price: int) -> bool:
+    async def update_price(
+        session: AsyncSession,
+        product_id: int,
+        new_price: int,
+        commit: bool = True,
+    ) -> bool:
         product = await session.get(Product, product_id)
         if not product:
             return False
         product.price = new_price
         session.add(product)
-        await session.commit()
+        if commit:
+            await session.commit()
+        else:
+            await session.flush()
         return True
 
     @staticmethod

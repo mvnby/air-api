@@ -116,6 +116,42 @@ async def test_product_update_and_brand_update_bump_revision(sqlite_session):
 
 
 @pytest.mark.asyncio
+async def test_product_update_rolls_back_when_revision_bump_fails(sqlite_session, monkeypatch):
+    product = Product(
+        title="Rollback Revision Product",
+        slug="rollback-revision-product",
+        description="Demo",
+        price=1000,
+        area=25,
+        is_published=True,
+    )
+    sqlite_session.add(product)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(product)
+
+    before = await CatalogRevisionService.get_current(sqlite_session)
+
+    async def fail_bump(*args, **kwargs):
+        raise RuntimeError("revision bump failed")
+
+    monkeypatch.setattr(CatalogRevisionService, "bump", fail_bump)
+
+    with pytest.raises(RuntimeError, match="revision bump failed"):
+        await ProductWriteService.update_product(
+            sqlite_session,
+            product.id,
+            {"price": 1250},
+        )
+
+    await sqlite_session.rollback()
+    await sqlite_session.refresh(product)
+    after = await CatalogRevisionService.get_current(sqlite_session)
+
+    assert product.price == 1000
+    assert after == before
+
+
+@pytest.mark.asyncio
 async def test_public_product_detail_still_hides_unpublished_product(sqlite_session):
     product = Product(
         title="Hidden Revision Product",

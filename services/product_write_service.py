@@ -38,13 +38,13 @@ class ProductWriteService:
         )
         product.main_image = ImageService.get_web_path(db_path)
         session.add(product)
-        await session.commit()
         await CatalogRevisionService.bump(
             session,
             scope="product_media",
             product_ids=[product.id],
             slugs=[product.slug],
         )
+        await session.commit()
         return {"message": "Product updated", "id": product.id}
 
     @staticmethod
@@ -107,13 +107,13 @@ class ProductWriteService:
             explicit_brand_id=explicit_brand_id,
             explicit_brand_override=explicit_brand_override,
         )
-        await session.commit()
         await CatalogRevisionService.bump(
             session,
             scope="product_update",
             product_ids=[product.id],
             slugs=[product.slug],
         )
+        await session.commit()
         return {"message": "Product updated", "id": product.id}
 
     @staticmethod
@@ -135,13 +135,13 @@ class ProductWriteService:
                     updated_slugs.append(product.slug)
 
         if updated_count > 0:
-            await session.commit()
             await CatalogRevisionService.bump(
                 session,
                 scope="product_price_bulk_round",
                 product_ids=updated_product_ids,
                 slugs=updated_slugs,
             )
+            await session.commit()
 
         return {"message": "Prices rounded", "updated_count": updated_count}
 
@@ -175,13 +175,13 @@ class ProductWriteService:
                     updated_slugs.append(product.slug)
 
         if updated_count > 0:
-            await session.commit()
             await CatalogRevisionService.bump(
                 session,
                 scope="product_price_bulk_rrc",
                 product_ids=updated_product_ids,
                 slugs=updated_slugs,
             )
+            await session.commit()
 
         processed_count = len(products)
         unchanged_count = processed_count - updated_count - skipped_count
@@ -222,7 +222,6 @@ class ProductWriteService:
             await session.flush()
             created_ids.append(product_image.id)
 
-        await session.commit()
         if created_ids:
             await CatalogRevisionService.bump(
                 session,
@@ -230,6 +229,7 @@ class ProductWriteService:
                 product_ids=[product.id],
                 slugs=[product.slug],
             )
+        await session.commit()
         return created_ids
 
     @staticmethod
@@ -254,7 +254,6 @@ class ProductWriteService:
             elif action == "remove":
                 product.tags = [tag for tag in product.tags if tag.id not in tag_ids]
 
-        await session.commit()
         if products:
             await CatalogRevisionService.bump(
                 session,
@@ -262,4 +261,5 @@ class ProductWriteService:
                 product_ids=[product.id for product in products if product.id is not None],
                 slugs=[product.slug for product in products if product.slug],
             )
+        await session.commit()
         return len(products)

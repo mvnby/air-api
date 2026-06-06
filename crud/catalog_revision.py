@@ -73,8 +73,7 @@ class CatalogRevisionDAO:
         row.description = _scope_description(scope)
 
         session.add(row)
-        await session.commit()
-        await session.refresh(row)
+        await session.flush()
         return CatalogRevisionSnapshot(
             revision=revision,
             updated_at=row.updated_at or now,
