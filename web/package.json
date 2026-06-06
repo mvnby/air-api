@@ -12,6 +12,8 @@
     "build:ssr:staging": "npm run check-api && astro build --config astro.config.ssr.mjs",
     "start:ssr:staging": "node ./dist/server/entry.mjs",
     "smoke:ssr:staging": "node scripts/smoke-ssr-staging.mjs",
+    "image:content": "node scripts/content-images.mjs",
+    "image:audit": "node scripts/content-images.mjs audit",
     "preview": "astro preview",
     "astro": "astro"
   },
@@ -33,6 +35,7 @@
     "@tailwindcss/typography": "^0.5.19",
     "autoprefixer": "^10.4.23",
     "node-fetch": "^3.3.2",
+    "sharp": "^0.34.5",
     "typescript": "^5.9.3"
   }
 }
