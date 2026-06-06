@@ -6,6 +6,14 @@ export type ProductMainImageCleanupItemResponse = {
     id?: (number | null);
     batch_id?: (number | null);
     product_id: number;
+    product_title?: (string | null);
+    product_slug?: (string | null);
+    product_brand_id?: (number | null);
+    product_brand_title?: (string | null);
+    product_series_id?: (number | null);
+    product_series_title?: (string | null);
+    product_model?: (string | null);
+    product_current_main_image?: (string | null);
     source_product_image_id?: (number | null);
     original_image_url: string;
     candidate_image_url?: (string | null);

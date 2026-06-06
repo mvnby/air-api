@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref } from 'vue';
-import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Settings, Wallet, ChevronLeft, ChevronRight, Tags, FileSpreadsheet, Link2, Award, Database, Calculator, ReceiptText } from 'lucide-vue-next';
+import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Settings, Wallet, ChevronLeft, ChevronRight, Tags, FileSpreadsheet, Link2, Award, Database, Calculator, ReceiptText, Image as ImageIcon } from 'lucide-vue-next';
 import { api } from './api';
 import { getApiErrorMessage } from './utils/api-errors';
 
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
+const ProductMainImageCleanupView = defineAsyncComponent(() => import('./views/ProductMainImageCleanupView.vue'));
 const CustomersView = defineAsyncComponent(() => import('./views/CustomersView.vue'));
 const CustomerProfileView = defineAsyncComponent(() => import('./views/CustomerProfileView.vue'));
 const OrdersKanbanView = defineAsyncComponent(() => import('./views/OrdersKanbanView.vue'));
@@ -45,6 +46,7 @@ const navItems = [
   { path: '/manager/orders/kanban', label: 'Заказы', icon: ShoppingCart },
   { path: '/manager/calendar', label: 'Календарь', icon: Calendar },
   { path: '/manager/products', label: 'Кондиционеры', icon: Package },
+  { path: '/manager/media/main-image-cleanup', label: 'Main-image', icon: ImageIcon },
   { path: '/manager/customers', label: 'Клиенты', icon: Users },
   { path: '/manager/installers', label: 'Сотрудники', icon: Users },
   { path: '/manager/tariffs', label: 'Тарифы услуг', icon: Wallet },
@@ -64,6 +66,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/leads')) return 'leads';
   if (path.startsWith('/manager/orders')) return 'orders';
   if (path.startsWith('/manager/calendar')) return 'calendar';
+  if (path.startsWith('/manager/media/main-image-cleanup')) return 'main-image-cleanup';
   if (path.startsWith('/manager/customers/profile')) return 'customer-profile';
   if (path.startsWith('/manager/customers')) return 'customers';
   if (path.startsWith('/manager/installers')) return 'installers';
@@ -331,6 +334,7 @@ onBeforeUnmount(() => {
       <LeadsView v-else-if="currentView === 'leads'" :key="currentLocation" />
       <OrdersKanbanView v-else-if="currentView === 'orders'" :key="currentLocation" />
       <CalendarDashboard v-else-if="currentView === 'calendar'" :key="currentLocation" />
+      <ProductMainImageCleanupView v-else-if="currentView === 'main-image-cleanup'" :key="currentLocation" />
       <CustomerProfileView v-else-if="currentView === 'customer-profile'" :key="currentLocation" />
       <CustomersView v-else-if="currentView === 'customers'" :key="currentLocation" />
       <InstallersView v-else-if="currentView === 'installers'" :key="currentLocation" />

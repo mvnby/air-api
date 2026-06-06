@@ -112,6 +112,9 @@ async def test_manager_main_image_cleanup_create_list_and_approve(
     item = payload["items"][0]
     assert item["status"] == "candidate_ready"
     assert item["candidate_image_url"] != source_url
+    assert item["product_title"] == "Cleanup API product"
+    assert item["product_slug"] == "cleanup-api-product"
+    assert item["product_current_main_image"] == source_url
 
     list_response = await async_client.get(
         "/api/manager/main-image-cleanup/items",
@@ -120,6 +123,7 @@ async def test_manager_main_image_cleanup_create_list_and_approve(
     )
     assert list_response.status_code == 200
     assert list_response.json()["items"][0]["id"] == item["id"]
+    assert list_response.json()["items"][0]["product_title"] == "Cleanup API product"
 
     approve_response = await async_client.post(
         "/api/manager/main-image-cleanup/items/approve",

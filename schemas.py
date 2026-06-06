@@ -1670,6 +1670,14 @@ class ProductMainImageCleanupItemResponse(BaseModel):
     id: Optional[int] = None
     batch_id: Optional[int] = None
     product_id: int
+    product_title: Optional[str] = None
+    product_slug: Optional[str] = None
+    product_brand_id: Optional[int] = None
+    product_brand_title: Optional[str] = None
+    product_series_id: Optional[int] = None
+    product_series_title: Optional[str] = None
+    product_model: Optional[str] = None
+    product_current_main_image: Optional[str] = None
     source_product_image_id: Optional[int] = None
     original_image_url: str
     candidate_image_url: Optional[str] = None

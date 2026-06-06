@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from models import (
@@ -18,10 +19,26 @@ class ProductMainImageCleanupDAO:
     async def list_products_with_main_images(session: AsyncSession) -> list[Product]:
         result = await session.execute(
             select(Product)
+            .options(selectinload(Product.brand), selectinload(Product.series))
             .where(Product.main_image.is_not(None))
             .order_by(Product.id)
         )
         return list(result.scalars().all())
+
+    @staticmethod
+    async def list_products_by_ids(
+        session: AsyncSession,
+        product_ids: list[int],
+    ) -> dict[int, Product]:
+        if not product_ids:
+            return {}
+        result = await session.execute(
+            select(Product)
+            .options(selectinload(Product.brand), selectinload(Product.series))
+            .where(Product.id.in_(product_ids))
+        )
+        products = result.scalars().all()
+        return {int(product.id): product for product in products if product.id is not None}
 
     @staticmethod
     async def get_item_by_product_source(
