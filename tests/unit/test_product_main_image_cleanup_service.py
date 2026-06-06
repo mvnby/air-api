@@ -9,6 +9,7 @@ from sqlmodel import SQLModel, select
 
 from models import Product, ProductImage, ProductMainImageCleanupItem
 from services.media_storage_service import LocalProductMediaStorage
+from services.catalog_revision_service import CatalogRevisionService
 from services.product_main_image_cleanup_contract import ProductMainImageCleanupStatus
 from services.product_main_image_cleanup_service import ProductMainImageCleanupService
 
@@ -127,6 +128,7 @@ async def test_approval_updates_main_image_and_preserves_original_metadata(
     sqlite_session.add(item)
     await sqlite_session.commit()
     await sqlite_session.refresh(item)
+    before_revision = await CatalogRevisionService.get_current(sqlite_session)
 
     result = await ProductMainImageCleanupService.approve_items(
         sqlite_session,
@@ -143,6 +145,8 @@ async def test_approval_updates_main_image_and_preserves_original_metadata(
     assert item.approved_image_url == "/media/products/variants/main_cleanup/clean.webp"
     assert item.approved_by == "manager"
     assert item.approved_at is not None
+    after_revision = await CatalogRevisionService.get_current(sqlite_session)
+    assert after_revision["revision"] == before_revision["revision"] + 1
 
 
 @pytest.mark.asyncio
@@ -160,6 +164,7 @@ async def test_rejection_does_not_change_public_main_image(
     sqlite_session.add(item)
     await sqlite_session.commit()
     await sqlite_session.refresh(item)
+    before_revision = await CatalogRevisionService.get_current(sqlite_session)
 
     result = await ProductMainImageCleanupService.reject_items(
         sqlite_session,
@@ -173,6 +178,8 @@ async def test_rejection_does_not_change_public_main_image(
     assert product.main_image == original_url
     assert item.status == ProductMainImageCleanupStatus.REJECTED.value
     assert item.reject_reason == "bad crop"
+    after_revision = await CatalogRevisionService.get_current(sqlite_session)
+    assert after_revision == before_revision
 
 
 @pytest.mark.asyncio

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from crud.product_main_image_cleanup import ProductMainImageCleanupDAO
 from models import Product, ProductMainImageCleanupBatch, ProductMainImageCleanupItem
+from services.catalog_revision_service import CatalogRevisionService
 from services.media_storage_service import ProductMediaStorage, get_product_media_storage
 from services.product_main_image_cleanup_contract import (
     MAIN_IMAGE_CLEANUP_VARIANT_TYPE,
@@ -205,6 +206,8 @@ class ProductMainImageCleanupService:
     ) -> dict[str, Any]:
         unique_ids = ProductMainImageCleanupService._normalize_ids(item_ids)
         approved: list[ProductMainImageCleanupItem] = []
+        updated_product_ids: list[int] = []
+        updated_slugs: list[str] = []
         skipped: list[dict[str, Any]] = []
         now = datetime.now()
 
@@ -232,7 +235,12 @@ class ProductMainImageCleanupService:
                 skipped.append({"item_id": item_id, "reason": "product_not_found"})
                 continue
 
-            product.main_image = item.candidate_image_url
+            if product.main_image != item.candidate_image_url:
+                product.main_image = item.candidate_image_url
+                if product.id is not None:
+                    updated_product_ids.append(int(product.id))
+                if product.slug:
+                    updated_slugs.append(product.slug)
             item.status = ProductMainImageCleanupStatus.APPROVED.value
             item.approved_image_url = item.candidate_image_url
             item.approved_by = approved_by
@@ -242,6 +250,13 @@ class ProductMainImageCleanupService:
             session.add(item)
             approved.append(item)
 
+        if updated_product_ids:
+            await CatalogRevisionService.bump(
+                session,
+                scope="product_main_image_cleanup_approval",
+                product_ids=updated_product_ids,
+                slugs=updated_slugs,
+            )
         await session.commit()
         return {
             "updated_count": len(approved),
