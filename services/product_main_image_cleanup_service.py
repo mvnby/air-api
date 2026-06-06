@@ -251,13 +251,14 @@ class ProductMainImageCleanupService:
             approved.append(item)
 
         if updated_product_ids:
-            await CatalogRevisionService.bump(
+            await CatalogRevisionService.bump_commit_and_purge(
                 session,
                 scope="product_main_image_cleanup_approval",
                 product_ids=updated_product_ids,
                 slugs=updated_slugs,
             )
-        await session.commit()
+        else:
+            await session.commit()
         return {
             "updated_count": len(approved),
             "skipped_count": len(skipped),
