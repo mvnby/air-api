@@ -14,12 +14,12 @@ export async function getStaticPaths() {
         {
             slug: "obslujivanie-kondicionerov",
             title: "Обслуживание кондиционеров",
-            description: "Профессиональное обслуживание сплит-систем.",
+            description: "Чистка кондиционера в Витебске: внутренний блок, дренаж, давление и рабочие режимы.",
         },
         {
             slug: "montaj-konditionerov",
             title: "Установка кондиционеров",
-            description: "Профессиональный монтаж и установка.",
+            description: "Монтаж кондиционера в Витебске с вакуумированием трассы и согласованной стоимостью.",
         },
     ];
     const seoServiceSlugs = seoFallbackServices.map((service) => service.slug);
@@ -75,6 +75,14 @@ export async function getStaticPaths() {
 }
 
 const { service } = Astro.props;
+const canonicalServicePaths: Record<string, string> = {
+    "montaj-konditionerov": "/montaj-konditionerov",
+    "obslujivanie-kondicionerov": "/obslujivanie-kondicionerov",
+};
+const canonicalPath = canonicalServicePaths[service.slug];
+if (canonicalPath) {
+    return Astro.redirect(canonicalPath);
+}
 const sanitizeDescription = (value?: string | null): string => {
     if (!value) return "";
     // Hotfix policy: render description only as plain text to fully block script/HTML injection.
@@ -102,7 +110,7 @@ const safeDescription = sanitizeDescription(service.description);
                     {safeDescription ?
                         <p>{safeDescription}</p>
                         :
-                        <p>Профессиональная климатическая услуга от «Мастера Воздуха» с гарантией качества и надежности.</p>
+                        <p>Работаем по Витебску: осматриваем кондиционер, называем понятный объем работ и согласуем стоимость до старта.</p>
                     }
                 </div>
             </div>
