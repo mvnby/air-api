@@ -4,6 +4,8 @@ import ProductGroup from "../components/ProductGroup.astro";
 import FeaturedArticles from "../components/blog/FeaturedArticles.astro";
 import { getInstallationPricingInfo } from "../utils/api";
 
+export const prerender = true;
+
 const { minBundlePrice } = await getInstallationPricingInfo();
 
 const heroServices = [

@@ -1,4 +1,4 @@
-FROM node:21-slim AS base
+FROM node:20-slim AS base
 WORKDIR /app
 
 COPY package*.json ./
@@ -11,14 +11,25 @@ RUN npm install
 
 FROM build-deps AS build
 COPY . .
-RUN npm run build
+ARG INTERNAL_API_URL=https://api.mvn.by/api/v1
+ARG PUBLIC_API_URL=https://api.mvn.by/api/v1
+ARG PUBLIC_SITE_URL=https://mvn.by
+ARG PUBLIC_GTM_ID=
+ARG SSR_STAGING_BASE_PATH=/__ssr-staging
+ENV INTERNAL_API_URL=${INTERNAL_API_URL}
+ENV PUBLIC_API_URL=${PUBLIC_API_URL}
+ENV PUBLIC_SITE_URL=${PUBLIC_SITE_URL}
+ENV PUBLIC_GTM_ID=${PUBLIC_GTM_ID}
+ENV SSR_STAGING_BASE_PATH=${SSR_STAGING_BASE_PATH}
+RUN npm run build:ssr:staging
 
 FROM base AS runtime
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 
+ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=4321
 EXPOSE 4321
 
-CMD ["node", "./dist/server/entry.mjs"]
+CMD ["npm", "run", "start:ssr:staging"]

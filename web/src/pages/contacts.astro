@@ -3,6 +3,8 @@ import Layout from "../layouts/Layout.astro";
 import ContactForm from "../components/ContactForm.vue";
 import { getGlobalConfig } from "../utils/api";
 
+export const prerender = true;
+
 const config = await getGlobalConfig();
 const phone = config["phone"] || "+375 (29) 000-00-00";
 const email = config["email"] || "info@master-air.by";

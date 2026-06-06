@@ -1,13 +1,33 @@
-version: '3.8'
-
 services:
-  web:
+  web-ssr-staging:
     build:
       context: ./web
       dockerfile: Dockerfile.prod
-    restart: always
+      args:
+        INTERNAL_API_URL: ${SSR_INTERNAL_API_URL:-https://api.mvn.by/api/v1}
+        PUBLIC_API_URL: ${PUBLIC_API_URL:-https://api.mvn.by/api/v1}
+        PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://mvn.by}
+        PUBLIC_GTM_ID: ${PUBLIC_GTM_ID:-}
+        SSR_STAGING_BASE_PATH: ${SSR_STAGING_BASE_PATH:-/__ssr-staging}
+    image: mvn-web-ssr-staging:local
+    restart: unless-stopped
     ports:
-      - "4321:4321"
+      - "127.0.0.1:${SSR_STAGING_PORT:-4321}:4321"
     environment:
-      - PUBLIC_API_URL=https://api.mvn.by/api/v1
-      - INTERNAL_API_URL=https://api.mvn.by/api/v1
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 4321
+      INTERNAL_API_URL: ${SSR_INTERNAL_API_URL:-https://api.mvn.by/api/v1}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-https://api.mvn.by/api/v1}
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://mvn.by}
+      SSR_STAGING_BASE_PATH: ${SSR_STAGING_BASE_PATH:-/__ssr-staging}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"const p=process.env.SSR_STAGING_BASE_PATH||'/__ssr-staging'; fetch('http://127.0.0.1:'+(process.env.PORT||4321)+p+'/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

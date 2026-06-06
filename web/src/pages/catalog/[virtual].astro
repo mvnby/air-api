@@ -8,6 +8,8 @@ import { getCatalog, getFiltersConfig } from "../../utils/api";
 import { buildCatalogItemListSchema } from "../../utils/catalog-seo";
 import { buildCatalogQueryFromVirtual } from "../../utils/virtual-category";
 
+export const prerender = true;
+
 export async function getStaticPaths() {
     return VIRTUAL_CATEGORIES.map((category) => ({
         params: { virtual: category.slug },

@@ -2,6 +2,8 @@
 import { getCollection } from 'astro:content';
 import ArticleLayout from '../../layouts/ArticleLayout.astro';
 
+export const prerender = true;
+
 // 1. Генерируем пути для всех статей (Static Site Generation)
 export async function getStaticPaths() {
   const posts = await getCollection('blog');
