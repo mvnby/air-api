@@ -501,8 +501,8 @@ const submitOrder = async () => {
     justify-content: center;
     padding: 1rem 0.5rem;
     border-radius: 1rem;
-    border: 1px solid var(--border, #e5e7eb);
-    background: rgba(255, 255, 255, 0.5);
+    border: 1px solid var(--panel-chip-border);
+    background: var(--panel-chip-bg);
     color: var(--text-muted);
     cursor: pointer;
     transition: all 0.2s ease;
@@ -510,14 +510,14 @@ const submitOrder = async () => {
 }
 
 .cat-btn:hover {
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--panel-pill-bg);
     color: var(--primary);
-    border-color: var(--primary);
+    border-color: var(--panel-chip-hover-border);
 }
 
 .cat-btn.active {
     background: var(--primary);
-    color: white;
+    color: var(--panel-active-text);
     border-color: var(--primary);
     box-shadow: 0 4px 12px rgba(0, 127, 128, 0.3);
 }
@@ -548,8 +548,8 @@ const submitOrder = async () => {
 .custom-select {
     width: 100%;
     appearance: none;
-    background: rgba(255, 255, 255, 0.5);
-    border: 1px solid var(--border);
+    background: var(--panel-input-bg);
+    border: 1px solid var(--panel-input-border);
     border-radius: 0.75rem;
     padding: 0.75rem 1rem;
     font-size: 1rem;
@@ -787,8 +787,8 @@ const submitOrder = async () => {
 }
 
 .modal-card {
-    background: white; /* Fallback */
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--panel-glass-bg);
+    border: 1px solid var(--panel-glass-border);
     width: 100%;
     max-width: 400px;
     padding: 2rem;
@@ -838,7 +838,8 @@ const submitOrder = async () => {
 .form-input {
     width: 100%;
     padding: 0.75rem 1rem;
-    border: 1px solid var(--border);
+    background: var(--panel-input-bg);
+    border: 1px solid var(--panel-input-border);
     border-radius: 0.75rem;
     font-size: 1rem;
     transition: all 0.2s;
@@ -900,19 +901,19 @@ const submitOrder = async () => {
 }
 
 .option-card {
-    border: 2px solid transparent;
+    border: 2px solid var(--panel-chip-border);
     border-radius: 1rem;
     overflow: hidden;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    background: rgba(255, 255, 255, 0.6);
+    background: var(--panel-chip-bg);
     position: relative;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 
 .option-card:hover {
     transform: translateY(-2px);
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--panel-pill-bg);
     box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
 }
 
@@ -922,7 +923,7 @@ const submitOrder = async () => {
 
 .option-card.active {
     border-color: var(--primary);
-    background: #f0fdfa; /* Teal-50 */
+    background: var(--success-bg);
     box-shadow: 0 4px 12px rgba(13, 148, 136, 0.15);
 }
 
