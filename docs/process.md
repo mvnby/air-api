@@ -18,6 +18,16 @@
    - do not reintroduce SQLAdmin or add legacy `/admin` UI workflows.
 3. Any new internal workflow must target manager routes and manager UI.
 
+## Static Content Image Workflow
+
+Use `docs/content-image-assets.md` for static storefront images committed under
+`web/public/img`:
+
+- optimize new blog/service/hero/brand images with `cd web && npm run image:content`;
+- audit existing committed rasters with `cd web && npm run image:audit`;
+- keep catalog product uploads and product gallery variants in the backend
+  media/R2 pipeline, not this static content workflow.
+
 ## Manager API Client Sync Policy
 
 When changing manager API contracts (`routers/manager_*`, `schemas.py`, OpenAPI-affecting dependencies):
