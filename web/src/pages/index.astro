@@ -211,12 +211,8 @@ const businessBenefits = [
 
 	{
 		homepageBrands.length > 0 && (
-			<section class="container brand-discovery-section" aria-labelledby="brand-discovery-title">
+			<section class="container brand-discovery-section" aria-label="Бренды кондиционеров">
 				<div class="brand-discovery-head">
-					<div>
-						<p class="section-kicker">Бренды</p>
-						<h2 id="brand-discovery-title">Быстрый переход к моделям</h2>
-					</div>
 					<a href="/brands" class="brand-discovery-all">
 						Все бренды
 						<span class="material-icons-round" aria-hidden="true">arrow_forward</span>
@@ -349,21 +345,13 @@ const businessBenefits = [
 
 	<div class="container products-section">
 		<ProductGroup
-			title="Популярные модели в наличии в Витебске"
+			title="Кондиционеры в наличии в Витебске"
 			vitebskFeatured={true}
 			limit={6}
 		/>
 	</div>
 
 	<FeaturedArticles />
-
-	<div class="container products-section">
-		<ProductGroup
-			title="Для квартиры до 25 м² с обогревом"
-			filters={{ area_max: 29, heating_min: -20 }}
-			limit={4}
-		/>
-	</div>
 </Layout>
 
 <style>
@@ -670,14 +658,6 @@ const businessBenefits = [
 		margin-bottom: 1rem;
 	}
 
-	.brand-discovery-head h2 {
-		margin: 0;
-		color: var(--text);
-		font-family: "Space Grotesk", sans-serif;
-		font-size: 1.45rem;
-		line-height: 1.2;
-	}
-
 	.brand-discovery-all {
 		display: inline-flex;
 		align-items: center;
@@ -804,7 +784,7 @@ const businessBenefits = [
 		width: min(100%, 18rem);
 		padding: 1rem;
 		border-radius: 1.25rem;
-		background: rgba(var(--surface-rgb), 0.78);
+		background: rgba(var(--surface-rgb), 0.75);
 		border: 1px solid var(--panel-glass-border);
 		box-shadow: var(--panel-glass-shadow);
 		backdrop-filter: blur(12px);
@@ -812,7 +792,7 @@ const businessBenefits = [
 
 	.coverage-card strong {
 		font-family: "Space Grotesk", sans-serif;
-		font-size: 1.08rem;
+		font-size: 1.14rem;
 		line-height: 1.16;
 	}
 
@@ -823,7 +803,7 @@ const businessBenefits = [
 	}
 
 	.context-kicker {
-		font-size: 0.64rem;
+		font-size: 0.875rem;
 		font-weight: 800;
 		letter-spacing: 0.13em;
 		text-transform: uppercase;
