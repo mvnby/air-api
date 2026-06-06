@@ -337,6 +337,14 @@ API_SSH_HOST=mvn-api API_SSH_USER=root bash scripts/check_api_vps_health.sh
 See `docs/api-vps-monitoring.md` for cron examples, the manual GitHub Actions
 workflow, alert routing options, and failure triage.
 
+## API VPS Reliability Strategy
+
+Use `docs/api-reliability-plan.md` to choose between current single-VPS
+monitoring, a new Belarus API primary with passive reserve, and future
+Cloudflare Load Balancing or active failover. It captures the DB, bot/scheduler,
+media, documents, DNS rollback, monitoring, and owner-decision tradeoffs for
+issue #429.
+
 ## Product Media R2/S3 Rollout
 
 Product image variant storage can be switched from local files to R2/S3-compatible
