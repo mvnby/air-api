@@ -11,6 +11,7 @@ import type { OrderResponse } from '../models/OrderResponse';
 import type { ProductAvailabilityLeadPayload } from '../models/ProductAvailabilityLeadPayload';
 import type { ProductAvailabilityLeadResponse } from '../models/ProductAvailabilityLeadResponse';
 import type { ProductResponse } from '../models/ProductResponse';
+import type { PublicBrandResponse } from '../models/PublicBrandResponse';
 import type { ServiceResponse } from '../models/ServiceResponse';
 import type { SpecsKeysResponse } from '../models/SpecsKeysResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -150,6 +151,39 @@ export class ApiService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/content/services',
+        });
+    }
+    /**
+     * Get Public Brands
+     * Get published brands that have at least one published product.
+     * @returns PublicBrandResponse Successful Response
+     * @throws ApiError
+     */
+    public static getPublicBrands(): CancelablePromise<Array<PublicBrandResponse>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/content/brands',
+        });
+    }
+    /**
+     * Get Public Brand
+     * Get a published brand by slug if it has published products.
+     * @param slug
+     * @returns PublicBrandResponse Successful Response
+     * @throws ApiError
+     */
+    public static getPublicBrand(
+        slug: string,
+    ): CancelablePromise<PublicBrandResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/content/brands/{slug}',
+            path: {
+                'slug': slug,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**
@@ -294,6 +328,7 @@ export class ApiService {
      * @param hasFreshAir
      * @param indoorTypes Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)
      * @param tagSlugs
+     * @param brandSlugs Canonical brand slugs to include
      * @param isInverter
      * @param q Smart search query
      * @returns CatalogResponse Successful Response
@@ -312,6 +347,7 @@ export class ApiService {
         hasFreshAir?: (boolean | null),
         indoorTypes?: (Array<string> | null),
         tagSlugs?: (Array<string> | null),
+        brandSlugs?: (Array<string> | null),
         isInverter?: (boolean | null),
         q?: (string | null),
     ): CancelablePromise<CatalogResponse> {
@@ -331,6 +367,7 @@ export class ApiService {
                 'has_fresh_air': hasFreshAir,
                 'indoor_types': indoorTypes,
                 'tag_slugs': tagSlugs,
+                'brand_slugs': brandSlugs,
                 'is_inverter': isInverter,
                 'q': q,
             },
@@ -353,6 +390,7 @@ export class ApiService {
      * @param hasFreshAir
      * @param indoorTypes Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)
      * @param tagSlugs
+     * @param brandSlugs Canonical brand slugs to include
      * @param isInverter
      * @param q Smart search query
      * @returns CatalogResponse Successful Response
@@ -371,6 +409,7 @@ export class ApiService {
         hasFreshAir?: (boolean | null),
         indoorTypes?: (Array<string> | null),
         tagSlugs?: (Array<string> | null),
+        brandSlugs?: (Array<string> | null),
         isInverter?: (boolean | null),
         q?: (string | null),
     ): CancelablePromise<CatalogResponse> {
@@ -390,6 +429,7 @@ export class ApiService {
                 'has_fresh_air': hasFreshAir,
                 'indoor_types': indoorTypes,
                 'tag_slugs': tagSlugs,
+                'brand_slugs': brandSlugs,
                 'is_inverter': isInverter,
                 'q': q,
             },

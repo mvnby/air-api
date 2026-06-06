@@ -61,6 +61,7 @@ async def get_catalog(
         description="Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)",
     ),
     tag_slugs: Optional[List[str]] = Query(None),
+    brand_slugs: Optional[List[str]] = Query(None, description="Canonical brand slugs to include"),
     is_inverter: Optional[bool] = None,
     q: Optional[str] = Query(None, description="Smart search query"),
     session: AsyncSession = Depends(get_session),
@@ -84,6 +85,7 @@ async def get_catalog(
         has_fresh_air=has_fresh_air,
         indoor_types=indoor_types,
         tag_slugs=tag_slugs,
+        brand_slugs=brand_slugs,
         is_inverter=is_inverter,
         search=q,
     )

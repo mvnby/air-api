@@ -64,20 +64,23 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
         has_fresh_air: Optional[bool] = None,
         indoor_types: Optional[List[str]] = None,
         tag_slugs: Optional[List[str]] = None,
+        brand_slugs: Optional[List[str]] = None,
         is_inverter: Optional[bool] = None,
         search: Optional[str] = None,
     ) -> Dict[str, Any]:
         faceted_tag_ids = None
-        brand_slugs = []
+        resolved_brand_slugs = list(brand_slugs or [])
         facet_slugs = tag_slugs or []
         if tag_slugs:
             brand_rows = (
                 await session.execute(select(Brand.slug).where(Brand.slug.in_(tag_slugs)))
             ).scalars().all()
-            brand_slugs = [slug for slug in brand_rows if slug]
-            brand_slug_set = set(brand_slugs)
+            legacy_brand_slugs = [slug for slug in brand_rows if slug]
+            resolved_brand_slugs.extend(legacy_brand_slugs)
+            brand_slug_set = set(legacy_brand_slugs)
             facet_slugs = [slug for slug in tag_slugs if slug not in brand_slug_set]
             faceted_tag_ids = await ProductReadService.resolve_slugs_to_grouped_ids(session, facet_slugs)
+        resolved_brand_slugs = list(dict.fromkeys(resolved_brand_slugs))
 
         items = await ProductDAO.get_filtered(
             session,
@@ -91,7 +94,7 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
             indoor_types=indoor_types,
             is_inverter=is_inverter,
             tag_slugs=None,
-            brand_slugs=brand_slugs,
+            brand_slugs=resolved_brand_slugs,
             faceted_tag_ids=faceted_tag_ids,
             sort=sort,
             page=page,
@@ -112,7 +115,7 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
             indoor_types=indoor_types,
             is_inverter=is_inverter,
             tag_slugs=None,
-            brand_slugs=brand_slugs,
+            brand_slugs=resolved_brand_slugs,
             faceted_tag_ids=faceted_tag_ids,
             is_published=True,
             search_query=search,

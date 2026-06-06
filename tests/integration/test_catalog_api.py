@@ -275,6 +275,43 @@ async def test_catalog_filters_by_brand_entity_slug(async_client: AsyncClient, d
 
 
 @pytest.mark.asyncio
+async def test_catalog_filters_by_explicit_brand_slugs(async_client: AsyncClient, db):
+    mdv = Brand(title="MDV Explicit", slug="mdv-explicit", is_published=True, sort_order=10)
+    haier = Brand(title="Haier Explicit", slug="haier-explicit", is_published=True, sort_order=40)
+    db.add_all([mdv, haier])
+    await db.flush()
+
+    db.add_all(
+        [
+            Product(
+                title="MDV explicit product",
+                slug="mdv-explicit-product",
+                price=1000,
+                area=25,
+                brand_id=mdv.id,
+                is_published=True,
+                specs={"brand": "Wrong free text"},
+            ),
+            Product(
+                title="Haier explicit product",
+                slug="haier-explicit-product",
+                price=1000,
+                area=25,
+                brand_id=haier.id,
+                is_published=True,
+            ),
+        ]
+    )
+    await db.commit()
+
+    response = await async_client.get("/api/v1/catalog?brand_slugs=mdv-explicit")
+    assert response.status_code == 200, response.text
+    slugs = [item["slug"] for item in response.json()["items"]]
+    assert "mdv-explicit-product" in slugs
+    assert "haier-explicit-product" not in slugs
+
+
+@pytest.mark.asyncio
 async def test_catalog_filters_by_indoor_types(async_client: AsyncClient, db):
     cassette = Product(
         title="Cassette Unit",
