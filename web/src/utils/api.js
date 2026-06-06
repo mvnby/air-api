@@ -23,6 +23,149 @@ const CLIENT_URL = normalizeApiV1Base(import.meta.env.PUBLIC_API_URL || 'http://
 const API_V1 = import.meta.env.SSR ? INTERNAL_URL : CLIENT_URL;
 const API_ROOT = API_V1.replace(/\/v1$/, ""); // Fallback for non-versioned endpoints if any
 
+const readProcessEnv = (key) => {
+    if (typeof process === "undefined" || !process?.env) return undefined;
+    return process.env[key];
+};
+
+const isEnabledFlag = (value) =>
+    ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+
+const parsePositiveInt = (value, fallback) => {
+    const parsed = Number.parseInt(String(value || ""), 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const runtimeCache = new Map();
+const runtimeCacheMaxEntries = () =>
+    parsePositiveInt(readProcessEnv("SSR_RUNTIME_DATA_CACHE_MAX_ENTRIES"), 200);
+
+export function isRuntimeFreshnessEnabled() {
+    return (
+        import.meta.env.SSR &&
+        isEnabledFlag(import.meta.env.SSR_RUNTIME_FRESHNESS || readProcessEnv("SSR_RUNTIME_FRESHNESS"))
+    );
+}
+
+async function fetchCatalogRevision() {
+    const fallbackTtlMs = parsePositiveInt(readProcessEnv("SSR_RUNTIME_FRESHNESS_FALLBACK_TTL_MS"), 15000);
+    const timeoutMs = parsePositiveInt(readProcessEnv("SSR_RUNTIME_REVISION_TIMEOUT_MS"), 4000);
+    const fallbackBucket = Math.floor(Date.now() / fallbackTtlMs);
+    const fallback = {
+        revision: `fallback-${fallbackBucket}`,
+        updated_at: null,
+        unavailable: true,
+        ttlMs: fallbackTtlMs,
+    };
+
+    if (!isRuntimeFreshnessEnabled()) return null;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const data = await fetchJson(`${API_V1}/catalog/revision`, { signal: controller.signal }, false);
+        const revision = String(data?.revision ?? "").trim();
+        if (!revision) {
+            throw new Error("catalog revision response did not include revision");
+        }
+        return {
+            revision,
+            updated_at: data?.updated_at || null,
+            unavailable: false,
+            ttlMs: parsePositiveInt(readProcessEnv("SSR_RUNTIME_DATA_CACHE_TTL_MS"), 30000),
+        };
+    } catch (error) {
+        console.error("[API] Catalog revision unavailable, using short fallback cache key:", error.message);
+        return fallback;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+export async function createRuntimeFreshnessContext() {
+    const revisionState = await fetchCatalogRevision();
+    if (!revisionState) return null;
+
+    const statuses = new Set();
+    return {
+        revision: revisionState.revision,
+        updated_at: revisionState.updated_at,
+        unavailable: revisionState.unavailable,
+        ttlMs: revisionState.ttlMs,
+        mark(status) {
+            if (status) statuses.add(status);
+        },
+        cacheStatus() {
+            if (statuses.has("stale") || revisionState.unavailable) return "stale";
+            if (statuses.has("miss")) return "miss";
+            if (statuses.has("hit")) return "hit";
+            return "miss";
+        },
+    };
+}
+
+function trimRuntimeCache() {
+    const maxEntries = runtimeCacheMaxEntries();
+    while (runtimeCache.size > maxEntries) {
+        const oldestKey = runtimeCache.keys().next().value;
+        if (!oldestKey) break;
+        runtimeCache.delete(oldestKey);
+    }
+}
+
+async function fetchJsonWithRuntimeCache(url, options = {}, returnNullOnError = true, runtimeFreshness = null) {
+    const method = String(options?.method || "GET").toUpperCase();
+    if (!runtimeFreshness || method !== "GET") {
+        return await fetchJson(url, options, returnNullOnError);
+    }
+
+    const now = Date.now();
+    const cacheKey = `${runtimeFreshness.revision} ${method} ${url}`;
+    const cached = runtimeCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+        runtimeFreshness.mark(runtimeFreshness.unavailable ? "stale" : "hit");
+        return cached.data;
+    }
+
+    const data = await fetchJson(url, options, returnNullOnError);
+    if (data !== null && data !== undefined) {
+        runtimeCache.set(cacheKey, {
+            data,
+            expiresAt: now + runtimeFreshness.ttlMs,
+        });
+        trimRuntimeCache();
+    }
+
+    runtimeFreshness.mark(runtimeFreshness.unavailable ? "stale" : "miss");
+    return data;
+}
+
+function getRuntimeFreshnessOption(options = {}) {
+    return options.runtimeFreshness || options.freshness || null;
+}
+
+export function applyRuntimeFreshnessHeaders(response, runtimeFreshness) {
+    if (!runtimeFreshness || !response?.headers) return;
+    response.headers.set("X-Catalog-Revision", runtimeFreshness.revision);
+    response.headers.set("X-Web-Data-Cache", runtimeFreshness.cacheStatus());
+    response.headers.set("Cache-Control", "no-store");
+}
+
+export function createRuntimeNotFoundResponse(response, runtimeFreshness) {
+    applyRuntimeFreshnessHeaders(response, runtimeFreshness);
+    const headers = new Headers(response?.headers || {});
+    headers.set("Content-Type", "text/html; charset=utf-8");
+    headers.set("Cache-Control", "no-store");
+    return new Response(
+        "<!doctype html><html><head><title>Not found</title></head><body><h1>404</h1></body></html>",
+        {
+            status: 404,
+            headers,
+        },
+    );
+}
+
 export function resolveImageUrl(path) {
     if (!path) return "/no-photo.png";
     if (path.startsWith("http")) return path;
@@ -107,11 +250,12 @@ async function getCatalogStrictForSsg(params = {}) {
     throw new Error(`[SSG] Failed to fetch catalog. Tried: ${candidates.join(", ")}. Errors: ${errors.join(" | ")}`);
 }
 
-export async function getCatalog(params = {}) {
+export async function getCatalog(params = {}, options = {}) {
     const query = buildQuery(params);
     const url = `${API_V1}/catalog?${query}`;
+    const runtimeFreshness = getRuntimeFreshnessOption(options);
 
-    const data = await fetchJson(url);
+    const data = await fetchJsonWithRuntimeCache(url, {}, true, runtimeFreshness);
     if (!data) {
         return { items: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } };
     }
@@ -131,12 +275,19 @@ export async function getVitebskFeaturedProducts() {
     return data || [];
 }
 
-export async function getFiltersConfig() {
-    const data = await fetchJson(`${API_V1}/filters/config`);
+export async function getFiltersConfig(options = {}) {
+    const runtimeFreshness = getRuntimeFreshnessOption(options);
+    const data = await fetchJsonWithRuntimeCache(`${API_V1}/filters/config`, {}, true, runtimeFreshness);
     return data || { price: { min: null, max: null }, area: { min: null, max: null }, brands: [], expert_tags: [] };
 }
 
-export async function getPublicBrands() {
+export async function getPublicBrands(options = {}) {
+    const runtimeFreshness = getRuntimeFreshnessOption(options);
+    if (runtimeFreshness) {
+        const data = await fetchJsonWithRuntimeCache(`${API_V1}/content/brands`, {}, true, runtimeFreshness);
+        return Array.isArray(data) ? data : [];
+    }
+
     if (import.meta.env.SSR) {
         for (const baseUrl of getSsgApiCandidates()) {
             const data = await fetchJson(`${baseUrl}/content/brands`);
@@ -149,8 +300,18 @@ export async function getPublicBrands() {
     return Array.isArray(data) ? data : [];
 }
 
-export async function getPublicBrandBySlug(slug) {
+export async function getPublicBrandBySlug(slug, options = {}) {
     if (!slug) return null;
+    const runtimeFreshness = getRuntimeFreshnessOption(options);
+    if (runtimeFreshness) {
+        return await fetchJsonWithRuntimeCache(
+            `${API_V1}/content/brands/${encodeURIComponent(slug)}`,
+            {},
+            true,
+            runtimeFreshness,
+        );
+    }
+
     if (import.meta.env.SSR) {
         for (const baseUrl of getSsgApiCandidates()) {
             const data = await fetchJson(`${baseUrl}/content/brands/${encodeURIComponent(slug)}`);
@@ -174,8 +335,14 @@ export async function getProducts() {
     return data && data.items ? data.items : [];
 }
 
-export async function getProductBySlug(slug) {
-    return await fetchJson(`${API_V1}/products/${slug}`);
+export async function getProductBySlug(slug, options = {}) {
+    const runtimeFreshness = getRuntimeFreshnessOption(options);
+    return await fetchJsonWithRuntimeCache(
+        `${API_V1}/products/${encodeURIComponent(slug)}`,
+        {},
+        true,
+        runtimeFreshness,
+    );
 }
 
 export async function getProductById(id) {

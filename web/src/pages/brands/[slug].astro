@@ -2,12 +2,22 @@
 import Layout from "../../layouts/Layout.astro";
 import CatalogApp from "../../components/CatalogApp.vue";
 import ProductCard from "../../components/ProductCard.astro";
-import { getCatalog, getFiltersConfig, getPublicBrandBySlug, getPublicBrands, resolveImageUrl } from "../../utils/api";
+import {
+    applyRuntimeFreshnessHeaders,
+    createRuntimeFreshnessContext,
+    createRuntimeNotFoundResponse,
+    getCatalog,
+    getFiltersConfig,
+    getPublicBrandBySlug,
+    getPublicBrands,
+    isRuntimeFreshnessEnabled,
+    resolveImageUrl,
+} from "../../utils/api";
 import { formatBrandProductCount, getBrandIntro, getBrandIntroPlainText, renderBrandIntroMarkdown } from "../../utils/brands";
 import { buildCatalogItemListSchema } from "../../utils/catalog-seo";
 import { buildBrandMetaDescription, buildBrandSeoTitle } from "../../utils/seo";
 
-export const prerender = true;
+export const prerender = !isRuntimeFreshnessEnabled();
 
 interface PublicBrand {
     id: number;
@@ -58,9 +68,13 @@ interface Props {
 }
 
 const { brand: initialBrand } = Astro.props as Props;
-const brand = initialBrand || (await getPublicBrandBySlug(Astro.params.slug || ""));
+const runtimeFreshness = await createRuntimeFreshnessContext();
+const runtimeFreshnessOption = runtimeFreshness ? { runtimeFreshness } : undefined;
+const brand = runtimeFreshness
+    ? await getPublicBrandBySlug(Astro.params.slug || "", runtimeFreshnessOption)
+    : initialBrand || (await getPublicBrandBySlug(Astro.params.slug || ""));
 if (!brand) {
-    return Astro.redirect("/404");
+    return createRuntimeNotFoundResponse(Astro.response, runtimeFreshness);
 }
 
 const catalogParams = {
@@ -69,15 +83,16 @@ const catalogParams = {
     sort: "recommended",
     brand_slugs: [brand.slug],
 };
-const data = await getCatalog(catalogParams);
+const data = await getCatalog(catalogParams, runtimeFreshnessOption);
 const popularData = await getCatalog({
     ...catalogParams,
     limit: 80,
-});
+}, runtimeFreshnessOption);
 const products = (data.items || []) as Product[];
 const popularProducts = (popularData.items || []) as Product[];
-const filtersConfig = await getFiltersConfig();
+const filtersConfig = await getFiltersConfig(runtimeFreshnessOption);
 const meta = data.meta || { total: brand.products_count || 0, page: 1, limit: 20, pages: 1 };
+applyRuntimeFreshnessHeaders(Astro.response, runtimeFreshness);
 const catalogSchema = buildCatalogItemListSchema(products, Astro.url.origin);
 const h1 = `Кондиционеры ${brand.title} в Витебске`;
 const seoTitle = buildBrandSeoTitle(brand);

@@ -1,6 +1,11 @@
 ---
 import Layout from "../../layouts/Layout.astro";
-import { getPublicBrands, resolveImageUrl } from "../../utils/api";
+import {
+    applyRuntimeFreshnessHeaders,
+    createRuntimeFreshnessContext,
+    getPublicBrands,
+    resolveImageUrl,
+} from "../../utils/api";
 import { formatBrandProductCount, getBrandIntro, getBrandIntroPlainText } from "../../utils/brands";
 
 interface PublicBrand {
@@ -13,7 +18,10 @@ interface PublicBrand {
     sort_order: number;
 }
 
-const brands = (await getPublicBrands()) as PublicBrand[];
+const runtimeFreshness = await createRuntimeFreshnessContext();
+const runtimeFreshnessOption = runtimeFreshness ? { runtimeFreshness } : undefined;
+const brands = (await getPublicBrands(runtimeFreshnessOption)) as PublicBrand[];
+applyRuntimeFreshnessHeaders(Astro.response, runtimeFreshness);
 const brandListSchema = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",

@@ -13,8 +13,9 @@ const normalizeBasePath = (value) => {
 };
 
 const stagingBasePath = normalizeBasePath(process.env.SSR_STAGING_BASE_PATH);
+process.env.SSR_RUNTIME_FRESHNESS = process.env.SSR_RUNTIME_FRESHNESS || 'true';
 
-// Staging-only Astro Node runtime config for issue #464.
+// Staging-only Astro Node runtime config for issues #464 and #476.
 // Keep web/astro.config.mjs and npm run build static until a production cutover is approved.
 export default defineConfig({
   site: process.env.PUBLIC_SITE_URL || 'https://mvn.by',

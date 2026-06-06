@@ -3,12 +3,19 @@ import Layout from "../../layouts/Layout.astro";
 import CatalogApp from "../../components/CatalogApp.vue";
 import ProductCard from "../../components/ProductCard.astro";
 import type { VirtualCategoryConfig } from "../../config/virtual-categories";
-import { VIRTUAL_CATEGORIES } from "../../config/virtual-categories";
-import { getCatalog, getFiltersConfig } from "../../utils/api";
+import { getVirtualCategoryBySlug, VIRTUAL_CATEGORIES } from "../../config/virtual-categories";
+import {
+    applyRuntimeFreshnessHeaders,
+    createRuntimeFreshnessContext,
+    createRuntimeNotFoundResponse,
+    getCatalog,
+    getFiltersConfig,
+    isRuntimeFreshnessEnabled,
+} from "../../utils/api";
 import { buildCatalogItemListSchema } from "../../utils/catalog-seo";
 import { buildCatalogQueryFromVirtual } from "../../utils/virtual-category";
 
-export const prerender = true;
+export const prerender = !isRuntimeFreshnessEnabled();
 
 export async function getStaticPaths() {
     return VIRTUAL_CATEGORIES.map((category) => ({
@@ -48,26 +55,30 @@ interface Props {
 }
 
 const { category } = Astro.props as Props;
-if (!category) {
-    return Astro.redirect("/404");
+const runtimeFreshness = await createRuntimeFreshnessContext();
+const runtimeFreshnessOption = runtimeFreshness ? { runtimeFreshness } : undefined;
+const resolvedCategory = category || getVirtualCategoryBySlug(Astro.params.virtual || "");
+if (!resolvedCategory) {
+    return createRuntimeNotFoundResponse(Astro.response, runtimeFreshness);
 }
 
-const query = buildCatalogQueryFromVirtual(category);
-const data = await getCatalog(query);
+const query = buildCatalogQueryFromVirtual(resolvedCategory);
+const data = await getCatalog(query, runtimeFreshnessOption);
 const popularData = await getCatalog({
     ...query,
     page: 1,
     limit: 80,
     sort: "recommended",
-});
+}, runtimeFreshnessOption);
 const products = (data.items || []) as Product[];
 const popularProducts = (popularData.items || []) as Product[];
-const filtersConfig = await getFiltersConfig();
+const filtersConfig = await getFiltersConfig(runtimeFreshnessOption);
 const meta = data.meta || { total: 0, page: 1, limit: 20, pages: 1 };
-const robotsValue = category.indexable === false ? "noindex,follow" : undefined;
+applyRuntimeFreshnessHeaders(Astro.response, runtimeFreshness);
+const robotsValue = resolvedCategory.indexable === false ? "noindex,follow" : undefined;
 const catalogSchema = buildCatalogItemListSchema(products, Astro.url.origin);
 const initialCategorySlug =
-    category.filters.tag_slugs?.find((slug) =>
+    resolvedCategory.filters.tag_slugs?.find((slug) =>
         ["cat-household", "cat-multi", "cat-industrial"].includes(slug),
     ) || "cat-household";
 const isCatalogAvailable = (product: Product) => {
@@ -78,15 +89,15 @@ const isCatalogAvailable = (product: Product) => {
 const staticPopularProducts =
     initialCategorySlug === "cat-household"
         ? popularProducts
-              .filter((product) => isCatalogAvailable(product) && Number(product.area || 0) <= Number(category.filters.area_max || 35))
+              .filter((product) => isCatalogAvailable(product) && Number(product.area || 0) <= Number(resolvedCategory.filters.area_max || 35))
               .slice(0, 8)
         : [];
 ---
 
 <Layout
-    title={category.seoTitle}
-    description={category.seoDescription}
-    canonical={`/catalog/${category.slug}/`}
+    title={resolvedCategory.seoTitle}
+    description={resolvedCategory.seoDescription}
+    canonical={`/catalog/${resolvedCategory.slug}/`}
     robots={robotsValue}
 >
     <script type="application/ld+json" set:html={JSON.stringify(catalogSchema)} />
@@ -97,20 +108,20 @@ const staticPopularProducts =
                 <span class="sep">/</span>
                 <a href="/catalog">Каталог</a>
                 <span class="sep">/</span>
-                <span>{category.h1}</span>
+                <span>{resolvedCategory.h1}</span>
             </div>
-            <h1 class="gradient-text">{category.h1}</h1>
-            <p class="header-description">{category.intro || category.seoDescription}</p>
+            <h1 class="gradient-text">{resolvedCategory.h1}</h1>
+            <p class="header-description">{resolvedCategory.intro || resolvedCategory.seoDescription}</p>
         </header>
         <CatalogApp
             client:idle
             initialProducts={products}
             initialMeta={meta}
             initialPopularProducts={popularProducts}
-            initialFilters={category.filters}
-            forcedTitle={category.h1}
-            forcedDescription={category.intro || category.seoDescription}
-            lockedInitialFilters={category.filters}
+            initialFilters={resolvedCategory.filters}
+            forcedTitle={resolvedCategory.h1}
+            forcedDescription={resolvedCategory.intro || resolvedCategory.seoDescription}
+            lockedInitialFilters={resolvedCategory.filters}
             initialCategorySlug={initialCategorySlug}
             initialBrands={filtersConfig?.brands || []}
         >
@@ -162,8 +173,8 @@ const staticPopularProducts =
                 }
 
                 <section class="catalog-seo-block">
-                    <h2>{category.h1}: выбор и монтаж в Витебске</h2>
-                    <p>{category.intro || category.seoDescription}</p>
+                    <h2>{resolvedCategory.h1}: выбор и монтаж в Витебске</h2>
+                    <p>{resolvedCategory.intro || resolvedCategory.seoDescription}</p>
                     <p>
                         В каталоге можно сравнить модели по мощности, типу компрессора, наличию Wi-Fi, режимам обогрева
                         и доступности. Для точного подбора учитывайте площадь помещения, теплопритоки и место установки.

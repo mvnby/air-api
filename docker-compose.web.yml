@@ -9,6 +9,7 @@ services:
         PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://mvn.by}
         PUBLIC_GTM_ID: ${PUBLIC_GTM_ID:-}
         SSR_STAGING_BASE_PATH: ${SSR_STAGING_BASE_PATH:-/__ssr-staging}
+        SSR_RUNTIME_FRESHNESS: ${SSR_RUNTIME_FRESHNESS:-true}
     image: mvn-web-ssr-staging:local
     restart: unless-stopped
     ports:
@@ -21,6 +22,7 @@ services:
       PUBLIC_API_URL: ${PUBLIC_API_URL:-https://api.mvn.by/api/v1}
       PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://mvn.by}
       SSR_STAGING_BASE_PATH: ${SSR_STAGING_BASE_PATH:-/__ssr-staging}
+      SSR_RUNTIME_FRESHNESS: ${SSR_RUNTIME_FRESHNESS:-true}
     healthcheck:
       test:
         [

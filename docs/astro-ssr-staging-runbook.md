@@ -28,16 +28,16 @@ public `mvn.by` production root away from the current static deploy.
   snippet for `/__ssr-staging/`.
 - `web/scripts/smoke-ssr-staging.mjs`: smoke checks for `/`, `/catalog/`, a
   query catalog URL, `/brands/`, one product URL, and one `/_astro/*` asset.
+- `web/src/utils/api.js`: staging-only catalog revision freshness context,
+  in-process GET cache keyed by `catalog_revision + URL`, and diagnostic
+  headers for runtime catalog pages.
 
 ## Route Policy
 
 Prerendered/static in the staging SSR build:
 
 - `/`
-- product detail pages under `/product/[slug]`
 - service pages and service landing pages
-- brand detail pages under `/brands/[slug]`
-- popular catalog SEO pages under `/catalog/[virtual]`
 - blog, legal, cart, checkout, success, contact, and static content shells
 
 Runtime SSR in the staging build:
@@ -45,10 +45,13 @@ Runtime SSR in the staging build:
 - `/catalog/`
 - `/catalog/?...` query pages
 - `/brands/`
+- `/brands/[slug]`
+- `/product/[slug]`
+- configured catalog SEO pages under `/catalog/[virtual]`
 
-This is intentionally conservative. It gives the spike a real request-time
-freshness path for catalog and brand lists while preserving the most important
-SEO/static entry points.
+This remains staging-only. The public static build still uses
+`web/astro.config.mjs` and prerenders product, brand detail, and virtual catalog
+routes until a production cutover is explicitly approved.
 
 ## Local Smoke
 
@@ -71,10 +74,39 @@ SSR_SMOKE_API_URL=https://api.mvn.by/api/v1 \
 npm run smoke:ssr:staging
 ```
 
-If the API catalog lookup should not choose the product automatically, set:
+The smoke checks `GET /api/v1/catalog/revision`, requires
+`X-Catalog-Revision` and `X-Web-Data-Cache` on runtime pages, compares catalog
+and product prices/titles against the API fixture, verifies a brand page and
+brand count, and checks one static `/_astro` asset.
+
+If the API catalog lookup should not choose the product or brand automatically,
+set:
 
 ```bash
 SSR_SMOKE_PRODUCT_PATH=/product/<known-slug>/ npm run smoke:ssr:staging
+SSR_SMOKE_BRAND_PATH=/brands/<known-brand>/ npm run smoke:ssr:staging
+```
+
+After manual Manager/API edits, use these read-only assertions as freshness
+evidence:
+
+```bash
+# Price change: API product price must match staging product and catalog HTML.
+SSR_SMOKE_PRODUCT_PATH=/product/<edited-slug>/ \
+SSR_SMOKE_EXPECT_CATALOG_PRODUCT_PATH=/product/<edited-slug>/ \
+npm run smoke:ssr:staging
+
+# Unpublish/delete: product detail must return 404 and disappear from /catalog/.
+SSR_SMOKE_UNPUBLISHED_PRODUCT_PATH=/product/<unpublished-slug>/ \
+npm run smoke:ssr:staging
+
+# New product: product detail must render and /catalog/ must include its link.
+SSR_SMOKE_PRODUCT_PATH=/product/<new-slug>/ \
+SSR_SMOKE_EXPECT_CATALOG_PRODUCT_PATH=/product/<new-slug>/ \
+npm run smoke:ssr:staging
+
+# Brand count/list change: choose the affected brand instead of the default.
+SSR_SMOKE_BRAND_PATH=/brands/<brand-slug>/ npm run smoke:ssr:staging
 ```
 
 ## Web VPS Staging Deploy
@@ -132,23 +164,25 @@ High-freshness public data:
 
 Current spike behavior:
 
-- `/catalog/`, query catalog pages, and `/brands/` fetch from the API at request
-  time in the Node runtime.
-- Product detail pages remain prerendered for SEO/performance; client-side price
-  and availability refresh remains a safety layer, but detail HTML freshness is
-  not promoted in this issue.
-- Corrected prices and publication changes should be validated through catalog
-  and brand list pages before any public SSR cutover.
+- `/catalog/`, query catalog pages, `/brands/`, `/brands/[slug]`,
+  `/product/[slug]`, and configured `/catalog/[virtual]` pages fetch from the
+  API at request time in the staging Node runtime.
+- Each runtime request first reads `GET /api/v1/catalog/revision`.
+- GET API responses used by those pages are cached in-process by
+  `catalog_revision + URL` for a short runtime TTL.
+- If the revision endpoint is unavailable, the runtime uses a short fallback
+  cache bucket and emits `X-Web-Data-Cache: stale`.
+- Runtime pages emit `X-Catalog-Revision`, `X-Web-Data-Cache: hit|miss|stale`,
+  and `Cache-Control: no-store`.
+- Missing/unpublished product, brand, or virtual catalog slugs return 404 from
+  the runtime instead of redirecting to a stale static shell.
 
 Follow-up freshness work to investigate:
 
-- API/catalog revision endpoint, for example `/api/v1/catalog/revision`, bumped
-  by manager writes that affect public catalog output.
-- SSR data cache keyed by revision plus route/query, with short TTL fallback.
 - Explicit invalidation trigger from manager after price, availability,
   publication, or product-list updates.
-- Product detail runtime mode or partial hydration strategy that prevents
-  unpublished products and corrected prices from lingering in initial HTML.
+- Production Cloudflare/nginx cache policy for runtime HTML after staging
+  evidence is accepted.
 
 Suggested initial cache rules for future promotion:
 

@@ -31,7 +31,7 @@ Current GitHub web deploy:
 - This means manager/API catalog changes do not update prerendered HTML until a
   static rebuild is run.
 
-Staging runtime already proven by #464 / PR #469:
+Staging runtime already proven by #464 / PR #469 and extended by #476:
 
 - `web/astro.config.ssr.mjs` is a separate Astro Node standalone config with
   `output: "server"` and staging base `/__ssr-staging`.
@@ -41,18 +41,23 @@ Staging runtime already proven by #464 / PR #469:
   and does not affect the public static root.
 - Manager audit confirmed authenticated staging smoke through Cloudflare and
   public static production remained healthy.
+- High-freshness staging pages use `GET /api/v1/catalog/revision` as a
+  revision key for a short in-process data cache and emit
+  `X-Catalog-Revision` plus `X-Web-Data-Cache: hit|miss|stale`.
 
 Current storefront data patterns:
 
 - `web/astro.config.mjs` is still static production output.
-- `/product/[slug]`, `/brands/[slug]`, `/catalog/[virtual]`, services, blog,
-  legal pages, and the home page are currently prerendered/static in the SSR
-  staging build.
-- `/catalog/`, `/catalog/?...`, and `/brands/` are the current request-time SSR
-  surfaces in staging.
+- Services, blog, legal pages, contact/cart/checkout/success, and the home page
+  remain prerendered/static in the SSR staging build.
+- `/catalog/`, `/catalog/?...`, `/brands/`, `/brands/[slug]`,
+  `/product/[slug]`, and configured `/catalog/[virtual]` pages are request-time
+  SSR surfaces in staging.
 - `web/src/utils/api.js` uses `import.meta.env.SSR` for both SSG/build-time and
-  server/runtime contexts. Production runtime work must split strict
-  `getStaticPaths()` behavior from softer request-time fetch behavior.
+  server/runtime contexts, but the staging runtime freshness path is explicitly
+  gated by `SSR_RUNTIME_FRESHNESS=true`; production runtime work must keep this
+  split between strict `getStaticPaths()` behavior and softer request-time fetch
+  behavior.
 - Public API reads already filter published catalog data through
   `ProductReadService` / `ProductDAO` with `is_published=True`.
 - Product and catalog-affecting writes currently flow through multiple paths:
