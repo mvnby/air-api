@@ -1146,7 +1146,32 @@ const workflowSteps = [
 	}
 
 	:global(.dark) .hero-section::before {
-		opacity: 0.3;
+		background:
+			linear-gradient(
+				90deg,
+				rgba(2, 6, 23, 0.96) 0%,
+				rgba(2, 6, 23, 0.84) 38%,
+				rgba(2, 6, 23, 0.36) 68%,
+				rgba(2, 6, 23, 0.82) 100%
+			),
+			linear-gradient(
+				180deg,
+				rgba(2, 6, 23, 0.68) 0%,
+				rgba(2, 6, 23, 0.16) 52%,
+				rgba(2, 6, 23, 0.96) 100%
+			),
+			url("/img/hero/vitebsk-hero-dark.jpg") center right / cover no-repeat;
+		opacity: 0.94;
+	}
+
+	:global(.dark) .workflow-media {
+		background:
+			linear-gradient(
+				180deg,
+				rgba(2, 6, 23, 0.22),
+				rgba(2, 6, 23, 0.82)
+			),
+			url("/img/hero/vitebsk-night-real.jpg") center / cover no-repeat;
 	}
 
 	@media (max-width: 1500px) {
