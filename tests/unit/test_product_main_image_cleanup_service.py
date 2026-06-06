@@ -10,7 +10,16 @@ from sqlmodel import SQLModel, select
 from models import Product, ProductImage, ProductMainImageCleanupItem
 from services.media_storage_service import LocalProductMediaStorage
 from services.catalog_revision_service import CatalogRevisionService
-from services.product_main_image_cleanup_contract import ProductMainImageCleanupStatus
+from services.product_image_processing_provider import CARD_CANVAS_SIZE
+from services.product_main_image_cleanup_contract import (
+    ProductMainImageCleanupProcessor,
+    ProductMainImageCleanupStatus,
+)
+from services.product_main_image_cleanup_provider import (
+    ProductMainImageCleanupContext,
+    SafeBackgroundCleanupProcessor,
+    get_main_image_cleanup_processor,
+)
 from services.product_main_image_cleanup_service import ProductMainImageCleanupService
 
 
@@ -19,6 +28,49 @@ def _image_bytes() -> bytes:
     output = BytesIO()
     image.save(output, format="PNG")
     return output.getvalue()
+
+
+def _encoded_image_bytes(image: Image.Image) -> bytes:
+    output = BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
+
+
+def _transparent_border_fixture() -> bytes:
+    image = Image.new("RGBA", (120, 90), (255, 255, 255, 0))
+    image.paste((50, 110, 200, 255), box=(48, 16, 78, 76))
+    return _encoded_image_bytes(image)
+
+
+def _near_white_border_fixture() -> bytes:
+    image = Image.new("RGB", (160, 100), (247, 247, 244))
+    image.paste((45, 115, 205), box=(68, 18, 98, 78))
+    return _encoded_image_bytes(image)
+
+
+def _complex_background_fixture() -> bytes:
+    image = Image.new("RGB", (160, 100), (80, 110, 150))
+    for y in range(image.height):
+        for x in range(image.width):
+            image.putpixel(
+                (x, y),
+                (70 + (x % 50), 92 + (y % 45), 130 + ((x + y) % 55)),
+            )
+    image.paste((210, 55, 45), box=(68, 18, 98, 78))
+    return _encoded_image_bytes(image)
+
+
+def _processor_context() -> ProductMainImageCleanupContext:
+    return ProductMainImageCleanupContext(
+        product_id=1,
+        source_url="/media/products/shared/source.png",
+        source_product_image_id=1,
+    )
+
+
+def _alpha_bbox(content: bytes) -> tuple[int, int, int, int] | None:
+    with Image.open(BytesIO(content)) as output:
+        return output.convert("RGBA").getchannel("A").getbbox()
 
 
 @pytest.fixture
@@ -66,6 +118,73 @@ def _write_source(tmp_path: Path, name: str) -> str:
 
 
 @pytest.mark.asyncio
+async def test_safe_bg_cleanup_trims_transparent_fields_to_card_canvas():
+    processor = SafeBackgroundCleanupProcessor()
+
+    result = await processor.process(
+        source_content=_transparent_border_fixture(),
+        context=_processor_context(),
+    )
+    bbox = _alpha_bbox(result.content)
+
+    assert result.width == CARD_CANVAS_SIZE[0]
+    assert result.height == CARD_CANVAS_SIZE[1]
+    assert result.processor_method == ProductMainImageCleanupProcessor.SAFE_BG_CLEANUP.value
+    assert result.confidence_score is not None
+    assert result.confidence_score >= 0.9
+    assert bbox is not None
+    assert bbox[0] > 0
+    assert bbox[1] > 0
+    assert bbox[2] < CARD_CANVAS_SIZE[0]
+    assert bbox[3] < CARD_CANVAS_SIZE[1]
+    assert (bbox[3] - bbox[1]) > (bbox[2] - bbox[0])
+
+
+@pytest.mark.asyncio
+async def test_safe_bg_cleanup_removes_near_white_border_when_confident():
+    processor = SafeBackgroundCleanupProcessor()
+
+    result = await processor.process(
+        source_content=_near_white_border_fixture(),
+        context=_processor_context(),
+    )
+    bbox = _alpha_bbox(result.content)
+
+    assert result.width == CARD_CANVAS_SIZE[0]
+    assert result.height == CARD_CANVAS_SIZE[1]
+    assert result.confidence_score is not None
+    assert result.confidence_score >= 0.8
+    assert result.quality_score is not None
+    assert result.quality_score >= 0.75
+    assert bbox is not None
+    assert (bbox[3] - bbox[1]) > (bbox[2] - bbox[0])
+
+
+@pytest.mark.asyncio
+async def test_safe_bg_cleanup_keeps_complex_background_low_confidence():
+    processor = SafeBackgroundCleanupProcessor()
+
+    result = await processor.process(
+        source_content=_complex_background_fixture(),
+        context=_processor_context(),
+    )
+    bbox = _alpha_bbox(result.content)
+
+    assert result.width == CARD_CANVAS_SIZE[0]
+    assert result.height == CARD_CANVAS_SIZE[1]
+    assert result.confidence_score is not None
+    assert result.confidence_score < 0.75
+    assert bbox is not None
+    assert (bbox[2] - bbox[0]) > (bbox[3] - bbox[1])
+    assert (bbox[2] - bbox[0]) >= int(CARD_CANVAS_SIZE[0] * 0.8)
+
+
+def test_unsupported_cleanup_processor_is_rejected():
+    with pytest.raises(ValueError, match="Unsupported cleanup processor"):
+        get_main_image_cleanup_processor("magic_cleanup")
+
+
+@pytest.mark.asyncio
 async def test_create_batch_generates_candidates_and_records_skip_reasons(
     sqlite_session: AsyncSession,
     tmp_path: Path,
@@ -92,6 +211,7 @@ async def test_create_batch_generates_candidates_and_records_skip_reasons(
     result = await ProductMainImageCleanupService.create_batch(
         sqlite_session,
         limit=10,
+        processor_method=ProductMainImageCleanupProcessor.SAFE_BG_CLEANUP.value,
         storage=LocalProductMediaStorage(base_dir=tmp_path / "media/products/variants"),
     )
 
@@ -102,6 +222,7 @@ async def test_create_batch_generates_candidates_and_records_skip_reasons(
     by_product = {item["product_id"]: item for item in result["items"]}
     assert by_product[good.id]["status"] == ProductMainImageCleanupStatus.CANDIDATE_READY.value
     assert by_product[good.id]["candidate_image_url"] != good_url
+    assert by_product[good.id]["processor_method"] == "safe_bg_cleanup"
     assert by_product[missing.id]["status"] == ProductMainImageCleanupStatus.SKIPPED.value
     assert by_product[missing.id]["skip_reason"] == "missing_local_source"
     assert result["skipped_existing"][0]["product_id"] == existing.id

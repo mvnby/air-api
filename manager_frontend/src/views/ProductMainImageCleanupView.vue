@@ -17,6 +17,7 @@ import {
 import { getApiErrorMessage } from '../utils/api-errors';
 
 type StatusFilter = 'all' | 'candidate_ready' | 'failed' | 'skipped' | 'rejected' | 'approved';
+type CleanupProcessorMethod = 'safe_bg_cleanup' | 'noop' | 'manual';
 
 const batches = ref<ProductMainImageCleanupBatchResponse[]>([]);
 const items = ref<ProductMainImageCleanupItemResponse[]>([]);
@@ -24,7 +25,7 @@ const selectedBatchId = ref<number | null>(null);
 const selectedIds = ref<number[]>([]);
 const statusFilter = ref<StatusFilter>('all');
 const batchLimit = ref(50);
-const processorMethod = ref('noop');
+const processorMethod = ref<CleanupProcessorMethod>('safe_bg_cleanup');
 const rejectReason = ref('Не подходит для публичной карточки');
 const loadingBatches = ref(false);
 const loadingItems = ref(false);
@@ -52,6 +53,16 @@ const statusClasses: Record<string, string> = {
   rejected: 'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300',
   approved: 'border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-300',
 };
+
+const processorOptions = [
+  { value: 'safe_bg_cleanup', label: 'Безопасная чистка фона' },
+  { value: 'noop', label: 'Только нормализация' },
+  { value: 'manual', label: 'Ручной кандидат' },
+] as const satisfies Array<{ value: CleanupProcessorMethod; label: string }>;
+
+const processorLabels: Record<string, string> = Object.fromEntries(
+  processorOptions.map((option) => [option.value, option.label]),
+);
 
 const actionableItems = computed(() => items.value.filter((item) => item.status === 'candidate_ready' && item.id));
 const selectedActionableIds = computed(() => selectedIds.value.filter((id) => {
@@ -117,6 +128,7 @@ const lowScore = (item: ProductMainImageCleanupItemResponse) => {
 
 const statusLabel = (status: string) => statusLabels[status] || status;
 const statusClass = (status: string) => statusClasses[status] || statusClasses.pending;
+const processorLabel = (value?: string | null) => (value ? processorLabels[value] || value : '—');
 
 const formatDate = (value?: string | null) => {
   if (!value) return '—';
@@ -233,7 +245,7 @@ const createBatch = async () => {
   try {
     const response = await api.createMainImageCleanupBatch({
       limit: Math.max(1, Math.min(Number(batchLimit.value) || 50, 50)),
-      processor_method: processorMethod.value.trim() || 'noop',
+      processor_method: processorMethod.value,
     });
     selectedBatchId.value = response.batch.id || null;
     items.value = response.items || [];
@@ -310,9 +322,13 @@ onMounted(async () => {
           Лимит
           <input v-model.number="batchLimit" min="1" max="50" type="number" class="field-input h-9 py-1.5 text-sm" />
         </label>
-        <label class="field-label w-32">
+        <label class="field-label w-56">
           Процессор
-          <input v-model="processorMethod" type="text" class="field-input h-9 py-1.5 text-sm" />
+          <select v-model="processorMethod" class="field-input h-9 py-1.5 text-sm">
+            <option v-for="option in processorOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
         </label>
         <button
           type="button"
@@ -364,7 +380,7 @@ onMounted(async () => {
               </span>
             </div>
             <div class="mt-1 text-xs text-gray-500 dark:text-slate-400">
-              {{ batch.processor_method }} / {{ batch.processor_version || '—' }}
+              {{ processorLabel(batch.processor_method) }} / {{ batch.processor_version || '—' }}
             </div>
             <div class="mt-1 flex justify-between text-xs text-gray-500 dark:text-slate-400">
               <span>Лимит {{ batch.requested_limit }}</span>
@@ -505,7 +521,8 @@ onMounted(async () => {
                   </div>
                 </td>
                 <td class="max-w-[180px] px-3 py-3 text-xs text-gray-600 dark:text-slate-300">
-                  <div class="font-semibold">{{ item.processor_method || '—' }}</div>
+                  <div class="font-semibold">{{ processorLabel(item.processor_method) }}</div>
+                  <div v-if="item.processor_method" class="mt-1 text-gray-400">{{ item.processor_method }}</div>
                   <div class="mt-1 break-words text-gray-500 dark:text-slate-400">{{ item.processor_version || '—' }}</div>
                   <div v-if="item.candidate_storage_provider" class="mt-1 text-gray-400">{{ item.candidate_storage_provider }}</div>
                 </td>
