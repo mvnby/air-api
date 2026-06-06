@@ -23,7 +23,8 @@ from models import Product, ProductImage
 
 
 def _image_bytes() -> bytes:
-    image = Image.new("RGB", (24, 18), (80, 140, 200))
+    image = Image.new("RGB", (80, 60), (255, 255, 255))
+    image.paste((80, 140, 200), box=(26, 22, 54, 38))
     output = BytesIO()
     image.save(output, format="PNG")
     return output.getvalue()
@@ -103,7 +104,7 @@ async def test_manager_main_image_cleanup_create_list_and_approve(
     headers = await _auth_headers(async_client)
     create_response = await async_client.post(
         "/api/manager/main-image-cleanup/batches",
-        json={"limit": 5, "processor_method": "noop"},
+        json={"limit": 5, "processor_method": "classical_trim"},
         headers=headers,
     )
     assert create_response.status_code == 200
@@ -112,6 +113,10 @@ async def test_manager_main_image_cleanup_create_list_and_approve(
     item = payload["items"][0]
     assert item["status"] == "candidate_ready"
     assert item["candidate_image_url"] != source_url
+    assert item["processor_method"] == "classical_trim"
+    assert item["candidate_width"] < 80
+    assert item["candidate_height"] < 60
+    assert item["confidence_score"] >= 0.75
     assert item["product_title"] == "Cleanup API product"
     assert item["product_slug"] == "cleanup-api-product"
     assert item["product_current_main_image"] == source_url

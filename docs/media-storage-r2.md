@@ -57,6 +57,26 @@ key changes, and the database URL changes. CDN caches can keep old objects
 without serving stale images from current product responses. If bytes are
 identical, reusing the same key is safe.
 
+## Main Image Cleanup Candidates
+
+Manager main-image cleanup batches create review-only candidates under the
+`main_cleanup` product variant type. These writes go through the same
+`PRODUCT_MEDIA_STORAGE_PROVIDER` adapter as other generated variants, so local
+storage writes to `/media/products/variants/main_cleanup/...` and R2/S3 writes
+to `{PRODUCT_MEDIA_S3_KEY_PREFIX}/main_cleanup/...`.
+
+The `classical_trim` processor is intentionally bounded. It uses Pillow-only
+foreground heuristics to trim safe transparent or near-white margins, keeps
+padding around indoor/outdoor units, exports WebP when available with PNG
+fallback, and records confidence/quality scores for manager review. It does not
+rewrite `Product.main_image`, `ProductImage.url`, or source files; approval is
+still a separate manager action.
+
+Full ML background removal remains future work. Add it as an explicitly disabled
+or opt-in processor adapter after fixture coverage against real HVAC supplier
+images, especially white indoor units on white backgrounds, mirrored showroom
+photos, and images with supplier watermarks.
+
 ## Environment
 
 Local fallback is the default:

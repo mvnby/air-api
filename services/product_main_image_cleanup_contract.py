@@ -16,6 +16,7 @@ class ProductMainImageCleanupStatus(str, Enum):
 
 
 class ProductMainImageCleanupProcessor(str, Enum):
+    CLASSICAL_TRIM = "classical_trim"
     MANUAL = "manual"
     NOOP = "noop"
 
