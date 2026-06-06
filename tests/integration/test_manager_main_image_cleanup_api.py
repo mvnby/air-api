@@ -74,6 +74,22 @@ async def test_manager_main_image_cleanup_requires_auth(async_client: AsyncClien
 
 
 @pytest.mark.asyncio
+async def test_manager_main_image_cleanup_rejects_unsupported_processor(
+    async_client: AsyncClient,
+):
+    headers = await _auth_headers(async_client)
+
+    response = await async_client.post(
+        "/api/manager/main-image-cleanup/batches",
+        json={"limit": 1, "processor_method": "magic_cleanup"},
+        headers=headers,
+    )
+
+    assert response.status_code == 400
+    assert "Unsupported cleanup processor" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_manager_main_image_cleanup_create_list_and_approve(
     async_client: AsyncClient,
     db,

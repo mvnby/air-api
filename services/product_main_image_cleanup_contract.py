@@ -18,6 +18,7 @@ class ProductMainImageCleanupStatus(str, Enum):
 class ProductMainImageCleanupProcessor(str, Enum):
     MANUAL = "manual"
     NOOP = "noop"
+    SAFE_BG_CLEANUP = "safe_bg_cleanup"
 
 
 class ProductMainImageCleanupSkipReason(str, Enum):
