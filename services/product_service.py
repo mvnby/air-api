@@ -12,6 +12,7 @@ from sqlmodel import select
 
 from crud.product import ProductDAO
 from models.product import Product
+from services.catalog_revision_service import CatalogRevisionService
 from services.product_manager_service import ProductManagerService
 from services.product_read_service import ProductReadService
 from services.product_write_service import ProductWriteService
@@ -28,7 +29,15 @@ class ProductService(ProductReadService, ProductWriteService, ProductManagerServ
         product_id: int,
         new_price: int,
     ) -> bool:
-        return await ProductDAO.update_price(session, product_id, new_price)
+        updated = await ProductDAO.update_price(session, product_id, new_price, commit=False)
+        if updated:
+            await CatalogRevisionService.bump(
+                session,
+                scope="product_price",
+                product_ids=[product_id],
+            )
+            await session.commit()
+        return updated
 
     @staticmethod
     async def delete(session: AsyncSession, product_id: int) -> bool:

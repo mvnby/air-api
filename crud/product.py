@@ -549,13 +549,21 @@ class ProductDAO:
         return result.scalar_one() or 0
 
     @staticmethod
-    async def update_price(session: AsyncSession, product_id: int, new_price: int) -> bool:
+    async def update_price(
+        session: AsyncSession,
+        product_id: int,
+        new_price: int,
+        commit: bool = True,
+    ) -> bool:
         product = await session.get(Product, product_id)
         if not product:
             return False
         product.price = new_price
         session.add(product)
-        await session.commit()
+        if commit:
+            await session.commit()
+        else:
+            await session.flush()
         return True
 
     @staticmethod
@@ -573,6 +581,7 @@ class ProductDAO:
         product_id: int,
         update_data: Dict[str, Any],
         tag_ids: Optional[List[int]] = None,
+        commit: bool = True,
     ) -> Optional[Product]:
         stmt = (
             select(Product)
@@ -593,8 +602,11 @@ class ProductDAO:
             product.tags = list(tag_result.scalars().all())
 
         session.add(product)
-        await session.commit()
-        await session.refresh(product)
+        if commit:
+            await session.commit()
+            await session.refresh(product)
+        else:
+            await session.flush()
         return product
 
     @staticmethod

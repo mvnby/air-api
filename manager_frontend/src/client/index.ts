@@ -37,6 +37,7 @@ export type { CatalogImportJobStatusResponse } from './models/CatalogImportJobSt
 export type { CatalogImportPayload } from './models/CatalogImportPayload';
 export type { CatalogImportResultResponse } from './models/CatalogImportResultResponse';
 export type { CatalogResponse } from './models/CatalogResponse';
+export type { CatalogRevisionResponse } from './models/CatalogRevisionResponse';
 export type { CommonGalleryImageResponse } from './models/CommonGalleryImageResponse';
 export type { CustomerPayload } from './models/CustomerPayload';
 export type { DashboardBankReceiptReviewItem } from './models/DashboardBankReceiptReviewItem';

@@ -133,6 +133,12 @@ class CatalogResponse(BaseModel):
     items: List[ProductResponse]
     meta: Meta
 
+
+class CatalogRevisionResponse(BaseModel):
+    revision: int
+    updated_at: datetime
+
+
 class BulkSpecUpdate(BaseModel):
     product_ids: List[int]
     specs: Dict[str, Any]  # Словарь характеристик для добавления/обновления

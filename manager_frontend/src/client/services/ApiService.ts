@@ -5,6 +5,7 @@
 import type { AddressSuggestResponse } from '../models/AddressSuggestResponse';
 import type { ArticleResponse } from '../models/ArticleResponse';
 import type { CatalogResponse } from '../models/CatalogResponse';
+import type { CatalogRevisionResponse } from '../models/CatalogRevisionResponse';
 import type { FiltersConfigResponse } from '../models/FiltersConfigResponse';
 import type { OrderPayload } from '../models/OrderPayload';
 import type { OrderResponse } from '../models/OrderResponse';
@@ -106,6 +107,17 @@ export class ApiService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/health',
+        });
+    }
+    /**
+     * Get Catalog Revision
+     * @returns CatalogRevisionResponse Successful Response
+     * @throws ApiError
+     */
+    public static getCatalogRevision(): CancelablePromise<CatalogRevisionResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/catalog/revision',
         });
     }
     /**
