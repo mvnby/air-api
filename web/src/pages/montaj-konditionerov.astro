@@ -9,7 +9,7 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
 
 <Layout
     title="Установка кондиционеров в Витебске и области"
-    description="Профессиональный монтаж сплит-систем любой сложности. Вакуумирование системы, чистая работа с пылесосом, гарантия до5 лет. Устанавливаем даже б/у технику."
+    description="Монтаж кондиционера в Витебске с вакуумированием трассы, пылеудалением и понятной ценой до начала работ. Устанавливаем новое и б/у оборудование."
 >
     <section class="page-header">
         <div class="container">
@@ -20,7 +20,7 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
 
     <section class="container detail-grid">
         <div class="content">
-            <h2>Стандартный монтаж «под ключ»</h2>
+            <h2>Стандартный монтаж кондиционера</h2>
             <div class="price-header">
                 <p class="price-tag">от {minStandardPrice} <span class="price-byn"></span></p>
                 {
@@ -39,16 +39,17 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
 
             <div class="article-content prose">
                 <section class="mb-12">
-                    <h2>Почему выбирают «Мастер Воздуха»?</h2>
+                    <h2>Как мы ставим кондиционеры</h2>
                     <p>
-                        Мы специализируемся на качественном монтаже
-                        климатического оборудования в Витебске. Наш подход
-                        исключает «экономию» на критически важных этапах.
+                        Ставим кондиционеры в Витебске и заранее согласуем
+                        состав работ. Не пропускаем вакуумирование, проверяем
+                        герметичность трассы и используем материалы, от которых
+                        зависит нормальная работа системы.
                     </p>
 
                     <div class="grid md:grid-cols-2 gap-6 mt-6">
                         <div class="advantage-card">
-                            <h3>Универсальность</h3>
+                            <h3>Ставим разные типы блоков</h3>
                             <p>
                                 Монтируем настенные, кассетные, канальные и
                                 напольно-потолочные системы любой мощности.
@@ -57,26 +58,27 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
                             </p>
                         </div>
                         <div class="advantage-card">
-                            <h3>Технологичность</h3>
+                            <h3>Вакуумируем трассу</h3>
                             <p>
                                 Всегда используем вакуумный насос для удаления
-                                влаги и воздуха из системы. Это предотвращает
-                                поломку компрессора и потерю производительности.
+                                влаги и воздуха из системы. Это помогает защитить
+                                компрессор и сохранить нормальную
+                                производительность.
                             </p>
                         </div>
                         <div class="advantage-card">
-                            <h3>Сервис</h3>
+                            <h3>Подбираем место установки</h3>
                             <p>
                                 Бесплатная консультация и выезд специалиста для
-                                подбора оптимального места установки в черте
-                                города.
+                                выбора места внутреннего и наружного блока в
+                                черте города.
                             </p>
                         </div>
                         <div class="advantage-card">
-                            <h3>Надежность</h3>
+                            <h3>Не экономим на трассе</h3>
                             <p>
                                 Используем только толстостенную медную трубу
-                                (ASTM), качественную теплоизоляцию и усиленные
+                                (ASTM), плотную теплоизоляцию и усиленные
                                 кронштейны.
                             </p>
                         </div>
@@ -108,7 +110,7 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
                         </li>
                         <li>
                             <strong>Монтажный комплект:</strong> кронштейны, метизы
-                            и профессиональная пена.
+                            и монтажная пена.
                         </li>
                     </ul>
                 </section>
@@ -120,7 +122,7 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
                         коммуникации в штробу на черновом этапе, а после
                         чистовой отделки довесить блоки и запустить систему.
                         Если старый кондиционер мешает ремонту или замене,
-                        его лучше аккуратно снять заранее.
+                        его лучше снять заранее.
                     </p>
                     <div class="planning-links">
                         <a href="/services/zakladka-kommunikaciy-kondicionera" class="planning-link">
@@ -217,8 +219,9 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
         margin-bottom: 0;
     }
     h1 {
-        font-size: 3rem;
+        font-size: clamp(2.25rem, 9vw, 3rem);
         font-weight: 800;
+        line-height: 1.1;
     }
     .breadcrumbs {
         color: var(--text-muted);
