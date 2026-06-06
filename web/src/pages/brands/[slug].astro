@@ -3,7 +3,7 @@ import Layout from "../../layouts/Layout.astro";
 import CatalogApp from "../../components/CatalogApp.vue";
 import ProductCard from "../../components/ProductCard.astro";
 import { getCatalog, getFiltersConfig, getPublicBrandBySlug, getPublicBrands, resolveImageUrl } from "../../utils/api";
-import { formatBrandProductCount, getBrandIntro } from "../../utils/brands";
+import { formatBrandProductCount, getBrandIntro, getBrandIntroPlainText, renderBrandIntroMarkdown } from "../../utils/brands";
 import { buildCatalogItemListSchema } from "../../utils/catalog-seo";
 
 export const prerender = true;
@@ -84,6 +84,8 @@ const brandProductCount = formatBrandProductCount(brand.products_count);
 const brandLogoLabel = logoUrl ? `Логотип ${brand.title}` : `${brand.title}: логотип не загружен`;
 const brandInitials = brand.title.trim().slice(0, 2).toUpperCase();
 const brandIntro = getBrandIntro(brand.title, brand.description);
+const brandIntroHtml = renderBrandIntroMarkdown(brandIntro);
+const brandIntroText = getBrandIntroPlainText(brandIntro);
 const seoDescription = `${h1}: подбор, продажа, монтаж и обслуживание. В каталоге ${brandProductCount} с актуальными характеристиками.`;
 const lockedFilters = { brand_slugs: [brand.slug] };
 ---
@@ -107,9 +109,7 @@ const lockedFilters = { brand_slugs: [brand.slug] };
             <div class="brand-hero">
                 <div class="brand-hero-copy">
                     <h1 class="gradient-text">{h1}</h1>
-                    <p class="header-description">
-                        {brandIntro}
-                    </p>
+                    <div class="header-description brand-intro-markdown" set:html={brandIntroHtml} />
                     <div class="brand-hero-meta">
                         <span>{brandProductCount}</span>
                         <span>наличие и монтаж уточняем перед заказом</span>
@@ -128,7 +128,7 @@ const lockedFilters = { brand_slugs: [brand.slug] };
             initialPopularProducts={popularProducts}
             initialFilters={lockedFilters}
             forcedTitle={h1}
-            forcedDescription={brandIntro}
+            forcedDescription={brandIntroText}
             lockedInitialFilters={lockedFilters}
             initialCategorySlug=""
             initialBrands={filtersConfig?.brands || []}
@@ -218,6 +218,26 @@ const lockedFilters = { brand_slugs: [brand.slug] };
         color: var(--text-muted);
         margin: 0;
         line-height: 1.7;
+    }
+    .brand-intro-markdown :global(p) {
+        margin: 0 0 0.65rem;
+    }
+    .brand-intro-markdown :global(p:last-child),
+    .brand-intro-markdown :global(ul:last-child) {
+        margin-bottom: 0;
+    }
+    .brand-intro-markdown :global(ul) {
+        margin: 0.55rem 0 0.65rem;
+        padding-left: 1.2rem;
+    }
+    .brand-intro-markdown :global(li + li) {
+        margin-top: 0.25rem;
+    }
+    .brand-intro-markdown :global(a) {
+        color: var(--primary);
+        font-weight: 700;
+        text-decoration: underline;
+        text-underline-offset: 0.2em;
     }
     .brand-hero-meta {
         display: flex;
