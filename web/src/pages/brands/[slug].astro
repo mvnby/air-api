@@ -5,6 +5,7 @@ import ProductCard from "../../components/ProductCard.astro";
 import { getCatalog, getFiltersConfig, getPublicBrandBySlug, getPublicBrands, resolveImageUrl } from "../../utils/api";
 import { formatBrandProductCount, getBrandIntro, getBrandIntroPlainText, renderBrandIntroMarkdown } from "../../utils/brands";
 import { buildCatalogItemListSchema } from "../../utils/catalog-seo";
+import { buildBrandMetaDescription, buildBrandSeoTitle } from "../../utils/seo";
 
 export const prerender = true;
 
@@ -79,6 +80,7 @@ const filtersConfig = await getFiltersConfig();
 const meta = data.meta || { total: brand.products_count || 0, page: 1, limit: 20, pages: 1 };
 const catalogSchema = buildCatalogItemListSchema(products, Astro.url.origin);
 const h1 = `Кондиционеры ${brand.title} в Витебске`;
+const seoTitle = buildBrandSeoTitle(brand);
 const logoUrl = brand.logo_url ? resolveImageUrl(brand.logo_url) : "";
 const brandProductCount = formatBrandProductCount(brand.products_count);
 const brandLogoLabel = logoUrl ? `Логотип ${brand.title}` : `${brand.title}: логотип не загружен`;
@@ -86,15 +88,15 @@ const brandInitials = brand.title.trim().slice(0, 2).toUpperCase();
 const brandIntro = getBrandIntro(brand.title, brand.description);
 const brandIntroHtml = renderBrandIntroMarkdown(brandIntro);
 const brandIntroText = getBrandIntroPlainText(brandIntro);
-const seoDescription = `${h1}: подбор, продажа, монтаж и обслуживание. В каталоге ${brandProductCount} с актуальными характеристиками.`;
+const seoDescription = buildBrandMetaDescription(brand);
 const lockedFilters = { brand_slugs: [brand.slug] };
 ---
 
 <Layout
-    title={h1}
+    title={seoTitle}
     description={seoDescription}
     image={logoUrl || undefined}
-    canonical={`/brands/${brand.slug}`}
+    canonical={`/brands/${brand.slug}/`}
 >
     <script type="application/ld+json" set:html={JSON.stringify(catalogSchema)} />
     <div class="container brand-page catalog-page">

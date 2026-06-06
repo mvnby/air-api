@@ -36,5 +36,7 @@ token.json
 backups/*
 /media/*
 web/temp/*
+var/seo/*
+!var/seo/.gitkeep
 .agent/workflows/plan.md
 .agent/*

@@ -16,6 +16,7 @@ import {
     formatPublicSpecsGrouped,
 } from "../../utils/spec-dictionary";
 import { generateBentoCards } from "../../utils/bento-cards";
+import { buildProductMetaDescription } from "../../utils/seo";
 
 export const prerender = true;
 
@@ -114,17 +115,17 @@ const publicSpecsSummary = buildPublicSpecsSummary(specs);
 const bentoCards = generateBentoCards(product);
 
 const publicTags = (product.tags || []).filter((t: any) => t.is_public);
+const seoDescription = buildProductMetaDescription(product);
 	---
 
 <Layout
     title={product.title}
-    description={product.description
-        ? product.description.slice(0, 160)
-        : undefined}
+    description={seoDescription}
     image={mainImage}
     price={product.price}
     currency="BYN"
     type="product"
+    canonical={`/product/${product.slug}/`}
 >
     <StickyBuyBar
         client:visible

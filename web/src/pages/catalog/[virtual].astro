@@ -86,7 +86,7 @@ const staticPopularProducts =
 <Layout
     title={category.seoTitle}
     description={category.seoDescription}
-    canonical={`/catalog/${category.slug}`}
+    canonical={`/catalog/${category.slug}/`}
     robots={robotsValue}
 >
     <script type="application/ld+json" set:html={JSON.stringify(catalogSchema)} />

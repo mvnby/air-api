@@ -7,6 +7,7 @@
     "test:brands": "node tests/brand-markdown.test.mjs",
     "check-api": "node scripts/check-api.js",
     "audit:theme": "bash ../scripts/audit_theme_hardcodes.sh",
+    "test:seo": "node scripts/test-seo-helpers.mjs",
     "build": "npm run check-api && astro build",
     "build:ssr:staging": "npm run check-api && astro build --config astro.config.ssr.mjs",
     "start:ssr:staging": "node ./dist/server/entry.mjs",
