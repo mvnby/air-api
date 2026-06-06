@@ -9,9 +9,9 @@ const sortedPosts = allPosts.sort(
     (a, b) => (b.data.date?.valueOf() || 0) - (a.data.date?.valueOf() || 0),
 );
 
-const title = "Блог и Статьи о кондиционерах";
+const title = "Статьи о кондиционерах";
 const description =
-    "Полезные статьи, обзоры и советы экспертов по выбору, установке и обслуживанию кондиционеров.";
+    "Практичные материалы о выборе, установке, обслуживании и ремонте кондиционеров.";
 ---
 
 <Layout title={title} description={description}>
@@ -21,11 +21,11 @@ const description =
                 <h1
                     class="text-4xl sm:text-5xl font-extrabold text-slate-900 dark:text-white mb-6 font-heading"
                 >
-                    Блог Экспертов
+                    Статьи о кондиционерах
                 </h1>
                 <p class="text-lg text-text-muted leading-relaxed">
-                    Делимся опытом, рассказываем о новинках и помогаем сделать
-                    правильный выбор. Всё, что вы хотели знать о климате в доме.
+                    Пишем простыми словами: как выбрать мощность, где заложить
+                    трассу, когда чистить блок и на чем не стоит переплачивать.
                 </p>
             </div>
 
