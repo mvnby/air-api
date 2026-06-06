@@ -148,7 +148,7 @@ const catalogUrl = computed(() => {
         
         <div class="extra-params">
              <div class="param-item">
-                 <label>Потолков (м)</label>
+                 <label>Высота потолка, м</label>
                  <input type="number" step="0.1" v-model.number="ceilingHeight">
              </div>
              <div class="param-item">
@@ -167,9 +167,9 @@ const catalogUrl = computed(() => {
             <div class="res-row">
                 <span>Расчетная мощность:</span>
                 <span class="val">{{ calculatedPower }} кВт</span>
-            </div>
+             </div>
              <div class="res-row main">
-                <span>Рекомендуем модель:</span>
+                <span>Подходящий типоразмер:</span>
                 <span class="val highlight">{{ recommendedModel.name }}</span>
             </div>
              <div class="res-desc" v-if="recommendedModel.btu">
@@ -179,7 +179,7 @@ const catalogUrl = computed(() => {
 
         <div v-if="!recommendedModel.slug" class="warning-box">
             <span class="material-icons-round">warning</span>
-            <p>Для такой площади требуется профессиональный расчет. Возможно, вам нужен полупромышленный кондиционер или мульти-сплит система.</p>
+            <p>Для такой площади нужно уточнить теплопритоки, тип блоков и трассу. Возможно, вам нужен полупромышленный кондиционер или мульти-сплит система.</p>
         </div>
 
         <a :href="catalogUrl" class="btn btn-primary full-width">

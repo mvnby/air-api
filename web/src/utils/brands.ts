@@ -16,3 +16,17 @@ export const brandConfig: Record<string, { logo?: string, color?: string }> = {
 export const getBrandConfig = (slug: string) => {
     return brandConfig[slug.toLowerCase()] || {};
 };
+
+export const formatBrandProductCount = (count: number): string => {
+    const normalized = Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : 0;
+    const lastDigit = normalized % 10;
+    const lastTwoDigits = normalized % 100;
+    const noun =
+        lastDigit === 1 && lastTwoDigits !== 11
+            ? "модель"
+            : lastDigit >= 2 && lastDigit <= 4 && (lastTwoDigits < 12 || lastTwoDigits > 14)
+              ? "модели"
+              : "моделей";
+
+    return `${normalized} ${noun}`;
+};

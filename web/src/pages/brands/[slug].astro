@@ -3,6 +3,7 @@ import Layout from "../../layouts/Layout.astro";
 import CatalogApp from "../../components/CatalogApp.vue";
 import ProductCard from "../../components/ProductCard.astro";
 import { getCatalog, getFiltersConfig, getPublicBrandBySlug, getPublicBrands, resolveImageUrl } from "../../utils/api";
+import { formatBrandProductCount } from "../../utils/brands";
 import { buildCatalogItemListSchema } from "../../utils/catalog-seo";
 
 interface PublicBrand {
@@ -76,8 +77,11 @@ const filtersConfig = await getFiltersConfig();
 const meta = data.meta || { total: brand.products_count || 0, page: 1, limit: 20, pages: 1 };
 const catalogSchema = buildCatalogItemListSchema(products, Astro.url.origin);
 const h1 = `Кондиционеры ${brand.title} в Витебске`;
-const seoDescription = `${h1}: подбор, продажа, монтаж и сервис. В каталоге ${brand.products_count} моделей с актуальными характеристиками.`;
 const logoUrl = brand.logo_url ? resolveImageUrl(brand.logo_url) : "";
+const brandProductCount = formatBrandProductCount(brand.products_count);
+const brandLogoLabel = logoUrl ? `Логотип ${brand.title}` : `${brand.title}: логотип не загружен`;
+const brandInitials = brand.title.trim().slice(0, 2).toUpperCase();
+const seoDescription = `${h1}: подбор, продажа, монтаж и сервис. В каталоге ${brandProductCount} с актуальными характеристиками.`;
 const lockedFilters = { brand_slugs: [brand.slug] };
 ---
 
@@ -104,12 +108,12 @@ const lockedFilters = { brand_slugs: [brand.slug] };
                         {brand.description || `Модели ${brand.title} для квартиры, дома и офиса: подбор по площади, продажа, монтаж и сервис в Витебске.`}
                     </p>
                     <div class="brand-hero-meta">
-                        <span>{brand.products_count} моделей</span>
-                        <span>подбор, продажа, монтаж и сервис</span>
+                        <span>{brandProductCount}</span>
+                        <span>наличие и монтаж уточняем перед заказом</span>
                     </div>
                 </div>
-                <div class="brand-logo-panel" aria-label={`Логотип ${brand.title}`}>
-                    {logoUrl ? <img src={logoUrl} alt={brand.title} /> : <span>{brand.title.slice(0, 2).toUpperCase()}</span>}
+                <div class="brand-logo-panel" aria-label={brandLogoLabel}>
+                    {logoUrl ? <img src={logoUrl} alt={brand.title} /> : <span>{brandInitials}</span>}
                 </div>
             </div>
         </header>
@@ -157,11 +161,11 @@ const lockedFilters = { brand_slugs: [brand.slug] };
                     <h2>{h1}: выбор и монтаж</h2>
                     <p>
                         Поможем сравнить модели {brand.title} по мощности, уровню шума, режимам обогрева и наличию на
-                        складах. Перед монтажом уточняем трассу, место установки наружного блока и условия обслуживания.
+                        складах. Перед монтажом уточняем трассу, доступ к наружному блоку и условия обслуживания.
                     </p>
                     <p>
-                        Для Витебска и области подбираем решение под конкретное помещение: от небольшой спальни до
-                        офиса или торговой зоны.
+                        Для Витебска и ближайших районов подбираем модель под конкретное помещение: от небольшой
+                        спальни до офиса или торговой зоны.
                     </p>
                 </section>
             </div>
