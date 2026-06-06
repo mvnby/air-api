@@ -45,9 +45,13 @@ class ProductDAO:
         session: AsyncSession,
         product_id: int,
         *,
+        is_published: Optional[bool] = None,
         load_image_variants: bool = False,
     ) -> Optional[Product]:
-        stmt = select(Product).where(Product.id == product_id).options(
+        stmt = select(Product).where(Product.id == product_id)
+        if is_published is not None:
+            stmt = stmt.where(Product.is_published == is_published)
+        stmt = stmt.options(
             selectinload(Product.tags).selectinload(Tag.group),
             ProductDAO._gallery_images_option(load_image_variants=load_image_variants),
             selectinload(Product.attachments),
@@ -60,9 +64,13 @@ class ProductDAO:
         session: AsyncSession,
         slug: str,
         *,
+        is_published: Optional[bool] = None,
         load_image_variants: bool = False,
     ) -> Optional[Product]:
-        stmt = select(Product).where(Product.slug == slug).options(
+        stmt = select(Product).where(Product.slug == slug)
+        if is_published is not None:
+            stmt = stmt.where(Product.is_published == is_published)
+        stmt = stmt.options(
             selectinload(Product.tags).selectinload(Tag.group),
             ProductDAO._gallery_images_option(load_image_variants=load_image_variants),
             selectinload(Product.attachments),

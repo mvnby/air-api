@@ -52,6 +52,41 @@ async def test_product_detail(async_client: AsyncClient, seed_product):
 
 
 @pytest.mark.asyncio
+async def test_public_product_detail_hides_unpublished_slug(async_client: AsyncClient, db):
+    product = Product(
+        title="Hidden Detail Product",
+        slug="hidden-detail-product",
+        price=1000,
+        area=25,
+        is_published=False,
+    )
+    db.add(product)
+    await db.commit()
+
+    response = await async_client.get(f"/api/v1/products/{product.slug}")
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_public_product_detail_hides_unpublished_id(async_client: AsyncClient, db):
+    product = Product(
+        title="Hidden Detail Product By ID",
+        slug="hidden-detail-product-by-id",
+        price=1000,
+        area=25,
+        is_published=False,
+    )
+    db.add(product)
+    await db.commit()
+    await db.refresh(product)
+
+    response = await async_client.get(f"/api/v1/products/{product.id}")
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_public_product_payload_exposes_approved_ready_image_variants(async_client: AsyncClient, db):
     product = Product(
         title="Approved Variant Product",

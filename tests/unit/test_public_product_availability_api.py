@@ -68,7 +68,7 @@ async def test_public_product_detail_includes_city_availability(monkeypatch):
     async def override_get_session():
         yield object()
 
-    async def fake_get_product_by_identifier(*args, **kwargs):
+    async def fake_get_public_product_by_identifier(*args, **kwargs):
         return product
 
     async def fake_get_series_siblings(*args, **kwargs):
@@ -83,7 +83,7 @@ async def test_public_product_detail_includes_city_availability(monkeypatch):
             }
         }
 
-    monkeypatch.setattr(ProductService, "get_product_by_identifier", fake_get_product_by_identifier)
+    monkeypatch.setattr(ProductService, "get_public_product_by_identifier", fake_get_public_product_by_identifier)
     monkeypatch.setattr(ProductService, "get_series_siblings", fake_get_series_siblings)
     monkeypatch.setattr(ProductService, "get_supply_metrics_map", fake_get_supply_metrics_map)
     app.dependency_overrides[get_session] = override_get_session
