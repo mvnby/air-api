@@ -47,6 +47,15 @@ import type { ProductImageVariantCandidatesResponse } from '../models/ProductIma
 import type { ProductImageVariantResponse } from '../models/ProductImageVariantResponse';
 import type { ProductLocalStockPayload } from '../models/ProductLocalStockPayload';
 import type { ProductLocalStockResponse } from '../models/ProductLocalStockResponse';
+import type { ProductMainImageCleanupApprovePayload } from '../models/ProductMainImageCleanupApprovePayload';
+import type { ProductMainImageCleanupBatchCreatePayload } from '../models/ProductMainImageCleanupBatchCreatePayload';
+import type { ProductMainImageCleanupBatchCreateResponse } from '../models/ProductMainImageCleanupBatchCreateResponse';
+import type { ProductMainImageCleanupBatchListResponse } from '../models/ProductMainImageCleanupBatchListResponse';
+import type { ProductMainImageCleanupDecisionResponse } from '../models/ProductMainImageCleanupDecisionResponse';
+import type { ProductMainImageCleanupItemListResponse } from '../models/ProductMainImageCleanupItemListResponse';
+import type { ProductMainImageCleanupRejectPayload } from '../models/ProductMainImageCleanupRejectPayload';
+import type { ProductMainImageCleanupSkipPayload } from '../models/ProductMainImageCleanupSkipPayload';
+import type { ProductMainImageCleanupSkipReasonsResponse } from '../models/ProductMainImageCleanupSkipReasonsResponse';
 import type { ProductUpdate } from '../models/ProductUpdate';
 import type { SupplierCreatePayload } from '../models/SupplierCreatePayload';
 import type { SupplierListResponse } from '../models/SupplierListResponse';
@@ -607,6 +616,152 @@ export class ManagerService {
             errors: {
                 422: `Validation Error`,
             },
+        });
+    }
+    /**
+     * Create Main Image Cleanup Batch
+     * Create a bounded batch of product main-image cleanup candidates.
+     * @param requestBody
+     * @returns ProductMainImageCleanupBatchCreateResponse Successful Response
+     * @throws ApiError
+     */
+    public static createMainImageCleanupBatch(
+        requestBody: ProductMainImageCleanupBatchCreatePayload,
+    ): CancelablePromise<ProductMainImageCleanupBatchCreateResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/main-image-cleanup/batches',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Main Image Cleanup Batches
+     * List cleanup batches for manager review.
+     * @param limit
+     * @param offset
+     * @returns ProductMainImageCleanupBatchListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listMainImageCleanupBatches(
+        limit: number = 20,
+        offset?: number,
+    ): CancelablePromise<ProductMainImageCleanupBatchListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/main-image-cleanup/batches',
+            query: {
+                'limit': limit,
+                'offset': offset,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Main Image Cleanup Items
+     * List cleanup items by batch and/or status.
+     * @param batchId
+     * @param status
+     * @param limit
+     * @param offset
+     * @returns ProductMainImageCleanupItemListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listMainImageCleanupItems(
+        batchId?: (number | null),
+        status?: (string | null),
+        limit: number = 100,
+        offset?: number,
+    ): CancelablePromise<ProductMainImageCleanupItemListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/main-image-cleanup/items',
+            query: {
+                'batch_id': batchId,
+                'status': status,
+                'limit': limit,
+                'offset': offset,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Approve Main Image Cleanup Items
+     * Approve selected candidates and explicitly update Product.main_image.
+     * @param requestBody
+     * @returns ProductMainImageCleanupDecisionResponse Successful Response
+     * @throws ApiError
+     */
+    public static approveMainImageCleanupItems(
+        requestBody: ProductMainImageCleanupApprovePayload,
+    ): CancelablePromise<ProductMainImageCleanupDecisionResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/main-image-cleanup/items/approve',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Reject Main Image Cleanup Items
+     * Reject selected candidates without changing public product fields.
+     * @param requestBody
+     * @returns ProductMainImageCleanupDecisionResponse Successful Response
+     * @throws ApiError
+     */
+    public static rejectMainImageCleanupItems(
+        requestBody: ProductMainImageCleanupRejectPayload,
+    ): CancelablePromise<ProductMainImageCleanupDecisionResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/main-image-cleanup/items/reject',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Skip Main Image Cleanup Items
+     * Mark selected items skipped with an operator-visible reason.
+     * @param requestBody
+     * @returns ProductMainImageCleanupDecisionResponse Successful Response
+     * @throws ApiError
+     */
+    public static skipMainImageCleanupItems(
+        requestBody: ProductMainImageCleanupSkipPayload,
+    ): CancelablePromise<ProductMainImageCleanupDecisionResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/main-image-cleanup/items/skip',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Main Image Cleanup Skip Reasons
+     * Return known machine reasons plus user-entered skip reasons support.
+     * @returns ProductMainImageCleanupSkipReasonsResponse Successful Response
+     * @throws ApiError
+     */
+    public static listMainImageCleanupSkipReasons(): CancelablePromise<ProductMainImageCleanupSkipReasonsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/main-image-cleanup/skip-reasons',
         });
     }
     /**

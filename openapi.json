@@ -3299,6 +3299,375 @@
         }
       }
     },
+    "/api/manager/main-image-cleanup/batches": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Create Main Image Cleanup Batch",
+        "description": "Create a bounded batch of product main-image cleanup candidates.",
+        "operationId": "create_main_image_cleanup_batch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductMainImageCleanupBatchCreatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductMainImageCleanupBatchCreateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "List Main Image Cleanup Batches",
+        "description": "List cleanup batches for manager review.",
+        "operationId": "list_main_image_cleanup_batches",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductMainImageCleanupBatchListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/main-image-cleanup/items": {
+      "get": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "List Main Image Cleanup Items",
+        "description": "List cleanup items by batch and/or status.",
+        "operationId": "list_main_image_cleanup_items",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "batch_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Batch Id"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductMainImageCleanupItemListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/main-image-cleanup/items/approve": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Approve Main Image Cleanup Items",
+        "description": "Approve selected candidates and explicitly update Product.main_image.",
+        "operationId": "approve_main_image_cleanup_items",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductMainImageCleanupApprovePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductMainImageCleanupDecisionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/main-image-cleanup/items/reject": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Reject Main Image Cleanup Items",
+        "description": "Reject selected candidates without changing public product fields.",
+        "operationId": "reject_main_image_cleanup_items",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductMainImageCleanupRejectPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductMainImageCleanupDecisionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/main-image-cleanup/items/skip": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Skip Main Image Cleanup Items",
+        "description": "Mark selected items skipped with an operator-visible reason.",
+        "operationId": "skip_main_image_cleanup_items",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductMainImageCleanupSkipPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductMainImageCleanupDecisionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/main-image-cleanup/skip-reasons": {
+      "get": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "List Main Image Cleanup Skip Reasons",
+        "description": "Return known machine reasons plus user-entered skip reasons support.",
+        "operationId": "list_main_image_cleanup_skip_reasons",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductMainImageCleanupSkipReasonsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/search-images": {
       "post": {
         "tags": [
@@ -23656,6 +24025,566 @@
           "title"
         ],
         "title": "ProductLogisticsComponentTemplate"
+      },
+      "ProductMainImageCleanupApprovePayload": {
+        "properties": {
+          "item_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Item Ids"
+          }
+        },
+        "type": "object",
+        "title": "ProductMainImageCleanupApprovePayload"
+      },
+      "ProductMainImageCleanupBatchCreatePayload": {
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 50
+          },
+          "processor_method": {
+            "type": "string",
+            "title": "Processor Method",
+            "default": "noop"
+          }
+        },
+        "type": "object",
+        "title": "ProductMainImageCleanupBatchCreatePayload"
+      },
+      "ProductMainImageCleanupBatchCreateResponse": {
+        "properties": {
+          "batch": {
+            "$ref": "#/components/schemas/ProductMainImageCleanupBatchResponse"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProductMainImageCleanupItemResponse"
+            },
+            "type": "array",
+            "title": "Items",
+            "default": []
+          },
+          "created_count": {
+            "type": "integer",
+            "title": "Created Count"
+          },
+          "candidate_ready_count": {
+            "type": "integer",
+            "title": "Candidate Ready Count"
+          },
+          "skipped_count": {
+            "type": "integer",
+            "title": "Skipped Count"
+          },
+          "failed_count": {
+            "type": "integer",
+            "title": "Failed Count"
+          },
+          "already_processed_count": {
+            "type": "integer",
+            "title": "Already Processed Count"
+          },
+          "skipped_existing": {
+            "items": {
+              "$ref": "#/components/schemas/ProductMainImageCleanupSkippedExistingResponse"
+            },
+            "type": "array",
+            "title": "Skipped Existing",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "batch",
+          "created_count",
+          "candidate_ready_count",
+          "skipped_count",
+          "failed_count",
+          "already_processed_count"
+        ],
+        "title": "ProductMainImageCleanupBatchCreateResponse"
+      },
+      "ProductMainImageCleanupBatchListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProductMainImageCleanupBatchResponse"
+            },
+            "type": "array",
+            "title": "Items",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "ProductMainImageCleanupBatchListResponse"
+      },
+      "ProductMainImageCleanupBatchResponse": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "requested_limit": {
+            "type": "integer",
+            "title": "Requested Limit"
+          },
+          "processor_method": {
+            "type": "string",
+            "title": "Processor Method"
+          },
+          "processor_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processor Version"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "requested_limit",
+          "processor_method",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ProductMainImageCleanupBatchResponse"
+      },
+      "ProductMainImageCleanupDecisionResponse": {
+        "properties": {
+          "updated_count": {
+            "type": "integer",
+            "title": "Updated Count"
+          },
+          "skipped_count": {
+            "type": "integer",
+            "title": "Skipped Count"
+          },
+          "skipped": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Skipped",
+            "default": []
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProductMainImageCleanupItemResponse"
+            },
+            "type": "array",
+            "title": "Items",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "updated_count",
+          "skipped_count"
+        ],
+        "title": "ProductMainImageCleanupDecisionResponse"
+      },
+      "ProductMainImageCleanupItemListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProductMainImageCleanupItemResponse"
+            },
+            "type": "array",
+            "title": "Items",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "ProductMainImageCleanupItemListResponse"
+      },
+      "ProductMainImageCleanupItemResponse": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "source_product_image_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Product Image Id"
+          },
+          "original_image_url": {
+            "type": "string",
+            "title": "Original Image Url"
+          },
+          "candidate_image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Image Url"
+          },
+          "approved_image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved Image Url"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "skip_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skip Reason"
+          },
+          "reject_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reject Reason"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "processor_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processor Method"
+          },
+          "processor_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processor Version"
+          },
+          "confidence_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Score"
+          },
+          "quality_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Score"
+          },
+          "candidate_storage_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Storage Provider"
+          },
+          "candidate_content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Content Hash"
+          },
+          "candidate_width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Width"
+          },
+          "candidate_height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Height"
+          },
+          "approved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "approved_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "original_image_url",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ProductMainImageCleanupItemResponse"
+      },
+      "ProductMainImageCleanupRejectPayload": {
+        "properties": {
+          "item_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Item Ids"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "ProductMainImageCleanupRejectPayload"
+      },
+      "ProductMainImageCleanupSkipPayload": {
+        "properties": {
+          "item_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Item Ids"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "ProductMainImageCleanupSkipPayload"
+      },
+      "ProductMainImageCleanupSkipReasonsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Items",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "ProductMainImageCleanupSkipReasonsResponse"
+      },
+      "ProductMainImageCleanupSkippedExistingResponse": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "original_image_url": {
+            "type": "string",
+            "title": "Original Image Url"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "existing_item_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Existing Item Id"
+          },
+          "existing_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Existing Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "original_image_url",
+          "reason"
+        ],
+        "title": "ProductMainImageCleanupSkippedExistingResponse"
       },
       "ProductManualPayload": {
         "properties": {

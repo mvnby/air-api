@@ -1654,6 +1654,101 @@ class ManagerMediaCleanupResponse(BaseModel):
     files: List[str]
 
 
+class ProductMainImageCleanupBatchResponse(BaseModel):
+    id: Optional[int] = None
+    status: str
+    requested_limit: int
+    processor_method: str
+    processor_version: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    completed_at: Optional[datetime] = None
+
+
+class ProductMainImageCleanupItemResponse(BaseModel):
+    id: Optional[int] = None
+    batch_id: Optional[int] = None
+    product_id: int
+    source_product_image_id: Optional[int] = None
+    original_image_url: str
+    candidate_image_url: Optional[str] = None
+    approved_image_url: Optional[str] = None
+    status: str
+    skip_reason: Optional[str] = None
+    reject_reason: Optional[str] = None
+    failure_reason: Optional[str] = None
+    processor_method: Optional[str] = None
+    processor_version: Optional[str] = None
+    confidence_score: Optional[float] = None
+    quality_score: Optional[float] = None
+    candidate_storage_provider: Optional[str] = None
+    candidate_content_hash: Optional[str] = None
+    candidate_width: Optional[int] = None
+    candidate_height: Optional[int] = None
+    approved_by: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    approved_at: Optional[datetime] = None
+
+
+class ProductMainImageCleanupSkippedExistingResponse(BaseModel):
+    product_id: int
+    original_image_url: str
+    reason: str
+    existing_item_id: Optional[int] = None
+    existing_status: Optional[str] = None
+
+
+class ProductMainImageCleanupBatchCreatePayload(BaseModel):
+    limit: int = Field(default=50, ge=1, le=50)
+    processor_method: str = "noop"
+
+
+class ProductMainImageCleanupBatchCreateResponse(BaseModel):
+    batch: ProductMainImageCleanupBatchResponse
+    items: List[ProductMainImageCleanupItemResponse] = []
+    created_count: int
+    candidate_ready_count: int
+    skipped_count: int
+    failed_count: int
+    already_processed_count: int
+    skipped_existing: List[ProductMainImageCleanupSkippedExistingResponse] = []
+
+
+class ProductMainImageCleanupBatchListResponse(BaseModel):
+    items: List[ProductMainImageCleanupBatchResponse] = []
+
+
+class ProductMainImageCleanupItemListResponse(BaseModel):
+    items: List[ProductMainImageCleanupItemResponse] = []
+
+
+class ProductMainImageCleanupApprovePayload(BaseModel):
+    item_ids: List[int] = Field(default_factory=list)
+
+
+class ProductMainImageCleanupRejectPayload(BaseModel):
+    item_ids: List[int] = Field(default_factory=list)
+    reason: str
+
+
+class ProductMainImageCleanupSkipPayload(BaseModel):
+    item_ids: List[int] = Field(default_factory=list)
+    reason: str
+
+
+class ProductMainImageCleanupDecisionResponse(BaseModel):
+    updated_count: int
+    skipped_count: int
+    skipped: List[Dict[str, Any]] = []
+    items: List[ProductMainImageCleanupItemResponse] = []
+
+
+class ProductMainImageCleanupSkipReasonsResponse(BaseModel):
+    items: List[str] = []
+
+
 class ProductUpdate(BaseModel):
     title: Optional[str] = None
     price: Optional[int] = None
