@@ -161,7 +161,7 @@ Local API/data scripts default to `root@185.250.45.54`. Override with `REMOTE_HO
 3. Uploads `dist/` to web server via rsync
 4. Configures robots.txt based on environment
 
-**Critical:** Script uses `INTERNAL_API_URL=https://api.mvn.by/api/v1` for SSR build to fetch product data and generate all 102 static pages.
+**Critical:** Script uses `INTERNAL_API_URL=https://api.mvn.by/api/v1` during Astro static generation to fetch product data and generate all 102 static pages.
 
 ## GitHub Actions Deployment
 
@@ -179,7 +179,7 @@ The workflow requires these env vars in the build step:
 ```yaml
 - name: Build Astro Site
   env:
-    # SSR Build: Production API for static generation
+    # Static generation: Production API for prerendered pages
     INTERNAL_API_URL: https://api.mvn.by/api/v1
     # Client-side: Production API
     PUBLIC_API_URL: https://api.mvn.by/api/v1
@@ -187,7 +187,7 @@ The workflow requires these env vars in the build step:
     PUBLIC_GTM_ID: GTM-5CR6WBBC
 ```
 
-**Without `INTERNAL_API_URL`:** Build generates only 16 pages (all API calls fail during SSR)  
+**Without `INTERNAL_API_URL`:** Build generates only 16 pages (all API calls fail during static generation).
 **With `INTERNAL_API_URL`:** Build generates 102+ pages (all products pre-rendered)
 
 ### Deployment Steps
