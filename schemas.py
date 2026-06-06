@@ -100,10 +100,18 @@ class ProductSiblingResponse(BaseModel):
     main_image: Optional[str]
 
 
+class ProductBrandResponse(BaseModel):
+    id: int
+    title: str
+    slug: str
+    logo_url: Optional[str] = None
+
+
 class ProductResponse(ProductBase):
     vitebsk_qty: int = 0
     minsk_qty: int = 0
     availability_status: Optional[str] = None
+    brand: Optional[ProductBrandResponse] = None
     tags: List[TagResponse] = []
     specs: Dict[str, Any] = {}
     images: List[str] = [] # Legacy

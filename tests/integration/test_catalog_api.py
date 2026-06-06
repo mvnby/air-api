@@ -52,6 +52,40 @@ async def test_product_detail(async_client: AsyncClient, seed_product):
 
 
 @pytest.mark.asyncio
+async def test_public_product_detail_includes_canonical_brand(async_client: AsyncClient, db):
+    brand = Brand(
+        title="Haier",
+        slug="haier",
+        logo_url="/media/brands/haier.svg",
+        is_published=True,
+    )
+    db.add(brand)
+    await db.flush()
+
+    product = Product(
+        title="Haier Brand Detail Product",
+        slug="haier-brand-detail-product",
+        price=1200,
+        area=25,
+        brand_id=brand.id,
+        is_published=True,
+    )
+    db.add(product)
+    await db.commit()
+    await db.refresh(product)
+
+    response = await async_client.get(f"/api/v1/products/{product.slug}")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["brand"] == {
+        "id": brand.id,
+        "title": "Haier",
+        "slug": "haier",
+        "logo_url": "/media/brands/haier.svg",
+    }
+
+
+@pytest.mark.asyncio
 async def test_public_product_detail_hides_unpublished_slug(async_client: AsyncClient, db):
     product = Product(
         title="Hidden Detail Product",

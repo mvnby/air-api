@@ -48,6 +48,13 @@
                 >
                   Полупром
                 </a>
+                <a
+                  href="/brands"
+                  class="nav-subitem"
+                  @click="isOpen = false"
+                >
+                  Бренды
+                </a>
               </div>
               <a href="/services" class="nav-item" @click="isOpen = false">
                 <span class="material-icons-round icon">handyman</span>

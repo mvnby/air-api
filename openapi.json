@@ -23177,6 +23177,40 @@
         ],
         "title": "ProductAvailabilityLeadResponse"
       },
+      "ProductBrandResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "slug"
+        ],
+        "title": "ProductBrandResponse"
+      },
       "ProductImageResponse": {
         "properties": {
           "id": {
@@ -23772,6 +23806,16 @@
               }
             ],
             "title": "Availability Status"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductBrandResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "tags": {
             "items": {

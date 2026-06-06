@@ -30,3 +30,11 @@ export const formatBrandProductCount = (count: number): string => {
 
     return `${normalized} ${noun}`;
 };
+
+export const getBrandIntro = (title: string, description?: string | null): string => {
+    const ownDescription = String(description || "").trim();
+    if (ownDescription) return ownDescription;
+
+    const brandTitle = String(title || "").trim() || "бренда";
+    return `Подбор кондиционеров ${brandTitle} в Витебске: поможем выбрать модель под площадь помещения, условия монтажа и бюджет. Перед заказом уточним наличие и параметры установки.`;
+};

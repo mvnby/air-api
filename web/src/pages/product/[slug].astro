@@ -42,6 +42,46 @@ if (!product) {
     return Astro.redirect("/404");
 }
 
+const CATEGORY_BREADCRUMBS: Record<string, { title: string; href: string }> = {
+    "cat-household": {
+        title: "Бытовые кондиционеры",
+        href: "/catalog?tag_slugs=cat-household",
+    },
+    "cat-multi": {
+        title: "Мультисплит",
+        href: "/catalog?tag_slugs=cat-multi",
+    },
+    "cat-industrial": {
+        title: "Полупромышленные кондиционеры",
+        href: "/catalog?tag_slugs=cat-industrial",
+    },
+};
+
+const findTagByGroup = (groupSlug: string) =>
+    (product.tags || []).find((tag: any) => {
+        const tagGroupSlug = tag?.group?.slug || tag?.group_slug;
+        return tagGroupSlug === groupSlug;
+    });
+
+const categoryTag = findTagByGroup("category");
+const categoryBreadcrumb = categoryTag?.slug
+    ? CATEGORY_BREADCRUMBS[String(categoryTag.slug)]
+    : null;
+const brandTag = findTagByGroup("brand");
+const productBrand = product.brand || (
+    brandTag?.slug
+        ? {
+              id: brandTag.id,
+              title: brandTag.title,
+              slug: brandTag.slug,
+              logo_url: null,
+          }
+        : null
+);
+const productBrandLogo = productBrand?.logo_url
+    ? resolveImageUrl(productBrand.logo_url)
+    : "";
+
 const specs = product.specs || {};
 const manuals = (product.manuals || [])
     .map((item: any) => ({
@@ -100,6 +140,22 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
             <span class="sep">/</span>
             <a href="/catalog">Каталог</a>
             <span class="sep">/</span>
+            {
+                categoryBreadcrumb && (
+                    <>
+                        <a href={categoryBreadcrumb.href}>{categoryBreadcrumb.title}</a>
+                        <span class="sep">/</span>
+                    </>
+                )
+            }
+            {
+                productBrand && (
+                    <>
+                        <a href={`/brands/${productBrand.slug}/`}>{productBrand.title}</a>
+                        <span class="sep">/</span>
+                    </>
+                )
+            }
             <span class="active">{product.title}</span>
         </nav>
 
@@ -124,6 +180,25 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
             <!-- Right: Info -->
             <div class="info-col">
                 <div class="header-section">
+                    {
+                        productBrand && (
+                            <a class="product-brand-link" href={`/brands/${productBrand.slug}/`}>
+                                {
+                                    productBrandLogo ? (
+                                        <span class="product-brand-logo">
+                                            <img src={productBrandLogo} alt={productBrand.title} loading="lazy" />
+                                        </span>
+                                    ) : (
+                                        <span class="product-brand-text-kicker">Бренд</span>
+                                    )
+                                }
+                                <span>{productBrand.title}</span>
+                                <span class="material-icons-round product-brand-arrow" aria-hidden="true">
+                                    arrow_forward
+                                </span>
+                            </a>
+                        )
+                    }
                     <div class="badges">
                         {
                             publicTags.map((tag: any) => {
@@ -902,6 +977,7 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
         display: flex;
         gap: 0.5rem;
         align-items: center;
+        flex-wrap: wrap;
     }
     .breadcrumb a:hover {
         color: var(--primary, #007f80);
@@ -930,6 +1006,56 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
     /* Info Column */
     .header-section {
         margin-bottom: 2rem;
+    }
+
+    .product-brand-link {
+        width: fit-content;
+        min-height: 38px;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.35rem 0.65rem;
+        border-radius: 8px;
+        background: var(--panel-chip-bg);
+        border: 1px solid var(--panel-chip-border);
+        color: var(--text);
+        font-size: 0.9rem;
+        font-weight: 800;
+        margin-bottom: 0.65rem;
+    }
+
+    .product-brand-link:hover {
+        border-color: var(--panel-chip-hover-border);
+        color: var(--primary);
+    }
+
+    .product-brand-logo {
+        width: 48px;
+        height: 24px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        background: rgba(var(--surface-rgb), 0.64);
+        border: 1px solid var(--panel-chip-border);
+    }
+
+    .product-brand-logo img {
+        max-width: 38px;
+        max-height: 16px;
+        object-fit: contain;
+    }
+
+    .product-brand-text-kicker {
+        color: var(--text-muted);
+        font-size: 0.74rem;
+        text-transform: uppercase;
+        letter-spacing: 0;
+    }
+
+    .product-brand-arrow {
+        font-size: 1rem;
+        color: var(--text-muted);
     }
 
     h1 {

@@ -3,7 +3,7 @@ import Layout from "../../layouts/Layout.astro";
 import CatalogApp from "../../components/CatalogApp.vue";
 import ProductCard from "../../components/ProductCard.astro";
 import { getCatalog, getFiltersConfig, getPublicBrandBySlug, getPublicBrands, resolveImageUrl } from "../../utils/api";
-import { formatBrandProductCount } from "../../utils/brands";
+import { formatBrandProductCount, getBrandIntro } from "../../utils/brands";
 import { buildCatalogItemListSchema } from "../../utils/catalog-seo";
 
 export const prerender = true;
@@ -83,6 +83,7 @@ const logoUrl = brand.logo_url ? resolveImageUrl(brand.logo_url) : "";
 const brandProductCount = formatBrandProductCount(brand.products_count);
 const brandLogoLabel = logoUrl ? `Логотип ${brand.title}` : `${brand.title}: логотип не загружен`;
 const brandInitials = brand.title.trim().slice(0, 2).toUpperCase();
+const brandIntro = getBrandIntro(brand.title, brand.description);
 const seoDescription = `${h1}: подбор, продажа, монтаж и обслуживание. В каталоге ${brandProductCount} с актуальными характеристиками.`;
 const lockedFilters = { brand_slugs: [brand.slug] };
 ---
@@ -107,7 +108,7 @@ const lockedFilters = { brand_slugs: [brand.slug] };
                 <div class="brand-hero-copy">
                     <h1 class="gradient-text">{h1}</h1>
                     <p class="header-description">
-                        {brand.description || `Модели ${brand.title} для квартиры, дома и офиса: подбор по площади, продажа, монтаж и обслуживание в Витебске.`}
+                        {brandIntro}
                     </p>
                     <div class="brand-hero-meta">
                         <span>{brandProductCount}</span>
@@ -127,7 +128,7 @@ const lockedFilters = { brand_slugs: [brand.slug] };
             initialPopularProducts={popularProducts}
             initialFilters={lockedFilters}
             forcedTitle={h1}
-            forcedDescription={seoDescription}
+            forcedDescription={brandIntro}
             lockedInitialFilters={lockedFilters}
             initialCategorySlug=""
             initialBrands={filtersConfig?.brands || []}

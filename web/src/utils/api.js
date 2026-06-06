@@ -130,12 +130,28 @@ export async function getFiltersConfig() {
 }
 
 export async function getPublicBrands() {
+    if (import.meta.env.SSR) {
+        for (const baseUrl of getSsgApiCandidates()) {
+            const data = await fetchJson(`${baseUrl}/content/brands`);
+            if (Array.isArray(data)) return data;
+        }
+        return [];
+    }
+
     const data = await fetchJson(`${API_V1}/content/brands`);
     return Array.isArray(data) ? data : [];
 }
 
 export async function getPublicBrandBySlug(slug) {
     if (!slug) return null;
+    if (import.meta.env.SSR) {
+        for (const baseUrl of getSsgApiCandidates()) {
+            const data = await fetchJson(`${baseUrl}/content/brands/${encodeURIComponent(slug)}`);
+            if (data) return data;
+        }
+        return null;
+    }
+
     return await fetchJson(`${API_V1}/content/brands/${encodeURIComponent(slug)}`);
 }
 
