@@ -38,13 +38,12 @@ class ProductWriteService:
         )
         product.main_image = ImageService.get_web_path(db_path)
         session.add(product)
-        await CatalogRevisionService.bump(
+        await CatalogRevisionService.bump_commit_and_purge(
             session,
             scope="product_media",
             product_ids=[product.id],
             slugs=[product.slug],
         )
-        await session.commit()
         return {"message": "Product updated", "id": product.id}
 
     @staticmethod
@@ -85,6 +84,10 @@ class ProductWriteService:
                 title=payload.get("title") or (existing_product.title if existing_product else ""),
             )
 
+        previous_brand_slugs = await CatalogRevisionService.get_product_brand_slugs(
+            session,
+            [product_id],
+        )
         product = await ProductDAO.update_full(session, product_id, payload, tag_ids, commit=False)
         if not product:
             return None
@@ -107,13 +110,13 @@ class ProductWriteService:
             explicit_brand_id=explicit_brand_id,
             explicit_brand_override=explicit_brand_override,
         )
-        await CatalogRevisionService.bump(
+        await CatalogRevisionService.bump_commit_and_purge(
             session,
             scope="product_update",
             product_ids=[product.id],
             slugs=[product.slug],
+            brand_slugs=previous_brand_slugs,
         )
-        await session.commit()
         return {"message": "Product updated", "id": product.id}
 
     @staticmethod
@@ -135,13 +138,12 @@ class ProductWriteService:
                     updated_slugs.append(product.slug)
 
         if updated_count > 0:
-            await CatalogRevisionService.bump(
+            await CatalogRevisionService.bump_commit_and_purge(
                 session,
                 scope="product_price_bulk_round",
                 product_ids=updated_product_ids,
                 slugs=updated_slugs,
             )
-            await session.commit()
 
         return {"message": "Prices rounded", "updated_count": updated_count}
 
@@ -175,13 +177,12 @@ class ProductWriteService:
                     updated_slugs.append(product.slug)
 
         if updated_count > 0:
-            await CatalogRevisionService.bump(
+            await CatalogRevisionService.bump_commit_and_purge(
                 session,
                 scope="product_price_bulk_rrc",
                 product_ids=updated_product_ids,
                 slugs=updated_slugs,
             )
-            await session.commit()
 
         processed_count = len(products)
         unchanged_count = processed_count - updated_count - skipped_count
@@ -223,13 +224,14 @@ class ProductWriteService:
             created_ids.append(product_image.id)
 
         if created_ids:
-            await CatalogRevisionService.bump(
+            await CatalogRevisionService.bump_commit_and_purge(
                 session,
                 scope="product_gallery",
                 product_ids=[product.id],
                 slugs=[product.slug],
             )
-        await session.commit()
+        else:
+            await session.commit()
         return created_ids
 
     @staticmethod
@@ -255,11 +257,12 @@ class ProductWriteService:
                 product.tags = [tag for tag in product.tags if tag.id not in tag_ids]
 
         if products:
-            await CatalogRevisionService.bump(
+            await CatalogRevisionService.bump_commit_and_purge(
                 session,
                 scope="product_tags",
                 product_ids=[product.id for product in products if product.id is not None],
                 slugs=[product.slug for product in products if product.slug],
             )
-        await session.commit()
+        else:
+            await session.commit()
         return len(products)
