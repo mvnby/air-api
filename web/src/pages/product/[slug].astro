@@ -1,6 +1,14 @@
 ---
 import Layout from "../../layouts/Layout.astro";
-import { resolveImageUrl, getProducts } from "../../utils/api";
+import {
+    applyRuntimeFreshnessHeaders,
+    createRuntimeFreshnessContext,
+    createRuntimeNotFoundResponse,
+    getProductBySlug,
+    getProducts,
+    isRuntimeFreshnessEnabled,
+    resolveImageUrl,
+} from "../../utils/api";
 // @ts-expect-error Vue SFC with script setup
 import PriceWithToggle from "../../components/PriceWithToggle.vue";
 // @ts-expect-error Vue SFC with script setup
@@ -18,7 +26,7 @@ import {
 import { generateBentoCards } from "../../utils/bento-cards";
 import { buildProductMetaDescription } from "../../utils/seo";
 
-export const prerender = true;
+export const prerender = !isRuntimeFreshnessEnabled();
 
 export async function getStaticPaths() {
     const products = await getProducts();
@@ -37,11 +45,17 @@ interface Props {
     product: any;
 }
 
-const { product } = Astro.props as Props;
+const runtimeFreshness = await createRuntimeFreshnessContext();
+const runtimeFreshnessOption = runtimeFreshness ? { runtimeFreshness } : undefined;
+const { product: initialProduct } = Astro.props as Props;
+const product = runtimeFreshness
+    ? await getProductBySlug(Astro.params.slug || "", runtimeFreshnessOption)
+    : initialProduct;
 
 if (!product) {
-    return Astro.redirect("/404");
+    return createRuntimeNotFoundResponse(Astro.response, runtimeFreshness);
 }
+applyRuntimeFreshnessHeaders(Astro.response, runtimeFreshness);
 
 const CATEGORY_BREADCRUMBS: Record<string, { title: string; href: string }> = {
     "cat-household": {

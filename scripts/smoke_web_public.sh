@@ -16,6 +16,8 @@ Environment:
   TIMEOUT_SECONDS curl max time per request. Default: 20
 
 The script does not mutate manager/API/web state.
+When BASE_URL points at SSR staging, diagnostic X-Catalog-Revision and
+X-Web-Data-Cache headers are printed when present.
 USAGE
 }
 
@@ -41,12 +43,46 @@ trim_trailing_slash() {
   printf '%s' "${value%/}"
 }
 
+base_path_prefix() {
+  local base rest path
+  base="$(trim_trailing_slash "$1")"
+  rest="${base#*://}"
+  if [[ "$rest" == "$base" || "$rest" != */* ]]; then
+    return 0
+  fi
+  path="/${rest#*/}"
+  if [[ "$path" == "/" ]]; then
+    return 0
+  fi
+  printf '%s' "${path%/}"
+}
+
+origin_from_base() {
+  local base prefix
+  base="$(trim_trailing_slash "$1")"
+  prefix="$(base_path_prefix "$base")"
+  if [[ -n "$prefix" && "$base" == *"$prefix" ]]; then
+    printf '%s' "${base%"$prefix"}"
+  else
+    printf '%s' "$base"
+  fi
+}
+
 join_url() {
-  local base path
+  local base path prefix
   base="$(trim_trailing_slash "$1")"
   path="$2"
+  if [[ "$path" == http://* || "$path" == https://* ]]; then
+    printf '%s' "$path"
+    return 0
+  fi
   if [[ "$path" != /* ]]; then
     path="/$path"
+  fi
+  prefix="$(base_path_prefix "$base")"
+  if [[ -n "$prefix" && ( "$path" == "$prefix" || "$path" == "$prefix/"* ) ]]; then
+    printf '%s%s' "$(origin_from_base "$base")" "$path"
+    return 0
   fi
   printf '%s%s' "$base" "$path"
 }
@@ -97,15 +133,19 @@ fetch_url() {
     return 1
   fi
 
-  local cache_control cf_cache_status x_robots
+  local cache_control cf_cache_status x_robots x_catalog_revision x_web_data_cache
   cache_control="$(header_value "$headers_file" "cache-control" || true)"
   cf_cache_status="$(header_value "$headers_file" "cf-cache-status" || true)"
   x_robots="$(header_value "$headers_file" "x-robots-tag" || true)"
+  x_catalog_revision="$(header_value "$headers_file" "x-catalog-revision" || true)"
+  x_web_data_cache="$(header_value "$headers_file" "x-web-data-cache" || true)"
 
   printf 'OK   %-18s HTTP %s %s\n' "$label" "$status" "$url"
   [[ -n "$cache_control" ]] && printf '     cache-control: %s\n' "$cache_control"
   [[ -n "$cf_cache_status" ]] && printf '     cf-cache-status: %s\n' "$cf_cache_status"
   [[ -n "$x_robots" ]] && printf '     x-robots-tag: %s\n' "$x_robots"
+  [[ -n "$x_catalog_revision" ]] && printf '     x-catalog-revision: %s\n' "$x_catalog_revision"
+  [[ -n "$x_web_data_cache" ]] && printf '     x-web-data-cache: %s\n' "$x_web_data_cache"
 
   LAST_BODY_FILE="$body_file"
 }
@@ -179,6 +219,7 @@ fetch_url "brands" "$(join_url "$BASE_URL" "/brands/")" "storefront"
 fetch_url "api-health" "$(join_url "$API_ORIGIN_URL" "/api/health")"
 fetch_url "api-products" "$(join_url "$API_V1_URL" "/catalog?limit=5")"
 catalog_body="$LAST_BODY_FILE"
+fetch_url "api-revision" "$(join_url "$API_V1_URL" "/catalog/revision")"
 fetch_url "api-filters" "$(join_url "$API_V1_URL" "/filters/config")"
 
 product_path="${PRODUCT_PATH:-}"

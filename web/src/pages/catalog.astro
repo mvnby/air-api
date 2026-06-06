@@ -2,7 +2,12 @@
 import Layout from "../layouts/Layout.astro";
 import CatalogApp from "../components/CatalogApp.vue";
 import ProductCard from "../components/ProductCard.astro";
-import { getCatalog, getFiltersConfig } from "../utils/api";
+import {
+    applyRuntimeFreshnessHeaders,
+    createRuntimeFreshnessContext,
+    getCatalog,
+    getFiltersConfig,
+} from "../utils/api";
 import { buildCatalogItemListSchema } from "../utils/catalog-seo";
 import { matchVirtualCategoryByFilters } from "../utils/virtual-category";
 import {
@@ -130,17 +135,20 @@ const catalogParams = {
             ? parsedIndoorTypes
             : undefined,
 };
-const data = await getCatalog(catalogParams);
+const runtimeFreshness = await createRuntimeFreshnessContext();
+const runtimeFreshnessOption = runtimeFreshness ? { runtimeFreshness } : undefined;
+const data = await getCatalog(catalogParams, runtimeFreshnessOption);
 const popularData = await getCatalog({
     ...catalogParams,
     page: 1,
     limit: 80,
     sort: "recommended",
-});
+}, runtimeFreshnessOption);
 const products = (data.items || []) as Product[];
 const popularProducts = (popularData.items || []) as Product[];
-const filtersConfig = await getFiltersConfig();
+const filtersConfig = await getFiltersConfig(runtimeFreshnessOption);
 const meta = data.meta || { total: 0, page: 1, limit: 20, pages: 1 };
+applyRuntimeFreshnessHeaders(Astro.response, runtimeFreshness);
 const catalogSchema = buildCatalogItemListSchema(products, Astro.url.origin);
 const isCatalogAvailable = (product: Product) => {
     const status = String(product?.availability_status || "");
