@@ -2,7 +2,11 @@
 import Layout from "../layouts/Layout.astro";
 import ProductGroup from "../components/ProductGroup.astro";
 import FeaturedArticles from "../components/blog/FeaturedArticles.astro";
-import { getInstallationPricingInfo, getPublicBrands, resolveImageUrl } from "../utils/api";
+import {
+	getInstallationPricingInfo,
+	getPublicBrands,
+	resolveImageUrl,
+} from "../utils/api";
 import { formatBrandProductCount, getBrandConfig } from "../utils/brands";
 
 export const prerender = true;
@@ -23,59 +27,57 @@ const homepageBrands = publicBrands
 	.filter((brand) => Number(brand.products_count || 0) > 0)
 	.slice(0, 12);
 const getHomepageBrandLogo = (brand: PublicBrand) =>
-	brand.logo_url ? resolveImageUrl(brand.logo_url) : getBrandConfig(brand.slug).logo || "";
+	brand.logo_url
+		? resolveImageUrl(brand.logo_url)
+		: getBrandConfig(brand.slug).logo || "";
 const getBrandInitials = (brand: PublicBrand) =>
 	brand.title.trim().slice(0, 2).toUpperCase();
 
 const heroServices = [
 	{
 		title: "Подбор",
-		description: "под площадь и условия",
+		description: "по площади, теплопритокам и режиму работы",
 		icon: "tune",
 	},
 	{
 		title: "Продажа",
-		description: "кондиционеры в наличии",
+		description: "кмодели в наличии и под заказ",
 		icon: "inventory_2",
 	},
 	{
 		title: "Монтаж",
-		description: "трасса, блоки, запуск",
+		description: "трасса, блоки, пусконаладка",
 		icon: "construction",
 	},
 	{
 		title: "Сервис",
-		description: "чистка и ремонт",
+		description: "чистка, диагностика и ремонт",
 		icon: "cleaning_services",
 	},
 ];
 
 const bundleBenefits = [
 	{
-		title: "Подскажем по монтажу",
-		description: "Можем проконсультировать как на объекте, так и по фото/видео",
+		title: "Подскажем по монтажу до выезда",
+		description:
+			"Оценим место установки на объекте или по фото и видео. Предложим варианты, где лучше поставить блоки, как пойдёт трасса и что может повлиять на цену.",
 		icon: "straighten",
 	},
 	{
-		title: "Гарантия от одной команды",
-		description: "Продаем и устанавливаем под ключ. Отвечаем за продажу и монтаж",
+		title: "Полноценная гарантия",
+		description:
+			"Мы сами поставляем технику и сами монтируем. Если возникнет вопрос по работе системы, не перекладываем ответственность между продавцом и монтажником.",
 		icon: "verified",
 	},
 	{
-		title: "Сумма без сюрпризов",
-		description: "Полную стоимость обсуждаем до начала работ",
+		title: "Смета до начала работ",
+		description:
+			"Заранее оговариваем все условия монтажа, длину трассы, доступ к наружному блоку и дополнительные материалы. После этого согласуем итоговую стоимость",
 		icon: "receipt_long",
 	},
 ];
 
 const serviceCards = [
-	{
-		title: "Помощь в выборе и продажа",
-		description:
-			"Поможем подобрать кондиционеры по площади, бюджету и задачам.",
-		href: "/catalog",
-		icon: "inventory_2",
-	},
 	{
 		title: "Монтаж кондиционеров",
 		description:
@@ -90,7 +92,7 @@ const serviceCards = [
 		href: "/zakladka-kommunikaciy-kondicionera",
 		icon: "construction",
 	},
-		{
+	{
 		title: "Демонтаж кондиционеров",
 		description:
 			"Безопасно демонтируем старые кондиционеры, сохраняя фреон. Возможен демонтаж только внутреннего или наружного блока.",
@@ -100,7 +102,7 @@ const serviceCards = [
 	{
 		title: "Обслуживание",
 		description:
-			"Чистка, дезинфекция и профилактика, чтобы техника сохраняла мощность и не начала шуметь или пахнуть.",
+			"Чистка, дезинфекция и профилактика для квартир, офисов, магазинов, серверных и объектов с несколькими блоками.",
 		href: "/obslujivanie-kondicionerov",
 		icon: "cleaning_services",
 	},
@@ -111,20 +113,48 @@ const serviceCards = [
 		href: "/services/repair",
 		icon: "engineering",
 	},
+	{
+		title: "Мультизональные системы",
+		description:
+			"Решения для объектов с несколькими помещениями: офисов, административных зданий, предприятий, складов и коммерческих площадей",
+		href: "#",
+		icon: "settings_ethernet",
+	},
+	{
+		title: "Серверные и технические помещения",
+		description:
+			"Подбор и обслуживание кондиционирования для помещений, где важна стабильная температура и надёжная работа оборудования.",
+		href: "#",
+		icon: "computer",
+	},
 ];
 
 const residentialBenefits = [
-	"Тихие внутренние блоки для жилых комнат",
-	"Подбор по площади, солнцу и реальным условиям помещения",
-	"Модели с обогревом для межсезонья",
-	"Бурение с пылеудалением и без неожиданных доплат",
+	"тихие внутренние блоки",
+	"подбор по площади, солнцу и планировке",
+	"обогрев в межсезонье и сильные морозы",
+	"аккуратный монтаж с понятной сметой",
 ];
 
 const businessBenefits = [
-	"Подбор мощности под площадь, людей и технику в помещении",
-	"Стабильная работа при ежедневной нагрузке",
-	"Чистка и профилактика без долгих простоев",
-	"Схема трасс и нескольких внутренних блоков до начала работ",
+	"подбор мощности с учетом людей и оборудования",
+	"решения для нескольких кабинетов или залов",
+	"монтаж с учётом графика работы",
+	"регулярная чистка и профилактика",
+];
+
+const serverBenefits = [
+	"прецизионное охлаждение по параметрам оборудования",
+	"бесперебойная работа 24/7",
+	"системы с резервированием",
+	"чистка и сервис с минимальным простоем",
+];
+
+const promBenefits = [
+	"кондиционирование нескольких зон",
+	"полупромышленные и мультизональные решения",
+	"монтаж с учётом графика работы и технологических процессов",
+	"регулярное техобслуживание",
 ];
 
 ---
@@ -143,13 +173,16 @@ const businessBenefits = [
 				<div class="badge hero-badge">Витебск и Витебская область</div>
 				<h1>
 					Кондиционеры в Витебске:
-					<span class="gradient-text">подбор, продажа, монтаж и сервис</span>
+					<span class="gradient-text"
+						>для дома, бизнеса и предприятий</span
+					>
 				</h1>
 				<p class="hero-lead">
-					Подберем кондиционер под помещение, привезем, установим и
-					проверим в работе. Работаем по Витебску, пригородам и ближайшим
-					районам области. Перед монтажом согласуем стоимость, после
-					установки помогаем с чисткой, профилактикой и ремонтом.
+					Подбираем, поставляем, монтируем и обслуживаем бытовые,
+					полупромышленные, мультисплит и мультизональные системы.
+					Работаем с квартирами, домами, офисами, магазинами,
+					серверными, производственными и складскими помещениями. До
+					начала работ согласуем схему, сроки и стоимость.
 				</p>
 
 				<div class="hero-actions">
@@ -160,15 +193,21 @@ const businessBenefits = [
 						</span>
 					</a>
 					<a href="/catalog" class="btn btn-outline btn-large">
-						Перейти в каталог
+						Смотреть кондиционеры
 					</a>
 				</div>
 
-				<div class="hero-service-grid" aria-label="Основные направления">
+				<div
+					class="hero-service-grid"
+					aria-label="Основные направления"
+				>
 					{
 						heroServices.map((item) => (
 							<div class="service-pill">
-								<span class="service-pill-icon material-icons-round" aria-hidden="true">
+								<span
+									class="service-pill-icon material-icons-round"
+									aria-hidden="true"
+								>
 									{item.icon}
 								</span>
 								<span>
@@ -187,15 +226,25 @@ const businessBenefits = [
 		<div class="bundle-card">
 			<div class="bundle-stat">
 				<span class="bundle-stat-value">500+</span>
-				<span class="bundle-stat-label">установленных кондиционеров</span>
-				<span class="bundle-stat-proof">20+ лет опыта работы с кондиционерами</span>
+				<span class="bundle-stat-label"
+					>установленных кондиционеров</span
+				>
+				<span class="bundle-stat-proof"
+					>20+ лет опыта работы с кондиционерами</span
+				>
 			</div>
 
-			<div class="bundle-benefits" aria-label="Что входит в подготовку монтажа">
+			<div
+				class="bundle-benefits"
+				aria-label="Что входит в подготовку монтажа"
+			>
 				{
 					bundleBenefits.map((item) => (
 						<div class="bundle-benefit">
-							<span class="bundle-benefit-icon material-icons-round" aria-hidden="true">
+							<span
+								class="bundle-benefit-icon material-icons-round"
+								aria-hidden="true"
+							>
 								{item.icon}
 							</span>
 							<span>
@@ -211,42 +260,61 @@ const businessBenefits = [
 				<div>
 					<span class="bundle-price-kicker">Стандартный монтаж</span>
 					<strong>
-						от {minBundlePrice}
+						{minBundlePrice}
 						<span class="price-byn"></span>
 					</strong>
 					<span class="bundle-price-label">
 						при покупке кондиционера у нас
 					</span>
 				</div>
-				<a href="/montaj-konditionerov" class="btn btn-primary">Рассчитать монтаж</a>
+				<a href="/montaj-konditionerov" class="btn btn-primary"
+					>Рассчитать монтаж</a
+				>
 			</div>
 		</div>
 	</section>
 
 	{
 		homepageBrands.length > 0 && (
-			<section class="container brand-discovery-section" aria-label="Бренды кондиционеров">
+			<section
+				class="container brand-discovery-section"
+				aria-label="Бренды кондиционеров"
+			>
 				<div class="brand-discovery-head">
 					<a href="/brands" class="brand-discovery-all">
 						Все бренды
-						<span class="material-icons-round" aria-hidden="true">arrow_forward</span>
+						<span class="material-icons-round" aria-hidden="true">
+							arrow_forward
+						</span>
 					</a>
 				</div>
 				<div class="brand-logo-strip" aria-label="Бренды кондиционеров">
 					{homepageBrands.map((brand) => {
 						const logo = getHomepageBrandLogo(brand);
 						return (
-							<a class="brand-logo-link" href={`/brands/${brand.slug}/`} aria-label={`Открыть бренд ${brand.title}`}>
+							<a
+								class="brand-logo-link"
+								href={`/brands/${brand.slug}/`}
+								aria-label={`Открыть бренд ${brand.title}`}
+							>
 								<span class="brand-logo-mark">
 									{logo ? (
-										<img src={logo} alt={brand.title} loading="lazy" />
+										<img
+											src={logo}
+											alt={brand.title}
+											loading="lazy"
+										/>
 									) : (
 										<span>{getBrandInitials(brand)}</span>
 									)}
 								</span>
 								<span class="brand-logo-copy">
 									<strong>{brand.title}</strong>
-									<small>{formatBrandProductCount(brand.products_count)}</small>
+									<small>
+										{formatBrandProductCount(
+											brand.products_count,
+										)}
+									</small>
 								</span>
 							</a>
 						);
@@ -261,9 +329,12 @@ const businessBenefits = [
 			<div class="workflow-media">
 				<div class="coverage-card">
 					<span class="context-kicker">Мы из Витебска</span>
-					<strong>Работаем по городу, пригородам и ближайшим районам</strong>
+					<strong
+						>Работаем по городу, пригородам и ближайшим районам</strong
+					>
 					<span>
-						В дальние районы Витебской области выезжаем по договоренности.
+						В дальние районы Витебской области выезжаем по
+						договоренности.
 					</span>
 				</div>
 			</div>
@@ -273,11 +344,13 @@ const businessBenefits = [
 	<section class="container services-section">
 		<div class="section-heading">
 			<p class="section-kicker">Что мы делаем</p>
-			<h2>Подберем модель, установим и возьмем на обслуживание</h2>
+			<h2>От подбора до обслуживания системы</h2>
 			<p class="section-lead">
-				Помогаем с кондиционером от выбора до регулярной чистки:
-				подбираем мощность, продаем оборудование, выполняем монтаж,
-				запускаем систему и обслуживаем ее после установки.
+				Берём на себя полный цикл работ: осмотр объекта, подбор
+				оборудования, поставку, монтаж трасс и блоков, запуск, чистку,
+				диагностику и ремонт. Для объектов с несколькими помещениями
+				подбираем мультисплит, полупромышленные или мультизональные
+				решения.
 			</p>
 		</div>
 
@@ -286,7 +359,9 @@ const businessBenefits = [
 				serviceCards.map((card) => (
 					<a href={card.href} class="service-card glass">
 						<div class="service-icon" aria-hidden="true">
-							<span class="material-icons-round">{card.icon}</span>
+							<span class="material-icons-round">
+								{card.icon}
+							</span>
 						</div>
 						<div>
 							<h3>{card.title}</h3>
@@ -294,7 +369,10 @@ const businessBenefits = [
 						</div>
 						<span class="service-link">
 							Подробнее
-							<span class="material-icons-round" aria-hidden="true">
+							<span
+								class="material-icons-round"
+								aria-hidden="true"
+							>
 								arrow_forward
 							</span>
 						</span>
@@ -306,26 +384,34 @@ const businessBenefits = [
 
 	<section class="container audience-section">
 		<div class="section-heading narrow">
-			<p class="section-kicker">Для разных помещений</p>
-			<h2>Для квартиры, дома, офиса и магазина</h2>
+			<p class="section-kicker">Для любых объектов</p>
+			<h2>
+				Для квартиры, дома, офиса, магазина, серверных и других
+				помещений
+			</h2>
 			<p class="section-lead">
-				Сначала разбираемся, где будет стоять кондиционер, затем предлагаем
-				модель и план монтажа.
+				Работаем с разными объектами: от одной комнаты до системы
+				кондиционирования для нескольких помещений. Смотрим площадь,
+				теплопритоки, режим работы, размещение блоков и доступ для
+				обслуживания.
 			</p>
 		</div>
 
 		<div class="audience-grid">
 			<article class="audience-card">
 				<div class="audience-card-top">
-					<p class="audience-label">Для квартиры и дома</p>
-					<h3>Тихие модели, обогрев в межсезонье и подбор мощности без переплаты</h3>
+					<p class="audience-label">Квартиры и дома</p>
+					<h3>
+						Тихие модели для спальни, гостиной, детской и кухни.
+					</h3>
+					<p>
+						Подберём мощность без переплаты, продумаем место
+						установки и трассу, чтобы кондиционер не дул на кровать
+						и не портил интерьер.
+					</p>
 				</div>
 				<ul class="audience-list">
-					{
-						residentialBenefits.map((item) => (
-							<li>{item}</li>
-						))
-					}
+					{residentialBenefits.map((item) => <li>{item}</li>)}
 				</ul>
 				<a href="/catalog?area_max=35" class="audience-link">
 					Подобрать для дома
@@ -338,14 +424,45 @@ const businessBenefits = [
 			<article class="audience-card audience-card-alt">
 				<div class="audience-card-top">
 					<p class="audience-label">Для офиса и бизнеса</p>
-					<h3>Кондиционеры для кабинетов, магазинов, салонов и небольших офисов</h3>
+					<h3>
+						Кондиционеры для кабинетов, магазинов, салонов и
+						небольших офисов
+					</h3>
 				</div>
 				<ul class="audience-list">
-					{
-						businessBenefits.map((item) => (
-							<li>{item}</li>
-						))
-					}
+					{businessBenefits.map((item) => <li>{item}</li>)}
+				</ul>
+				<a href="/contacts" class="audience-link">
+					Обсудить задачу
+					<span class="material-icons-round" aria-hidden="true">
+						arrow_forward
+					</span>
+				</a>
+			</article>
+			<article class="audience-card audience-card-alt">
+				<div class="audience-card-top">
+					<p class="audience-label">Производство и склады</p>
+					<h3>Промышленные системы и мультизональное кондиционирование</h3>
+					<p>Работаем с производственными, складскими и административными помещениями. Подбираем бытовые, полупромышленные, мультисплит или мультизональные системы под площадь, режим работы и особенности объекта.</p>
+				</div>
+				<ul class="audience-list">
+					{promBenefits.map((item) => <li>{item}</li>)}
+				</ul>
+				<a href="/contacts" class="audience-link">
+					Обсудить объект
+					<span class="material-icons-round" aria-hidden="true">
+						arrow_forward
+					</span>
+				</a>
+			</article>
+			<article class="audience-card audience-card-alt">
+				<div class="audience-card-top">
+					<p class="audience-label">Серверные и технические помещения</p>
+					<h3>Надежное охлаждение технологических помещений</h3>
+					<p>Подбираем кондиционирование для помещений, где техника выделяет тепло и важна стабильная температура. Обсуждаем режим работы, резервирование, отвод конденсата и доступ для обслуживания.</p>
+				</div>
+				<ul class="audience-list">
+					{serverBenefits.map((item) => <li>{item}</li>)}
 				</ul>
 				<a href="/contacts" class="audience-link">
 					Обсудить задачу
@@ -395,8 +512,16 @@ const businessBenefits = [
 		position: absolute;
 		inset: 0;
 		background:
-			radial-gradient(circle at top left, rgba(45, 212, 191, 0.08), transparent 28%),
-			radial-gradient(circle at bottom right, rgba(0, 127, 128, 0.08), transparent 24%);
+			radial-gradient(
+				circle at top left,
+				rgba(45, 212, 191, 0.08),
+				transparent 28%
+			),
+			radial-gradient(
+				circle at bottom right,
+				rgba(0, 127, 128, 0.08),
+				transparent 24%
+			);
 		pointer-events: none;
 	}
 
@@ -535,7 +660,10 @@ const businessBenefits = [
 
 	.bundle-card {
 		display: grid;
-		grid-template-columns: minmax(140px, 0.7fr) minmax(0, 1.35fr) minmax(280px, 1fr);
+		grid-template-columns: minmax(140px, 0.7fr) minmax(0, 1.35fr) minmax(
+				280px,
+				1fr
+			);
 		grid-template-areas: "stat benefits price";
 		gap: 0.85rem;
 		align-items: stretch;
@@ -785,7 +913,8 @@ const businessBenefits = [
 				rgba(var(--surface-rgb), 0.18) 42%,
 				rgba(var(--surface-rgb), 0.82) 100%
 			),
-			url("/img/hero/vitebsk-tri-shtyka-light.webp") 58% center / cover no-repeat;
+			url("/img/hero/vitebsk-tri-shtyka-light.webp") 58% center / cover
+				no-repeat;
 		border: 1px solid var(--panel-glass-border);
 		box-shadow: var(--panel-glass-shadow);
 	}
@@ -953,7 +1082,11 @@ const businessBenefits = [
 
 	.audience-card-alt {
 		background:
-			radial-gradient(circle at top right, rgba(45, 212, 191, 0.18), transparent 35%),
+			radial-gradient(
+				circle at top right,
+				rgba(45, 212, 191, 0.18),
+				transparent 35%
+			),
 			linear-gradient(
 				160deg,
 				rgba(var(--surface-rgb), 0.92),
@@ -1081,7 +1214,11 @@ const businessBenefits = [
 		justify-content: center;
 		padding: 1.2rem 1.2rem 0;
 		background:
-			radial-gradient(circle at center, rgba(45, 212, 191, 0.12), transparent 55%),
+			radial-gradient(
+				circle at center,
+				rgba(45, 212, 191, 0.12),
+				transparent 55%
+			),
 			rgba(var(--surface-rgb), 0.24);
 	}
 
@@ -1181,18 +1318,16 @@ const businessBenefits = [
 				rgba(2, 6, 23, 0.16) 52%,
 				rgba(2, 6, 23, 0.96) 100%
 			),
-			url("/img/hero/vitebsk-hero-dark.jpg") center right / cover no-repeat;
+			url("/img/hero/vitebsk-hero-dark.jpg") center right / cover
+				no-repeat;
 		opacity: 0.94;
 	}
 
 	:global(.dark) .workflow-media {
 		background:
-			linear-gradient(
-				180deg,
-				rgba(2, 6, 23, 0.22),
-				rgba(2, 6, 23, 0.82)
-			),
-			url("/img/hero/vitebsk-tri-shtyka-dark.webp") 58% center / cover no-repeat;
+			linear-gradient(180deg, rgba(2, 6, 23, 0.22), rgba(2, 6, 23, 0.82)),
+			url("/img/hero/vitebsk-tri-shtyka-dark.webp") 58% center / cover
+				no-repeat;
 	}
 
 	@media (max-width: 1500px) {
@@ -1531,4 +1666,4 @@ const businessBenefits = [
 			height: 48px;
 		}
 	}
-	</style>
+</style>
