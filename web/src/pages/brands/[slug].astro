@@ -127,10 +127,88 @@ const normalizeSeriesFeatures = (value: unknown) =>
     Array.isArray(value)
         ? value.map((item) => asText(item)).filter(Boolean)
         : [];
+const getSpecValue = (product: Product, keys: string[]) => {
+    const specs = product.specs || {};
+    for (const key of keys) {
+        const value = specs[key];
+        if (value !== undefined && value !== null && String(value).trim() !== "") {
+            return value;
+        }
+    }
+    return "";
+};
+const parseSpecNumber = (value: unknown) => {
+    if (value === null || value === undefined || value === "") return null;
+    if (typeof value === "number") return Number.isFinite(value) ? value : null;
+    const match = String(value).replace(",", ".").match(/[-+]?\d+(?:\.\d+)?/);
+    if (!match) return null;
+    const parsed = Number.parseFloat(match[0]);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+const formatDecimal = (value: number) =>
+    value.toLocaleString("ru-RU", {
+        maximumFractionDigits: 1,
+    });
+const normalizeCapacityToken = (value: unknown) => {
+    const text = asText(value);
+    const match = text.match(/\b(07|09|12|18|24|30|36|42|48|60)\b/);
+    return match?.[1] || "";
+};
+const formatProductPowerLabel = (product: Product) => {
+    const rawArea = product.area ?? product.specs?.area_m2;
+    const area = parseSpecNumber(rawArea);
+    if (area && area > 0) return `до ${formatDecimal(area)} м²`;
+
+    const capacityClass = normalizeCapacityToken(
+        getSpecValue(product, [
+            "capacity_class",
+            "btu_class",
+            "BTU класс",
+            "Класс BTU",
+            "BTU",
+            "БТЕ",
+            "Мощность BTU",
+        ]),
+    );
+    if (capacityClass) return `BTU ${capacityClass}`;
+
+    const coolingKw = parseSpecNumber(
+        getSpecValue(product, ["capacity_cooling_kw", "Мощность охлаждения"]),
+    );
+    if (coolingKw && coolingKw > 0) return `${formatDecimal(coolingKw)} кВт`;
+
+    const textArea = asText(rawArea);
+    return textArea ? `до ${textArea}` : "";
+};
 const getProductSeriesKey = (product: Product) => {
     const title = getProductSeriesTitle(product);
     if (!title) return "";
     return asText(product.series?.slug) || slugifySeriesFallback(title) || title.toLowerCase();
+};
+const getSeriesPreviewProducts = (items: Product[]) => {
+    const seen = new Set<string>();
+    const seenProducts = new Set<string>();
+    const preview: Product[] = [];
+    for (const item of items) {
+        const powerLabel = formatProductPowerLabel(item);
+        const key = powerLabel || item.slug || item.title;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        seenProducts.add(item.slug || item.title);
+        preview.push(item);
+        if (preview.length >= 4) break;
+    }
+
+    const targetPreviewCount = Math.min(4, items.length);
+    for (const item of items) {
+        if (preview.length >= targetPreviewCount) break;
+        const productKey = item.slug || item.title;
+        if (seenProducts.has(productKey)) continue;
+        seenProducts.add(productKey);
+        preview.push(item);
+    }
+
+    return preview.length > 0 ? preview : items.slice(0, 4);
 };
 const formatSeriesProductCount = (count: number) => {
     const mod10 = count % 10;
@@ -139,6 +217,12 @@ const formatSeriesProductCount = (count: number) => {
     if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${count} модели`;
     return `${count} моделей`;
 };
+const sortSeriesGroups = <T extends { title: string; products: Product[] }>(groups: T[]) =>
+    [...groups].sort((a, b) => {
+        const countDiff = b.products.length - a.products.length;
+        if (countDiff !== 0) return countDiff;
+        return a.title.localeCompare(b.title, "ru");
+    });
 const seriesGroupsMap = new Map<
     string,
     {
@@ -184,7 +268,12 @@ for (const product of seriesSourceProducts) {
     }
 }
 
-const seriesGroups = Array.from(seriesGroupsMap.values());
+const seriesGroups = sortSeriesGroups(Array.from(seriesGroupsMap.values())).map((group, index) => ({
+    ...group,
+    anchorId: `series-${slugifySeriesFallback(group.key || group.title) || index + 1}`,
+    previewProducts: getSeriesPreviewProducts(group.products),
+}));
+const seriesOverviewGroups = seriesGroups;
 ---
 
 <Layout
@@ -232,6 +321,74 @@ const seriesGroups = Array.from(seriesGroupsMap.values());
         >
             <div class="catalog-static-content">
                 {
+                    seriesOverviewGroups.length > 0 && (
+                        <section class="catalog-section brand-series-overview" aria-labelledby="brand-series-overview-title">
+                            <div class="catalog-section-head brand-series-overview-head">
+                                <div>
+                                    <h2 id="brand-series-overview-title">Серии {brand.title}</h2>
+                                </div>
+                                <p>
+                                    Модели сгруппированы по сериям: видно отличия, количество моделей и доступные
+                                    мощности.
+                                </p>
+                            </div>
+                            <div class="brand-series-overview-grid">
+                                {seriesOverviewGroups.map((group) => (
+                                    <article class="brand-series-card">
+                                        {group.heroImage && (
+                                            <a class="brand-series-card-image" href={`#${group.anchorId}`} aria-label={`Перейти к моделям серии ${group.title}`}>
+                                                <img
+                                                    src={resolveImageUrl(group.heroImage)}
+                                                    alt={`Серия ${group.title}`}
+                                                    loading="lazy"
+                                                />
+                                            </a>
+                                        )}
+                                        <div class="brand-series-card-copy">
+                                            <div class="brand-series-card-title">
+                                                <h3>{group.title}</h3>
+                                                <span>{formatSeriesProductCount(group.products.length)}</span>
+                                            </div>
+                                            {group.description ? (
+                                                <p class="brand-series-card-description">{group.description}</p>
+                                            ) : (
+                                                <p class="brand-series-card-description muted">
+                                                    {formatSeriesProductCount(group.products.length)} в каталоге {brand.title}.
+                                                </p>
+                                            )}
+                                            {group.features.length > 0 && (
+                                                <ul class="brand-series-features" aria-label={`Особенности серии ${group.title}`}>
+                                                    {group.features.map((feature) => (
+                                                        <li>{feature}</li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                            {group.previewProducts.length > 0 && (
+                                                <div class="brand-series-preview" aria-label={`Модели серии ${group.title}`}>
+                                                    {group.previewProducts.map((product) => {
+                                                        const powerLabel = formatProductPowerLabel(product);
+                                                        return (
+                                                            <a href={`/product/${product.slug}/`} class="brand-series-preview-link">
+                                                                <span>{product.title}</span>
+                                                                {powerLabel && <small>{powerLabel}</small>}
+                                                            </a>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                            <a class="brand-series-anchor-link" href={`#${group.anchorId}`}>
+                                                Смотреть карточки серии
+                                                <span class="material-icons-round" aria-hidden="true">arrow_downward</span>
+                                            </a>
+                                        </div>
+                                    </article>
+                                ))}
+                            </div>
+                        </section>
+                    )
+                }
+
+                {
                     seriesSourceProducts.length > 0 ? (
                         <section class="catalog-section brand-series-section" aria-labelledby="brand-products-title">
                             <div class="catalog-section-head">
@@ -239,29 +396,11 @@ const seriesGroups = Array.from(seriesGroupsMap.values());
                             </div>
                             <div class="brand-series-list">
                                 {seriesGroups.map((group) => (
-                                    <section class="brand-series-group" aria-labelledby={`brand-series-${group.key}`}>
-                                        <div class="brand-series-head">
-                                            <div class="brand-series-summary">
-                                                {group.heroImage && (
-                                                    <span class="brand-series-thumb">
-                                                        <img
-                                                            src={resolveImageUrl(group.heroImage)}
-                                                            alt={`Серия ${group.title}`}
-                                                            loading="lazy"
-                                                        />
-                                                    </span>
-                                                )}
-                                                <div>
-                                                    <h3 id={`brand-series-${group.key}`}>{group.title}</h3>
-                                                    {group.description && <p>{group.description}</p>}
-                                                    {group.features.length > 0 && (
-                                                        <ul class="brand-series-features" aria-label={`Особенности серии ${group.title}`}>
-                                                            {group.features.map((feature) => (
-                                                                <li>{feature}</li>
-                                                            ))}
-                                                        </ul>
-                                                    )}
-                                                </div>
+                                    <section id={group.anchorId} class="brand-series-group" aria-labelledby={`brand-series-${group.key}`}>
+                                        <div class="brand-series-head brand-products-group-head">
+                                            <div>
+                                                <p class="section-kicker">Серия</p>
+                                                <h3 id={`brand-series-${group.key}`}>{group.title}</h3>
                                             </div>
                                             <span>{formatSeriesProductCount(group.products.length)}</span>
                                         </div>
@@ -430,6 +569,12 @@ const seriesGroups = Array.from(seriesGroupsMap.values());
         flex-direction: column;
         gap: 1.4rem;
     }
+    .catalog-section-head {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 1rem;
+    }
     .catalog-section-head h2,
     .catalog-seo-block h2 {
         margin: 0;
@@ -437,6 +582,103 @@ const seriesGroups = Array.from(seriesGroupsMap.values());
         font-family: "Space Grotesk", sans-serif;
         font-size: 1.35rem;
         line-height: 1.2;
+    }
+    .section-kicker {
+        margin: 0 0 0.25rem;
+        color: var(--primary);
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0;
+        text-transform: uppercase;
+    }
+    .brand-series-overview {
+        padding: 1.2rem;
+        border: 1px solid var(--panel-glass-border);
+        border-radius: 8px;
+        background: var(--panel-glass-bg);
+        box-shadow: var(--panel-glass-shadow);
+    }
+    .brand-series-overview-head {
+        align-items: flex-start;
+    }
+    .brand-series-overview-head > p {
+        max-width: 520px;
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 0.94rem;
+        line-height: 1.6;
+    }
+    .brand-series-overview-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    .brand-series-card {
+        min-width: 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid var(--panel-chip-border);
+        border-radius: 8px;
+        background: rgba(var(--surface-rgb), 0.6);
+    }
+    .brand-series-card-image {
+        height: 152px;
+        display: block;
+        overflow: hidden;
+        border-bottom: 1px solid var(--panel-chip-border);
+        background: var(--panel-chip-bg);
+    }
+    .brand-series-card-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.25s ease;
+    }
+    .brand-series-card-image:hover img {
+        transform: scale(1.03);
+    }
+    .brand-series-card-copy {
+        min-width: 0;
+        display: grid;
+        gap: 0.85rem;
+        padding: 1rem;
+    }
+    .brand-series-card-title {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.75rem;
+    }
+    .brand-series-card-title h3 {
+        margin: 0;
+        color: var(--text);
+        font-size: 1.15rem;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+    }
+    .brand-series-card-title span,
+    .brand-series-head > span {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 0.25rem 0.6rem;
+        border-radius: 8px;
+        background: var(--panel-chip-bg);
+        border: 1px solid var(--panel-chip-border);
+        color: var(--text-muted);
+        font-size: 0.82rem;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+    .brand-series-card-description {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 0.94rem;
+        line-height: 1.6;
+    }
+    .brand-series-card-description.muted {
+        color: var(--text-muted);
     }
     .brand-series-list {
         display: grid;
@@ -447,35 +689,13 @@ const seriesGroups = Array.from(seriesGroupsMap.values());
         gap: 1rem;
         padding-top: 1.1rem;
         border-top: 1px solid var(--panel-glass-border);
+        scroll-margin-top: 5.5rem;
     }
     .brand-series-head {
         display: flex;
         align-items: start;
         justify-content: space-between;
         gap: 1rem;
-    }
-    .brand-series-summary {
-        display: flex;
-        align-items: flex-start;
-        gap: 1rem;
-        min-width: 0;
-    }
-    .brand-series-thumb {
-        width: 82px;
-        height: 62px;
-        flex: 0 0 auto;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        overflow: hidden;
-        border: 1px solid var(--panel-chip-border);
-        border-radius: 10px;
-        background: var(--panel-chip-bg);
-    }
-    .brand-series-thumb img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
     }
     .brand-series-head h3 {
         margin: 0;
@@ -510,18 +730,50 @@ const seriesGroups = Array.from(seriesGroupsMap.values());
         font-size: 0.82rem;
         font-weight: 700;
     }
-    .brand-series-head > span {
-        display: inline-flex;
-        align-items: center;
-        min-height: 30px;
-        padding: 0.25rem 0.6rem;
+    .brand-series-preview {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+        gap: 0.5rem;
+    }
+    .brand-series-preview-link {
+        min-width: 0;
+        display: grid;
+        gap: 0.2rem;
+        padding: 0.62rem 0.7rem;
+        border: 1px solid var(--panel-chip-border);
         border-radius: 8px;
         background: var(--panel-chip-bg);
-        border: 1px solid var(--panel-chip-border);
-        color: var(--text-muted);
-        font-size: 0.82rem;
+        color: var(--text);
+    }
+    .brand-series-preview-link:hover {
+        border-color: var(--panel-chip-hover-border);
+        color: var(--primary);
+    }
+    .brand-series-preview-link span {
+        font-size: 0.86rem;
         font-weight: 800;
-        white-space: nowrap;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+    }
+    .brand-series-preview-link small {
+        color: var(--text-muted);
+        font-size: 0.78rem;
+        font-weight: 700;
+    }
+    .brand-series-anchor-link {
+        width: fit-content;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        color: var(--primary);
+        font-size: 0.9rem;
+        font-weight: 800;
+    }
+    .brand-series-anchor-link:hover {
+        color: var(--primary-dark);
+    }
+    .brand-series-anchor-link .material-icons-round {
+        font-size: 1rem;
     }
     .catalog-grid {
         display: grid;
@@ -564,15 +816,21 @@ const seriesGroups = Array.from(seriesGroupsMap.values());
             justify-content: flex-start;
             padding: 1rem;
         }
+        .catalog-section-head,
+        .brand-series-overview-head,
         .brand-series-head {
             flex-direction: column;
+            align-items: flex-start;
             gap: 0.6rem;
         }
-        .brand-series-summary {
-            flex-direction: column;
-        }
+        .brand-series-card-title,
         .brand-series-head > span {
             white-space: normal;
+        }
+    }
+    @media (min-width: 860px) {
+        .brand-series-overview-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
         }
     }
 </style>
