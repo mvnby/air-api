@@ -41,7 +41,7 @@ const heroServices = [
 	},
 	{
 		title: "Продажа",
-		description: "кмодели в наличии и под заказ",
+		description: "модели в наличии и под заказ",
 		icon: "inventory_2",
 	},
 	{
@@ -144,10 +144,10 @@ const businessBenefits = [
 ];
 
 const serverBenefits = [
-	"прецизионное охлаждение по параметрам оборудования",
-	"бесперебойная работа 24/7",
-	"системы с резервированием",
-	"чистка и сервис с минимальным простоем",
+	"расчёт с учётом тепловыделения оборудования",
+	"подбор под режим работы помещения",
+	"обсуждение потребности в резерве",
+	"отвод конденсата и доступ для обслуживания",
 ];
 
 const promBenefits = [
@@ -155,6 +155,76 @@ const promBenefits = [
 	"полупромышленные и мультизональные решения",
 	"монтаж с учётом графика работы и технологических процессов",
 	"регулярное техобслуживание",
+];
+
+const installationCostFactors = [
+	{
+		title: "Трасса и материалы",
+		description:
+			"Смотрим длину трассы, толщину стены, дренаж, кабель, кронштейны и расходные материалы.",
+		icon: "route",
+	},
+	{
+		title: "Доступ к наружному блоку",
+		description:
+			"Учитываем высоту установки, доступ к фасаду, балкону или окну и сложность безопасного монтажа.",
+		icon: "open_in_full",
+	},
+	{
+		title: "Отделка и отвод конденсата",
+		description:
+			"Заранее обсуждаем штробление, декоративный короб, помпу и место вывода дренажа.",
+		icon: "water_drop",
+	},
+	{
+		title: "Масштаб и график работ",
+		description:
+			"Для нескольких блоков, магазинов, офисов и производственных объектов отдельно согласуем этапы и время работ.",
+		icon: "event_available",
+	},
+];
+
+const workSteps = [
+	{
+		title: "Обращение и фото",
+		description:
+			"Вы описываете задачу, присылаете фото или видео помещения, фасада и места под блоки.",
+	},
+	{
+		title: "Уточняем объект",
+		description:
+			"Смотрим площадь, теплопритоки, людей, технику, солнце, режим работы и доступ к монтажу.",
+	},
+	{
+		title: "Предлагаем решение",
+		description:
+			"Подбираем оборудование и схему: где поставить блоки, как вести трассу и отводить конденсат.",
+	},
+	{
+		title: "Согласуем условия",
+		description:
+			"До начала работ называем стоимость, сроки, состав материалов и возможные доплаты.",
+	},
+	{
+		title: "Монтируем и проверяем",
+		description:
+			"Устанавливаем систему, запускаем, проверяем режимы и показываем базовое управление.",
+	},
+	{
+		title: "Обслуживаем дальше",
+		description:
+			"Помогаем с чисткой, диагностикой, ремонтом и обслуживанием одного или нескольких блоков.",
+	},
+];
+
+const organizationCapabilities = [
+	"подбор решения под объект и режим работы",
+	"поставка оборудования",
+	"монтаж трасс, внутренних и наружных блоков",
+	"запуск и проверка системы",
+	"обслуживание нескольких блоков",
+	"диагностика и ремонт",
+	"работа по согласованному графику",
 ];
 
 ---
@@ -274,6 +344,43 @@ const promBenefits = [
 		</div>
 	</section>
 
+	<section class="container meaning-section cost-section">
+		<div class="section-heading">
+			<p class="section-kicker">Стоимость монтажа</p>
+			<h2>Что влияет на итоговую цену</h2>
+			<p class="section-lead">
+				Цена монтажа зависит не только от модели кондиционера. До
+				начала работ смотрим трассу, доступ к наружному блоку,
+				материалы и особенности помещения, а потом согласуем итоговую
+				стоимость.
+			</p>
+		</div>
+
+		<div class="factor-grid">
+			{
+				installationCostFactors.map((item) => (
+					<article class="info-card factor-card">
+						<span
+							class="info-card-icon material-icons-round"
+							aria-hidden="true"
+						>
+							{item.icon}
+						</span>
+						<h3>{item.title}</h3>
+						<p>{item.description}</p>
+					</article>
+				))
+			}
+		</div>
+
+		<a href="/montaj-konditionerov" class="btn btn-outline section-cta">
+			Подробнее о монтаже
+			<span class="material-icons-round" aria-hidden="true">
+				arrow_forward
+			</span>
+		</a>
+	</section>
+
 	{
 		homepageBrands.length > 0 && (
 			<section
@@ -341,6 +448,32 @@ const promBenefits = [
 		</div>
 	</section>
 
+	<section class="container meaning-section process-section">
+		<div class="section-heading narrow">
+			<p class="section-kicker">Как проходит работа</p>
+			<h2>Сначала разбираемся с объектом, потом предлагаем решение</h2>
+			<p class="section-lead">
+				Не подбираем кондиционер «на глаз». Смотрим помещение, режим
+				работы, теплопритоки, трассу и доступ к блокам, чтобы заранее
+				понять схему монтажа и стоимость.
+			</p>
+		</div>
+
+		<ol class="process-grid" aria-label="Этапы работы">
+			{
+				workSteps.map((step, index) => (
+					<li class="info-card process-card">
+						<span class="process-number">
+							{String(index + 1).padStart(2, "0")}
+						</span>
+						<h3>{step.title}</h3>
+						<p>{step.description}</p>
+					</li>
+				))
+			}
+		</ol>
+	</section>
+
 	<section class="container services-section">
 		<div class="section-heading">
 			<p class="section-kicker">Что мы делаем</p>
@@ -379,6 +512,30 @@ const promBenefits = [
 					</a>
 				))
 			}
+		</div>
+	</section>
+
+	<section class="container organization-section">
+		<div class="organization-card">
+			<div class="organization-copy">
+				<p class="section-kicker">Организациям</p>
+				<h2>Работаем с офисами, магазинами и техническими помещениями</h2>
+				<p>
+					Помогаем с кондиционированием коммерческих и рабочих
+					объектов: офисов, магазинов, серверных, складов,
+					производственных и административных помещений.
+				</p>
+				<a href="/contacts" class="btn btn-primary">
+					Обсудить объект
+					<span class="material-icons-round" aria-hidden="true">
+						arrow_forward
+					</span>
+				</a>
+			</div>
+
+			<ul class="organization-list" aria-label="Что делаем для организаций">
+				{organizationCapabilities.map((item) => <li>{item}</li>)}
+			</ul>
 		</div>
 	</section>
 
@@ -459,7 +616,7 @@ const promBenefits = [
 				<div class="audience-card-top">
 					<p class="audience-label">Серверные и технические помещения</p>
 					<h3>Надежное охлаждение технологических помещений</h3>
-					<p>Подбираем кондиционирование для помещений, где техника выделяет тепло и важна стабильная температура. Обсуждаем режим работы, резервирование, отвод конденсата и доступ для обслуживания.</p>
+					<p>Подбираем кондиционирование для помещений, где техника выделяет тепло и важна стабильная температура. Обсуждаем режим работы, потребность в резерве, отвод конденсата и доступ для обслуживания.</p>
 				</div>
 				<ul class="audience-list">
 					{serverBenefits.map((item) => <li>{item}</li>)}
@@ -788,8 +945,159 @@ const promBenefits = [
 		color: var(--primary);
 	}
 
+	.meaning-section {
+		margin-bottom: 4.5rem;
+	}
+
+	.factor-grid,
+	.process-grid {
+		display: grid;
+		gap: 1rem;
+	}
+
+	.factor-grid {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		margin-bottom: 1.25rem;
+	}
+
+	.process-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		counter-reset: work-step;
+	}
+
+	.info-card {
+		display: grid;
+		align-content: start;
+		gap: 0.75rem;
+		padding: 1.35rem;
+		border-radius: 1.35rem;
+		background: var(--panel-glass-bg);
+		border: 1px solid var(--panel-glass-border);
+		box-shadow: var(--panel-glass-shadow);
+		min-width: 0;
+	}
+
+	.info-card-icon {
+		width: 2.6rem;
+		height: 2.6rem;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 1rem;
+		background: var(--panel-active-gradient-alt);
+		color: var(--panel-active-text);
+		font-size: 1.35rem;
+	}
+
+	.info-card h3 {
+		font-size: 1.08rem;
+		line-height: 1.22;
+		text-wrap: balance;
+	}
+
+	.info-card p {
+		color: var(--text-muted);
+		line-height: 1.6;
+	}
+
+	.section-cta {
+		width: fit-content;
+	}
+
+	.process-card {
+		position: relative;
+		padding-top: 1.1rem;
+	}
+
+	.process-number {
+		display: inline-flex;
+		width: fit-content;
+		font-family: "Space Grotesk", sans-serif;
+		font-size: 0.8rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		color: var(--primary);
+	}
+
+	.organization-section {
+		margin-bottom: 6rem;
+	}
+
+	.organization-card {
+		display: grid;
+		grid-template-columns: minmax(0, 0.95fr) minmax(320px, 1.05fr);
+		gap: 1.25rem;
+		align-items: stretch;
+		padding: 1.2rem;
+		border-radius: 2rem;
+		background:
+			radial-gradient(
+				circle at top right,
+				rgba(45, 212, 191, 0.16),
+				transparent 36%
+			),
+			var(--panel-glass-bg);
+		border: 1px solid var(--panel-glass-border);
+		box-shadow: var(--panel-glass-shadow);
+	}
+
+	.organization-copy,
+	.organization-list {
+		border-radius: 1.35rem;
+		background: rgba(var(--surface-rgb), 0.64);
+		border: 1px solid var(--panel-glass-border);
+	}
+
+	.organization-copy {
+		display: grid;
+		align-content: center;
+		gap: 1rem;
+		padding: 1.65rem;
+	}
+
+	.organization-copy h2 {
+		font-size: clamp(1.75rem, 2.5vw, 2.6rem);
+		line-height: 1.06;
+		text-wrap: balance;
+	}
+
+	.organization-copy p:not(.section-kicker) {
+		color: var(--text-muted);
+		line-height: 1.7;
+	}
+
+	.organization-copy .btn {
+		width: fit-content;
+	}
+
+	.organization-list {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.8rem;
+		padding: 1.65rem;
+	}
+
+	.organization-list li {
+		position: relative;
+		padding-left: 1.35rem;
+		color: var(--text);
+		line-height: 1.45;
+	}
+
+	.organization-list li::before {
+		content: "";
+		position: absolute;
+		top: 0.55rem;
+		left: 0;
+		width: 0.48rem;
+		height: 0.48rem;
+		border-radius: 999px;
+		background: var(--primary);
+	}
+
 	.brand-discovery-section {
 		margin-bottom: 4rem;
+		overflow: hidden;
 	}
 
 	.brand-discovery-head {
@@ -988,6 +1296,8 @@ const promBenefits = [
 
 	.services-section,
 	.audience-section,
+	.organization-section,
+	.meaning-section,
 	.offer-section,
 	.products-section {
 		margin-bottom: 6rem;
@@ -1297,6 +1607,8 @@ const promBenefits = [
 	:global(.dark) .bundle-stat,
 	:global(.dark) .bundle-benefit,
 	:global(.dark) .coverage-card,
+	:global(.dark) .info-card,
+	:global(.dark) .organization-card,
 	:global(.dark) .audience-card,
 	:global(.dark) .guide-card,
 	:global(.dark) .maintenance-card {
@@ -1362,6 +1674,8 @@ const promBenefits = [
 		.workflow-section,
 		.services-section,
 		.audience-section,
+		.organization-section,
+		.meaning-section,
 		.offer-section,
 		.products-section {
 			margin-bottom: 5.25rem;
@@ -1451,6 +1765,7 @@ const promBenefits = [
 
 	@media (max-width: 1180px) {
 		.bundle-card,
+		.organization-card,
 		.offer-grid,
 		.offer-main {
 			grid-template-columns: 1fr;
@@ -1464,6 +1779,11 @@ const promBenefits = [
 		}
 
 		.services-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+
+		.factor-grid,
+		.process-grid {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
 
@@ -1537,7 +1857,10 @@ const promBenefits = [
 
 	@media (max-width: 900px) {
 		.audience-grid,
-		.services-grid {
+		.services-grid,
+		.factor-grid,
+		.process-grid,
+		.organization-list {
 			grid-template-columns: 1fr;
 		}
 
@@ -1586,6 +1909,10 @@ const promBenefits = [
 
 		.bundle-card,
 		.audience-card,
+		.info-card,
+		.organization-card,
+		.organization-copy,
+		.organization-list,
 		.offer-copy,
 		.guide-card,
 		.maintenance-card {
@@ -1602,6 +1929,11 @@ const promBenefits = [
 		}
 
 		.bundle-price-band .btn {
+			width: 100%;
+		}
+
+		.section-cta,
+		.organization-copy .btn {
 			width: 100%;
 		}
 
