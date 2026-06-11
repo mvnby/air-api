@@ -170,6 +170,10 @@ LIST_MANAGER_BRANDS = "list_manager_brands"
 CREATE_MANAGER_BRAND = "create_manager_brand"
 UPDATE_MANAGER_BRAND = "update_manager_brand"
 DELETE_MANAGER_BRAND = "delete_manager_brand"
+LIST_MANAGER_BRAND_SERIES = "list_manager_brand_series"
+CREATE_MANAGER_BRAND_SERIES = "create_manager_brand_series"
+UPDATE_MANAGER_BRAND_SERIES = "update_manager_brand_series"
+DELETE_MANAGER_BRAND_SERIES = "delete_manager_brand_series"
 LIST_SUPPLIERS = "list_suppliers"
 CREATE_SUPPLIER = "create_supplier"
 PATCH_SUPPLIER = "patch_supplier"
@@ -344,6 +348,10 @@ ALL_MANAGER_OPERATION_IDS = (
     CREATE_MANAGER_BRAND,
     UPDATE_MANAGER_BRAND,
     DELETE_MANAGER_BRAND,
+    LIST_MANAGER_BRAND_SERIES,
+    CREATE_MANAGER_BRAND_SERIES,
+    UPDATE_MANAGER_BRAND_SERIES,
+    DELETE_MANAGER_BRAND_SERIES,
     LIST_SUPPLIERS,
     CREATE_SUPPLIER,
     PATCH_SUPPLIER,

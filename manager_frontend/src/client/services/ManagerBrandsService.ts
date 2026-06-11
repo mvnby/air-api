@@ -6,6 +6,10 @@ import type { ManagerActionMessageResponse } from '../models/ManagerActionMessag
 import type { ManagerBrandCreatePayload } from '../models/ManagerBrandCreatePayload';
 import type { ManagerBrandListResponse } from '../models/ManagerBrandListResponse';
 import type { ManagerBrandResponse } from '../models/ManagerBrandResponse';
+import type { ManagerBrandSeriesCreatePayload } from '../models/ManagerBrandSeriesCreatePayload';
+import type { ManagerBrandSeriesListResponse } from '../models/ManagerBrandSeriesListResponse';
+import type { ManagerBrandSeriesResponse } from '../models/ManagerBrandSeriesResponse';
+import type { ManagerBrandSeriesUpdatePayload } from '../models/ManagerBrandSeriesUpdatePayload';
 import type { ManagerBrandUpdatePayload } from '../models/ManagerBrandUpdatePayload';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
@@ -79,6 +83,100 @@ export class ManagerBrandsService {
             url: '/api/manager/brands/{brand_id}',
             path: {
                 'brand_id': brandId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Manager Brand Series
+     * @param brandId
+     * @returns ManagerBrandSeriesListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listManagerBrandSeries(
+        brandId: number,
+    ): CancelablePromise<ManagerBrandSeriesListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/brands/{brand_id}/series',
+            path: {
+                'brand_id': brandId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Manager Brand Series
+     * @param brandId
+     * @param requestBody
+     * @returns ManagerBrandSeriesResponse Successful Response
+     * @throws ApiError
+     */
+    public static createManagerBrandSeries(
+        brandId: number,
+        requestBody: ManagerBrandSeriesCreatePayload,
+    ): CancelablePromise<ManagerBrandSeriesResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/brands/{brand_id}/series',
+            path: {
+                'brand_id': brandId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Update Manager Brand Series
+     * @param brandId
+     * @param seriesId
+     * @param requestBody
+     * @returns ManagerBrandSeriesResponse Successful Response
+     * @throws ApiError
+     */
+    public static updateManagerBrandSeries(
+        brandId: number,
+        seriesId: number,
+        requestBody: ManagerBrandSeriesUpdatePayload,
+    ): CancelablePromise<ManagerBrandSeriesResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/manager/brands/{brand_id}/series/{series_id}',
+            path: {
+                'brand_id': brandId,
+                'series_id': seriesId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Delete Manager Brand Series
+     * @param brandId
+     * @param seriesId
+     * @returns ManagerActionMessageResponse Successful Response
+     * @throws ApiError
+     */
+    public static deleteManagerBrandSeries(
+        brandId: number,
+        seriesId: number,
+    ): CancelablePromise<ManagerActionMessageResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/brands/{brand_id}/series/{series_id}',
+            path: {
+                'brand_id': brandId,
+                'series_id': seriesId,
             },
             errors: {
                 422: `Validation Error`,

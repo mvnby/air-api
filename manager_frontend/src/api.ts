@@ -63,6 +63,9 @@ import {
     type CatalogImportJobStatusResponse,
     type ManagerBrandResponse,
     type ManagerBrandCreatePayload,
+    type ManagerBrandSeriesCreatePayload,
+    type ManagerBrandSeriesResponse,
+    type ManagerBrandSeriesUpdatePayload,
     type ManagerBrandUpdatePayload,
     type ProductImageVariantBatchProcessResponse,
     type ProductImageVariantCandidateResponse,
@@ -111,10 +114,14 @@ export type {
 };
 
 type ManagerBrand = ManagerBrandResponse;
+type ManagerBrandSeries = ManagerBrandSeriesResponse;
 
 export type {
     ManagerBrand,
     ManagerBrandCreatePayload,
+    ManagerBrandSeries,
+    ManagerBrandSeriesCreatePayload,
+    ManagerBrandSeriesUpdatePayload,
     ManagerBrandUpdatePayload,
 };
 export type {
@@ -866,6 +873,47 @@ export const api = {
 
     async deleteManagerBrand(brandId: number): Promise<{ message: string }> {
         return await ManagerBrandsService.deleteManagerBrand(brandId);
+    },
+
+    async listManagerBrandSeries(brandId: number): Promise<{ items: ManagerBrandSeries[] }> {
+        const response = await ManagerBrandsService.listManagerBrandSeries(brandId);
+        return {
+            ...response,
+            items: (response.items || []).map((series) => ({
+                ...series,
+                features: series.features || [],
+                products_count: series.products_count ?? 0,
+            })),
+        };
+    },
+
+    async createManagerBrandSeries(
+        brandId: number,
+        payload: ManagerBrandSeriesCreatePayload,
+    ): Promise<ManagerBrandSeries> {
+        const series = await ManagerBrandsService.createManagerBrandSeries(brandId, payload);
+        return {
+            ...series,
+            features: series.features || [],
+            products_count: series.products_count ?? 0,
+        };
+    },
+
+    async updateManagerBrandSeries(
+        brandId: number,
+        seriesId: number,
+        payload: ManagerBrandSeriesUpdatePayload,
+    ): Promise<ManagerBrandSeries> {
+        const series = await ManagerBrandsService.updateManagerBrandSeries(brandId, seriesId, payload);
+        return {
+            ...series,
+            features: series.features || [],
+            products_count: series.products_count ?? 0,
+        };
+    },
+
+    async deleteManagerBrandSeries(brandId: number, seriesId: number): Promise<{ message: string }> {
+        return await ManagerBrandsService.deleteManagerBrandSeries(brandId, seriesId);
     },
     // Leads Inbox (Order-based triage)
     async getLeadsCounter() {

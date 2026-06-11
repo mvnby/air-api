@@ -69,6 +69,7 @@ async def test_product_detail_contains_series_and_series_id_siblings(async_clien
         brand_id=brand.id,
         description="Fresh air product line",
         hero_image="/media/series/freshin.webp",
+        features=["Fresh air intake", "Self-cleaning"],
         is_published=True,
     )
     db.add(series)
@@ -126,6 +127,7 @@ async def test_product_detail_contains_series_and_series_id_siblings(async_clien
         "slug": "freshin",
         "description": "Fresh air product line",
         "hero_image": "/media/series/freshin.webp",
+        "features": ["Fresh air intake", "Self-cleaning"],
     }
 
     sibling_slugs = [item["slug"] for item in data["series_siblings"]]

@@ -49,6 +49,7 @@ interface Product {
         slug?: string | null;
         description?: string | null;
         hero_image?: string | null;
+        features?: string[] | null;
     } | null;
     badges?: Array<{ text: string; class?: string }>;
     tags?: Array<{
@@ -122,6 +123,10 @@ const slugifySeriesFallback = (value: string) =>
         .replace(/^-+|-+$/g, "");
 const getProductSeriesTitle = (product: Product) =>
     asText(product.series?.title) || asText(product.specs?.series);
+const normalizeSeriesFeatures = (value: unknown) =>
+    Array.isArray(value)
+        ? value.map((item) => asText(item)).filter(Boolean)
+        : [];
 const getProductSeriesKey = (product: Product) => {
     const title = getProductSeriesTitle(product);
     if (!title) return "";
@@ -140,6 +145,8 @@ const seriesGroupsMap = new Map<
         key: string;
         title: string;
         description: string;
+        heroImage: string;
+        features: string[];
         products: Product[];
     }
 >();
@@ -160,6 +167,8 @@ for (const product of seriesSourceProducts) {
             key,
             title,
             description: asText(product.series?.description),
+            heroImage: asText(product.series?.hero_image),
+            features: normalizeSeriesFeatures(product.series?.features),
             products: [],
         });
     }
@@ -167,6 +176,10 @@ for (const product of seriesSourceProducts) {
     const group = seriesGroupsMap.get(key);
     if (group) {
         if (!group.description) group.description = asText(product.series?.description);
+        if (!group.heroImage) group.heroImage = asText(product.series?.hero_image);
+        if (group.features.length === 0) {
+            group.features = normalizeSeriesFeatures(product.series?.features);
+        }
         group.products.push(product);
     }
 }
@@ -228,9 +241,27 @@ const seriesGroups = Array.from(seriesGroupsMap.values());
                                 {seriesGroups.map((group) => (
                                     <section class="brand-series-group" aria-labelledby={`brand-series-${group.key}`}>
                                         <div class="brand-series-head">
-                                            <div>
-                                                <h3 id={`brand-series-${group.key}`}>{group.title}</h3>
-                                                {group.description && <p>{group.description}</p>}
+                                            <div class="brand-series-summary">
+                                                {group.heroImage && (
+                                                    <span class="brand-series-thumb">
+                                                        <img
+                                                            src={resolveImageUrl(group.heroImage)}
+                                                            alt={`Серия ${group.title}`}
+                                                            loading="lazy"
+                                                        />
+                                                    </span>
+                                                )}
+                                                <div>
+                                                    <h3 id={`brand-series-${group.key}`}>{group.title}</h3>
+                                                    {group.description && <p>{group.description}</p>}
+                                                    {group.features.length > 0 && (
+                                                        <ul class="brand-series-features" aria-label={`Особенности серии ${group.title}`}>
+                                                            {group.features.map((feature) => (
+                                                                <li>{feature}</li>
+                                                            ))}
+                                                        </ul>
+                                                    )}
+                                                </div>
                                             </div>
                                             <span>{formatSeriesProductCount(group.products.length)}</span>
                                         </div>
@@ -423,6 +454,29 @@ const seriesGroups = Array.from(seriesGroupsMap.values());
         justify-content: space-between;
         gap: 1rem;
     }
+    .brand-series-summary {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        min-width: 0;
+    }
+    .brand-series-thumb {
+        width: 82px;
+        height: 62px;
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border: 1px solid var(--panel-chip-border);
+        border-radius: 10px;
+        background: var(--panel-chip-bg);
+    }
+    .brand-series-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
     .brand-series-head h3 {
         margin: 0;
         color: var(--text);
@@ -435,6 +489,26 @@ const seriesGroups = Array.from(seriesGroupsMap.values());
         color: var(--text-muted);
         font-size: 0.94rem;
         line-height: 1.6;
+    }
+    .brand-series-features {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+        margin: 0.7rem 0 0;
+        padding: 0;
+        list-style: none;
+    }
+    .brand-series-features li {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 0.25rem 0.6rem;
+        border-radius: 8px;
+        background: var(--panel-chip-bg);
+        border: 1px solid var(--panel-chip-border);
+        color: var(--text);
+        font-size: 0.82rem;
+        font-weight: 700;
     }
     .brand-series-head > span {
         display: inline-flex;
@@ -493,6 +567,9 @@ const seriesGroups = Array.from(seriesGroupsMap.values());
         .brand-series-head {
             flex-direction: column;
             gap: 0.6rem;
+        }
+        .brand-series-summary {
+            flex-direction: column;
         }
         .brand-series-head > span {
             white-space: normal;

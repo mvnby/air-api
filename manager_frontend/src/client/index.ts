@@ -78,6 +78,10 @@ export type { ManagerBackupRunStatusResponse } from './models/ManagerBackupRunSt
 export type { ManagerBrandCreatePayload } from './models/ManagerBrandCreatePayload';
 export type { ManagerBrandListResponse } from './models/ManagerBrandListResponse';
 export type { ManagerBrandResponse } from './models/ManagerBrandResponse';
+export type { ManagerBrandSeriesCreatePayload } from './models/ManagerBrandSeriesCreatePayload';
+export type { ManagerBrandSeriesListResponse } from './models/ManagerBrandSeriesListResponse';
+export type { ManagerBrandSeriesResponse } from './models/ManagerBrandSeriesResponse';
+export type { ManagerBrandSeriesUpdatePayload } from './models/ManagerBrandSeriesUpdatePayload';
 export type { ManagerBrandUpdatePayload } from './models/ManagerBrandUpdatePayload';
 export type { ManagerBulkDeleteProductsError } from './models/ManagerBulkDeleteProductsError';
 export type { ManagerBulkDeleteProductsResponse } from './models/ManagerBulkDeleteProductsResponse';

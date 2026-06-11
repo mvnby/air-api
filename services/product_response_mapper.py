@@ -131,6 +131,7 @@ def map_product_to_response(
             slug=series.slug,
             description=series.description,
             hero_image=series.hero_image,
+            features=series.features or [],
         )
         if series and series.is_published
         else None
