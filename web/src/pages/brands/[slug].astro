@@ -42,6 +42,14 @@ interface Product {
     availability_status?: string | null;
     is_inverter?: boolean;
     area?: number;
+    specs?: Record<string, any>;
+    series?: {
+        id?: number;
+        title?: string | null;
+        slug?: string | null;
+        description?: string | null;
+        hero_image?: string | null;
+    } | null;
     badges?: Array<{ text: string; class?: string }>;
     tags?: Array<{
         title: string;
@@ -105,6 +113,65 @@ const brandIntroHtml = renderBrandIntroMarkdown(brandIntro);
 const brandIntroText = getBrandIntroPlainText(brandIntro);
 const seoDescription = buildBrandMetaDescription(brand);
 const lockedFilters = { brand_slugs: [brand.slug] };
+const asText = (value: unknown) => String(value || "").trim();
+const slugifySeriesFallback = (value: string) =>
+    value
+        .toLowerCase()
+        .replace(/ё/g, "е")
+        .replace(/[^\p{Letter}\p{Number}]+/gu, "-")
+        .replace(/^-+|-+$/g, "");
+const getProductSeriesTitle = (product: Product) =>
+    asText(product.series?.title) || asText(product.specs?.series);
+const getProductSeriesKey = (product: Product) => {
+    const title = getProductSeriesTitle(product);
+    if (!title) return "";
+    return asText(product.series?.slug) || slugifySeriesFallback(title) || title.toLowerCase();
+};
+const formatSeriesProductCount = (count: number) => {
+    const mod10 = count % 10;
+    const mod100 = count % 100;
+    if (mod10 === 1 && mod100 !== 11) return `${count} модель`;
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${count} модели`;
+    return `${count} моделей`;
+};
+const seriesGroupsMap = new Map<
+    string,
+    {
+        key: string;
+        title: string;
+        description: string;
+        products: Product[];
+    }
+>();
+const seriesSourceProducts = popularProducts.length > 0 ? popularProducts : products;
+const productsWithoutSeries: Product[] = [];
+
+for (const product of seriesSourceProducts) {
+    const title = getProductSeriesTitle(product);
+    const key = getProductSeriesKey(product);
+
+    if (!title || !key) {
+        productsWithoutSeries.push(product);
+        continue;
+    }
+
+    if (!seriesGroupsMap.has(key)) {
+        seriesGroupsMap.set(key, {
+            key,
+            title,
+            description: asText(product.series?.description),
+            products: [],
+        });
+    }
+
+    const group = seriesGroupsMap.get(key);
+    if (group) {
+        if (!group.description) group.description = asText(product.series?.description);
+        group.products.push(product);
+    }
+}
+
+const seriesGroups = Array.from(seriesGroupsMap.values());
 ---
 
 <Layout
@@ -152,20 +219,53 @@ const lockedFilters = { brand_slugs: [brand.slug] };
         >
             <div class="catalog-static-content">
                 {
-                    products.length > 0 ? (
-                        <section class="catalog-section all-products-section" aria-labelledby="brand-products-title">
+                    seriesSourceProducts.length > 0 ? (
+                        <section class="catalog-section brand-series-section" aria-labelledby="brand-products-title">
                             <div class="catalog-section-head">
                                 <h2 id="brand-products-title">Модели {brand.title}</h2>
                             </div>
-                            <div class="catalog-grid">
-                                {products.map((product) => (
-                                    <ProductCard
-                                        product={product}
-                                        variant="default"
-                                        showInstallation={true}
-                                        refreshProductOnMount={false}
-                                    />
+                            <div class="brand-series-list">
+                                {seriesGroups.map((group) => (
+                                    <section class="brand-series-group" aria-labelledby={`brand-series-${group.key}`}>
+                                        <div class="brand-series-head">
+                                            <div>
+                                                <h3 id={`brand-series-${group.key}`}>{group.title}</h3>
+                                                {group.description && <p>{group.description}</p>}
+                                            </div>
+                                            <span>{formatSeriesProductCount(group.products.length)}</span>
+                                        </div>
+                                        <div class="catalog-grid series-products-grid">
+                                            {group.products.map((product) => (
+                                                <ProductCard
+                                                    product={product}
+                                                    variant="default"
+                                                    showInstallation={true}
+                                                    refreshProductOnMount={false}
+                                                />
+                                            ))}
+                                        </div>
+                                    </section>
                                 ))}
+                                {productsWithoutSeries.length > 0 && (
+                                    <section class="brand-series-group" aria-labelledby="brand-series-other">
+                                        <div class="brand-series-head">
+                                            <div>
+                                                <h3 id="brand-series-other">Другие модели</h3>
+                                            </div>
+                                            <span>{formatSeriesProductCount(productsWithoutSeries.length)}</span>
+                                        </div>
+                                        <div class="catalog-grid series-products-grid">
+                                            {productsWithoutSeries.map((product) => (
+                                                <ProductCard
+                                                    product={product}
+                                                    variant="default"
+                                                    showInstallation={true}
+                                                    refreshProductOnMount={false}
+                                                />
+                                            ))}
+                                        </div>
+                                    </section>
+                                )}
                             </div>
                         </section>
                     ) : (
@@ -307,10 +407,55 @@ const lockedFilters = { brand_slugs: [brand.slug] };
         font-size: 1.35rem;
         line-height: 1.2;
     }
+    .brand-series-list {
+        display: grid;
+        gap: 2rem;
+    }
+    .brand-series-group {
+        display: grid;
+        gap: 1rem;
+        padding-top: 1.1rem;
+        border-top: 1px solid var(--panel-glass-border);
+    }
+    .brand-series-head {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+    .brand-series-head h3 {
+        margin: 0;
+        color: var(--text);
+        font-size: 1.16rem;
+        line-height: 1.25;
+    }
+    .brand-series-head p {
+        max-width: 780px;
+        margin: 0.4rem 0 0;
+        color: var(--text-muted);
+        font-size: 0.94rem;
+        line-height: 1.6;
+    }
+    .brand-series-head > span {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 0.25rem 0.6rem;
+        border-radius: 8px;
+        background: var(--panel-chip-bg);
+        border: 1px solid var(--panel-chip-border);
+        color: var(--text-muted);
+        font-size: 0.82rem;
+        font-weight: 800;
+        white-space: nowrap;
+    }
     .catalog-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
         gap: 1.3rem;
+    }
+    .series-products-grid {
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
     }
     .empty-status {
         text-align: center;
@@ -344,6 +489,13 @@ const lockedFilters = { brand_slugs: [brand.slug] };
             min-height: 108px;
             justify-content: flex-start;
             padding: 1rem;
+        }
+        .brand-series-head {
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+        .brand-series-head > span {
+            white-space: normal;
         }
     }
 </style>

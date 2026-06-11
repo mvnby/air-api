@@ -1,6 +1,6 @@
 import pytest
 
-from models import Product, ProductImage, ProductImageVariant
+from models import Product, ProductImage, ProductImageVariant, ProductSeries
 from services.product_image_processing_contract import (
     ProductImageManualQualityStatus,
     ProductImageProcessingStatus,
@@ -127,3 +127,60 @@ def test_map_product_to_response_keeps_legacy_product_without_variants_unchanged
     assert payload.gallery_images[0].url == "/media/products/legacy.webp"
     assert payload.gallery_images[0].card_variant_url is None
     assert payload.gallery_images[0].full_variant_url is None
+
+
+def test_map_product_to_response_serializes_public_series():
+    series = ProductSeries(
+        id=7,
+        title="Elite",
+        slug="elite",
+        description="Quiet inverter product line",
+        hero_image="/media/series/elite.webp",
+        is_published=True,
+    )
+    product = Product(
+        id=1,
+        title="Elite 25",
+        slug="elite-25",
+        description="",
+        price=1200,
+        area=25,
+        is_published=True,
+        series_id=series.id,
+    )
+    product.series = series
+
+    payload = map_product_to_response(product)
+
+    assert payload.series is not None
+    assert payload.series.model_dump() == {
+        "id": 7,
+        "title": "Elite",
+        "slug": "elite",
+        "description": "Quiet inverter product line",
+        "hero_image": "/media/series/elite.webp",
+    }
+
+
+def test_map_product_to_response_hides_unpublished_series():
+    series = ProductSeries(
+        id=8,
+        title="Draft",
+        slug="draft",
+        is_published=False,
+    )
+    product = Product(
+        id=1,
+        title="Draft 25",
+        slug="draft-25",
+        description="",
+        price=1200,
+        area=25,
+        is_published=True,
+        series_id=series.id,
+    )
+    product.series = series
+
+    payload = map_product_to_response(product)
+
+    assert payload.series is None

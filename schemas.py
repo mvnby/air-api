@@ -107,11 +107,20 @@ class ProductBrandResponse(BaseModel):
     logo_url: Optional[str] = None
 
 
+class ProductSeriesResponse(BaseModel):
+    id: int
+    title: str
+    slug: str
+    description: Optional[str] = None
+    hero_image: Optional[str] = None
+
+
 class ProductResponse(ProductBase):
     vitebsk_qty: int = 0
     minsk_qty: int = 0
     availability_status: Optional[str] = None
     brand: Optional[ProductBrandResponse] = None
+    series: Optional[ProductSeriesResponse] = None
     tags: List[TagResponse] = []
     specs: Dict[str, Any] = {}
     images: List[str] = [] # Legacy

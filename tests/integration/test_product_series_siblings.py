@@ -1,6 +1,6 @@
 import pytest
 
-from models import Product, ProductTagLink, Tag, TagGroup
+from models import Brand, Product, ProductSeries, ProductTagLink, Tag, TagGroup
 
 
 @pytest.mark.asyncio
@@ -55,3 +55,79 @@ async def test_product_detail_contains_series_siblings(async_client, db):
     assert len(siblings) == 2
     assert siblings[0]["slug"] == "sibling-a"
     assert siblings[1]["slug"] == "sibling-b"
+
+
+@pytest.mark.asyncio
+async def test_product_detail_contains_series_and_series_id_siblings(async_client, db):
+    brand = Brand(title="TCL", slug="tcl", is_published=True)
+    db.add(brand)
+    await db.flush()
+
+    series = ProductSeries(
+        title="FreshIN",
+        slug="freshin",
+        brand_id=brand.id,
+        description="Fresh air product line",
+        hero_image="/media/series/freshin.webp",
+        is_published=True,
+    )
+    db.add(series)
+    await db.flush()
+
+    main = Product(
+        title="TCL FreshIN 35",
+        slug="tcl-freshin-35",
+        price=1900,
+        area=35,
+        power_cooling=3.5,
+        brand_id=brand.id,
+        series_id=series.id,
+        is_published=True,
+    )
+    sibling_25 = Product(
+        title="TCL FreshIN 25",
+        slug="tcl-freshin-25",
+        price=1500,
+        area=25,
+        power_cooling=2.6,
+        brand_id=brand.id,
+        series_id=series.id,
+        is_published=True,
+    )
+    sibling_50 = Product(
+        title="TCL FreshIN 50",
+        slug="tcl-freshin-50",
+        price=2600,
+        area=50,
+        power_cooling=5.2,
+        brand_id=brand.id,
+        series_id=series.id,
+        is_published=True,
+    )
+    other_series = Product(
+        title="TCL Elite 25",
+        slug="tcl-elite-25",
+        price=1300,
+        area=25,
+        brand_id=brand.id,
+        is_published=True,
+    )
+    db.add_all([main, sibling_50, sibling_25, other_series])
+    await db.commit()
+    await db.refresh(main)
+
+    response = await async_client.get(f"/api/v1/products/{main.slug}")
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["series"] == {
+        "id": series.id,
+        "title": "FreshIN",
+        "slug": "freshin",
+        "description": "Fresh air product line",
+        "hero_image": "/media/series/freshin.webp",
+    }
+
+    sibling_slugs = [item["slug"] for item in data["series_siblings"]]
+    assert sibling_slugs[:2] == ["tcl-freshin-25", "tcl-freshin-50"]
+    assert "tcl-elite-25" not in sibling_slugs

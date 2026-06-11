@@ -8,6 +8,7 @@ from schemas import (
     ProductManualResponse,
     ProductBrandResponse,
     ProductResponse,
+    ProductSeriesResponse,
     ProductSiblingResponse,
     TagGroupResponse,
     TagResponse,
@@ -122,6 +123,19 @@ def map_product_to_response(
         for item in (series_siblings or [])
     ]
 
+    series = product.series if product.series_id else None
+    series_payload = (
+        ProductSeriesResponse(
+            id=series.id,
+            title=series.title,
+            slug=series.slug,
+            description=series.description,
+            hero_image=series.hero_image,
+        )
+        if series and series.is_published
+        else None
+    )
+
     manuals_payload = [
         ProductManualResponse(
             id=item.id,
@@ -161,6 +175,7 @@ def map_product_to_response(
             if product.brand
             else None
         ),
+        series=series_payload,
         tags=tags_payload,
         specs=specs or {},
         images=images or [],

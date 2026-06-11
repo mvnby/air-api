@@ -24875,6 +24875,16 @@
               }
             ]
           },
+          "series": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductSeriesResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "tags": {
             "items": {
               "$ref": "#/components/schemas/TagResponse"
@@ -24937,6 +24947,51 @@
           "created_at"
         ],
         "title": "ProductResponse"
+      },
+      "ProductSeriesResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "hero_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hero Image"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "slug"
+        ],
+        "title": "ProductSeriesResponse"
       },
       "ProductSiblingResponse": {
         "properties": {
