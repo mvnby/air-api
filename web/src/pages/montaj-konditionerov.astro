@@ -140,7 +140,7 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
                             <span class="material-icons-round" aria-hidden="true">construction</span>
                             <span>
                                 <strong>Демонтаж кондиционера</strong>
-                                <small>Снимем блоки и по возможности сохраним оборудование.</small>
+                                <small>Аккуратно снимем блоки, чтобы сохранить работоспособность для повторной установки.</small>
                             </span>
                         </a>
                     </div>
@@ -237,6 +237,18 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
         grid-template-columns: 2fr 1fr;
         gap: 4rem;
         margin-bottom: 6rem;
+    }
+
+    .content,
+    .sidebar,
+    .article-content {
+        min-width: 0;
+    }
+
+    .content,
+    .article-content,
+    .planning-link {
+        overflow-wrap: anywhere;
     }
 
     .price-tag {
@@ -345,9 +357,14 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
         color: var(--text);
         display: flex;
         gap: 1rem;
+        min-width: 0;
         padding: 1.25rem;
         text-decoration: none;
         transition: border-color 0.2s, transform 0.2s;
+    }
+
+    .planning-link > span:not(.material-icons-round) {
+        min-width: 0;
     }
     .planning-link:hover {
         border-color: var(--primary);

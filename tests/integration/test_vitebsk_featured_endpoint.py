@@ -2,13 +2,17 @@ import pytest
 from httpx import AsyncClient
 from datetime import datetime, timedelta
 
-from models import Product
+from models import Brand, Product
 from crud.supplier import ProductLocalStockDAO
 
 
 @pytest.mark.asyncio
 async def test_vitebsk_featured_filters_by_stock_vitebsk_and_sorts(async_client: AsyncClient, db):
     now = datetime.now()
+
+    brand = Brand(title="Featured Brand", slug="featured-brand")
+    db.add(brand)
+    await db.flush()
 
     older = Product(
         title="Older in stock",
@@ -17,6 +21,7 @@ async def test_vitebsk_featured_filters_by_stock_vitebsk_and_sorts(async_client:
         area=25,
         is_published=True,
         created_at=now - timedelta(days=1),
+        brand_id=brand.id,
     )
     newer = Product(
         title="Newer in stock",
@@ -70,8 +75,8 @@ async def test_vitebsk_featured_filters_by_stock_vitebsk_and_sorts(async_client:
     slugs = [item["slug"] for item in payload]
     assert "out-of-stock" not in slugs
     assert slugs[:2] == ["newer-in-stock", "older-in-stock"]
+    assert payload[1]["brand"]["slug"] == "featured-brand"
 
     # Sanity: all returned products must be marked in stock in payload
     for item in payload:
         assert item["vitebsk_qty"] > 0
-
