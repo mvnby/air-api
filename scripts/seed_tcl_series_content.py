@@ -237,7 +237,7 @@ async def seed_tcl_series(
                 updated += 1
                 print(f"[update] {series.title} ({series.slug}) <- {seed.title}")
 
-        if updated:
+        if updated and execute:
             await CatalogRevisionService.bump_commit_and_purge(
                 session,
                 scope="tcl_series_content_seed",
