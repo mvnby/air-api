@@ -197,6 +197,158 @@ class ManagerBrandService:
         )
 
     @staticmethod
+    async def list_brand_series(
+        session: AsyncSession,
+        brand_id: int,
+    ) -> List[Dict[str, Any]]:
+        brand = await session.get(Brand, brand_id)
+        if brand is None:
+            raise HTTPException(status_code=404, detail="Бренд не найден.")
+
+        rows = (
+            await session.execute(
+                select(ProductSeries, func.count(Product.id).label("products_count"))
+                .outerjoin(Product, Product.series_id == ProductSeries.id)
+                .where(ProductSeries.brand_id == brand_id)
+                .group_by(ProductSeries.id)
+                .order_by(ProductSeries.sort_order.asc(), ProductSeries.title.asc())
+            )
+        ).all()
+        return [
+            ManagerBrandService._serialize_series(series, products_count=int(products_count or 0))
+            for series, products_count in rows
+        ]
+
+    @staticmethod
+    async def create_brand_series(
+        session: AsyncSession,
+        brand_id: int,
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        brand = await session.get(Brand, brand_id)
+        if brand is None:
+            raise HTTPException(status_code=404, detail="Бренд не найден.")
+
+        title = str(payload.get("title") or "").strip()
+        if not title:
+            raise HTTPException(status_code=400, detail="Название серии не может быть пустым.")
+
+        series_slug = ManagerBrandService._build_series_slug(payload.get("slug"), title)
+        await ManagerBrandService._ensure_series_slug_available(
+            session,
+            brand_id=brand_id,
+            slug=series_slug,
+        )
+
+        series = ProductSeries(
+            brand_id=brand_id,
+            title=title,
+            slug=series_slug,
+            description=ManagerBrandService._clean_optional_text(payload.get("description")),
+            hero_image=ManagerBrandService._clean_optional_text(payload.get("hero_image")),
+            features=ManagerBrandService._normalize_features(payload.get("features")),
+            is_published=bool(payload.get("is_published", True)),
+            sort_order=int(payload.get("sort_order") or 0),
+        )
+        session.add(series)
+        await session.flush()
+
+        await CatalogRevisionService.bump_commit_and_purge(
+            session,
+            scope="brand_series_create",
+            brand_slugs=[brand.slug],
+        )
+        await session.refresh(series)
+        return ManagerBrandService._serialize_series(series, products_count=0)
+
+    @staticmethod
+    async def update_brand_series(
+        session: AsyncSession,
+        brand_id: int,
+        series_id: int,
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        brand = await session.get(Brand, brand_id)
+        if brand is None:
+            raise HTTPException(status_code=404, detail="Бренд не найден.")
+
+        series = await ManagerBrandService._get_brand_series(session, brand_id, series_id)
+
+        if "title" in payload and payload["title"] is not None:
+            title = str(payload["title"]).strip()
+            if not title:
+                raise HTTPException(status_code=400, detail="Название серии не может быть пустым.")
+            series.title = title
+
+        if "slug" in payload and payload["slug"] is not None:
+            new_slug = ManagerBrandService._build_series_slug(payload["slug"], series.title)
+            if new_slug != series.slug:
+                await ManagerBrandService._ensure_series_slug_available(
+                    session,
+                    brand_id=brand_id,
+                    slug=new_slug,
+                    exclude_series_id=series_id,
+                )
+                series.slug = new_slug
+
+        if "description" in payload:
+            series.description = ManagerBrandService._clean_optional_text(payload["description"])
+        if "hero_image" in payload:
+            series.hero_image = ManagerBrandService._clean_optional_text(payload["hero_image"])
+        if "features" in payload and payload["features"] is not None:
+            series.features = ManagerBrandService._normalize_features(payload["features"])
+        if "is_published" in payload and payload["is_published"] is not None:
+            series.is_published = bool(payload["is_published"])
+        if "sort_order" in payload and payload["sort_order"] is not None:
+            series.sort_order = int(payload["sort_order"])
+
+        session.add(series)
+        await session.flush()
+
+        await CatalogRevisionService.bump_commit_and_purge(
+            session,
+            scope="brand_series_update",
+            brand_slugs=[brand.slug],
+        )
+        await session.refresh(series)
+
+        products_count = (
+            await session.execute(
+                select(func.count(Product.id)).where(Product.series_id == series.id)
+            )
+        ).scalar_one()
+        return ManagerBrandService._serialize_series(series, products_count=int(products_count or 0))
+
+    @staticmethod
+    async def delete_brand_series(
+        session: AsyncSession,
+        brand_id: int,
+        series_id: int,
+    ) -> None:
+        brand = await session.get(Brand, brand_id)
+        if brand is None:
+            raise HTTPException(status_code=404, detail="Бренд не найден.")
+
+        series = await ManagerBrandService._get_brand_series(session, brand_id, series_id)
+        products_count = (
+            await session.execute(
+                select(func.count(Product.id)).where(Product.series_id == series.id)
+            )
+        ).scalar_one()
+        if int(products_count or 0) > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Нельзя удалить серию: к ней привязаны товары. Скройте серию вместо удаления.",
+            )
+
+        await session.delete(series)
+        await CatalogRevisionService.bump_commit_and_purge(
+            session,
+            scope="brand_series_delete",
+            brand_slugs=[brand.slug],
+        )
+
+    @staticmethod
     def _serialize_brand(brand: Brand, *, products_count: int = 0) -> Dict[str, Any]:
         return {
             "id": brand.id,
@@ -209,6 +361,94 @@ class ManagerBrandService:
             "created_at": brand.created_at,
             "products_count": int(products_count or 0),
         }
+
+    @staticmethod
+    def _serialize_series(series: ProductSeries, *, products_count: int = 0) -> Dict[str, Any]:
+        return {
+            "id": series.id,
+            "brand_id": series.brand_id,
+            "title": series.title,
+            "slug": series.slug,
+            "description": series.description,
+            "hero_image": series.hero_image,
+            "features": ManagerBrandService._normalize_features(series.features),
+            "is_published": series.is_published,
+            "sort_order": series.sort_order,
+            "created_at": series.created_at,
+            "products_count": int(products_count or 0),
+        }
+
+    @staticmethod
+    async def _get_brand_series(
+        session: AsyncSession,
+        brand_id: int,
+        series_id: int,
+    ) -> ProductSeries:
+        series = (
+            await session.execute(
+                select(ProductSeries).where(
+                    ProductSeries.id == series_id,
+                    ProductSeries.brand_id == brand_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if series is None:
+            raise HTTPException(status_code=404, detail="Серия не найдена.")
+        return series
+
+    @staticmethod
+    async def _ensure_series_slug_available(
+        session: AsyncSession,
+        *,
+        brand_id: int,
+        slug: str,
+        exclude_series_id: Optional[int] = None,
+    ) -> None:
+        query = select(ProductSeries).where(
+            ProductSeries.brand_id == brand_id,
+            ProductSeries.slug == slug,
+        )
+        if exclude_series_id is not None:
+            query = query.where(ProductSeries.id != exclude_series_id)
+        existing = (await session.execute(query)).scalar_one_or_none()
+        if existing is not None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Серия со slug '{slug}' уже существует у этого бренда.",
+            )
+
+    @staticmethod
+    def _build_series_slug(value: Any, fallback_title: str) -> str:
+        requested_slug = str(value or "").strip()
+        series_slug = requested_slug or slugify(fallback_title, lowercase=True)
+        if not series_slug:
+            raise HTTPException(status_code=400, detail="Не удалось сформировать slug серии.")
+        return series_slug
+
+    @staticmethod
+    def _clean_optional_text(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
+    @staticmethod
+    def _normalize_features(value: Any) -> List[str]:
+        if not isinstance(value, list):
+            return []
+
+        features: List[str] = []
+        seen: set[str] = set()
+        for item in value:
+            text = str(item or "").strip()
+            if not text:
+                continue
+            dedupe_key = text.casefold()
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            features.append(text)
+        return features
 
     @staticmethod
     async def _ensure_brand_group(session: AsyncSession) -> TagGroup:

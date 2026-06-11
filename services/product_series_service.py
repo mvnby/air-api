@@ -77,6 +77,7 @@ class ProductSeriesService:
             slug=series.slug,
             description=series.description,
             hero_image=series.hero_image,
+            features=series.features or [],
         )
 
     @staticmethod

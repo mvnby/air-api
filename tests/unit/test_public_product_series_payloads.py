@@ -46,6 +46,7 @@ async def _seed_series_products(session: AsyncSession) -> dict[str, Product]:
         brand_id=brand.id,
         description="Quiet inverter product line",
         hero_image="/media/series/elite.webp",
+        features=["Quiet mode", "Wi-Fi ready"],
         is_published=True,
     )
     session.add(series)
@@ -131,6 +132,7 @@ async def test_public_product_queries_eager_load_series_and_siblings(sqlite_sess
         "slug": "elite",
         "description": "Quiet inverter product line",
         "hero_image": "/media/series/elite.webp",
+        "features": ["Quiet mode", "Wi-Fi ready"],
     }
 
     catalog_products = await ProductDAO.get_filtered(

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Column, Text, UniqueConstraint
+from sqlalchemy import Column, JSON, Text, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -36,6 +36,7 @@ class ProductSeries(SQLModel, table=True):
     slug: str = Field(index=True)
     description: Optional[str] = Field(default=None, sa_column=Column(Text))
     hero_image: Optional[str] = Field(default=None)
+    features: List[str] = Field(default=[], sa_column=Column(JSON))
     is_published: bool = Field(default=True, index=True)
     sort_order: int = Field(default=0)
     created_at: datetime = Field(default_factory=datetime.now)

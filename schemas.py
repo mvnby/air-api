@@ -113,6 +113,7 @@ class ProductSeriesResponse(BaseModel):
     slug: str
     description: Optional[str] = None
     hero_image: Optional[str] = None
+    features: List[str] = Field(default_factory=list)
 
 
 class ProductSeriesNavigationItemResponse(BaseModel):
@@ -1518,6 +1519,44 @@ class ManagerBrandUpdatePayload(BaseModel):
     slug: Optional[str] = None
     logo_url: Optional[str] = None
     description: Optional[str] = None
+    is_published: Optional[bool] = None
+    sort_order: Optional[int] = None
+
+
+class ManagerBrandSeriesResponse(BaseModel):
+    id: int
+    brand_id: Optional[int] = None
+    title: str
+    slug: str
+    description: Optional[str] = None
+    hero_image: Optional[str] = None
+    features: List[str] = Field(default_factory=list)
+    is_published: bool
+    sort_order: int
+    created_at: datetime
+    products_count: int = 0
+
+
+class ManagerBrandSeriesListResponse(BaseModel):
+    items: List[ManagerBrandSeriesResponse]
+
+
+class ManagerBrandSeriesCreatePayload(BaseModel):
+    title: str
+    slug: Optional[str] = None
+    description: Optional[str] = None
+    hero_image: Optional[str] = None
+    features: List[str] = Field(default_factory=list)
+    is_published: bool = True
+    sort_order: int = 0
+
+
+class ManagerBrandSeriesUpdatePayload(BaseModel):
+    title: Optional[str] = None
+    slug: Optional[str] = None
+    description: Optional[str] = None
+    hero_image: Optional[str] = None
+    features: Optional[List[str]] = None
     is_published: Optional[bool] = None
     sort_order: Optional[int] = None
 
