@@ -95,7 +95,7 @@ const catalogParams = {
 const data = await getCatalog(catalogParams, runtimeFreshnessOption);
 const popularData = await getCatalog({
     ...catalogParams,
-    limit: 80,
+    limit: 120,
 }, runtimeFreshnessOption);
 const products = (data.items || []) as Product[];
 const popularProducts = (popularData.items || []) as Product[];
@@ -115,6 +115,7 @@ const brandIntroText = getBrandIntroPlainText(brandIntro);
 const seoDescription = buildBrandMetaDescription(brand);
 const lockedFilters = { brand_slugs: [brand.slug] };
 const asText = (value: unknown) => String(value || "").trim();
+const normalizeText = (value: unknown) => asText(value).toLowerCase().replace(/ё/g, "е");
 const slugifySeriesFallback = (value: string) =>
     value
         .toLowerCase()
@@ -127,6 +128,9 @@ const normalizeSeriesFeatures = (value: unknown) =>
     Array.isArray(value)
         ? value.map((item) => asText(item)).filter(Boolean)
         : [];
+const getTagSlugs = (product: Product) =>
+    (product.tags || []).map((tag) => normalizeText(tag.slug || tag.title));
+const hasTagSlug = (product: Product, slug: string) => getTagSlugs(product).includes(slug);
 const getSpecValue = (product: Product, keys: string[]) => {
     const specs = product.specs || {};
     for (const key of keys) {
@@ -223,6 +227,81 @@ const sortSeriesGroups = <T extends { title: string; products: Product[] }>(grou
         if (countDiff !== 0) return countDiff;
         return a.title.localeCompare(b.title, "ru");
     });
+const CATALOG_GROUPS = {
+    household: {
+        key: "household",
+        title: `Бытовые настенные кондиционеры ${brand.title}`,
+        shortLabel: "настенные",
+        emptyTitle: "Бытовые модели без серии",
+        order: 10,
+    },
+    mobile: {
+        key: "mobile",
+        title: `Мобильные кондиционеры ${brand.title}`,
+        shortLabel: "мобильные",
+        emptyTitle: "Мобильные модели без серии",
+        order: 20,
+    },
+    multi: {
+        key: "multi",
+        title: `Мульти-сплит ${brand.title}`,
+        shortLabel: "мульти-сплит",
+        emptyTitle: "Мульти-сплит без серии",
+        order: 30,
+    },
+    industrial: {
+        key: "industrial",
+        title: `Полупромышленные кондиционеры ${brand.title}`,
+        shortLabel: "полупром",
+        emptyTitle: "Полупромышленные модели без серии",
+        order: 40,
+    },
+    other: {
+        key: "other",
+        title: `Другие модели ${brand.title}`,
+        shortLabel: "другие",
+        emptyTitle: "Другие модели",
+        order: 50,
+    },
+} as const;
+type CatalogGroupKey = keyof typeof CATALOG_GROUPS;
+const getProductCatalogGroupKey = (product: Product): CatalogGroupKey => {
+    const title = normalizeText(product.title);
+    const type = normalizeText(getSpecValue(product, ["type", "Тип"]));
+    const indoorType = normalizeText(getSpecValue(product, ["indoor_type", "Тип внутреннего блока"]));
+    const joined = `${title} ${type} ${indoorType}`;
+
+    if (hasTagSlug(product, "cat-multi") || joined.includes("мульти") || joined.includes("внутренний блок")) {
+        return "multi";
+    }
+    if (hasTagSlug(product, "cat-industrial") || joined.includes("полупром") || joined.includes("кассет") || joined.includes("каналь") || joined.includes("напольно")) {
+        return "industrial";
+    }
+    if (joined.includes("мобиль")) {
+        return "mobile";
+    }
+    if (hasTagSlug(product, "cat-household") || hasTagSlug(product, "wall") || joined.includes("сплит-система")) {
+        return "household";
+    }
+    return "other";
+};
+const inferSeriesVariantToken = (products: Product[]) => {
+    const tokenCounts = new Map<string, number>();
+    for (const product of products) {
+        const text = `${product.title} ${product.slug}`.toUpperCase();
+        const matches = text.match(/\b[A-Z]{1,4}\d{2,4}[A-Z]{1,4}\b/g) || [];
+        for (const token of matches) {
+            if (/^(TAC|FMA|TCA|TCB|TCC|TUB)\d/.test(token)) continue;
+            tokenCounts.set(token, (tokenCounts.get(token) || 0) + 1);
+        }
+    }
+    return [...tokenCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] || "";
+};
+const getDisplayTitle = (title: string, products: Product[], duplicateTitleCount: number) => {
+    if (duplicateTitleCount <= 1) return title;
+    const token = inferSeriesVariantToken(products);
+    return token && !normalizeText(title).includes(normalizeText(token)) ? `${title} ${token}` : title;
+};
 const seriesGroupsMap = new Map<
     string,
     {
@@ -231,6 +310,7 @@ const seriesGroupsMap = new Map<
         description: string;
         heroImage: string;
         features: string[];
+        catalogGroupKey: CatalogGroupKey;
         products: Product[];
     }
 >();
@@ -253,6 +333,7 @@ for (const product of seriesSourceProducts) {
             description: asText(product.series?.description),
             heroImage: asText(product.series?.hero_image),
             features: normalizeSeriesFeatures(product.series?.features),
+            catalogGroupKey: getProductCatalogGroupKey(product),
             products: [],
         });
     }
@@ -268,12 +349,42 @@ for (const product of seriesSourceProducts) {
     }
 }
 
-const seriesGroups = sortSeriesGroups(Array.from(seriesGroupsMap.values())).map((group, index) => ({
+const rawSeriesGroups = sortSeriesGroups(Array.from(seriesGroupsMap.values()));
+const seriesTitleCounts = rawSeriesGroups.reduce((counts, group) => {
+    const key = normalizeText(group.title);
+    counts.set(key, (counts.get(key) || 0) + 1);
+    return counts;
+}, new Map<string, number>());
+const featureCounts = rawSeriesGroups.reduce((counts, group) => {
+    const uniqueFeatures = new Set(group.features.map((feature) => normalizeText(feature)).filter(Boolean));
+    uniqueFeatures.forEach((feature) => counts.set(feature, (counts.get(feature) || 0) + 1));
+    return counts;
+}, new Map<string, number>());
+const commonFeatureThreshold = Math.max(2, Math.ceil(rawSeriesGroups.length * 0.65));
+const getDistinctFeatures = (features: string[]) => {
+    const distinct = features.filter((feature) => (featureCounts.get(normalizeText(feature)) || 0) < commonFeatureThreshold);
+    return (distinct.length > 0 ? distinct : features).slice(0, 4);
+};
+const seriesGroups = rawSeriesGroups.map((group, index) => ({
     ...group,
     anchorId: `series-${slugifySeriesFallback(group.key || group.title) || index + 1}`,
+    catalogGroup: CATALOG_GROUPS[group.catalogGroupKey],
+    displayTitle: getDisplayTitle(group.title, group.products, seriesTitleCounts.get(normalizeText(group.title)) || 0),
+    distinctFeatures: getDistinctFeatures(group.features),
     previewProducts: getSeriesPreviewProducts(group.products),
 }));
-const seriesOverviewGroups = seriesGroups;
+const seriesGroupsByCatalog = Object.values(CATALOG_GROUPS)
+    .map((catalogGroup) => ({
+        ...catalogGroup,
+        series: seriesGroups.filter((group) => group.catalogGroupKey === catalogGroup.key),
+    }))
+    .filter((catalogGroup) => catalogGroup.series.length > 0);
+const productsWithoutSeriesByCatalog = Object.values(CATALOG_GROUPS)
+    .map((catalogGroup) => ({
+        ...catalogGroup,
+        products: productsWithoutSeries.filter((product) => getProductCatalogGroupKey(product) === catalogGroup.key),
+    }))
+    .filter((catalogGroup) => catalogGroup.products.length > 0);
 ---
 
 <Layout
@@ -321,70 +432,23 @@ const seriesOverviewGroups = seriesGroups;
         >
             <div class="catalog-static-content">
                 {
-                    seriesOverviewGroups.length > 0 && (
-                        <section class="catalog-section brand-series-overview" aria-labelledby="brand-series-overview-title">
-                            <div class="catalog-section-head brand-series-overview-head">
+                    seriesGroups.length > 0 && (
+                        <nav class="brand-series-nav" aria-labelledby="brand-series-nav-title">
+                            <div class="brand-series-nav-head">
                                 <div>
-                                    <h2 id="brand-series-overview-title">Серии {brand.title}</h2>
+                                    <p class="section-kicker" id="brand-series-nav-title">Серии {brand.title}</p>
+                                    <p>Перейдите сразу к нужной линейке и моделям.</p>
                                 </div>
-                                <p>
-                                    Модели сгруппированы по сериям: видно отличия, количество моделей и доступные
-                                    мощности.
-                                </p>
                             </div>
-                            <div class="brand-series-overview-grid">
-                                {seriesOverviewGroups.map((group) => (
-                                    <article class="brand-series-card">
-                                        {group.heroImage && (
-                                            <a class="brand-series-card-image" href={`#${group.anchorId}`} aria-label={`Перейти к моделям серии ${group.title}`}>
-                                                <img
-                                                    src={resolveImageUrl(group.heroImage)}
-                                                    alt={`Серия ${group.title}`}
-                                                    loading="lazy"
-                                                />
-                                            </a>
-                                        )}
-                                        <div class="brand-series-card-copy">
-                                            <div class="brand-series-card-title">
-                                                <h3>{group.title}</h3>
-                                                <span>{formatSeriesProductCount(group.products.length)}</span>
-                                            </div>
-                                            {group.description ? (
-                                                <p class="brand-series-card-description">{group.description}</p>
-                                            ) : (
-                                                <p class="brand-series-card-description muted">
-                                                    {formatSeriesProductCount(group.products.length)} в каталоге {brand.title}.
-                                                </p>
-                                            )}
-                                            {group.features.length > 0 && (
-                                                <ul class="brand-series-features" aria-label={`Особенности серии ${group.title}`}>
-                                                    {group.features.map((feature) => (
-                                                        <li>{feature}</li>
-                                                    ))}
-                                                </ul>
-                                            )}
-                                            {group.previewProducts.length > 0 && (
-                                                <div class="brand-series-preview" aria-label={`Модели серии ${group.title}`}>
-                                                    {group.previewProducts.map((product) => {
-                                                        const powerLabel = formatProductPowerLabel(product);
-                                                        return (
-                                                            <a href={`/product/${product.slug}/`} class="brand-series-preview-link">
-                                                                <span>{product.title}</span>
-                                                                {powerLabel && <small>{powerLabel}</small>}
-                                                            </a>
-                                                        );
-                                                    })}
-                                                </div>
-                                            )}
-                                            <a class="brand-series-anchor-link" href={`#${group.anchorId}`}>
-                                                Смотреть карточки серии
-                                                <span class="material-icons-round" aria-hidden="true">arrow_downward</span>
-                                            </a>
-                                        </div>
-                                    </article>
+                            <div class="brand-series-nav-list">
+                                {seriesGroups.map((group) => (
+                                    <a class="brand-series-chip" href={`#${group.anchorId}`}>
+                                        <span>{group.displayTitle}</span>
+                                        <small>{group.catalogGroup.shortLabel} · {formatSeriesProductCount(group.products.length)}</small>
+                                    </a>
                                 ))}
                             </div>
-                        </section>
+                        </nav>
                     )
                 }
 
@@ -392,50 +456,83 @@ const seriesOverviewGroups = seriesGroups;
                     seriesSourceProducts.length > 0 ? (
                         <section class="catalog-section brand-series-section" aria-labelledby="brand-products-title">
                             <div class="catalog-section-head">
-                                <h2 id="brand-products-title">Модели {brand.title}</h2>
+                                <h2 id="brand-products-title">Модели {brand.title} по сериям</h2>
                             </div>
                             <div class="brand-series-list">
-                                {seriesGroups.map((group) => (
-                                    <section id={group.anchorId} class="brand-series-group" aria-labelledby={`brand-series-${group.key}`}>
-                                        <div class="brand-series-head brand-products-group-head">
-                                            <div>
-                                                <p class="section-kicker">Серия</p>
-                                                <h3 id={`brand-series-${group.key}`}>{group.title}</h3>
-                                            </div>
-                                            <span>{formatSeriesProductCount(group.products.length)}</span>
+                                {seriesGroupsByCatalog.map((catalogGroup) => (
+                                    <section class="brand-catalog-group" aria-labelledby={`brand-catalog-${catalogGroup.key}`}>
+                                        <div class="brand-catalog-group-head">
+                                            <h3 id={`brand-catalog-${catalogGroup.key}`}>{catalogGroup.title}</h3>
                                         </div>
-                                        <div class="catalog-grid series-products-grid">
-                                            {group.products.map((product) => (
-                                                <ProductCard
-                                                    product={product}
-                                                    variant="default"
-                                                    showInstallation={true}
-                                                    refreshProductOnMount={false}
-                                                />
+                                        <div class="brand-catalog-group-list">
+                                            {catalogGroup.series.map((group) => (
+                                                <section id={group.anchorId} class="brand-series-group" aria-labelledby={`brand-series-${group.key}`}>
+                                                    <div class={`brand-series-head brand-products-group-head ${group.heroImage ? "has-thumb" : ""}`}>
+                                                        {group.heroImage && (
+                                                            <img
+                                                                class="brand-series-thumb"
+                                                                src={resolveImageUrl(group.heroImage)}
+                                                                alt={`Серия ${group.displayTitle}`}
+                                                                loading="lazy"
+                                                            />
+                                                        )}
+                                                        <div class="brand-series-copy">
+                                                            <div class="brand-series-title-row">
+                                                                <div>
+                                                                    <p class="section-kicker">Серия</p>
+                                                                    <h4 id={`brand-series-${group.key}`}>{group.displayTitle}</h4>
+                                                                </div>
+                                                                <span>{formatSeriesProductCount(group.products.length)}</span>
+                                                            </div>
+                                                            {group.description ? (
+                                                                <p>{group.description}</p>
+                                                            ) : (
+                                                                <p>{formatSeriesProductCount(group.products.length)} в каталоге {brand.title}.</p>
+                                                            )}
+                                                            {group.distinctFeatures.length > 0 && (
+                                                                <ul class="brand-series-features" aria-label={`Особенности серии ${group.displayTitle}`}>
+                                                                    {group.distinctFeatures.map((feature) => (
+                                                                        <li>{feature}</li>
+                                                                    ))}
+                                                                </ul>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div class="catalog-grid series-products-grid">
+                                                        {group.products.map((product) => (
+                                                            <ProductCard
+                                                                product={product}
+                                                                variant="default"
+                                                                showInstallation={true}
+                                                                refreshProductOnMount={false}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </section>
                                             ))}
                                         </div>
                                     </section>
                                 ))}
-                                {productsWithoutSeries.length > 0 && (
-                                    <section class="brand-series-group" aria-labelledby="brand-series-other">
-                                        <div class="brand-series-head">
-                                            <div>
-                                                <h3 id="brand-series-other">Другие модели</h3>
-                                            </div>
-                                            <span>{formatSeriesProductCount(productsWithoutSeries.length)}</span>
+                                {productsWithoutSeriesByCatalog.map((catalogGroup) => (
+                                    <section class="brand-catalog-group" aria-labelledby={`brand-catalog-unsorted-${catalogGroup.key}`}>
+                                        <div class="brand-catalog-group-head">
+                                            <h3 id={`brand-catalog-unsorted-${catalogGroup.key}`}>{catalogGroup.emptyTitle}</h3>
+                                            <span>{formatSeriesProductCount(catalogGroup.products.length)}</span>
                                         </div>
-                                        <div class="catalog-grid series-products-grid">
-                                            {productsWithoutSeries.map((product) => (
-                                                <ProductCard
-                                                    product={product}
-                                                    variant="default"
-                                                    showInstallation={true}
-                                                    refreshProductOnMount={false}
-                                                />
-                                            ))}
+                                        <div class="brand-series-group">
+                                            <div class="catalog-grid series-products-grid">
+                                                {catalogGroup.products.map((product) => (
+                                                    <ProductCard
+                                                        product={product}
+                                                        variant="default"
+                                                        showInstallation={true}
+                                                        refreshProductOnMount={false}
+                                                    />
+                                                ))}
+                                            </div>
                                         </div>
                                     </section>
-                                )}
+                                ))}
                             </div>
                         </section>
                     ) : (
@@ -591,74 +688,62 @@ const seriesOverviewGroups = seriesGroups;
         letter-spacing: 0;
         text-transform: uppercase;
     }
-    .brand-series-overview {
+    .brand-series-nav {
         padding: 1.2rem;
         border: 1px solid var(--panel-glass-border);
         border-radius: 8px;
         background: var(--panel-glass-bg);
         box-shadow: var(--panel-glass-shadow);
     }
-    .brand-series-overview-head {
+    .brand-series-nav-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
         align-items: flex-start;
     }
-    .brand-series-overview-head > p {
-        max-width: 520px;
+    .brand-series-nav-head p:not(.section-kicker) {
         margin: 0;
         color: var(--text-muted);
-        font-size: 0.94rem;
-        line-height: 1.6;
+        font-size: 0.92rem;
+        line-height: 1.5;
     }
-    .brand-series-overview-grid {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 1rem;
-    }
-    .brand-series-card {
-        min-width: 0;
-        overflow: hidden;
+    .brand-series-nav-list {
         display: flex;
-        flex-direction: column;
+        gap: 0.65rem;
+        overflow: hidden;
+        overflow-x: auto;
+        padding-bottom: 0.15rem;
+        scroll-snap-type: x proximity;
+        scrollbar-width: thin;
+    }
+    .brand-series-chip {
+        min-width: clamp(168px, 18vw, 240px);
+        display: grid;
+        gap: 0.22rem;
+        padding: 0.7rem 0.8rem;
         border: 1px solid var(--panel-chip-border);
         border-radius: 8px;
-        background: rgba(var(--surface-rgb), 0.6);
-    }
-    .brand-series-card-image {
-        height: 152px;
-        display: block;
-        overflow: hidden;
-        border-bottom: 1px solid var(--panel-chip-border);
         background: var(--panel-chip-bg);
-    }
-    .brand-series-card-image img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        transition: transform 0.25s ease;
-    }
-    .brand-series-card-image:hover img {
-        transform: scale(1.03);
-    }
-    .brand-series-card-copy {
-        min-width: 0;
-        display: grid;
-        gap: 0.85rem;
-        padding: 1rem;
-    }
-    .brand-series-card-title {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 0.75rem;
-    }
-    .brand-series-card-title h3 {
-        margin: 0;
         color: var(--text);
-        font-size: 1.15rem;
+        scroll-snap-align: start;
+    }
+    .brand-series-chip:hover {
+        border-color: var(--panel-chip-hover-border);
+        color: var(--primary);
+    }
+    .brand-series-chip span {
+        font-size: 0.9rem;
+        font-weight: 800;
         line-height: 1.25;
         overflow-wrap: anywhere;
     }
-    .brand-series-card-title span,
-    .brand-series-head > span {
+    .brand-series-chip small {
+        color: var(--text-muted);
+        font-size: 0.76rem;
+        font-weight: 700;
+    }
+    .brand-series-title-row > span,
+    .brand-catalog-group-head > span {
         display: inline-flex;
         align-items: center;
         min-height: 30px;
@@ -671,37 +756,77 @@ const seriesOverviewGroups = seriesGroups;
         font-weight: 800;
         white-space: nowrap;
     }
-    .brand-series-card-description {
-        margin: 0;
-        color: var(--text-muted);
-        font-size: 0.94rem;
-        line-height: 1.6;
-    }
-    .brand-series-card-description.muted {
-        color: var(--text-muted);
-    }
     .brand-series-list {
         display: grid;
         gap: 2rem;
     }
+    .brand-catalog-group {
+        display: grid;
+        gap: 1.25rem;
+    }
+    .brand-catalog-group-head {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 1rem;
+        padding-top: 1.3rem;
+        border-top: 1px solid var(--panel-glass-border);
+    }
+    .brand-catalog-group:first-child .brand-catalog-group-head {
+        padding-top: 0;
+        border-top: 0;
+    }
+    .brand-catalog-group-head h3 {
+        margin: 0;
+        color: var(--text);
+        font-size: 1.22rem;
+        line-height: 1.25;
+    }
+    .brand-catalog-group-list {
+        display: grid;
+        gap: 1.5rem;
+    }
     .brand-series-group {
         display: grid;
         gap: 1rem;
-        padding-top: 1.1rem;
-        border-top: 1px solid var(--panel-glass-border);
+        min-width: 0;
+        padding: 1rem;
+        border: 1px solid var(--panel-glass-border);
+        border-radius: 8px;
+        background: rgba(var(--surface-rgb), 0.42);
         scroll-margin-top: 5.5rem;
     }
     .brand-series-head {
-        display: flex;
+        display: grid;
+        grid-template-columns: 1fr;
         align-items: start;
+        gap: 1rem;
+    }
+    .brand-series-head.has-thumb {
+        grid-template-columns: minmax(0, 132px) minmax(0, 1fr);
+    }
+    .brand-series-thumb {
+        width: 100%;
+        max-height: 128px;
+        border-radius: 8px;
+        object-fit: cover;
+        background: var(--panel-chip-bg);
+    }
+    .brand-series-copy {
+        min-width: 0;
+    }
+    .brand-series-title-row {
+        display: flex;
+        align-items: flex-start;
         justify-content: space-between;
         gap: 1rem;
     }
-    .brand-series-head h3 {
+    .brand-series-head h4 {
         margin: 0;
         color: var(--text);
         font-size: 1.16rem;
         line-height: 1.25;
+        overflow-wrap: anywhere;
     }
     .brand-series-head p {
         max-width: 780px;
@@ -729,51 +854,6 @@ const seriesOverviewGroups = seriesGroups;
         color: var(--text);
         font-size: 0.82rem;
         font-weight: 700;
-    }
-    .brand-series-preview {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
-        gap: 0.5rem;
-    }
-    .brand-series-preview-link {
-        min-width: 0;
-        display: grid;
-        gap: 0.2rem;
-        padding: 0.62rem 0.7rem;
-        border: 1px solid var(--panel-chip-border);
-        border-radius: 8px;
-        background: var(--panel-chip-bg);
-        color: var(--text);
-    }
-    .brand-series-preview-link:hover {
-        border-color: var(--panel-chip-hover-border);
-        color: var(--primary);
-    }
-    .brand-series-preview-link span {
-        font-size: 0.86rem;
-        font-weight: 800;
-        line-height: 1.25;
-        overflow-wrap: anywhere;
-    }
-    .brand-series-preview-link small {
-        color: var(--text-muted);
-        font-size: 0.78rem;
-        font-weight: 700;
-    }
-    .brand-series-anchor-link {
-        width: fit-content;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-        color: var(--primary);
-        font-size: 0.9rem;
-        font-weight: 800;
-    }
-    .brand-series-anchor-link:hover {
-        color: var(--primary-dark);
-    }
-    .brand-series-anchor-link .material-icons-round {
-        font-size: 1rem;
     }
     .catalog-grid {
         display: grid;
@@ -817,20 +897,26 @@ const seriesOverviewGroups = seriesGroups;
             padding: 1rem;
         }
         .catalog-section-head,
-        .brand-series-overview-head,
+        .brand-series-nav-head,
+        .brand-catalog-group-head,
         .brand-series-head {
             flex-direction: column;
             align-items: flex-start;
             gap: 0.6rem;
         }
-        .brand-series-card-title,
-        .brand-series-head > span {
-            white-space: normal;
+        .brand-series-head {
+            grid-template-columns: 1fr;
         }
-    }
-    @media (min-width: 860px) {
-        .brand-series-overview-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+        .brand-series-thumb {
+            max-height: 160px;
+        }
+        .brand-series-title-row {
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+        .brand-series-title-row > span,
+        .brand-catalog-group-head > span {
+            white-space: normal;
         }
     }
 </style>
