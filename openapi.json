@@ -1275,6 +1275,28 @@
         }
       }
     },
+    "/api/v1/product-series/navigation": {
+      "get": {
+        "tags": [
+          "api",
+          "api"
+        ],
+        "summary": "Get Product Series Navigation",
+        "operationId": "get_product_series_navigation",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductSeriesNavigationResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/products/{identifier}": {
       "get": {
         "tags": [
@@ -24947,6 +24969,44 @@
           "created_at"
         ],
         "title": "ProductResponse"
+      },
+      "ProductSeriesNavigationItemResponse": {
+        "properties": {
+          "series": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductSeriesResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "series_siblings": {
+            "items": {
+              "$ref": "#/components/schemas/ProductSiblingResponse"
+            },
+            "type": "array",
+            "title": "Series Siblings",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "ProductSeriesNavigationItemResponse"
+      },
+      "ProductSeriesNavigationResponse": {
+        "properties": {
+          "products": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ProductSeriesNavigationItemResponse"
+            },
+            "type": "object",
+            "title": "Products",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "title": "ProductSeriesNavigationResponse"
       },
       "ProductSeriesResponse": {
         "properties": {

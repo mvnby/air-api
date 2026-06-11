@@ -269,6 +269,37 @@ export async function getCatalogForSsg(params = {}) {
     return await getCatalog(params);
 }
 
+async function getProductSeriesNavigationStrictForSsg() {
+    const candidates = getSsgApiCandidates();
+
+    for (const baseUrl of candidates) {
+        const data = await fetchJson(`${baseUrl}/product-series/navigation`);
+        if (data && data.products && typeof data.products === "object") {
+            return data;
+        }
+    }
+
+    return null;
+}
+
+export async function getProductSeriesNavigation(options = {}) {
+    const runtimeFreshness = getRuntimeFreshnessOption(options);
+    const data = await fetchJsonWithRuntimeCache(
+        `${API_V1}/product-series/navigation`,
+        {},
+        true,
+        runtimeFreshness,
+    );
+    return data && data.products ? data : { products: {} };
+}
+
+export async function getProductSeriesNavigationForSsg() {
+    if (import.meta.env.SSR) {
+        return await getProductSeriesNavigationStrictForSsg();
+    }
+    return await getProductSeriesNavigation();
+}
+
 export async function getVitebskFeaturedProducts() {
     const url = `${API_V1}/products/vitebsk-featured`;
     const data = await fetchJson(url);

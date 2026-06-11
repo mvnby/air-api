@@ -115,6 +115,15 @@ class ProductSeriesResponse(BaseModel):
     hero_image: Optional[str] = None
 
 
+class ProductSeriesNavigationItemResponse(BaseModel):
+    series: Optional[ProductSeriesResponse] = None
+    series_siblings: List[ProductSiblingResponse] = []
+
+
+class ProductSeriesNavigationResponse(BaseModel):
+    products: Dict[str, ProductSeriesNavigationItemResponse] = {}
+
+
 class ProductResponse(ProductBase):
     vitebsk_qty: int = 0
     minsk_qty: int = 0
