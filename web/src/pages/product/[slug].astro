@@ -48,9 +48,19 @@ interface Props {
 const runtimeFreshness = await createRuntimeFreshnessContext();
 const runtimeFreshnessOption = runtimeFreshness ? { runtimeFreshness } : undefined;
 const { product: initialProduct } = Astro.props as Props;
+const productSlug = Astro.params.slug || "";
+const hasInitialSeriesInfo = Boolean(
+    initialProduct?.series?.title
+        || initialProduct?.specs?.series
+        || (initialProduct?.tags || []).some((tag: any) => (tag?.group?.slug || tag?.group_slug) === "series")
+);
+const hasInitialSeriesSiblings =
+    Array.isArray(initialProduct?.series_siblings) && initialProduct.series_siblings.length > 0;
 const product = runtimeFreshness
-    ? await getProductBySlug(Astro.params.slug || "", runtimeFreshnessOption)
-    : initialProduct;
+    ? await getProductBySlug(productSlug, runtimeFreshnessOption)
+    : hasInitialSeriesSiblings || !hasInitialSeriesInfo
+        ? initialProduct
+        : (await getProductBySlug(productSlug)) || initialProduct;
 
 if (!product) {
     return createRuntimeNotFoundResponse(Astro.response, runtimeFreshness);
@@ -130,7 +140,34 @@ const bentoCards = generateBentoCards(product);
 
 const publicTags = (product.tags || []).filter((t: any) => t.is_public);
 const seoDescription = buildProductMetaDescription(product);
-	---
+const asText = (value: unknown) => String(value || "").trim();
+const formatSeriesPrice = (value: unknown) => {
+    const price = Number(value);
+    return Number.isFinite(price) && price > 0
+        ? `${price.toLocaleString("ru-RU")} Br`
+        : "Цена по запросу";
+};
+const formatSeriesArea = (item: any) => {
+    const rawArea = item?.area ?? item?.specs?.area_m2;
+    const area = Number(rawArea);
+    if (Number.isFinite(area) && area > 0) return `до ${area} м²`;
+    const textArea = asText(rawArea);
+    return textArea ? `до ${textArea}` : "";
+};
+const resolveSeriesCompressorLabel = (item: any) => {
+    const raw = asText(item?.specs?.compressor_type_norm).toLowerCase();
+    if (raw === "full_dc") return "Full DC Inverter";
+    if (raw === "on_off") return "On/Off";
+    if (raw === "inverter") return "Инвертор";
+    if (item?.is_inverter === true) return "Инвертор";
+    if (item?.is_inverter === false) return "On/Off";
+    return "";
+};
+const seriesTitle = asText(product.series?.title) || asText(specs.series);
+const seriesSiblings = Array.isArray(product.series_siblings)
+    ? product.series_siblings.filter((item: any) => item?.slug && item.slug !== product.slug)
+    : [];
+---
 
 <Layout
     title={product.title}
@@ -950,6 +987,58 @@ const seoDescription = buildProductMetaDescription(product);
                 </details>
             </div>
         </div>
+
+        {
+            seriesSiblings.length > 0 && (
+                <section class="series-siblings-section" aria-labelledby="series-siblings-title">
+                    <div class="series-siblings-head">
+                        <div>
+                            <p class="section-kicker">Серия</p>
+                            <h2 id="series-siblings-title">
+                                Другие модели серии {seriesTitle || "этой линейки"}
+                            </h2>
+                        </div>
+                        {productBrand && (
+                            <a class="series-brand-link" href={`/brands/${productBrand.slug}/`}>
+                                Все модели {productBrand.title}
+                                <span class="material-icons-round" aria-hidden="true">arrow_forward</span>
+                            </a>
+                        )}
+                    </div>
+                    <div class="series-siblings-grid">
+                        {seriesSiblings.map((item: any) => {
+                            const image = resolveImageUrl(item.card_image || item.main_image || item.full_image);
+                            const areaLabel = formatSeriesArea(item);
+                            const compressorLabel = resolveSeriesCompressorLabel(item);
+
+                            return (
+                                <a class="series-sibling-card" href={`/product/${item.slug}/`}>
+                                    <span class="series-sibling-image">
+                                        <img
+                                            src={image}
+                                            alt={item.title}
+                                            width="240"
+                                            height="180"
+                                            loading="lazy"
+                                        />
+                                    </span>
+                                    <span class="series-sibling-info">
+                                        <span class="series-sibling-title">{item.title}</span>
+                                        <span class="series-sibling-meta">
+                                            {areaLabel && <span>{areaLabel}</span>}
+                                            {compressorLabel && <span>{compressorLabel}</span>}
+                                        </span>
+                                        <span class="series-sibling-price">
+                                            {formatSeriesPrice(item.price)}
+                                        </span>
+                                    </span>
+                                </a>
+                            );
+                        })}
+                    </div>
+                </section>
+            )
+        }
     </div>
 </Layout>
 
@@ -1011,6 +1100,141 @@ const seoDescription = buildProductMetaDescription(product);
         grid-template-columns: 42% 1fr; /* User requested ~40% for gallery */
         gap: 4rem;
         align-items: start;
+    }
+
+    .series-siblings-section {
+        margin-top: 3rem;
+        padding-top: 1.6rem;
+        border-top: 1px solid var(--panel-glass-border);
+    }
+
+    .series-siblings-head {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .section-kicker {
+        margin: 0 0 0.25rem;
+        color: var(--primary);
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0;
+        text-transform: uppercase;
+    }
+
+    .series-siblings-head h2 {
+        margin: 0;
+        color: var(--text);
+        font-size: 1.35rem;
+        line-height: 1.2;
+    }
+
+    .series-brand-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .series-brand-link:hover {
+        color: var(--primary);
+    }
+
+    .series-brand-link .material-icons-round {
+        font-size: 1rem;
+    }
+
+    .series-siblings-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+        gap: 0.85rem;
+    }
+
+    .series-sibling-card {
+        min-width: 0;
+        display: grid;
+        grid-template-columns: 88px minmax(0, 1fr);
+        gap: 0.85rem;
+        align-items: center;
+        padding: 0.75rem;
+        border-radius: 12px;
+        border: 1px solid var(--panel-chip-border);
+        background: var(--panel-chip-bg);
+        color: var(--text);
+        transition:
+            border-color 0.2s ease,
+            transform 0.2s ease,
+            box-shadow 0.2s ease;
+    }
+
+    .series-sibling-card:hover {
+        border-color: var(--panel-chip-hover-border);
+        transform: translateY(-2px);
+        box-shadow: var(--panel-glass-shadow);
+    }
+
+    .series-sibling-image {
+        width: 88px;
+        aspect-ratio: 4 / 3;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        background: rgba(var(--surface-rgb), 0.58);
+        border: 1px solid var(--panel-chip-border);
+        overflow: hidden;
+    }
+
+    .series-sibling-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        padding: 0.45rem;
+    }
+
+    .series-sibling-info {
+        min-width: 0;
+        display: grid;
+        gap: 0.35rem;
+    }
+
+    .series-sibling-title {
+        color: var(--text);
+        font-weight: 800;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+    }
+
+    .series-sibling-meta {
+        min-height: 1.45rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+    }
+
+    .series-sibling-meta span {
+        display: inline-flex;
+        align-items: center;
+        min-height: 22px;
+        padding: 0.18rem 0.45rem;
+        border-radius: 7px;
+        background: var(--panel-pill-bg);
+        color: var(--text-muted);
+        font-size: 0.78rem;
+        font-weight: 700;
+    }
+
+    .series-sibling-price {
+        color: var(--primary);
+        font-size: 0.98rem;
+        font-weight: 900;
+        font-variant-numeric: tabular-nums;
     }
 
     .visuals-col {
@@ -1750,6 +1974,27 @@ const seoDescription = buildProductMetaDescription(product);
         .product-page {
             padding: 1rem; /* Aligned with global container */
             padding-bottom: 6rem;
+        }
+
+        .series-siblings-section {
+            margin-top: 2rem;
+        }
+
+        .series-siblings-head {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .series-brand-link {
+            white-space: normal;
+        }
+
+        .series-sibling-card {
+            grid-template-columns: 78px minmax(0, 1fr);
+        }
+
+        .series-sibling-image {
+            width: 78px;
         }
 
         .header-section h1 {

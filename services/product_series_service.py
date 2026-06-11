@@ -40,7 +40,7 @@ class ProductSeriesService:
         stmt = stmt.options(selectinload(Product.tags).selectinload(Tag.group))
         candidates = list((await session.execute(stmt)).scalars().all())
 
-        def score(item: Product) -> tuple[int, int]:
+        def score(item: Product) -> tuple[int, float, float, float, str, int]:
             same_brand = 1
             if product.brand_id and item.brand_id:
                 same_brand = 0 if product.brand_id == item.brand_id else 1
@@ -54,7 +54,24 @@ class ProductSeriesService:
                     if tag.group and tag.group.slug == "brand"
                 }
                 same_brand = 0 if (product_brand_ids and item_brand_ids.intersection(product_brand_ids)) else 1
-            return (same_brand, item.price or 0)
+
+            def numeric(value) -> float:
+                if value is None:
+                    return float("inf")
+                try:
+                    number = float(value)
+                except (TypeError, ValueError):
+                    return float("inf")
+                return number if number > 0 else float("inf")
+
+            return (
+                same_brand,
+                numeric(item.area),
+                numeric(item.power_cooling),
+                numeric(item.price),
+                (item.title or "").casefold(),
+                item.id or 0,
+            )
 
         candidates.sort(key=score)
         return candidates[:limit]

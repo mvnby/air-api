@@ -229,6 +229,7 @@ export type { ProductMainImageCleanupSkipReasonsResponse } from './models/Produc
 export type { ProductManualPayload } from './models/ProductManualPayload';
 export type { ProductManualResponse } from './models/ProductManualResponse';
 export type { ProductResponse } from './models/ProductResponse';
+export type { ProductSeriesResponse } from './models/ProductSeriesResponse';
 export type { ProductSiblingResponse } from './models/ProductSiblingResponse';
 export type { ProductUpdate } from './models/ProductUpdate';
 export type { PublicBrandResponse } from './models/PublicBrandResponse';

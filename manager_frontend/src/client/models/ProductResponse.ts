@@ -5,6 +5,7 @@
 import type { ProductBrandResponse } from './ProductBrandResponse';
 import type { ProductImageResponse } from './ProductImageResponse';
 import type { ProductManualResponse } from './ProductManualResponse';
+import type { ProductSeriesResponse } from './ProductSeriesResponse';
 import type { ProductSiblingResponse } from './ProductSiblingResponse';
 import type { TagResponse } from './TagResponse';
 export type ProductResponse = {
@@ -25,6 +26,7 @@ export type ProductResponse = {
     minsk_qty?: number;
     availability_status?: (string | null);
     brand?: (ProductBrandResponse | null);
+    series?: (ProductSeriesResponse | null);
     tags?: Array<TagResponse>;
     specs?: Record<string, any>;
     images?: Array<string>;

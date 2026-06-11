@@ -32,6 +32,7 @@ class CatalogService:
             .join(ProductLocalStock, Product.id == ProductLocalStock.product_id)
             .options(
                 selectinload(Product.brand).load_only(Brand.id, Brand.title, Brand.slug, Brand.logo_url),
+                selectinload(Product.series),
                 selectinload(Product.tags).selectinload(Tag.group),
                 selectinload(Product.gallery_images).selectinload(ProductImage.variants),
                 selectinload(Product.attachments),
