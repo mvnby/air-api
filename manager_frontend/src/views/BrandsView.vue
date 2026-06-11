@@ -37,6 +37,12 @@ const seriesSaving = ref(false);
 const seriesError = ref('');
 const seriesModalOpen = ref(false);
 const editingSeries = ref<ManagerBrandSeries | null>(null);
+const reorderingBrands = ref(false);
+const reorderingSeries = ref(false);
+const draggedBrandId = ref<number | null>(null);
+const brandDropTargetId = ref<number | null>(null);
+const draggedSeriesId = ref<number | null>(null);
+const seriesDropTargetId = ref<number | null>(null);
 const form = ref<BrandForm>({
     title: '',
     slug: '',
@@ -71,13 +77,58 @@ const selectedBrand = computed(() => {
     return brands.value.find((item) => item.id === selectedBrandId.value) || null;
 });
 
+const isBrandSearchActive = computed(() => query.value.trim().length > 0);
+const isBrandReorderDisabled = computed(() => (
+    loading.value
+    || saving.value
+    || reorderingBrands.value
+    || isBrandSearchActive.value
+));
+const isSeriesReorderDisabled = computed(() => (
+    !selectedBrandId.value
+    || seriesLoading.value
+    || seriesSaving.value
+    || reorderingSeries.value
+));
+
+const SORT_ORDER_STEP = 10;
+
+const getNextSortOrder = <T extends { sort_order?: number | null }>(items: T[]) => {
+    const maxOrder = items.reduce((max, item) => Math.max(max, Number(item.sort_order || 0)), 0);
+    return maxOrder + SORT_ORDER_STEP;
+};
+
+const moveItemById = <T extends { id: number }>(items: T[], draggedId: number, targetId: number) => {
+    const sourceIndex = items.findIndex((item) => item.id === draggedId);
+    const targetIndex = items.findIndex((item) => item.id === targetId);
+    if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return items;
+
+    const next = [...items];
+    const [moved] = next.splice(sourceIndex, 1);
+    if (!moved) return items;
+    next.splice(targetIndex, 0, moved);
+    return next;
+};
+
+const withSortOrder = <T extends { sort_order: number }>(items: T[]) => (
+    items.map((item, index) => ({
+        ...item,
+        sort_order: (index + 1) * SORT_ORDER_STEP,
+    }))
+);
+
+const getChangedSortItems = <T extends { id: number; sort_order: number }>(previous: T[], next: T[]) => {
+    const previousOrder = new Map(previous.map((item) => [item.id, Number(item.sort_order || 0)]));
+    return next.filter((item) => Number(item.sort_order || 0) !== previousOrder.get(item.id));
+};
+
 const resetForm = () => {
     form.value = {
         title: '',
         slug: '',
         logo_url: '',
         description: '',
-        sort_order: 0,
+        sort_order: getNextSortOrder(brands.value),
         is_published: true,
     };
 };
@@ -89,7 +140,7 @@ const resetSeriesForm = () => {
         description: '',
         hero_image: '',
         featuresText: '',
-        sort_order: 0,
+        sort_order: getNextSortOrder(seriesItems.value),
         is_published: true,
     };
 };
@@ -227,7 +278,7 @@ const saveBrand = async () => {
             slug: String(form.value.slug || '').trim() || undefined,
             logo_url: String(form.value.logo_url || '').trim() || undefined,
             description: String(form.value.description || '').trim() || undefined,
-            sort_order: Number(form.value.sort_order || 0),
+            sort_order: wasEditing ? Number(form.value.sort_order || 0) : getNextSortOrder(brands.value),
             is_published: Boolean(form.value.is_published),
         };
         if (editingBrand.value?.id) {
@@ -242,6 +293,56 @@ const saveBrand = async () => {
         error.value = getApiErrorMessage(err);
     } finally {
         saving.value = false;
+    }
+};
+
+const resetBrandDragState = () => {
+    draggedBrandId.value = null;
+    brandDropTargetId.value = null;
+};
+
+const onBrandDragStart = (event: DragEvent, brand: ManagerBrand) => {
+    if (isBrandReorderDisabled.value) return;
+    draggedBrandId.value = brand.id;
+    event.dataTransfer?.setData('text/plain', String(brand.id));
+    if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move';
+    }
+};
+
+const onBrandDragOver = (event: DragEvent, brand: ManagerBrand) => {
+    if (isBrandReorderDisabled.value || !draggedBrandId.value || draggedBrandId.value === brand.id) return;
+    event.preventDefault();
+    brandDropTargetId.value = brand.id;
+    if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = 'move';
+    }
+};
+
+const onBrandDrop = async (brand: ManagerBrand) => {
+    const sourceId = draggedBrandId.value;
+    resetBrandDragState();
+    if (!sourceId || sourceId === brand.id || isBrandReorderDisabled.value) return;
+
+    const previous = [...brands.value];
+    const reordered = moveItemById(brands.value, sourceId, brand.id);
+    const next = withSortOrder(reordered);
+    const changed = getChangedSortItems(previous, next);
+    if (changed.length === 0) return;
+
+    brands.value = next;
+    reorderingBrands.value = true;
+    error.value = '';
+    try {
+        await Promise.all(changed.map((item) => api.updateManagerBrand(item.id, { sort_order: item.sort_order })));
+        setToast('Порядок брендов сохранен');
+        await fetchBrands();
+    } catch (err) {
+        brands.value = previous;
+        error.value = `Не удалось сохранить порядок брендов: ${getApiErrorMessage(err)}`;
+        await fetchBrands();
+    } finally {
+        reorderingBrands.value = false;
     }
 };
 
@@ -276,7 +377,7 @@ const saveSeries = async () => {
             description: String(seriesForm.value.description || '').trim() || undefined,
             hero_image: String(seriesForm.value.hero_image || '').trim() || undefined,
             features: normalizeFeatures(seriesForm.value.featuresText),
-            sort_order: Number(seriesForm.value.sort_order || 0),
+            sort_order: wasEditing ? Number(seriesForm.value.sort_order || 0) : getNextSortOrder(seriesItems.value),
             is_published: Boolean(seriesForm.value.is_published),
         };
         if (editingSeries.value?.id) {
@@ -291,6 +392,59 @@ const saveSeries = async () => {
         seriesError.value = getApiErrorMessage(err);
     } finally {
         seriesSaving.value = false;
+    }
+};
+
+const resetSeriesDragState = () => {
+    draggedSeriesId.value = null;
+    seriesDropTargetId.value = null;
+};
+
+const onSeriesDragStart = (event: DragEvent, series: ManagerBrandSeries) => {
+    if (isSeriesReorderDisabled.value) return;
+    draggedSeriesId.value = series.id;
+    event.dataTransfer?.setData('text/plain', String(series.id));
+    if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move';
+    }
+};
+
+const onSeriesDragOver = (event: DragEvent, series: ManagerBrandSeries) => {
+    if (isSeriesReorderDisabled.value || !draggedSeriesId.value || draggedSeriesId.value === series.id) return;
+    event.preventDefault();
+    seriesDropTargetId.value = series.id;
+    if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = 'move';
+    }
+};
+
+const onSeriesDrop = async (series: ManagerBrandSeries) => {
+    const brandId = selectedBrandId.value;
+    const sourceId = draggedSeriesId.value;
+    resetSeriesDragState();
+    if (!brandId || !sourceId || sourceId === series.id || isSeriesReorderDisabled.value) return;
+
+    const previous = [...seriesItems.value];
+    const reordered = moveItemById(seriesItems.value, sourceId, series.id);
+    const next = withSortOrder(reordered);
+    const changed = getChangedSortItems(previous, next);
+    if (changed.length === 0) return;
+
+    seriesItems.value = next;
+    reorderingSeries.value = true;
+    seriesError.value = '';
+    try {
+        await Promise.all(changed.map((item) => (
+            api.updateManagerBrandSeries(brandId, item.id, { sort_order: item.sort_order })
+        )));
+        setToast('Порядок серий сохранен');
+        await fetchSeries();
+    } catch (err) {
+        seriesItems.value = previous;
+        seriesError.value = `Не удалось сохранить порядок серий: ${getApiErrorMessage(err)}`;
+        await fetchSeries();
+    } finally {
+        reorderingSeries.value = false;
     }
 };
 
@@ -346,7 +500,9 @@ onMounted(() => {
                     class="w-full sm:max-w-sm px-3 py-2 bg-slate-100 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg text-sm"
                 />
                 <div class="text-xs text-gray-500 dark:text-slate-400">
-                    Всего: {{ filteredBrands.length }}
+                    <span v-if="reorderingBrands" class="font-semibold text-teal-600 dark:text-teal-300">Сохраняем порядок...</span>
+                    <span v-else-if="isBrandSearchActive">Перетаскивание доступно после очистки поиска.</span>
+                    <span v-else>Всего: {{ filteredBrands.length }} · порядок меняется перетаскиванием</span>
                 </div>
             </div>
 
@@ -361,10 +517,10 @@ onMounted(() => {
                 <table class="min-w-full text-sm">
                     <thead>
                         <tr class="text-left text-gray-500 dark:text-slate-400 border-b border-gray-100 dark:border-slate-700">
+                            <th class="py-2 pr-3 font-semibold w-12">Порядок</th>
                             <th class="py-2 pr-3 font-semibold">Бренд</th>
                             <th class="py-2 pr-3 font-semibold">Slug</th>
                             <th class="py-2 pr-3 font-semibold">Товаров</th>
-                            <th class="py-2 pr-3 font-semibold">Порядок</th>
                             <th class="py-2 pr-3 font-semibold">Статус</th>
                             <th class="py-2 text-right font-semibold">Действия</th>
                         </tr>
@@ -374,9 +530,31 @@ onMounted(() => {
                             v-for="brand in filteredBrands"
                             :key="brand.id"
                             class="border-b border-gray-100 dark:border-slate-800/80 cursor-pointer transition-colors"
-                            :class="selectedBrandId === brand.id ? 'bg-teal-50/80 dark:bg-teal-900/20' : 'hover:bg-gray-50 dark:hover:bg-slate-800'"
+                            :class="[
+                                selectedBrandId === brand.id ? 'bg-teal-50/80 dark:bg-teal-900/20' : 'hover:bg-gray-50 dark:hover:bg-slate-800',
+                                brandDropTargetId === brand.id ? 'outline outline-2 outline-teal-400 outline-offset-[-2px]' : '',
+                                draggedBrandId === brand.id ? 'opacity-50' : '',
+                            ]"
+                            :draggable="!isBrandReorderDisabled"
+                            @dragstart="onBrandDragStart($event, brand)"
+                            @dragover="onBrandDragOver($event, brand)"
+                            @dragleave="brandDropTargetId = brandDropTargetId === brand.id ? null : brandDropTargetId"
+                            @drop.prevent="onBrandDrop(brand)"
+                            @dragend="resetBrandDragState"
                             @click="selectBrand(brand)"
                         >
+                            <td class="py-2 pr-3">
+                                <button
+                                    type="button"
+                                    class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 dark:border-slate-700 text-gray-400 dark:text-slate-500 transition-colors"
+                                    :class="isBrandReorderDisabled ? 'cursor-not-allowed opacity-40' : 'cursor-grab hover:bg-gray-50 hover:text-teal-600 dark:hover:bg-slate-700 dark:hover:text-teal-300 active:cursor-grabbing'"
+                                    :disabled="isBrandReorderDisabled"
+                                    title="Перетащите бренд выше или ниже"
+                                    @click.stop
+                                >
+                                    <span class="material-icons-round text-[20px]">drag_indicator</span>
+                                </button>
+                            </td>
                             <td class="py-2 pr-3">
                                 <div class="flex items-center gap-2 min-w-[220px]">
                                     <img
@@ -395,7 +573,6 @@ onMounted(() => {
                             </td>
                             <td class="py-2 pr-3 text-gray-600 dark:text-slate-300 font-mono">{{ brand.slug }}</td>
                             <td class="py-2 pr-3 text-gray-700 dark:text-slate-200">{{ brand.products_count }}</td>
-                            <td class="py-2 pr-3 text-gray-700 dark:text-slate-200">{{ brand.sort_order }}</td>
                             <td class="py-2 pr-3">
                                 <span
                                     class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
@@ -444,8 +621,11 @@ onMounted(() => {
                         {{ selectedBrand ? selectedBrand.title : 'Выберите бренд' }}
                     </h2>
                     <p class="text-sm text-gray-500 dark:text-slate-400">
-                        Описания и фичи попадут на брендовые страницы и в блок связанных моделей.
+                        Описания и фичи попадут на брендовые страницы и в блок связанных моделей. Порядок меняется перетаскиванием карточек.
                     </p>
+                </div>
+                <div v-if="reorderingSeries" class="text-xs font-semibold text-teal-600 dark:text-teal-300">
+                    Сохраняем порядок серий...
                 </div>
                 <button
                     type="button"
@@ -476,8 +656,28 @@ onMounted(() => {
                     v-for="series in seriesItems"
                     :key="series.id"
                     class="rounded-xl border border-gray-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-4 space-y-3"
+                    :class="[
+                        seriesDropTargetId === series.id ? 'outline outline-2 outline-teal-400 outline-offset-2' : '',
+                        draggedSeriesId === series.id ? 'opacity-50' : '',
+                    ]"
+                    :draggable="!isSeriesReorderDisabled"
+                    @dragstart="onSeriesDragStart($event, series)"
+                    @dragover="onSeriesDragOver($event, series)"
+                    @dragleave="seriesDropTargetId = seriesDropTargetId === series.id ? null : seriesDropTargetId"
+                    @drop.prevent="onSeriesDrop(series)"
+                    @dragend="resetSeriesDragState"
                 >
                     <div class="flex items-start gap-3">
+                        <button
+                            type="button"
+                            class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-200 dark:border-slate-700 text-gray-400 dark:text-slate-500 transition-colors"
+                            :class="isSeriesReorderDisabled ? 'cursor-not-allowed opacity-40' : 'cursor-grab hover:bg-white hover:text-teal-600 dark:hover:bg-slate-800 dark:hover:text-teal-300 active:cursor-grabbing'"
+                            :disabled="isSeriesReorderDisabled"
+                            title="Перетащите серию выше или ниже"
+                            @click.stop
+                        >
+                            <span class="material-icons-round text-[22px]">drag_indicator</span>
+                        </button>
                         <img
                             v-if="series.hero_image"
                             :src="series.hero_image"
@@ -510,7 +710,7 @@ onMounted(() => {
                         </span>
                     </div>
                     <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500 dark:text-slate-400">
-                        <span>{{ series.products_count }} товаров · порядок {{ series.sort_order }}</span>
+                        <span>{{ series.products_count }} товаров</span>
                         <div class="inline-flex items-center gap-1">
                             <button
                                 type="button"
@@ -566,16 +766,10 @@ onMounted(() => {
                             Можно использовать Markdown: абзацы, списки, ссылки, **жирный**, *курсив*.
                         </span>
                     </label>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <label class="text-sm space-y-1 block">
-                            <span class="text-gray-600 dark:text-slate-300 font-medium">Sort order</span>
-                            <input v-model.number="form.sort_order" type="number" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
-                        </label>
-                        <label class="text-sm flex items-center gap-2 pt-6">
-                            <input v-model="form.is_published" type="checkbox" class="rounded border-gray-300 dark:border-slate-700" />
-                            <span class="text-gray-600 dark:text-slate-300 font-medium">Публиковать бренд</span>
-                        </label>
-                    </div>
+                    <label class="text-sm flex items-center gap-2">
+                        <input v-model="form.is_published" type="checkbox" class="rounded border-gray-300 dark:border-slate-700" />
+                        <span class="text-gray-600 dark:text-slate-300 font-medium">Публиковать бренд</span>
+                    </label>
                 </div>
                 <footer class="px-5 py-4 border-t border-gray-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 flex items-center justify-end gap-2">
                     <button type="button" class="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700" @click="closeModal">
@@ -626,16 +820,10 @@ onMounted(() => {
                         <span class="text-gray-600 dark:text-slate-300 font-medium">Фичи серии</span>
                         <textarea v-model="seriesForm.featuresText" rows="5" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" placeholder="Одна фича на строку" />
                     </label>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <label class="text-sm space-y-1 block">
-                            <span class="text-gray-600 dark:text-slate-300 font-medium">Sort order</span>
-                            <input v-model.number="seriesForm.sort_order" type="number" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
-                        </label>
-                        <label class="text-sm flex items-center gap-2 pt-6">
-                            <input v-model="seriesForm.is_published" type="checkbox" class="rounded border-gray-300 dark:border-slate-700" />
-                            <span class="text-gray-600 dark:text-slate-300 font-medium">Публиковать серию</span>
-                        </label>
-                    </div>
+                    <label class="text-sm flex items-center gap-2">
+                        <input v-model="seriesForm.is_published" type="checkbox" class="rounded border-gray-300 dark:border-slate-700" />
+                        <span class="text-gray-600 dark:text-slate-300 font-medium">Публиковать серию</span>
+                    </label>
                 </div>
                 <footer class="px-5 py-4 border-t border-gray-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 flex items-center justify-end gap-2">
                     <button type="button" class="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700" @click="closeSeriesModal">
