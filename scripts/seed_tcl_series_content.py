@@ -27,7 +27,7 @@ class SeriesSeed:
 TCL_SERIES: tuple[SeriesSeed, ...] = (
     SeriesSeed(
         title="FreshIN 3.0",
-        match_slugs=("freshin-3-0", "freshin", "fci"),
+        match_slugs=("freshin-3-0", "freshin3-0", "freshin", "fci"),
         description=(
             "Флагманская инверторная серия TCL с подачей свежего воздуха FreshIN+, "
             "фильтрами QuadriPuri, индикатором качества воздуха и тихим ночным режимом."
@@ -76,7 +76,7 @@ TCL_SERIES: tuple[SeriesSeed, ...] = (
     ),
     SeriesSeed(
         title="BreezeIN 2.0",
-        match_slugs=("breezein-2-0", "breeze-in-2-0", "ug11v3ah"),
+        match_slugs=("breezein-2-0", "breeze-in-2-0", "breeze-in-2-0-a", "ug11v3ah"),
         description=(
             "Инверторная серия BreezeIN 2.0 подходит для ежедневного охлаждения и обогрева: "
             "мягкий поток воздуха, самоочистка и стабильная работа в широком диапазоне температур."
@@ -92,7 +92,7 @@ TCL_SERIES: tuple[SeriesSeed, ...] = (
     ),
     SeriesSeed(
         title="BreezeIN 1.0",
-        match_slugs=("breezein-1-0", "breeze-in-1-0", "tph11ihb"),
+        match_slugs=("breezein-1-0", "breeze-in-1-0", "breeze-in-1-0-a", "tph11ihb"),
         description=(
             "Базовая инверторная линейка BreezeIN для спокойного бытового использования: "
             "охлаждение, обогрев, осушение и понятный набор повседневных функций."
@@ -108,7 +108,7 @@ TCL_SERIES: tuple[SeriesSeed, ...] = (
     ),
     SeriesSeed(
         title="Ocarina",
-        match_slugs=("ocarina", "tpg21i3ahb"),
+        match_slugs=("ocarina", "ocarina-t-pro-c-paneliu-tpg21", "tpg21", "tpg21i3ahb"),
         description=(
             "Дизайнерская инверторная серия TCL с расширенными функциями комфорта, "
             "очистки воздуха и автоматического распределения потока."
@@ -124,7 +124,14 @@ TCL_SERIES: tuple[SeriesSeed, ...] = (
     ),
     SeriesSeed(
         title="Elite Inverter",
-        match_slugs=("elite-inverter", "elite-invertor", "xa71if", "xa71in"),
+        match_slugs=(
+            "elite-inverter",
+            "elite-invertor",
+            "elite-inverter-c-paneliu-xa71n",
+            "xa71if",
+            "xa71in",
+            "xa71n",
+        ),
         description=(
             "Практичная инверторная серия TCL Elite для помещений, где нужны базовая "
             "надежность, экономичная работа компрессора и понятное управление."
@@ -156,7 +163,7 @@ TCL_SERIES: tuple[SeriesSeed, ...] = (
     ),
     SeriesSeed(
         title="Elite",
-        match_slugs=("elite", "xab1"),
+        match_slugs=("elite", "elite-on", "xab1"),
         description=(
             "Базовая серия TCL On/Off: простой кондиционер для стандартных задач "
             "охлаждения, обогрева и осушения в квартире или офисе."
