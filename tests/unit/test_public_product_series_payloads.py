@@ -7,7 +7,15 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
 from crud.product import ProductDAO
-from models import Brand, Product, ProductLocalStock, ProductSeries
+from models import (
+    Brand,
+    Product,
+    ProductLocalStock,
+    ProductSeries,
+    ProductTagLink,
+    Tag,
+    TagGroup,
+)
 from services.catalog import CatalogService
 from services.product_response_mapper import map_product_to_response
 from services.product_series_service import ProductSeriesService
@@ -143,3 +151,80 @@ async def test_public_product_queries_eager_load_series_and_siblings(sqlite_sess
 
     siblings = await ProductSeriesService.get_series_siblings(sqlite_session, detail, limit=8)
     assert [item.slug for item in siblings] == ["mdv-elite-25", "mdv-elite-50"]
+
+
+@pytest.mark.asyncio
+async def test_public_series_navigation_builds_slug_sibling_map(sqlite_session):
+    seeded = await _seed_series_products(sqlite_session)
+
+    navigation = await ProductSeriesService.get_series_navigation(sqlite_session)
+
+    main_item = navigation.products[seeded["main"].slug]
+    assert main_item.series is not None
+    assert main_item.series.slug == "elite"
+    assert [item.slug for item in main_item.series_siblings] == [
+        "mdv-elite-25",
+        "mdv-elite-50",
+    ]
+
+    sibling_item = navigation.products[seeded["sibling_25"].slug]
+    assert [item.slug for item in sibling_item.series_siblings] == [
+        "mdv-elite-35",
+        "mdv-elite-50",
+    ]
+    assert seeded["other"].slug not in navigation.products
+
+
+@pytest.mark.asyncio
+async def test_public_series_navigation_covers_legacy_series_sources(sqlite_session):
+    specs_main = Product(
+        title="Legacy Line 35",
+        slug="legacy-line-35",
+        price=1700,
+        area=35,
+        specs={"series": "Legacy Line"},
+        is_published=True,
+    )
+    specs_sibling = Product(
+        title="Legacy Line 25",
+        slug="legacy-line-25",
+        price=1400,
+        area=25,
+        specs={"series": "Legacy Line"},
+        is_published=True,
+    )
+    specs_single = Product(
+        title="Solo Line 25",
+        slug="solo-line-25",
+        price=1200,
+        area=25,
+        specs={"series": "Solo Line"},
+        is_published=True,
+    )
+    tag_single = Product(
+        title="Tagged Series 25",
+        slug="tagged-series-25",
+        price=1300,
+        area=25,
+        is_published=True,
+    )
+    tag_group = TagGroup(title="Series", slug="series")
+    tag = Tag(title="Tagged Series", slug="tagged-series")
+    sqlite_session.add_all([specs_main, specs_sibling, specs_single, tag_single, tag_group])
+    await sqlite_session.flush()
+
+    tag.group_id = tag_group.id
+    sqlite_session.add(tag)
+    await sqlite_session.flush()
+    sqlite_session.add(ProductTagLink(product_id=tag_single.id, tag_id=tag.id))
+    await sqlite_session.commit()
+
+    navigation = await ProductSeriesService.get_series_navigation(sqlite_session)
+
+    assert [item.slug for item in navigation.products[specs_main.slug].series_siblings] == [
+        "legacy-line-25",
+    ]
+    assert navigation.products[specs_single.slug].series is None
+    assert navigation.products[specs_single.slug].series_siblings == []
+    assert navigation.products[tag_single.slug].series is None
+    assert navigation.products[tag_single.slug].series_siblings == []

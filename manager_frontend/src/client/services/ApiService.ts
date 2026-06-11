@@ -12,6 +12,7 @@ import type { OrderResponse } from '../models/OrderResponse';
 import type { ProductAvailabilityLeadPayload } from '../models/ProductAvailabilityLeadPayload';
 import type { ProductAvailabilityLeadResponse } from '../models/ProductAvailabilityLeadResponse';
 import type { ProductResponse } from '../models/ProductResponse';
+import type { ProductSeriesNavigationResponse } from '../models/ProductSeriesNavigationResponse';
 import type { PublicBrandResponse } from '../models/PublicBrandResponse';
 import type { ServiceResponse } from '../models/ServiceResponse';
 import type { SpecsKeysResponse } from '../models/SpecsKeysResponse';
@@ -459,6 +460,17 @@ export class ApiService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/products/vitebsk-featured',
+        });
+    }
+    /**
+     * Get Product Series Navigation
+     * @returns ProductSeriesNavigationResponse Successful Response
+     * @throws ApiError
+     */
+    public static getProductSeriesNavigation(): CancelablePromise<ProductSeriesNavigationResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/product-series/navigation',
         });
     }
     /**

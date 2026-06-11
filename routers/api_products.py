@@ -11,6 +11,7 @@ from schemas import (
     CatalogResponse,
     FiltersConfigResponse,
     Meta,
+    ProductSeriesNavigationResponse,
     ProductResponse,
     SpecsKeysResponse,
 )
@@ -118,6 +119,15 @@ async def get_vitebsk_featured_products(session: AsyncSession = Depends(get_sess
         )
         for product in products
     ]
+
+
+@router.get(
+    "/v1/product-series/navigation",
+    response_model=ProductSeriesNavigationResponse,
+    operation_id="get_product_series_navigation",
+)
+async def get_product_series_navigation(session: AsyncSession = Depends(get_session)):
+    return await ProductService.get_series_navigation(session)
 
 
 @router.get("/v1/products/{identifier}", response_model=ProductResponse, operation_id="get_product")

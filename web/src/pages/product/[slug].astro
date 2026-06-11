@@ -6,6 +6,7 @@ import {
     createRuntimeNotFoundResponse,
     getProductBySlug,
     getProducts,
+    getProductSeriesNavigationForSsg,
     isRuntimeFreshnessEnabled,
     resolveImageUrl,
 } from "../../utils/api";
@@ -33,33 +34,49 @@ export async function getStaticPaths() {
     if (!Array.isArray(products) || products.length === 0) {
         throw new Error("[SSG] Product static paths generation failed: no products returned from API.");
     }
+    const seriesNavigation = await getProductSeriesNavigationForSsg();
+    const seriesNavigationBySlug = seriesNavigation?.products || {};
 
     return products.map((product: any) => ({
         params: { slug: product.slug },
-        props: { product },
+        props: {
+            product,
+            seriesNavigationItem: seriesNavigationBySlug[product.slug] || null,
+        },
     }));
 }
 
 // Define Props
 interface Props {
     product: any;
+    seriesNavigationItem?: any;
 }
 
 const runtimeFreshness = await createRuntimeFreshnessContext();
 const runtimeFreshnessOption = runtimeFreshness ? { runtimeFreshness } : undefined;
-const { product: initialProduct } = Astro.props as Props;
+const { product: initialProduct, seriesNavigationItem } = Astro.props as Props;
 const productSlug = Astro.params.slug || "";
+const initialProductWithSeriesNavigation = seriesNavigationItem
+    ? {
+          ...initialProduct,
+          series: seriesNavigationItem.series || initialProduct?.series,
+          series_siblings: Array.isArray(seriesNavigationItem.series_siblings)
+              ? seriesNavigationItem.series_siblings
+              : initialProduct?.series_siblings,
+      }
+    : initialProduct;
 const hasInitialSeriesInfo = Boolean(
-    initialProduct?.series?.title
-        || initialProduct?.specs?.series
-        || (initialProduct?.tags || []).some((tag: any) => (tag?.group?.slug || tag?.group_slug) === "series")
+    initialProductWithSeriesNavigation?.series?.title
+        || initialProductWithSeriesNavigation?.specs?.series
+        || (initialProductWithSeriesNavigation?.tags || []).some((tag: any) => (tag?.group?.slug || tag?.group_slug) === "series")
 );
 const hasInitialSeriesSiblings =
-    Array.isArray(initialProduct?.series_siblings) && initialProduct.series_siblings.length > 0;
+    Array.isArray(initialProductWithSeriesNavigation?.series_siblings)
+    && initialProductWithSeriesNavigation.series_siblings.length > 0;
 const product = runtimeFreshness
     ? await getProductBySlug(productSlug, runtimeFreshnessOption)
-    : hasInitialSeriesSiblings || !hasInitialSeriesInfo
-        ? initialProduct
+    : seriesNavigationItem || hasInitialSeriesSiblings || !hasInitialSeriesInfo
+        ? initialProductWithSeriesNavigation
         : (await getProductBySlug(productSlug)) || initialProduct;
 
 if (!product) {
