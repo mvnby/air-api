@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue';
-import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Settings, Wallet, ChevronLeft, ChevronRight, Tags, FileSpreadsheet, Link2, Award, Database, Calculator, ReceiptText, Image as ImageIcon } from 'lucide-vue-next';
+import type { Component } from 'vue';
+import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Settings, Wallet, ChevronLeft, ChevronRight, ChevronDown, Tags, FileSpreadsheet, Link2, Award, Database, Calculator, ReceiptText, Image as ImageIcon } from 'lucide-vue-next';
 import { api } from './api';
 import { getApiErrorMessage } from './utils/api-errors';
 import type { TelegramLoginPayload } from './api';
@@ -42,8 +43,24 @@ const toastType = ref<'success' | 'error'>('success');
 
 const currentLocation = ref(`${window.location.pathname}${window.location.search}`);
 const THEME_STORAGE_KEY = 'manager_theme';
+const NAV_SECTIONS_STORAGE_KEY = 'manager_nav_sections_v1';
 const telegramLoginBotUsername = String(import.meta.env.VITE_TELEGRAM_LOGIN_BOT_USERNAME || '').trim();
 const telegramCallbackName = 'onTelegramManagerAuth';
+
+type NavItem = {
+  path: string;
+  label: string;
+  icon: Component;
+  match?: 'exact' | 'prefix';
+};
+
+type NavSectionId = 'catalog' | 'services' | 'team' | 'finance' | 'system';
+
+type NavSection = {
+  id: NavSectionId;
+  label: string;
+  items: NavItem[];
+};
 
 declare global {
   interface Window {
@@ -51,28 +68,120 @@ declare global {
   }
 }
 
-const navItems = [
-  { path: '/manager', label: 'Главная', icon: Home },
-  { path: '/manager/leads', label: 'Лиды', icon: UserPlus },
-  { path: '/manager/orders/kanban', label: 'Заказы', icon: ShoppingCart },
-  { path: '/manager/calendar', label: 'Календарь', icon: Calendar },
-  { path: '/manager/products', label: 'Кондиционеры', icon: Package },
-  { path: '/manager/media/main-image-cleanup', label: 'Main-image', icon: ImageIcon },
-  { path: '/manager/customers', label: 'Клиенты', icon: Users },
-  { path: '/manager/staff', label: 'Сотрудники', icon: Users },
-  { path: '/manager/tariffs', label: 'Тарифы услуг', icon: Wallet },
-  { path: '/manager/service-estimates', label: 'Сметы услуг', icon: Calculator },
-  { path: '/manager/payments', label: 'Платежи', icon: ReceiptText },
-  { path: '/manager/tags', label: 'Теги', icon: Tags },
-  { path: '/manager/brands', label: 'Бренды', icon: Award },
-  { path: '/manager/suppliers', label: 'Прайсы поставщиков', icon: FileSpreadsheet },
-  { path: '/manager/supplier-mapping', label: 'Маппинг прайсов', icon: Link2 },
-  { path: '/manager/settings', label: 'Настройки сайта', icon: Settings },
-  { path: '/manager/settings/backup', label: 'DR / Бэкапы', icon: Database },
+const coreNavItems: NavItem[] = [
+  { path: '/manager', label: 'Главная', icon: Home, match: 'exact' },
+  { path: '/manager/leads', label: 'Лиды', icon: UserPlus, match: 'prefix' },
+  { path: '/manager/orders/kanban', label: 'Заказы', icon: ShoppingCart, match: 'prefix' },
+  { path: '/manager/calendar', label: 'Календарь', icon: Calendar, match: 'prefix' },
+  { path: '/manager/customers', label: 'Клиенты', icon: Users, match: 'prefix' },
 ];
 
+const navSections: NavSection[] = [
+  {
+    id: 'catalog',
+    label: 'Каталог',
+    items: [
+      { path: '/manager/products', label: 'Кондиционеры', icon: Package, match: 'prefix' },
+      { path: '/manager/suppliers', label: 'Прайсы поставщиков', icon: FileSpreadsheet, match: 'prefix' },
+      { path: '/manager/supplier-mapping', label: 'Маппинг прайсов', icon: Link2, match: 'prefix' },
+      { path: '/manager/brands', label: 'Бренды', icon: Award, match: 'prefix' },
+      { path: '/manager/tags', label: 'Теги', icon: Tags, match: 'prefix' },
+      { path: '/manager/media/main-image-cleanup', label: 'Главные изображения', icon: ImageIcon, match: 'prefix' },
+    ],
+  },
+  {
+    id: 'services',
+    label: 'Услуги',
+    items: [
+      { path: '/manager/tariffs', label: 'Тарифы услуг', icon: Wallet, match: 'prefix' },
+      { path: '/manager/service-estimates', label: 'Сметы услуг', icon: Calculator, match: 'prefix' },
+    ],
+  },
+  {
+    id: 'team',
+    label: 'Команда',
+    items: [
+      { path: '/manager/staff', label: 'Сотрудники', icon: Users, match: 'prefix' },
+    ],
+  },
+  {
+    id: 'finance',
+    label: 'Финансы',
+    items: [
+      { path: '/manager/payments', label: 'Платежи', icon: ReceiptText, match: 'prefix' },
+    ],
+  },
+  {
+    id: 'system',
+    label: 'Системное',
+    items: [
+      { path: '/manager/settings', label: 'Настройки сайта', icon: Settings, match: 'exact' },
+      { path: '/manager/settings/backup', label: 'DR / Бэкапы', icon: Database, match: 'prefix' },
+    ],
+  },
+];
+
+const defaultExpandedNavSections: Record<NavSectionId, boolean> = {
+  catalog: true,
+  services: true,
+  team: true,
+  finance: true,
+  system: true,
+};
+
+const expandedNavSections = ref<Record<NavSectionId, boolean>>({ ...defaultExpandedNavSections });
+
+const normalizePath = (path: string) => {
+  if (path.length > 1 && path.endsWith('/')) {
+    return path.slice(0, -1);
+  }
+  return path;
+};
+
+const currentPath = computed(() => normalizePath(currentLocation.value.split('?')[0] || '/manager'));
+
+const isNavItemActive = (item: NavItem) => {
+  if (item.match === 'exact') return currentPath.value === item.path;
+  return currentPath.value === item.path || currentPath.value.startsWith(`${item.path}/`);
+};
+
+const isNavSectionActive = (section: NavSection) => section.items.some(isNavItemActive);
+
+const loadExpandedNavSections = () => {
+  try {
+    const storedValue = window.localStorage.getItem(NAV_SECTIONS_STORAGE_KEY);
+    if (!storedValue) return;
+    const parsed = JSON.parse(storedValue) as Partial<Record<NavSectionId, boolean>>;
+    expandedNavSections.value = {
+      ...defaultExpandedNavSections,
+      ...Object.fromEntries(
+        Object.entries(parsed).filter(([, value]) => typeof value === 'boolean'),
+      ),
+    } as Record<NavSectionId, boolean>;
+  } catch {
+    expandedNavSections.value = { ...defaultExpandedNavSections };
+  }
+};
+
+const expandActiveNavSection = () => {
+  const activeSection = navSections.find(isNavSectionActive);
+  if (activeSection && !expandedNavSections.value[activeSection.id]) {
+    expandedNavSections.value = {
+      ...expandedNavSections.value,
+      [activeSection.id]: true,
+    };
+  }
+};
+
+const toggleNavSection = (sectionId: NavSectionId) => {
+  expandedNavSections.value = {
+    ...expandedNavSections.value,
+    [sectionId]: !expandedNavSections.value[sectionId],
+  };
+};
+
 const currentView = computed(() => {
-  const path = currentLocation.value.split('?')[0] || '/manager';
+  const path = currentPath.value;
   if (path === '/manager' || path === '/manager/') return 'home';
   if (path.startsWith('/manager/leads')) return 'leads';
   if (path.startsWith('/manager/orders')) return 'orders';
@@ -224,6 +333,8 @@ onMounted(() => {
   } else {
     applyTheme('light');
   }
+  loadExpandedNavSections();
+  expandActiveNavSection();
   if (window.location.pathname === '/manager') {
     navigate('/manager');
   }
@@ -240,6 +351,14 @@ watch(showLoginModal, (visible) => {
   if (visible) {
     void renderTelegramLogin();
   }
+});
+
+watch(expandedNavSections, (value) => {
+  window.localStorage.setItem(NAV_SECTIONS_STORAGE_KEY, JSON.stringify(value));
+}, { deep: true });
+
+watch(currentPath, () => {
+  expandActiveNavSection();
 });
 </script>
 
@@ -350,31 +469,83 @@ watch(showLoginModal, (visible) => {
         </button>
       </div>
 
-      <nav class="flex-1 p-3 space-y-1">
-        <button
-          v-for="item in navItems"
-          :key="item.path"
-          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left relative"
-          :class="[
-            currentLocation.split('?')[0] === item.path
-              ? 'bg-teal-50 text-teal-700'
-              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
-            isDesktopNavCollapsed ? 'md:justify-center px-0' : ''
-          ]"
-          @click="navigate(item.path)"
-          :title="isDesktopNavCollapsed ? item.label : ''"
-        >
-          <component :is="item.icon" class="w-5 h-5 shrink-0" />
-          <span class="flex-1 truncate" :class="isDesktopNavCollapsed ? 'md:hidden' : ''">{{ item.label }}</span>
-          <!-- Leads counter badge -->
-          <span
-            v-if="item.path === '/manager/leads' && leadsCount > 0"
-            class="inline-flex items-center justify-center font-bold bg-red-500 text-white shrink-0"
-            :class="isDesktopNavCollapsed ? 'md:absolute md:top-1 md:right-1 h-3 w-3 rounded-full text-[0px]' : 'min-w-[20px] h-5 px-1 rounded-full text-[11px]'"
+      <nav class="flex-1 overflow-y-auto p-3 space-y-2">
+        <div class="space-y-1">
+          <button
+            v-for="item in coreNavItems"
+            :key="item.path"
+            class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left relative"
+            :class="[
+              isNavItemActive(item)
+                ? 'bg-teal-50 text-teal-700'
+                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+              isDesktopNavCollapsed ? 'md:justify-center md:px-0' : ''
+            ]"
+            @click="navigate(item.path)"
+            :title="isDesktopNavCollapsed ? item.label : ''"
           >
-            {{ isDesktopNavCollapsed ? '' : leadsCount }}
-          </span>
-        </button>
+            <component :is="item.icon" class="w-5 h-5 shrink-0" />
+            <span class="flex-1 truncate" :class="isDesktopNavCollapsed ? 'md:hidden' : ''">{{ item.label }}</span>
+            <span
+              v-if="item.path === '/manager/leads' && leadsCount > 0"
+              class="inline-flex items-center justify-center font-bold bg-red-500 text-white shrink-0"
+              :class="isDesktopNavCollapsed ? 'md:absolute md:top-1 md:right-1 h-3 w-3 rounded-full text-[0px]' : 'min-w-[20px] h-5 px-1 rounded-full text-[11px]'"
+            >
+              {{ isDesktopNavCollapsed ? '' : leadsCount }}
+            </span>
+          </button>
+        </div>
+
+        <div
+          v-for="section in navSections"
+          :key="section.id"
+          class="border-t border-gray-100 pt-2"
+        >
+          <button
+            class="mb-1 flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-[11px] font-bold uppercase tracking-[0.16em] transition-colors"
+            :class="[
+              isNavSectionActive(section)
+                ? 'text-teal-700'
+                : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600',
+              isDesktopNavCollapsed ? 'md:justify-center md:px-0' : ''
+            ]"
+            @click="toggleNavSection(section.id)"
+            :title="isDesktopNavCollapsed ? section.label : ''"
+            :aria-expanded="expandedNavSections[section.id]"
+          >
+            <span class="min-w-0 flex-1 truncate" :class="isDesktopNavCollapsed ? 'md:hidden' : ''">{{ section.label }}</span>
+            <ChevronDown
+              class="h-3.5 w-3.5 shrink-0 transition-transform"
+              :class="[
+                expandedNavSections[section.id] ? 'rotate-0' : '-rotate-90',
+                isDesktopNavCollapsed ? 'md:h-4 md:w-4' : ''
+              ]"
+            />
+          </button>
+
+          <div
+            v-show="expandedNavSections[section.id]"
+            class="space-y-1 border-l border-gray-100 pl-3 ml-3 md:transition-all"
+            :class="isDesktopNavCollapsed ? 'md:ml-0 md:border-l-0 md:pl-0' : ''"
+          >
+            <button
+              v-for="item in section.items"
+              :key="item.path"
+              class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left relative"
+              :class="[
+                isNavItemActive(item)
+                  ? 'bg-teal-50 text-teal-700'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                isDesktopNavCollapsed ? 'md:justify-center md:px-0' : ''
+              ]"
+              @click="navigate(item.path)"
+              :title="isDesktopNavCollapsed ? item.label : ''"
+            >
+              <component :is="item.icon" class="w-5 h-5 shrink-0" />
+              <span class="flex-1 truncate" :class="isDesktopNavCollapsed ? 'md:hidden' : ''">{{ item.label }}</span>
+            </button>
+          </div>
+        </div>
       </nav>
 
       <div class="p-3 border-t border-gray-100 mt-auto">
