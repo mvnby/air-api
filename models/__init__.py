@@ -13,7 +13,7 @@ from .common import (
     PaymentCurrency,
     PaymentType,
 )
-from .customer import Customer, CustomerBranch, CustomerContract, Lead
+from .customer import Customer, CustomerBranch, CustomerContract, CustomerRequisitesRecognition, Lead
 from .equipment import CustomerEquipment, EquipmentServiceHistory
 from .brand import Brand, ProductSeries
 from .cart import Cart, CartItem
@@ -76,6 +76,7 @@ __all__ = [
     "Customer",
     "CustomerBranch",
     "CustomerContract",
+    "CustomerRequisitesRecognition",
     "CustomerType",
     "DocumentRoleType",
     "DocumentTemplate",

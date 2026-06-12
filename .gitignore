@@ -21,6 +21,7 @@ __pycache__/
 
 # Логи и временные файлы
 *.log
+*.log.*
 app.log
 server.log
 bot.log
@@ -33,6 +34,7 @@ AI_AGENT_CONTEXT.md
 credentials.json
 client_secret.json
 token.json
+g-vision-ocr.json
 backups/*
 /media/*
 web/temp/*

@@ -139,6 +139,8 @@ class Settings(BaseSettings):
     DEEPSEEK_TOKEN: str = ""
     DEEPSEEK_MODEL: str = "deepseek-v4-flash"
     DEEPSEEK_API_URL: str = "https://api.deepseek.com/chat/completions"
+    GOOGLE_VISION_CREDENTIALS_FILE: str = ""
+    GOOGLE_VISION_PROJECT_ID: str = ""
 
     # GitHub Actions (for Turbo Rebuilds)
     GITHUB_TOKEN: str = ""

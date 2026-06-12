@@ -4,6 +4,7 @@ from sqlmodel import select
 
 from core.config import settings
 from models import Customer, CustomerBranch, CustomerContract, CustomerType, GlobalConfig, Order, OrderStatus
+from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
 
 
 async def _auth_headers(async_client):
@@ -200,6 +201,153 @@ async def test_manager_customer_patch_rejects_invalid_iban(async_client, db):
     detail = patch_resp.json()["detail"]
     assert detail["error_code"] == "validation_error"
     assert "iban" in detail["field_errors"]
+
+
+@pytest.mark.asyncio
+async def test_manager_customer_requisites_recognize_and_confirm_create(async_client, db, monkeypatch):
+    headers = await _auth_headers(async_client)
+
+    async def fake_ocr(content, *, mime_type, filename=None):
+        assert content == b"fake-image"
+        return "УП «Витебскгазстрой» ОАО «Белгазстрой» УНП 300063995 г. Витебск тел. 69-73-29"
+
+    async def fake_extract(raw_text):
+        assert "300063995" in raw_text
+        return {
+            "name": "УП «Витебскгазстрой» ОАО «Белгазстрой»",
+            "full_legal_name": "УП «Витебскгазстрой» ОАО «Белгазстрой»",
+            "inn": "300063995",
+            "legal_address": "211301 Витебская область, Витебский район, г. Витебск, ул. Витебская 14",
+            "iban": "BY26BLBB30120300063995001001",
+            "bic": "BLBBBY2X",
+            "bank_name": "ОАО «Белинвестбанк»",
+            "phone_raw": "69-73-29",
+            "email": "vitebskgazstroy@belgazstroy.by",
+            "signer_position": "Директор",
+            "signer_name": "Дмитриенко Сергея Александровича",
+            "acting_basis": "действующий на основании Устава",
+            "extra": {"okpo": "05896981", "bank_address": "г. Витебск, ул. Ленина 22/16"},
+        }
+
+    monkeypatch.setattr(CustomerRequisitesRecognitionService, "extract_ocr_text", fake_ocr)
+    monkeypatch.setattr(CustomerRequisitesRecognitionService, "extract_requisites", fake_extract)
+
+    recognize_resp = await async_client.post(
+        "/api/manager/customers/requisites/recognize",
+        headers=headers,
+        files={"file": ("requisites.png", b"fake-image", "image/png")},
+    )
+    assert recognize_resp.status_code == 200
+    recognized = recognize_resp.json()
+    assert recognized["extracted"]["inn"] == "300063995"
+    assert recognized["extracted"]["phone"] == "+375212697329"
+    assert recognized["extracted"]["signer_name"] == "Дмитриенко Сергея Александровича"
+    assert recognized["extracted"]["acting_basis"] == "Устава"
+    assert recognized["extracted"]["extra"]["okpo"] == "05896981"
+    assert recognized["validation_flags"]["is_valid"] is True
+    assert recognized["duplicate_customer"] is None
+
+    confirm_resp = await async_client.post(
+        f"/api/manager/customers/requisites/{recognized['id']}/confirm",
+        headers=headers,
+        json={"action": "create"},
+    )
+    assert confirm_resp.status_code == 200
+    customer = confirm_resp.json()["customer"]
+    assert customer["name"] == "УП «Витебскгазстрой» ОАО «Белгазстрой»"
+    assert customer["inn"] == "300063995"
+    assert customer["phone"] == "+375212697329"
+    assert customer["signer_position"] == "директора"
+    assert customer["signer_name"] == "Дмитриенко Сергея Александровича"
+    assert customer["acting_basis"] == "Устава"
+
+
+@pytest.mark.asyncio
+async def test_manager_customer_requisites_duplicate_can_update(async_client, db, monkeypatch):
+    headers = await _auth_headers(async_client)
+    existing = Customer(
+        name="Старое имя",
+        phone="",
+        type=CustomerType.company,
+        inn="300063995",
+        bank_name="Старый банк",
+    )
+    db.add(existing)
+    await db.commit()
+    await db.refresh(existing)
+
+    async def fake_ocr(content, *, mime_type, filename=None):
+        return "УП «Витебскгазстрой» ОАО «Белгазстрой» УНП 300063995"
+
+    async def fake_extract(raw_text):
+        return {
+            "name": "УП «Витебскгазстрой» ОАО «Белгазстрой»",
+            "inn": "300063995",
+            "bank_name": "ОАО «Белинвестбанк»",
+            "bic": "BLBBBY2X",
+            "iban": "BY26BLBB30120300063995001001",
+            "signer_name": "Дмитриенко Сергея Александровича",
+            "signer_position": "директора",
+            "acting_basis": "Устава",
+        }
+
+    monkeypatch.setattr(CustomerRequisitesRecognitionService, "extract_ocr_text", fake_ocr)
+    monkeypatch.setattr(CustomerRequisitesRecognitionService, "extract_requisites", fake_extract)
+
+    recognize_resp = await async_client.post(
+        "/api/manager/customers/requisites/recognize",
+        headers=headers,
+        files={"file": ("requisites.png", b"fake-image", "image/png")},
+    )
+    assert recognize_resp.status_code == 200
+    recognized = recognize_resp.json()
+    assert recognized["duplicate_customer"]["id"] == existing.id
+
+    confirm_resp = await async_client.post(
+        f"/api/manager/customers/requisites/{recognized['id']}/confirm",
+        headers=headers,
+        json={"action": "update"},
+    )
+    assert confirm_resp.status_code == 200
+    assert confirm_resp.json()["customer"]["id"] == existing.id
+    await db.refresh(existing)
+    assert existing.bank_name == "ОАО «Белинвестбанк»"
+    assert existing.signer_name == "Дмитриенко Сергея Александровича"
+
+
+@pytest.mark.asyncio
+async def test_manager_customer_requisites_invalid_iban_blocks_confirm(async_client, monkeypatch):
+    headers = await _auth_headers(async_client)
+
+    async def fake_ocr(content, *, mime_type, filename=None):
+        return "ООО Ошибка УНП 123456789"
+
+    async def fake_extract(raw_text):
+        return {
+            "name": "ООО Ошибка",
+            "inn": "123456789",
+            "iban": "INVALID",
+            "signer_name": "Иванова Ивана Ивановича",
+        }
+
+    monkeypatch.setattr(CustomerRequisitesRecognitionService, "extract_ocr_text", fake_ocr)
+    monkeypatch.setattr(CustomerRequisitesRecognitionService, "extract_requisites", fake_extract)
+
+    recognize_resp = await async_client.post(
+        "/api/manager/customers/requisites/recognize",
+        headers=headers,
+        files={"file": ("requisites.png", b"fake-image", "image/png")},
+    )
+    assert recognize_resp.status_code == 200
+    recognized = recognize_resp.json()
+    assert "iban" in recognized["validation_flags"]["field_errors"]
+
+    confirm_resp = await async_client.post(
+        f"/api/manager/customers/requisites/{recognized['id']}/confirm",
+        headers=headers,
+        json={"action": "create"},
+    )
+    assert confirm_resp.status_code == 400
 
 
 @pytest.mark.asyncio

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Column, String
+from sqlalchemy import Column, JSON, String
 from sqlmodel import Field, Relationship, SQLModel
 
 from .common import CustomerType, DocumentRoleType, LeadIntakeSource, LeadLossReason, LeadSegmentHint, LeadStatus
@@ -96,6 +96,35 @@ class CustomerBranch(SQLModel, table=True):
 
     customer: Optional["Customer"] = Relationship(back_populates="branches")
     orders: List["Order"] = Relationship(back_populates="customer_branch")
+
+
+class CustomerRequisitesRecognition(SQLModel, table=True):
+    __tablename__ = "customer_requisites_recognition"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    source: str = Field(default="manager", index=True)
+    status: str = Field(default="recognized", index=True)
+    telegram_user_id: Optional[int] = Field(default=None, index=True)
+    telegram_chat_id: Optional[int] = Field(default=None, index=True)
+    telegram_message_id: Optional[int] = Field(default=None, index=True)
+
+    original_filename: Optional[str] = None
+    mime_type: Optional[str] = None
+    local_file_path: Optional[str] = None
+    local_file_url: Optional[str] = None
+
+    raw_text: str = Field(default="")
+    extracted_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False, default=dict))
+    validation_flags: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False, default=dict))
+
+    duplicate_customer_id: Optional[int] = Field(default=None, foreign_key="customer.id", index=True)
+    confirmed_customer_id: Optional[int] = Field(default=None, foreign_key="customer.id", index=True)
+    confirmed_action: Optional[str] = None
+
+    created_at: datetime = Field(default_factory=datetime.now, index=True)
+    updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
+    confirmed_at: Optional[datetime] = None
 
 
 class Lead(SQLModel, table=True):
