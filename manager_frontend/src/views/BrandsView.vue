@@ -549,13 +549,16 @@ onMounted(() => {
                         </tr>
                     </thead>
                     <tbody>
+                        <template v-for="brand in filteredBrands" :key="brand.id">
+                        <tr v-if="brandDropTargetId === brand.id" aria-hidden="true">
+                            <td colspan="6" class="p-0">
+                                <div class="mx-3 h-1 rounded-full bg-teal-400 shadow-[0_0_18px_rgba(20,184,166,0.75)] dark:bg-teal-300"></div>
+                            </td>
+                        </tr>
                         <tr
-                            v-for="brand in filteredBrands"
-                            :key="brand.id"
                             class="border-b border-gray-100 dark:border-slate-800/80 cursor-pointer transition-colors"
                             :class="[
                                 selectedBrandId === brand.id ? 'bg-teal-50/80 dark:bg-teal-900/20' : 'hover:bg-gray-50 dark:hover:bg-slate-800',
-                                brandDropTargetId === brand.id ? 'outline outline-2 outline-teal-400 outline-offset-[-2px]' : '',
                                 draggedBrandId === brand.id ? 'opacity-50' : '',
                             ]"
                             :draggable="!isBrandReorderDisabled"
@@ -631,6 +634,7 @@ onMounted(() => {
                                 </div>
                             </td>
                         </tr>
+                        </template>
                     </tbody>
                 </table>
             </div>
