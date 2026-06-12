@@ -27,6 +27,7 @@ def test_extract_series_name_cleans_marketing_suffix_from_specs():
 def test_extract_series_name_keeps_values_when_stop_marker_is_series_prefix():
     assert extract_series_name({"series": "R32 Deluxe"}) == "R32 Deluxe"
     assert extract_series_name({"series": "Wi-Fi Ready"}) == "Wi-Fi Ready"
+    assert extract_series_name({"series": "COSMO inverter"}) == "COSMO"
     assert extract_series_name({"series": "Dual Inverter"}) == "Dual Inverter"
     assert extract_series_name({"series": "Dual Inverter R32 WI-FI"}) == "Dual Inverter"
 

@@ -93,20 +93,17 @@ def _clean_series_value(value: str) -> str:
     if not text:
         return ""
 
-    trimmed_by_marker = False
     marker = SERIES_VALUE_STOP_PATTERN.search(text)
     if marker:
         if marker.start() == 0:
             return re.sub(r"\s+", " ", text).strip(" -–—.,;:")
         text = text[: marker.start()].strip()
-        trimmed_by_marker = True
 
-    if trimmed_by_marker:
-        trailing_inverter = SERIES_TRAILING_INVERTER_PATTERN.search(text)
-        if trailing_inverter:
-            prefix = text[: trailing_inverter.start()].strip()
-            if prefix.casefold() not in SERIES_TRAILING_INVERTER_PREFIX_ALLOWLIST:
-                text = text[: trailing_inverter.start()].strip()
+    trailing_inverter = SERIES_TRAILING_INVERTER_PATTERN.search(text)
+    if trailing_inverter:
+        prefix = text[: trailing_inverter.start()].strip()
+        if prefix.casefold() not in SERIES_TRAILING_INVERTER_PREFIX_ALLOWLIST:
+            text = text[: trailing_inverter.start()].strip()
 
     return re.sub(r"\s+", " ", text).strip(" -–—.,;:")
 

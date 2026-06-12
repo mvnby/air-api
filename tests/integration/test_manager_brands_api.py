@@ -258,6 +258,8 @@ async def test_manager_brand_series_list_auto_creates_series_from_product_specs(
         ),
     ]
     db.add_all(products)
+    await db.flush()
+    product_ids = [int(product.id) for product in products]
     await db.commit()
 
     list_resp = await async_client.get(
@@ -275,8 +277,8 @@ async def test_manager_brand_series_list_auto_creates_series_from_product_specs(
     after_first_revision = await CatalogRevisionService.get_current(db)
 
     db.expire_all()
-    for product in products:
-        updated = await db.get(Product, product.id)
+    for product_id in product_ids:
+        updated = await db.get(Product, product_id)
         assert updated.series_id is not None
 
     second_list_resp = await async_client.get(

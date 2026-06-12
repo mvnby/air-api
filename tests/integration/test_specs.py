@@ -142,6 +142,9 @@ async def test_bulk_update_specs_creates_and_links_product_series(async_client: 
         for i in range(1, 3)
     ]
     db.add_all(products)
+    await db.flush()
+    brand_id = int(brand.id)
+    product_ids = [int(product.id) for product in products]
     await db.commit()
 
     login_resp = await async_client.post(
@@ -154,7 +157,7 @@ async def test_bulk_update_specs_creates_and_links_product_series(async_client: 
     response = await async_client.post(
         "/api/manager/specs/bulk-update",
         json={
-            "product_ids": [product.id for product in products],
+            "product_ids": product_ids,
             "specs": {"series": "COSMO inverter R32 WI-FI"},
             "operation": "merge",
         },
@@ -167,15 +170,15 @@ async def test_bulk_update_specs_creates_and_links_product_series(async_client: 
     series = (
         await db.execute(
             select(ProductSeries).where(
-                ProductSeries.brand_id == brand.id,
+                ProductSeries.brand_id == brand_id,
                 ProductSeries.slug == "cosmo",
             )
         )
     ).scalar_one()
     assert series.title == "COSMO"
 
-    for product in products:
-        updated = await db.get(Product, product.id)
+    for product_id in product_ids:
+        updated = await db.get(Product, product_id)
         assert updated.series_id == series.id
 
 
@@ -183,7 +186,7 @@ async def test_bulk_update_specs_creates_and_links_product_series(async_client: 
 async def test_bulk_update_specs_moves_product_to_new_series(async_client: AsyncClient, db):
     headers = await _auth_headers(async_client)
 
-    brand = Brand(title="KINGHOME Move Series", slug="kinghome-move-series", is_published=True)
+    brand = Brand(title="KINGHOME", slug="kinghome", is_published=True)
     db.add(brand)
     await db.flush()
 
@@ -201,12 +204,16 @@ async def test_bulk_update_specs_moves_product_to_new_series(async_client: Async
         specs={"brand": "KINGHOME", "series": "COSMO"},
     )
     db.add(product)
+    await db.flush()
+    brand_id = int(brand.id)
+    old_series_id = int(old_series.id)
+    product_id = int(product.id)
     await db.commit()
 
     response = await async_client.post(
         "/api/manager/specs/bulk-update",
         json={
-            "product_ids": [product.id],
+            "product_ids": [product_id],
             "specs": {"series": "LUNA Matt inverter R32 WI-FI"},
             "operation": "merge",
         },
@@ -219,16 +226,16 @@ async def test_bulk_update_specs_moves_product_to_new_series(async_client: Async
     new_series = (
         await db.execute(
             select(ProductSeries).where(
-                ProductSeries.brand_id == brand.id,
+                ProductSeries.brand_id == brand_id,
                 ProductSeries.slug == "luna-matt",
             )
         )
     ).scalar_one()
-    updated = await db.get(Product, product.id)
+    updated = await db.get(Product, product_id)
     assert updated.series_id == new_series.id
 
     old_count = (
-        await db.execute(select(func.count(Product.id)).where(Product.series_id == old_series.id))
+        await db.execute(select(func.count(Product.id)).where(Product.series_id == old_series_id))
     ).scalar_one()
     new_count = (
         await db.execute(select(func.count(Product.id)).where(Product.series_id == new_series.id))
@@ -262,12 +269,14 @@ async def test_bulk_update_specs_delete_series_key_clears_series_link(
         specs={"brand": "KINGHOME", "series": "COSMO", "wifi": "yes"},
     )
     db.add(product)
+    await db.flush()
+    product_id = int(product.id)
     await db.commit()
 
     response = await async_client.post(
         "/api/manager/specs/bulk-update",
         json={
-            "product_ids": [product.id],
+            "product_ids": [product_id],
             "specs": {"series": ""},
             "operation": "delete_keys",
         },
@@ -276,7 +285,7 @@ async def test_bulk_update_specs_delete_series_key_clears_series_link(
     assert response.status_code == 200, response.text
 
     db.expire_all()
-    updated = await db.get(Product, product.id)
+    updated = await db.get(Product, product_id)
     assert "series" not in updated.specs
     assert updated.series_id is None
 
@@ -306,12 +315,14 @@ async def test_bulk_update_specs_replace_without_series_clears_series_link(
         specs={"brand": "KINGHOME", "series": "COSMO", "wifi": "yes"},
     )
     db.add(product)
+    await db.flush()
+    product_id = int(product.id)
     await db.commit()
 
     response = await async_client.post(
         "/api/manager/specs/bulk-update",
         json={
-            "product_ids": [product.id],
+            "product_ids": [product_id],
             "specs": {"brand": "KINGHOME", "wifi": "yes"},
             "operation": "replace",
         },
@@ -320,6 +331,6 @@ async def test_bulk_update_specs_replace_without_series_clears_series_link(
     assert response.status_code == 200, response.text
 
     db.expire_all()
-    updated = await db.get(Product, product.id)
+    updated = await db.get(Product, product_id)
     assert "series" not in updated.specs
     assert updated.series_id is None
