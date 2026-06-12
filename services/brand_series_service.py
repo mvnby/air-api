@@ -38,10 +38,15 @@ SERIES_SPEC_KEYS = (
 
 SERIES_VALUE_STOP_PATTERN = re.compile(
     r"(?i)(?:"
-    r"\b(?:inverter|invertor|инвертор\w*|r32|r410a|wi[\s-]?fi|wifi|технология)\b"
+    r"\b(?:r32|r410a|wi[\s-]?fi|wifi|технология)\b"
     r"|[-−]\s*\d+\s*°?\s*c\b"
     r")"
 )
+
+SERIES_TRAILING_INVERTER_PATTERN = re.compile(
+    r"(?i)\s+\b(?:inverter|invertor|инвертор\w*)\b\s*$"
+)
+SERIES_TRAILING_INVERTER_PREFIX_ALLOWLIST = {"dual"}
 
 TITLE_SERIES_STOP_WORDS = {
     "кондиционер",
@@ -93,6 +98,12 @@ def _clean_series_value(value: str) -> str:
         if marker.start() == 0:
             return re.sub(r"\s+", " ", text).strip(" -–—.,;:")
         text = text[: marker.start()].strip()
+
+    trailing_inverter = SERIES_TRAILING_INVERTER_PATTERN.search(text)
+    if trailing_inverter:
+        prefix = text[: trailing_inverter.start()].strip()
+        if prefix.casefold() not in SERIES_TRAILING_INVERTER_PREFIX_ALLOWLIST:
+            text = text[: trailing_inverter.start()].strip()
 
     return re.sub(r"\s+", " ", text).strip(" -–—.,;:")
 
@@ -472,6 +483,9 @@ async def sync_product_brand_series(
     tags: Optional[Sequence[Tag]] = None,
     explicit_brand_id: Optional[int] = None,
     explicit_brand_override: bool = False,
+    allow_series_tag_fallback: bool = True,
+    allow_series_title_fallback: bool = True,
+    clear_series_when_missing: bool = False,
 ) -> bool:
     data_specs = specs if specs is not None else (product.specs or {})
     product_title = title if title is not None else (product.title or "")
@@ -548,16 +562,19 @@ async def sync_product_brand_series(
 
     series_name = extract_series_name(
         specs=data_specs,
-        tags=tag_list,
+        tags=tag_list if allow_series_tag_fallback else [],
         group_slug_by_id=group_slug_by_id,
-        title=product_title,
-        brand_name=brand_name,
+        title=product_title if allow_series_title_fallback else "",
+        brand_name=brand_name if allow_series_title_fallback else None,
     )
     if series_name:
         series = await ensure_series(session, title=series_name, brand_id=product.brand_id)
         if product.series_id != series.id:
             product.series_id = series.id
             changed = True
+    elif clear_series_when_missing and product.series_id is not None:
+        product.series_id = None
+        changed = True
 
     if changed:
         session.add(product)
