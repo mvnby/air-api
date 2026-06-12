@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref } from 'vue';
+import { computed, defineAsyncComponent, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Settings, Wallet, ChevronLeft, ChevronRight, Tags, FileSpreadsheet, Link2, Award, Database, Calculator, ReceiptText, Image as ImageIcon } from 'lucide-vue-next';
 import { api } from './api';
 import { getApiErrorMessage } from './utils/api-errors';
+import type { TelegramLoginPayload } from './api';
 
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
 const ProductMainImageCleanupView = defineAsyncComponent(() => import('./views/ProductMainImageCleanupView.vue'));
@@ -29,6 +30,8 @@ const loginUsername = ref('');
 const loginPassword = ref('');
 const loginLoading = ref(false);
 const loginError = ref('');
+const telegramLoginLoading = ref(false);
+const telegramLoginContainer = ref<HTMLElement | null>(null);
 const rebuildLoading = ref(false);
 const isMobileNavOpen = ref(false);
 const isDesktopNavCollapsed = ref(false);
@@ -39,6 +42,14 @@ const toastType = ref<'success' | 'error'>('success');
 
 const currentLocation = ref(`${window.location.pathname}${window.location.search}`);
 const THEME_STORAGE_KEY = 'manager_theme';
+const telegramLoginBotUsername = String(import.meta.env.VITE_TELEGRAM_LOGIN_BOT_USERNAME || '').trim();
+const telegramCallbackName = 'onTelegramManagerAuth';
+
+declare global {
+  interface Window {
+    onTelegramManagerAuth?: (user: TelegramLoginPayload) => void;
+  }
+}
 
 const navItems = [
   { path: '/manager', label: 'Главная', icon: Home },
@@ -48,7 +59,7 @@ const navItems = [
   { path: '/manager/products', label: 'Кондиционеры', icon: Package },
   { path: '/manager/media/main-image-cleanup', label: 'Main-image', icon: ImageIcon },
   { path: '/manager/customers', label: 'Клиенты', icon: Users },
-  { path: '/manager/installers', label: 'Сотрудники', icon: Users },
+  { path: '/manager/staff', label: 'Сотрудники', icon: Users },
   { path: '/manager/tariffs', label: 'Тарифы услуг', icon: Wallet },
   { path: '/manager/service-estimates', label: 'Сметы услуг', icon: Calculator },
   { path: '/manager/payments', label: 'Платежи', icon: ReceiptText },
@@ -69,7 +80,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/media/main-image-cleanup')) return 'main-image-cleanup';
   if (path.startsWith('/manager/customers/profile')) return 'customer-profile';
   if (path.startsWith('/manager/customers')) return 'customers';
-  if (path.startsWith('/manager/installers')) return 'installers';
+  if (path.startsWith('/manager/staff') || path.startsWith('/manager/users') || path.startsWith('/manager/installers')) return 'installers';
   if (path.startsWith('/manager/settings/backup')) return 'settings-backup';
   if (path.startsWith('/manager/settings')) return 'settings';
   if (path.startsWith('/manager/tariffs')) return 'tariffs';
@@ -127,11 +138,49 @@ const handleLogin = async () => {
     await api.login(loginUsername.value, loginPassword.value);
     isAuthenticated.value = true;
     showLoginModal.value = false;
+    loginPassword.value = '';
+    void fetchLeadsCount();
   } catch {
-    loginError.value = 'Invalid credentials';
+    loginError.value = 'Неверный логин или пароль';
   } finally {
     loginLoading.value = false;
   }
+};
+
+const handleTelegramLogin = async (payload: TelegramLoginPayload) => {
+  telegramLoginLoading.value = true;
+  loginError.value = '';
+  try {
+    await api.loginTelegram(payload);
+    isAuthenticated.value = true;
+    showLoginModal.value = false;
+    void fetchLeadsCount();
+  } catch (err) {
+    loginError.value = getApiErrorMessage(err) || 'Не удалось войти через Telegram';
+  } finally {
+    telegramLoginLoading.value = false;
+  }
+};
+
+const renderTelegramLogin = async () => {
+  if (!telegramLoginBotUsername || !showLoginModal.value) return;
+  await nextTick();
+  const container = telegramLoginContainer.value;
+  if (!container) return;
+  container.innerHTML = '';
+  window[telegramCallbackName] = (user: TelegramLoginPayload) => {
+    void handleTelegramLogin(user);
+  };
+
+  const script = document.createElement('script');
+  script.src = 'https://telegram.org/js/telegram-widget.js?22';
+  script.async = true;
+  script.setAttribute('data-telegram-login', telegramLoginBotUsername);
+  script.setAttribute('data-size', 'large');
+  script.setAttribute('data-userpic', 'false');
+  script.setAttribute('data-request-access', 'write');
+  script.setAttribute('data-onauth', `${telegramCallbackName}(user)`);
+  container.appendChild(script);
 };
 
 const handleRebuild = async () => {
@@ -184,6 +233,13 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('popstate', onPopState);
+  delete window[telegramCallbackName];
+});
+
+watch(showLoginModal, (visible) => {
+  if (visible) {
+    void renderTelegramLogin();
+  }
 });
 </script>
 
@@ -195,26 +251,26 @@ onBeforeUnmount(() => {
           <Package class="w-6 h-6 text-white" />
         </div>
       </div>
-      <h2 class="text-2xl font-bold mb-6 text-center text-gray-900">Manager Login</h2>
+      <h2 class="text-2xl font-bold mb-6 text-center text-gray-900">Вход в менеджер</h2>
       <form @submit.prevent="handleLogin" class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Логин</label>
           <input
             v-model="loginUsername"
             type="text"
             required
             class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-            placeholder="Enter username"
+            placeholder="Введите логин"
           />
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Пароль</label>
           <input
             v-model="loginPassword"
             type="password"
             required
             class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-            placeholder="Enter password"
+            placeholder="Введите пароль"
           />
         </div>
         <div v-if="loginError" class="text-red-600 text-sm">{{ loginError }}</div>
@@ -223,8 +279,20 @@ onBeforeUnmount(() => {
           :disabled="loginLoading"
           class="w-full bg-teal-600 text-white py-2.5 rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
         >
-          {{ loginLoading ? 'Logging in...' : 'Login' }}
+          {{ loginLoading ? 'Входим...' : 'Войти' }}
         </button>
+        <div v-if="telegramLoginBotUsername" class="pt-2">
+          <div class="mb-3 flex items-center gap-3 text-xs uppercase tracking-[0.18em] text-gray-400">
+            <span class="h-px flex-1 bg-gray-200" />
+            <span>или</span>
+            <span class="h-px flex-1 bg-gray-200" />
+          </div>
+          <div
+            ref="telegramLoginContainer"
+            class="flex min-h-[44px] justify-center"
+            :class="telegramLoginLoading ? 'pointer-events-none opacity-60' : ''"
+          />
+        </div>
       </form>
     </div>
   </div>

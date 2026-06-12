@@ -1,6 +1,9 @@
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+import hashlib
+import hmac
+import time
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -29,8 +32,13 @@ def test_staff_role_and_status_helpers():
     active_admin = StaffUser(display_name="Owner", status="active", roles=["owner"], telegram_id=101)
     blocked_admin = StaffUser(display_name="Blocked", status="blocked", roles=["admin"], telegram_id=102)
     inactive_installer = StaffUser(display_name="Inactive", status="inactive", roles=["installer"])
-    maintenance_executor = StaffUser(display_name="Maintenance", status="active", roles=["maintenance"])
-    repair_executor = StaffUser(display_name="Repair", status="active", roles=["repair"])
+    maintenance_executor = StaffUser(
+        display_name="Maintenance",
+        status="active",
+        roles=["maintenance"],
+        legacy_installer_id=1,
+    )
+    repair_executor = StaffUser(display_name="Repair", status="active", roles=["repair"], legacy_installer_id=2)
     manager = StaffUser(display_name="Manager", status="active", roles=["manager"])
     json_roles_admin = StaffUser(display_name="JSON Admin", status="active", roles='["admin"]', telegram_id=103)
 
@@ -52,12 +60,42 @@ def test_staff_role_and_status_helpers():
     assert StaffUserService.can_be_any_executor(repair_executor)
     assert not StaffUserService.can_be_any_executor(manager)
     assert StaffUserService.has_role(json_roles_admin, "admin")
+    assert StaffUserService.primary_role(json_roles_admin) == "owner"
+
+
+def test_staff_password_hash_and_verify():
+    password_hash = StaffUserService.hash_password("secret123")
+
+    assert password_hash != "secret123"
+    assert StaffUserService.verify_password("secret123", password_hash)
+    assert not StaffUserService.verify_password("wrong", password_hash)
+
+
+def test_telegram_login_payload_signature(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_TOKEN", "123:token", raising=False)
+    payload = {
+        "id": "101",
+        "first_name": "Max",
+        "username": "mvn",
+        "auth_date": str(int(time.time())),
+    }
+    data_check_string = "\n".join(f"{key}={payload[key]}" for key in sorted(payload))
+    secret_key = hashlib.sha256(settings.BOT_TOKEN.encode("utf-8")).digest()
+    payload["hash"] = hmac.new(secret_key, data_check_string.encode("utf-8"), hashlib.sha256).hexdigest()
+
+    assert StaffUserService.verify_telegram_login_payload(payload)
+
+    payload["username"] = "attacker"
+    assert not StaffUserService.verify_telegram_login_payload(payload)
 
 
 @pytest.mark.asyncio
 async def test_find_active_executors_by_role_excludes_inactive_and_blocked(sqlite_staff_session):
+    installer = Installer(name="Active Legacy", is_active=True)
+    sqlite_staff_session.add(installer)
+    await sqlite_staff_session.flush()
     sqlite_staff_session.add(
-        StaffUser(display_name="Active Installer", status="active", roles=["installer"], legacy_installer_id=None)
+        StaffUser(display_name="Active Installer", status="active", roles=["installer"], legacy_installer_id=installer.id)
     )
     sqlite_staff_session.add(StaffUser(display_name="Inactive Installer", status="inactive", roles=["installer"]))
     sqlite_staff_session.add(StaffUser(display_name="Blocked Installer", status="blocked", roles=["installer"]))
@@ -79,13 +117,14 @@ async def test_admin_recipients_use_active_db_owner_admin_before_legacy_fallback
 
     sqlite_staff_session.add(StaffUser(display_name="Owner", status="active", roles=["owner"], telegram_id=101))
     sqlite_staff_session.add(StaffUser(display_name="Admin", status="active", roles=["admin"], telegram_id=202))
+    sqlite_staff_session.add(StaffUser(display_name="Manager", status="active", roles=["manager"], telegram_id=505))
     sqlite_staff_session.add(StaffUser(display_name="Blocked", status="blocked", roles=["admin"], telegram_id=303))
     sqlite_staff_session.add(StaffUser(display_name="Installer", status="active", roles=["installer"], telegram_id=404))
     await sqlite_staff_session.commit()
 
     recipients = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(sqlite_staff_session)
 
-    assert recipients == [101, 202]
+    assert recipients == [101, 202, 505]
 
 
 @pytest.mark.asyncio
@@ -106,7 +145,7 @@ async def test_telegram_admin_check_uses_active_owner_admin_and_blocks_non_admin
     assert await StaffUserService.is_active_owner_admin_telegram_user(sqlite_staff_session, 101)
     assert await StaffUserService.is_active_owner_admin_telegram_user(sqlite_staff_session, 202)
     assert not await StaffUserService.is_active_owner_admin_telegram_user(sqlite_staff_session, 303)
-    assert not await StaffUserService.is_active_owner_admin_telegram_user(sqlite_staff_session, 404)
+    assert await StaffUserService.is_active_owner_admin_telegram_user(sqlite_staff_session, 404)
     assert not await StaffUserService.is_active_owner_admin_telegram_user(sqlite_staff_session, 505)
     assert not await StaffUserService.is_active_owner_admin_telegram_user(sqlite_staff_session, 606)
 
@@ -161,6 +200,7 @@ async def test_ensure_for_installer_creates_compatibility_staff_user(sqlite_staf
     assert staff_user.legacy_installer_id == installer.id
     assert staff_user.display_name == "Legacy Installer"
     assert staff_user.status == "active"
+    assert staff_user.primary_role == "installer"
     assert staff_user.roles == ["installer"]
     assert staff_user.telegram_id == 777
 

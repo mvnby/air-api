@@ -1,12 +1,18 @@
 import logging
 import json
+from datetime import datetime, timedelta, timezone
+import hashlib
+import hmac
 from typing import Iterable, Optional
+from urllib.parse import parse_qsl
 
+import bcrypt
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import select, func, or_
 
 from core.config import settings
 from models import Installer, StaffUser
+from schemas import ManagerStaffCreatePayload, ManagerStaffUpdatePayload, ManagerStaffResponse, ManagerStaffListResponse, Meta
 
 logger = logging.getLogger(__name__)
 
@@ -26,16 +32,9 @@ class StaffUserService:
     STATUS_INACTIVE = "inactive"
     STATUS_BLOCKED = "blocked"
 
-    ROLES = {
-        ROLE_OWNER,
-        ROLE_ADMIN,
-        ROLE_MANAGER,
-        ROLE_INSTALLER,
-        ROLE_MAINTENANCE,
-        ROLE_REPAIR,
-        ROLE_MEASURER,
-    }
-    OWNER_ADMIN_ROLES = {ROLE_OWNER, ROLE_ADMIN}
+    PRIMARY_ROLES = {ROLE_OWNER, ROLE_MANAGER, ROLE_INSTALLER}
+    ROLES = PRIMARY_ROLES | {ROLE_ADMIN, ROLE_MAINTENANCE, ROLE_REPAIR, ROLE_MEASURER}
+    OWNER_ADMIN_ROLES = {ROLE_OWNER, ROLE_MANAGER}
     MANAGEMENT_ROLES = {ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER}
     EXECUTOR_ROLES = {ROLE_INSTALLER, ROLE_MAINTENANCE, ROLE_REPAIR, ROLE_MEASURER}
     STATUSES = {STATUS_ACTIVE, STATUS_INACTIVE, STATUS_BLOCKED}
@@ -43,6 +42,35 @@ class StaffUserService:
     @classmethod
     def normalize_role(cls, role: str) -> str:
         return str(role or "").strip().lower()
+
+    @classmethod
+    def normalize_primary_role(cls, role: str | None, roles: Iterable[str] | None = None) -> str:
+        value = cls.normalize_role(role or "")
+        if value == cls.ROLE_ADMIN:
+            return cls.ROLE_OWNER
+        if value in {cls.ROLE_OWNER, cls.ROLE_MANAGER}:
+            return value
+
+        legacy_roles = set(cls.normalize_roles(roles))
+        if cls.ROLE_OWNER in legacy_roles or cls.ROLE_ADMIN in legacy_roles:
+            return cls.ROLE_OWNER
+        if cls.ROLE_MANAGER in legacy_roles:
+            return cls.ROLE_MANAGER
+        if value == cls.ROLE_INSTALLER:
+            return cls.ROLE_INSTALLER
+        return cls.ROLE_INSTALLER
+
+    @classmethod
+    def primary_role(cls, staff_user: StaffUser) -> str:
+        return cls.normalize_primary_role(getattr(staff_user, "primary_role", None), getattr(staff_user, "roles", []))
+
+    @classmethod
+    def roles_for_primary(cls, primary_role: str, *, assignable_as_installer: bool = False) -> list[str]:
+        normalized = cls.normalize_primary_role(primary_role)
+        roles = [normalized]
+        if assignable_as_installer and cls.ROLE_INSTALLER not in roles:
+            roles.append(cls.ROLE_INSTALLER)
+        return roles
 
     @classmethod
     def normalize_roles(cls, roles: Iterable[str] | None) -> list[str]:
@@ -86,7 +114,7 @@ class StaffUserService:
         return (
             cls.is_active(staff_user)
             and bool(getattr(staff_user, "telegram_id", None))
-            and cls.has_any_role(staff_user, cls.OWNER_ADMIN_ROLES)
+            and cls.primary_role(staff_user) in cls.OWNER_ADMIN_ROLES
         )
 
     @classmethod
@@ -95,11 +123,297 @@ class StaffUserService:
 
     @classmethod
     def can_be_executor(cls, staff_user: StaffUser, role: str) -> bool:
-        return cls.is_active(staff_user) and cls.has_role(staff_user, role)
+        return (
+            cls.is_active(staff_user)
+            and getattr(staff_user, "legacy_installer_id", None) is not None
+            and cls.has_role(staff_user, role)
+        )
 
     @classmethod
     def can_be_any_executor(cls, staff_user: StaffUser) -> bool:
-        return cls.is_active(staff_user) and cls.has_any_role(staff_user, cls.EXECUTOR_ROLES)
+        return (
+            cls.is_active(staff_user)
+            and getattr(staff_user, "legacy_installer_id", None) is not None
+            and cls.has_any_role(staff_user, cls.EXECUTOR_ROLES)
+        )
+
+    @staticmethod
+    def normalize_username(username: str | None) -> str | None:
+        value = str(username or "").strip().lower()
+        return value or None
+
+    @staticmethod
+    def hash_password(password: str) -> str:
+        value = str(password or "")
+        if len(value) < 6:
+            raise ValueError("Пароль должен быть не короче 6 символов")
+        return bcrypt.hashpw(value.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+    @staticmethod
+    def verify_password(password: str, password_hash: str | None) -> bool:
+        if not password_hash:
+            return False
+        try:
+            return bcrypt.checkpw(str(password or "").encode("utf-8"), password_hash.encode("utf-8"))
+        except ValueError:
+            return False
+
+    @classmethod
+    def _response(cls, user: StaffUser) -> ManagerStaffResponse:
+        return ManagerStaffResponse(
+            id=int(user.id or 0),
+            display_name=user.display_name,
+            status=cls.normalize_status(user.status),
+            primary_role=cls.primary_role(user),
+            username=user.username,
+            has_password=bool(user.password_hash),
+            phone=user.phone,
+            email=user.email,
+            telegram_id=user.telegram_id,
+            telegram_username=user.telegram_username,
+            is_assignable_installer=user.legacy_installer_id is not None,
+            legacy_installer_id=user.legacy_installer_id,
+            default_rate=user.default_rate,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+            last_login_at=user.last_login_at,
+        )
+
+    @classmethod
+    async def authenticate_password(cls, session: AsyncSession, username: str, password: str) -> StaffUser | None:
+        normalized_username = cls.normalize_username(username)
+        if not normalized_username:
+            return None
+
+        result = await session.execute(select(StaffUser).where(StaffUser.username == normalized_username))
+        user = result.scalar_one_or_none()
+        if user is None or not cls.is_active(user):
+            return None
+        if not cls.verify_password(password, user.password_hash):
+            return None
+
+        user.last_login_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        user.primary_role = cls.primary_role(user)
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        return user
+
+    @classmethod
+    async def authenticate_telegram_login(
+        cls,
+        session: AsyncSession,
+        payload: dict[str, str | int],
+        *,
+        max_age: timedelta = timedelta(minutes=10),
+    ) -> StaffUser | None:
+        if not cls.verify_telegram_login_payload(payload, max_age=max_age):
+            return None
+
+        telegram_id = payload.get("id")
+        try:
+            normalized_telegram_id = int(telegram_id)
+        except (TypeError, ValueError):
+            return None
+
+        result = await session.execute(select(StaffUser).where(StaffUser.telegram_id == normalized_telegram_id))
+        user = result.scalar_one_or_none()
+        if user is None or not cls.is_active(user):
+            return None
+
+        username = str(payload.get("username") or "").strip() or None
+        if username and user.telegram_username != username:
+            user.telegram_username = username
+        user.last_login_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        user.primary_role = cls.primary_role(user)
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        return user
+
+    @staticmethod
+    def _telegram_payload_items(payload: dict[str, str | int] | str) -> dict[str, str]:
+        if isinstance(payload, str):
+            return {key: value for key, value in parse_qsl(payload, keep_blank_values=True)}
+        return {str(key): str(value) for key, value in payload.items() if value is not None}
+
+    @classmethod
+    def verify_telegram_login_payload(
+        cls,
+        payload: dict[str, str | int] | str,
+        *,
+        max_age: timedelta = timedelta(minutes=10),
+    ) -> bool:
+        values = cls._telegram_payload_items(payload)
+        received_hash = values.pop("hash", "")
+        if not received_hash:
+            return False
+
+        try:
+            auth_date = datetime.fromtimestamp(int(values.get("auth_date", "0")), tz=timezone.utc)
+        except (TypeError, ValueError, OSError):
+            return False
+        if datetime.now(timezone.utc) - auth_date > max_age:
+            return False
+
+        data_check_string = "\n".join(f"{key}={values[key]}" for key in sorted(values))
+        secret_key = hashlib.sha256(settings.BOT_TOKEN.encode("utf-8")).digest()
+        expected_hash = hmac.new(secret_key, data_check_string.encode("utf-8"), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected_hash, received_hash)
+
+    @classmethod
+    async def get_by_id(cls, session: AsyncSession, staff_user_id: int) -> StaffUser | None:
+        return await session.get(StaffUser, staff_user_id)
+
+    @classmethod
+    async def list_staff(
+        cls,
+        session: AsyncSession,
+        page: int = 1,
+        limit: int = 100,
+        search: Optional[str] = None,
+    ) -> ManagerStaffListResponse:
+        stmt = select(StaffUser)
+        if search:
+            query = f"%{search.strip().lower()}%"
+            stmt = stmt.where(
+                or_(
+                    func.lower(StaffUser.display_name).like(query),
+                    func.lower(StaffUser.username).like(query),
+                    func.lower(StaffUser.email).like(query),
+                    func.lower(StaffUser.phone).like(query),
+                    func.lower(StaffUser.telegram_username).like(query),
+                )
+            )
+
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total_res = await session.execute(count_stmt)
+        total = total_res.scalar() or 0
+
+        result = await session.execute(
+            stmt.order_by(StaffUser.display_name.asc()).offset((page - 1) * limit).limit(limit)
+        )
+        items = [cls._response(user) for user in result.scalars().all()]
+        pages = (total + limit - 1) // limit if total > 0 else 1
+        return ManagerStaffListResponse(items=items, meta=Meta(total=total, page=page, limit=limit, pages=pages))
+
+    @classmethod
+    async def create_staff(
+        cls,
+        session: AsyncSession,
+        payload: ManagerStaffCreatePayload,
+    ) -> ManagerStaffResponse:
+        username = cls.normalize_username(payload.username)
+        primary_role = cls.normalize_primary_role(payload.primary_role)
+        assignable = bool(payload.is_assignable_installer)
+        display_name = payload.display_name.strip()
+        if not display_name:
+            raise ValueError("Имя сотрудника обязательно")
+        staff_user = StaffUser(
+            display_name=display_name,
+            status=cls.normalize_status(payload.status),
+            primary_role=primary_role,
+            roles=cls.roles_for_primary(primary_role, assignable_as_installer=assignable),
+            username=username,
+            password_hash=cls.hash_password(payload.password) if payload.password else None,
+            phone=payload.phone,
+            email=payload.email,
+            telegram_id=payload.telegram_id,
+            telegram_username=payload.telegram_username,
+            default_rate=payload.default_rate,
+        )
+        session.add(staff_user)
+        await session.flush()
+        await cls._sync_installer_link(session, staff_user, assignable)
+        await session.commit()
+        await session.refresh(staff_user)
+        return cls._response(staff_user)
+
+    @classmethod
+    async def update_staff(
+        cls,
+        session: AsyncSession,
+        staff_user_id: int,
+        payload: ManagerStaffUpdatePayload,
+    ) -> ManagerStaffResponse | None:
+        staff_user = await cls.get_by_id(session, staff_user_id)
+        if staff_user is None:
+            return None
+
+        changed_fields = payload.model_fields_set
+
+        if "display_name" in changed_fields and payload.display_name is not None:
+            display_name = payload.display_name.strip()
+            if not display_name:
+                raise ValueError("Имя сотрудника обязательно")
+            staff_user.display_name = display_name
+        if "status" in changed_fields:
+            staff_user.status = cls.normalize_status(payload.status)
+        if "primary_role" in changed_fields:
+            staff_user.primary_role = cls.normalize_primary_role(payload.primary_role)
+        else:
+            staff_user.primary_role = cls.primary_role(staff_user)
+        if "username" in changed_fields:
+            staff_user.username = cls.normalize_username(payload.username)
+        if payload.password:
+            staff_user.password_hash = cls.hash_password(payload.password)
+        if "phone" in changed_fields:
+            staff_user.phone = payload.phone or None
+        if "email" in changed_fields:
+            staff_user.email = payload.email or None
+        if "telegram_id" in changed_fields:
+            staff_user.telegram_id = payload.telegram_id
+        if "telegram_username" in changed_fields:
+            staff_user.telegram_username = payload.telegram_username or None
+        if "default_rate" in changed_fields:
+            staff_user.default_rate = payload.default_rate
+
+        assignable = (
+            bool(payload.is_assignable_installer)
+            if "is_assignable_installer" in changed_fields
+            else staff_user.legacy_installer_id is not None
+        )
+        staff_user.roles = cls.roles_for_primary(staff_user.primary_role, assignable_as_installer=assignable)
+        session.add(staff_user)
+        await session.flush()
+        await cls._sync_installer_link(session, staff_user, assignable)
+        await session.commit()
+        await session.refresh(staff_user)
+        return cls._response(staff_user)
+
+    @classmethod
+    async def _sync_installer_link(
+        cls,
+        session: AsyncSession,
+        staff_user: StaffUser,
+        assignable: bool,
+    ) -> None:
+        if assignable:
+            installer: Installer | None = None
+            if staff_user.legacy_installer_id:
+                installer = await session.get(Installer, staff_user.legacy_installer_id)
+            if installer is None:
+                installer = Installer(name=staff_user.display_name)
+                session.add(installer)
+                await session.flush()
+                staff_user.legacy_installer_id = installer.id
+            installer.name = staff_user.display_name
+            installer.is_active = cls.is_active(staff_user)
+            installer.default_rate = staff_user.default_rate
+            installer.telegram_id = staff_user.telegram_id
+            session.add(installer)
+            session.add(staff_user)
+            await session.flush()
+            return
+
+        if staff_user.legacy_installer_id:
+            installer = await session.get(Installer, staff_user.legacy_installer_id)
+            if installer is not None:
+                installer.is_active = False
+                session.add(installer)
+        staff_user.legacy_installer_id = None
+        session.add(staff_user)
+        await session.flush()
 
     @classmethod
     async def find_active_executors_by_role(
@@ -226,6 +540,7 @@ class StaffUserService:
             staff_user = StaffUser(
                 display_name=installer.name,
                 status=cls.STATUS_ACTIVE if installer.is_active else cls.STATUS_INACTIVE,
+                primary_role=cls.ROLE_INSTALLER,
                 roles=[cls.ROLE_INSTALLER],
                 telegram_id=installer.telegram_id,
                 legacy_installer_id=installer.id,
@@ -238,6 +553,7 @@ class StaffUserService:
         staff_user.display_name = installer.name
         staff_user.default_rate = installer.default_rate
         staff_user.telegram_id = installer.telegram_id
+        staff_user.primary_role = cls.primary_role(staff_user)
         roles = cls.normalize_roles(staff_user.roles)
         if cls.ROLE_INSTALLER not in roles:
             roles.append(cls.ROLE_INSTALLER)

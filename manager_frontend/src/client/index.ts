@@ -174,6 +174,10 @@ export type { ManagerSettingCreatePayload } from './models/ManagerSettingCreateP
 export type { ManagerSettingListResponse } from './models/ManagerSettingListResponse';
 export type { ManagerSettingResponse } from './models/ManagerSettingResponse';
 export type { ManagerSettingUpdatePayload } from './models/ManagerSettingUpdatePayload';
+export type { ManagerStaffCreatePayload } from './models/ManagerStaffCreatePayload';
+export type { ManagerStaffListResponse } from './models/ManagerStaffListResponse';
+export type { ManagerStaffResponse } from './models/ManagerStaffResponse';
+export type { ManagerStaffUpdatePayload } from './models/ManagerStaffUpdatePayload';
 export type { ManagerTagCreatePayload } from './models/ManagerTagCreatePayload';
 export type { ManagerTagGroupCreatePayload } from './models/ManagerTagGroupCreatePayload';
 export type { ManagerTagGroupResponse } from './models/ManagerTagGroupResponse';
@@ -273,6 +277,7 @@ export type { SupplierSyncRunResponse } from './models/SupplierSyncRunResponse';
 export type { SupplierUpdatePayload } from './models/SupplierUpdatePayload';
 export type { TagGroupResponse } from './models/TagGroupResponse';
 export type { TagResponse } from './models/TagResponse';
+export type { TelegramLoginPayload } from './models/TelegramLoginPayload';
 export type { ValidationError } from './models/ValidationError';
 
 export { ApiService } from './services/ApiService';
@@ -295,6 +300,7 @@ export { ManagerOrdersService } from './services/ManagerOrdersService';
 export { ManagerRepairComplaintsService } from './services/ManagerRepairComplaintsService';
 export { ManagerServiceEstimatesService } from './services/ManagerServiceEstimatesService';
 export { ManagerSettingsService } from './services/ManagerSettingsService';
+export { ManagerStaffService } from './services/ManagerStaffService';
 export { ManagerTagsService } from './services/ManagerTagsService';
 export { ManagerTariffsService } from './services/ManagerTariffsService';
 export { ManagerYandexBusinessService } from './services/ManagerYandexBusinessService';
