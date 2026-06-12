@@ -683,34 +683,36 @@ onMounted(() => {
                     @dragend="resetSeriesDragState"
                 >
                     <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
-                        <button
-                            type="button"
-                            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 dark:border-slate-700 text-gray-400 dark:text-slate-500 transition-colors"
-                            :class="isSeriesReorderDisabled ? 'cursor-not-allowed opacity-40' : 'cursor-grab hover:bg-white hover:text-teal-600 dark:hover:bg-slate-800 dark:hover:text-teal-300 active:cursor-grabbing'"
-                            :disabled="isSeriesReorderDisabled"
-                            title="Перетащите серию выше или ниже"
-                            @click.stop
-                        >
-                            <span class="material-icons-round text-[22px]">drag_indicator</span>
-                        </button>
-                        <img
-                            v-if="series.hero_image"
-                            :src="series.hero_image"
-                            :alt="series.title"
-                            class="h-10 w-10 shrink-0 rounded-lg object-cover border border-gray-200 dark:border-slate-700 bg-white"
-                        />
-                        <div class="min-w-0 flex-1">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <h3 class="font-bold leading-tight text-gray-900 dark:text-slate-100">{{ series.title }}</h3>
-                                <span
-                                    class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
-                                    :class="series.is_published ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-300'"
-                                >
-                                    {{ series.is_published ? 'Публичная' : 'Скрыта' }}
-                                </span>
-                                <span class="text-xs text-gray-500 dark:text-slate-400">{{ series.products_count }} товаров</span>
+                        <div class="flex min-w-0 flex-1 items-start gap-2">
+                            <button
+                                type="button"
+                                class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 dark:border-slate-700 text-gray-400 dark:text-slate-500 transition-colors"
+                                :class="isSeriesReorderDisabled ? 'cursor-not-allowed opacity-40' : 'cursor-grab hover:bg-white hover:text-teal-600 dark:hover:bg-slate-800 dark:hover:text-teal-300 active:cursor-grabbing'"
+                                :disabled="isSeriesReorderDisabled"
+                                title="Перетащите серию выше или ниже"
+                                @click.stop
+                            >
+                                <span class="material-icons-round text-[22px]">drag_indicator</span>
+                            </button>
+                            <img
+                                v-if="series.hero_image"
+                                :src="series.hero_image"
+                                :alt="series.title"
+                                class="h-10 w-10 shrink-0 rounded-lg object-cover border border-gray-200 dark:border-slate-700 bg-white"
+                            />
+                            <div class="min-w-0 flex-1">
+                                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                    <h3 class="min-w-0 break-words font-bold leading-tight text-gray-900 dark:text-slate-100">{{ series.title }}</h3>
+                                    <span
+                                        class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
+                                        :class="series.is_published ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-300'"
+                                    >
+                                        {{ series.is_published ? 'Публичная' : 'Скрыта' }}
+                                    </span>
+                                    <span class="text-xs text-gray-500 dark:text-slate-400">{{ series.products_count }} товаров</span>
+                                </div>
+                                <p class="text-xs font-mono text-gray-500 dark:text-slate-400">{{ series.slug }}</p>
                             </div>
-                            <p class="text-xs font-mono text-gray-500 dark:text-slate-400">{{ series.slug }}</p>
                         </div>
                         <div v-if="series.features?.length" class="flex min-w-0 flex-1 flex-wrap gap-1.5 lg:max-w-[34%]">
                             <span
