@@ -29,6 +29,7 @@ services:
       - ./token.json:/app/token.json
       - ./client_secret.json:/app/client_secret.json
       - ./credentials.json:/app/credentials.json
+      - ./g-vision-ocr.json:/app/g-vision-ocr.json:ro
 
   bot:
     image: ghcr.io/mvnby/air-api/backend:latest
@@ -39,6 +40,8 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
+    volumes:
+      - ./g-vision-ocr.json:/app/g-vision-ocr.json:ro
     command: python -m bot_app.main
 
 volumes:

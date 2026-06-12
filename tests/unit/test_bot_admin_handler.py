@@ -1,9 +1,15 @@
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
+os.environ["BOT_TOKEN"] = "123:test"
+
+from core.config import settings
+
+settings.BOT_TOKEN = "123:test"
 from bot_app.handlers import admin as admin_handler
 
 
@@ -11,6 +17,8 @@ class _DummyMessage:
     def __init__(self, text: str, user_id: int = 1):
         self.text = text
         self.from_user = SimpleNamespace(id=user_id)
+        self.chat = SimpleNamespace(id=100)
+        self.message_id = 55
         self.answer = AsyncMock()
         self.delete = AsyncMock()
 
@@ -32,6 +40,11 @@ class _DummyCallback:
         self.answer = AsyncMock()
 
 
+class _DummyProgress:
+    def __init__(self):
+        self.edit_text = AsyncMock()
+
+
 class _DummySessionContext:
     async def __aenter__(self):
         return object()
@@ -48,6 +61,24 @@ def test_admin_handler_has_no_direct_dao_import():
     source = Path("bot_app/handlers/admin.py").read_text(encoding="utf-8")
     assert "from crud.product import ProductDAO" not in source
     assert "from services.product_service import ProductService" in source
+
+
+def test_requisites_preview_marks_field_errors_by_field_key():
+    text = admin_handler._preview_text(
+        {
+            "extracted": {
+                "name": "ООО Тест",
+                "iban": "BAD",
+            },
+            "validation_flags": {
+                "field_errors": {"iban": "Некорректный IBAN"},
+                "warnings": {},
+            },
+        }
+    )
+
+    assert "<b>IBAN:</b> ⚠️ BAD" in text
+    assert "Некорректный IBAN" in text
 
 
 @pytest.mark.asyncio
@@ -115,3 +146,62 @@ async def test_is_admin_user_uses_staff_service(monkeypatch):
     assert await admin_handler._is_admin_user(7)
     admin_check.assert_awaited_once()
     assert admin_check.await_args.args == (session, 7)
+
+
+@pytest.mark.asyncio
+async def test_requisites_file_rejects_non_admin(monkeypatch):
+    monkeypatch.setattr(admin_handler, "_is_admin_user", AsyncMock(return_value=False))
+    message = _DummyMessage(text="", user_id=5)
+
+    await admin_handler._handle_requisites_file(
+        message,
+        file_id="file-1",
+        filename="req.png",
+        mime_type="image/png",
+    )
+
+    message.answer.assert_awaited_once_with("Распознавание реквизитов доступно только администраторам.")
+
+
+@pytest.mark.asyncio
+async def test_requisites_file_sends_preview_for_admin(monkeypatch):
+    progress = _DummyProgress()
+    message = _DummyMessage(text="", user_id=5)
+    message.answer = AsyncMock(return_value=progress)
+
+    monkeypatch.setattr(admin_handler, "_is_admin_user", AsyncMock(return_value=True))
+    monkeypatch.setattr(admin_handler, "_download_telegram_file", AsyncMock(return_value=b"image"))
+
+    async def fake_recognize(session, **kwargs):
+        assert kwargs["content"] == b"image"
+        assert kwargs["source"] == "telegram"
+        return {
+            "id": 12,
+            "status": "recognized",
+            "source": "telegram",
+            "raw_text": "raw",
+            "extracted": {
+                "name": "ООО Тест",
+                "inn": "123456789",
+                "signer_name": "Иванова Ивана Ивановича",
+                "signer_position": "директора",
+                "acting_basis": "Устава",
+            },
+            "validation_flags": {"field_errors": {}, "warnings": {}, "is_valid": True},
+            "duplicate_customer": None,
+        }
+
+    monkeypatch.setattr(admin_handler.CustomerRequisitesRecognitionService, "recognize_bytes", fake_recognize)
+    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
+
+    await admin_handler._handle_requisites_file(
+        message,
+        file_id="file-1",
+        filename="req.png",
+        mime_type="image/png",
+    )
+
+    progress.edit_text.assert_awaited_once()
+    args, kwargs = progress.edit_text.await_args
+    assert "ООО Тест" in args[0]
+    assert kwargs["parse_mode"] == "HTML"

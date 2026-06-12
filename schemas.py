@@ -1378,6 +1378,63 @@ class ManagerCatalogCustomerListResponse(BaseModel):
     meta: Meta
 
 
+class CustomerRequisitesExtractedData(BaseModel):
+    name: Optional[str] = None
+    full_legal_name: Optional[str] = None
+    inn: Optional[str] = None
+    legal_address: Optional[str] = None
+    bank_name: Optional[str] = None
+    bic: Optional[str] = None
+    iban: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    phone_raw: Optional[str] = None
+    signer_position: Optional[str] = None
+    signer_name: Optional[str] = None
+    acting_basis: Optional[str] = None
+    extra: Dict[str, Any] = Field(default_factory=dict)
+
+
+class CustomerRequisitesDuplicateCustomer(BaseModel):
+    id: int
+    name: Optional[str] = None
+    inn: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+
+
+class CustomerRequisitesRecognitionResponse(BaseModel):
+    id: int
+    status: str
+    source: str
+    raw_text: str
+    extracted: CustomerRequisitesExtractedData
+    validation_flags: Dict[str, Any] = Field(default_factory=dict)
+    duplicate_customer: Optional[CustomerRequisitesDuplicateCustomer] = None
+    confirmed_customer_id: Optional[int] = None
+    confirmed_action: Optional[str] = None
+    local_file_url: Optional[str] = None
+    created_at: datetime
+
+
+class CustomerRequisitesConfirmPayload(BaseModel):
+    action: str
+    customer_id: Optional[int] = None
+
+    @field_validator("action")
+    @classmethod
+    def _validate_action(cls, value: str) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized not in {"create", "update"}:
+            raise ValueError("action must be create or update")
+        return normalized
+
+
+class CustomerRequisitesConfirmResponse(BaseModel):
+    recognition: CustomerRequisitesRecognitionResponse
+    customer: ManagerCatalogCustomerItemResponse
+
+
 class ManagerCustomerUpdatePayload(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None

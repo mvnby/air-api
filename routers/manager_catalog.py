@@ -1,6 +1,6 @@
 from typing import List, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
@@ -18,6 +18,8 @@ from routers.manager_operation_ids import (
     GET_MANAGER_CUSTOMERS,
     GET_MANAGER_CUSTOMER_DETAIL,
     GET_MANAGER_CUSTOMER_DOCS,
+    RECOGNIZE_MANAGER_CUSTOMER_REQUISITES,
+    CONFIRM_MANAGER_CUSTOMER_REQUISITES,
     GET_MANAGER_CUSTOMER_BRANCHES,
     CREATE_MANAGER_CUSTOMER_BRANCH,
     PATCH_MANAGER_CUSTOMER_BRANCH,
@@ -40,6 +42,9 @@ from schemas import (
     CatalogImportResultResponse,
     ManagerActionMessageResponse,
     ManagerCatalogCustomerItemResponse,
+    CustomerRequisitesConfirmPayload,
+    CustomerRequisitesConfirmResponse,
+    CustomerRequisitesRecognitionResponse,
     ManagerBulkRoundPriceResponse,
     ManagerBulkSetRrcPriceResponse,
     ManagerBulkDeleteProductsResponse,
@@ -57,6 +62,7 @@ from schemas import (
     ProductUpdate,
 )
 from services.catalog_import_runtime_service import catalog_import_runtime_service
+from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
 from services.manager_catalog_service import ManagerCatalogService
 from services.document_service import DocumentService
 from services.importer_service import ImporterService
@@ -139,6 +145,68 @@ async def list_customers_for_manager(
         customer_type=customer_type,
         only_with_orders=only_with_orders,
     )
+
+
+@router.post(
+    "/customers/requisites/recognize",
+    response_model=CustomerRequisitesRecognitionResponse,
+    operation_id=RECOGNIZE_MANAGER_CUSTOMER_REQUISITES,
+)
+async def recognize_customer_requisites_for_manager(
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        content = await file.read()
+        return await CustomerRequisitesRecognitionService.recognize_bytes(
+            session,
+            content=content,
+            filename=file.filename,
+            mime_type=file.content_type,
+            source="manager",
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=RECOGNIZE_MANAGER_CUSTOMER_REQUISITES,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/customers/requisites/{recognition_id}/confirm",
+    response_model=CustomerRequisitesConfirmResponse,
+    operation_id=CONFIRM_MANAGER_CUSTOMER_REQUISITES,
+)
+async def confirm_customer_requisites_for_manager(
+    recognition_id: int,
+    payload: CustomerRequisitesConfirmPayload,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        return await CustomerRequisitesRecognitionService.confirm(
+            session,
+            recognition_id=recognition_id,
+            action=payload.action,
+            customer_id=payload.customer_id,
+        )
+    except LookupError as exc:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=CONFIRM_MANAGER_CUSTOMER_REQUISITES,
+            error_code=CUSTOMER_NOT_FOUND,
+            message=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=CONFIRM_MANAGER_CUSTOMER_REQUISITES,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
 
 
 @router.get(

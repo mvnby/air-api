@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { Body_bulk_upload_local_images } from '../models/Body_bulk_upload_local_images';
+import type { Body_recognize_manager_customer_requisites } from '../models/Body_recognize_manager_customer_requisites';
 import type { Body_upload_local_images } from '../models/Body_upload_local_images';
 import type { BulkGalleryAddRequest } from '../models/BulkGalleryAddRequest';
 import type { BulkGalleryDeleteRequest } from '../models/BulkGalleryDeleteRequest';
@@ -14,6 +15,9 @@ import type { CatalogImportJobStatusResponse } from '../models/CatalogImportJobS
 import type { CatalogImportPayload } from '../models/CatalogImportPayload';
 import type { CatalogImportResultResponse } from '../models/CatalogImportResultResponse';
 import type { CommonGalleryImageResponse } from '../models/CommonGalleryImageResponse';
+import type { CustomerRequisitesConfirmPayload } from '../models/CustomerRequisitesConfirmPayload';
+import type { CustomerRequisitesConfirmResponse } from '../models/CustomerRequisitesConfirmResponse';
+import type { CustomerRequisitesRecognitionResponse } from '../models/CustomerRequisitesRecognitionResponse';
 import type { ManagerActionMessageResponse } from '../models/ManagerActionMessageResponse';
 import type { ManagerAuthStatusResponse } from '../models/ManagerAuthStatusResponse';
 import type { ManagerBulkDeleteProductsResponse } from '../models/ManagerBulkDeleteProductsResponse';
@@ -168,6 +172,49 @@ export class ManagerService {
                 'type': type,
                 'only_with_orders': onlyWithOrders,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Recognize Customer Requisites For Manager
+     * @param formData
+     * @returns CustomerRequisitesRecognitionResponse Successful Response
+     * @throws ApiError
+     */
+    public static recognizeManagerCustomerRequisites(
+        formData: Body_recognize_manager_customer_requisites,
+    ): CancelablePromise<CustomerRequisitesRecognitionResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/customers/requisites/recognize',
+            formData: formData,
+            mediaType: 'multipart/form-data',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Confirm Customer Requisites For Manager
+     * @param recognitionId
+     * @param requestBody
+     * @returns CustomerRequisitesConfirmResponse Successful Response
+     * @throws ApiError
+     */
+    public static confirmManagerCustomerRequisites(
+        recognitionId: number,
+        requestBody: CustomerRequisitesConfirmPayload,
+    ): CancelablePromise<CustomerRequisitesConfirmResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/customers/requisites/{recognition_id}/confirm',
+            path: {
+                'recognition_id': recognitionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },
