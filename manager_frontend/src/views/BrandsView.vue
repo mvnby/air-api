@@ -714,16 +714,16 @@ onMounted(() => {
                                 <p class="text-xs font-mono text-gray-500 dark:text-slate-400">{{ series.slug }}</p>
                             </div>
                         </div>
-                        <div v-if="series.features?.length" class="flex min-w-0 flex-1 flex-wrap gap-1.5 lg:max-w-[34%]">
+                        <div v-if="series.features?.length && !isSeriesExpanded(series.id)" class="flex min-w-0 flex-1 flex-wrap gap-1.5 lg:max-w-[34%]">
                             <span
-                                v-for="feature in series.features.slice(0, isSeriesExpanded(series.id) ? series.features.length : 3)"
+                                v-for="feature in series.features.slice(0, 3)"
                                 :key="feature"
                                 class="rounded-full border border-teal-200 dark:border-teal-900/60 bg-teal-50 dark:bg-teal-950/30 px-2 py-0.5 text-xs font-semibold text-teal-700 dark:text-teal-200"
                             >
                                 {{ feature }}
                             </span>
                             <span
-                                v-if="!isSeriesExpanded(series.id) && series.features.length > 3"
+                                v-if="series.features.length > 3"
                                 class="rounded-full border border-gray-200 dark:border-slate-700 px-2 py-0.5 text-xs font-semibold text-gray-500 dark:text-slate-400"
                             >
                                 +{{ series.features.length - 3 }}
