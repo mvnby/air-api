@@ -113,6 +113,8 @@ const moveItemById = <T extends { id: number }>(items: T[], draggedId: number, t
 
 const isSeriesExpanded = (seriesId: number) => expandedSeriesIds.value.has(seriesId);
 
+const hasSeriesDetails = (series: ManagerBrandSeries) => Boolean(series.description || series.features?.length);
+
 const toggleSeriesExpanded = (seriesId: number) => {
     const next = new Set(expandedSeriesIds.value);
     if (next.has(seriesId)) {
@@ -121,6 +123,12 @@ const toggleSeriesExpanded = (seriesId: number) => {
         next.add(seriesId);
     }
     expandedSeriesIds.value = next;
+};
+
+const toggleSeriesExpandedFromCard = (series: ManagerBrandSeries) => {
+    if (!hasSeriesDetails(series)) return;
+    if (window.matchMedia('(min-width: 1024px)').matches) return;
+    toggleSeriesExpanded(series.id);
 };
 
 const withSortOrder = <T extends { sort_order: number }>(items: T[]) => (
@@ -670,18 +678,45 @@ onMounted(() => {
                 <article
                     v-for="series in seriesItems"
                     :key="series.id"
-                    class="rounded-xl border border-gray-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 px-3 py-2.5"
+                    class="relative rounded-xl border border-gray-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 px-3 py-2.5 pr-20 transition-shadow lg:pr-3"
                     :class="[
-                        seriesDropTargetId === series.id ? 'outline outline-2 outline-teal-400 outline-offset-2' : '',
                         draggedSeriesId === series.id ? 'opacity-50' : '',
+                        hasSeriesDetails(series) ? 'cursor-pointer lg:cursor-default' : '',
                     ]"
                     :draggable="!isSeriesReorderDisabled"
+                    @click="toggleSeriesExpandedFromCard(series)"
                     @dragstart="onSeriesDragStart($event, series)"
                     @dragover="onSeriesDragOver($event, series)"
                     @dragleave="seriesDropTargetId = seriesDropTargetId === series.id ? null : seriesDropTargetId"
                     @drop.prevent="onSeriesDrop(series)"
                     @dragend="resetSeriesDragState"
                 >
+                    <span
+                        v-if="seriesDropTargetId === series.id"
+                        aria-hidden="true"
+                        class="pointer-events-none absolute -top-2 left-3 right-3 h-1 rounded-full bg-teal-400 shadow-[0_0_18px_rgba(20,184,166,0.75)] dark:bg-teal-300"
+                    />
+                    <div class="absolute right-2 top-2 z-10 inline-flex items-center gap-1 lg:hidden" @click.stop>
+                        <button
+                            type="button"
+                            class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white/85 text-gray-600 shadow-sm backdrop-blur hover:text-teal-700 dark:border-slate-700 dark:bg-slate-900/85 dark:text-slate-300 dark:hover:text-teal-200"
+                            title="Изменить серию"
+                            aria-label="Изменить серию"
+                            @click.stop="openSeriesEdit(series)"
+                        >
+                            <span class="material-icons-round text-[18px]">edit</span>
+                        </button>
+                        <button
+                            type="button"
+                            class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-white/85 text-red-500 shadow-sm backdrop-blur hover:bg-red-50 disabled:opacity-40 dark:border-red-900/60 dark:bg-slate-900/85 dark:hover:bg-red-950/30"
+                            :disabled="(series.products_count ?? 0) > 0"
+                            title="Удалить серию"
+                            aria-label="Удалить серию"
+                            @click.stop="deleteSeries(series)"
+                        >
+                            <span class="material-icons-round text-[18px]">delete</span>
+                        </button>
+                    </div>
                     <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
                         <div class="flex min-w-0 flex-1 items-start gap-2">
                             <button
@@ -729,13 +764,13 @@ onMounted(() => {
                                 +{{ series.features.length - 3 }}
                             </span>
                         </div>
-                        <div class="inline-flex shrink-0 items-center gap-1">
+                        <div class="hidden shrink-0 items-center gap-1 lg:inline-flex">
                             <button
-                                v-if="series.description || series.features?.length"
+                                v-if="hasSeriesDetails(series)"
                                 type="button"
                                 class="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-gray-200 dark:border-slate-700 text-xs font-semibold hover:bg-white dark:hover:bg-slate-800"
                                 :aria-expanded="isSeriesExpanded(series.id)"
-                                @click="toggleSeriesExpanded(series.id)"
+                                @click.stop="toggleSeriesExpanded(series.id)"
                             >
                                 <span class="material-icons-round text-[16px]">
                                     {{ isSeriesExpanded(series.id) ? 'expand_less' : 'expand_more' }}
@@ -745,7 +780,7 @@ onMounted(() => {
                             <button
                                 type="button"
                                 class="px-2.5 py-1 rounded border border-gray-200 dark:border-slate-700 text-xs font-semibold hover:bg-white dark:hover:bg-slate-800"
-                                @click="openSeriesEdit(series)"
+                                @click.stop="openSeriesEdit(series)"
                             >
                                 Изменить
                             </button>
@@ -753,7 +788,7 @@ onMounted(() => {
                                 type="button"
                                 class="px-2.5 py-1 rounded border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 disabled:opacity-50"
                                 :disabled="(series.products_count ?? 0) > 0"
-                                @click="deleteSeries(series)"
+                                @click.stop="deleteSeries(series)"
                             >
                                 Удалить
                             </button>
