@@ -124,6 +124,9 @@ GET_MANAGER_INSTALLERS = "get_manager_installers"
 CREATE_MANAGER_INSTALLER = "create_manager_installer"
 UPDATE_MANAGER_INSTALLER = "update_manager_installer"
 SEARCH_MANAGER_INSTALLERS = "search_manager_installers"
+LIST_MANAGER_STAFF = "list_manager_staff"
+CREATE_MANAGER_STAFF = "create_manager_staff"
+PATCH_MANAGER_STAFF = "patch_manager_staff"
 
 LIST_MANAGER_SETTINGS = "list_manager_settings"
 GET_FX_RATE = "get_fx_rate"
@@ -307,6 +310,9 @@ ALL_MANAGER_OPERATION_IDS = (
     CREATE_MANAGER_INSTALLER,
     UPDATE_MANAGER_INSTALLER,
     SEARCH_MANAGER_INSTALLERS,
+    LIST_MANAGER_STAFF,
+    CREATE_MANAGER_STAFF,
+    PATCH_MANAGER_STAFF,
     LIST_MANAGER_SETTINGS,
     CREATE_MANAGER_SETTING,
     GET_FX_RATE,

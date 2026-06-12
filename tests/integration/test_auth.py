@@ -1,6 +1,8 @@
 import pytest
 from httpx import AsyncClient
 from core.config import settings
+from models import StaffUser
+from services.staff_user_service import StaffUserService
 
 @pytest.mark.asyncio
 async def test_login_success(async_client: AsyncClient):
@@ -17,6 +19,36 @@ async def test_login_success(async_client: AsyncClient):
     assert data["token_type"] == "bearer"
     # Verify cookie is set
     assert "access_token" in response.cookies
+
+
+@pytest.mark.asyncio
+async def test_login_success_with_staff_user(async_client: AsyncClient, db):
+    db.add(
+        StaffUser(
+            display_name="Manager",
+            status="active",
+            primary_role="manager",
+            roles=["manager"],
+            username="manager",
+            password_hash=StaffUserService.hash_password("secret123"),
+        )
+    )
+    await db.commit()
+
+    response = await async_client.post(
+        "/login/access-token",
+        data={"username": "manager", "password": "secret123"},
+    )
+
+    assert response.status_code == 200
+    token = response.json()["access_token"]
+    me_response = await async_client.get("/api/manager/me", headers={"Authorization": f"Bearer {token}"})
+    assert me_response.status_code == 200
+    payload = me_response.json()
+    assert payload["username"] == "manager"
+    assert payload["role"] == "manager"
+    assert payload["display_name"] == "Manager"
+    assert payload["auth_source"] == "staff_password"
 
 @pytest.mark.asyncio
 async def test_login_failure(async_client: AsyncClient):

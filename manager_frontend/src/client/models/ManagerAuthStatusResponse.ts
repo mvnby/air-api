@@ -5,5 +5,9 @@
 export type ManagerAuthStatusResponse = {
     username: string;
     status: string;
+    staff_user_id?: (number | null);
+    role?: (string | null);
+    display_name?: (string | null);
+    auth_source?: string;
 };
 

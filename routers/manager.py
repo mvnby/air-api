@@ -20,6 +20,7 @@ from routers import manager_specs
 from routers import manager_installers
 from routers import manager_settings
 from routers import manager_service_estimates
+from routers import manager_staff
 from routers import manager_tariffs
 from routers import manager_tags
 from routers import manager_supply
@@ -44,6 +45,7 @@ router.include_router(manager_contracts.router)
 router.include_router(manager_calendar.router)
 router.include_router(manager_dashboard.router)
 router.include_router(manager_installers.router)
+router.include_router(manager_staff.router)
 router.include_router(manager_brands.router)
 router.include_router(manager_settings.router)
 router.include_router(manager_tariffs.router)

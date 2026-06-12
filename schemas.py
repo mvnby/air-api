@@ -356,6 +356,64 @@ class ManagerInstallerListResponse(BaseModel):
     items: List[ManagerInstallerResponse]
     meta: Meta
 
+
+# --- STAFF USERS ---
+
+class ManagerStaffBase(BaseModel):
+    display_name: str
+    status: str = "active"
+    primary_role: str = "installer"
+    username: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    telegram_id: Optional[int] = None
+    telegram_username: Optional[str] = None
+    is_assignable_installer: bool = False
+    default_rate: Optional[float] = None
+
+
+class ManagerStaffCreatePayload(ManagerStaffBase):
+    password: Optional[str] = None
+
+
+class ManagerStaffUpdatePayload(BaseModel):
+    display_name: Optional[str] = None
+    status: Optional[str] = None
+    primary_role: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    telegram_id: Optional[int] = None
+    telegram_username: Optional[str] = None
+    is_assignable_installer: Optional[bool] = None
+    default_rate: Optional[float] = None
+
+
+class ManagerStaffResponse(ManagerStaffBase):
+    id: int
+    has_password: bool = False
+    legacy_installer_id: Optional[int] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    last_login_at: Optional[datetime] = None
+
+
+class ManagerStaffListResponse(BaseModel):
+    items: List[ManagerStaffResponse]
+    meta: Meta
+
+
+class TelegramLoginPayload(BaseModel):
+    id: int
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    username: Optional[str] = None
+    photo_url: Optional[str] = None
+    auth_date: int
+    hash: str
+
+
 # --- ORDERS ---
 
 class OrderCustomerBrief(BaseModel):
@@ -1033,6 +1091,10 @@ class LeadQualifyResponse(BaseModel):
 class ManagerAuthStatusResponse(BaseModel):
     username: str
     status: str
+    staff_user_id: Optional[int] = None
+    role: Optional[str] = None
+    display_name: Optional[str] = None
+    auth_source: str = "legacy"
 
 
 class ManagerCatalogProductImageResponse(BaseModel):

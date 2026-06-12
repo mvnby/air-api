@@ -6,6 +6,7 @@ import {
     ManagerLeadsService,
     ManagerDashboardService,
     ManagerInstallersService,
+    ManagerStaffService,
     ManagerSettingsService,
     ManagerGoogleAuthService,
     ManagerBackupsService,
@@ -24,6 +25,10 @@ import {
     type DashboardTouchpoint,
     type ManagerInstallerCreatePayload,
     type ManagerInstallerUpdatePayload,
+    type ManagerStaffCreatePayload,
+    type ManagerStaffResponse,
+    type ManagerStaffUpdatePayload,
+    type TelegramLoginPayload,
     type LeadCreatePayload,
     type LeadUpdatePayload,
     type LeadQualifyPayload,
@@ -90,6 +95,7 @@ export type DashboardView = 'kanban' | 'list';
 export { type Product, type DashboardStatsResponse, type DashboardTouchpoint };
 export type { LeadsInboxItemResponse };
 export type { ManagerGoogleAuthStatusResponse, ManagerGoogleAuthUrlResponse };
+export type { ManagerStaffCreatePayload, ManagerStaffResponse, ManagerStaffUpdatePayload, TelegramLoginPayload };
 export type {
     ManagerBackupListResponse,
     ManagerBackupRunStartResponse,
@@ -199,6 +205,10 @@ export const api = {
         return await LoginService.loginAccessToken({ username, password });
     },
 
+    async loginTelegram(payload: TelegramLoginPayload) {
+        return await LoginService.loginTelegram(payload);
+    },
+
     async checkAuth() {
         return await ManagerService.readUserMe();
     },
@@ -301,6 +311,19 @@ export const api = {
 
     async searchManagerInstallers(q: string, limit = 50) {
         return await ManagerInstallersService.searchManagerInstallers(q, limit);
+    },
+
+    // Staff users
+    async listManagerStaff(page = 1, limit = 100, search?: string) {
+        return await ManagerStaffService.listManagerStaff(page, limit, search);
+    },
+
+    async createManagerStaff(payload: ManagerStaffCreatePayload) {
+        return await ManagerStaffService.createManagerStaff(payload);
+    },
+
+    async patchManagerStaff(id: number, payload: ManagerStaffUpdatePayload) {
+        return await ManagerStaffService.patchManagerStaff(id, payload);
     },
 
     // Settings
