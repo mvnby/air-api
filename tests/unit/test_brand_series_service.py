@@ -18,6 +18,22 @@ def test_extract_series_name_from_russian_key():
     assert name == "BreezeIN 2.0"
 
 
+def test_extract_series_name_cleans_marketing_suffix_from_specs():
+    assert extract_series_name({"series": "COSMO inverter R32 WI-FI"}) == "COSMO"
+    assert extract_series_name({"series": "COSMO NORDIC inverter R32  WI-FI -25°C"}) == "COSMO NORDIC"
+    assert extract_series_name({"series": "LUNA Matt inverter R32  WI-FI"}) == "LUNA Matt"
+
+
+def test_extract_series_name_keeps_values_when_stop_marker_is_series_prefix():
+    assert extract_series_name({"series": "R32 Deluxe"}) == "R32 Deluxe"
+    assert extract_series_name({"series": "Wi-Fi Ready"}) == "Wi-Fi Ready"
+
+
+def test_extract_series_name_supports_extended_russian_keys():
+    name = extract_series_name({"Серия кондиционера": "VIOLA inverter R32 WI-FI"})
+    assert name == "VIOLA"
+
+
 def test_extract_series_name_from_series_tag_fallback():
     tag = SimpleNamespace(
         title="Elite",
@@ -25,6 +41,36 @@ def test_extract_series_name_from_series_tag_fallback():
     )
     name = extract_series_name({}, [tag])
     assert name == "Elite"
+
+
+def test_extract_series_name_from_title_after_brand_fallback():
+    name = extract_series_name({}, title="KINGHOME Cosmo KWH24AWDXE-K6DNA3A", brand_name="KINGHOME")
+    assert name == "Cosmo"
+
+
+def test_extract_series_name_title_fallback_ignores_model_code_after_brand():
+    name = extract_series_name({}, title="KINGHOME KUD100ZD1/A-S+ KUD100W1/NhA-S", brand_name="KINGHOME")
+    assert name is None
+
+
+def test_extract_series_name_title_fallback_keeps_series_version_and_inverter_word():
+    assert (
+        extract_series_name({}, title="TCL BreezeIN 2.0 A+++ TAC-09CHSD", brand_name="TCL")
+        == "BreezeIN 2.0"
+    )
+    assert (
+        extract_series_name({}, title="LG Dual Inverter S09EQ", brand_name="LG")
+        == "Dual Inverter"
+    )
+
+
+def test_extract_series_name_title_fallback_stops_before_capacity_tokens():
+    assert extract_series_name({}, title="Gree Bora 09 GWH09AAA-K6DNA1A", brand_name="Gree") == "Bora"
+    assert extract_series_name({}, title="AUX Halo 12 ASW-H12A4", brand_name="AUX") == "Halo"
+    assert (
+        extract_series_name({}, title="Midea Xtreme Save 09 MSAG-09HRN8", brand_name="Midea")
+        == "Xtreme Save"
+    )
 
 
 @pytest.mark.asyncio
