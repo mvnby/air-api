@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Brand, Product, ProductSeries, ProductTagLink, Tag, TagGroup
+from services.brand_series_service import extract_series_name, sync_product_brand_series
 from services.catalog_revision_service import CatalogRevisionService
 
 
@@ -205,6 +206,11 @@ class ManagerBrandService:
         if brand is None:
             raise HTTPException(status_code=404, detail="Бренд не найден.")
 
+        await ManagerBrandService._sync_missing_product_series_for_brand(
+            session,
+            brand=brand,
+        )
+
         rows = (
             await session.execute(
                 select(ProductSeries, func.count(Product.id).label("products_count"))
@@ -218,6 +224,48 @@ class ManagerBrandService:
             ManagerBrandService._serialize_series(series, products_count=int(products_count or 0))
             for series, products_count in rows
         ]
+
+    @staticmethod
+    async def _sync_missing_product_series_for_brand(
+        session: AsyncSession,
+        *,
+        brand: Brand,
+    ) -> int:
+        products = (
+            await session.execute(
+                select(Product).where(
+                    Product.brand_id == brand.id,
+                    Product.series_id.is_(None),
+                )
+            )
+        ).scalars().all()
+
+        changed_product_ids: List[int] = []
+        for product in products:
+            if not extract_series_name(specs=product.specs or {}):
+                continue
+
+            if await sync_product_brand_series(
+                session,
+                product=product,
+                specs=product.specs or {},
+                title=product.title or "",
+                explicit_brand_id=brand.id,
+                explicit_brand_override=True,
+            ):
+                if product.id is not None:
+                    changed_product_ids.append(int(product.id))
+
+        if not changed_product_ids:
+            return 0
+
+        await CatalogRevisionService.bump_commit_and_purge(
+            session,
+            scope="brand_series_auto_sync",
+            product_ids=changed_product_ids,
+            brand_slugs=[brand.slug],
+        )
+        return len(changed_product_ids)
 
     @staticmethod
     async def create_brand_series(

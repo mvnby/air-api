@@ -22,11 +22,42 @@ SERIES_SPEC_KEYS = (
     "series",
     "Серия",
     "серия",
+    "Серия модели",
+    "серия модели",
+    "Серия кондиционера",
+    "серия кондиционера",
     "Линейка",
     "линейка",
+    "Линейка модели",
+    "линейка модели",
+    "Модельная серия",
+    "модельная серия",
     "Модельный ряд",
     "model_series",
 )
+
+SERIES_VALUE_STOP_PATTERN = re.compile(
+    r"(?i)(?:"
+    r"\b(?:r32|r410a|wi[\s-]?fi|wifi|технология)\b"
+    r"|[-−]\s*\d+\s*°?\s*c\b"
+    r")"
+)
+
+SERIES_TRAILING_INVERTER_PATTERN = re.compile(
+    r"(?i)\s+\b(?:inverter|invertor|инвертор\w*)\b\s*$"
+)
+SERIES_TRAILING_INVERTER_PREFIX_ALLOWLIST = {"dual"}
+
+TITLE_SERIES_STOP_WORDS = {
+    "кондиционер",
+    "сплит",
+    "сплит-система",
+    "система",
+    "настенный",
+    "настенная",
+    "инверторный",
+    "инверторная",
+}
 
 
 def _to_text(value: Any) -> str:
@@ -55,6 +86,80 @@ def _first_non_empty(specs: Dict[str, Any], keys: Iterable[str]) -> Optional[str
 
 def _primary_token(value: str) -> str:
     return re.split(r"[,/|;]", _to_text(value), maxsplit=1)[0].strip()
+
+
+def _clean_series_value(value: str) -> str:
+    text = _primary_token(value)
+    if not text:
+        return ""
+
+    trimmed_by_marker = False
+    marker = SERIES_VALUE_STOP_PATTERN.search(text)
+    if marker:
+        if marker.start() == 0:
+            return re.sub(r"\s+", " ", text).strip(" -–—.,;:")
+        text = text[: marker.start()].strip()
+        trimmed_by_marker = True
+
+    if trimmed_by_marker:
+        trailing_inverter = SERIES_TRAILING_INVERTER_PATTERN.search(text)
+        if trailing_inverter:
+            prefix = text[: trailing_inverter.start()].strip()
+            if prefix.casefold() not in SERIES_TRAILING_INVERTER_PREFIX_ALLOWLIST:
+                text = text[: trailing_inverter.start()].strip()
+
+    return re.sub(r"\s+", " ", text).strip(" -–—.,;:")
+
+
+def _looks_like_model_code(value: str) -> bool:
+    token = _to_text(value).strip("()[]{}.,;:!?'\"`")
+    if not token:
+        return True
+    if "/" in token or "+" in token or "_" in token:
+        return True
+    if re.fullmatch(r"\d+(?:[.,]\d+)+", token):
+        return False
+    if re.fullmatch(r"\d+", token):
+        return True
+    if any(char.isdigit() for char in token):
+        if re.search(r"[A-ZА-Я]{2,}", token) or "-" in token or len(token) > 5:
+            return True
+        return False
+    if token.isupper() and len(token) > 4:
+        return True
+    return False
+
+
+def _extract_series_from_title(title: str, brand_name: Optional[str]) -> Optional[str]:
+    title_text = re.sub(r"\s+", " ", _to_text(title))
+    brand_text = re.sub(r"\s+", " ", _to_text(brand_name))
+    if not title_text or not brand_text:
+        return None
+
+    if not title_text.casefold().startswith(f"{brand_text.casefold()} "):
+        return None
+
+    tail = title_text[len(brand_text) :].strip()
+    if not tail:
+        return None
+
+    parts: list[str] = []
+    for raw_token in tail.split():
+        token = raw_token.strip("()[]{}.,;:!?'\"`")
+        if not token:
+            break
+        normalized = token.casefold()
+        if normalized in TITLE_SERIES_STOP_WORDS:
+            break
+        if _looks_like_model_code(token):
+            break
+        parts.append(token)
+        if len(parts) >= 3:
+            break
+
+    if not parts:
+        return None
+    return " ".join(parts)
 
 
 def _safe_group_slug(tag: Tag, group_slug_by_id: Dict[int, str]) -> Optional[str]:
@@ -100,11 +205,13 @@ def extract_series_name(
     tags: Optional[Sequence[Tag]] = None,
     *,
     group_slug_by_id: Optional[Dict[int, str]] = None,
+    title: str = "",
+    brand_name: Optional[str] = None,
 ) -> Optional[str]:
     specs = specs or {}
     raw = _first_non_empty(specs, SERIES_SPEC_KEYS)
     if raw:
-        series = _primary_token(raw)
+        series = _clean_series_value(raw)
         if series:
             return series
 
@@ -112,6 +219,10 @@ def extract_series_name(
     for tag in tags or []:
         if _safe_group_slug(tag, slug_map) == "series" and _to_text(getattr(tag, "title", "")):
             return _to_text(tag.title)
+
+    title_series = _extract_series_from_title(title, brand_name)
+    if title_series:
+        return title_series
     return None
 
 
@@ -375,6 +486,9 @@ async def sync_product_brand_series(
     tags: Optional[Sequence[Tag]] = None,
     explicit_brand_id: Optional[int] = None,
     explicit_brand_override: bool = False,
+    allow_series_tag_fallback: bool = True,
+    allow_series_title_fallback: bool = True,
+    clear_series_when_missing: bool = False,
 ) -> bool:
     data_specs = specs if specs is not None else (product.specs or {})
     product_title = title if title is not None else (product.title or "")
@@ -451,14 +565,19 @@ async def sync_product_brand_series(
 
     series_name = extract_series_name(
         specs=data_specs,
-        tags=tag_list,
+        tags=tag_list if allow_series_tag_fallback else [],
         group_slug_by_id=group_slug_by_id,
+        title=product_title if allow_series_title_fallback else "",
+        brand_name=brand_name if allow_series_title_fallback else None,
     )
     if series_name:
         series = await ensure_series(session, title=series_name, brand_id=product.brand_id)
         if product.series_id != series.id:
             product.series_id = series.id
             changed = True
+    elif clear_series_when_missing and product.series_id is not None:
+        product.series_id = None
+        changed = True
 
     if changed:
         session.add(product)

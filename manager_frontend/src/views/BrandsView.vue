@@ -43,6 +43,7 @@ const draggedBrandId = ref<number | null>(null);
 const brandDropTargetId = ref<number | null>(null);
 const draggedSeriesId = ref<number | null>(null);
 const seriesDropTargetId = ref<number | null>(null);
+const expandedSeriesIds = ref<Set<number>>(new Set());
 const form = ref<BrandForm>({
     title: '',
     slug: '',
@@ -108,6 +109,18 @@ const moveItemById = <T extends { id: number }>(items: T[], draggedId: number, t
     if (!moved) return items;
     next.splice(targetIndex, 0, moved);
     return next;
+};
+
+const isSeriesExpanded = (seriesId: number) => expandedSeriesIds.value.has(seriesId);
+
+const toggleSeriesExpanded = (seriesId: number) => {
+    const next = new Set(expandedSeriesIds.value);
+    if (next.has(seriesId)) {
+        next.delete(seriesId);
+    } else {
+        next.add(seriesId);
+    }
+    expandedSeriesIds.value = next;
 };
 
 const withSortOrder = <T extends { sort_order: number }>(items: T[]) => (
@@ -182,6 +195,8 @@ const fetchSeries = async () => {
     try {
         const res = await api.listManagerBrandSeries(selectedBrandId.value);
         seriesItems.value = [...(res.items || [])];
+        const existingIds = new Set(seriesItems.value.map((item) => item.id));
+        expandedSeriesIds.value = new Set([...expandedSeriesIds.value].filter((id) => existingIds.has(id)));
     } catch (err) {
         seriesError.value = getApiErrorMessage(err);
     } finally {
@@ -651,11 +666,11 @@ onMounted(() => {
             <div v-else-if="seriesItems.length === 0" class="rounded-xl border border-dashed border-gray-300 dark:border-slate-700 px-4 py-8 text-sm text-gray-500 dark:text-slate-400">
                 У бренда пока нет серий. Можно добавить первую вручную.
             </div>
-            <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div v-else class="space-y-2">
                 <article
                     v-for="series in seriesItems"
                     :key="series.id"
-                    class="rounded-xl border border-gray-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-4 space-y-3"
+                    class="rounded-xl border border-gray-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 px-3 py-2.5"
                     :class="[
                         seriesDropTargetId === series.id ? 'outline outline-2 outline-teal-400 outline-offset-2' : '',
                         draggedSeriesId === series.id ? 'opacity-50' : '',
@@ -667,10 +682,10 @@ onMounted(() => {
                     @drop.prevent="onSeriesDrop(series)"
                     @dragend="resetSeriesDragState"
                 >
-                    <div class="flex items-start gap-3">
+                    <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
                         <button
                             type="button"
-                            class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-200 dark:border-slate-700 text-gray-400 dark:text-slate-500 transition-colors"
+                            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 dark:border-slate-700 text-gray-400 dark:text-slate-500 transition-colors"
                             :class="isSeriesReorderDisabled ? 'cursor-not-allowed opacity-40' : 'cursor-grab hover:bg-white hover:text-teal-600 dark:hover:bg-slate-800 dark:hover:text-teal-300 active:cursor-grabbing'"
                             :disabled="isSeriesReorderDisabled"
                             title="Перетащите серию выше или ниже"
@@ -682,36 +697,49 @@ onMounted(() => {
                             v-if="series.hero_image"
                             :src="series.hero_image"
                             :alt="series.title"
-                            class="w-16 h-16 rounded-lg object-cover border border-gray-200 dark:border-slate-700 bg-white"
+                            class="h-10 w-10 shrink-0 rounded-lg object-cover border border-gray-200 dark:border-slate-700 bg-white"
                         />
                         <div class="min-w-0 flex-1">
                             <div class="flex flex-wrap items-center gap-2">
-                                <h3 class="font-bold text-gray-900 dark:text-slate-100">{{ series.title }}</h3>
+                                <h3 class="font-bold leading-tight text-gray-900 dark:text-slate-100">{{ series.title }}</h3>
                                 <span
                                     class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
                                     :class="series.is_published ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-300'"
                                 >
                                     {{ series.is_published ? 'Публичная' : 'Скрыта' }}
                                 </span>
+                                <span class="text-xs text-gray-500 dark:text-slate-400">{{ series.products_count }} товаров</span>
                             </div>
                             <p class="text-xs font-mono text-gray-500 dark:text-slate-400">{{ series.slug }}</p>
-                            <p v-if="series.description" class="mt-2 text-sm text-gray-600 dark:text-slate-300 line-clamp-3">
-                                {{ series.description }}
-                            </p>
                         </div>
-                    </div>
-                    <div v-if="series.features?.length" class="flex flex-wrap gap-2">
-                        <span
-                            v-for="feature in series.features"
-                            :key="feature"
-                            class="rounded-full border border-teal-200 dark:border-teal-900/60 bg-teal-50 dark:bg-teal-950/30 px-2.5 py-1 text-xs font-semibold text-teal-700 dark:text-teal-200"
-                        >
-                            {{ feature }}
-                        </span>
-                    </div>
-                    <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500 dark:text-slate-400">
-                        <span>{{ series.products_count }} товаров</span>
-                        <div class="inline-flex items-center gap-1">
+                        <div v-if="series.features?.length" class="flex min-w-0 flex-1 flex-wrap gap-1.5 lg:max-w-[34%]">
+                            <span
+                                v-for="feature in series.features.slice(0, isSeriesExpanded(series.id) ? series.features.length : 3)"
+                                :key="feature"
+                                class="rounded-full border border-teal-200 dark:border-teal-900/60 bg-teal-50 dark:bg-teal-950/30 px-2 py-0.5 text-xs font-semibold text-teal-700 dark:text-teal-200"
+                            >
+                                {{ feature }}
+                            </span>
+                            <span
+                                v-if="!isSeriesExpanded(series.id) && series.features.length > 3"
+                                class="rounded-full border border-gray-200 dark:border-slate-700 px-2 py-0.5 text-xs font-semibold text-gray-500 dark:text-slate-400"
+                            >
+                                +{{ series.features.length - 3 }}
+                            </span>
+                        </div>
+                        <div class="inline-flex shrink-0 items-center gap-1">
+                            <button
+                                v-if="series.description || series.features?.length"
+                                type="button"
+                                class="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-gray-200 dark:border-slate-700 text-xs font-semibold hover:bg-white dark:hover:bg-slate-800"
+                                :aria-expanded="isSeriesExpanded(series.id)"
+                                @click="toggleSeriesExpanded(series.id)"
+                            >
+                                <span class="material-icons-round text-[16px]">
+                                    {{ isSeriesExpanded(series.id) ? 'expand_less' : 'expand_more' }}
+                                </span>
+                                Детали
+                            </button>
                             <button
                                 type="button"
                                 class="px-2.5 py-1 rounded border border-gray-200 dark:border-slate-700 text-xs font-semibold hover:bg-white dark:hover:bg-slate-800"
@@ -727,6 +755,23 @@ onMounted(() => {
                             >
                                 Удалить
                             </button>
+                        </div>
+                    </div>
+                    <div
+                        v-if="isSeriesExpanded(series.id)"
+                        class="mt-2 border-t border-gray-200 dark:border-slate-700 pt-2 text-sm text-gray-600 dark:text-slate-300"
+                    >
+                        <p v-if="series.description">
+                            {{ series.description }}
+                        </p>
+                        <div v-if="series.features?.length" class="mt-2 flex flex-wrap gap-1.5">
+                            <span
+                                v-for="feature in series.features"
+                                :key="feature"
+                                class="rounded-full border border-teal-200 dark:border-teal-900/60 bg-teal-50 dark:bg-teal-950/30 px-2 py-0.5 text-xs font-semibold text-teal-700 dark:text-teal-200"
+                            >
+                                {{ feature }}
+                            </span>
                         </div>
                     </div>
                 </article>

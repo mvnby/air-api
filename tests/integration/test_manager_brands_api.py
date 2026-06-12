@@ -2,6 +2,7 @@ import pytest
 
 from core.config import settings
 from models import Product, ProductSeries
+from services.catalog_revision_service import CatalogRevisionService
 
 
 async def _auth_headers(async_client):
@@ -216,3 +217,73 @@ async def test_manager_brand_series_delete_forbidden_when_products_linked(async_
     )
     assert delete_resp.status_code == 400
     assert "привязаны товары" in delete_resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_manager_brand_series_list_auto_creates_series_from_product_specs(async_client, db):
+    headers = await _auth_headers(async_client)
+
+    brand_resp = await async_client.post(
+        "/api/manager/brands",
+        headers=headers,
+        json={"title": "KingHome Auto Series", "slug": "kinghome-auto-series"},
+    )
+    assert brand_resp.status_code == 200
+    brand_id = brand_resp.json()["id"]
+
+    products = [
+        Product(
+            title="KINGHOME Cosmo KWH09AWAXB-K6DNA3B",
+            slug="kinghome-auto-cosmo-1",
+            price=1000,
+            area=25,
+            brand_id=brand_id,
+            specs={"brand": "KINGHOME", "series": "COSMO inverter R32 WI-FI"},
+        ),
+        Product(
+            title="KINGHOME Cosmo KWH12AWBXB-K6DNA3D",
+            slug="kinghome-auto-cosmo-2",
+            price=1200,
+            area=35,
+            brand_id=brand_id,
+            specs={"brand": "KINGHOME", "series": "COSMO inverter R32 WI-FI"},
+        ),
+        Product(
+            title="KINGHOME Luna Matt KWH09AYAXB-K6DNA5B",
+            slug="kinghome-auto-luna-1",
+            price=1300,
+            area=25,
+            brand_id=brand_id,
+            specs={"brand": "KINGHOME", "series": "LUNA Matt inverter R32 WI-FI"},
+        ),
+    ]
+    db.add_all(products)
+    await db.commit()
+
+    list_resp = await async_client.get(
+        f"/api/manager/brands/{brand_id}/series",
+        headers=headers,
+    )
+
+    assert list_resp.status_code == 200, list_resp.text
+    items = list_resp.json()["items"]
+    by_slug = {item["slug"]: item for item in items}
+    assert by_slug["cosmo"]["title"] == "COSMO"
+    assert by_slug["cosmo"]["products_count"] == 2
+    assert by_slug["luna-matt"]["title"] == "LUNA Matt"
+    assert by_slug["luna-matt"]["products_count"] == 1
+    after_first_revision = await CatalogRevisionService.get_current(db)
+
+    db.expire_all()
+    for product in products:
+        updated = await db.get(Product, product.id)
+        assert updated.series_id is not None
+
+    second_list_resp = await async_client.get(
+        f"/api/manager/brands/{brand_id}/series",
+        headers=headers,
+    )
+    assert second_list_resp.status_code == 200, second_list_resp.text
+    assert second_list_resp.json()["items"] == items
+    after_second_revision = await CatalogRevisionService.get_current(db)
+    assert after_second_revision["revision"] == after_first_revision["revision"]
