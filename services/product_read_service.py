@@ -154,7 +154,7 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
     @staticmethod
     async def get_curated(
         session: AsyncSession,
-        area: int,
+        area: Optional[int],
         is_inverter: bool,
         tag_slugs: Optional[List[str]] = None,
         heating_min: Optional[int] = None,
@@ -162,6 +162,8 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
         has_fresh_air: Optional[bool] = None,
         min_price: Optional[int] = None,
         max_price: Optional[int] = None,
+        area_min: Optional[int] = None,
+        area_max: Optional[int] = None,
         limit: int = 5,
     ) -> List[Dict[str, Any]]:
         faceted_tag_ids = None
@@ -170,7 +172,8 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
 
         products = await ProductDAO.get_filtered(
             session,
-            area_min=area,
+            area_min=area_min if area_min is not None else area,
+            area_max=area_max,
             is_inverter=is_inverter,
             heating_min=heating_min,
             has_wifi=has_wifi,

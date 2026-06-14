@@ -77,6 +77,31 @@ def test_product_selection_parse_areas():
     assert BotProductSelectionService.parse_areas("подбор 20 м² и 35 квадратов") == [20, 35]
 
 
+def test_product_selection_parse_power_classes_preserves_repeats():
+    parsed = BotProductSelectionService.parse_selection_request("подбор 7,7,12")
+
+    assert [target["code"] for target in parsed["targets"]] == ["7", "7", "12"]
+    assert [target["kw"] for target in parsed["targets"]] == [1.9, 1.9, 3.5]
+    assert parsed["targets"][0]["label"] == "7 (1,9 кВт)"
+    assert parsed["compressor_mode"] == "mixed"
+
+
+def test_product_selection_parse_power_class_words_and_inverter_mode():
+    parsed = BotProductSelectionService.parse_selection_request("нужно две семёрки и двенашка, инвертора")
+
+    assert [target["code"] for target in parsed["targets"]] == ["7", "7", "12"]
+    assert parsed["compressor_mode"] == "inverter_only"
+    assert parsed["mode_reason"] == "инверторы"
+
+
+def test_product_selection_parse_server_room_forces_onoff_mode():
+    parsed = BotProductSelectionService.parse_selection_request("серверная, 7 и 12, только on-off")
+
+    assert [target["code"] for target in parsed["targets"]] == ["7", "12"]
+    assert parsed["compressor_mode"] == "onoff_only"
+    assert parsed["mode_reason"] == "серверная"
+
+
 @pytest.mark.asyncio
 async def test_bot_access_context_for_staff_and_non_staff(sqlite_staff_session):
     sqlite_staff_session.add(
@@ -117,6 +142,70 @@ async def test_product_selection_builds_tiers(monkeypatch):
 
     assert [area["area"] for area in selection["areas"]] == [20, 35]
     assert [tier["label"] for tier in selection["areas"][0]["tiers"]] == ["Бюджетнее", "Оптимально", "Премиум"]
+
+
+@pytest.mark.asyncio
+async def test_product_selection_builds_power_classes_and_inverter_only(monkeypatch):
+    calls = []
+
+    async def fake_get_curated(session, area, is_inverter, limit=12, **kwargs):
+        calls.append(
+            {
+                "area": area,
+                "area_min": kwargs.get("area_min"),
+                "area_max": kwargs.get("area_max"),
+                "is_inverter": is_inverter,
+                "tag_slugs": kwargs.get("tag_slugs"),
+            }
+        )
+        return [
+            {
+                "id": len(calls),
+                "title": f"Picked {area}",
+                "slug": f"picked-{area}-{len(calls)}",
+                "price": 1500,
+                "vitebsk_qty": 1,
+                "minsk_qty": 0,
+            }
+        ]
+
+    monkeypatch.setattr(ProductService, "get_curated", fake_get_curated)
+
+    selection = await BotProductSelectionService.build_selection(object(), "7,12 инвертора")
+
+    assert [area["label"] for area in selection["areas"]] == ["7 (1,9 кВт)", "12 (3,5 кВт)"]
+    assert [tier["key"] for tier in selection["areas"][0]["tiers"]] == ["optimal", "premium"]
+    assert {call["is_inverter"] for call in calls} == {True}
+    assert calls[0]["area_min"] == 15
+    assert calls[0]["area_max"] == 24
+    assert calls[0]["tag_slugs"] == ["cat-household"]
+
+
+@pytest.mark.asyncio
+async def test_product_selection_builds_onoff_only_for_server_room(monkeypatch):
+    calls = []
+
+    async def fake_get_curated(session, area, is_inverter, limit=12, **kwargs):
+        calls.append({"is_inverter": is_inverter, "area_min": kwargs.get("area_min"), "area_max": kwargs.get("area_max")})
+        return [
+            {
+                "id": 1,
+                "title": "Server ON-OFF",
+                "slug": "server-onoff",
+                "price": 1000,
+                "vitebsk_qty": 1,
+                "minsk_qty": 0,
+            }
+        ]
+
+    monkeypatch.setattr(ProductService, "get_curated", fake_get_curated)
+
+    selection = await BotProductSelectionService.build_selection(object(), "серверная 12")
+    formatted = BotProductSelectionService.format_selection(selection)
+
+    assert [tier["key"] for tier in selection["areas"][0]["tiers"]] == ["onoff"]
+    assert calls == [{"is_inverter": False, "area_min": 33, "area_max": 42}]
+    assert "Режим: только ON-OFF (серверная)" in formatted
 
 
 @pytest.mark.asyncio
