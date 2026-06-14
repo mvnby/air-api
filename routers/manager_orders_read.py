@@ -5,8 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.security import get_current_username
-from routers.manager_operation_ids import GET_MANAGER_ORDER_DETAIL, GET_MANAGER_ORDERS
-from schemas import ManagerOrderDetailResponse, ManagerOrderListResponse
+from routers.manager_operation_ids import GET_MANAGER_ORDER_DETAIL, GET_MANAGER_ORDERS, LIST_MANAGER_STALE_ORDER_STAGES
+from schemas import ManagerOrderDetailResponse, ManagerOrderListResponse, ManagerStaleWorkStageListResponse
 from services.order_service import OrderService
 
 
@@ -38,6 +38,26 @@ async def get_manager_orders(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get(
+    "/work-stages/stale",
+    response_model=ManagerStaleWorkStageListResponse,
+    operation_id=LIST_MANAGER_STALE_ORDER_STAGES,
+)
+async def list_manager_stale_order_stages(
+    older_than_days: int = Query(7, ge=0, le=365),
+    include_unscheduled: bool = Query(True),
+    limit: int = Query(100, ge=1, le=100),
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    return await OrderService.list_stale_order_stages(
+        session,
+        older_than_days=older_than_days,
+        include_unscheduled=include_unscheduled,
+        limit=limit,
+    )
 
 
 @router.get("/{order_id}", response_model=ManagerOrderDetailResponse, operation_id=GET_MANAGER_ORDER_DETAIL)

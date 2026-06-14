@@ -7,6 +7,8 @@ import type { ManagerOrderDetailResponse } from '../models/ManagerOrderDetailRes
 import type { ManagerOrderDocumentResponse } from '../models/ManagerOrderDocumentResponse';
 import type { ManagerOrderListResponse } from '../models/ManagerOrderListResponse';
 import type { ManagerOrderUpdatePayload } from '../models/ManagerOrderUpdatePayload';
+import type { ManagerStaleWorkStageItem } from '../models/ManagerStaleWorkStageItem';
+import type { ManagerStaleWorkStageListResponse } from '../models/ManagerStaleWorkStageListResponse';
 import type { OrderProposalCreatePayload } from '../models/OrderProposalCreatePayload';
 import type { OrderProposalUpdatePayload } from '../models/OrderProposalUpdatePayload';
 import type { OrderWorkStageCreatePayload } from '../models/OrderWorkStageCreatePayload';
@@ -75,6 +77,32 @@ export class ManagerOrdersService {
         });
     }
     /**
+     * List Manager Stale Order Stages
+     * @param olderThanDays
+     * @param includeUnscheduled
+     * @param limit
+     * @returns ManagerStaleWorkStageListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listManagerStaleOrderStages(
+        olderThanDays: number = 7,
+        includeUnscheduled: boolean = true,
+        limit: number = 100,
+    ): CancelablePromise<ManagerStaleWorkStageListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/orders/work-stages/stale',
+            query: {
+                'older_than_days': olderThanDays,
+                'include_unscheduled': includeUnscheduled,
+                'limit': limit,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Get Manager Order Detail
      * @param orderId
      * @returns ManagerOrderDetailResponse Successful Response
@@ -132,6 +160,46 @@ export class ManagerOrdersService {
             url: '/api/manager/orders/{order_id}',
             path: {
                 'order_id': orderId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Cancel Manager Order Stage Direct
+     * @param stageId
+     * @returns ManagerStaleWorkStageItem Successful Response
+     * @throws ApiError
+     */
+    public static cancelManagerOrderStageDirect(
+        stageId: number,
+    ): CancelablePromise<ManagerStaleWorkStageItem> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/orders/work-stages/{stage_id}/cancel',
+            path: {
+                'stage_id': stageId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Delete Manager Order Stage Direct
+     * @param stageId
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static deleteManagerOrderStageDirect(
+        stageId: number,
+    ): CancelablePromise<Record<string, any>> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/orders/work-stages/{stage_id}',
+            path: {
+                'stage_id': stageId,
             },
             errors: {
                 422: `Validation Error`,

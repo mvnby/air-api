@@ -1,7 +1,7 @@
 import logging
 import json
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from sqlalchemy import func, or_, and_, not_, cast, String, delete, inspect
@@ -10,7 +10,7 @@ from sqlalchemy.orm.attributes import NO_VALUE, flag_modified
 
 from crud.order import OrderDAO
 from crud.product import ProductDAO
-from models import Order, OrderProductLink, OrderProposal, OrderServiceLink, Customer, CustomerBranch, CustomerContract, CustomerType, OrderStatus, PaymentCurrency, Product, LeadSource, Service, ServiceTariff, OrderInstaller, OrderWorkStage, Payment
+from models import Order, OrderProductLink, OrderProposal, OrderServiceLink, Customer, CustomerBranch, CustomerContract, CustomerType, OrderStageStatus, OrderStatus, PaymentCurrency, Product, LeadSource, Service, ServiceTariff, OrderInstaller, OrderWorkStage, Payment
 from services.customer_contract_service import CustomerContractService
 from services.document_role_service import DocumentRoleService
 from services.product_supply_metrics_service import ProductSupplyMetricsService
@@ -1534,6 +1534,99 @@ class OrderService:
         session.add(stage)
         await session.commit()
         return await OrderService.get_order_detail_for_manager(session, order_id)
+
+    @staticmethod
+    def _map_stale_order_stage(stage: OrderWorkStage) -> Dict[str, Any]:
+        order = getattr(stage, "order", None)
+        customer = getattr(order, "customer", None) if order else None
+        installer = getattr(stage, "installer", None)
+        return {
+            "id": stage.id,
+            "order_id": stage.order_id,
+            "order_status": order.status.value if order and hasattr(order.status, "value") else str(order.status if order else ""),
+            "order_title": OrderService._display_order_title(order) if order else None,
+            "name": stage.name,
+            "status": stage.status.value if hasattr(stage.status, "value") else str(stage.status),
+            "start_time": stage.start_time,
+            "end_time": stage.end_time,
+            "installer_id": stage.installer_id,
+            "installer_name": installer.name if installer else None,
+            "customer_name": customer.name if customer else None,
+            "customer_phone": customer.phone if customer else None,
+            "address": order.delivery_address if order else None,
+            "manager_comment": stage.manager_comment,
+            "installer_report": stage.installer_report,
+        }
+
+    @staticmethod
+    async def list_stale_order_stages(
+        session: AsyncSession,
+        *,
+        older_than_days: int = 7,
+        include_unscheduled: bool = True,
+        limit: int = 100,
+    ) -> Dict[str, Any]:
+        safe_limit = max(1, min(int(limit or 100), 100))
+        cutoff = datetime.now() - timedelta(days=max(0, int(older_than_days or 0)))
+        stale_conditions = [OrderWorkStage.start_time < cutoff]
+        if include_unscheduled:
+            stale_conditions.append(OrderWorkStage.start_time.is_(None))
+
+        base_filters = [
+            OrderWorkStage.status.notin_([OrderStageStatus.COMPLETED, OrderStageStatus.CANCELED]),
+            or_(*stale_conditions),
+        ]
+        count_result = await session.execute(
+            select(func.count())
+            .select_from(OrderWorkStage)
+            .join(Order, Order.id == OrderWorkStage.order_id)
+            .where(*base_filters)
+        )
+        total = int(count_result.scalar_one() or 0)
+
+        result = await session.execute(
+            select(OrderWorkStage)
+            .join(Order, Order.id == OrderWorkStage.order_id)
+            .where(*base_filters)
+            .options(
+                selectinload(OrderWorkStage.order).selectinload(Order.customer),
+                selectinload(OrderWorkStage.installer),
+            )
+            .order_by(OrderWorkStage.start_time.asc().nullsfirst(), OrderWorkStage.id.asc())
+            .limit(safe_limit)
+        )
+        return {
+            "items": [OrderService._map_stale_order_stage(stage) for stage in result.scalars().all()],
+            "total": total,
+        }
+
+    @staticmethod
+    async def cancel_order_stage_direct(session: AsyncSession, stage_id: int) -> Dict[str, Any]:
+        stage = await session.get(OrderWorkStage, stage_id)
+        if not stage:
+            raise ValueError("Stage not found")
+        stage.status = OrderStageStatus.CANCELED
+        session.add(stage)
+        await session.commit()
+        await session.refresh(stage)
+        result = await session.execute(
+            select(OrderWorkStage)
+            .where(OrderWorkStage.id == stage_id)
+            .options(
+                selectinload(OrderWorkStage.order).selectinload(Order.customer),
+                selectinload(OrderWorkStage.installer),
+            )
+        )
+        return OrderService._map_stale_order_stage(result.scalars().one())
+
+    @staticmethod
+    async def delete_order_stage_direct(session: AsyncSession, stage_id: int) -> Dict[str, Any]:
+        stage = await session.get(OrderWorkStage, stage_id)
+        if not stage:
+            raise ValueError("Stage not found")
+        await session.delete(stage)
+        await session.commit()
+        return {"ok": True, "id": stage_id}
 
     @staticmethod
     async def update_order_stage(session: AsyncSession, order_id: int, stage_id: int, payload: Any):

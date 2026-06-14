@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
 from crud.product import ProductDAO
-from models import GlobalConfig, StaffUser
+from models import Customer, GlobalConfig, Installer, Order, OrderInstaller, OrderStatus, OrderWorkStage, StaffUser
 from models.common import OrderStageStatus
 from services.bot_access_service import BotAccessService
 from services.bot_product_selection_service import BotProductSelectionService
@@ -42,10 +42,17 @@ def test_quick_order_fallback_parses_service_phone_address_and_date():
     )
 
     assert draft["service_type"] == "maintenance"
-    assert draft["phone"] == "+375 29 123-45-67"
+    assert draft["phone"] == "+375291234567"
     assert draft["name"] == "Иван"
     assert draft["address"] == "Победы 15"
     assert draft["target_date"] == "2026-06-15T14:00:00"
+
+
+def test_quick_order_normalizes_belarus_phone_variants():
+    assert BotQuickOrderService.normalize_phone("+375 (29) 123-45-67") == "+375291234567"
+    assert BotQuickOrderService.normalize_phone("80291234567") == "+375291234567"
+    assert BotQuickOrderService.normalize_phone("0291234567") == "+375291234567"
+    assert BotQuickOrderService.normalize_phone("291234567") == "+375291234567"
 
 
 def test_quick_order_fallback_parses_weekday_and_loose_time():
@@ -100,6 +107,40 @@ def test_quick_order_rich_preview_formats_and_escapes_fields():
     assert "<script>" not in fallback
 
 
+@pytest.mark.asyncio
+async def test_quick_order_address_check_adds_preview_warning(monkeypatch):
+    async def fake_suggest(query: str):
+        assert query == "Победы 15"
+        return [{"value": "Беларусь, Витебск, улица Победы, 15"}]
+
+    monkeypatch.setattr(
+        "services.bot_quick_order_service.AddressSuggestService.suggest",
+        fake_suggest,
+    )
+
+    draft = await BotQuickOrderService.enrich_draft({"address": "Победы 15"})
+    preview = BotQuickOrderService.format_draft_preview(draft)
+
+    assert draft["address_check"]["status"] == "confirmed"
+    assert "Проверка адреса: адрес найден: Беларусь, Витебск, улица Победы, 15" in preview
+
+
+@pytest.mark.asyncio
+async def test_quick_order_address_check_does_not_block_when_suggest_unavailable(monkeypatch):
+    async def fake_suggest(query: str):
+        raise RuntimeError("YANDEX_API_KEY not configured")
+
+    monkeypatch.setattr(
+        "services.bot_quick_order_service.AddressSuggestService.suggest",
+        fake_suggest,
+    )
+
+    draft = await BotQuickOrderService.enrich_draft({"address": "Победы 15"})
+
+    assert draft["address"] == "Победы 15"
+    assert draft["address_check"]["status"] == "unchecked"
+
+
 def test_tasks_rich_html_formats_and_escapes_cards():
     tasks = [
         {
@@ -124,6 +165,94 @@ def test_tasks_rich_html_formats_and_escapes_cards():
     assert "Не забыть &lt;лестницу&gt;" in rich
     assert "<важно>" not in rich
     assert "Монтаж &lt;важно&gt;" in fallback
+
+
+@pytest.mark.asyncio
+async def test_task_list_skips_stale_unscheduled_and_closed_work(sqlite_staff_session):
+    installer = Installer(name="Иван Монтажник")
+    sqlite_staff_session.add(installer)
+    await sqlite_staff_session.commit()
+    await sqlite_staff_session.refresh(installer)
+
+    staff = StaffUser(
+        display_name="Иван",
+        telegram_id=12345,
+        status="active",
+        roles=["installer"],
+        primary_role="installer",
+        legacy_installer_id=installer.id,
+    )
+    customer = Customer(name="Клиент", phone="+375291234567")
+    sqlite_staff_session.add(staff)
+    sqlite_staff_session.add(customer)
+    await sqlite_staff_session.commit()
+    await sqlite_staff_session.refresh(customer)
+
+    active_order = Order(
+        customer_id=customer.id,
+        status=OrderStatus.EXECUTION,
+        title="Активный заказ",
+        delivery_address="Победы 15",
+    )
+    closed_order = Order(
+        customer_id=customer.id,
+        status=OrderStatus.CLOSED,
+        title="Закрытый заказ",
+        delivery_address="Победы 16",
+        installation_date=datetime.now() + timedelta(days=3),
+    )
+    legacy_order = Order(
+        customer_id=customer.id,
+        status=OrderStatus.EXECUTION,
+        title="Старый монтаж без даты",
+        delivery_address="Победы 17",
+    )
+    sqlite_staff_session.add(active_order)
+    sqlite_staff_session.add(closed_order)
+    sqlite_staff_session.add(legacy_order)
+    await sqlite_staff_session.commit()
+    await sqlite_staff_session.refresh(active_order)
+    await sqlite_staff_session.refresh(closed_order)
+    await sqlite_staff_session.refresh(legacy_order)
+
+    sqlite_staff_session.add_all(
+        [
+            OrderWorkStage(
+                order_id=active_order.id,
+                name="Старый мартовский этап",
+                installer_id=installer.id,
+                start_time=datetime.now() - timedelta(days=90),
+                status=OrderStageStatus.PLANNED,
+            ),
+            OrderWorkStage(
+                order_id=active_order.id,
+                name="Этап без даты",
+                installer_id=installer.id,
+                start_time=None,
+                status=OrderStageStatus.PLANNED,
+            ),
+            OrderWorkStage(
+                order_id=active_order.id,
+                name="Ближайший монтаж",
+                installer_id=installer.id,
+                start_time=datetime.now() + timedelta(days=2),
+                status=OrderStageStatus.PLANNED,
+            ),
+            OrderWorkStage(
+                order_id=closed_order.id,
+                name="Этап закрытого заказа",
+                installer_id=installer.id,
+                start_time=datetime.now() + timedelta(days=2),
+                status=OrderStageStatus.PLANNED,
+            ),
+            OrderInstaller(order_id=legacy_order.id, installer_id=installer.id),
+        ]
+    )
+    await sqlite_staff_session.commit()
+
+    tasks = await BotTaskService.list_my_tasks(sqlite_staff_session, 12345)
+
+    assert [task["title"] for task in tasks] == ["Ближайший монтаж"]
 
 
 def test_task_report_builder_keeps_text_report_plain():

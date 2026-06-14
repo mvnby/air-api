@@ -725,6 +725,29 @@ class OrderWorkStageResponse(BaseModel):
     installer: Optional[ManagerInstallerResponse] = None
 
 
+class ManagerStaleWorkStageItem(BaseModel):
+    id: int
+    order_id: int
+    order_status: str
+    order_title: Optional[str] = None
+    name: str
+    status: str
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    installer_id: Optional[int] = None
+    installer_name: Optional[str] = None
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
+    address: Optional[str] = None
+    manager_comment: Optional[str] = None
+    installer_report: Optional[str] = None
+
+
+class ManagerStaleWorkStageListResponse(BaseModel):
+    items: List[ManagerStaleWorkStageItem]
+    total: int
+
+
 class OrderProposalResponse(BaseModel):
     id: int
     order_id: int

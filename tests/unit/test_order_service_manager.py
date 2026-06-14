@@ -10,8 +10,11 @@ from models import (
     BankReceipt,
     Customer,
     CustomerType,
+    Installer,
     Order,
+    OrderWorkStage,
     OrderProposal,
+    OrderStageStatus,
     OrderStatus,
     OutgoingEmail,
     PaymentCurrency,
@@ -42,6 +45,77 @@ def test_service_default_order_title_inference():
     assert OrderService._build_default_order_title(comment="Купить кондиционер") == "Продажа"
     assert OrderService._build_default_order_title(items=[{"product_id": 1, "with_installation": True}]) == "Продажа + монтаж"
     assert OrderService._build_default_order_title(items=[{"product_id": 1}]) == "Продажа"
+
+
+@pytest.mark.asyncio
+async def test_service_lists_cancels_and_deletes_stale_work_stages(sqlite_order_session):
+    installer = Installer(name="Монтажник")
+    customer = Customer(name="Иван", phone="+375291234567")
+    sqlite_order_session.add(installer)
+    sqlite_order_session.add(customer)
+    await sqlite_order_session.commit()
+    await sqlite_order_session.refresh(installer)
+    await sqlite_order_session.refresh(customer)
+
+    order = Order(
+        customer_id=customer.id,
+        status=OrderStatus.EXECUTION,
+        title="Монтаж",
+        delivery_address="Победы 15",
+    )
+    sqlite_order_session.add(order)
+    await sqlite_order_session.commit()
+    await sqlite_order_session.refresh(order)
+
+    stale_stage = OrderWorkStage(
+        order_id=order.id,
+        name="Старый выезд",
+        installer_id=installer.id,
+        start_time=datetime.now() - timedelta(days=30),
+        status=OrderStageStatus.PLANNED,
+    )
+    unscheduled_stage = OrderWorkStage(
+        order_id=order.id,
+        name="Без даты",
+        installer_id=installer.id,
+        start_time=None,
+        status=OrderStageStatus.PLANNED,
+    )
+    upcoming_stage = OrderWorkStage(
+        order_id=order.id,
+        name="Будущий выезд",
+        installer_id=installer.id,
+        start_time=datetime.now() + timedelta(days=2),
+        status=OrderStageStatus.PLANNED,
+    )
+    completed_stage = OrderWorkStage(
+        order_id=order.id,
+        name="Закрытый выезд",
+        installer_id=installer.id,
+        start_time=datetime.now() - timedelta(days=30),
+        status=OrderStageStatus.COMPLETED,
+    )
+    sqlite_order_session.add_all([stale_stage, unscheduled_stage, upcoming_stage, completed_stage])
+    await sqlite_order_session.commit()
+    for stage in (stale_stage, unscheduled_stage, upcoming_stage, completed_stage):
+        await sqlite_order_session.refresh(stage)
+
+    result = await OrderService.list_stale_order_stages(sqlite_order_session, older_than_days=7)
+    names = {item["name"] for item in result["items"]}
+
+    assert result["total"] == 2
+    assert names == {"Старый выезд", "Без даты"}
+    assert result["items"][0]["customer_name"] == "Иван"
+
+    canceled = await OrderService.cancel_order_stage_direct(sqlite_order_session, stale_stage.id)
+    assert canceled["status"] == "canceled"
+
+    after_cancel = await OrderService.list_stale_order_stages(sqlite_order_session, older_than_days=7)
+    assert {item["name"] for item in after_cancel["items"]} == {"Без даты"}
+
+    deleted = await OrderService.delete_order_stage_direct(sqlite_order_session, unscheduled_stage.id)
+    assert deleted == {"ok": True, "id": unscheduled_stage.id}
+    assert await sqlite_order_session.get(OrderWorkStage, unscheduled_stage.id) is None
 
 
 def test_service_display_order_title_hides_legacy_site_title():

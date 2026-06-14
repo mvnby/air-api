@@ -3,12 +3,11 @@ from datetime import datetime, timedelta
 from html import escape
 from typing import Any
 
-from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from models import Order, OrderInstaller, OrderStageStatus, OrderWorkStage, StaffUser
+from models import Order, OrderInstaller, OrderStageStatus, OrderStatus, OrderWorkStage, StaffUser
 from services.notification_service import NotificationService
 from services.staff_user_service import StaffUserService
 
@@ -16,6 +15,12 @@ logger = logging.getLogger(__name__)
 
 
 class BotTaskService:
+    ACTIVE_ORDER_STATUSES = {
+        OrderStatus.NEW_LEAD,
+        OrderStatus.NEGOTIATION,
+        OrderStatus.EXECUTION,
+    }
+
     @staticmethod
     async def _staff_by_telegram_id(session: AsyncSession, telegram_id: int | str | None) -> StaffUser | None:
         try:
@@ -51,11 +56,10 @@ class BotTaskService:
             select(OrderWorkStage)
             .join(Order, Order.id == OrderWorkStage.order_id)
             .where(OrderWorkStage.installer_id == installer_id)
+            .where(Order.status.in_(list(cls.ACTIVE_ORDER_STATUSES)))
+            .where(OrderWorkStage.start_time.is_not(None))
             .where(
-                or_(
-                    OrderWorkStage.start_time.is_(None),
-                    (OrderWorkStage.start_time >= now) & (OrderWorkStage.start_time <= until),
-                )
+                (OrderWorkStage.start_time >= now) & (OrderWorkStage.start_time <= until)
             )
             .where(OrderWorkStage.status != OrderStageStatus.COMPLETED)
             .where(OrderWorkStage.status != OrderStageStatus.CANCELED)
@@ -74,11 +78,10 @@ class BotTaskService:
             select(Order)
             .join(OrderInstaller, OrderInstaller.order_id == Order.id)
             .where(OrderInstaller.installer_id == installer_id)
+            .where(Order.status.in_(list(cls.ACTIVE_ORDER_STATUSES)))
+            .where(Order.installation_date.is_not(None))
             .where(
-                or_(
-                    Order.installation_date.is_(None),
-                    (Order.installation_date >= now) & (Order.installation_date <= until),
-                )
+                (Order.installation_date >= now) & (Order.installation_date <= until)
             )
             .options(selectinload(Order.customer), selectinload(Order.installers))
             .order_by(Order.installation_date.asc().nullslast(), Order.id.asc())
