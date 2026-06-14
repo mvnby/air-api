@@ -151,13 +151,12 @@ async def selection_process(message: types.Message, state: FSMContext):
     await state.set_state(None)
     keyboard = selection_result_keyboard() if selection.get("areas") else None
     fallback_text = BotProductSelectionService.format_selection(selection)
-    delivered = await BotService.send_rich_message(
+    await BotService.send_rich_message(
         message.chat.id,
         BotProductSelectionService.format_selection_rich_html(selection),
+        fallback_text=fallback_text,
         reply_markup=keyboard,
     )
-    if not delivered:
-        await message.answer(fallback_text, parse_mode="HTML", reply_markup=keyboard)
     await message.answer("Готово. Можно продолжить работу из меню.", reply_markup=get_staff_main_menu(context))
 
 
