@@ -1,7 +1,7 @@
 import asyncio
 from aiogram import types
 from .config import bot, dp
-from .handlers import base, catalog, orders, admin, favorites, cart
+from .handlers import admin, base, catalog, work
 from core.config import settings
 from core.logger import setup_logging
 
@@ -31,10 +31,8 @@ async def main(*, wait_when_disabled: bool = True):
     logger.info("Starting bot polling: %s.", decision.reason)
     # Register routers in specific order
     dp.include_router(base.router)
+    dp.include_router(work.router)
     dp.include_router(catalog.router)
-    dp.include_router(cart.router)
-    dp.include_router(orders.router)
-    dp.include_router(favorites.router)
     dp.include_router(admin.router)
     
     await bot.delete_webhook(drop_pending_updates=True)

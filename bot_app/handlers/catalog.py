@@ -7,6 +7,7 @@ from aiogram.filters import Command, StateFilter
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 from core.database import async_session_maker
+from services.bot_access_service import BotAccessService
 from services.product_service import ProductService
 from services.staff_user_service import StaffUserService
 from ..keyboards import area_selection_kb, type_selection_kb, winter_selection_kb, wifi_selection_kb
@@ -15,6 +16,21 @@ from ..states import ShopState
 
 router = Router()
 logger = logging.getLogger(__name__)
+
+
+async def _get_access_context(user_id: int | None):
+    async with async_session_maker() as session:
+        return await BotAccessService.get_context(session, user_id)
+
+
+async def _is_staff_user(user_id: int | None) -> bool:
+    context = await _get_access_context(user_id)
+    return context.is_staff
+
+
+async def _is_manager_user(user_id: int | None) -> bool:
+    context = await _get_access_context(user_id)
+    return context.is_staff and context.is_manager
 
 
 def _is_inline_search_query(text: str) -> bool:
@@ -76,6 +92,9 @@ async def _render_search_results(message: types.Message, query: str, products: l
 
 @router.message(F.text == "🏆 Умный подбор")
 async def start_selection(message: types.Message, state: FSMContext):
+    if not await _is_manager_user(message.from_user.id if message.from_user else None):
+        await message.answer("Подбор доступен сотрудникам MVN.")
+        return
     await state.set_state(ShopState.select_area)
     await message.answer(
         "Давайте подберем идеальный кондиционер! 🌬️\n\n"
@@ -182,6 +201,9 @@ async def process_wifi_and_show_results(callback: CallbackQuery, state: FSMConte
 @router.message(F.text == "🔎 Поиск")
 @router.message(Command("search"))
 async def search_start(message: types.Message, state: FSMContext):
+    if not await _is_staff_user(message.from_user.id if message.from_user else None):
+        await message.answer("Этот бот теперь только для сотрудников MVN.")
+        return
     await state.set_state(ShopState.waiting_for_search)
     logger.info("BOT_SEARCH_START user_id=%s", message.from_user.id if message.from_user else None)
     await message.answer("Введите бренд и мощность, например: Midea 12")
@@ -189,6 +211,9 @@ async def search_start(message: types.Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("search_details_"))
 async def search_details(callback: CallbackQuery):
+    if not await _is_staff_user(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
     product_id = int(callback.data.split("_")[-1])
     async with async_session_maker() as session:
         product = await ProductService.get_by_id(session, product_id)
@@ -203,6 +228,10 @@ async def search_details(callback: CallbackQuery):
 
 @router.message(ShopState.waiting_for_search)
 async def search_process(message: types.Message, state: FSMContext):
+    if not await _is_staff_user(message.from_user.id if message.from_user else None):
+        await message.answer("Этот бот теперь только для сотрудников MVN.")
+        await state.clear()
+        return
     query = (message.text or "").strip()
     user_id = message.from_user.id if message.from_user else None
     if not query:
@@ -231,6 +260,8 @@ async def auto_search_process(message: types.Message):
     query = (message.text or "").strip()
     user_id = message.from_user.id if message.from_user else None
     if not _is_inline_search_query(query):
+        return
+    if not await _is_staff_user(user_id):
         return
 
     async with async_session_maker() as session:

@@ -3,8 +3,7 @@ import os
 from pathlib import Path
 from aiogram import types
 from aiogram.types import FSInputFile
-from core.database import async_session_maker
-from services.favorite_service import FavoriteService
+from services.bot_product_selection_service import BotProductSelectionService
 from .keyboards import get_product_keyboard
 
 
@@ -26,6 +25,12 @@ def _availability_badge(product: dict) -> str:
     return "✅ <b>В наличии</b>\n" if in_stock else "⛔ <b>Нет в наличии</b>\n"
 
 
+def _availability_details(product: dict) -> str:
+    if not any(key in product for key in ("availability_status", "vitebsk_qty", "minsk_qty")):
+        return ""
+    return f"📦 {BotProductSelectionService.availability_text(product)}\n"
+
+
 def format_caption(product):
     # Пытаемся достать характеристики
     specs_str = ""
@@ -36,21 +41,17 @@ def format_caption(product):
     return (
         f"❄️ <b>{product['title']}</b>\n"
         f"{_availability_badge(product)}"
+        f"{_availability_details(product)}"
         f"💰 <b>{product['price']} руб.</b>\n"
         f"🏠 Площадь: {product.get('area', '-')} м²\n"
         f"{specs_str}"
-        f"📝 {product.get('description', '')[:200]}"
+        f"📝 {product.get('description', '')[:200]}\n"
+        f"🔗 {BotProductSelectionService.product_url(product)}"
     )
 
-async def send_product_card(message_or_callback, product, is_admin):
-    user_id = message_or_callback.from_user.id
-    
-    # Use new Service Layer
-    async with async_session_maker() as session:
-        in_fav = await FavoriteService.is_favorite(session, user_id, product['id'])
-    
+async def send_product_card(message_or_callback, product, is_admin, *, staff_mode=True):
     caption = format_caption(product)
-    kb = get_product_keyboard(product['id'], is_admin, in_favorites=in_fav)
+    kb = get_product_keyboard(product['id'], is_admin, product=product, staff_mode=staff_mode)
     
     target = message_or_callback.answer if isinstance(message_or_callback, types.Message) else message_or_callback.message.answer
     
