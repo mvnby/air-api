@@ -1,5 +1,6 @@
 import logging
 import os
+from html import escape
 from pathlib import Path
 from aiogram import types
 from aiogram.types import FSInputFile
@@ -36,17 +37,17 @@ def format_caption(product):
     specs_str = ""
     # Если categories существует (и это список), выводим красиво
     if product.get('categories') and isinstance(product['categories'], list):
-        specs_str += f"📌 {', '.join(product['categories'])}\n"
+        specs_str += f"📌 {escape(', '.join(str(category) for category in product['categories']))}\n"
     
     return (
-        f"❄️ <b>{product['title']}</b>\n"
+        f"❄️ <b>{escape(str(product['title']))}</b>\n"
         f"{_availability_badge(product)}"
         f"{_availability_details(product)}"
-        f"💰 <b>{product['price']} руб.</b>\n"
-        f"🏠 Площадь: {product.get('area', '-')} м²\n"
+        f"💰 <b>{escape(str(product['price']))} руб.</b>\n"
+        f"🏠 Площадь: {escape(str(product.get('area', '-')))} м²\n"
         f"{specs_str}"
-        f"📝 {product.get('description', '')[:200]}\n"
-        f"🔗 {BotProductSelectionService.product_url(product)}"
+        f"📝 {escape(str(product.get('description', ''))[:200])}\n"
+        f"🔗 {escape(BotProductSelectionService.product_url(product))}"
     )
 
 async def send_product_card(message_or_callback, product, is_admin, *, staff_mode=True):

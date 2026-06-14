@@ -73,6 +73,9 @@ def get_product_keyboard(product_id, is_admin=False, in_favorites=False, product
         buttons = []
         if url:
             buttons.append([InlineKeyboardButton(text="Открыть на сайте", url=url)])
+            buttons.append(
+                [InlineKeyboardButton(text="Текст клиенту", callback_data=f"product_client_text_{product_id}")]
+            )
         buttons.append([InlineKeyboardButton(text="Подробнее", callback_data=f"search_details_{product_id}")])
         if is_admin:
             buttons.append(

@@ -556,3 +556,16 @@ class BotProductSelectionService:
         if len(lines) == 1:
             return "Пока не получилось подобрать варианты из наличия."
         return "\n".join(lines)
+
+    @classmethod
+    def format_client_product(cls, product: dict[str, Any]) -> str:
+        title = str(product.get("title") or "Кондиционер").strip()
+        price = product.get("price")
+        price_text = f"{price} руб." if price not in (None, "") else "цену уточним"
+        lines = [
+            f"{title}",
+            f"Цена: {price_text}",
+            cls.client_availability_text(product),
+            cls.product_url(product),
+        ]
+        return "\n".join(line for line in lines if str(line).strip())
