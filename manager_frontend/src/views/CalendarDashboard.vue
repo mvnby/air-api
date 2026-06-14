@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import FullCalendar from '@fullcalendar/vue3';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import type { CalendarOptions, EventSourceFunc } from '@fullcalendar/core';
-import { ManagerCalendarService, type CalendarEventResponse, type ManagerOrderDetailResponse, type ManagerOrderUpdatePayload } from '../client';
+import { ManagerCalendarService, ManagerOrdersService, type CalendarEventResponse, type ManagerOrderDetailResponse, type ManagerOrderUpdatePayload, type ManagerStaleWorkStageItem } from '../client';
 import { api } from '../api';
-import { Loader2 } from 'lucide-vue-next';
+import { Loader2, RefreshCw, Trash2, XCircle } from 'lucide-vue-next';
 import OrderEditDrawer from '../components/orders/OrderEditDrawer.vue';
-import { parseApiFieldErrors } from '../utils/api-errors';
+import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
 
 const isLoading = ref(false);
 const error = ref<string | null>(null);
@@ -22,6 +22,10 @@ const orderFormError = ref('');
 const saving = ref(false);
 const toast = ref('');
 const calendarRef = ref<any>(null);
+const staleStages = ref<ManagerStaleWorkStageItem[]>([]);
+const staleStagesTotal = ref(0);
+const staleStagesLoading = ref(false);
+const staleStagesError = ref('');
 
 const setToast = (message: string) => {
   toast.value = message;
@@ -87,6 +91,52 @@ const openOrder = async (orderId: number) => {
   }
 };
 
+const loadStaleStages = async () => {
+  staleStagesLoading.value = true;
+  staleStagesError.value = '';
+  try {
+    const response = await ManagerOrdersService.listManagerStaleOrderStages(7, true, 100);
+    staleStages.value = response.items || [];
+    staleStagesTotal.value = response.total || 0;
+  } catch (err) {
+    console.error('Failed to load stale work stages', err);
+    staleStagesError.value = getApiErrorMessage(err);
+  } finally {
+    staleStagesLoading.value = false;
+  }
+};
+
+const refreshCalendar = () => {
+  const calendarApi = calendarRef.value?.getApi();
+  if (calendarApi) {
+    calendarApi.refetchEvents();
+  }
+};
+
+const cancelStaleStage = async (stage: ManagerStaleWorkStageItem) => {
+  if (!window.confirm(`Отменить задачу «${stage.name}» по заказу #${stage.order_id}?`)) return;
+  try {
+    await ManagerOrdersService.cancelManagerOrderStageDirect(stage.id);
+    setToast('Задача отменена');
+    await loadStaleStages();
+    refreshCalendar();
+  } catch (err) {
+    setToast(`Ошибка отмены: ${getApiErrorMessage(err)}`);
+  }
+};
+
+const deleteStaleStage = async (stage: ManagerStaleWorkStageItem) => {
+  if (!window.confirm(`Удалить задачу «${stage.name}» по заказу #${stage.order_id}?`)) return;
+  try {
+    await ManagerOrdersService.deleteManagerOrderStageDirect(stage.id);
+    setToast('Задача удалена');
+    await loadStaleStages();
+    refreshCalendar();
+  } catch (err) {
+    setToast(`Ошибка удаления: ${getApiErrorMessage(err)}`);
+  }
+};
+
 const saveOrder = async (payload: { orderId: number; data: ManagerOrderUpdatePayload }) => {
   if (saving.value) return;
   saving.value = true;
@@ -97,10 +147,7 @@ const saveOrder = async (payload: { orderId: number; data: ManagerOrderUpdatePay
     setToast('Сделка сохранена');
     
     // Refresh events to show updated dates immediately
-    const calendarApi = calendarRef.value?.getApi();
-    if (calendarApi) {
-      calendarApi.refetchEvents();
-    }
+    refreshCalendar();
   } catch (error: any) {
     console.error(error);
     const parsed = parseApiFieldErrors(error, [
@@ -137,11 +184,21 @@ const handleOrderDeleted = (orderId: number) => {
     selectedOrder.value = null;
   }
   setToast('Сделка удалена');
-  const calendarApi = calendarRef.value?.getApi();
-  if (calendarApi) {
-    calendarApi.refetchEvents();
-  }
+  refreshCalendar();
 };
+
+const formatStageDate = (value?: string | null) => {
+  if (!value) return 'дата не задана';
+  return new Date(value).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+onMounted(loadStaleStages);
 
 const fetchEvents: EventSourceFunc = async (fetchInfo, successCallback, failureCallback) => {
   isLoading.value = true;
@@ -221,6 +278,93 @@ const calendarOptions = ref<CalendarOptions>({
     <div v-if="error" class="bg-red-50 text-red-600 p-4 rounded-lg mb-6">
       {{ error }}
     </div>
+
+    <section class="mb-6 rounded-xl border border-amber-200 bg-amber-50/70 p-4 shadow-sm">
+      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-wide text-amber-900">Хвосты рабочих задач</h2>
+          <p class="mt-1 text-sm text-amber-800">
+            Незавершенные этапы старше 7 дней или без даты: {{ staleStagesTotal }}
+          </p>
+        </div>
+        <button
+          class="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-medium text-amber-900 shadow-sm transition hover:bg-amber-100 disabled:opacity-60"
+          :disabled="staleStagesLoading"
+          @click="loadStaleStages"
+        >
+          <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': staleStagesLoading }" />
+          Обновить
+        </button>
+      </div>
+
+      <div v-if="staleStagesError" class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        {{ staleStagesError }}
+      </div>
+      <div v-else-if="staleStagesLoading" class="mt-3 flex items-center gap-2 text-sm text-amber-800">
+        <Loader2 class="h-4 w-4 animate-spin" />
+        Проверяем задачи...
+      </div>
+      <div v-else-if="!staleStages.length" class="mt-3 rounded-lg bg-white/70 px-3 py-2 text-sm text-amber-800">
+        Просроченных рабочих задач нет.
+      </div>
+      <div v-else class="mt-4 overflow-x-auto">
+        <table class="min-w-full border-separate border-spacing-y-2 text-sm">
+          <thead class="text-left text-xs uppercase tracking-wide text-amber-900">
+            <tr>
+              <th class="px-3 py-1">Задача</th>
+              <th class="px-3 py-1">Дата</th>
+              <th class="px-3 py-1">Клиент</th>
+              <th class="px-3 py-1">Исполнитель</th>
+              <th class="px-3 py-1 text-right">Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="stage in staleStages" :key="stage.id" class="bg-white shadow-sm">
+              <td class="rounded-l-lg px-3 py-3 align-top">
+                <button class="font-semibold text-teal-700 hover:text-teal-900" @click="openOrder(stage.order_id)">
+                  #{{ stage.order_id }} · {{ stage.name }}
+                </button>
+                <div class="mt-1 text-xs text-slate-500">
+                  {{ stage.order_title || 'Заказ без названия' }} · {{ stage.order_status }}
+                </div>
+                <div v-if="stage.manager_comment" class="mt-2 max-w-xl text-xs text-slate-600">
+                  {{ stage.manager_comment }}
+                </div>
+              </td>
+              <td class="px-3 py-3 align-top text-slate-700">
+                {{ formatStageDate(stage.start_time) }}
+              </td>
+              <td class="px-3 py-3 align-top text-slate-700">
+                <div>{{ stage.customer_name || 'Клиент не указан' }}</div>
+                <div class="text-xs text-slate-500">{{ stage.customer_phone || 'телефон не указан' }}</div>
+                <div class="text-xs text-slate-500">{{ stage.address || 'адрес не указан' }}</div>
+              </td>
+              <td class="px-3 py-3 align-top text-slate-700">
+                {{ stage.installer_name || 'не назначен' }}
+              </td>
+              <td class="rounded-r-lg px-3 py-3 align-top">
+                <div class="flex justify-end gap-2">
+                  <button
+                    class="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                    @click="cancelStaleStage(stage)"
+                  >
+                    <XCircle class="h-4 w-4" />
+                    Отменить
+                  </button>
+                  <button
+                    class="inline-flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-50"
+                    @click="deleteStaleStage(stage)"
+                  >
+                    <Trash2 class="h-4 w-4" />
+                    Удалить
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 calendar-wrapper">
       <FullCalendar ref="calendarRef" :options="calendarOptions" />

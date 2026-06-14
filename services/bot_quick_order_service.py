@@ -9,7 +9,9 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
+from core.input_validation import normalize_phone_digits
 from schemas import ManagerOrderCreatePayload, OrderWorkStageCreatePayload
+from services.address_suggest_service import AddressSuggestService
 from services.notification_service import NotificationService
 from services.order_service import OrderService
 
@@ -77,6 +79,16 @@ class BotQuickOrderService:
             return None
         phone = re.sub(r"\s+", " ", match.group(1)).strip()
         return phone
+
+    @classmethod
+    def normalize_phone(cls, value: Any) -> Optional[str]:
+        cleaned = cls._clean_optional(value)
+        if not cleaned:
+            return None
+        digits = normalize_phone_digits(cleaned)
+        if len(digits) == 12 and digits.startswith("375"):
+            return f"+{digits}"
+        return cleaned
 
     @staticmethod
     def _infer_service_type(text: str) -> Optional[str]:
@@ -187,14 +199,14 @@ class BotQuickOrderService:
 
     @classmethod
     def parse_text_fallback(cls, text: str, *, now: Optional[datetime] = None) -> dict[str, Any]:
-        phone = cls._extract_phone(text)
+        raw_phone = cls._extract_phone(text)
         service_type = cls._infer_service_type(text)
         target_date = cls._parse_date(text, now=now)
-        name = cls._extract_name(text, phone)
+        name = cls._extract_name(text, raw_phone)
         address = cls._extract_address(text)
         return {
             "name": name,
-            "phone": phone,
+            "phone": cls.normalize_phone(raw_phone),
             "address": address,
             "service_type": service_type,
             "target_date": target_date.isoformat() if target_date else None,
@@ -220,7 +232,7 @@ class BotQuickOrderService:
         fallback = cls.parse_text_fallback(text)
         token = settings.DEEPSEEK_TOKEN.strip()
         if not token:
-            return fallback
+            return await cls.enrich_draft(cls.normalize_draft(fallback))
 
         try:
             async with httpx.AsyncClient(timeout=12.0) as client:
@@ -240,7 +252,7 @@ class BotQuickOrderService:
                 content = response.json()["choices"][0]["message"]["content"]
             parsed = cls._extract_json_object(content)
         except Exception:
-            return fallback
+            return await cls.enrich_draft(cls.normalize_draft(fallback))
 
         merged = dict(fallback)
         for key in ("name", "phone", "address", "service_type", "target_date", "request_text"):
@@ -248,13 +260,13 @@ class BotQuickOrderService:
             if value:
                 merged[key] = value
         merged["parser"] = "ai"
-        return cls.normalize_draft(merged)
+        return await cls.enrich_draft(cls.normalize_draft(merged))
 
     @classmethod
     def normalize_draft(cls, draft: dict[str, Any]) -> dict[str, Any]:
         normalized = dict(draft or {})
         normalized["name"] = cls._clean_optional(normalized.get("name"))
-        normalized["phone"] = cls._clean_optional(normalized.get("phone"))
+        normalized["phone"] = cls.normalize_phone(normalized.get("phone"))
         normalized["address"] = cls._clean_optional(normalized.get("address"))
         normalized["request_text"] = cls._clean_optional(normalized.get("request_text")) or ""
         service_type = cls._clean_optional(normalized.get("service_type"))
@@ -271,6 +283,67 @@ class BotQuickOrderService:
             normalized["target_date"] = None
         return normalized
 
+    @staticmethod
+    def _address_tokens(value: str) -> set[str]:
+        return set(re.findall(r"\d+[а-яa-z]?", value.casefold().replace("ё", "е")))
+
+    @classmethod
+    async def enrich_draft(cls, draft: dict[str, Any]) -> dict[str, Any]:
+        enriched = dict(draft or {})
+        address = cls._clean_optional(enriched.get("address"))
+        if not address:
+            enriched.pop("address_check", None)
+            return enriched
+
+        try:
+            suggestions = await AddressSuggestService.suggest(address)
+        except (RuntimeError, httpx.HTTPError):
+            enriched["address_check"] = {
+                "status": "unchecked",
+                "message": "адрес не проверен, сервис подсказок временно недоступен",
+            }
+            return enriched
+        except Exception:
+            logger.exception("BOT_QUICK_ORDER_ADDRESS_CHECK_FAILED")
+            enriched["address_check"] = {
+                "status": "unchecked",
+                "message": "адрес не проверен",
+            }
+            return enriched
+
+        if not suggestions:
+            enriched["address_check"] = {
+                "status": "not_found",
+                "message": "адрес не найден в подсказках, лучше уточнить у клиента",
+            }
+            return enriched
+
+        suggestion = suggestions[0]
+        suggested_value = cls._clean_optional(suggestion.get("value") or suggestion.get("title"))
+        input_tokens = cls._address_tokens(address)
+        suggested_tokens = cls._address_tokens(suggested_value or "")
+        if input_tokens and not (input_tokens & suggested_tokens):
+            enriched["address_check"] = {
+                "status": "needs_review",
+                "message": "адрес найден, но номер дома стоит сверить",
+                "suggestion": suggested_value,
+            }
+            return enriched
+        if not input_tokens:
+            enriched["address_check"] = {
+                "status": "needs_review",
+                "message": "адрес найден, уточните номер дома",
+                "suggestion": suggested_value,
+            }
+            return enriched
+
+        enriched["address_check"] = {
+            "status": "confirmed",
+            "message": "адрес найден",
+            "suggestion": suggested_value,
+        }
+        return enriched
+
     @classmethod
     def _display_target_date(cls, draft: dict[str, Any]) -> str | None:
         target_date = draft.get("target_date")
@@ -282,10 +355,25 @@ class BotQuickOrderService:
                 return str(target_date)
         return None
 
+    @staticmethod
+    def _address_check_text(draft: dict[str, Any]) -> str | None:
+        check = draft.get("address_check")
+        if not isinstance(check, dict):
+            return None
+        status = check.get("status")
+        message = str(check.get("message") or "").strip()
+        suggestion = str(check.get("suggestion") or "").strip()
+        if status == "confirmed" and suggestion:
+            return f"{message}: {suggestion}"
+        if suggestion:
+            return f"{message}. Вариант: {suggestion}"
+        return message or None
+
     @classmethod
     def format_draft_preview(cls, draft: dict[str, Any]) -> str:
         target_date = cls._display_target_date(draft)
         service_type = draft.get("service_type")
+        address_check_text = cls._address_check_text(draft)
         lines = [
             "<b>Черновик заказа</b>",
             f"Клиент: {escape(str(draft.get('name') or 'не указан'))}",
@@ -296,6 +384,8 @@ class BotQuickOrderService:
             "",
             f"<i>{escape(str(draft.get('request_text') or ''))}</i>",
         ]
+        if address_check_text:
+            lines.insert(4, f"Проверка адреса: {escape(address_check_text)}")
         return "\n".join(lines)
 
     @classmethod
@@ -303,12 +393,14 @@ class BotQuickOrderService:
         target_date = cls._display_target_date(draft)
         service_type = draft.get("service_type")
         request_text = str(draft.get("request_text") or "").strip()
+        address_check_text = cls._address_check_text(draft)
         rich_html = (
             "<h3>Черновик заказа</h3>"
             "<p>"
             f"<b>Клиент:</b> {escape(str(draft.get('name') or 'не указан'))}<br/>"
             f"<b>Телефон:</b> {escape(str(draft.get('phone') or 'не указан'))}<br/>"
             f"<b>Адрес:</b> {escape(str(draft.get('address') or 'не указан'))}<br/>"
+            f"{('<b>Проверка адреса:</b> ' + escape(address_check_text) + '<br/>') if address_check_text else ''}"
             f"<b>Услуга:</b> {escape(cls.SERVICE_LABELS.get(service_type, 'не указана'))}<br/>"
             f"<b>Дата:</b> {escape(target_date or 'не указана')}"
             "</p>"

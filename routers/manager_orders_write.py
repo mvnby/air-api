@@ -21,6 +21,8 @@ from routers.manager_operation_ids import (
     CREATE_MANAGER_ORDER_STAGE,
     UPDATE_MANAGER_ORDER_STAGE,
     DELETE_MANAGER_ORDER_STAGE,
+    CANCEL_MANAGER_ORDER_STAGE_DIRECT,
+    DELETE_MANAGER_ORDER_STAGE_DIRECT,
 )
 from schemas import (
     ManagerOrderCreatePayload,
@@ -33,6 +35,7 @@ from schemas import (
     PaymentResponse,
     OrderWorkStageCreatePayload,
     OrderWorkStageUpdatePayload,
+    ManagerStaleWorkStageItem,
 )
 from services.document_service import DocumentService
 from services.order_service import OrderService
@@ -57,6 +60,48 @@ async def create_manager_order(
             message=str(exc),
         ) from exc
     return data
+
+
+@router.patch(
+    "/work-stages/{stage_id}/cancel",
+    response_model=ManagerStaleWorkStageItem,
+    operation_id=CANCEL_MANAGER_ORDER_STAGE_DIRECT,
+)
+async def cancel_manager_order_stage_direct(
+    stage_id: int,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await OrderService.cancel_order_stage_direct(session, stage_id)
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=CANCEL_MANAGER_ORDER_STAGE_DIRECT,
+            error_code=ORDER_NOT_FOUND,
+            message=str(exc),
+        ) from exc
+
+
+@router.delete(
+    "/work-stages/{stage_id}",
+    response_model=dict,
+    operation_id=DELETE_MANAGER_ORDER_STAGE_DIRECT,
+)
+async def delete_manager_order_stage_direct(
+    stage_id: int,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await OrderService.delete_order_stage_direct(session, stage_id)
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=DELETE_MANAGER_ORDER_STAGE_DIRECT,
+            error_code=ORDER_NOT_FOUND,
+            message=str(exc),
+        ) from exc
 
 
 @router.patch("/{order_id}", response_model=ManagerOrderDetailResponse, operation_id=PATCH_MANAGER_ORDER)

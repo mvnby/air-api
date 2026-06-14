@@ -94,6 +94,9 @@ DELETE_MANAGER_ORDER_PAYMENT = "delete_manager_order_payment"
 CREATE_MANAGER_ORDER_STAGE = "create_manager_order_stage"
 UPDATE_MANAGER_ORDER_STAGE = "update_manager_order_stage"
 DELETE_MANAGER_ORDER_STAGE = "delete_manager_order_stage"
+LIST_MANAGER_STALE_ORDER_STAGES = "list_manager_stale_order_stages"
+CANCEL_MANAGER_ORDER_STAGE_DIRECT = "cancel_manager_order_stage_direct"
+DELETE_MANAGER_ORDER_STAGE_DIRECT = "delete_manager_order_stage_direct"
 GET_MANAGER_DOC_DOWNLOAD = "get_manager_doc_download"
 DELETE_MANAGER_DOC = "delete_manager_doc"
 IMPORT_MANAGER_BANK_RECEIPTS = "import_manager_bank_receipts"
@@ -286,6 +289,9 @@ ALL_MANAGER_OPERATION_IDS = (
     CREATE_MANAGER_ORDER_STAGE,
     UPDATE_MANAGER_ORDER_STAGE,
     DELETE_MANAGER_ORDER_STAGE,
+    LIST_MANAGER_STALE_ORDER_STAGES,
+    CANCEL_MANAGER_ORDER_STAGE_DIRECT,
+    DELETE_MANAGER_ORDER_STAGE_DIRECT,
     GET_MANAGER_DOC_DOWNLOAD,
     DELETE_MANAGER_DOC,
     IMPORT_MANAGER_BANK_RECEIPTS,
