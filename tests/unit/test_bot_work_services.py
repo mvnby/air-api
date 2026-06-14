@@ -487,9 +487,45 @@ def test_product_selection_rich_html_formats_cards_and_escapes(monkeypatch):
     assert "7 &lt;1,9 кВт&gt;" in rich
     assert "Midea &lt;script&gt;" in rich
     assert '<a href="https://example.test/product/midea-07/">Открыть товар на сайте</a>' in rich
+    assert "1200 руб. руб." not in rich
     assert "<script>" not in rich
     assert "Midea &lt;script&gt;" in fallback
     assert "<script>" not in fallback
+
+
+def test_product_selection_missing_price_uses_contact_us_text(monkeypatch):
+    monkeypatch.setattr(
+        "services.bot_product_selection_service.settings",
+        SimpleNamespace(PUBLIC_SITE_URL="https://example.test"),
+    )
+    selection = {
+        "areas": [
+            {
+                "label": "12 (3,5 кВт)",
+                "tiers": [
+                    {
+                        "label": "Оптимально",
+                        "products": [
+                            {
+                                "title": "Midea 12",
+                                "slug": "midea-12",
+                                "price": None,
+                                "vitebsk_qty": 0,
+                                "minsk_qty": 0,
+                            }
+                        ],
+                    },
+                ],
+            }
+        ]
+    }
+
+    formatted = BotProductSelectionService.format_client_selection(selection)
+    rich = BotProductSelectionService.format_selection_rich_html(selection)
+
+    assert "Midea 12 - цену уточним" in formatted
+    assert "0 руб." not in formatted
+    assert "<b>Цена:</b> цену уточним<br/>" in rich
 
 
 def test_selection_result_keyboard_has_client_text_action():
@@ -602,10 +638,12 @@ async def test_product_selection_groups_duplicate_power_classes(monkeypatch):
     assert len(selection["areas"]) == 1
     assert selection["areas"][0]["label"] == "7 (1,9 кВт)"
     assert selection["areas"][0]["quantity"] == 2
-    assert "<b>7 (1,9 кВт) x2</b>" in formatted
+    assert "<b>7 (1,9 кВт), 2 шт.</b>" in formatted
     assert "1200 руб. x 2 шт. = 2400 руб." in formatted
-    assert "7 (1,9 кВт) x2" in client_text
+    assert "Подобрал варианты кондиционеров комплектом:" in client_text
+    assert "7 (1,9 кВт), 2 шт." in client_text
     assert "1200 руб. x 2 шт. = 2400 руб." in client_text
+    assert "Итого по варианту: 2400 руб." in client_text
 
 
 @pytest.mark.asyncio
@@ -660,6 +698,7 @@ async def test_product_selection_prefers_same_series_for_multi_power_kit(monkeyp
     monkeypatch.setattr(ProductService, "get_curated", fake_get_curated)
 
     selection = await BotProductSelectionService.build_selection(object(), "7,9 инвертора")
+    client_text = BotProductSelectionService.format_client_selection(selection)
 
     optimal_products = [
         area["tiers"][0]["products"][0]
@@ -668,6 +707,11 @@ async def test_product_selection_prefers_same_series_for_multi_power_kit(monkeyp
     assert [area["label"] for area in selection["areas"]] == ["7 (1,9 кВт)", "9 (2,6 кВт)"]
     assert {product["series_id"] for product in optimal_products} == {10}
     assert [product["title"] for product in optimal_products] == ["LG Artcool 7", "LG Artcool 9"]
+    assert "Подобрал варианты кондиционеров комплектом:" in client_text
+    assert "Оптимально:" in client_text
+    assert "- 7 (1,9 кВт): LG Artcool 7 - 1100 руб." in client_text
+    assert "- 9 (2,6 кВт): LG Artcool 9 - 1000 руб." in client_text
+    assert "Итого по варианту: 2100 руб." in client_text
 
 
 @pytest.mark.asyncio

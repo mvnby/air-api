@@ -6,7 +6,7 @@ from ..keyboards import get_staff_main_menu
 
 router = Router()
 
-@router.message(Command("start"))
+@router.message(Command("start", "menu", "help"))
 async def cmd_start(message: types.Message):
     async with async_session_maker() as session:
         context = await BotAccessService.get_context(

@@ -494,14 +494,35 @@ class BotProductSelectionService:
     def _format_area_label(area: dict[str, Any]) -> str:
         label = str(area.get("label") or f"{area['area']} м²")
         quantity = int(area.get("quantity") or 1)
-        return f"{label} x{quantity}" if quantity > 1 else label
+        return f"{label}, {quantity} шт." if quantity > 1 else label
 
     @staticmethod
-    def _format_price(product: dict[str, Any], quantity: int = 1) -> str:
-        price = int(product.get("price") or 0)
+    def _product_price(product: dict[str, Any]) -> int | None:
+        price = product.get("price")
+        if price in (None, ""):
+            return None
+        try:
+            return int(price)
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _format_price(cls, product: dict[str, Any], quantity: int = 1) -> str:
+        price = cls._product_price(product)
+        if price is None:
+            return "цену уточним"
         if quantity <= 1:
             return f"{price} руб."
         return f"{price} руб. x {quantity} шт. = {price * quantity} руб."
+
+    @classmethod
+    def _product_total_price(cls, product: dict[str, Any], quantity: int = 1) -> int | None:
+        price = cls._product_price(product)
+        return price * max(int(quantity or 1), 1) if price is not None else None
+
+    @staticmethod
+    def _format_total_price(total: int | None) -> str:
+        return f"{total} руб." if total is not None else "цену уточним"
 
     @staticmethod
     def availability_text(product: dict[str, Any]) -> str:
@@ -660,7 +681,7 @@ class BotProductSelectionService:
                 blocks.append(
                     "<p>"
                     f"<b>{tier_label}:</b> {title}<br/>"
-                    f"<b>Цена:</b> {price} руб.<br/>"
+                    f"<b>Цена:</b> {price}<br/>"
                     f"<b>Наличие:</b> {availability}<br/>"
                     f"<a href=\"{url}\">Открыть товар на сайте</a>"
                     "</p>"
@@ -672,8 +693,13 @@ class BotProductSelectionService:
         if not selection.get("areas"):
             return selection.get("message") or "Пока не получилось подобрать варианты."
 
+        areas = selection["areas"]
+        is_kit = len(areas) > 1 or any(int(area.get("quantity") or 1) > 1 for area in areas)
+        if is_kit:
+            return cls._format_client_kit_selection(areas)
+
         lines = ["Подобрал варианты кондиционеров:"]
-        for area in selection["areas"]:
+        for area in areas:
             area_label = cls._format_area_label(area)
             quantity = int(area.get("quantity") or 1)
             area_lines = []
@@ -689,6 +715,53 @@ class BotProductSelectionService:
                 )
             if area_lines:
                 lines.extend(["", area_label, *area_lines])
+
+        if len(lines) == 1:
+            return "Пока не получилось подобрать варианты из наличия."
+        return "\n".join(lines)
+
+    @classmethod
+    def _format_client_kit_selection(cls, areas: list[dict[str, Any]]) -> str:
+        tier_keys = list(
+            dict.fromkeys(
+                str(tier.get("key") or tier.get("label") or "")
+                for area in areas
+                for tier in area.get("tiers", [])
+                if tier.get("products")
+            )
+        )
+        lines = ["Подобрал варианты кондиционеров комплектом:"]
+        for tier_key in tier_keys:
+            tier_label = ""
+            tier_lines: list[str] = []
+            total: int | None = 0
+            for area in areas:
+                tier = next(
+                    (
+                        item
+                        for item in area.get("tiers", [])
+                        if str(item.get("key") or item.get("label") or "") == tier_key
+                    ),
+                    None,
+                )
+                products = (tier or {}).get("products") or []
+                if not products:
+                    continue
+                product = products[0]
+                quantity = int(area.get("quantity") or 1)
+                tier_label = tier_label or str((tier or {}).get("label") or "Вариант")
+                area_label = cls._format_area_label(area)
+                title = str(product.get("title") or "Товар")
+                product_total = cls._product_total_price(product, quantity)
+                total = total + product_total if total is not None and product_total is not None else None
+                tier_lines.append(
+                    f"- {area_label}: {title} - {cls._format_price(product, quantity)}\n"
+                    f"  {cls.client_availability_text(product)}\n"
+                    f"  {cls.product_url(product)}"
+                )
+            if tier_lines:
+                lines.extend(["", f"{tier_label}:", *tier_lines])
+                lines.append(f"Итого по варианту: {cls._format_total_price(total)}")
 
         if len(lines) == 1:
             return "Пока не получилось подобрать варианты из наличия."
