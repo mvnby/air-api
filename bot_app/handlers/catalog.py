@@ -8,6 +8,7 @@ from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 from core.database import async_session_maker
 from services.bot_access_service import BotAccessService
+from services.bot_product_selection_service import BotProductSelectionService
 from services.product_service import ProductService
 from services.staff_user_service import StaffUserService
 from ..keyboards import area_selection_kb, type_selection_kb, winter_selection_kb, wifi_selection_kb
@@ -225,6 +226,24 @@ async def search_details(callback: CallbackQuery):
 
     await send_product_card(callback, product, is_admin)
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("product_client_text_"))
+async def product_client_text(callback: CallbackQuery):
+    if not await _is_staff_user(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+    product_id = int((callback.data or "").split("_")[-1])
+    async with async_session_maker() as session:
+        product = await ProductService.get_by_id(session, product_id)
+
+    if not product:
+        await callback.answer("Товар не найден", show_alert=True)
+        return
+
+    await callback.message.answer(BotProductSelectionService.format_client_product(product))
+    await callback.answer("Можно переслать клиенту")
+
 
 @router.message(ShopState.waiting_for_search)
 async def search_process(message: types.Message, state: FSMContext):

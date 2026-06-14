@@ -16,7 +16,7 @@ from services.bot_quick_order_service import BotQuickOrderService
 from services.bot_task_service import BotTaskService
 from services.product_read_service import ProductReadService
 from services.product_service import ProductService
-from bot_app.keyboards import selection_result_keyboard
+from bot_app.keyboards import get_product_keyboard, selection_result_keyboard
 from bot_app.utils import format_caption
 
 
@@ -141,6 +141,77 @@ def test_product_caption_contains_public_product_link(monkeypatch):
     )
 
     assert "https://example.test/product/midea-12/" in caption
+
+
+def test_product_caption_escapes_html_fields(monkeypatch):
+    monkeypatch.setattr(
+        "services.bot_product_selection_service.settings",
+        SimpleNamespace(PUBLIC_SITE_URL="https://example.test"),
+    )
+
+    caption = format_caption(
+        {
+            "id": 1,
+            "title": "Midea <script>",
+            "slug": "midea-12",
+            "price": 1200,
+            "area": "35 <bad>",
+            "categories": ["Настенные <x>"],
+            "description": "Описание <b>опасно</b>",
+        }
+    )
+
+    assert "Midea &lt;script&gt;" in caption
+    assert "Настенные &lt;x&gt;" in caption
+    assert "35 &lt;bad&gt;" in caption
+    assert "Описание &lt;b&gt;опасно&lt;/b&gt;" in caption
+    assert "<script>" not in caption
+    assert "<bad>" not in caption
+
+
+def test_staff_product_keyboard_has_client_text_action(monkeypatch):
+    monkeypatch.setattr(
+        "services.bot_product_selection_service.settings",
+        SimpleNamespace(PUBLIC_SITE_URL="https://example.test"),
+    )
+
+    keyboard = get_product_keyboard(
+        42,
+        is_admin=False,
+        product={"id": 42, "slug": "midea-12"},
+        staff_mode=True,
+    )
+
+    assert keyboard.inline_keyboard[0][0].text == "Открыть на сайте"
+    assert keyboard.inline_keyboard[0][0].url == "https://example.test/product/midea-12/"
+    assert keyboard.inline_keyboard[1][0].text == "Текст клиенту"
+    assert keyboard.inline_keyboard[1][0].callback_data == "product_client_text_42"
+
+
+def test_product_client_text_is_forwardable(monkeypatch):
+    monkeypatch.setattr(
+        "services.bot_product_selection_service.settings",
+        SimpleNamespace(PUBLIC_SITE_URL="https://example.test"),
+    )
+
+    text = BotProductSelectionService.format_client_product(
+        {
+            "title": "Midea 12",
+            "slug": "midea-12",
+            "price": 1200,
+            "vitebsk_qty": 0,
+            "minsk_qty": 2,
+        }
+    )
+
+    assert text == (
+        "Midea 12\n"
+        "Цена: 1200 руб.\n"
+        "доступно 2-3 дня\n"
+        "https://example.test/product/midea-12/"
+    )
+    assert "Витебск" not in text
+    assert "<b>" not in text
 
 
 def test_product_selection_sorts_by_vitebsk_then_minsk_then_unknown():
