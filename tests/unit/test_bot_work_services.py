@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -8,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
 from crud.product import ProductDAO
-from models import StaffUser
+from models import GlobalConfig, StaffUser
 from services.bot_access_service import BotAccessService
 from services.bot_product_selection_service import BotProductSelectionService
 from services.bot_quick_order_service import BotQuickOrderService
@@ -150,6 +151,34 @@ def test_product_selection_parse_does_not_treat_large_area_as_quantity():
     assert parsed["targets"][0]["label"] == "20 м²"
 
 
+def test_product_selection_rules_defaults_match_current_mapping():
+    rules = BotProductSelectionService.normalize_rules({})
+
+    assert rules["power_classes"]["7"] == {"kw": 1.9, "area_min": 15, "area_max": 24}
+    assert rules["default_tag_slugs"] == ["cat-household"]
+    assert [tier[0] for tier in rules["tiers"]["mixed"]] == ["budget", "optimal", "premium"]
+
+
+def test_product_selection_parse_uses_configured_power_class_rules():
+    rules = BotProductSelectionService.normalize_rules(
+        {
+            "power_classes": {
+                "7": {"kw": 2.0, "area_min": 18, "area_max": 27},
+                "5": {"kw": 1.5, "area": [10, 16]},
+            }
+        }
+    )
+
+    parsed = BotProductSelectionService.parse_selection_request("2x5 и 7", rules)
+
+    assert [target["code"] for target in parsed["targets"]] == ["5", "5", "7"]
+    assert parsed["targets"][0]["label"] == "5 (1,5 кВт)"
+    assert parsed["targets"][0]["area_min"] == 10
+    assert parsed["targets"][2]["label"] == "7 (2,0 кВт)"
+    assert parsed["targets"][2]["area_min"] == 18
+    assert parsed["targets"][2]["area_max"] == 27
+
+
 @pytest.mark.asyncio
 async def test_bot_access_context_for_staff_and_non_staff(sqlite_staff_session):
     sqlite_staff_session.add(
@@ -227,6 +256,84 @@ async def test_product_selection_builds_power_classes_and_inverter_only(monkeypa
     assert calls[0]["area_min"] == 15
     assert calls[0]["area_max"] == 24
     assert calls[0]["tag_slugs"] == ["cat-household"]
+
+
+@pytest.mark.asyncio
+async def test_product_selection_builds_with_configured_rules(sqlite_staff_session, monkeypatch):
+    calls = []
+    sqlite_staff_session.add(
+        GlobalConfig(
+            key=BotProductSelectionService.CONFIG_KEY,
+            value=json.dumps(
+                {
+                    "power_classes": {
+                        "7": {"kw": 2.0, "area_min": 18, "area_max": 27},
+                    },
+                    "default_tag_slugs": ["cat-wall"],
+                    "tiers": {
+                        "mixed": [
+                            {
+                                "key": "manager_pick",
+                                "label": "Менеджерский выбор",
+                                "is_inverter": True,
+                                "sort": "premium",
+                            }
+                        ]
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            description="Bot selection test rules",
+        )
+    )
+    await sqlite_staff_session.commit()
+
+    async def fake_get_curated(session, area, is_inverter, limit=12, **kwargs):
+        calls.append(
+            {
+                "area": area,
+                "area_min": kwargs.get("area_min"),
+                "area_max": kwargs.get("area_max"),
+                "is_inverter": is_inverter,
+                "tag_slugs": kwargs.get("tag_slugs"),
+            }
+        )
+        return [
+            {
+                "id": 1,
+                "title": "Configured Cheaper",
+                "slug": "configured-cheaper",
+                "price": 2000,
+                "vitebsk_qty": 1,
+                "minsk_qty": 0,
+            },
+            {
+                "id": 2,
+                "title": "Configured Premium",
+                "slug": "configured-premium",
+                "price": 3000,
+                "vitebsk_qty": 1,
+                "minsk_qty": 0,
+            }
+        ]
+
+    monkeypatch.setattr(ProductService, "get_curated", fake_get_curated)
+
+    selection = await BotProductSelectionService.build_selection(sqlite_staff_session, "7")
+
+    assert selection["areas"][0]["label"] == "7 (2,0 кВт)"
+    assert selection["areas"][0]["tiers"][0]["key"] == "manager_pick"
+    assert selection["areas"][0]["tiers"][0]["label"] == "Менеджерский выбор"
+    assert selection["areas"][0]["tiers"][0]["products"][0]["title"] == "Configured Premium"
+    assert calls == [
+        {
+            "area": 18,
+            "area_min": 18,
+            "area_max": 27,
+            "is_inverter": True,
+            "tag_slugs": ["cat-wall"],
+        }
+    ]
 
 
 @pytest.mark.asyncio
