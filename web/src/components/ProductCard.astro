@@ -1,11 +1,12 @@
 ---
 import PriceWithToggle from "./PriceWithToggle.vue";
 import { resolveImageUrl } from "../utils/api";
+import { formatProductPrice, hasKnownProductPrice } from "../utils/product-display";
 
 interface Props {
   product: {
     title: string;
-    price: number;
+    price: number | null;
     slug: string;
     main_image?: string;
     card_image?: string | null;
@@ -56,7 +57,7 @@ const pricingProps = {
     : {}),
 };
 
-const formatPrice = (price: number) => price.toLocaleString();
+const formatPrice = (price: number | null) => formatProductPrice(price);
 const productCardImage = product.card_image || product.main_image;
 const productDescription = product.description || "Кондиционер из каталога";
 
@@ -294,7 +295,10 @@ const showAreaBadge = !!product.area;
       <div class="m-info">
         <p class="m-title">{product.title}</p>
         <div class="m-footer">
-          <span class="final-price small">{formatPrice(product.price)} <span class="price-byn"></span></span>
+          <span class="final-price small">
+            {formatPrice(product.price)}
+            {hasKnownProductPrice(product.price) && <span class="price-byn"></span>}
+          </span>
           <button class="add-btn micro plain js-track-cart">
             <span class="material-icons-round">arrow_forward</span>
           </button>

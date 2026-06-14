@@ -1,3 +1,5 @@
+import { hasKnownProductPrice } from "./product-display";
+
 type CatalogSeoProduct = {
     id?: number;
     title: string;
@@ -25,7 +27,7 @@ export function getSchemaAvailability(product: CatalogSeoProduct) {
     if (stockQty > 0 || status === "in_stock_now" || status === "available_2_3_days") {
         return "https://schema.org/InStock";
     }
-    return "https://schema.org/OutOfStock";
+    return "https://schema.org/LimitedAvailability";
 }
 
 export function buildCatalogItemListSchema(products: CatalogSeoProduct[], origin: string) {
@@ -43,7 +45,7 @@ export function buildCatalogItemListSchema(products: CatalogSeoProduct[], origin
                 sku: product.id ? String(product.id) : undefined,
                 offers: {
                     "@type": "Offer",
-                    price: Number(product.price || 0),
+                    ...(hasKnownProductPrice(product.price) ? { price: Number(product.price) } : {}),
                     priceCurrency: "BYN",
                     availability: getSchemaAvailability(product),
                     url: absoluteUrl(product.slug ? `/product/${product.slug}/` : undefined, origin),

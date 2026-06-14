@@ -3,16 +3,16 @@
     <div class="bar-content">
       <div class="price-info">
         <span class="label">Итого:</span>
-        <span class="price-val">{{ formattedPrice }} <span class="price-byn"></span></span>
-        <span v-if="isUnavailableInCities" class="stock-note">Нет в наличии</span>
+        <span class="price-val">{{ formattedPrice }} <span v-if="hasKnownPrice" class="price-byn"></span></span>
+        <span v-if="shouldInquire" class="stock-note">{{ stockNote }}</span>
       </div>
       <button
         class="btn btn-primary btn-sm js-track-cart"
-        :class="{ notify: isUnavailableInCities }"
+        :class="{ notify: shouldInquire }"
         @click="scrollToBuy"
       >
-        <span class="material-icons-round">{{ isUnavailableInCities ? 'notifications_active' : 'shopping_cart' }}</span>
-        {{ isUnavailableInCities ? 'Сообщить о поступлении' : 'В корзину' }}
+        <span class="material-icons-round">{{ actionIcon }}</span>
+        {{ actionLabel }}
       </button>
     </div>
   </div>
@@ -20,22 +20,54 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import {
+    formatProductPrice,
+    getProductAvailabilityDisplay,
+    hasKnownProductPrice,
+} from '../../utils/product-display';
 
 const props = defineProps({
-  price: { type: Number, required: true },
+  price: { type: [Number, String], default: 0 },
   currency: { type: String, default: 'Br' },
   vitebskQty: { type: Number, default: 0 },
-  minskQty: { type: Number, default: 0 }
+  minskQty: { type: Number, default: 0 },
+  availabilityStatus: { type: String, default: null }
 });
 
 const isVisible = ref(false);
 
 const formattedPrice = computed(() => {
-  return props.price.toLocaleString('ru-RU');
+  return formatProductPrice(props.price);
 });
 
-const isUnavailableInCities = computed(() => {
-  return Number(props.vitebskQty) <= 0 && Number(props.minskQty) <= 0;
+const hasKnownPrice = computed(() => hasKnownProductPrice(props.price));
+
+const availabilityState = computed(() => {
+  return getProductAvailabilityDisplay({
+    vitebskQty: props.vitebskQty,
+    minskQty: props.minskQty,
+    availabilityStatus: props.availabilityStatus,
+  });
+});
+
+const shouldInquire = computed(() => {
+  return !hasKnownPrice.value || !availabilityState.value.canOrder;
+});
+
+const stockNote = computed(() => availabilityState.value.message);
+
+const actionLabel = computed(() => {
+  if (!hasKnownPrice.value && availabilityState.value.isUnknown) return 'Уточнить';
+  if (!hasKnownPrice.value) return 'Уточнить цену';
+  if (availabilityState.value.isExplicitOutOfStock) return 'Сообщить';
+  if (!availabilityState.value.canOrder) return 'Уточнить наличие';
+  return 'В корзину';
+});
+
+const actionIcon = computed(() => {
+  if (availabilityState.value.isExplicitOutOfStock) return 'notifications_active';
+  if (shouldInquire.value) return 'support_agent';
+  return 'shopping_cart';
 });
 
 const handleScroll = () => {

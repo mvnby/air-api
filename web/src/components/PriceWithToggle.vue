@@ -5,10 +5,15 @@ import { getInstallationRates, getGlobalConfig, getProductById, submitProductAva
 import { addItem } from '../store/cart';
 import { addToast } from '../store/toast';
 import { validateRequiredBelarusPhone } from '../utils/validation';
+import {
+    formatProductPrice,
+    hasKnownProductPrice,
+    resolveProductAvailability,
+} from '../utils/product-display';
 
 const props = defineProps({
-  basePrice: { type: Number, required: true },
-  oldPrice: { type: Number, default: 0 },
+  basePrice: { type: [Number, String], default: 0 },
+  oldPrice: { type: [Number, String], default: 0 },
   installPrice: { type: Number, default: 600 }, // Fallback/Legacy
   currency: { type: String, default: 'р.' },
   showToggle: { type: Boolean, default: true },
@@ -44,10 +49,11 @@ const notifyForm = ref({
 const notifyPhoneInputRef = ref(null);
 let notifyMask = null;
 
-const liveBasePrice = ref(props.basePrice);
-const liveOldPrice = ref(props.oldPrice);
+const liveBasePrice = ref(Number(props.basePrice) || 0);
+const liveOldPrice = ref(Number(props.oldPrice) || 0);
 const liveVitebskQty = ref(Number(props.vitebskQty) || 0);
 const liveMinskQty = ref(Number(props.minskQty) || 0);
+const liveAvailabilityStatus = ref(props.availabilityStatus);
 
 onMounted(async () => {
     try {
@@ -65,10 +71,11 @@ onMounted(async () => {
             discount.value = parseInt(configData.install_discount, 10) || 0;
         }
         if (freshProduct && freshProduct.price !== undefined) {
-            liveBasePrice.value = freshProduct.price;
-            liveOldPrice.value = freshProduct.old_price || 0;
+            liveBasePrice.value = Number(freshProduct.price) || 0;
+            liveOldPrice.value = Number(freshProduct.old_price) || 0;
             liveVitebskQty.value = Number(freshProduct.vitebsk_qty) || 0;
             liveMinskQty.value = Number(freshProduct.minsk_qty) || 0;
+            liveAvailabilityStatus.value = freshProduct.availability_status;
         }
     } finally {
         loading.value = false;
@@ -187,38 +194,63 @@ const finalInstallPrice = computed(() => {
     return Math.max(0, effectiveInstallPrice.value - discount.value);
 });
 
-const isUnavailableInCities = computed(() => {
-    return liveVitebskQty.value <= 0 && liveMinskQty.value <= 0;
+const hasKnownPrice = computed(() => hasKnownProductPrice(liveBasePrice.value));
+
+const availabilityState = computed(() => {
+    return resolveProductAvailability({
+        vitebskQty: liveVitebskQty.value,
+        minskQty: liveMinskQty.value,
+        availabilityStatus: liveAvailabilityStatus.value,
+    });
 });
 
 const availabilityMessage = computed(() => {
-    if (liveVitebskQty.value > 0) return 'В наличии в Витебске';
-    if (liveMinskQty.value > 0) return 'В наличии в Минске';
-    return 'Нет в наличии';
+    return availabilityState.value.message;
 });
 
 const availabilityTone = computed(() => {
-    if (liveVitebskQty.value > 0) return 'vitebsk';
-    if (liveMinskQty.value > 0) return 'minsk';
-    return 'out';
+    return availabilityState.value.tone;
+});
+
+const isExplicitOutOfStock = computed(() => {
+    return availabilityState.value.isExplicitOutOfStock;
+});
+
+const shouldOpenInquiry = computed(() => {
+    return !hasKnownPrice.value || !availabilityState.value.canOrder;
+});
+
+const canAddToCart = computed(() => {
+    return hasKnownPrice.value && availabilityState.value.canOrder;
 });
 
 const shouldShowToggle = computed(() => {
-    if (isUnavailableInCities.value) return false;
+    if (!canAddToCart.value) return false;
     if (!matchedRate.value) return false;
     if (!matchedRate.value.is_fixed) return false;
     return props.showToggle;
 });
 
 // Force ru-RU to match server side rendering
-const format = (num) => num.toLocaleString('ru-RU');
+const format = (num) => Number(num).toLocaleString('ru-RU');
 
 const priceDisplay = computed(() => {
+    if (!hasKnownPrice.value) {
+        return {
+            current: formatProductPrice(liveBasePrice.value),
+            old: null,
+            showCurrency: false,
+            isInquiry: true,
+        };
+    }
+
     // Case 1: No match or non-fixed -> Just Product Price
     if (!matchedRate.value || !matchedRate.value.is_fixed) {
          return {
              current: format(liveBasePrice.value),
-             old: null
+             old: null,
+             showCurrency: true,
+             isInquiry: false,
          };
     }
     
@@ -226,24 +258,28 @@ const priceDisplay = computed(() => {
     if (!isInstalled.value) {
         return {
             current: format(liveBasePrice.value),
-            old: null
+            old: null,
+            showCurrency: true,
+            isInquiry: false,
         };
     }
 
     // Case 3: Fixed rate + Toggled -> Product + Discounted Install
-    const total = liveBasePrice.value + finalInstallPrice.value;
-    const oldTotal = liveBasePrice.value + effectiveInstallPrice.value;
+    const total = Number(liveBasePrice.value) + Number(finalInstallPrice.value);
+    const oldTotal = Number(liveBasePrice.value) + Number(effectiveInstallPrice.value);
 
     return {
         current: format(total),
-        old: discount.value > 0 ? format(oldTotal) : null
+        old: discount.value > 0 ? format(oldTotal) : null,
+        showCurrency: true,
+        isInquiry: false,
     };
 });
 
 const discountPct = computed(() => {
-    if (!liveOldPrice.value || !liveBasePrice.value) return 0;
+    if (!liveOldPrice.value || !hasKnownPrice.value) return 0;
     const diff = liveOldPrice.value - liveBasePrice.value;
-    return Math.round((diff / liveOldPrice.value) * 100);
+    return diff > 0 ? Math.round((diff / liveOldPrice.value) * 100) : 0;
 });
 
 const toggle = (e) => {
@@ -253,13 +289,13 @@ const toggle = (e) => {
 }
 
 const addToCart = () => {
-    if (isUnavailableInCities.value) return;
+    if (!canAddToCart.value) return;
     if (!props.id) return;
     
     addItem({
         id: props.id,
         name: props.title,
-        price: liveBasePrice.value,
+        price: Number(liveBasePrice.value),
         image: props.image,
         productId: props.productId,
         withInstallation: isInstalled.value,
@@ -277,17 +313,46 @@ const addToCart = () => {
 }
 
 const buttonLabel = computed(() => {
-    if (isUnavailableInCities.value) return 'Сообщить о поступлении';
+    if (!hasKnownPrice.value && availabilityState.value.isUnknown) return 'Уточнить цену и наличие';
+    if (!hasKnownPrice.value) return 'Уточнить цену';
+    if (isExplicitOutOfStock.value) return 'Сообщить о поступлении';
+    if (!availabilityState.value.canOrder) return 'Уточнить наличие';
     return buttonState.value === 'success' ? 'Добавлено' : 'В корзину';
 });
 
 const buttonIcon = computed(() => {
-    if (isUnavailableInCities.value) return 'notifications_active';
+    if (isExplicitOutOfStock.value) return 'notifications_active';
+    if (shouldOpenInquiry.value) return 'support_agent';
     return buttonState.value === 'success' ? 'check' : 'shopping_cart';
 });
 
 const buttonVariant = computed(() => {
-    return isUnavailableInCities.value ? 'notify' : 'primary';
+    return shouldOpenInquiry.value ? 'notify' : 'primary';
+});
+
+const inquiryModalTitle = computed(() => {
+    if (!hasKnownPrice.value && availabilityState.value.isUnknown) return 'Уточнить цену и наличие';
+    if (!hasKnownPrice.value) return 'Уточнить цену';
+    if (isExplicitOutOfStock.value) return 'Сообщить о поступлении';
+    return 'Уточнить наличие';
+});
+
+const inquiryModalDescription = computed(() => {
+    if (!hasKnownPrice.value && availabilityState.value.isUnknown) {
+        return 'Оставьте телефон, и мы уточним цену и наличие этой модели.';
+    }
+    if (!hasKnownPrice.value) {
+        return 'Оставьте телефон, и мы уточним актуальную цену этой модели.';
+    }
+    if (isExplicitOutOfStock.value) {
+        return 'Оставьте телефон, и мы сообщим, когда модель появится в наличии.';
+    }
+    return 'Оставьте телефон, и мы уточним наличие и срок поставки этой модели.';
+});
+
+const inquirySuccessText = computed(() => {
+    if (isExplicitOutOfStock.value) return 'Сообщим, когда товар появится в наличии.';
+    return 'Менеджер свяжется с вами и уточнит детали.';
 });
 
 const validateNotifyPhone = () => {
@@ -311,7 +376,7 @@ const closeNotifyModal = () => {
 };
 
 const handlePrimaryAction = () => {
-    if (isUnavailableInCities.value) {
+    if (shouldOpenInquiry.value) {
         openNotifyModal();
         return;
     }
@@ -336,7 +401,7 @@ const submitNotifyLead = async () => {
     }
 
     notifySuccess.value = true;
-    addToast(`Запрос на поступление отправлен: ${props.title}`);
+    addToast(`Запрос отправлен: ${props.title}`);
     setTimeout(() => {
         closeNotifyModal();
     }, 2500);
@@ -348,7 +413,7 @@ const submitNotifyLead = async () => {
     <!-- Price Display -->
     <div class="price-wrapper">
         <!-- Sale Badge -->
-        <div v-if="liveOldPrice" class="discount-badge sale-badge">
+        <div v-if="discountPct > 0" class="discount-badge sale-badge">
           -{{ discountPct }}%
         </div>
         
@@ -356,7 +421,7 @@ const submitNotifyLead = async () => {
             {{ priceDisplay.old }} <span class="price-byn"></span>
         </span>
         <span class="final-price" :class="{ 'pulse-primary': isInstalled }">
-          {{ priceDisplay.current }} <span class="price-byn"></span>
+          {{ priceDisplay.current }} <span v-if="priceDisplay.showCurrency" class="price-byn"></span>
         </span>
     </div>
 
@@ -405,7 +470,7 @@ const submitNotifyLead = async () => {
     <div class="actions-container">
         <button 
             class="btn-action js-track-cart"
-            :class="[buttonVariant, { success: buttonState === 'success' && !isUnavailableInCities }]"
+            :class="[buttonVariant, { success: buttonState === 'success' && canAddToCart }]"
             @click.stop="handlePrimaryAction"
         >
             <span class="material-icons-round">{{ buttonIcon }}</span>
@@ -425,9 +490,9 @@ const submitNotifyLead = async () => {
         </button>
 
         <div v-if="!notifySuccess">
-          <h3 class="modal-title">Сообщить о поступлении</h3>
+          <h3 class="modal-title">{{ inquiryModalTitle }}</h3>
           <p class="modal-desc">
-            Оставьте телефон, и мы сообщим, когда <strong>{{ title }}</strong> появится в наличии.
+            {{ inquiryModalDescription }}
           </p>
 
           <form class="notify-form" @submit.prevent="submitNotifyLead">
@@ -467,7 +532,7 @@ const submitNotifyLead = async () => {
             <span class="material-icons-round">check_circle</span>
           </div>
           <h3>Запрос отправлен</h3>
-          <p>Сообщим, когда товар появится в наличии.</p>
+          <p>{{ inquirySuccessText }}</p>
         </div>
       </div>
     </div>
