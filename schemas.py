@@ -35,6 +35,64 @@ class Meta(BaseModel):
     limit: int
     pages: int
 
+
+class ManagerMediaAssetResponse(BaseModel):
+    id: int
+    parent_asset_id: Optional[int] = None
+    title: str
+    alt_text: Optional[str] = None
+    description: Optional[str] = None
+    kind: str
+    tags: List[str] = []
+    variant_type: str
+    url: str
+    original_url: Optional[str] = None
+    source_filename: Optional[str] = None
+    mime_type: str
+    storage_provider: str
+    processing_status: str
+    processing_error: Optional[str] = None
+    content_hash: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    size_bytes: int = 0
+    usage_count: int = 0
+    created_by: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ManagerMediaAssetListResponse(BaseModel):
+    items: List[ManagerMediaAssetResponse]
+    meta: Meta
+
+
+class ManagerMediaAssetUpdatePayload(BaseModel):
+    title: Optional[str] = None
+    alt_text: Optional[str] = None
+    description: Optional[str] = None
+    kind: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+
+class ManagerMediaAssetCropPayload(BaseModel):
+    x: int = Field(ge=0)
+    y: int = Field(ge=0)
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    title: Optional[str] = None
+
+
+class ManagerMediaAssetUrlUploadPayload(BaseModel):
+    url: str
+    kind: str = "misc"
+    tags: List[str] = []
+
+
+class ManagerMediaAssetUploadResponse(BaseModel):
+    uploaded: int
+    items: List[ManagerMediaAssetResponse]
+
 # --- CATALOG ---
 
 class ProductBase(BaseModel):

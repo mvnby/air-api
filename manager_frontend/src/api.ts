@@ -13,8 +13,10 @@ import {
     ManagerTariffsService,
     ManagerServiceEstimatesService,
     ManagerBrandsService,
+    ManagerMediaService,
     SystemService,
     ApiService,
+    type Body_upload_media_assets,
     type ProductUpdate,
     type ManagerCustomerBranchCreatePayload,
     type ManagerCustomerBranchUpdatePayload,
@@ -72,6 +74,12 @@ import {
     type ManagerBrandSeriesResponse,
     type ManagerBrandSeriesUpdatePayload,
     type ManagerBrandUpdatePayload,
+    type ManagerMediaAssetCropPayload,
+    type ManagerMediaAssetListResponse,
+    type ManagerMediaAssetResponse,
+    type ManagerMediaAssetUpdatePayload,
+    type ManagerMediaAssetUrlUploadPayload,
+    type ManagerMediaAssetUploadResponse,
     type ProductImageVariantBatchProcessResponse,
     type ProductImageVariantCandidateResponse,
     type ProductImageVariantCandidatesResponse,
@@ -129,6 +137,15 @@ export type {
     ManagerBrandSeriesCreatePayload,
     ManagerBrandSeriesUpdatePayload,
     ManagerBrandUpdatePayload,
+};
+export type {
+    Body_upload_media_assets,
+    ManagerMediaAssetCropPayload,
+    ManagerMediaAssetListResponse,
+    ManagerMediaAssetResponse,
+    ManagerMediaAssetUpdatePayload,
+    ManagerMediaAssetUrlUploadPayload,
+    ManagerMediaAssetUploadResponse,
 };
 export type {
     ProductImageVariantBatchProcessResponse,
@@ -215,6 +232,48 @@ export const api = {
 
     async getDashboardStats() {
         return await ManagerDashboardService.getDashboardStats();
+    },
+
+    async listMediaAssets(params: {
+        page?: number;
+        limit?: number;
+        q?: string | null;
+        kind?: string | null;
+        tag?: string | null;
+        status?: string | null;
+    } = {}): Promise<ManagerMediaAssetListResponse> {
+        return await ManagerMediaService.listMediaAssets(
+            params.page ?? 1,
+            params.limit ?? 40,
+            params.q ?? null,
+            params.kind ?? null,
+            params.tag ?? null,
+            params.status ?? null,
+        );
+    },
+
+    async uploadMediaAssets(formData: Body_upload_media_assets): Promise<ManagerMediaAssetUploadResponse> {
+        return await ManagerMediaService.uploadMediaAssets(formData);
+    },
+
+    async uploadMediaAssetFromUrl(payload: ManagerMediaAssetUrlUploadPayload): Promise<ManagerMediaAssetUploadResponse> {
+        return await ManagerMediaService.uploadMediaAssetFromUrl(payload);
+    },
+
+    async updateMediaAsset(assetId: number, payload: ManagerMediaAssetUpdatePayload): Promise<ManagerMediaAssetResponse> {
+        return await ManagerMediaService.updateMediaAsset(assetId, payload);
+    },
+
+    async cropMediaAsset(assetId: number, payload: ManagerMediaAssetCropPayload): Promise<ManagerMediaAssetResponse> {
+        return await ManagerMediaService.cropMediaAsset(assetId, payload);
+    },
+
+    async removeMediaAssetBackground(assetId: number): Promise<ManagerMediaAssetResponse> {
+        return await ManagerMediaService.removeMediaAssetBackground(assetId);
+    },
+
+    async deleteMediaAsset(assetId: number, force = false) {
+        return await ManagerMediaService.deleteMediaAsset(assetId, force);
     },
 
     async getManagerOrders(params: {
