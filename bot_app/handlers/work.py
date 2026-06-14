@@ -10,6 +10,7 @@ from services.bot_quick_order_service import BotQuickOrderService
 from services.bot_service import BotService
 from services.bot_task_service import BotTaskService
 from ..keyboards import (
+    get_staff_main_menu,
     quick_order_confirm_keyboard,
     selection_result_keyboard,
     task_actions_keyboard,
@@ -123,7 +124,8 @@ async def selection_start(message: types.Message, state: FSMContext):
         return
     await state.set_state(ShopState.waiting_for_selection)
     await message.answer(
-        "Напишите запрос: например, 20 м² и 35 м², нужны бюджетный, оптимальный и премиум варианты.",
+        "Напишите запрос: например, 7х2, 7, 12 или 9 инвертора. "
+        "Можно добавить: бюджетнее, премиум, ON-OFF, серверная.",
         reply_markup=ReplyKeyboardRemove(),
     )
 
@@ -148,6 +150,7 @@ async def selection_process(message: types.Message, state: FSMContext):
     )
     if not delivered:
         await message.answer(fallback_text, parse_mode="HTML", reply_markup=keyboard)
+    await message.answer("Готово. Можно продолжить работу из меню.", reply_markup=get_staff_main_menu(context))
 
 
 @router.callback_query(F.data == "selection_client_text")
