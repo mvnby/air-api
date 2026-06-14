@@ -46,6 +46,36 @@ def test_quick_order_fallback_parses_service_phone_address_and_date():
     assert draft["target_date"] == "2026-06-15T14:00:00"
 
 
+def test_quick_order_fallback_parses_weekday_and_loose_time():
+    draft = BotQuickOrderService.parse_text_fallback(
+        "Монтаж, Иван, +375 29 123-45-67, в понедельник к 14",
+        now=datetime(2026, 6, 14, 10, 0),
+    )
+
+    assert draft["service_type"] == "install_only"
+    assert draft["target_date"] == "2026-06-15T14:00:00"
+
+
+def test_quick_order_fallback_parses_weekday_abbreviation_and_dot_time():
+    draft = BotQuickOrderService.parse_text_fallback(
+        "Ремонт, пт в 14.30, +375 29 123-45-67",
+        now=datetime(2026, 6, 14, 10, 0),
+    )
+
+    assert draft["service_type"] == "repair"
+    assert draft["target_date"] == "2026-06-19T14:30:00"
+
+
+def test_quick_order_fallback_does_not_treat_date_day_as_time():
+    draft = BotQuickOrderService.parse_text_fallback(
+        "ТО, Иван, +375 29 123-45-67, на 15.06",
+        now=datetime(2026, 6, 14, 10, 0),
+    )
+
+    assert draft["service_type"] == "maintenance"
+    assert draft["target_date"] == "2026-06-15T09:00:00"
+
+
 def test_quick_order_rich_preview_formats_and_escapes_fields():
     draft = {
         "name": "Иван <опасно>",
