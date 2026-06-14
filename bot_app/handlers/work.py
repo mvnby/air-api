@@ -7,6 +7,7 @@ from core.database import async_session_maker
 from services.bot_access_service import BotAccessService
 from services.bot_product_selection_service import BotProductSelectionService
 from services.bot_quick_order_service import BotQuickOrderService
+from services.bot_service import BotService
 from services.bot_task_service import BotTaskService
 from ..keyboards import (
     quick_order_confirm_keyboard,
@@ -60,11 +61,15 @@ async def quick_order_parse(message: types.Message, state: FSMContext):
         return
     draft = await BotQuickOrderService.parse_text(text)
     await state.update_data(quick_order_draft=draft)
-    await message.answer(
-        BotQuickOrderService.format_draft_preview(draft),
-        parse_mode="HTML",
-        reply_markup=quick_order_confirm_keyboard(),
+    keyboard = quick_order_confirm_keyboard()
+    fallback_text = BotQuickOrderService.format_draft_preview(draft)
+    delivered = await BotService.send_rich_message(
+        message.chat.id,
+        BotQuickOrderService.format_draft_preview_rich_html(draft),
+        reply_markup=keyboard,
     )
+    if not delivered:
+        await message.answer(fallback_text, parse_mode="HTML", reply_markup=keyboard)
 
 
 @router.callback_query(F.data == "quick_order_create")
@@ -172,11 +177,15 @@ async def my_tasks(message: types.Message):
         return
     async with async_session_maker() as session:
         tasks = await BotTaskService.list_my_tasks(session, message.from_user.id if message.from_user else None)
-    await message.answer(
-        BotTaskService.format_tasks(tasks),
-        parse_mode="HTML",
-        reply_markup=task_actions_keyboard(tasks),
+    keyboard = task_actions_keyboard(tasks)
+    fallback_text = BotTaskService.format_tasks(tasks)
+    delivered = await BotService.send_rich_message(
+        message.chat.id,
+        BotTaskService.format_tasks_rich_html(tasks),
+        reply_markup=keyboard,
     )
+    if not delivered:
+        await message.answer(fallback_text, parse_mode="HTML", reply_markup=keyboard)
 
 
 @router.callback_query(F.data.startswith("task_accept_") | F.data.startswith("task_done_"))

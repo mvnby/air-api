@@ -13,6 +13,7 @@ from models import GlobalConfig, StaffUser
 from services.bot_access_service import BotAccessService
 from services.bot_product_selection_service import BotProductSelectionService
 from services.bot_quick_order_service import BotQuickOrderService
+from services.bot_task_service import BotTaskService
 from services.product_read_service import ProductReadService
 from services.product_service import ProductService
 from bot_app.keyboards import selection_result_keyboard
@@ -43,6 +44,54 @@ def test_quick_order_fallback_parses_service_phone_address_and_date():
     assert draft["name"] == "Иван"
     assert draft["address"] == "Победы 15"
     assert draft["target_date"] == "2026-06-15T14:00:00"
+
+
+def test_quick_order_rich_preview_formats_and_escapes_fields():
+    draft = {
+        "name": "Иван <опасно>",
+        "phone": "+375 29 123-45-67",
+        "address": "Победы 15",
+        "service_type": "maintenance",
+        "target_date": "2026-06-15T14:00:00",
+        "request_text": "ТО <script>, Иван, Победы 15",
+    }
+
+    rich = BotQuickOrderService.format_draft_preview_rich_html(draft)
+    fallback = BotQuickOrderService.format_draft_preview(draft)
+
+    assert "<h3>Черновик заказа</h3>" in rich
+    assert "<b>Услуга:</b> Обслуживание" in rich
+    assert "<b>Дата:</b> 15.06.2026 14:00" in rich
+    assert "Иван &lt;опасно&gt;" in rich
+    assert "<script>" not in rich
+    assert "Иван &lt;опасно&gt;" in fallback
+    assert "<script>" not in fallback
+
+
+def test_tasks_rich_html_formats_and_escapes_cards():
+    tasks = [
+        {
+            "kind": "stage",
+            "id": 10,
+            "order_id": 42,
+            "title": "Монтаж <важно>",
+            "start_time": datetime(2026, 6, 15, 14, 0),
+            "customer_name": "Иван",
+            "customer_phone": "+375291234567",
+            "address": "Победы 15",
+            "comment": "Не забыть <лестницу>",
+        }
+    ]
+
+    rich = BotTaskService.format_tasks_rich_html(tasks)
+    fallback = BotTaskService.format_tasks(tasks)
+
+    assert "<h3>Мои ближайшие задачи</h3>" in rich
+    assert "#42 - Монтаж &lt;важно&gt;" in rich
+    assert "<b>Дата:</b> 15.06.2026 14:00" in rich
+    assert "Не забыть &lt;лестницу&gt;" in rich
+    assert "<важно>" not in rich
+    assert "Монтаж &lt;важно&gt;" in fallback
 
 
 def test_product_caption_contains_public_product_link(monkeypatch):

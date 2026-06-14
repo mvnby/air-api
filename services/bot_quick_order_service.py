@@ -2,6 +2,7 @@ import json
 import logging
 import re
 from datetime import datetime, timedelta
+from html import escape
 from typing import Any, Optional
 
 import httpx
@@ -225,26 +226,50 @@ class BotQuickOrderService:
         return normalized
 
     @classmethod
-    def format_draft_preview(cls, draft: dict[str, Any]) -> str:
+    def _display_target_date(cls, draft: dict[str, Any]) -> str | None:
         target_date = draft.get("target_date")
         if target_date:
             try:
                 dt = datetime.fromisoformat(str(target_date).replace("Z", "+00:00"))
-                target_date = dt.strftime("%d.%m.%Y %H:%M")
+                return dt.strftime("%d.%m.%Y %H:%M")
             except ValueError:
-                pass
+                return str(target_date)
+        return None
+
+    @classmethod
+    def format_draft_preview(cls, draft: dict[str, Any]) -> str:
+        target_date = cls._display_target_date(draft)
         service_type = draft.get("service_type")
         lines = [
             "<b>Черновик заказа</b>",
-            f"Клиент: {draft.get('name') or 'не указан'}",
-            f"Телефон: {draft.get('phone') or 'не указан'}",
-            f"Адрес: {draft.get('address') or 'не указан'}",
-            f"Услуга: {cls.SERVICE_LABELS.get(service_type, 'не указана')}",
-            f"Дата: {target_date or 'не указана'}",
+            f"Клиент: {escape(str(draft.get('name') or 'не указан'))}",
+            f"Телефон: {escape(str(draft.get('phone') or 'не указан'))}",
+            f"Адрес: {escape(str(draft.get('address') or 'не указан'))}",
+            f"Услуга: {escape(cls.SERVICE_LABELS.get(service_type, 'не указана'))}",
+            f"Дата: {escape(target_date or 'не указана')}",
             "",
-            f"<i>{draft.get('request_text') or ''}</i>",
+            f"<i>{escape(str(draft.get('request_text') or ''))}</i>",
         ]
         return "\n".join(lines)
+
+    @classmethod
+    def format_draft_preview_rich_html(cls, draft: dict[str, Any]) -> str:
+        target_date = cls._display_target_date(draft)
+        service_type = draft.get("service_type")
+        request_text = str(draft.get("request_text") or "").strip()
+        rich_html = (
+            "<h3>Черновик заказа</h3>"
+            "<p>"
+            f"<b>Клиент:</b> {escape(str(draft.get('name') or 'не указан'))}<br/>"
+            f"<b>Телефон:</b> {escape(str(draft.get('phone') or 'не указан'))}<br/>"
+            f"<b>Адрес:</b> {escape(str(draft.get('address') or 'не указан'))}<br/>"
+            f"<b>Услуга:</b> {escape(cls.SERVICE_LABELS.get(service_type, 'не указана'))}<br/>"
+            f"<b>Дата:</b> {escape(target_date or 'не указана')}"
+            "</p>"
+        )
+        if request_text:
+            rich_html += f"<blockquote>{escape(request_text)}</blockquote>"
+        return rich_html
 
     @classmethod
     async def create_order_from_draft(
