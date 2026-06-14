@@ -8,7 +8,11 @@ from services.bot_access_service import BotAccessService
 from services.bot_product_selection_service import BotProductSelectionService
 from services.bot_quick_order_service import BotQuickOrderService
 from services.bot_task_service import BotTaskService
-from ..keyboards import quick_order_confirm_keyboard, task_actions_keyboard
+from ..keyboards import (
+    quick_order_confirm_keyboard,
+    selection_result_keyboard,
+    task_actions_keyboard,
+)
 from ..states import ShopState
 
 router = Router()
@@ -128,8 +132,28 @@ async def selection_process(message: types.Message, state: FSMContext):
     query = (message.text or "").strip()
     async with async_session_maker() as session:
         selection = await BotProductSelectionService.build_selection(session, query)
-    await message.answer(BotProductSelectionService.format_selection(selection), parse_mode="HTML")
-    await state.clear()
+    await state.update_data(selection_client_text=BotProductSelectionService.format_client_selection(selection))
+    await state.set_state(None)
+    await message.answer(
+        BotProductSelectionService.format_selection(selection),
+        parse_mode="HTML",
+        reply_markup=selection_result_keyboard() if selection.get("areas") else None,
+    )
+
+
+@router.callback_query(F.data == "selection_client_text")
+async def selection_client_text(callback: CallbackQuery, state: FSMContext):
+    context = await _access_context(callback.from_user.id)
+    if not context.is_staff or not context.is_manager:
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+    data = await state.get_data()
+    text = str(data.get("selection_client_text") or "").strip()
+    if not text:
+        await callback.answer("Подбор не найден", show_alert=True)
+        return
+    await callback.message.answer(text)
+    await callback.answer("Можно переслать клиенту")
 
 
 @router.message(F.text == "📅 Календарь")

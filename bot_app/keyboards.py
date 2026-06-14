@@ -119,6 +119,14 @@ def quick_order_confirm_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def selection_result_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Текст клиенту", callback_data="selection_client_text")],
+        ]
+    )
+
+
 def task_actions_keyboard(tasks: list[dict]) -> InlineKeyboardMarkup | None:
     rows: list[list[InlineKeyboardButton]] = []
     for task in tasks[:5]:
