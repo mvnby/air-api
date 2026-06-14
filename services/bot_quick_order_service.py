@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from datetime import datetime, timedelta
 from typing import Any, Optional
@@ -8,7 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from schemas import ManagerOrderCreatePayload, OrderWorkStageCreatePayload
+from services.notification_service import NotificationService
 from services.order_service import OrderService
+
+logger = logging.getLogger(__name__)
 
 
 class BotQuickOrderService:
@@ -268,6 +272,7 @@ class BotQuickOrderService:
             raise ValueError("Не удалось создать заказ")
 
         service_type = normalized.get("service_type")
+        result = order
         if target_date and service_type != "maintenance":
             stage_payload = OrderWorkStageCreatePayload(
                 name=cls.SERVICE_LABELS.get(service_type, "Рабочая задача"),
@@ -275,6 +280,15 @@ class BotQuickOrderService:
                 manager_comment=normalized["request_text"],
             )
             updated = await OrderService.add_order_stage(session, int(order["id"]), stage_payload)
-            return updated or order
+            result = updated or order
 
-        return order
+        try:
+            await NotificationService.notify_admins_staff_order_created(
+                session,
+                int(order["id"]),
+                source_label="Telegram-бот",
+            )
+        except Exception:
+            logger.exception("BOT_QUICK_ORDER_NOTIFY_FAILED order_id=%s", order.get("id"))
+
+        return result
