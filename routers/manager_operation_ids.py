@@ -57,6 +57,13 @@ CLEANUP_MEDIA = "cleanup_media"
 GET_IMAGE_VARIANT_CANDIDATES = "get_image_variant_candidates"
 PROCESS_MISSING_IMAGE_VARIANTS = "process_missing_image_variants"
 REPROCESS_IMAGE_VARIANT = "reprocess_image_variant"
+LIST_MEDIA_ASSETS = "list_media_assets"
+UPLOAD_MEDIA_ASSETS = "upload_media_assets"
+UPLOAD_MEDIA_ASSET_FROM_URL = "upload_media_asset_from_url"
+UPDATE_MEDIA_ASSET = "update_media_asset"
+DELETE_MEDIA_ASSET = "delete_media_asset"
+CROP_MEDIA_ASSET = "crop_media_asset"
+REMOVE_MEDIA_ASSET_BACKGROUND = "remove_media_asset_background"
 CREATE_MAIN_IMAGE_CLEANUP_BATCH = "create_main_image_cleanup_batch"
 LIST_MAIN_IMAGE_CLEANUP_BATCHES = "list_main_image_cleanup_batches"
 LIST_MAIN_IMAGE_CLEANUP_ITEMS = "list_main_image_cleanup_items"
@@ -255,6 +262,13 @@ ALL_MANAGER_OPERATION_IDS = (
     GET_IMAGE_VARIANT_CANDIDATES,
     PROCESS_MISSING_IMAGE_VARIANTS,
     REPROCESS_IMAGE_VARIANT,
+    LIST_MEDIA_ASSETS,
+    UPLOAD_MEDIA_ASSETS,
+    UPLOAD_MEDIA_ASSET_FROM_URL,
+    UPDATE_MEDIA_ASSET,
+    DELETE_MEDIA_ASSET,
+    CROP_MEDIA_ASSET,
+    REMOVE_MEDIA_ASSET_BACKGROUND,
     CREATE_MAIN_IMAGE_CLEANUP_BATCH,
     LIST_MAIN_IMAGE_CLEANUP_BATCHES,
     LIST_MAIN_IMAGE_CLEANUP_ITEMS,

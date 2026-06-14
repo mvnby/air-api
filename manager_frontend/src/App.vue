@@ -7,6 +7,7 @@ import { getApiErrorMessage } from './utils/api-errors';
 import type { TelegramLoginPayload } from './api';
 
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
+const MediaLibraryView = defineAsyncComponent(() => import('./views/MediaLibraryView.vue'));
 const ProductMainImageCleanupView = defineAsyncComponent(() => import('./views/ProductMainImageCleanupView.vue'));
 const CustomersView = defineAsyncComponent(() => import('./views/CustomersView.vue'));
 const CustomerProfileView = defineAsyncComponent(() => import('./views/CustomerProfileView.vue'));
@@ -86,6 +87,7 @@ const navSections: NavSection[] = [
       { path: '/manager/supplier-mapping', label: 'Маппинг прайсов', icon: Link2, match: 'prefix' },
       { path: '/manager/brands', label: 'Бренды', icon: Award, match: 'prefix' },
       { path: '/manager/tags', label: 'Теги', icon: Tags, match: 'prefix' },
+      { path: '/manager/media', label: 'Медиатека', icon: ImageIcon, match: 'exact' },
       { path: '/manager/media/main-image-cleanup', label: 'Главные изображения', icon: ImageIcon, match: 'prefix' },
     ],
   },
@@ -187,6 +189,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/orders')) return 'orders';
   if (path.startsWith('/manager/calendar')) return 'calendar';
   if (path.startsWith('/manager/media/main-image-cleanup')) return 'main-image-cleanup';
+  if (path === '/manager/media') return 'media-library';
   if (path.startsWith('/manager/customers/profile')) return 'customer-profile';
   if (path.startsWith('/manager/customers')) return 'customers';
   if (path.startsWith('/manager/staff') || path.startsWith('/manager/users') || path.startsWith('/manager/installers')) return 'installers';
@@ -574,6 +577,7 @@ watch(currentPath, () => {
       <OrdersKanbanView v-else-if="currentView === 'orders'" :key="currentLocation" />
       <CalendarDashboard v-else-if="currentView === 'calendar'" :key="currentLocation" />
       <ProductMainImageCleanupView v-else-if="currentView === 'main-image-cleanup'" :key="currentLocation" />
+      <MediaLibraryView v-else-if="currentView === 'media-library'" :key="currentLocation" />
       <CustomerProfileView v-else-if="currentView === 'customer-profile'" :key="currentLocation" />
       <CustomersView v-else-if="currentView === 'customers'" :key="currentLocation" />
       <InstallersView v-else-if="currentView === 'installers'" :key="currentLocation" />

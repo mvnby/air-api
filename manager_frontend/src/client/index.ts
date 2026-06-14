@@ -25,6 +25,7 @@ export type { Body_register_manager_external_contract } from './models/Body_regi
 export type { Body_upload_local_images } from './models/Body_upload_local_images';
 export type { Body_upload_manager_customer_contract } from './models/Body_upload_manager_customer_contract';
 export type { Body_upload_manager_order_document } from './models/Body_upload_manager_order_document';
+export type { Body_upload_media_assets } from './models/Body_upload_media_assets';
 export type { BulkGalleryAddRequest } from './models/BulkGalleryAddRequest';
 export type { BulkGalleryDeleteRequest } from './models/BulkGalleryDeleteRequest';
 export type { BulkProductIdsRequest } from './models/BulkProductIdsRequest';
@@ -134,6 +135,12 @@ export type { ManagerInstallerUpdatePayload } from './models/ManagerInstallerUpd
 export type { ManagerInstallEstimateCalculatePayload } from './models/ManagerInstallEstimateCalculatePayload';
 export type { ManagerInstallEstimateResponse } from './models/ManagerInstallEstimateResponse';
 export type { ManagerInstallEstimateSavePayload } from './models/ManagerInstallEstimateSavePayload';
+export type { ManagerMediaAssetCropPayload } from './models/ManagerMediaAssetCropPayload';
+export type { ManagerMediaAssetListResponse } from './models/ManagerMediaAssetListResponse';
+export type { ManagerMediaAssetResponse } from './models/ManagerMediaAssetResponse';
+export type { ManagerMediaAssetUpdatePayload } from './models/ManagerMediaAssetUpdatePayload';
+export type { ManagerMediaAssetUploadResponse } from './models/ManagerMediaAssetUploadResponse';
+export type { ManagerMediaAssetUrlUploadPayload } from './models/ManagerMediaAssetUrlUploadPayload';
 export type { ManagerMediaBulkAddResponse } from './models/ManagerMediaBulkAddResponse';
 export type { ManagerMediaBulkDeleteResponse } from './models/ManagerMediaBulkDeleteResponse';
 export type { ManagerMediaBulkUploadResponse } from './models/ManagerMediaBulkUploadResponse';
@@ -298,6 +305,7 @@ export { ManagerInstallersService } from './services/ManagerInstallersService';
 export { ManagerLeadsService } from './services/ManagerLeadsService';
 export { ManagerLeadsInboxService } from './services/ManagerLeadsInboxService';
 export { ManagerMailService } from './services/ManagerMailService';
+export { ManagerMediaService } from './services/ManagerMediaService';
 export { ManagerOrdersService } from './services/ManagerOrdersService';
 export { ManagerRepairComplaintsService } from './services/ManagerRepairComplaintsService';
 export { ManagerServiceEstimatesService } from './services/ManagerServiceEstimatesService';
