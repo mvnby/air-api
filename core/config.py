@@ -83,6 +83,7 @@ class Settings(BaseSettings):
     # Static Files
     STATIC_DIR: str = "static"
     UPLOAD_DIR: str = "static/uploads"
+    PUBLIC_SITE_URL: str = "https://mvn.by"
 
     # Product media storage. Default stays local so CI/deploy do not require
     # R2/S3 secrets unless PRODUCT_MEDIA_STORAGE_PROVIDER is changed.
