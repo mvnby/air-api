@@ -94,6 +94,35 @@ def test_tasks_rich_html_formats_and_escapes_cards():
     assert "Монтаж &lt;важно&gt;" in fallback
 
 
+def test_task_report_builder_keeps_text_report_plain():
+    report = BotTaskService.build_stage_report(text="Фреон дозаправлен, трасса проверена")
+
+    assert report == "Фреон дозаправлен, трасса проверена"
+
+
+def test_task_report_builder_accepts_photo_with_caption():
+    report = BotTaskService.build_stage_report(
+        caption="Фото после обслуживания",
+        photo_file_id="AgACAgIAAxkBAAIB_photo",
+    )
+
+    assert report == (
+        "Фото после обслуживания\n"
+        "\n"
+        "Вложения:\n"
+        "- Фото: AgACAgIAAxkBAAIB_photo"
+    )
+
+
+def test_task_report_builder_accepts_document_without_caption():
+    report = BotTaskService.build_stage_report(
+        document_file_id="BQACAgIAAxkBAAIB_doc",
+        document_name="акт выполненных работ.pdf",
+    )
+
+    assert report == "Вложения:\n- Документ: акт выполненных работ.pdf (BQACAgIAAxkBAAIB_doc)"
+
+
 def test_product_caption_contains_public_product_link(monkeypatch):
     monkeypatch.setattr(
         "services.bot_product_selection_service.settings",

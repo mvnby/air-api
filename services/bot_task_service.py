@@ -168,6 +168,34 @@ class BotTaskService:
         return "".join(blocks)
 
     @staticmethod
+    def build_stage_report(
+        *,
+        text: str | None = None,
+        caption: str | None = None,
+        photo_file_id: str | None = None,
+        document_file_id: str | None = None,
+        document_name: str | None = None,
+    ) -> str:
+        body = (text or caption or "").strip()
+        lines: list[str] = [body] if body else []
+        attachments: list[str] = []
+
+        if photo_file_id:
+            attachments.append(f"Фото: {photo_file_id}")
+
+        if document_file_id:
+            safe_name = " ".join((document_name or "файл").split())[:120] or "файл"
+            attachments.append(f"Документ: {safe_name} ({document_file_id})")
+
+        if attachments:
+            if lines:
+                lines.append("")
+            lines.append("Вложения:")
+            lines.extend(f"- {attachment}" for attachment in attachments)
+
+        return "\n".join(lines).strip()
+
+    @staticmethod
     async def update_stage_status(
         session: AsyncSession,
         stage_id: int,

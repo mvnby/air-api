@@ -212,7 +212,7 @@ async def task_report_start(callback: CallbackQuery, state: FSMContext):
     stage_id = int((callback.data or "").rsplit("_", 1)[-1])
     await state.update_data(task_report_stage_id=stage_id)
     await state.set_state(ShopState.waiting_for_task_report)
-    await callback.message.answer("Пришлите комментарий/отчет по задаче.")
+    await callback.message.answer("Пришлите комментарий/отчет по задаче: текст, фото или документ с подписью.")
     await callback.answer()
 
 
@@ -220,7 +220,15 @@ async def task_report_start(callback: CallbackQuery, state: FSMContext):
 async def task_report_finish(message: types.Message, state: FSMContext):
     data = await state.get_data()
     stage_id = int(data.get("task_report_stage_id") or 0)
-    report = (message.text or "").strip()
+    photo_file_id = message.photo[-1].file_id if message.photo else None
+    document = message.document
+    report = BotTaskService.build_stage_report(
+        text=message.text,
+        caption=message.caption,
+        photo_file_id=photo_file_id,
+        document_file_id=document.file_id if document else None,
+        document_name=document.file_name if document else None,
+    )
     if not stage_id or not report:
         await message.answer("Отчет пустой, попробуйте еще раз.")
         return
