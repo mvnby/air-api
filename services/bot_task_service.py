@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 from html import escape
 from typing import Any
@@ -8,7 +9,10 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from models import Order, OrderInstaller, OrderStageStatus, OrderWorkStage, StaffUser
+from services.notification_service import NotificationService
 from services.staff_user_service import StaffUserService
+
+logger = logging.getLogger(__name__)
 
 
 class BotTaskService:
@@ -210,6 +214,10 @@ class BotTaskService:
         stage.status = OrderStageStatus(status)
         session.add(stage)
         await session.commit()
+        try:
+            await NotificationService.notify_admins_work_stage_status_changed(session, stage_id)
+        except Exception:
+            logger.exception("BOT_TASK_STATUS_NOTIFY_FAILED stage_id=%s", stage_id)
         return True
 
     @staticmethod

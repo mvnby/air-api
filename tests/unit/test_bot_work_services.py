@@ -10,6 +10,7 @@ from sqlmodel import SQLModel
 
 from crud.product import ProductDAO
 from models import GlobalConfig, StaffUser
+from models.common import OrderStageStatus
 from services.bot_access_service import BotAccessService
 from services.bot_product_selection_service import BotProductSelectionService
 from services.bot_quick_order_service import BotQuickOrderService
@@ -151,6 +152,51 @@ def test_task_report_builder_accepts_document_without_caption():
     )
 
     assert report == "Вложения:\n- Документ: акт выполненных работ.pdf (BQACAgIAAxkBAAIB_doc)"
+
+
+@pytest.mark.asyncio
+async def test_task_status_update_notifies_admins(monkeypatch):
+    calls = {}
+    stage = SimpleNamespace(id=10, installer_id=7, status=OrderStageStatus.PLANNED)
+    staff = SimpleNamespace(legacy_installer_id=7)
+
+    class FakeSession:
+        async def get(self, model, stage_id):
+            calls["get"] = {"model": model, "stage_id": stage_id}
+            return stage
+
+        def add(self, item):
+            calls["add"] = item
+
+        async def commit(self):
+            calls["commit"] = True
+
+    async def fake_staff_by_telegram_id(session, telegram_id):
+        calls["staff_lookup"] = {"session": session, "telegram_id": telegram_id}
+        return staff
+
+    async def fake_notify(session, stage_id):
+        calls["notify"] = {"session": session, "stage_id": stage_id}
+        return 1
+
+    monkeypatch.setattr(BotTaskService, "_staff_by_telegram_id", fake_staff_by_telegram_id)
+    monkeypatch.setattr(
+        "services.bot_task_service.NotificationService.notify_admins_work_stage_status_changed",
+        fake_notify,
+    )
+
+    session = FakeSession()
+    ok = await BotTaskService.update_stage_status(
+        session,
+        10,
+        "completed",
+        telegram_id=777,
+    )
+
+    assert ok
+    assert stage.status == OrderStageStatus.COMPLETED
+    assert calls["commit"] is True
+    assert calls["notify"] == {"session": session, "stage_id": 10}
 
 
 def test_product_caption_contains_public_product_link(monkeypatch):

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from models.order import BankReceipt, Order, OrderProductLink
+from models.order import BankReceipt, Order, OrderProductLink, OrderWorkStage
 from services.bot_service import BotService
 from services.staff_user_service import StaffUserService
 
@@ -20,6 +20,12 @@ class NotificationService:
         "maintenance": "Обслуживание",
         "repair": "Ремонт",
         "dismantling": "Демонтаж",
+    }
+    WORK_STAGE_STATUS_LABELS = {
+        "planned": "запланирована",
+        "in_progress": "принята в работу",
+        "completed": "выполнена",
+        "canceled": "отменена",
     }
 
     @staticmethod
@@ -153,6 +159,91 @@ class NotificationService:
                 sent += 1
             except Exception:
                 logger.exception("NOTIFY_STAFF_ORDER_SEND_FAILED order_id=%s admin_id=%s", order.id, admin_id)
+        return sent
+
+    @staticmethod
+    async def notify_admins_work_stage_status_changed(
+        session: AsyncSession,
+        stage_id: int,
+    ) -> int:
+        admin_ids = await NotificationService._admin_recipient_ids(session)
+        if not admin_ids:
+            return 0
+
+        stmt = (
+            select(OrderWorkStage)
+            .where(OrderWorkStage.id == stage_id)
+            .options(
+                selectinload(OrderWorkStage.order).selectinload(Order.customer),
+                selectinload(OrderWorkStage.installer),
+            )
+        )
+        result = await session.execute(stmt)
+        stage = result.scalar_one_or_none()
+        if not stage:
+            logger.warning("NOTIFY_WORK_STAGE_STATUS_SKIPPED missing_stage_id=%s", stage_id)
+            return 0
+
+        order = getattr(stage, "order", None)
+        customer = getattr(order, "customer", None) if order else None
+        installer = getattr(stage, "installer", None)
+        status_value = stage.status.value if hasattr(stage.status, "value") else str(stage.status)
+        status_label = NotificationService.WORK_STAGE_STATUS_LABELS.get(status_value, status_value)
+        date_text = stage.start_time.strftime("%d.%m.%Y %H:%M") if stage.start_time else "не назначена"
+        order_id = getattr(order, "id", None) or stage.order_id
+        title = stage.name or "Рабочая задача"
+        customer_name = getattr(customer, "name", None) or "Клиент"
+        customer_phone = getattr(customer, "phone", None) or "не указан"
+        address = getattr(order, "delivery_address", None) if order else None
+        installer_name = getattr(installer, "name", None) or "исполнитель не указан"
+        comment = (stage.installer_report or stage.manager_comment or "").strip()
+        if len(comment) > 320:
+            comment = f"{comment[:317]}..."
+
+        text_lines = [
+            f"🔧 <b>Задача #{stage.id}: {escape(status_label)}</b>",
+            f"Заказ: #{order_id}",
+            f"Задача: {escape(title)}",
+            f"Исполнитель: {escape(installer_name)}",
+            f"Дата: {escape(date_text)}",
+            f"Клиент: {escape(customer_name)}",
+            f"Телефон: {escape(customer_phone)}",
+            f"Адрес: {escape(address or 'не указан')}",
+        ]
+        if comment:
+            text_lines.extend(["", f"<i>{escape(comment)}</i>"])
+        text = "\n".join(text_lines)
+
+        rich_html = (
+            f"<h3>Задача #{stage.id}: {escape(status_label)}</h3>"
+            "<p>"
+            f"<b>Заказ:</b> #{order_id}<br/>"
+            f"<b>Задача:</b> {escape(title)}<br/>"
+            f"<b>Исполнитель:</b> {escape(installer_name)}<br/>"
+            f"<b>Дата:</b> {escape(date_text)}<br/>"
+            f"<b>Клиент:</b> {escape(customer_name)}<br/>"
+            f"<b>Телефон:</b> {escape(customer_phone)}<br/>"
+            f"<b>Адрес:</b> {escape(address or 'не указан')}"
+            "</p>"
+        )
+        if comment:
+            rich_html += f"<blockquote>{escape(comment)}</blockquote>"
+
+        sent = 0
+        for admin_id in admin_ids:
+            try:
+                await BotService.send_rich_message(
+                    admin_id,
+                    rich_html,
+                    fallback_text=text,
+                )
+                sent += 1
+            except Exception:
+                logger.exception(
+                    "NOTIFY_WORK_STAGE_STATUS_SEND_FAILED stage_id=%s admin_id=%s",
+                    stage.id,
+                    admin_id,
+                )
         return sent
 
     @staticmethod

@@ -1,3 +1,4 @@
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -139,3 +140,40 @@ async def test_notify_admins_staff_order_created_sends_work_order_summary(monkey
     assert "<b>Клиент:</b> Иван" in rich_text
     assert "Победы 15" in rich_text
     assert "Новый рабочий заказ #88" in fallback_text
+
+
+@pytest.mark.asyncio
+async def test_notify_admins_work_stage_status_changed_sends_task_summary(monkeypatch):
+    monkeypatch.setattr(settings, "ADMIN_IDS", "10,11", raising=False)
+    monkeypatch.setattr(settings, "ADMIN_ID", 0, raising=False)
+
+    stage = SimpleNamespace(
+        id=5,
+        order_id=88,
+        name="Монтаж <важно>",
+        status="completed",
+        start_time=datetime(2026, 6, 15, 14, 0),
+        manager_comment="Комментарий менеджера",
+        installer_report="Готово <фото>",
+        installer=SimpleNamespace(name="Петр"),
+        order=SimpleNamespace(
+            id=88,
+            delivery_address="Победы 15",
+            customer=SimpleNamespace(name="Иван", phone="+375 29 123-45-67"),
+        ),
+    )
+    session = _DummySession(order=stage)
+    send_mock = AsyncMock(return_value=True)
+    monkeypatch.setattr("services.notification_service.BotService.send_rich_message", send_mock)
+
+    sent = await NotificationService.notify_admins_work_stage_status_changed(session, stage_id=5)
+
+    assert sent == 2
+    rich_text = send_mock.await_args_list[0].args[1]
+    fallback_text = send_mock.await_args_list[0].kwargs["fallback_text"]
+    assert "<h3>Задача #5: выполнена</h3>" in rich_text
+    assert "<b>Заказ:</b> #88" in rich_text
+    assert "Монтаж &lt;важно&gt;" in rich_text
+    assert "<blockquote>Готово &lt;фото&gt;</blockquote>" in rich_text
+    assert "<важно>" not in rich_text
+    assert "Задача #5: выполнена" in fallback_text
