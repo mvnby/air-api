@@ -580,6 +580,97 @@ async def test_product_selection_builds_power_classes_and_inverter_only(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_product_selection_groups_duplicate_power_classes(monkeypatch):
+    async def fake_get_curated(session, area, is_inverter, limit=12, **kwargs):
+        return [
+            {
+                "id": area * 10 + int(is_inverter),
+                "title": f"Picked {area}",
+                "slug": f"picked-{area}",
+                "price": 1200,
+                "vitebsk_qty": 1,
+                "minsk_qty": 0,
+            }
+        ]
+
+    monkeypatch.setattr(ProductService, "get_curated", fake_get_curated)
+
+    selection = await BotProductSelectionService.build_selection(object(), "2x7")
+    formatted = BotProductSelectionService.format_selection(selection)
+    client_text = BotProductSelectionService.format_client_selection(selection)
+
+    assert len(selection["areas"]) == 1
+    assert selection["areas"][0]["label"] == "7 (1,9 кВт)"
+    assert selection["areas"][0]["quantity"] == 2
+    assert "<b>7 (1,9 кВт) x2</b>" in formatted
+    assert "1200 руб. x 2 шт. = 2400 руб." in formatted
+    assert "7 (1,9 кВт) x2" in client_text
+    assert "1200 руб. x 2 шт. = 2400 руб." in client_text
+
+
+@pytest.mark.asyncio
+async def test_product_selection_prefers_same_series_for_multi_power_kit(monkeypatch):
+    async def fake_get_curated(session, area, is_inverter, limit=12, **kwargs):
+        if area == 15:
+            return [
+                {
+                    "id": 1,
+                    "title": "TCL 7",
+                    "slug": "tcl-7",
+                    "price": 900,
+                    "series_id": 20,
+                    "brand_id": 2,
+                    "vitebsk_qty": 1,
+                    "minsk_qty": 0,
+                },
+                {
+                    "id": 2,
+                    "title": "LG Artcool 7",
+                    "slug": "lg-artcool-7",
+                    "price": 1100,
+                    "series_id": 10,
+                    "brand_id": 1,
+                    "vitebsk_qty": 1,
+                    "minsk_qty": 0,
+                },
+            ]
+        return [
+            {
+                "id": 3,
+                "title": "LG Artcool 9",
+                "slug": "lg-artcool-9",
+                "price": 1000,
+                "series_id": 10,
+                "brand_id": 1,
+                "vitebsk_qty": 1,
+                "minsk_qty": 0,
+            },
+            {
+                "id": 4,
+                "title": "TCL 9",
+                "slug": "tcl-9",
+                "price": 1300,
+                "series_id": 20,
+                "brand_id": 2,
+                "vitebsk_qty": 1,
+                "minsk_qty": 0,
+            },
+        ]
+
+    monkeypatch.setattr(ProductService, "get_curated", fake_get_curated)
+
+    selection = await BotProductSelectionService.build_selection(object(), "7,9 инвертора")
+
+    optimal_products = [
+        area["tiers"][0]["products"][0]
+        for area in selection["areas"]
+    ]
+    assert [area["label"] for area in selection["areas"]] == ["7 (1,9 кВт)", "9 (2,6 кВт)"]
+    assert {product["series_id"] for product in optimal_products} == {10}
+    assert [product["title"] for product in optimal_products] == ["LG Artcool 7", "LG Artcool 9"]
+
+
+@pytest.mark.asyncio
 async def test_product_selection_builds_with_configured_rules(sqlite_staff_session, monkeypatch):
     calls = []
     sqlite_staff_session.add(

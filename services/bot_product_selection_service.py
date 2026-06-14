@@ -376,6 +376,134 @@ class BotProductSelectionService:
         return sorted(products, key=lambda item: (BotProductSelectionService.availability_rank(item), abs(price(item))))
 
     @staticmethod
+    def _target_key(target: dict[str, Any]) -> tuple[Any, ...]:
+        if target.get("kind") == "power_class" and target.get("code"):
+            return ("power_class", str(target["code"]))
+        return (
+            "area",
+            int(target.get("area_min") or target.get("area") or 0),
+            int(target.get("area_max") or 0),
+            str(target.get("label") or ""),
+        )
+
+    @classmethod
+    def _group_targets(cls, targets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        grouped: list[dict[str, Any]] = []
+        index_by_key: dict[tuple[Any, ...], int] = {}
+        for target in targets:
+            key = cls._target_key(target)
+            if key in index_by_key:
+                grouped[index_by_key[key]]["quantity"] += 1
+                continue
+            item = dict(target)
+            item["quantity"] = 1
+            index_by_key[key] = len(grouped)
+            grouped.append(item)
+        return grouped
+
+    @staticmethod
+    def _normalized_product_spec(product: dict[str, Any], key: str) -> str:
+        specs = product.get("specs") if isinstance(product.get("specs"), dict) else {}
+        return " ".join(str(specs.get(key) or "").casefold().split())
+
+    @classmethod
+    def _product_group_key(cls, product: dict[str, Any], group_type: str) -> str | None:
+        if group_type == "series":
+            series_id = product.get("series_id")
+            if series_id:
+                return f"series_id:{series_id}"
+            specs_series = cls._normalized_product_spec(product, "series")
+            if specs_series:
+                brand = cls._product_group_key(product, "brand") or ""
+                return f"series:{brand}:{specs_series}"
+            return None
+        if group_type == "brand":
+            brand_id = product.get("brand_id")
+            if brand_id:
+                return f"brand_id:{brand_id}"
+            specs_brand = cls._normalized_product_spec(product, "brand")
+            return f"brand:{specs_brand}" if specs_brand else None
+        return None
+
+    @classmethod
+    def _apply_coherent_tier_picks(cls, areas: list[dict[str, Any]]) -> None:
+        tier_keys = list(
+            dict.fromkeys(
+                str(tier.get("key"))
+                for area in areas
+                for tier in area.get("tiers", [])
+                if tier.get("_candidates")
+            )
+        )
+        for tier_key in tier_keys:
+            tiers = [
+                tier
+                for area in areas
+                for tier in area.get("tiers", [])
+                if tier.get("key") == tier_key and tier.get("_candidates")
+            ]
+            if len(tiers) < 2:
+                continue
+
+            best: tuple[int, int, int, int, list[dict[str, Any]]] | None = None
+            for group_priority, group_type in ((2, "series"), (1, "brand")):
+                group_keys = list(
+                    dict.fromkeys(
+                        key
+                        for tier in tiers
+                        for product in tier["_candidates"]
+                        if (key := cls._product_group_key(product, group_type))
+                    )
+                )
+                for group_key in group_keys:
+                    matches = 0
+                    rank_sum = 0
+                    price_sum = 0
+                    picks: list[dict[str, Any]] = []
+                    for tier in tiers:
+                        candidates = tier["_candidates"]
+                        match_index = next(
+                            (
+                                index
+                                for index, product in enumerate(candidates)
+                                if cls._product_group_key(product, group_type) == group_key
+                            ),
+                            None,
+                        )
+                        if match_index is None:
+                            picks.append(candidates[0])
+                            rank_sum += 50
+                            price_sum += int(candidates[0].get("price") or 0)
+                        else:
+                            picked = candidates[match_index]
+                            picks.append(picked)
+                            rank_sum += match_index
+                            price_sum += int(picked.get("price") or 0)
+                            matches += 1
+
+                    score = (matches, group_priority, -rank_sum, -price_sum, picks)
+                    if best is None or score[:4] > best[:4]:
+                        best = score
+
+            if not best or best[0] < 2:
+                continue
+            for tier, pick in zip(tiers, best[4]):
+                tier["products"] = [pick]
+
+    @staticmethod
+    def _format_area_label(area: dict[str, Any]) -> str:
+        label = str(area.get("label") or f"{area['area']} м²")
+        quantity = int(area.get("quantity") or 1)
+        return f"{label} x{quantity}" if quantity > 1 else label
+
+    @staticmethod
+    def _format_price(product: dict[str, Any], quantity: int = 1) -> str:
+        price = int(product.get("price") or 0)
+        if quantity <= 1:
+            return f"{price} руб."
+        return f"{price} руб. x {quantity} шт. = {price * quantity} руб."
+
+    @staticmethod
     def availability_text(product: dict[str, Any]) -> str:
         vitebsk_qty = int(product.get("vitebsk_qty") or 0)
         minsk_qty = int(product.get("minsk_qty") or 0)
@@ -415,7 +543,7 @@ class BotProductSelectionService:
     ) -> dict[str, Any]:
         rules = await cls.get_selection_rules(session)
         parsed = cls.parse_selection_request(query, rules)
-        targets = parsed["targets"]
+        targets = cls._group_targets(parsed["targets"])
         if not targets:
             return {"areas": [], "message": "Не нашел мощность или площадь. Напишите, например: подбор 7,7,12 или 20 и 35 м²."}
 
@@ -432,6 +560,7 @@ class BotProductSelectionService:
                 "label": target["label"],
                 "kind": target["kind"],
                 "code": target.get("code"),
+                "quantity": int(target.get("quantity") or 1),
                 "tiers": [],
             }
             seen_ids: set[int] = set()
@@ -458,9 +587,14 @@ class BotProductSelectionService:
                         "key": tier_key,
                         "label": label,
                         "products": picked,
+                        "_candidates": sorted_products,
                     }
                 )
             result["areas"].append(area_payload)
+        cls._apply_coherent_tier_picks(result["areas"])
+        for area in result["areas"]:
+            for tier in area["tiers"]:
+                tier.pop("_candidates", None)
         return result
 
     @classmethod
@@ -476,7 +610,8 @@ class BotProductSelectionService:
             reason = f" ({selection.get('mode_reason')})" if selection.get("mode_reason") else ""
             lines.append(f"Режим: только ON-OFF{escape(reason)}")
         for area in selection["areas"]:
-            area_label = area.get("label") or f"{area['area']} м²"
+            area_label = cls._format_area_label(area)
+            quantity = int(area.get("quantity") or 1)
             lines.extend(["", f"<b>{escape(str(area_label))}</b>"])
             for tier in area["tiers"]:
                 products = tier.get("products") or []
@@ -487,7 +622,7 @@ class BotProductSelectionService:
                 reason = cls.availability_text(product)
                 lines.append(
                     f"{escape(str(tier['label']))}: {escape(str(product.get('title') or 'Товар'))} - "
-                    f"{escape(str(product.get('price') or 0))} руб.\n"
+                    f"{escape(cls._format_price(product, quantity))}\n"
                     f"{escape(reason)}\n"
                     f"{escape(cls.product_url(product))}"
                 )
@@ -508,7 +643,8 @@ class BotProductSelectionService:
             blocks.append(f"<p><b>Режим:</b> только ON-OFF{escape(reason)}</p>")
 
         for area in selection["areas"]:
-            area_label = area.get("label") or f"{area['area']} м²"
+            area_label = cls._format_area_label(area)
+            quantity = int(area.get("quantity") or 1)
             blocks.append(f"<h4>{escape(str(area_label))}</h4>")
             for tier in area["tiers"]:
                 products = tier.get("products") or []
@@ -518,7 +654,7 @@ class BotProductSelectionService:
                     continue
                 product = products[0]
                 title = escape(str(product.get("title") or "Товар"))
-                price = escape(str(product.get("price") or 0))
+                price = escape(cls._format_price(product, quantity))
                 availability = escape(cls.availability_text(product))
                 url = escape(cls.product_url(product))
                 blocks.append(
@@ -538,7 +674,8 @@ class BotProductSelectionService:
 
         lines = ["Подобрал варианты кондиционеров:"]
         for area in selection["areas"]:
-            area_label = area.get("label") or f"{area['area']} м²"
+            area_label = cls._format_area_label(area)
+            quantity = int(area.get("quantity") or 1)
             area_lines = []
             for tier in area["tiers"]:
                 products = tier.get("products") or []
@@ -546,7 +683,7 @@ class BotProductSelectionService:
                     continue
                 product = products[0]
                 area_lines.append(
-                    f"{tier['label']}: {product.get('title')} - {product.get('price')} руб.\n"
+                    f"{tier['label']}: {product.get('title')} - {cls._format_price(product, quantity)}\n"
                     f"{cls.client_availability_text(product)}\n"
                     f"{cls.product_url(product)}"
                 )
