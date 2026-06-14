@@ -7,10 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
+from crud.product import ProductDAO
 from models import StaffUser
 from services.bot_access_service import BotAccessService
 from services.bot_product_selection_service import BotProductSelectionService
 from services.bot_quick_order_service import BotQuickOrderService
+from services.product_read_service import ProductReadService
 from services.product_service import ProductService
 from bot_app.utils import format_caption
 
@@ -119,6 +121,35 @@ def test_product_selection_parse_limits_word_repeats():
     assert [target["code"] for target in parsed["targets"]] == ["7", "7", "9", "9", "12", "12"]
 
 
+def test_product_selection_parse_compact_quantity_syntax():
+    cases = {
+        "2x7 и 12": ["7", "7", "12"],
+        "2х7 и 12": ["7", "7", "12"],
+        "2*7, 3 шт 12": ["7", "7", "12", "12", "12"],
+        "7x2 и 12х3": ["7", "7", "12", "12", "12"],
+        "две 7 и один 12": ["7", "7", "12"],
+        "4 штуки 9": ["9", "9", "9", "9"],
+    }
+
+    for query, expected_codes in cases.items():
+        parsed = BotProductSelectionService.parse_selection_request(query)
+
+        assert [target["code"] for target in parsed["targets"]] == expected_codes
+
+
+def test_product_selection_parse_limits_compact_quantity_syntax():
+    parsed = BotProductSelectionService.parse_selection_request("4x7 4x12")
+
+    assert [target["code"] for target in parsed["targets"]] == ["7", "7", "7", "7", "12", "12"]
+
+
+def test_product_selection_parse_does_not_treat_large_area_as_quantity():
+    parsed = BotProductSelectionService.parse_selection_request("20 12")
+
+    assert [target.get("code") for target in parsed["targets"]] == [None, "12"]
+    assert parsed["targets"][0]["label"] == "20 м²"
+
+
 @pytest.mark.asyncio
 async def test_bot_access_context_for_staff_and_non_staff(sqlite_staff_session):
     sqlite_staff_session.add(
@@ -223,6 +254,40 @@ async def test_product_selection_builds_onoff_only_for_server_room(monkeypatch):
     assert [tier["key"] for tier in selection["areas"][0]["tiers"]] == ["onoff"]
     assert calls == [{"is_inverter": False, "area_min": 33, "area_max": 42}]
     assert "Режим: только ON-OFF (серверная)" in formatted
+
+
+@pytest.mark.asyncio
+async def test_product_read_curated_passes_power_range_to_dao(monkeypatch):
+    calls = {}
+
+    async def fake_resolve_slugs(session, tag_slugs):
+        calls["tag_slugs"] = tag_slugs
+        return [[101]]
+
+    async def fake_get_filtered(session, **kwargs):
+        calls["filtered"] = kwargs
+        return []
+
+    monkeypatch.setattr(ProductReadService, "resolve_slugs_to_grouped_ids", fake_resolve_slugs)
+    monkeypatch.setattr(ProductDAO, "get_filtered", fake_get_filtered)
+
+    items = await ProductReadService.get_curated(
+        object(),
+        area=15,
+        area_min=15,
+        area_max=24,
+        is_inverter=False,
+        tag_slugs=["cat-household"],
+        limit=12,
+    )
+
+    assert items == []
+    assert calls["tag_slugs"] == ["cat-household"]
+    assert calls["filtered"]["area_min"] == 15
+    assert calls["filtered"]["area_max"] == 24
+    assert calls["filtered"]["is_inverter"] is False
+    assert calls["filtered"]["faceted_tag_ids"] == [[101]]
+    assert calls["filtered"]["limit"] == 12
 
 
 @pytest.mark.asyncio
