@@ -102,6 +102,23 @@ def test_product_selection_parse_server_room_forces_onoff_mode():
     assert parsed["mode_reason"] == "серверная"
 
 
+def test_product_selection_parse_non_inverter_wording_forces_onoff_mode():
+    for query in ("не инвертор 12", "не инверторный 12", "on/off 12"):
+        parsed = BotProductSelectionService.parse_selection_request(query)
+
+        assert [target["code"] for target in parsed["targets"]] == ["12"]
+        assert parsed["compressor_mode"] == "onoff_only"
+        assert parsed["mode_reason"] == "ON-OFF"
+
+
+def test_product_selection_parse_limits_word_repeats():
+    parsed = BotProductSelectionService.parse_selection_request(
+        "две семерки две девятки две двенашки две восемнашки"
+    )
+
+    assert [target["code"] for target in parsed["targets"]] == ["7", "7", "9", "9", "12", "12"]
+
+
 @pytest.mark.asyncio
 async def test_bot_access_context_for_staff_and_non_staff(sqlite_staff_session):
     sqlite_staff_session.add(

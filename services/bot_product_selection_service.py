@@ -99,6 +99,7 @@ class BotProductSelectionService:
     @classmethod
     def parse_selection_request(cls, text: str) -> dict[str, Any]:
         normalized = cls._normalize_text(text)
+        max_targets = 6
         targets: list[dict[str, Any]] = []
 
         alias_to_code = {
@@ -123,29 +124,31 @@ class BotProductSelectionService:
                 count = max(1, min(count, 6))
                 code = alias_to_code[alias]
                 targets.extend(cls._target_for_power_class(code) for _ in range(count))
-                continue
-
-            number_raw = match.group("number")
-            if not number_raw:
-                continue
-            value = int(number_raw)
-            unit = match.group("unit")
-            power_code = cls._normalize_power_code(number_raw)
-            if unit:
-                if 8 <= value <= 120:
+            else:
+                number_raw = match.group("number")
+                if not number_raw:
+                    continue
+                value = int(number_raw)
+                unit = match.group("unit")
+                power_code = cls._normalize_power_code(number_raw)
+                if unit:
+                    if 8 <= value <= 120:
+                        targets.append(cls._target_for_area(value))
+                elif power_code:
+                    targets.append(cls._target_for_power_class(power_code))
+                elif 8 <= value <= 120:
                     targets.append(cls._target_for_area(value))
-            elif power_code:
-                targets.append(cls._target_for_power_class(power_code))
-            elif 8 <= value <= 120:
-                targets.append(cls._target_for_area(value))
 
-            if len(targets) >= 6:
-                targets = targets[:6]
+            if len(targets) >= max_targets:
+                targets = targets[:max_targets]
                 break
 
         compressor_mode = "mixed"
         mode_reason = ""
-        if re.search(r"\b(серверн\w*|on[\s-]?off|он[\s-]?офф|он[\s-]?оф|неинвертор\w*)\b", normalized):
+        if re.search(
+            r"\b(серверн\w*|on[\s/-]?off|он[\s-]?офф|он[\s-]?оф|не\s+инвертор\w*|неинвертор\w*)\b",
+            normalized,
+        ):
             compressor_mode = "onoff_only"
             mode_reason = "серверная" if "серверн" in normalized else "ON-OFF"
         elif re.search(r"\b(инвертор\w*|inverter\w*)\b", normalized):
