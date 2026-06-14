@@ -283,7 +283,7 @@ def test_product_client_text_is_forwardable(monkeypatch):
     assert text == (
         "Midea 12\n"
         "Цена: 1200 руб.\n"
-        "доступно 2-3 дня\n"
+        "в наличии в Минске, срок поставки 2-4 дня\n"
         "https://example.test/product/midea-12/"
     )
     assert "Витебск" not in text

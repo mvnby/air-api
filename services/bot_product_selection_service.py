@@ -400,7 +400,7 @@ class BotProductSelectionService:
         if vitebsk_qty > 0 or availability == "in_stock_now":
             return "в наличии"
         if minsk_qty > 0 or availability == "available_2_3_days":
-            return "доступно 2-3 дня"
+            return "в наличии в Минске, срок поставки 2-4 дня"
         if availability == "check_availability":
             return "наличие уточним"
         return "наличие уточним"
