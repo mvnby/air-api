@@ -139,11 +139,15 @@ async def selection_process(message: types.Message, state: FSMContext):
         selection = await BotProductSelectionService.build_selection(session, query)
     await state.update_data(selection_client_text=BotProductSelectionService.format_client_selection(selection))
     await state.set_state(None)
-    await message.answer(
-        BotProductSelectionService.format_selection(selection),
-        parse_mode="HTML",
-        reply_markup=selection_result_keyboard() if selection.get("areas") else None,
+    keyboard = selection_result_keyboard() if selection.get("areas") else None
+    fallback_text = BotProductSelectionService.format_selection(selection)
+    delivered = await BotService.send_rich_message(
+        message.chat.id,
+        BotProductSelectionService.format_selection_rich_html(selection),
+        reply_markup=keyboard,
     )
+    if not delivered:
+        await message.answer(fallback_text, parse_mode="HTML", reply_markup=keyboard)
 
 
 @router.callback_query(F.data == "selection_client_text")

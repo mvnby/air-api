@@ -1,5 +1,6 @@
 import json
 import re
+from html import escape
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -465,7 +466,7 @@ class BotProductSelectionService:
     @classmethod
     def format_selection(cls, selection: dict[str, Any]) -> str:
         if not selection.get("areas"):
-            return selection.get("message") or "Ничего не подобрал."
+            return escape(str(selection.get("message") or "Ничего не подобрал."))
 
         lines = ["<b>Подбор кондиционеров для клиента</b>"]
         mode = selection.get("compressor_mode")
@@ -473,23 +474,62 @@ class BotProductSelectionService:
             lines.append("Режим: только инверторы")
         elif mode == "onoff_only":
             reason = f" ({selection.get('mode_reason')})" if selection.get("mode_reason") else ""
-            lines.append(f"Режим: только ON-OFF{reason}")
+            lines.append(f"Режим: только ON-OFF{escape(reason)}")
         for area in selection["areas"]:
             area_label = area.get("label") or f"{area['area']} м²"
-            lines.extend(["", f"<b>{area_label}</b>"])
+            lines.extend(["", f"<b>{escape(str(area_label))}</b>"])
             for tier in area["tiers"]:
                 products = tier.get("products") or []
                 if not products:
-                    lines.append(f"{tier['label']}: нет подходящих моделей")
+                    lines.append(f"{escape(str(tier['label']))}: нет подходящих моделей")
                     continue
                 product = products[0]
                 reason = cls.availability_text(product)
                 lines.append(
-                    f"{tier['label']}: {product.get('title')} - {product.get('price')} руб.\n"
-                    f"{reason}\n"
-                    f"{cls.product_url(product)}"
+                    f"{escape(str(tier['label']))}: {escape(str(product.get('title') or 'Товар'))} - "
+                    f"{escape(str(product.get('price') or 0))} руб.\n"
+                    f"{escape(reason)}\n"
+                    f"{escape(cls.product_url(product))}"
                 )
         return "\n".join(lines)
+
+    @classmethod
+    def format_selection_rich_html(cls, selection: dict[str, Any]) -> str:
+        if not selection.get("areas"):
+            message = escape(str(selection.get("message") or "Ничего не подобрал."))
+            return f"<h3>Подбор кондиционеров</h3><p>{message}</p>"
+
+        blocks = ["<h3>Подбор кондиционеров для клиента</h3>"]
+        mode = selection.get("compressor_mode")
+        if mode == "inverter_only":
+            blocks.append("<p><b>Режим:</b> только инверторы</p>")
+        elif mode == "onoff_only":
+            reason = f" ({selection.get('mode_reason')})" if selection.get("mode_reason") else ""
+            blocks.append(f"<p><b>Режим:</b> только ON-OFF{escape(reason)}</p>")
+
+        for area in selection["areas"]:
+            area_label = area.get("label") or f"{area['area']} м²"
+            blocks.append(f"<h4>{escape(str(area_label))}</h4>")
+            for tier in area["tiers"]:
+                products = tier.get("products") or []
+                tier_label = escape(str(tier.get("label") or "Вариант"))
+                if not products:
+                    blocks.append(f"<p><b>{tier_label}:</b> нет подходящих моделей</p>")
+                    continue
+                product = products[0]
+                title = escape(str(product.get("title") or "Товар"))
+                price = escape(str(product.get("price") or 0))
+                availability = escape(cls.availability_text(product))
+                url = escape(cls.product_url(product))
+                blocks.append(
+                    "<p>"
+                    f"<b>{tier_label}:</b> {title}<br/>"
+                    f"<b>Цена:</b> {price} руб.<br/>"
+                    f"<b>Наличие:</b> {availability}<br/>"
+                    f"<a href=\"{url}\">Открыть товар на сайте</a>"
+                    "</p>"
+                )
+        return "".join(blocks)
 
     @classmethod
     def format_client_selection(cls, selection: dict[str, Any]) -> str:

@@ -303,6 +303,48 @@ def test_product_selection_formats_client_forward_text(monkeypatch):
     assert "Витебск" not in formatted
 
 
+def test_product_selection_rich_html_formats_cards_and_escapes(monkeypatch):
+    monkeypatch.setattr(
+        "services.bot_product_selection_service.settings",
+        SimpleNamespace(PUBLIC_SITE_URL="https://example.test"),
+    )
+    selection = {
+        "compressor_mode": "inverter_only",
+        "mode_reason": "инверторы",
+        "areas": [
+            {
+                "label": "7 <1,9 кВт>",
+                "tiers": [
+                    {
+                        "label": "Оптимально",
+                        "products": [
+                            {
+                                "title": "Midea <script>",
+                                "slug": "midea-07",
+                                "price": 1200,
+                                "vitebsk_qty": 2,
+                                "minsk_qty": 0,
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+
+    rich = BotProductSelectionService.format_selection_rich_html(selection)
+    fallback = BotProductSelectionService.format_selection(selection)
+
+    assert "<h3>Подбор кондиционеров для клиента</h3>" in rich
+    assert "<b>Режим:</b> только инверторы" in rich
+    assert "7 &lt;1,9 кВт&gt;" in rich
+    assert "Midea &lt;script&gt;" in rich
+    assert '<a href="https://example.test/product/midea-07/">Открыть товар на сайте</a>' in rich
+    assert "<script>" not in rich
+    assert "Midea &lt;script&gt;" in fallback
+    assert "<script>" not in fallback
+
+
 def test_selection_result_keyboard_has_client_text_action():
     keyboard = selection_result_keyboard()
 
