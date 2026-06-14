@@ -102,14 +102,32 @@ class BotProductSelectionService:
         max_targets = 6
         targets: list[dict[str, Any]] = []
 
+        def remaining_slots() -> int:
+            return max(max_targets - len(targets), 0)
+
+        def parse_count(value: str | None) -> int:
+            raw = str(value or "").strip()
+            count = cls.COUNT_WORDS.get(raw)
+            if count is None:
+                count = int(raw) if raw.isdigit() else 1
+            return max(1, min(count, max_targets))
+
+        def add_power_targets(code: str, count: int = 1) -> None:
+            for _ in range(min(count, remaining_slots())):
+                targets.append(cls._target_for_power_class(code))
+
         alias_to_code = {
             alias: code
             for code, aliases in cls.POWER_CLASS_ALIASES.items()
             for alias in aliases
         }
         alias_pattern = "|".join(sorted((re.escape(alias) for alias in alias_to_code), key=len, reverse=True))
+        count_value_pattern = rf"[1-6]|{'|'.join(cls.COUNT_WORDS)}"
+        power_code_pattern = "|".join(sorted((re.escape(code) for code in cls.POWER_CLASSES), key=len, reverse=True))
         token_pattern = re.compile(
             rf"(?:(?P<count>\b\d{{1,2}}\b|{'|'.join(cls.COUNT_WORDS)})\s+)?(?P<alias>{alias_pattern})\b"
+            rf"|(?<!\w)(?P<compact_count>{count_value_pattern})\s*(?:x|\*|шт\.?|штук[аи]?)\s*(?P<compact_code>{power_code_pattern})(?!\w)"
+            rf"|(?<!\w)(?P<word_count>{count_value_pattern})\s+(?P<compact_word_code>{power_code_pattern})(?!\w)"
             r"|(?P<number>\b\d{1,3}\b)\s*(?P<unit>м2|м²|кв\.?|квадрат(?:ов|а)?|квадратный метр(?:ов|а)?)?",
             re.IGNORECASE,
         )
@@ -117,13 +135,13 @@ class BotProductSelectionService:
         for match in token_pattern.finditer(normalized):
             alias = match.group("alias")
             if alias:
-                count_raw = match.group("count")
-                count = cls.COUNT_WORDS.get(str(count_raw or "").strip(), None)
-                if count is None:
-                    count = int(count_raw) if str(count_raw or "").isdigit() else 1
-                count = max(1, min(count, 6))
+                count = parse_count(match.group("count"))
                 code = alias_to_code[alias]
-                targets.extend(cls._target_for_power_class(code) for _ in range(count))
+                add_power_targets(code, count)
+            elif match.group("compact_code") or match.group("compact_word_code"):
+                code = cls._normalize_power_code(match.group("compact_code") or match.group("compact_word_code"))
+                if code:
+                    add_power_targets(code, parse_count(match.group("compact_count") or match.group("word_count")))
             else:
                 number_raw = match.group("number")
                 if not number_raw:
@@ -135,7 +153,7 @@ class BotProductSelectionService:
                     if 8 <= value <= 120:
                         targets.append(cls._target_for_area(value))
                 elif power_code:
-                    targets.append(cls._target_for_power_class(power_code))
+                    add_power_targets(power_code)
                 elif 8 <= value <= 120:
                     targets.append(cls._target_for_area(value))
 
