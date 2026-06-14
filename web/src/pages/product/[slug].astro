@@ -26,6 +26,7 @@ import {
 } from "../../utils/spec-dictionary";
 import { generateBentoCards } from "../../utils/bento-cards";
 import { buildProductMetaDescription } from "../../utils/seo";
+import { formatProductPrice } from "../../utils/product-display";
 
 export const prerender = !isRuntimeFreshnessEnabled();
 
@@ -161,10 +162,8 @@ const publicTags = (product.tags || []).filter((t: any) => t.is_public);
 const seoDescription = buildProductMetaDescription(product);
 const asText = (value: unknown) => String(value || "").trim();
 const formatSeriesPrice = (value: unknown) => {
-    const price = Number(value);
-    return Number.isFinite(price) && price > 0
-        ? `${price.toLocaleString("ru-RU")} Br`
-        : "Цена по запросу";
+    const formatted = formatProductPrice(value as number | string | null);
+    return formatted === "Цену уточняйте" ? formatted : `${formatted} Br`;
 };
 const formatSeriesArea = (item: any) => {
     const rawArea = item?.area ?? item?.specs?.area_m2;
@@ -208,6 +207,7 @@ const seriesSiblings = Array.isArray(product.series_siblings)
         currency="Br"
         vitebskQty={product.vitebsk_qty}
         minskQty={product.minsk_qty}
+        availabilityStatus={product.availability_status}
     />
 
     <div class="container product-page">
