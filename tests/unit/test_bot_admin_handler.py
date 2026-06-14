@@ -20,6 +20,7 @@ class _DummyMessage:
         self.chat = SimpleNamespace(id=100)
         self.message_id = 55
         self.answer = AsyncMock()
+        self.edit_text = AsyncMock()
         self.delete = AsyncMock()
 
 
@@ -27,9 +28,14 @@ class _DummyState:
     def __init__(self, data: dict):
         self._data = data
         self.clear = AsyncMock()
+        self.update_data = AsyncMock(side_effect=self._update_data)
+        self.set_state = AsyncMock()
 
     async def get_data(self):
         return self._data
+
+    async def _update_data(self, **kwargs):
+        self._data.update(kwargs)
 
 
 class _DummyCallback:
@@ -205,3 +211,115 @@ async def test_requisites_file_sends_preview_for_admin(monkeypatch):
     args, kwargs = progress.edit_text.await_args
     assert "ООО Тест" in args[0]
     assert kwargs["parse_mode"] == "HTML"
+
+
+@pytest.mark.asyncio
+async def test_requisites_photo_prompts_for_action_without_recognition(monkeypatch):
+    message = _DummyMessage(text="", user_id=5)
+    message.photo = [
+        SimpleNamespace(file_id="small-photo"),
+        SimpleNamespace(file_id="large-photo"),
+    ]
+    state = _DummyState({})
+
+    monkeypatch.setattr(admin_handler, "_is_admin_user", AsyncMock(return_value=True))
+    recognize_mock = AsyncMock()
+    monkeypatch.setattr(admin_handler.CustomerRequisitesRecognitionService, "recognize_bytes", recognize_mock)
+
+    await admin_handler.recognize_requisites_photo(message, state)
+
+    recognize_mock.assert_not_called()
+    state.update_data.assert_awaited_once()
+    pending = state._data["pending_requisites_file"]
+    assert pending == {
+        "file_id": "large-photo",
+        "filename": "telegram-photo-55.jpg",
+        "mime_type": "image/jpeg",
+        "telegram_message_id": 55,
+        "telegram_chat_id": 100,
+    }
+    message.answer.assert_awaited_once()
+    args, kwargs = message.answer.await_args
+    assert "Что сделать" in args[0]
+    assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "req_file_extract"
+
+
+@pytest.mark.asyncio
+async def test_requisites_document_prompts_for_pdf(monkeypatch):
+    message = _DummyMessage(text="", user_id=5)
+    message.document = SimpleNamespace(
+        file_id="pdf-file",
+        file_name="requisites.pdf",
+        mime_type="application/pdf",
+    )
+    state = _DummyState({})
+
+    monkeypatch.setattr(admin_handler, "_is_admin_user", AsyncMock(return_value=True))
+    download_mock = AsyncMock(return_value=b"pdf")
+    monkeypatch.setattr(admin_handler, "_download_telegram_file", download_mock)
+
+    await admin_handler.recognize_requisites_document(message, state)
+
+    download_mock.assert_not_called()
+    assert state._data["pending_requisites_file"]["file_id"] == "pdf-file"
+    assert state._data["pending_requisites_file"]["mime_type"] == "application/pdf"
+
+
+@pytest.mark.asyncio
+async def test_requisites_file_extract_callback_runs_recognition(monkeypatch):
+    callback = _DummyCallback(data="req_file_extract", user_id=5)
+    state = _DummyState(
+        {
+            "pending_requisites_file": {
+                "file_id": "file-1",
+                "filename": "req.png",
+                "mime_type": "image/png",
+                "telegram_message_id": 77,
+                "telegram_chat_id": 200,
+            }
+        }
+    )
+
+    monkeypatch.setattr(admin_handler, "_is_admin_user", AsyncMock(return_value=True))
+    monkeypatch.setattr(admin_handler, "_download_telegram_file", AsyncMock(return_value=b"image"))
+
+    async def fake_recognize(session, **kwargs):
+        assert kwargs["content"] == b"image"
+        assert kwargs["filename"] == "req.png"
+        assert kwargs["mime_type"] == "image/png"
+        assert kwargs["telegram_user_id"] == 5
+        assert kwargs["telegram_chat_id"] == 200
+        assert kwargs["telegram_message_id"] == 77
+        return {
+            "id": 12,
+            "status": "recognized",
+            "source": "telegram",
+            "raw_text": "raw",
+            "extracted": {"name": "ООО Тест", "inn": "123456789"},
+            "validation_flags": {"field_errors": {}, "warnings": {}, "is_valid": True},
+            "duplicate_customer": None,
+        }
+
+    monkeypatch.setattr(admin_handler.CustomerRequisitesRecognitionService, "recognize_bytes", fake_recognize)
+    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
+
+    await admin_handler.extract_pending_requisites_file(callback, state)
+
+    assert state._data["pending_requisites_file"] is None
+    callback.answer.assert_awaited_once()
+    assert callback.message.edit_text.await_count == 2
+    final_args, final_kwargs = callback.message.edit_text.await_args
+    assert "ООО Тест" in final_args[0]
+    assert final_kwargs["parse_mode"] == "HTML"
+
+
+@pytest.mark.asyncio
+async def test_requisites_file_cancel_clears_pending(monkeypatch):
+    callback = _DummyCallback(data="req_file_cancel", user_id=5)
+    state = _DummyState({"pending_requisites_file": {"file_id": "file-1"}})
+
+    await admin_handler.cancel_pending_requisites_file(callback, state)
+
+    assert state._data["pending_requisites_file"] is None
+    callback.message.edit_text.assert_awaited_once_with("Ок, файл оставил без обработки.")
+    callback.answer.assert_awaited_once()
