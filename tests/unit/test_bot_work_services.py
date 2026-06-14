@@ -422,6 +422,8 @@ def test_product_selection_formats_client_forward_text(monkeypatch):
                                 "title": "Midea 07",
                                 "slug": "midea-07",
                                 "price": 990,
+                                "power_cooling": 2.05,
+                                "area": 22,
                                 "vitebsk_qty": 1,
                                 "minsk_qty": 0,
                             }
@@ -441,13 +443,15 @@ def test_product_selection_formats_client_forward_text(monkeypatch):
     assert formatted == (
         "Подобрал варианты кондиционеров:\n"
         "\n"
-        "7 (1,9 кВт)\n"
-        "Бюджетнее: Midea 07 - 990 руб.\n"
-        "в наличии\n"
-        "https://example.test/product/midea-07/"
+        "Бюджетный вариант:\n"
+        "- кондиционер Midea 07 мощность 2,05 кВт, на 22 м²\n"
+        "  990 руб.\n"
+        "  в наличии\n"
+        "  https://example.test/product/midea-07/"
     )
     assert "<b>" not in formatted
     assert "Витебск" not in formatted
+    assert "7 (1,9 кВт)" not in formatted
 
 
 def test_product_selection_rich_html_formats_cards_and_escapes(monkeypatch):
@@ -523,9 +527,50 @@ def test_product_selection_missing_price_uses_contact_us_text(monkeypatch):
     formatted = BotProductSelectionService.format_client_selection(selection)
     rich = BotProductSelectionService.format_selection_rich_html(selection)
 
-    assert "Midea 12 - цену уточним" in formatted
+    assert "- кондиционер Midea 12" in formatted
+    assert "  цену уточним" in formatted
+    assert "наличие уточняем" in formatted
     assert "0 руб." not in formatted
     assert "<b>Цена:</b> цену уточним<br/>" in rich
+
+
+def test_product_selection_client_text_uses_product_specs_fallback(monkeypatch):
+    monkeypatch.setattr(
+        "services.bot_product_selection_service.settings",
+        SimpleNamespace(PUBLIC_SITE_URL="https://example.test"),
+    )
+    selection = {
+        "areas": [
+            {
+                "label": "7 (1,9 кВт)",
+                "tiers": [
+                    {
+                        "label": "Бюджетнее",
+                        "products": [
+                            {
+                                "title": "Haier Flexis 07",
+                                "slug": "haier-flexis-07",
+                                "price": 1657,
+                                "area": None,
+                                "power_cooling": None,
+                                "specs": {
+                                    "capacity_cooling_kw": "0,7 / 2,1 / 2,4",
+                                    "area_m2": "до 25",
+                                },
+                                "vitebsk_qty": 0,
+                                "minsk_qty": 0,
+                            }
+                        ],
+                    },
+                ],
+            }
+        ]
+    }
+
+    formatted = BotProductSelectionService.format_client_selection(selection)
+
+    assert "- кондиционер Haier Flexis 07 мощность 2,1 кВт, на 25 м²" in formatted
+    assert "1,9 кВт" not in formatted
 
 
 def test_selection_result_keyboard_has_client_text_action():
@@ -624,6 +669,8 @@ async def test_product_selection_groups_duplicate_power_classes(monkeypatch):
                 "title": f"Picked {area}",
                 "slug": f"picked-{area}",
                 "price": 1200,
+                "power_cooling": 2.1,
+                "area": 22,
                 "vitebsk_qty": 1,
                 "minsk_qty": 0,
             }
@@ -641,7 +688,8 @@ async def test_product_selection_groups_duplicate_power_classes(monkeypatch):
     assert "<b>7 (1,9 кВт), 2 шт.</b>" in formatted
     assert "1200 руб. x 2 шт. = 2400 руб." in formatted
     assert "Подобрал варианты кондиционеров комплектом:" in client_text
-    assert "7 (1,9 кВт), 2 шт." in client_text
+    assert "7 (1,9 кВт), 2 шт." not in client_text
+    assert "- кондиционер Picked 15 мощность 2,1 кВт, на 22 м²" in client_text
     assert "1200 руб. x 2 шт. = 2400 руб." in client_text
     assert "Итого по варианту: 2400 руб." in client_text
 
@@ -656,6 +704,8 @@ async def test_product_selection_prefers_same_series_for_multi_power_kit(monkeyp
                     "title": "TCL 7",
                     "slug": "tcl-7",
                     "price": 900,
+                    "power_cooling": 2.0,
+                    "area": 20,
                     "series_id": 20,
                     "brand_id": 2,
                     "vitebsk_qty": 1,
@@ -666,6 +716,8 @@ async def test_product_selection_prefers_same_series_for_multi_power_kit(monkeyp
                     "title": "LG Artcool 7",
                     "slug": "lg-artcool-7",
                     "price": 1100,
+                    "power_cooling": 2.1,
+                    "area": 22,
                     "series_id": 10,
                     "brand_id": 1,
                     "vitebsk_qty": 1,
@@ -678,6 +730,8 @@ async def test_product_selection_prefers_same_series_for_multi_power_kit(monkeyp
                 "title": "LG Artcool 9",
                 "slug": "lg-artcool-9",
                 "price": 1000,
+                "power_cooling": 2.64,
+                "area": 28,
                 "series_id": 10,
                 "brand_id": 1,
                 "vitebsk_qty": 1,
@@ -688,6 +742,8 @@ async def test_product_selection_prefers_same_series_for_multi_power_kit(monkeyp
                 "title": "TCL 9",
                 "slug": "tcl-9",
                 "price": 1300,
+                "power_cooling": 2.65,
+                "area": 28,
                 "series_id": 20,
                 "brand_id": 2,
                 "vitebsk_qty": 1,
@@ -708,9 +764,11 @@ async def test_product_selection_prefers_same_series_for_multi_power_kit(monkeyp
     assert {product["series_id"] for product in optimal_products} == {10}
     assert [product["title"] for product in optimal_products] == ["LG Artcool 7", "LG Artcool 9"]
     assert "Подобрал варианты кондиционеров комплектом:" in client_text
-    assert "Оптимально:" in client_text
-    assert "- 7 (1,9 кВт): LG Artcool 7 - 1100 руб." in client_text
-    assert "- 9 (2,6 кВт): LG Artcool 9 - 1000 руб." in client_text
+    assert "Оптимальный вариант:" in client_text
+    assert "- кондиционер LG Artcool 7 мощность 2,1 кВт, на 22 м²" in client_text
+    assert "- кондиционер LG Artcool 9 мощность 2,64 кВт, на 28 м²" in client_text
+    assert "- 7 (1,9 кВт):" not in client_text
+    assert "- 9 (2,6 кВт):" not in client_text
     assert "Итого по варианту: 2100 руб." in client_text
 
 
