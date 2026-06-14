@@ -124,9 +124,11 @@ class BotProductSelectionService:
         alias_pattern = "|".join(sorted((re.escape(alias) for alias in alias_to_code), key=len, reverse=True))
         count_value_pattern = rf"[1-6]|{'|'.join(cls.COUNT_WORDS)}"
         power_code_pattern = "|".join(sorted((re.escape(code) for code in cls.POWER_CLASSES), key=len, reverse=True))
+        compact_separator_pattern = r"x|х|\*"
         token_pattern = re.compile(
             rf"(?:(?P<count>\b\d{{1,2}}\b|{'|'.join(cls.COUNT_WORDS)})\s+)?(?P<alias>{alias_pattern})\b"
-            rf"|(?<!\w)(?P<compact_count>{count_value_pattern})\s*(?:x|\*|шт\.?|штук[аи]?)\s*(?P<compact_code>{power_code_pattern})(?!\w)"
+            rf"|(?<!\w)(?P<compact_count>{count_value_pattern})\s*(?:{compact_separator_pattern}|шт\.?|штук[аи]?)\s*(?P<compact_code>{power_code_pattern})(?!\w)"
+            rf"|(?<!\w)(?P<reverse_code>{power_code_pattern})\s*(?:{compact_separator_pattern})\s*(?P<reverse_count>{count_value_pattern})(?!\w)"
             rf"|(?<!\w)(?P<word_count>{count_value_pattern})\s+(?P<compact_word_code>{power_code_pattern})(?!\w)"
             r"|(?P<number>\b\d{1,3}\b)\s*(?P<unit>м2|м²|кв\.?|квадрат(?:ов|а)?|квадратный метр(?:ов|а)?)?",
             re.IGNORECASE,
@@ -142,6 +144,10 @@ class BotProductSelectionService:
                 code = cls._normalize_power_code(match.group("compact_code") or match.group("compact_word_code"))
                 if code:
                     add_power_targets(code, parse_count(match.group("compact_count") or match.group("word_count")))
+            elif match.group("reverse_code"):
+                code = cls._normalize_power_code(match.group("reverse_code"))
+                if code:
+                    add_power_targets(code, parse_count(match.group("reverse_count")))
             else:
                 number_raw = match.group("number")
                 if not number_raw:

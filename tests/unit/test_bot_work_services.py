@@ -124,7 +124,9 @@ def test_product_selection_parse_limits_word_repeats():
 def test_product_selection_parse_compact_quantity_syntax():
     cases = {
         "2x7 и 12": ["7", "7", "12"],
+        "2х7 и 12": ["7", "7", "12"],
         "2*7, 3 шт 12": ["7", "7", "12", "12", "12"],
+        "7x2 и 12х3": ["7", "7", "12", "12", "12"],
         "две 7 и один 12": ["7", "7", "12"],
         "4 штуки 9": ["9", "9", "9", "9"],
     }
