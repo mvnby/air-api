@@ -391,6 +391,19 @@ class BotProductSelectionService:
             return "Наличие уточнить"
         return "Нет в наличии"
 
+    @staticmethod
+    def client_availability_text(product: dict[str, Any]) -> str:
+        vitebsk_qty = int(product.get("vitebsk_qty") or 0)
+        minsk_qty = int(product.get("minsk_qty") or 0)
+        availability = str(product.get("availability_status") or "").strip().lower()
+        if vitebsk_qty > 0 or availability == "in_stock_now":
+            return "в наличии"
+        if minsk_qty > 0 or availability == "available_2_3_days":
+            return "доступно 2-3 дня"
+        if availability == "check_availability":
+            return "наличие уточним"
+        return "наличие уточним"
+
     @classmethod
     async def build_selection(
         cls,
@@ -476,4 +489,30 @@ class BotProductSelectionService:
                     f"{reason}\n"
                     f"{cls.product_url(product)}"
                 )
+        return "\n".join(lines)
+
+    @classmethod
+    def format_client_selection(cls, selection: dict[str, Any]) -> str:
+        if not selection.get("areas"):
+            return selection.get("message") or "Пока не получилось подобрать варианты."
+
+        lines = ["Подобрал варианты кондиционеров:"]
+        for area in selection["areas"]:
+            area_label = area.get("label") or f"{area['area']} м²"
+            area_lines = []
+            for tier in area["tiers"]:
+                products = tier.get("products") or []
+                if not products:
+                    continue
+                product = products[0]
+                area_lines.append(
+                    f"{tier['label']}: {product.get('title')} - {product.get('price')} руб.\n"
+                    f"{cls.client_availability_text(product)}\n"
+                    f"{cls.product_url(product)}"
+                )
+            if area_lines:
+                lines.extend(["", area_label, *area_lines])
+
+        if len(lines) == 1:
+            return "Пока не получилось подобрать варианты из наличия."
         return "\n".join(lines)

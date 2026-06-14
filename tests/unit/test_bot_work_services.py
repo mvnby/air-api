@@ -15,6 +15,7 @@ from services.bot_product_selection_service import BotProductSelectionService
 from services.bot_quick_order_service import BotQuickOrderService
 from services.product_read_service import ProductReadService
 from services.product_service import ProductService
+from bot_app.keyboards import selection_result_keyboard
 from bot_app.utils import format_caption
 
 
@@ -177,6 +178,59 @@ def test_product_selection_parse_uses_configured_power_class_rules():
     assert parsed["targets"][2]["label"] == "7 (2,0 кВт)"
     assert parsed["targets"][2]["area_min"] == 18
     assert parsed["targets"][2]["area_max"] == 27
+
+
+def test_product_selection_formats_client_forward_text(monkeypatch):
+    monkeypatch.setattr(
+        "services.bot_product_selection_service.settings",
+        SimpleNamespace(PUBLIC_SITE_URL="https://example.test"),
+    )
+    selection = {
+        "areas": [
+            {
+                "label": "7 (1,9 кВт)",
+                "tiers": [
+                    {
+                        "label": "Бюджетнее",
+                        "products": [
+                            {
+                                "title": "Midea 07",
+                                "slug": "midea-07",
+                                "price": 990,
+                                "vitebsk_qty": 1,
+                                "minsk_qty": 0,
+                            }
+                        ],
+                    },
+                    {
+                        "label": "Оптимально",
+                        "products": [],
+                    },
+                ],
+            }
+        ]
+    }
+
+    formatted = BotProductSelectionService.format_client_selection(selection)
+
+    assert formatted == (
+        "Подобрал варианты кондиционеров:\n"
+        "\n"
+        "7 (1,9 кВт)\n"
+        "Бюджетнее: Midea 07 - 990 руб.\n"
+        "в наличии\n"
+        "https://example.test/product/midea-07/"
+    )
+    assert "<b>" not in formatted
+    assert "Витебск" not in formatted
+
+
+def test_selection_result_keyboard_has_client_text_action():
+    keyboard = selection_result_keyboard()
+
+    button = keyboard.inline_keyboard[0][0]
+    assert button.text == "Текст клиенту"
+    assert button.callback_data == "selection_client_text"
 
 
 @pytest.mark.asyncio
