@@ -7,6 +7,7 @@ class ShopState(StatesGroup):
     waiting_for_quick_order = State()
     waiting_for_selection = State()
     waiting_for_task_report = State()
+    waiting_for_order_attachment_order_id = State()
     select_area = State()
     select_type = State()
     select_winter = State()  # Выбор зимнего обогрева

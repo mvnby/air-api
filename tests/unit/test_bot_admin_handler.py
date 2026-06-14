@@ -222,6 +222,7 @@ async def test_requisites_photo_prompts_for_action_without_recognition(monkeypat
     ]
     state = _DummyState({})
 
+    monkeypatch.setattr(admin_handler, "_is_staff_user", AsyncMock(return_value=True))
     monkeypatch.setattr(admin_handler, "_is_admin_user", AsyncMock(return_value=True))
     recognize_mock = AsyncMock()
     monkeypatch.setattr(admin_handler.CustomerRequisitesRecognitionService, "recognize_bytes", recognize_mock)
@@ -242,6 +243,44 @@ async def test_requisites_photo_prompts_for_action_without_recognition(monkeypat
     args, kwargs = message.answer.await_args
     assert "Что сделать" in args[0]
     assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "req_file_extract"
+    assert kwargs["reply_markup"].inline_keyboard[1][0].callback_data == "req_file_attach"
+
+
+@pytest.mark.asyncio
+async def test_requisites_photo_for_staff_non_admin_allows_attach_only(monkeypatch):
+    message = _DummyMessage(text="", user_id=5)
+    message.photo = [SimpleNamespace(file_id="large-photo")]
+    state = _DummyState({})
+
+    monkeypatch.setattr(admin_handler, "_is_staff_user", AsyncMock(return_value=True))
+    monkeypatch.setattr(admin_handler, "_is_admin_user", AsyncMock(return_value=False))
+
+    await admin_handler.recognize_requisites_photo(message, state)
+
+    message.answer.assert_awaited_once()
+    args, kwargs = message.answer.await_args
+    assert "Что сделать" in args[0]
+    callbacks = [
+        row[0].callback_data
+        for row in kwargs["reply_markup"].inline_keyboard
+    ]
+    assert callbacks == ["req_file_attach", "req_file_cancel"]
+    assert state._data["pending_requisites_file"]["file_id"] == "large-photo"
+
+
+@pytest.mark.asyncio
+async def test_requisites_photo_rejects_non_staff(monkeypatch):
+    message = _DummyMessage(text="", user_id=5)
+    message.photo = [SimpleNamespace(file_id="large-photo")]
+    state = _DummyState({})
+
+    monkeypatch.setattr(admin_handler, "_is_staff_user", AsyncMock(return_value=False))
+    monkeypatch.setattr(admin_handler, "_is_admin_user", AsyncMock(return_value=False))
+
+    await admin_handler.recognize_requisites_photo(message, state)
+
+    message.answer.assert_awaited_once_with("Файл получил, но действия с файлами доступны только сотрудникам.")
+    assert "pending_requisites_file" not in state._data
 
 
 @pytest.mark.asyncio
@@ -254,6 +293,7 @@ async def test_requisites_document_prompts_for_pdf(monkeypatch):
     )
     state = _DummyState({})
 
+    monkeypatch.setattr(admin_handler, "_is_staff_user", AsyncMock(return_value=True))
     monkeypatch.setattr(admin_handler, "_is_admin_user", AsyncMock(return_value=True))
     download_mock = AsyncMock(return_value=b"pdf")
     monkeypatch.setattr(admin_handler, "_download_telegram_file", download_mock)
@@ -311,6 +351,165 @@ async def test_requisites_file_extract_callback_runs_recognition(monkeypatch):
     final_args, final_kwargs = callback.message.edit_text.await_args
     assert "ООО Тест" in final_args[0]
     assert final_kwargs["parse_mode"] == "HTML"
+
+
+@pytest.mark.asyncio
+async def test_requisites_file_attach_callback_shows_recent_orders(monkeypatch):
+    callback = _DummyCallback(data="req_file_attach", user_id=5)
+    state = _DummyState(
+        {
+            "pending_requisites_file": {
+                "file_id": "file-1",
+                "filename": "photo.jpg",
+                "mime_type": "image/jpeg",
+            }
+        }
+    )
+
+    async def fake_list_recent(session, *, limit):
+        assert limit == 5
+        return [
+            {
+                "id": 42,
+                "title": "Монтаж",
+                "customer_name": "Иван",
+                "address": "Победы 15",
+            }
+        ]
+
+    monkeypatch.setattr(
+        admin_handler,
+        "_get_bot_access_context",
+        AsyncMock(return_value=SimpleNamespace(is_staff=True, is_manager=True)),
+    )
+    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
+    monkeypatch.setattr(admin_handler.BotOrderAttachmentService, "list_recent_orders", fake_list_recent)
+
+    await admin_handler.choose_order_for_pending_file(callback, state)
+
+    callback.message.edit_text.assert_awaited_once()
+    args, kwargs = callback.message.edit_text.await_args
+    assert "К какому заказу" in args[0]
+    assert "#42" in args[0]
+    assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "req_file_attach_order_42"
+    assert kwargs["reply_markup"].inline_keyboard[-2][0].callback_data == "req_file_attach_manual"
+    callback.answer.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_requisites_file_attach_callback_shows_executor_tasks(monkeypatch):
+    callback = _DummyCallback(data="req_file_attach", user_id=5)
+    state = _DummyState({"pending_requisites_file": {"file_id": "file-1"}})
+
+    list_recent_mock = AsyncMock()
+
+    async def fake_list_tasks(session, telegram_id, *, limit):
+        assert telegram_id == 5
+        assert limit == 5
+        return [
+            {
+                "id": 7,
+                "order_id": 42,
+                "title": "Монтаж",
+                "customer_name": "Иван",
+                "address": "Победы 15",
+            }
+        ]
+
+    monkeypatch.setattr(
+        admin_handler,
+        "_get_bot_access_context",
+        AsyncMock(return_value=SimpleNamespace(is_staff=True, is_manager=False)),
+    )
+    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
+    monkeypatch.setattr(admin_handler.BotOrderAttachmentService, "list_recent_orders", list_recent_mock)
+    monkeypatch.setattr(admin_handler.BotTaskService, "list_my_tasks", fake_list_tasks)
+
+    await admin_handler.choose_order_for_pending_file(callback, state)
+
+    list_recent_mock.assert_not_called()
+    args, kwargs = callback.message.edit_text.await_args
+    assert "#42" in args[0]
+    assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "req_file_attach_order_42"
+
+
+@pytest.mark.asyncio
+async def test_requisites_file_attach_chosen_order_saves_and_clears_pending(monkeypatch):
+    callback = _DummyCallback(data="req_file_attach_order_42", user_id=5)
+    state = _DummyState(
+        {
+            "pending_requisites_file": {
+                "file_id": "file-1",
+                "filename": "photo.jpg",
+                "mime_type": "image/jpeg",
+                "telegram_message_id": 77,
+                "telegram_chat_id": 200,
+            }
+        }
+    )
+
+    async def fake_attach(session, order_id, **kwargs):
+        assert order_id == 42
+        assert kwargs["file_id"] == "file-1"
+        assert kwargs["telegram_user_id"] == 5
+        assert kwargs["telegram_chat_id"] == 200
+        assert kwargs["telegram_message_id"] == 77
+        return {"id": 42, "already_attached": False}
+
+    monkeypatch.setattr(
+        admin_handler,
+        "_get_bot_access_context",
+        AsyncMock(return_value=SimpleNamespace(is_staff=True, is_manager=True)),
+    )
+    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
+    monkeypatch.setattr(admin_handler.BotOrderAttachmentService, "can_attach_to_order", AsyncMock(return_value=True))
+    monkeypatch.setattr(admin_handler.BotOrderAttachmentService, "attach_to_order", fake_attach)
+
+    await admin_handler.attach_pending_file_to_chosen_order(callback, state)
+
+    assert state._data["pending_requisites_file"] is None
+    state.set_state.assert_awaited_with(None)
+    callback.message.edit_text.assert_awaited_once_with("✅ Файл прикреплен к заказу #42.")
+    callback.answer.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_requisites_file_attach_chosen_order_blocks_unassigned_executor(monkeypatch):
+    callback = _DummyCallback(data="req_file_attach_order_42", user_id=5)
+    state = _DummyState({"pending_requisites_file": {"file_id": "file-1"}})
+
+    monkeypatch.setattr(
+        admin_handler,
+        "_get_bot_access_context",
+        AsyncMock(return_value=SimpleNamespace(is_staff=True, is_manager=False)),
+    )
+    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
+    monkeypatch.setattr(admin_handler.BotOrderAttachmentService, "can_attach_to_order", AsyncMock(return_value=False))
+    attach_mock = AsyncMock()
+    monkeypatch.setattr(admin_handler.BotOrderAttachmentService, "attach_to_order", attach_mock)
+
+    await admin_handler.attach_pending_file_to_chosen_order(callback, state)
+
+    attach_mock.assert_not_called()
+    callback.answer.assert_awaited_once_with("Этот заказ вам не назначен.", show_alert=True)
+    assert state._data["pending_requisites_file"]["file_id"] == "file-1"
+
+
+@pytest.mark.asyncio
+async def test_requisites_file_attach_typed_order_validates_number(monkeypatch):
+    message = _DummyMessage(text="не номер", user_id=5)
+    state = _DummyState({"pending_requisites_file": {"file_id": "file-1"}})
+
+    monkeypatch.setattr(
+        admin_handler,
+        "_get_bot_access_context",
+        AsyncMock(return_value=SimpleNamespace(is_staff=True, is_manager=True)),
+    )
+
+    await admin_handler.attach_pending_file_to_typed_order(message, state)
+
+    message.answer.assert_awaited_once_with("Введите номер заказа числом, например: 123")
+    assert state._data["pending_requisites_file"]["file_id"] == "file-1"
 
 
 @pytest.mark.asyncio

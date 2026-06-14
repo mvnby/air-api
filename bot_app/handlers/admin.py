@@ -6,9 +6,12 @@ from aiogram import Router, types, F
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
 from core.database import async_session_maker
+from services.bot_access_service import BotAccessService
 from services.product_service import ProductService
 from services.staff_user_service import StaffUserService
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
+from services.bot_order_attachment_service import BotOrderAttachmentService
+from services.bot_task_service import BotTaskService
 from ..config import bot
 from ..states import ShopState
 
@@ -18,6 +21,16 @@ router = Router()
 async def _is_admin_user(user_id: int | None) -> bool:
     async with async_session_maker() as session:
         return await StaffUserService.is_active_owner_admin_telegram_user(session, user_id)
+
+
+async def _get_bot_access_context(user_id: int | None):
+    async with async_session_maker() as session:
+        return await BotAccessService.get_context(session, user_id)
+
+
+async def _is_staff_user(user_id: int | None) -> bool:
+    context = await _get_bot_access_context(user_id)
+    return context.is_staff
 
 
 def _manager_customer_url(customer_id: int) -> str:
@@ -84,13 +97,71 @@ def _preview_keyboard(data: dict) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def _requisites_file_intent_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Извлечь реквизиты", callback_data="req_file_extract")],
-            [InlineKeyboardButton(text="Отмена", callback_data="req_file_cancel")],
-        ]
-    )
+def _requisites_file_intent_keyboard(*, can_extract_requisites: bool = True) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    if can_extract_requisites:
+        rows.append([InlineKeyboardButton(text="Извлечь реквизиты", callback_data="req_file_extract")])
+    rows.append([InlineKeyboardButton(text="Прикрепить к заказу", callback_data="req_file_attach")])
+    rows.append([InlineKeyboardButton(text="Отмена", callback_data="req_file_cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _order_attachment_keyboard(orders: list[dict]) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for order in orders[:5]:
+        order_id = int(order.get("id") or 0)
+        if not order_id:
+            continue
+        title = " ".join(str(order.get("title") or order.get("customer_name") or "заказ").split())
+        if len(title) > 36:
+            title = f"{title[:33]}..."
+        rows.append(
+            [InlineKeyboardButton(text=f"#{order_id} - {title}", callback_data=f"req_file_attach_order_{order_id}")]
+        )
+    rows.append([InlineKeyboardButton(text="Ввести номер/id заказа", callback_data="req_file_attach_manual")])
+    rows.append([InlineKeyboardButton(text="Отмена", callback_data="req_file_cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _format_order_attachment_choices(orders: list[dict]) -> str:
+    if not orders:
+        return "Быстрых вариантов не нашел. Введите номер/id заказа сообщением."
+
+    lines = ["К какому заказу прикрепить файл?"]
+    for order in orders[:5]:
+        order_id = int(order.get("id") or 0)
+        customer = order.get("customer_name") or "клиент не указан"
+        title = order.get("title") or "заказ"
+        address = order.get("address") or "адрес не указан"
+        lines.append(f"#{order_id}: {escape(str(title))}, {escape(str(customer))}, {escape(str(address))}")
+    return "\n".join(lines)
+
+
+def _order_choices_from_tasks(tasks: list[dict]) -> list[dict]:
+    choices: list[dict] = []
+    seen: set[int] = set()
+    for task in tasks:
+        order_id = int(task.get("order_id") or task.get("id") or 0)
+        if not order_id or order_id in seen:
+            continue
+        seen.add(order_id)
+        choices.append(
+            {
+                "id": order_id,
+                "title": task.get("title") or "заказ",
+                "customer_name": task.get("customer_name"),
+                "address": task.get("address"),
+            }
+        )
+    return choices
+
+
+def _parse_order_id(text: str | None) -> int | None:
+    cleaned = str(text or "").strip().lstrip("#").strip()
+    if not cleaned.isdigit():
+        return None
+    order_id = int(cleaned)
+    return order_id if order_id > 0 else None
 
 
 async def _download_telegram_file(file_id: str) -> bytes:
@@ -165,12 +236,12 @@ async def _ask_requisites_file_action(
     mime_type: str,
 ):
     user_id = message.from_user.id if message.from_user else None
-    if not await _is_admin_user(user_id):
+    if not await _is_staff_user(user_id):
         await message.answer(
-            "Файл получил. Сейчас распознавание реквизитов доступно только администраторам; "
-            "прикрепление фото к заказу добавим следующим шагом."
+            "Файл получил, но действия с файлами доступны только сотрудникам."
         )
         return
+    can_extract_requisites = await _is_admin_user(user_id)
 
     await state.update_data(
         pending_requisites_file={
@@ -182,9 +253,8 @@ async def _ask_requisites_file_action(
         }
     )
     await message.answer(
-        "Файл получил. Что сделать?\n\n"
-        "Сейчас могу извлечь реквизиты. Позже добавим действие «прикрепить к заказу».",
-        reply_markup=_requisites_file_intent_keyboard(),
+        "Файл получил. Что сделать?",
+        reply_markup=_requisites_file_intent_keyboard(can_extract_requisites=can_extract_requisites),
     )
 
 
@@ -232,6 +302,7 @@ async def extract_pending_requisites_file(callback: CallbackQuery, state: FSMCon
         return
 
     await state.update_data(pending_requisites_file=None)
+    await state.set_state(None)
     await callback.answer()
     await callback.message.edit_text("Распознаю реквизиты…")
     await _run_requisites_recognition(
@@ -245,9 +316,156 @@ async def extract_pending_requisites_file(callback: CallbackQuery, state: FSMCon
     )
 
 
+@router.callback_query(F.data == "req_file_attach")
+async def choose_order_for_pending_file(callback: CallbackQuery, state: FSMContext):
+    context = await _get_bot_access_context(callback.from_user.id)
+    if not context.is_staff:
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    data = await state.get_data()
+    pending = data.get("pending_requisites_file") or {}
+    if not isinstance(pending, dict) or not pending.get("file_id"):
+        await callback.answer("Файл не найден. Отправьте его еще раз.", show_alert=True)
+        return
+
+    async with async_session_maker() as session:
+        if context.is_manager:
+            orders = await BotOrderAttachmentService.list_recent_orders(session, limit=5)
+        else:
+            tasks = await BotTaskService.list_my_tasks(session, callback.from_user.id, limit=5)
+            orders = _order_choices_from_tasks(tasks)
+
+    if orders:
+        await callback.message.edit_text(
+            _format_order_attachment_choices(orders),
+            reply_markup=_order_attachment_keyboard(orders),
+            parse_mode="HTML",
+        )
+    else:
+        await state.set_state(ShopState.waiting_for_order_attachment_order_id)
+        await callback.message.edit_text("Быстрых вариантов не нашел. Введите номер/id заказа сообщением.")
+    await callback.answer()
+
+
+@router.callback_query(F.data == "req_file_attach_manual")
+async def enter_order_id_for_pending_file(callback: CallbackQuery, state: FSMContext):
+    context = await _get_bot_access_context(callback.from_user.id)
+    if not context.is_staff:
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    data = await state.get_data()
+    pending = data.get("pending_requisites_file") or {}
+    if not isinstance(pending, dict) or not pending.get("file_id"):
+        await callback.answer("Файл не найден. Отправьте его еще раз.", show_alert=True)
+        return
+
+    await state.set_state(ShopState.waiting_for_order_attachment_order_id)
+    await callback.message.edit_text("Введите номер/id заказа сообщением.")
+    await callback.answer()
+
+
+async def _attach_pending_file_to_order(
+    *,
+    order_id: int,
+    telegram_user_id: int | None,
+    can_attach_any: bool,
+    state: FSMContext,
+) -> dict | None:
+    data = await state.get_data()
+    pending = data.get("pending_requisites_file") or {}
+    if not isinstance(pending, dict) or not pending.get("file_id"):
+        return None
+
+    async with async_session_maker() as session:
+        allowed = await BotOrderAttachmentService.can_attach_to_order(
+            session,
+            order_id,
+            telegram_user_id=telegram_user_id,
+            can_attach_any=can_attach_any,
+        )
+        if not allowed:
+            return {"forbidden": True}
+        return await BotOrderAttachmentService.attach_to_order(
+            session,
+            order_id,
+            file_id=str(pending.get("file_id")),
+            filename=str(pending.get("filename") or "telegram-file"),
+            mime_type=str(pending.get("mime_type") or "application/octet-stream"),
+            telegram_user_id=telegram_user_id,
+            telegram_chat_id=pending.get("telegram_chat_id"),
+            telegram_message_id=pending.get("telegram_message_id"),
+        )
+
+
+@router.callback_query(F.data.startswith("req_file_attach_order_"))
+async def attach_pending_file_to_chosen_order(callback: CallbackQuery, state: FSMContext):
+    context = await _get_bot_access_context(callback.from_user.id)
+    if not context.is_staff:
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    order_id = _parse_order_id((callback.data or "").rsplit("_", 1)[-1])
+    if not order_id:
+        await callback.answer("Не понял номер заказа", show_alert=True)
+        return
+
+    result = await _attach_pending_file_to_order(
+        order_id=order_id,
+        telegram_user_id=callback.from_user.id,
+        can_attach_any=context.is_manager,
+        state=state,
+    )
+    if not result:
+        await callback.answer("Файл или заказ не найден. Проверьте номер.", show_alert=True)
+        return
+    if result.get("forbidden"):
+        await callback.answer("Этот заказ вам не назначен.", show_alert=True)
+        return
+
+    await state.update_data(pending_requisites_file=None)
+    await state.set_state(None)
+    status = "уже был прикреплен" if result.get("already_attached") else "прикреплен"
+    await callback.message.edit_text(f"✅ Файл {status} к заказу #{result['id']}.")
+    await callback.answer()
+
+
+@router.message(ShopState.waiting_for_order_attachment_order_id)
+async def attach_pending_file_to_typed_order(message: types.Message, state: FSMContext):
+    context = await _get_bot_access_context(message.from_user.id if message.from_user else None)
+    if not context.is_staff:
+        await state.clear()
+        return
+
+    order_id = _parse_order_id(message.text)
+    if not order_id:
+        await message.answer("Введите номер заказа числом, например: 123")
+        return
+
+    result = await _attach_pending_file_to_order(
+        order_id=order_id,
+        telegram_user_id=message.from_user.id if message.from_user else None,
+        can_attach_any=context.is_manager,
+        state=state,
+    )
+    if not result:
+        await message.answer("Файл или заказ не найден. Отправьте файл еще раз или проверьте номер заказа.")
+        return
+    if result.get("forbidden"):
+        await message.answer("Этот заказ вам не назначен. Проверьте номер заказа или попросите менеджера прикрепить файл.")
+        return
+
+    await state.update_data(pending_requisites_file=None)
+    await state.set_state(None)
+    status = "уже был прикреплен" if result.get("already_attached") else "прикреплен"
+    await message.answer(f"✅ Файл {status} к заказу #{result['id']}.")
+
+
 @router.callback_query(F.data == "req_file_cancel")
 async def cancel_pending_requisites_file(callback: CallbackQuery, state: FSMContext):
     await state.update_data(pending_requisites_file=None)
+    await state.set_state(None)
     await callback.message.edit_text("Ок, файл оставил без обработки.")
     await callback.answer()
 

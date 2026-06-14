@@ -17,7 +17,8 @@ from services.bot_quick_order_service import BotQuickOrderService
 from services.bot_task_service import BotTaskService
 from services.product_read_service import ProductReadService
 from services.product_service import ProductService
-from bot_app.keyboards import get_product_keyboard, selection_result_keyboard
+from bot_app.keyboards import get_product_keyboard, get_staff_main_menu, selection_result_keyboard
+from bot_app.handlers import work as work_handlers
 from bot_app.utils import format_caption
 
 
@@ -579,6 +580,105 @@ def test_selection_result_keyboard_has_client_text_action():
     button = keyboard.inline_keyboard[0][0]
     assert button.text == "Текст клиенту"
     assert button.callback_data == "selection_client_text"
+
+
+@pytest.mark.asyncio
+async def test_selection_process_passes_html_fallback_to_rich_sender(monkeypatch):
+    class FakeSessionContext:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeMessage:
+        text = "7"
+        from_user = SimpleNamespace(id=777)
+        chat = SimpleNamespace(id=555)
+
+        def __init__(self):
+            self.answers = []
+
+        async def answer(self, text, **kwargs):
+            self.answers.append({"text": text, "kwargs": kwargs})
+
+    class FakeState:
+        def __init__(self):
+            self.data = {}
+            self.states = []
+
+        async def update_data(self, **kwargs):
+            self.data.update(kwargs)
+
+        async def set_state(self, state):
+            self.states.append(state)
+
+        async def clear(self):
+            self.states.append("clear")
+
+    context = SimpleNamespace(is_staff=True, is_manager=True, is_executor=False)
+    selection = {
+        "areas": [
+            {
+                "label": "7 (1,9 кВт)",
+                "tiers": [
+                    {
+                        "label": "Бюджетнее",
+                        "products": [
+                            {
+                                "title": "Midea 07",
+                                "slug": "midea-07",
+                                "price": 990,
+                                "vitebsk_qty": 1,
+                                "minsk_qty": 0,
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+    calls = {}
+
+    async def fake_require_staff(message):
+        return context
+
+    async def fake_build_selection(session, query):
+        calls["build"] = {"session": session, "query": query}
+        return selection
+
+    async def fake_send_rich_message(user_id, rich_html, **kwargs):
+        calls["rich"] = {
+            "user_id": user_id,
+            "rich_html": rich_html,
+            "fallback_text": kwargs.get("fallback_text"),
+            "reply_markup": kwargs.get("reply_markup"),
+        }
+        return False
+
+    monkeypatch.setattr(work_handlers, "_require_staff", fake_require_staff)
+    monkeypatch.setattr(work_handlers, "async_session_maker", lambda: FakeSessionContext())
+    monkeypatch.setattr(work_handlers.BotProductSelectionService, "build_selection", fake_build_selection)
+    monkeypatch.setattr(work_handlers.BotService, "send_rich_message", fake_send_rich_message)
+
+    message = FakeMessage()
+    state = FakeState()
+
+    await work_handlers.selection_process(message, state)
+
+    assert calls["build"]["query"] == "7"
+    assert calls["rich"]["user_id"] == 555
+    assert "<h3>Подбор кондиционеров для клиента</h3>" in calls["rich"]["rich_html"]
+    assert "<b>Подбор кондиционеров для клиента</b>" in calls["rich"]["fallback_text"]
+    assert calls["rich"]["reply_markup"] is not None
+    assert state.data["selection_client_text"].startswith("Подобрал варианты кондиционеров:")
+    assert state.states == [None]
+    assert message.answers == [
+        {
+            "text": "Готово. Можно продолжить работу из меню.",
+            "kwargs": {"reply_markup": get_staff_main_menu(context)},
+        }
+    ]
 
 
 @pytest.mark.asyncio
