@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from html import escape
 from typing import Any
 
 from sqlalchemy import or_
@@ -133,16 +134,38 @@ class BotTaskService:
             lines.extend(
                 [
                     "",
-                    f"<b>#{task['order_id']} - {task['title']}</b>",
-                    f"Дата: {date_text}",
-                    f"Клиент: {task.get('customer_name') or 'Клиент'}",
-                    f"Телефон: {task.get('customer_phone') or 'не указан'}",
-                    f"Адрес: {task.get('address') or 'не указан'}",
+                    f"<b>#{task['order_id']} - {escape(str(task['title']))}</b>",
+                    f"Дата: {escape(date_text)}",
+                    f"Клиент: {escape(str(task.get('customer_name') or 'Клиент'))}",
+                    f"Телефон: {escape(str(task.get('customer_phone') or 'не указан'))}",
+                    f"Адрес: {escape(str(task.get('address') or 'не указан'))}",
                 ]
             )
             if task.get("comment"):
-                lines.append(f"Комментарий: {task['comment']}")
+                lines.append(f"Комментарий: {escape(str(task['comment']))}")
         return "\n".join(lines)
+
+    @staticmethod
+    def format_tasks_rich_html(tasks: list[dict[str, Any]]) -> str:
+        if not tasks:
+            return "<h3>Мои ближайшие задачи</h3><p>У вас нет ближайших задач.</p>"
+
+        blocks = ["<h3>Мои ближайшие задачи</h3>"]
+        for task in tasks:
+            dt = task.get("start_time")
+            date_text = dt.strftime("%d.%m.%Y %H:%M") if dt else "время не назначено"
+            blocks.append(
+                "<p>"
+                f"<b>#{task['order_id']} - {escape(str(task['title']))}</b><br/>"
+                f"<b>Дата:</b> {escape(date_text)}<br/>"
+                f"<b>Клиент:</b> {escape(str(task.get('customer_name') or 'Клиент'))}<br/>"
+                f"<b>Телефон:</b> {escape(str(task.get('customer_phone') or 'не указан'))}<br/>"
+                f"<b>Адрес:</b> {escape(str(task.get('address') or 'не указан'))}"
+                "</p>"
+            )
+            if task.get("comment"):
+                blocks.append(f"<blockquote>{escape(str(task['comment']))}</blockquote>")
+        return "".join(blocks)
 
     @staticmethod
     async def update_stage_status(

@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from bot_app.keyboards import quick_order_confirm_keyboard
 from services.bot_service import BotService
 
 
@@ -64,6 +65,25 @@ async def test_send_rich_message_calls_telegram_bot_api(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_send_rich_message_serializes_reply_markup(monkeypatch):
+    _FakeAsyncClient.requests = []
+    _FakeAsyncClient.response = _FakeResponse({"ok": True, "result": {"message_id": 1}})
+    monkeypatch.setattr("services.bot_service.httpx.AsyncClient", _FakeAsyncClient)
+    monkeypatch.setattr("services.bot_service.settings.BOT_TOKEN", "123:test", raising=False)
+
+    delivered = await BotService.send_rich_message(
+        777,
+        "<h3>Черновик</h3>",
+        reply_markup=quick_order_confirm_keyboard(),
+    )
+
+    assert delivered is True
+    payload = _FakeAsyncClient.requests[0]["json"]
+    assert payload["reply_markup"]["inline_keyboard"][0][0]["text"] == "Создать"
+    assert payload["reply_markup"]["inline_keyboard"][0][0]["callback_data"] == "quick_order_create"
+
+
+@pytest.mark.asyncio
 async def test_send_rich_message_falls_back_to_html_message(monkeypatch):
     _FakeAsyncClient.requests = []
     _FakeAsyncClient.response = _FakeResponse({"ok": False})
@@ -74,4 +94,4 @@ async def test_send_rich_message_falls_back_to_html_message(monkeypatch):
     delivered = await BotService.send_rich_message(777, "<h3>Заказ</h3>", fallback_text="fallback")
 
     assert delivered is False
-    fallback.assert_awaited_once_with(777, "fallback")
+    fallback.assert_awaited_once_with(777, "fallback", reply_markup=None)

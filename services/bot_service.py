@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 import httpx
 from aiogram import Bot
@@ -9,7 +10,17 @@ logger = logging.getLogger(__name__)
 
 class BotService:
     @staticmethod
-    async def send_message(user_id: int, text: str):
+    def _serialize_reply_markup(reply_markup: Any) -> dict[str, Any] | None:
+        if reply_markup is None:
+            return None
+        if isinstance(reply_markup, dict):
+            return reply_markup
+        if hasattr(reply_markup, "model_dump"):
+            return reply_markup.model_dump(exclude_none=True)
+        return None
+
+    @staticmethod
+    async def send_message(user_id: int, text: str, *, reply_markup: Any = None):
         """
         Sends a message to a specific Telegram user.
         Uses the shared BOT_TOKEN from settings.
@@ -17,7 +28,12 @@ class BotService:
         try:
             bot = Bot(token=settings.BOT_TOKEN)
             async with bot.context():
-                await bot.send_message(chat_id=user_id, text=text, parse_mode="HTML")
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=text,
+                    parse_mode="HTML",
+                    reply_markup=reply_markup,
+                )
         except Exception as e:
             logger.error(f"Failed to send Telegram message to {user_id}: {e}")
 
@@ -27,6 +43,7 @@ class BotService:
         rich_html: str,
         *,
         fallback_text: str | None = None,
+        reply_markup: Any = None,
     ) -> bool:
         """
         Send a Telegram Bot API 10.1 rich message.
@@ -36,14 +53,19 @@ class BotService:
         """
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
+                body: dict[str, Any] = {
+                    "chat_id": user_id,
+                    "rich_message": {
+                        "html": rich_html,
+                    },
+                }
+                serialized_reply_markup = BotService._serialize_reply_markup(reply_markup)
+                if serialized_reply_markup:
+                    body["reply_markup"] = serialized_reply_markup
+
                 response = await client.post(
                     f"https://api.telegram.org/bot{settings.BOT_TOKEN}/sendRichMessage",
-                    json={
-                        "chat_id": user_id,
-                        "rich_message": {
-                            "html": rich_html,
-                        },
-                    },
+                    json=body,
                 )
                 response.raise_for_status()
                 payload = response.json()
@@ -54,7 +76,7 @@ class BotService:
             logger.warning("Failed to send Telegram rich message to %s: %s", user_id, exc)
 
         if fallback_text:
-            await BotService.send_message(user_id, fallback_text)
+            await BotService.send_message(user_id, fallback_text, reply_markup=reply_markup)
         return False
 
     @staticmethod
