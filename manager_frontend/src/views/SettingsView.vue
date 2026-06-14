@@ -24,7 +24,7 @@ const toastType = ref<'success' | 'error'>('success');
 // A set to keep track of which settings are currently being saved
 const savingKeys = ref<Set<string>>(new Set());
 type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
-type SettingsTab = 'general' | 'documentTemplates' | 'repairComplaints' | 'emailLeads';
+type SettingsTab = 'general' | 'documentTemplates' | 'repairComplaints' | 'emailLeads' | 'botSelection';
 type ManagedDocumentType = 'contract' | 'act' | 'invoice' | 'defect_act';
 type DocumentTemplateFileOption = {
     id: string;
@@ -107,12 +107,42 @@ const EMAIL_LEAD_SETTING_KEYS = new Set([
     EMAIL_LEAD_LAST_IMPORT_KEY,
     'mail_lead_import_limit',
 ]);
+const BOT_SELECTION_RULES_KEY = 'bot_product_selection_rules';
+const BOT_SELECTION_RULES_DESCRIPTION = 'JSON-правила подбора кондиционеров для staff Telegram-бота';
+const DEFAULT_BOT_SELECTION_RULES = {
+    power_classes: {
+        '7': { kw: 1.9, area_min: 15, area_max: 24 },
+        '9': { kw: 2.6, area_min: 25, area_max: 32 },
+        '12': { kw: 3.5, area_min: 33, area_max: 42 },
+        '18': { kw: 5.3, area_min: 45, area_max: 60 },
+        '24': { kw: 7.0, area_min: 65, area_max: 80 },
+        '36': { kw: 10.5, area_min: 90, area_max: 110 },
+    },
+    default_tag_slugs: ['cat-household'],
+    tiers: {
+        mixed: [
+            { key: 'budget', label: 'Бюджетнее', is_inverter: false, sort: 'price' },
+            { key: 'optimal', label: 'Оптимально', is_inverter: true, sort: 'balanced' },
+            { key: 'premium', label: 'Премиум', is_inverter: true, sort: 'premium' },
+        ],
+        inverter_only: [
+            { key: 'optimal', label: 'Оптимально', is_inverter: true, sort: 'balanced' },
+            { key: 'premium', label: 'Премиум', is_inverter: true, sort: 'premium' },
+        ],
+        onoff_only: [
+            { key: 'onoff', label: 'ON-OFF', is_inverter: false, sort: 'price' },
+        ],
+    },
+};
 const emailLeadSettings = ref({
     autoImport: false,
     intervalMinutes: 20,
     lastImportAt: '',
 });
 const emailLeadSettingsSaving = ref(false);
+const botSelectionRulesText = ref('');
+const botSelectionRulesUpdatedAt = ref('');
+const botSelectionRulesSaving = ref(false);
 
 const goToBackups = () => {
     if (window.location.pathname !== '/manager/settings/backup') {
@@ -142,6 +172,72 @@ const hydrateEmailLeadSettings = (items: ManagerSettingResponse[]) => {
         lastImportAt: byKey.get(EMAIL_LEAD_LAST_IMPORT_KEY) || '',
     };
 };
+
+const formatJsonText = (value: unknown) => JSON.stringify(value, null, 2);
+
+const formatJsonSettingValue = (value?: string | null) => {
+    if (!value) return formatJsonText(DEFAULT_BOT_SELECTION_RULES);
+    try {
+        return formatJsonText(JSON.parse(value));
+    } catch {
+        return value;
+    }
+};
+
+const hydrateBotSelectionRules = (items: ManagerSettingResponse[]) => {
+    const setting = items.find((item) => item.key === BOT_SELECTION_RULES_KEY);
+    botSelectionRulesText.value = formatJsonSettingValue(setting?.value);
+    botSelectionRulesUpdatedAt.value = setting?.updated_at || '';
+};
+
+const parsedBotSelectionRules = computed(() => {
+    try {
+        const parsed = JSON.parse(botSelectionRulesText.value || '{}');
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, any> : null;
+    } catch {
+        return null;
+    }
+});
+
+const botSelectionRulesError = computed(() => {
+    const parsed = parsedBotSelectionRules.value;
+    if (!parsed) return 'Некорректный JSON';
+    if (!parsed.power_classes || typeof parsed.power_classes !== 'object' || Array.isArray(parsed.power_classes)) {
+        return 'Нет блока power_classes';
+    }
+    if (!parsed.tiers || typeof parsed.tiers !== 'object' || Array.isArray(parsed.tiers)) {
+        return 'Нет блока tiers';
+    }
+    return '';
+});
+
+const botSelectionPowerPreview = computed(() => {
+    const powerClasses = parsedBotSelectionRules.value?.power_classes;
+    if (!powerClasses || typeof powerClasses !== 'object' || Array.isArray(powerClasses)) return [];
+    return Object.entries(powerClasses)
+        .map(([code, config]) => {
+            const item = config as { kw?: number; area_min?: number; area_max?: number; area?: number[] };
+            const areaMin = item.area_min ?? item.area?.[0];
+            const areaMax = item.area_max ?? item.area?.[1];
+            return {
+                code,
+                kw: item.kw,
+                area: areaMin && areaMax ? `${areaMin}-${areaMax}` : '—',
+            };
+        })
+        .sort((a, b) => Number(a.code) - Number(b.code));
+});
+
+const botSelectionTierPreview = computed(() => {
+    const tiers = parsedBotSelectionRules.value?.tiers;
+    if (!tiers || typeof tiers !== 'object' || Array.isArray(tiers)) return [];
+    return Object.entries(tiers).map(([mode, items]) => ({
+        mode,
+        labels: Array.isArray(items)
+            ? items.map((item: any) => String(item?.label || item?.key || '').trim()).filter(Boolean).join(' / ')
+            : '',
+    }));
+});
 
 const upsertSettingValue = async (key: string, value: string, description: string) => {
     try {
@@ -174,6 +270,30 @@ const saveEmailLeadSettings = async () => {
     } finally {
         emailLeadSettingsSaving.value = false;
     }
+};
+
+const saveBotSelectionRules = async () => {
+    if (botSelectionRulesError.value) {
+        setToast(botSelectionRulesError.value, 'error');
+        return;
+    }
+    botSelectionRulesSaving.value = true;
+    error.value = '';
+    try {
+        const formatted = formatJsonText(parsedBotSelectionRules.value);
+        await upsertSettingValue(BOT_SELECTION_RULES_KEY, formatted, BOT_SELECTION_RULES_DESCRIPTION);
+        botSelectionRulesText.value = formatted;
+        setToast('Правила подбора бота сохранены');
+        await loadSettings();
+    } catch (e) {
+        setToast(getApiErrorMessage(e), 'error');
+    } finally {
+        botSelectionRulesSaving.value = false;
+    }
+};
+
+const resetBotSelectionRulesDraft = () => {
+    botSelectionRulesText.value = formatJsonText(DEFAULT_BOT_SELECTION_RULES);
 };
 
 const DOCUMENT_TYPE_OPTIONS: Array<{ value: ManagedDocumentType; label: string; addLabel: string }> = [
@@ -323,7 +443,13 @@ const loadSettings = async () => {
     try {
         const res = await api.listManagerSettings();
         hydrateEmailLeadSettings(res.items);
-        settings.value = res.items.filter((setting) => setting.key !== 'contract_templates' && !EMAIL_LEAD_SETTING_KEYS.has(setting.key));
+        hydrateBotSelectionRules(res.items);
+        settings.value = res.items.filter(
+            (setting) =>
+                setting.key !== 'contract_templates' &&
+                setting.key !== BOT_SELECTION_RULES_KEY &&
+                !EMAIL_LEAD_SETTING_KEYS.has(setting.key),
+        );
         contractTemplateDrafts.value = Object.fromEntries(
             res.items
                 .filter((setting) => setting.key === 'contract_templates')
@@ -743,6 +869,15 @@ onMounted(() => {
                 <span class="material-icons-round text-[18px]">mark_email_read</span>
                 Email-лиды
             </button>
+            <button
+                type="button"
+                class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                :class="activeSettingsTab === 'botSelection' ? 'bg-teal-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'"
+                @click="activeSettingsTab = 'botSelection'"
+            >
+                <span class="material-icons-round text-[18px]">smart_toy</span>
+                Telegram-бот
+            </button>
         </div>
 
         <div v-if="activeSettingsTab === 'general'" class="mb-6 bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-gray-200 dark:border-slate-700/60 p-6">
@@ -849,6 +984,108 @@ onMounted(() => {
                     <p class="mt-1 text-xs text-gray-500 dark:text-slate-400">
                         После успешной проверки дата прохода обновляется автоматически.
                     </p>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="activeSettingsTab === 'botSelection'" class="mb-6 bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-gray-200 dark:border-slate-700/60 p-6">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                    <h3 class="text-base font-semibold text-gray-900 dark:text-slate-200 mb-1 flex items-center gap-2">
+                        <span class="material-icons-round text-teal-500 text-[20px]">smart_toy</span>
+                        Подбор в Telegram-боте
+                    </h3>
+                    <p class="text-xs text-gray-500 dark:text-slate-400">
+                        Мощности, диапазоны, категории и уровни рекомендаций для staff-бота.
+                    </p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        class="flex items-center justify-center gap-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 active:bg-gray-100 dark:active:bg-slate-600 text-gray-700 dark:text-slate-300 font-medium py-2 px-4 rounded-lg shadow-sm transition-all text-sm disabled:opacity-60"
+                        :disabled="botSelectionRulesSaving"
+                        @click="resetBotSelectionRulesDraft"
+                    >
+                        <span class="material-icons-round text-[18px]">restart_alt</span>
+                        Сбросить
+                    </button>
+                    <button
+                        type="button"
+                        class="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-all text-sm disabled:opacity-60"
+                        :disabled="botSelectionRulesSaving || !!botSelectionRulesError"
+                        @click="saveBotSelectionRules"
+                    >
+                        <span v-if="botSelectionRulesSaving" class="material-icons-round text-[18px] animate-spin">refresh</span>
+                        <span v-else class="material-icons-round text-[18px]">save</span>
+                        Сохранить
+                    </button>
+                </div>
+            </div>
+
+            <div class="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+                <div>
+                    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <label class="block text-xs font-medium text-gray-500 dark:text-slate-400">bot_product_selection_rules</label>
+                        <span
+                            class="rounded-full px-2.5 py-1 text-xs font-medium"
+                            :class="botSelectionRulesError ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300' : 'bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-300'"
+                        >
+                            {{ botSelectionRulesError || 'JSON корректен' }}
+                        </span>
+                    </div>
+                    <textarea
+                        v-model="botSelectionRulesText"
+                        class="min-h-[520px] w-full resize-y rounded-lg border border-gray-300 bg-gray-50 px-3 py-3 font-mono text-sm leading-5 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                        spellcheck="false"
+                        :disabled="botSelectionRulesSaving"
+                    ></textarea>
+                    <p v-if="botSelectionRulesUpdatedAt" class="mt-2 text-xs text-gray-500 dark:text-slate-400">
+                        Изменено: {{ formatDate(botSelectionRulesUpdatedAt) }}
+                    </p>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-slate-700 dark:bg-slate-900">
+                        <div class="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-slate-100">
+                            <span class="material-icons-round text-[18px] text-teal-500">speed</span>
+                            Мощности
+                        </div>
+                        <div class="space-y-2">
+                            <div
+                                v-for="item in botSelectionPowerPreview"
+                                :key="item.code"
+                                class="grid grid-cols-[48px_1fr_82px] items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm dark:bg-slate-800"
+                            >
+                                <span class="font-semibold text-gray-900 dark:text-slate-100">{{ item.code }}</span>
+                                <span class="text-gray-600 dark:text-slate-300">{{ item.kw }} кВт</span>
+                                <span class="text-right text-xs text-gray-500 dark:text-slate-400">{{ item.area }} м²</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-slate-700 dark:bg-slate-900">
+                        <div class="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-slate-100">
+                            <span class="material-icons-round text-[18px] text-teal-500">tune</span>
+                            Режимы
+                        </div>
+                        <div class="space-y-2">
+                            <div
+                                v-for="item in botSelectionTierPreview"
+                                :key="item.mode"
+                                class="rounded-lg bg-white px-3 py-2 dark:bg-slate-800"
+                            >
+                                <div class="font-mono text-xs font-semibold text-gray-700 dark:text-slate-300">{{ item.mode }}</div>
+                                <div class="mt-1 text-sm text-gray-600 dark:text-slate-400">{{ item.labels || '—' }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-900 dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-200">
+                        <div class="font-semibold">Активно после сохранения</div>
+                        <div class="mt-1 text-xs opacity-80">
+                            Бот перечитает правила при следующем запросе подбора.
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
