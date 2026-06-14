@@ -121,8 +121,8 @@ async def test_notify_admins_staff_order_created_sends_work_order_summary(monkey
         customer=SimpleNamespace(name="Иван", phone="+375 29 123-45-67"),
     )
     session = _DummySession(order=order)
-    send_mock = AsyncMock()
-    monkeypatch.setattr("services.notification_service.BotService.send_message", send_mock)
+    send_mock = AsyncMock(return_value=True)
+    monkeypatch.setattr("services.notification_service.BotService.send_rich_message", send_mock)
 
     sent = await NotificationService.notify_admins_staff_order_created(
         session=session,
@@ -131,9 +131,11 @@ async def test_notify_admins_staff_order_created_sends_work_order_summary(monkey
     )
 
     assert sent == 2
-    sent_text = send_mock.await_args_list[0].args[1]
-    assert "Новый рабочий заказ #88" in sent_text
-    assert "Источник: Telegram-бот" in sent_text
-    assert "Услуга: Обслуживание" in sent_text
-    assert "Клиент: Иван" in sent_text
-    assert "Победы 15" in sent_text
+    rich_text = send_mock.await_args_list[0].args[1]
+    fallback_text = send_mock.await_args_list[0].kwargs["fallback_text"]
+    assert "<h3>Новый рабочий заказ #88</h3>" in rich_text
+    assert "<b>Источник:</b> Telegram-бот" in rich_text
+    assert "<b>Услуга:</b> Обслуживание" in rich_text
+    assert "<b>Клиент:</b> Иван" in rich_text
+    assert "Победы 15" in rich_text
+    assert "Новый рабочий заказ #88" in fallback_text

@@ -122,10 +122,34 @@ class NotificationService:
             lines.extend(["", f"<i>{escape(comment)}</i>"])
 
         text = "\n".join(lines)
+        rich_html = (
+            f"<h3>Новый рабочий заказ #{order.id}</h3>"
+            "<p>"
+            f"<b>Источник:</b> {escape(source_label)}<br/>"
+            f"<b>Услуга:</b> {escape(service_label)}<br/>"
+            f"<b>Дата:</b> {escape(date_text)}<br/>"
+            f"<b>Клиент:</b> {escape(customer_name)}<br/>"
+            f"<b>Телефон:</b> {escape(customer_phone)}<br/>"
+            f"<b>Адрес:</b> {escape(order.delivery_address or 'не указан')}"
+            "</p>"
+        )
+        if comment:
+            rich_html += f"<blockquote>{escape(comment)}</blockquote>"
+
         sent = 0
         for admin_id in admin_ids:
             try:
-                await BotService.send_message(admin_id, text)
+                delivered = await BotService.send_rich_message(
+                    admin_id,
+                    rich_html,
+                    fallback_text=text,
+                )
+                if not delivered:
+                    logger.info(
+                        "NOTIFY_STAFF_ORDER_RICH_FALLBACK_USED order_id=%s admin_id=%s",
+                        order.id,
+                        admin_id,
+                    )
                 sent += 1
             except Exception:
                 logger.exception("NOTIFY_STAFF_ORDER_SEND_FAILED order_id=%s admin_id=%s", order.id, admin_id)
