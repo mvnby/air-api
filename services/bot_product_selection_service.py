@@ -525,6 +525,97 @@ class BotProductSelectionService:
         return f"{total} руб." if total is not None else "цену уточним"
 
     @staticmethod
+    def _parse_spec_number(value: Any, *, nominal_from_range: bool = False) -> float | None:
+        if value in (None, ""):
+            return None
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            number = float(value)
+            return number if number > 0 else None
+
+        text = str(value).replace(",", ".")
+        matches = [float(match) for match in re.findall(r"\d+(?:\.\d+)?", text)]
+        if not matches:
+            return None
+        if nominal_from_range and len(matches) >= 3 and "/" in text:
+            return matches[1]
+        return max(matches)
+
+    @staticmethod
+    def _format_decimal(value: float) -> str:
+        rounded = round(value, 2)
+        if rounded.is_integer():
+            return str(int(rounded))
+        text = f"{rounded:.2f}".rstrip("0").rstrip(".")
+        return text.replace(".", ",")
+
+    @classmethod
+    def _product_cooling_power(cls, product: dict[str, Any]) -> float | None:
+        direct = cls._parse_spec_number(product.get("power_cooling"))
+        if direct is not None:
+            return direct
+
+        specs = product.get("specs") if isinstance(product.get("specs"), dict) else {}
+        for key in ("capacity_cooling_kw", "Мощность охлаждения", "Мощность охлаждения, кВт", "Охлаждение, кВт"):
+            number = cls._parse_spec_number(specs.get(key), nominal_from_range=True)
+            if number is not None:
+                return number
+        return None
+
+    @classmethod
+    def _product_area(cls, product: dict[str, Any]) -> float | None:
+        direct = cls._parse_spec_number(product.get("area"))
+        if direct is not None:
+            return direct
+
+        specs = product.get("specs") if isinstance(product.get("specs"), dict) else {}
+        for key in (
+            "area_m2",
+            "Обслуживаемая площадь",
+            "Обслуживаемая площадь до",
+            "Рекомендуемая максимальная площадь помещения",
+        ):
+            number = cls._parse_spec_number(specs.get(key))
+            if number is not None:
+                return number
+        return None
+
+    @classmethod
+    def _client_product_characteristics(cls, product: dict[str, Any]) -> str:
+        parts: list[str] = []
+        power = cls._product_cooling_power(product)
+        area = cls._product_area(product)
+        if power is not None:
+            parts.append(f"мощность {cls._format_decimal(power)} кВт")
+        if area is not None:
+            parts.append(f"на {cls._format_decimal(area)} м²")
+        return f" {', '.join(parts)}" if parts else ""
+
+    @staticmethod
+    def _client_tier_label(label: Any) -> str:
+        normalized = str(label or "").strip().lower()
+        if normalized == "бюджетнее":
+            return "Бюджетный вариант"
+        if normalized == "оптимально":
+            return "Оптимальный вариант"
+        if normalized == "премиум":
+            return "Премиальный вариант"
+        if normalized == "on-off":
+            return "ON-OFF вариант"
+        label_text = str(label or "Вариант").strip()
+        return label_text if label_text.lower().endswith("вариант") else f"{label_text} вариант"
+
+    @classmethod
+    def _format_client_product_line(cls, product: dict[str, Any], quantity: int = 1) -> str:
+        title = str(product.get("title") or "Кондиционер").strip()
+        characteristics = cls._client_product_characteristics(product)
+        return (
+            f"- кондиционер {title}{characteristics}\n"
+            f"  {cls._format_price(product, quantity)}\n"
+            f"  {cls.client_availability_text(product)}\n"
+            f"  {cls.product_url(product)}"
+        )
+
+    @staticmethod
     def availability_text(product: dict[str, Any]) -> str:
         vitebsk_qty = int(product.get("vitebsk_qty") or 0)
         minsk_qty = int(product.get("minsk_qty") or 0)
@@ -551,8 +642,8 @@ class BotProductSelectionService:
         if minsk_qty > 0 or availability == "available_2_3_days":
             return "в наличии в Минске, срок поставки 2-4 дня"
         if availability == "check_availability":
-            return "наличие уточним"
-        return "наличие уточним"
+            return "наличие уточняем"
+        return "наличие уточняем"
 
     @classmethod
     async def build_selection(
@@ -700,7 +791,6 @@ class BotProductSelectionService:
 
         lines = ["Подобрал варианты кондиционеров:"]
         for area in areas:
-            area_label = cls._format_area_label(area)
             quantity = int(area.get("quantity") or 1)
             area_lines = []
             for tier in area["tiers"]:
@@ -709,12 +799,11 @@ class BotProductSelectionService:
                     continue
                 product = products[0]
                 area_lines.append(
-                    f"{tier['label']}: {product.get('title')} - {cls._format_price(product, quantity)}\n"
-                    f"{cls.client_availability_text(product)}\n"
-                    f"{cls.product_url(product)}"
+                    f"{cls._client_tier_label(tier.get('label'))}:\n"
+                    f"{cls._format_client_product_line(product, quantity)}"
                 )
             if area_lines:
-                lines.extend(["", area_label, *area_lines])
+                lines.extend(["", *area_lines])
 
         if len(lines) == 1:
             return "Пока не получилось подобрать варианты из наличия."
@@ -750,17 +839,11 @@ class BotProductSelectionService:
                 product = products[0]
                 quantity = int(area.get("quantity") or 1)
                 tier_label = tier_label or str((tier or {}).get("label") or "Вариант")
-                area_label = cls._format_area_label(area)
-                title = str(product.get("title") or "Товар")
                 product_total = cls._product_total_price(product, quantity)
                 total = total + product_total if total is not None and product_total is not None else None
-                tier_lines.append(
-                    f"- {area_label}: {title} - {cls._format_price(product, quantity)}\n"
-                    f"  {cls.client_availability_text(product)}\n"
-                    f"  {cls.product_url(product)}"
-                )
+                tier_lines.append(cls._format_client_product_line(product, quantity))
             if tier_lines:
-                lines.extend(["", f"{tier_label}:", *tier_lines])
+                lines.extend(["", f"{cls._client_tier_label(tier_label)}:", *tier_lines])
                 lines.append(f"Итого по варианту: {cls._format_total_price(total)}")
 
         if len(lines) == 1:
