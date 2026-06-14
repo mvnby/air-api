@@ -25,6 +25,31 @@ class BotQuickOrderService:
         "repair": "Ремонт",
         "dismantling": "Демонтаж",
     }
+    WEEKDAY_ALIASES = {
+        "пн": 0,
+        "понедельник": 0,
+        "понедельника": 0,
+        "вт": 1,
+        "вторник": 1,
+        "вторника": 1,
+        "ср": 2,
+        "среду": 2,
+        "среда": 2,
+        "четверг": 3,
+        "четверга": 3,
+        "чт": 3,
+        "пятницу": 4,
+        "пятница": 4,
+        "пятницы": 4,
+        "пт": 4,
+        "субботу": 5,
+        "суббота": 5,
+        "субботы": 5,
+        "сб": 5,
+        "воскресенье": 6,
+        "воскресенья": 6,
+        "вс": 6,
+    }
 
     @staticmethod
     def _clean_optional(value: Any) -> Optional[str]:
@@ -82,8 +107,7 @@ class BotQuickOrderService:
         elif "сегодня" in value:
             day = now
         else:
-            match = re.search(r"\b(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?\b", value)
-            if match:
+            for match in re.finditer(r"\b(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?\b", value):
                 day_num = int(match.group(1))
                 month_num = int(match.group(2))
                 year_num = int(match.group(3)) if match.group(3) else now.year
@@ -93,6 +117,19 @@ class BotQuickOrderService:
                     day = now.replace(year=year_num, month=month_num, day=day_num)
                 except ValueError:
                     day = None
+                    continue
+                break
+            if day is None:
+                weekday_pattern = "|".join(
+                    sorted((re.escape(alias) for alias in BotQuickOrderService.WEEKDAY_ALIASES), key=len, reverse=True)
+                )
+                weekday_match = re.search(rf"\b(?:на\s+|в\s+)?({weekday_pattern})\b", value)
+                if weekday_match:
+                    target_weekday = BotQuickOrderService.WEEKDAY_ALIASES[weekday_match.group(1)]
+                    days_ahead = (target_weekday - now.weekday()) % 7
+                    if days_ahead == 0:
+                        days_ahead = 7
+                    day = now + timedelta(days=days_ahead)
 
         if day is None:
             return None
@@ -102,8 +139,17 @@ class BotQuickOrderService:
             hour = int(time_match.group(1))
             minute = int(time_match.group(2) or 0)
         else:
-            hour = 9
-            minute = 0
+            loose_time_match = re.search(
+                r"\b(?:в|к)\s*(\d{1,2})(?:(?:[:.](\d{2}))|\s*(?:ч|час(?:а|ов)?)(?:\s*(\d{2}))?)?\b"
+                r"|\b(\d{1,2})\s*(?:ч|час(?:а|ов)?)\b",
+                value,
+            )
+            if loose_time_match:
+                hour = int(loose_time_match.group(1) or loose_time_match.group(4))
+                minute = int(loose_time_match.group(2) or loose_time_match.group(3) or 0)
+            else:
+                hour = 9
+                minute = 0
         if hour > 23 or minute > 59:
             return day.replace(hour=9, minute=0, second=0, microsecond=0)
         return day.replace(hour=hour, minute=minute, second=0, microsecond=0)
