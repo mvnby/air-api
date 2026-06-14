@@ -1,4 +1,5 @@
 import asyncio
+import json
 import sys
 from datetime import datetime
 
@@ -10,6 +11,7 @@ sys.path.append(".")
 
 from core.config import settings
 from models.content import GlobalConfig
+from services.bot_product_selection_service import BotProductSelectionService
 
 
 DEFAULT_CONFIGS: list[tuple[str, str, str]] = [
@@ -20,6 +22,11 @@ DEFAULT_CONFIGS: list[tuple[str, str, str]] = [
     ("fx_rate_source", "manual", "Источник курса USD/BYN: manual | nbrb"),
     ("supplier_default_spreadsheet_id", "", "Spreadsheet ID по умолчанию для новых источников"),
     ("fx_supplier_markup_percent", "2.0", "Надбавка к курсу USD/BYN для закупки, %"),
+    (
+        BotProductSelectionService.CONFIG_KEY,
+        json.dumps(BotProductSelectionService.default_rules(), ensure_ascii=False, indent=2),
+        "JSON-правила подбора кондиционеров для staff Telegram-бота",
+    ),
 ]
 
 
