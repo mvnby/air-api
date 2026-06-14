@@ -94,6 +94,22 @@ def test_start_scheduler_loop_skips_for_standby(monkeypatch):
     create_task.assert_not_called()
 
 
+def test_bot_main_registers_staff_commands(monkeypatch):
+    _set_required_env(monkeypatch)
+    config = importlib.import_module("core.config")
+    monkeypatch.setattr(config.settings, "BOT_TOKEN", "123:test", raising=False)
+    bot_main = importlib.import_module("bot_app.main")
+
+    commands = {command.command: command.description for command in bot_main.STAFF_BOT_COMMANDS}
+
+    assert commands["menu"] == "Показать рабочее меню"
+    assert commands["help"] == "Показать рабочее меню и подсказки"
+    assert commands["quick_order"] == "Быстрый заказ из текста звонка"
+    assert commands["selection"] == "Подбор кондиционеров: 7х2, 7, 12"
+    assert commands["search"] == "Поиск товара: Midea 12"
+    assert commands["tasks"] == "Мои задачи и отчеты"
+
+
 @pytest.mark.asyncio
 async def test_bot_main_disabled_does_not_poll(monkeypatch):
     _set_required_env(monkeypatch)

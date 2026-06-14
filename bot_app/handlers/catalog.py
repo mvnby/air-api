@@ -11,7 +11,13 @@ from services.bot_access_service import BotAccessService
 from services.bot_product_selection_service import BotProductSelectionService
 from services.product_service import ProductService
 from services.staff_user_service import StaffUserService
-from ..keyboards import area_selection_kb, type_selection_kb, winter_selection_kb, wifi_selection_kb
+from ..keyboards import (
+    area_selection_kb,
+    get_staff_main_menu,
+    type_selection_kb,
+    winter_selection_kb,
+    wifi_selection_kb,
+)
 from ..utils import send_product_card
 from ..states import ShopState
 
@@ -32,6 +38,12 @@ async def _is_staff_user(user_id: int | None) -> bool:
 async def _is_manager_user(user_id: int | None) -> bool:
     context = await _get_access_context(user_id)
     return context.is_staff and context.is_manager
+
+
+async def _answer_with_staff_menu(message: types.Message, user_id: int | None) -> None:
+    context = await _get_access_context(user_id)
+    if context.is_staff:
+        await message.answer("Можно продолжить работу из меню.", reply_markup=get_staff_main_menu(context))
 
 
 def _is_inline_search_query(text: str) -> bool:
@@ -195,6 +207,7 @@ async def process_wifi_and_show_results(callback: CallbackQuery, state: FSMConte
             await send_product_card(callback, product, is_admin)
             
     await state.clear()
+    await _answer_with_staff_menu(callback.message, callback.from_user.id)
     await callback.answer()
 
 # ==================== ПОИСК ====================
@@ -272,6 +285,7 @@ async def search_process(message: types.Message, state: FSMContext):
     await _render_search_results(message, query, products)
 
     await state.clear()
+    await _answer_with_staff_menu(message, user_id)
 
 
 @router.message(StateFilter(None), F.text)

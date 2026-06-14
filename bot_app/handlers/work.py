@@ -33,6 +33,11 @@ async def _require_staff(message: types.Message):
     return context
 
 
+async def _answer_with_staff_menu(message: types.Message, context, text: str = "Можно продолжить работу из меню.") -> None:
+    if context and context.is_staff:
+        await message.answer(text, reply_markup=get_staff_main_menu(context))
+
+
 @router.message(F.text == "⚡ Быстрый заказ")
 @router.message(Command("quick_order"))
 async def quick_order_start(message: types.Message, state: FSMContext):
@@ -96,6 +101,7 @@ async def quick_order_create(callback: CallbackQuery, state: FSMContext):
         f"✅ Заказ #{order['id']} создан.\n"
         "Он уже доступен в менеджере и календаре, если дата была указана."
     )
+    await _answer_with_staff_menu(callback.message, context)
     await callback.answer()
 
 
@@ -108,8 +114,10 @@ async def quick_order_retry(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "quick_order_cancel")
 async def quick_order_cancel(callback: CallbackQuery, state: FSMContext):
+    context = await _access_context(callback.from_user.id)
     await state.clear()
     await callback.message.edit_text("Быстрый заказ отменен.")
+    await _answer_with_staff_menu(callback.message, context)
     await callback.answer()
 
 
@@ -173,7 +181,10 @@ async def calendar_hint(message: types.Message):
     context = await _require_staff(message)
     if not context:
         return
-    await message.answer("Календарь ведем в Manager. Быстрые заказы с датой автоматически появляются там.")
+    await message.answer(
+        "Календарь ведем в Manager. Быстрые заказы с датой автоматически появляются там.",
+        reply_markup=get_staff_main_menu(context),
+    )
 
 
 @router.message(F.text == "🧰 Мои задачи")
@@ -193,10 +204,12 @@ async def my_tasks(message: types.Message):
     )
     if not delivered:
         await message.answer(fallback_text, parse_mode="HTML", reply_markup=keyboard)
+    await _answer_with_staff_menu(message, context)
 
 
 @router.callback_query(F.data.startswith("task_accept_") | F.data.startswith("task_done_"))
 async def update_task_status(callback: CallbackQuery):
+    context = await _access_context(callback.from_user.id)
     data = callback.data or ""
     status = "in_progress" if data.startswith("task_accept_") else "completed"
     stage_id = int(data.rsplit("_", 1)[-1])
@@ -211,7 +224,7 @@ async def update_task_status(callback: CallbackQuery):
         await callback.answer("Задача не найдена или нет доступа", show_alert=True)
         return
     await callback.answer("Готово")
-    await callback.message.answer("Статус задачи обновлен.")
+    await callback.message.answer("Статус задачи обновлен.", reply_markup=get_staff_main_menu(context))
 
 
 @router.callback_query(F.data.startswith("task_report_"))
@@ -247,4 +260,8 @@ async def task_report_finish(message: types.Message, state: FSMContext):
             telegram_id=message.from_user.id if message.from_user else None,
         )
     await state.clear()
-    await message.answer("Отчет сохранен." if ok else "Задача не найдена или нет доступа.")
+    context = await _access_context(message.from_user.id if message.from_user else None)
+    await message.answer(
+        "Отчет сохранен." if ok else "Задача не найдена или нет доступа.",
+        reply_markup=get_staff_main_menu(context) if context.is_staff else None,
+    )

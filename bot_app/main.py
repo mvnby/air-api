@@ -1,5 +1,6 @@
 import asyncio
 from aiogram import types
+from aiogram.types import BotCommand
 from .config import bot, dp
 from .handlers import admin, base, catalog, work
 from core.config import settings
@@ -7,6 +8,16 @@ from core.logger import setup_logging
 
 # Setup logging with session-specific bot.log (cleared on restart)
 logger = setup_logging(session_log_file="logs/bot.log", clear_session_log=True)
+
+STAFF_BOT_COMMANDS = [
+    BotCommand(command="start", description="Открыть рабочее меню"),
+    BotCommand(command="menu", description="Показать рабочее меню"),
+    BotCommand(command="help", description="Показать рабочее меню и подсказки"),
+    BotCommand(command="quick_order", description="Быстрый заказ из текста звонка"),
+    BotCommand(command="selection", description="Подбор кондиционеров: 7х2, 7, 12"),
+    BotCommand(command="search", description="Поиск товара: Midea 12"),
+    BotCommand(command="tasks", description="Мои задачи и отчеты"),
+]
 
 # Global Error Handler for Bot
 @dp.error()
@@ -17,6 +28,10 @@ async def error_handler(event: types.ErrorEvent):
 async def _idle_when_disabled() -> None:
     while True:
         await asyncio.sleep(3600)
+
+
+async def _setup_bot_commands() -> None:
+    await bot.set_my_commands(STAFF_BOT_COMMANDS)
 
 
 async def main(*, wait_when_disabled: bool = True):
@@ -35,6 +50,7 @@ async def main(*, wait_when_disabled: bool = True):
     dp.include_router(catalog.router)
     dp.include_router(admin.router)
     
+    await _setup_bot_commands()
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
