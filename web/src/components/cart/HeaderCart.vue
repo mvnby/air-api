@@ -12,7 +12,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <a href="/cart" class="header-cart-btn" aria-label="Корзина">
+  <a href="/cart/" class="header-cart-btn" aria-label="Корзина">
     <div class="icon-wrapper">
         <span class="material-icons-round">shopping_cart</span>
         <transition name="pop">

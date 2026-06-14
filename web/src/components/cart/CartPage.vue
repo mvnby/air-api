@@ -105,7 +105,7 @@ const toggleOption = (item, opt) => {
         <span class="material-icons-round empty-icon">shopping_cart</span>
         <h2>Корзина пуста</h2>
         <p>Перейдите в каталог, чтобы выбрать товары</p>
-        <a href="/catalog" class="btn btn-primary">В каталог</a>
+        <a href="/catalog/" class="btn btn-primary">В каталог</a>
     </div>
 
     <div v-else key="list" class="cart-layout-grid-v2">
@@ -198,7 +198,7 @@ const toggleOption = (item, opt) => {
                 <span>{{ formatPrice(total) }} <span class="price-byn"></span></span>
             </div>
             
-            <a href="/checkout" class="btn btn-primary btn-block checkout-btn">
+            <a href="/checkout/" class="btn btn-primary btn-block checkout-btn">
                 Оформить заказ
             </a>
         </div>

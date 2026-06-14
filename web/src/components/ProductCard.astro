@@ -134,7 +134,7 @@ const showAreaBadge = !!product.area;
 {
   variant === "default" && (
     <div class="product-item card group">
-      <a href={`/product/${product.slug}`} class="p-img-box">
+      <a href={`/product/${product.slug}/`} class="p-img-box">
         <img
           src={resolveImageUrl(productCardImage)}
           alt={product.title}
@@ -177,7 +177,7 @@ const showAreaBadge = !!product.area;
         )}
       </a>
       <div class="p-info">
-        <a href={`/product/${product.slug}`} class="p-title-link">
+        <a href={`/product/${product.slug}/`} class="p-title-link">
           <p class="p-title">{product.title}</p>
         </a>
 
@@ -281,7 +281,7 @@ const showAreaBadge = !!product.area;
 
 {
   variant === "minimal" && (
-    <a href={`/product/${product.slug}`} class="minimal-card card">
+    <a href={`/product/${product.slug}/`} class="minimal-card card">
       <div class="m-img-box">
         <img
           src={resolveImageUrl(productCardImage)}

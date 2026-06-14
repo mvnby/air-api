@@ -299,7 +299,7 @@ const submitOrderHandler = async () => {
 
     <div v-else-if="items.length === 0" key="empty" class="empty-msg">
         <h2>Корзина пуста</h2>
-        <a href="/catalog">В каталог</a>
+        <a href="/catalog/">В каталог</a>
     </div>
 
     <div v-else key="form" class="checkout-layout-grid-v2">
@@ -475,8 +475,8 @@ const submitOrderHandler = async () => {
                     </button>
                     <p class="privacy-note">
                         Нажимая кнопку, вы соглашаетесь с
-                        <a href="/offer">публичной офертой</a> и
-                        <a href="/privacy">политикой обработки персональных данных</a>.
+                        <a href="/offer/">публичной офертой</a> и
+                        <a href="/privacy/">политикой обработки персональных данных</a>.
                     </p>
                 </div>
             </form>
@@ -504,13 +504,13 @@ const submitOrderHandler = async () => {
                     </button>
                      <p class="privacy-note">
                         Нажимая кнопку, вы соглашаетесь с
-                        <a href="/offer">публичной офертой</a> и
-                        <a href="/privacy">политикой обработки персональных данных</a>.
+                        <a href="/offer/">публичной офертой</a> и
+                        <a href="/privacy/">политикой обработки персональных данных</a>.
                      </p>
                 </div>
             </div>
             
-            <a href="/cart" class="back-link">
+            <a href="/cart/" class="back-link">
                 <span class="material-icons-round">arrow_back</span>
                 Вернуться в корзину
             </a>

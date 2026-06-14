@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {
   buildBrandMetaDescription,
   buildBrandSeoTitle,
+  buildCanonicalUrl,
   buildProductMetaDescription,
+  normalizeCanonicalPath,
   sanitizeSeoText,
 } from '../src/utils/seo.js';
 
@@ -41,6 +43,10 @@ assert.notEqual(haierDescription, 'Кондиционеры в Витебске.
 
 const htmlText = sanitizeSeoText('<b>Haier&nbsp;Home</b> &amp; монтаж');
 assert.equal(htmlText, 'Haier Home & монтаж');
+assert.equal(normalizeCanonicalPath('/product/split-sistema-haier-tundra'), '/product/split-sistema-haier-tundra/');
+assert.equal(normalizeCanonicalPath('/index.php?_route_=split/haier/lightera/'), '/split/haier/lightera/');
+assert.equal(normalizeCanonicalPath('https://mvn.by/catalog?tag_slugs=cat-multi'), '/catalog/');
+assert.equal(buildCanonicalUrl('/brands/haier', 'https://mvn.by'), 'https://mvn.by/brands/haier/');
 
 const longDescription = buildProductMetaDescription({
   title: 'Очень длинное название кондиционера с большим количеством характеристик и длинным техническим обозначением модели ABCDEFG-1234567890-EXTRA-LONG',

@@ -1,3 +1,5 @@
+import { buildCanonicalUrl } from "./seo.js";
+
 const ENV_API_URL = import.meta.env.INTERNAL_API_URL || 'http://app:8000/api/v1';
 const PUBLIC_API_URL = (import.meta.env.PUBLIC_API_URL || 'http://localhost:8000').replace(/\/api\/v1\/?$/, "");
 
@@ -152,13 +154,29 @@ export function applyRuntimeFreshnessHeaders(response, runtimeFreshness) {
     response.headers.set("Cache-Control", "no-store");
 }
 
-export function createRuntimeNotFoundResponse(response, runtimeFreshness) {
+export function createRuntimeNotFoundResponse(response, runtimeFreshness, options = {}) {
     applyRuntimeFreshnessHeaders(response, runtimeFreshness);
     const headers = new Headers(response?.headers || {});
     headers.set("Content-Type", "text/html; charset=utf-8");
     headers.set("Cache-Control", "no-store");
+    headers.set("X-Robots-Tag", "noindex, follow");
+    const canonicalHref = options?.canonicalOrigin
+        ? buildCanonicalUrl("/404/", options.canonicalOrigin)
+        : "/404/";
     return new Response(
-        "<!doctype html><html><head><title>Not found</title></head><body><h1>404</h1></body></html>",
+        [
+            "<!doctype html>",
+            '<html lang="ru">',
+            "<head>",
+            '<meta charset="utf-8" />',
+            '<meta name="robots" content="noindex,follow" />',
+            "<title>Страница не найдена | МАСТЕР ВОЗДУХА</title>",
+            '<meta name="description" content="Запрошенная страница не найдена. Перейдите в каталог кондиционеров MVN." />',
+            `<link rel="canonical" href="${canonicalHref}" />`,
+            "</head>",
+            "<body><h1>404: страница не найдена</h1></body>",
+            "</html>",
+        ].join(""),
         {
             status: 404,
             headers,

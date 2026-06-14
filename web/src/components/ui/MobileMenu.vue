@@ -28,43 +28,43 @@
                   Каталог
                 </div>
                 <a
-                  href="/catalog?tag_slugs=cat-household"
+                  href="/catalog/"
                   class="nav-subitem"
                   @click="isOpen = false"
                 >
                   Бытовые
                 </a>
                 <a
-                  href="/catalog?tag_slugs=cat-multi"
+                  href="/catalog/multi-split/"
                   class="nav-subitem"
                   @click="isOpen = false"
                 >
                   Мультисплит
                 </a>
                 <a
-                  href="/catalog?tag_slugs=cat-industrial"
+                  href="/catalog/polupromyshlennye/"
                   class="nav-subitem"
                   @click="isOpen = false"
                 >
                   Полупром
                 </a>
                 <a
-                  href="/brands"
+                  href="/brands/"
                   class="nav-subitem"
                   @click="isOpen = false"
                 >
                   Бренды
                 </a>
               </div>
-              <a href="/services" class="nav-item" @click="isOpen = false">
+              <a href="/services/" class="nav-item" @click="isOpen = false">
                 <span class="material-icons-round icon">handyman</span>
                 Услуги
               </a>
-              <a href="/blog" class="nav-item" @click="isOpen = false">
+              <a href="/blog/" class="nav-item" @click="isOpen = false">
                 <span class="material-icons-round icon">article</span>
                 Статьи
               </a>
-              <a href="/contacts" class="nav-item" @click="isOpen = false">
+              <a href="/contacts/" class="nav-item" @click="isOpen = false">
                 <span class="material-icons-round icon">contacts</span>
                 Контакты
               </a>

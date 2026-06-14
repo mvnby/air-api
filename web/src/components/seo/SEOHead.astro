@@ -1,4 +1,6 @@
 ---
+import { buildCanonicalUrl } from "../../utils/seo.js";
+
 export interface Props {
     title: string;
     description: string;
@@ -22,9 +24,7 @@ const {
 } = Astro.props;
 
 const site = Astro.site ? Astro.site.toString() : Astro.url.origin;
-const canonicalURL = canonical
-    ? new URL(canonical, site)
-    : new URL(Astro.url.pathname, site);
+const canonicalURL = buildCanonicalUrl(canonical || Astro.url.pathname, site);
 
 const resolveImage = (img: string | undefined): URL => {
     if (!img) {
@@ -76,14 +76,14 @@ const schema =
 
 <!-- Open Graph / Facebook -->
 <meta property="og:type" content={type} />
-<meta property="og:url" content={Astro.url} />
+<meta property="og:url" content={canonicalURL} />
 <meta property="og:title" content={title} />
 <meta property="og:description" content={description} />
 <meta property="og:image" content={resolvedImage} />
 
 <!-- Twitter -->
 <meta property="twitter:card" content="summary_large_image" />
-<meta property="twitter:url" content={Astro.url} />
+<meta property="twitter:url" content={canonicalURL} />
 <meta property="twitter:title" content={title} />
 <meta property="twitter:description" content={description} />
 <meta property="twitter:image" content={resolvedImage} />

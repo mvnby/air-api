@@ -31,6 +31,34 @@ export function trimSeoDescription(value, maxLength = MAX_META_DESCRIPTION_LENGT
     return `${normalized.slice(0, end).trim()}...`;
 }
 
+export function normalizeCanonicalPath(value = "/") {
+    const raw = String(value || "/").trim() || "/";
+    const parsed = new URL(raw, "https://mvn.by");
+    let pathname = parsed.pathname || "/";
+
+    if (pathname === "/index.php" && parsed.searchParams.has("_route_")) {
+        pathname = `/${String(parsed.searchParams.get("_route_") || "").replace(/^\/+/, "")}`;
+    } else if (pathname === "/index.php") {
+        pathname = "/";
+    }
+
+    pathname = pathname.replace(/\/{2,}/g, "/");
+    if (!pathname.startsWith("/")) {
+        pathname = `/${pathname}`;
+    }
+
+    const hasFileExtension = /\.[a-z0-9]{2,8}$/i.test(pathname);
+    if (!hasFileExtension && pathname !== "/" && !pathname.endsWith("/")) {
+        pathname = `${pathname}/`;
+    }
+
+    return pathname;
+}
+
+export function buildCanonicalUrl(value = "/", site = "https://mvn.by") {
+    return new URL(normalizeCanonicalPath(value), site).toString();
+}
+
 const getTagGroupSlug = (tag) => tag?.group?.slug || tag?.group_slug || "";
 
 const getTagByGroup = (product, groupSlug) =>

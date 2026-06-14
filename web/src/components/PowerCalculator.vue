@@ -78,7 +78,7 @@ const catalogUrl = computed(() => {
         params.set('heating_min', '-20');
     }
 
-    return `/catalog?${params.toString()}`;
+    return `/catalog/?${params.toString()}`;
 });
 </script>
 

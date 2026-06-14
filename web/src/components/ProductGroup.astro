@@ -23,7 +23,7 @@ const { title, tags = [], vitebskFeatured = false, filters = {}, limit = 4 } = A
 let products: any[] = [];
 
 const viewAllHref = (() => {
-    if (vitebskFeatured) return "/catalog";
+    if (vitebskFeatured) return "/catalog/";
 
     const viewAllParams = new URLSearchParams();
     if (tags.length) viewAllParams.set("tag_slugs", tags.join(","));
@@ -38,7 +38,7 @@ const viewAllHref = (() => {
     }
 
     const query = viewAllParams.toString();
-    return query ? `/catalog?${query}` : "/catalog";
+    return query ? `/catalog/?${query}` : "/catalog/";
 })();
 
 // Fetch products:
