@@ -464,6 +464,10 @@ async def test_quick_order_create_uses_order_service_and_stage_for_dated_work(mo
         calls["stage_payload"] = payload
         return {"id": order_id, "work_stages": [{"name": payload.name}]}
 
+    async def fake_notify(session, order_id, *, source_label):
+        calls["notify"] = {"order_id": order_id, "source_label": source_label}
+        return 1
+
     monkeypatch.setattr(
         "services.bot_quick_order_service.OrderService.create_manager_order",
         fake_create_manager_order,
@@ -471,6 +475,10 @@ async def test_quick_order_create_uses_order_service_and_stage_for_dated_work(mo
     monkeypatch.setattr(
         "services.bot_quick_order_service.OrderService.add_order_stage",
         fake_add_order_stage,
+    )
+    monkeypatch.setattr(
+        "services.bot_quick_order_service.NotificationService.notify_admins_staff_order_created",
+        fake_notify,
     )
 
     order = await BotQuickOrderService.create_order_from_draft(
@@ -490,3 +498,51 @@ async def test_quick_order_create_uses_order_service_and_stage_for_dated_work(mo
     assert calls["payload"].service_type == "install_only"
     assert calls["stage_order_id"] == 42
     assert calls["stage_payload"].name == "Монтаж"
+    assert calls["notify"] == {"order_id": 42, "source_label": "Telegram-бот"}
+
+
+@pytest.mark.asyncio
+async def test_quick_order_create_notifies_admins_for_maintenance_without_stage(monkeypatch):
+    calls = {}
+
+    async def fake_create_manager_order(session, payload):
+        calls["payload"] = payload
+        return {"id": 43}
+
+    async def fake_add_order_stage(session, order_id, payload):
+        raise AssertionError("maintenance quick orders should use order installation_date, not a work stage")
+
+    async def fake_notify(session, order_id, *, source_label):
+        calls["notify"] = {"order_id": order_id, "source_label": source_label}
+        return 1
+
+    monkeypatch.setattr(
+        "services.bot_quick_order_service.OrderService.create_manager_order",
+        fake_create_manager_order,
+    )
+    monkeypatch.setattr(
+        "services.bot_quick_order_service.OrderService.add_order_stage",
+        fake_add_order_stage,
+    )
+    monkeypatch.setattr(
+        "services.bot_quick_order_service.NotificationService.notify_admins_staff_order_created",
+        fake_notify,
+    )
+
+    order = await BotQuickOrderService.create_order_from_draft(
+        object(),
+        {
+            "name": "Иван",
+            "phone": "+375291234567",
+            "address": "Победы 15",
+            "service_type": "maintenance",
+            "target_date": "2026-06-15T14:00:00",
+            "request_text": "ТО, Иван, Победы 15",
+        },
+    )
+
+    assert order["id"] == 43
+    assert calls["payload"].source == "bot"
+    assert calls["payload"].service_type == "maintenance"
+    assert calls["payload"].target_date.isoformat() == "2026-06-15T14:00:00"
+    assert calls["notify"] == {"order_id": 43, "source_label": "Telegram-бот"}

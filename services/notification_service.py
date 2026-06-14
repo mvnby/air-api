@@ -13,6 +13,15 @@ logger = logging.getLogger(__name__)
 
 
 class NotificationService:
+    SERVICE_LABELS = {
+        "turnkey": "Продажа + монтаж",
+        "install_only": "Монтаж",
+        "pre_install": "Закладка трассы",
+        "maintenance": "Обслуживание",
+        "repair": "Ремонт",
+        "dismantling": "Демонтаж",
+    }
+
     @staticmethod
     async def _admin_recipient_ids(session: AsyncSession) -> list[int]:
         return await StaffUserService.get_active_owner_admin_telegram_recipient_ids(session)
@@ -65,6 +74,62 @@ class NotificationService:
                 await BotService.send_message(admin_id, admin_text)
             except Exception:
                 logger.exception("NOTIFY_NEW_ORDER_SEND_FAILED order_id=%s admin_id=%s", order.id, admin_id)
+
+    @staticmethod
+    async def notify_admins_staff_order_created(
+        session: AsyncSession,
+        order_id: int,
+        *,
+        source_label: str = "рабочий бот",
+    ) -> int:
+        admin_ids = await NotificationService._admin_recipient_ids(session)
+        if not admin_ids:
+            return 0
+
+        stmt = (
+            select(Order)
+            .where(Order.id == order_id)
+            .options(selectinload(Order.customer))
+        )
+        result = await session.execute(stmt)
+        order = result.scalar_one_or_none()
+        if not order:
+            logger.warning("NOTIFY_STAFF_ORDER_SKIPPED missing_order_id=%s", order_id)
+            return 0
+
+        customer = getattr(order, "customer", None)
+        customer_name = getattr(customer, "name", None) or "Новый клиент"
+        customer_phone = getattr(customer, "phone", None) or "не указан"
+        meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
+        service_type = str(meta.get("service_type") or "").strip()
+        service_label = NotificationService.SERVICE_LABELS.get(service_type, service_type or "не указана")
+        order_date = order.installation_date or order.measurement_date
+        date_text = order_date.strftime("%d.%m.%Y %H:%M") if order_date else "не назначена"
+        comment = (order.comment or "").strip()
+        if len(comment) > 320:
+            comment = f"{comment[:317]}..."
+
+        lines = [
+            f"🔔 <b>Новый рабочий заказ #{order.id}</b>",
+            f"Источник: {escape(source_label)}",
+            f"Услуга: {escape(service_label)}",
+            f"Дата: {escape(date_text)}",
+            f"Клиент: {escape(customer_name)}",
+            f"Телефон: {escape(customer_phone)}",
+            f"Адрес: {escape(order.delivery_address or 'не указан')}",
+        ]
+        if comment:
+            lines.extend(["", f"<i>{escape(comment)}</i>"])
+
+        text = "\n".join(lines)
+        sent = 0
+        for admin_id in admin_ids:
+            try:
+                await BotService.send_message(admin_id, text)
+                sent += 1
+            except Exception:
+                logger.exception("NOTIFY_STAFF_ORDER_SEND_FAILED order_id=%s admin_id=%s", order.id, admin_id)
+        return sent
 
     @staticmethod
     async def notify_admins_bank_receipts_imported(

@@ -104,3 +104,36 @@ async def test_notify_admins_new_order_sends_to_admins(monkeypatch):
     assert "НОВЫЙ ЗАКАЗ #77" in sent_text
     assert "Model X x2" in sent_text
     assert "Монтаж: 120 BYN" in sent_text
+
+
+@pytest.mark.asyncio
+async def test_notify_admins_staff_order_created_sends_work_order_summary(monkeypatch):
+    monkeypatch.setattr(settings, "ADMIN_IDS", "10,11", raising=False)
+    monkeypatch.setattr(settings, "ADMIN_ID", 0, raising=False)
+
+    order = SimpleNamespace(
+        id=88,
+        delivery_address="Победы 15",
+        installation_date=None,
+        measurement_date=None,
+        comment="ТО, Иван, +375 29 123-45-67, Победы 15",
+        technical_meta={"service_type": "maintenance"},
+        customer=SimpleNamespace(name="Иван", phone="+375 29 123-45-67"),
+    )
+    session = _DummySession(order=order)
+    send_mock = AsyncMock()
+    monkeypatch.setattr("services.notification_service.BotService.send_message", send_mock)
+
+    sent = await NotificationService.notify_admins_staff_order_created(
+        session=session,
+        order_id=88,
+        source_label="Telegram-бот",
+    )
+
+    assert sent == 2
+    sent_text = send_mock.await_args_list[0].args[1]
+    assert "Новый рабочий заказ #88" in sent_text
+    assert "Источник: Telegram-бот" in sent_text
+    assert "Услуга: Обслуживание" in sent_text
+    assert "Клиент: Иван" in sent_text
+    assert "Победы 15" in sent_text
