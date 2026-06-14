@@ -192,6 +192,122 @@ const initialFilters = {
     canonical={canonicalPath}
     robots={robotsValue}
 >
+    <Fragment slot="head">
+        <script is:inline define:vars={{ virtualCategories: VIRTUAL_CATEGORIES }}>
+            (() => {
+                if (typeof window === "undefined") return;
+
+                const sp = new URLSearchParams(window.location.search);
+                if (Array.from(sp.keys()).length === 0) return;
+
+                const parseTags = () => {
+                    const tags = [];
+                    sp.getAll("tag_slugs").forEach((raw) => {
+                        raw.split(",").forEach((tag) => {
+                            const clean = tag.trim().toLowerCase();
+                            if (clean) tags.push(clean);
+                        });
+                    });
+                    return tags;
+                };
+
+                const technicalDefaultTags = new Set(["cat-household"]);
+                const normalizeTags = (tags) => [...new Set(tags.filter((tag) => !technicalDefaultTags.has(tag)))].sort();
+
+                const sortRaw = sp.get("sort") || "recommended";
+                const allowedSorts = [
+                    "recommended",
+                    "newest",
+                    "price_asc",
+                    "price_desc",
+                    "area_asc",
+                    "area_desc",
+                ];
+                const sort = allowedSorts.includes(sortRaw) ? sortRaw : "recommended";
+
+                const toNumber = (value) => {
+                    if (!value) return undefined;
+                    const parsed = Number.parseInt(value, 10);
+                    return Number.isFinite(parsed) ? parsed : undefined;
+                };
+
+                const normalizedInput = {
+                    sort,
+                    tag_slugs: normalizeTags(parseTags()),
+                    is_inverter:
+                        sp.get("is_inverter") === "true"
+                            ? true
+                            : sp.get("is_inverter") === "false"
+                              ? false
+                              : undefined,
+                    has_wifi:
+                        sp.get("has_wifi") === "true"
+                            ? true
+                            : sp.get("has_wifi") === "false"
+                              ? false
+                              : undefined,
+                    heating_min: toNumber(sp.get("heating_min")),
+                    area_min: toNumber(sp.get("area_min")),
+                    area_max: toNumber(sp.get("area_max")),
+                    indoor_types: normalizeTags(
+                        sp
+                            .getAll("indoor_types")
+                            .flatMap((raw) => raw.split(","))
+                            .map((raw) => raw.trim().toLowerCase())
+                            .filter(Boolean),
+                    ),
+                };
+
+                const matched = virtualCategories.find((category) => {
+                    const normalizedCategory = {
+                        sort: category.filters.sort || "recommended",
+                        tag_slugs: normalizeTags(category.filters.tag_slugs || []),
+                        is_inverter:
+                            typeof category.filters.is_inverter === "boolean"
+                                ? category.filters.is_inverter
+                                : undefined,
+                        has_wifi:
+                            typeof category.filters.has_wifi === "boolean"
+                                ? category.filters.has_wifi
+                                : undefined,
+                        heating_min: category.filters.heating_min,
+                        area_min: category.filters.area_min,
+                        area_max: category.filters.area_max,
+                        indoor_types: normalizeTags(category.filters.indoor_types || []),
+                    };
+
+                    return (
+                        normalizedInput.sort === normalizedCategory.sort &&
+                        normalizedInput.is_inverter === normalizedCategory.is_inverter &&
+                        normalizedInput.has_wifi === normalizedCategory.has_wifi &&
+                        normalizedInput.heating_min === normalizedCategory.heating_min &&
+                        normalizedInput.area_min === normalizedCategory.area_min &&
+                        normalizedInput.area_max === normalizedCategory.area_max &&
+                        normalizedInput.indoor_types.length === normalizedCategory.indoor_types.length &&
+                        normalizedInput.indoor_types.every((value, idx) => value === normalizedCategory.indoor_types[idx]) &&
+                        normalizedInput.tag_slugs.length === normalizedCategory.tag_slugs.length &&
+                        normalizedInput.tag_slugs.every((tag, idx) => tag === normalizedCategory.tag_slugs[idx])
+                    );
+                });
+
+                const canonicalPath = matched ? `/catalog/${matched.slug}/` : "/catalog/";
+                const canonicalUrl = new URL(canonicalPath, window.location.origin).toString();
+
+                const canonicalNode = document.querySelector('link[rel="canonical"]');
+                if (canonicalNode) {
+                    canonicalNode.setAttribute("href", canonicalUrl);
+                }
+
+                let robotsNode = document.querySelector('meta[name="robots"]');
+                if (!robotsNode) {
+                    robotsNode = document.createElement("meta");
+                    robotsNode.setAttribute("name", "robots");
+                    document.head.appendChild(robotsNode);
+                }
+                robotsNode.setAttribute("content", "noindex,follow");
+            })();
+        </script>
+    </Fragment>
     <script type="application/ld+json" set:html={JSON.stringify(catalogSchema)} />
     <script is:inline>
         (() => {
@@ -326,131 +442,6 @@ const initialFilters = {
             </div>
         </CatalogApp>
     </div>
-    <script is:inline define:vars={{ virtualCategories: VIRTUAL_CATEGORIES }}>
-        (() => {
-            if (typeof window === "undefined") return;
-
-            const sp = new URLSearchParams(window.location.search);
-            if (Array.from(sp.keys()).length === 0) return;
-
-            const parseTags = () => {
-                const tags = [];
-                sp.getAll("tag_slugs").forEach((raw) => {
-                    raw.split(",").forEach((tag) => {
-                        const clean = tag.trim().toLowerCase();
-                        if (clean) tags.push(clean);
-                    });
-                });
-                return tags;
-            };
-
-            const technicalDefaultTags = new Set(["cat-household"]);
-            const normalizeTags = (tags) => [...new Set(tags.filter((tag) => !technicalDefaultTags.has(tag)))].sort();
-
-            const sortRaw = sp.get("sort") || "recommended";
-            const allowedSorts = [
-                "recommended",
-                "newest",
-                "price_asc",
-                "price_desc",
-                "area_asc",
-                "area_desc",
-            ];
-            const sort = allowedSorts.includes(sortRaw) ? sortRaw : "recommended";
-
-            const toNumber = (value) => {
-                if (!value) return undefined;
-                const parsed = Number.parseInt(value, 10);
-                return Number.isFinite(parsed) ? parsed : undefined;
-            };
-
-            const normalizedInput = {
-                sort,
-                tag_slugs: normalizeTags(parseTags()),
-                is_inverter:
-                    sp.get("is_inverter") === "true"
-                        ? true
-                        : sp.get("is_inverter") === "false"
-                          ? false
-                          : undefined,
-                has_wifi:
-                    sp.get("has_wifi") === "true"
-                        ? true
-                        : sp.get("has_wifi") === "false"
-                          ? false
-                          : undefined,
-                heating_min: toNumber(sp.get("heating_min")),
-                area_min: toNumber(sp.get("area_min")),
-                area_max: toNumber(sp.get("area_max")),
-                indoor_types: normalizeTags(
-                    sp
-                        .getAll("indoor_types")
-                        .flatMap((raw) => raw.split(","))
-                        .map((raw) => raw.trim().toLowerCase())
-                        .filter(Boolean),
-                ),
-            };
-
-            const matched = virtualCategories.find((category) => {
-                const normalizedCategory = {
-                    sort: category.filters.sort || "recommended",
-                    tag_slugs: normalizeTags(category.filters.tag_slugs || []),
-                    is_inverter:
-                        typeof category.filters.is_inverter === "boolean"
-                            ? category.filters.is_inverter
-                            : undefined,
-                    has_wifi:
-                        typeof category.filters.has_wifi === "boolean"
-                            ? category.filters.has_wifi
-                            : undefined,
-                    heating_min: category.filters.heating_min,
-                    area_min: category.filters.area_min,
-                    area_max: category.filters.area_max,
-                    indoor_types: normalizeTags(category.filters.indoor_types || []),
-                };
-
-                return (
-                    normalizedInput.sort === normalizedCategory.sort &&
-                    normalizedInput.is_inverter ===
-                        normalizedCategory.is_inverter &&
-                    normalizedInput.has_wifi === normalizedCategory.has_wifi &&
-                    normalizedInput.heating_min === normalizedCategory.heating_min &&
-                    normalizedInput.area_min === normalizedCategory.area_min &&
-                    normalizedInput.area_max === normalizedCategory.area_max &&
-                    normalizedInput.indoor_types.length ===
-                        normalizedCategory.indoor_types.length &&
-                    normalizedInput.indoor_types.every(
-                        (value, idx) =>
-                            value === normalizedCategory.indoor_types[idx],
-                    ) &&
-                    normalizedInput.tag_slugs.length ===
-                        normalizedCategory.tag_slugs.length &&
-                    normalizedInput.tag_slugs.every(
-                        (tag, idx) => tag === normalizedCategory.tag_slugs[idx],
-                    )
-                );
-            });
-
-            const canonicalPath = matched ? `/catalog/${matched.slug}` : "/catalog";
-            const canonicalUrl = new URL(
-                canonicalPath,
-                window.location.origin,
-            ).toString();
-
-            const canonicalNode = document.querySelector('link[rel="canonical"]');
-            if (canonicalNode) {
-                canonicalNode.setAttribute("href", canonicalUrl);
-            }
-
-            let robotsNode = document.querySelector('meta[name="robots"]');
-            if (!robotsNode) {
-                robotsNode = document.createElement("meta");
-                robotsNode.setAttribute("name", "robots");
-                document.head.appendChild(robotsNode);
-            }
-            robotsNode.setAttribute("content", "noindex,follow");
-        })();
-    </script>
 </Layout>
 
 <style>

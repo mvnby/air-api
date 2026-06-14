@@ -113,7 +113,7 @@ const productCardImage = computed(() => props.product.card_image || props.produc
 
 <template>
   <div v-if="variant === 'default'" class="product-item card group">
-    <a :href="`/product/${product.slug}`" class="product-link">
+    <a :href="`/product/${product.slug}/`" class="product-link">
       <div class="p-img-box">
         <img :src="resolveImageUrl(productCardImage)" :alt="product.title" />
 

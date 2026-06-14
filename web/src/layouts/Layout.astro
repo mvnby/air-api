@@ -81,6 +81,7 @@ const address = config["address"] || SITE_CONFIG.address;
 			canonical={canonical}
 			robots={robots}
 		/>
+		<slot name="head" />
 
 		<link
 			href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"
@@ -163,15 +164,15 @@ const address = config["address"] || SITE_CONFIG.address;
 							<span class="material-icons-round">expand_more</span>
 						</button>
 						<div id="catalog-menu" class="nav-dropdown-menu">
-							<a href="/catalog?tag_slugs=cat-household">Бытовые</a>
-							<a href="/catalog?tag_slugs=cat-multi">Мультисплит</a>
-							<a href="/catalog?tag_slugs=cat-industrial">Полупром</a>
-							<a href="/brands">Бренды</a>
+							<a href="/catalog/">Бытовые</a>
+							<a href="/catalog/multi-split/">Мультисплит</a>
+							<a href="/catalog/polupromyshlennye/">Полупром</a>
+							<a href="/brands/">Бренды</a>
 						</div>
 					</div>
-					<a href="/services">Услуги</a>
-					<a href="/blog">Статьи</a>
-					<a href="/contacts">Контакты</a>
+					<a href="/services/">Услуги</a>
+					<a href="/blog/">Статьи</a>
+					<a href="/contacts/">Контакты</a>
 				</div>
 
 				<div class="nav-actions">
@@ -252,10 +253,10 @@ const address = config["address"] || SITE_CONFIG.address;
 				<div class="footer-col">
 					<h4>Меню</h4>
 					<ul class="footer-links">
-						<li><a href="/catalog">Каталог</a></li>
-						<li><a href="/brands">Бренды</a></li>
-						<li><a href="/services">Услуги</a></li>
-						<li><a href="/contacts">О нас</a></li>
+						<li><a href="/catalog/">Каталог</a></li>
+						<li><a href="/brands/">Бренды</a></li>
+						<li><a href="/services/">Услуги</a></li>
+						<li><a href="/contacts/">О нас</a></li>
 					</ul>
 				</div>
 
@@ -274,11 +275,11 @@ const address = config["address"] || SITE_CONFIG.address;
 			<div class="footer-bottom">
 				<p>
 					© 2026 МАСТЕР ВОЗДУХА. Все права защищены.
-					<a href="/offer">Публичная оферта</a>
+					<a href="/offer/">Публичная оферта</a>
 					<span aria-hidden="true"> · </span>
-					<a href="/privacy">Политика конфиденциальности</a>
+					<a href="/privacy/">Политика конфиденциальности</a>
 					<span aria-hidden="true"> · </span>
-					<a href="/terms">Условия использования</a>
+					<a href="/terms/">Условия использования</a>
 				</p>
 			</div>
 		</footer>

@@ -83,7 +83,9 @@ const brand = runtimeFreshness
     ? await getPublicBrandBySlug(Astro.params.slug || "", runtimeFreshnessOption)
     : initialBrand || (await getPublicBrandBySlug(Astro.params.slug || ""));
 if (!brand) {
-    return createRuntimeNotFoundResponse(Astro.response, runtimeFreshness);
+    return createRuntimeNotFoundResponse(Astro.response, runtimeFreshness, {
+        canonicalOrigin: Astro.url.origin,
+    });
 }
 
 const catalogParams = {
@@ -399,7 +401,7 @@ const productsWithoutSeriesByCatalog = Object.values(CATALOG_GROUPS)
             <div class="breadcrumb">
                 <a href="/">Главная</a>
                 <span class="sep">/</span>
-                <a href="/brands">Бренды</a>
+                <a href="/brands/">Бренды</a>
                 <span class="sep">/</span>
                 <span>{brand.title}</span>
             </div>

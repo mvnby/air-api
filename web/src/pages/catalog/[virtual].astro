@@ -59,7 +59,9 @@ const runtimeFreshness = await createRuntimeFreshnessContext();
 const runtimeFreshnessOption = runtimeFreshness ? { runtimeFreshness } : undefined;
 const resolvedCategory = category || getVirtualCategoryBySlug(Astro.params.virtual || "");
 if (!resolvedCategory) {
-    return createRuntimeNotFoundResponse(Astro.response, runtimeFreshness);
+    return createRuntimeNotFoundResponse(Astro.response, runtimeFreshness, {
+        canonicalOrigin: Astro.url.origin,
+    });
 }
 
 const query = buildCatalogQueryFromVirtual(resolvedCategory);
@@ -106,7 +108,7 @@ const staticPopularProducts =
             <div class="breadcrumb">
                 <a href="/">Главная</a>
                 <span class="sep">/</span>
-                <a href="/catalog">Каталог</a>
+                <a href="/catalog/">Каталог</a>
                 <span class="sep">/</span>
                 <span>{resolvedCategory.h1}</span>
             </div>

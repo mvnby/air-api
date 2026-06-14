@@ -26,6 +26,32 @@ export interface VirtualCategoryConfig {
 
 export const VIRTUAL_CATEGORIES: VirtualCategoryConfig[] = [
     {
+        slug: "multi-split",
+        seoTitle: "Купить мульти-сплит систему в Витебске",
+        seoDescription:
+            "Мульти-сплит системы в Витебске: один наружный блок и несколько внутренних с подбором и монтажом.",
+        h1: "Мульти-сплит системы в Витебске",
+        intro: "Подберем мульти-сплит систему для нескольких комнат, когда важно сохранить фасад и грамотно развести трассы.",
+        filters: {
+            tag_slugs: ["cat-multi"],
+            sort: "recommended",
+        },
+        indexable: true,
+    },
+    {
+        slug: "polupromyshlennye",
+        seoTitle: "Купить полупромышленный кондиционер в Витебске",
+        seoDescription:
+            "Полупромышленные кондиционеры в Витебске: кассетные, канальные и напольно-потолочные модели с монтажом.",
+        h1: "Полупромышленные кондиционеры в Витебске",
+        intro: "Кассетные, канальные, колонные и напольно-потолочные системы для офисов, магазинов и залов.",
+        filters: {
+            tag_slugs: ["cat-industrial"],
+            sort: "recommended",
+        },
+        indexable: true,
+    },
+    {
         slug: "inverter",
         seoTitle: "Купить инверторную сплит-систему в Витебске",
         seoDescription:

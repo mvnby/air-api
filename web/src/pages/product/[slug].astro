@@ -80,22 +80,24 @@ const product = runtimeFreshness
         : (await getProductBySlug(productSlug)) || initialProduct;
 
 if (!product) {
-    return createRuntimeNotFoundResponse(Astro.response, runtimeFreshness);
+    return createRuntimeNotFoundResponse(Astro.response, runtimeFreshness, {
+        canonicalOrigin: Astro.url.origin,
+    });
 }
 applyRuntimeFreshnessHeaders(Astro.response, runtimeFreshness);
 
 const CATEGORY_BREADCRUMBS: Record<string, { title: string; href: string }> = {
     "cat-household": {
         title: "Бытовые кондиционеры",
-        href: "/catalog?tag_slugs=cat-household",
+        href: "/catalog/",
     },
     "cat-multi": {
         title: "Мультисплит",
-        href: "/catalog?tag_slugs=cat-multi",
+        href: "/catalog/multi-split/",
     },
     "cat-industrial": {
         title: "Полупромышленные кондиционеры",
-        href: "/catalog?tag_slugs=cat-industrial",
+        href: "/catalog/polupromyshlennye/",
     },
 };
 
@@ -212,7 +214,7 @@ const seriesSiblings = Array.isArray(product.series_siblings)
         <nav class="breadcrumb">
             <a href="/">Главная</a>
             <span class="sep">/</span>
-            <a href="/catalog">Каталог</a>
+            <a href="/catalog/">Каталог</a>
             <span class="sep">/</span>
             {
                 categoryBreadcrumb && (
