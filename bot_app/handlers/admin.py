@@ -84,24 +84,31 @@ def _preview_keyboard(data: dict) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def _requisites_file_intent_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Извлечь реквизиты", callback_data="req_file_extract")],
+            [InlineKeyboardButton(text="Отмена", callback_data="req_file_cancel")],
+        ]
+    )
+
+
 async def _download_telegram_file(file_id: str) -> bytes:
     buffer = BytesIO()
     await bot.download(file_id, destination=buffer)
     return buffer.getvalue()
 
 
-async def _handle_requisites_file(
-    message: types.Message,
+async def _run_requisites_recognition(
+    progress_message: types.Message,
     *,
     file_id: str,
     filename: str,
     mime_type: str,
+    telegram_user_id: int | None,
+    telegram_chat_id: int | None,
+    telegram_message_id: int | None,
 ):
-    if not await _is_admin_user(message.from_user.id if message.from_user else None):
-        await message.answer("Распознавание реквизитов доступно только администраторам.")
-        return
-
-    progress = await message.answer("Распознаю реквизиты…")
     try:
         content = await _download_telegram_file(file_id)
         async with async_session_maker() as session:
@@ -111,24 +118,84 @@ async def _handle_requisites_file(
                 filename=filename,
                 mime_type=mime_type,
                 source="telegram",
-                telegram_user_id=message.from_user.id if message.from_user else None,
-                telegram_chat_id=message.chat.id if message.chat else None,
-                telegram_message_id=message.message_id,
+                telegram_user_id=telegram_user_id,
+                telegram_chat_id=telegram_chat_id,
+                telegram_message_id=telegram_message_id,
             )
     except Exception as exc:
-        await progress.edit_text(f"❌ Не удалось распознать реквизиты: {escape(str(exc))}")
+        await progress_message.edit_text(f"❌ Не удалось распознать реквизиты: {escape(str(exc))}")
         return
 
-    await progress.edit_text(_preview_text(data), reply_markup=_preview_keyboard(data), parse_mode="HTML")
+    await progress_message.edit_text(_preview_text(data), reply_markup=_preview_keyboard(data), parse_mode="HTML")
+
+
+async def _handle_requisites_file(
+    message: types.Message,
+    *,
+    file_id: str,
+    filename: str,
+    mime_type: str,
+    telegram_user_id: int | None = None,
+    telegram_chat_id: int | None = None,
+    telegram_message_id: int | None = None,
+):
+    user_id = telegram_user_id if telegram_user_id is not None else (message.from_user.id if message.from_user else None)
+    if not await _is_admin_user(user_id):
+        await message.answer("Распознавание реквизитов доступно только администраторам.")
+        return
+
+    progress = await message.answer("Распознаю реквизиты…")
+    await _run_requisites_recognition(
+        progress,
+        file_id=file_id,
+        filename=filename,
+        mime_type=mime_type,
+        telegram_user_id=user_id,
+        telegram_chat_id=telegram_chat_id if telegram_chat_id is not None else (message.chat.id if message.chat else None),
+        telegram_message_id=telegram_message_id if telegram_message_id is not None else message.message_id,
+    )
+
+
+async def _ask_requisites_file_action(
+    message: types.Message,
+    state: FSMContext,
+    *,
+    file_id: str,
+    filename: str,
+    mime_type: str,
+):
+    user_id = message.from_user.id if message.from_user else None
+    if not await _is_admin_user(user_id):
+        await message.answer(
+            "Файл получил. Сейчас распознавание реквизитов доступно только администраторам; "
+            "прикрепление фото к заказу добавим следующим шагом."
+        )
+        return
+
+    await state.update_data(
+        pending_requisites_file={
+            "file_id": file_id,
+            "filename": filename,
+            "mime_type": mime_type,
+            "telegram_message_id": message.message_id,
+            "telegram_chat_id": message.chat.id if message.chat else None,
+        }
+    )
+    await message.answer(
+        "Файл получил. Что сделать?\n\n"
+        "Сейчас могу извлечь реквизиты. Позже добавим действие «прикрепить к заказу».",
+        reply_markup=_requisites_file_intent_keyboard(),
+    )
 
 
 @router.message(F.photo)
-async def recognize_requisites_photo(message: types.Message):
+async def recognize_requisites_photo(message: types.Message, state: FSMContext):
     if not message.photo:
         return
     photo = message.photo[-1]
-    await _handle_requisites_file(
+    await _ask_requisites_file_action(
         message,
+        state,
         file_id=photo.file_id,
         filename=f"telegram-photo-{message.message_id}.jpg",
         mime_type="image/jpeg",
@@ -136,19 +203,53 @@ async def recognize_requisites_photo(message: types.Message):
 
 
 @router.message(F.document)
-async def recognize_requisites_document(message: types.Message):
+async def recognize_requisites_document(message: types.Message, state: FSMContext):
     document = message.document
     if not document:
         return
     mime_type = document.mime_type or ""
     if mime_type not in {"image/jpeg", "image/png", "image/webp", "application/pdf"}:
         return
-    await _handle_requisites_file(
+    await _ask_requisites_file_action(
         message,
+        state,
         file_id=document.file_id,
         filename=document.file_name or f"telegram-document-{message.message_id}",
         mime_type=mime_type,
     )
+
+
+@router.callback_query(F.data == "req_file_extract")
+async def extract_pending_requisites_file(callback: CallbackQuery, state: FSMContext):
+    if not await _is_admin_user(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    data = await state.get_data()
+    pending = data.get("pending_requisites_file") or {}
+    if not isinstance(pending, dict) or not pending.get("file_id"):
+        await callback.answer("Файл не найден. Отправьте его еще раз.", show_alert=True)
+        return
+
+    await state.update_data(pending_requisites_file=None)
+    await callback.answer()
+    await callback.message.edit_text("Распознаю реквизиты…")
+    await _run_requisites_recognition(
+        callback.message,
+        file_id=str(pending.get("file_id")),
+        filename=str(pending.get("filename") or "telegram-file"),
+        mime_type=str(pending.get("mime_type") or "application/octet-stream"),
+        telegram_user_id=callback.from_user.id,
+        telegram_chat_id=pending.get("telegram_chat_id") or (callback.message.chat.id if callback.message and callback.message.chat else None),
+        telegram_message_id=pending.get("telegram_message_id"),
+    )
+
+
+@router.callback_query(F.data == "req_file_cancel")
+async def cancel_pending_requisites_file(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(pending_requisites_file=None)
+    await callback.message.edit_text("Ок, файл оставил без обработки.")
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("ocr_create_") | F.data.startswith("ocr_update_") | F.data.startswith("ocr_cancel_"))
