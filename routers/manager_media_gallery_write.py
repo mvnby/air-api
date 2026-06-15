@@ -233,7 +233,7 @@ async def process_missing_image_variants(
     limit: int = Query(100, ge=1, le=100),
     include_installation: bool = Query(False),
     dry_run: bool = Query(True),
-    provider: str = Query("noop", description="Processing provider: noop, manual, rembg"),
+    provider: str = Query("noop", description="Processing provider: auto, noop, manual, rembg, birefnet, ben"),
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
@@ -259,7 +259,7 @@ async def process_missing_image_variants(
 async def reprocess_image_variant(
     image_id: int,
     variant_type: str = Query("card", description="Variant to reprocess: processed, card, full"),
-    provider: str = Query("noop", description="Processing provider: noop, manual, rembg"),
+    provider: str = Query("noop", description="Processing provider: auto, noop, manual, rembg, birefnet, ben"),
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):

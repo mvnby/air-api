@@ -21,6 +21,10 @@ import ProductEditModal from '../components/ProductEditModal.vue';
 import OnlinerImportModal from '../components/OnlinerImportModal.vue';
 import ImageCropSelector, { type ImageCropSourceSize } from '../components/ImageCropSelector.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
+import {
+    backgroundRemovalProviderOptions,
+    type BackgroundRemovalProvider,
+} from '../utils/media-processing';
 
 // Product state
 const products = ref<Product[]>([]);
@@ -46,7 +50,7 @@ const showOnlinerImportModal = ref(false);
 const yandexPriceListLoading = ref(false);
 const variantLimit = ref(50);
 const includeInstallationVariants = ref(false);
-const variantProvider = ref<'noop' | 'manual' | 'rembg'>('noop');
+const variantProvider = ref<BackgroundRemovalProvider>('noop');
 const variantCandidatesLoading = ref(false);
 const variantProcessingLoading = ref(false);
 const variantReprocessingImageId = ref<number | null>(null);
@@ -1946,9 +1950,13 @@ watchDebounced(
                           class="h-8 rounded-md border border-gray-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
                           title="Провайдер обработки variant card"
                       >
-                          <option value="noop">noop</option>
-                          <option value="manual">manual</option>
-                          <option value="rembg">rembg</option>
+                          <option
+                              v-for="option in backgroundRemovalProviderOptions"
+                              :key="option.value"
+                              :value="option.value"
+                          >
+                              {{ option.label }}
+                          </option>
                       </select>
                       <label class="flex items-center gap-1 text-xs text-gray-600">
                           <input v-model="includeInstallationVariants" type="checkbox" class="rounded border-gray-300 text-teal-600 focus:ring-teal-500" />

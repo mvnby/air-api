@@ -270,8 +270,8 @@ export const api = {
         return await ManagerMediaService.cropMediaAsset(assetId, payload);
     },
 
-    async removeMediaAssetBackground(assetId: number): Promise<ManagerMediaAssetResponse> {
-        return await ManagerMediaService.removeMediaAssetBackground(assetId);
+    async removeMediaAssetBackground(assetId: number, provider = 'auto'): Promise<ManagerMediaAssetResponse> {
+        return await ManagerMediaService.removeMediaAssetBackground(assetId, provider);
     },
 
     async deleteMediaAsset(assetId: number, force = false) {

@@ -25,7 +25,7 @@ from models import Article, Brand, MediaAsset, Product, ProductImage, ProductIma
 from services.product_image_processing_contract import ProductImageVariantType
 from services.product_image_processing_provider import (
     ProductImageProcessingContext,
-    RembgProductImageProcessor,
+    get_product_image_processor,
 )
 
 
@@ -266,6 +266,7 @@ class MediaLibraryService:
         *,
         asset_id: int,
         created_by: str | None,
+        provider: str = "auto",
     ) -> dict:
         source = await MediaLibraryService._get_asset_or_raise(session, asset_id)
         if source.mime_type == SVG_MIME_TYPE:
@@ -274,7 +275,7 @@ class MediaLibraryService:
         if source_path is None or not source_path.exists():
             raise ValueError("Source file is not available in local media storage")
 
-        processor = RembgProductImageProcessor()
+        processor = get_product_image_processor(provider)
         processed = await processor.process(
             source_content=source_path.read_bytes(),
             context=ProductImageProcessingContext(

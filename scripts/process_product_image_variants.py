@@ -27,8 +27,12 @@ PROCESSABLE_VARIANTS = (
     ProductImageVariantType.FULL.value,
 )
 CLI_PROVIDERS = (
+    ProductImageProcessingProvider.AUTO.value,
     ProductImageProcessingProvider.NOOP.value,
+    ProductImageProcessingProvider.MANUAL.value,
     ProductImageProcessingProvider.REMBG.value,
+    ProductImageProcessingProvider.BIREFNET.value,
+    ProductImageProcessingProvider.BEN.value,
 )
 
 
@@ -137,7 +141,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--provider",
         choices=CLI_PROVIDERS,
         default=ProductImageProcessingProvider.NOOP.value,
-        help="Processing provider. noop means local Pillow normalization without background removal.",
+        help=(
+            "Processing provider. noop means local Pillow normalization without background "
+            "removal; auto uses BACKGROUND_REMOVAL_PROVIDER."
+        ),
     )
     parser.add_argument(
         "--include-installation",

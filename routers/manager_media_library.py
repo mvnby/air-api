@@ -170,6 +170,7 @@ async def crop_media_asset(
 )
 async def remove_media_asset_background(
     asset_id: int,
+    provider: str = Query("auto", description="Processing provider: auto, noop, manual, rembg, birefnet, ben"),
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
@@ -178,6 +179,7 @@ async def remove_media_asset_background(
             session=session,
             asset_id=asset_id,
             created_by=username,
+            provider=provider,
         )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
