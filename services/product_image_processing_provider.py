@@ -8,7 +8,7 @@ import shlex
 import subprocess
 import tempfile
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import lru_cache, partial
 from io import BytesIO
 from typing import Any, Protocol
 
@@ -39,30 +39,32 @@ BACKGROUND_REMOVAL_COMMAND_ENVS = {
 DEFAULT_BACKGROUND_REMOVAL_PROVIDER = ProductImageProcessingProvider.REMBG.value
 DEFAULT_BACKGROUND_REMOVAL_REMBG_MODEL = "u2net"
 DEFAULT_BACKGROUND_REMOVAL_TIMEOUT_SECONDS = 120
-REMBG_MODEL_OPTIONS = [
+SAFE_REMBG_MODEL_OPTIONS = [
     {
         "value": "u2net",
         "label": "U2Net",
         "description": "Stable baseline model for the first comparison pass.",
         "recommended": True,
     },
+]
+EXPERIMENTAL_REMBG_MODEL_OPTIONS = [
     {
         "value": "isnet-general-use",
         "label": "ISNet general",
         "description": "Often handles complex edges and light products more carefully.",
-        "recommended": True,
+        "recommended": False,
     },
     {
         "value": "birefnet-general-lite",
         "label": "BiRefNet lite",
         "description": "Faster BiRefNet candidate for quality comparison.",
-        "recommended": True,
+        "recommended": False,
     },
     {
         "value": "birefnet-general",
         "label": "BiRefNet general",
         "description": "High-quality general model, usually heavier than lite.",
-        "recommended": True,
+        "recommended": False,
     },
     {
         "value": "birefnet-massive",
@@ -77,7 +79,8 @@ REMBG_MODEL_OPTIONS = [
         "recommended": False,
     },
 ]
-DEFAULT_REMBG_PRELOAD_MODELS = tuple(item["value"] for item in REMBG_MODEL_OPTIONS)
+REMBG_MODEL_OPTIONS = [*SAFE_REMBG_MODEL_OPTIONS, *EXPERIMENTAL_REMBG_MODEL_OPTIONS]
+DEFAULT_REMBG_PRELOAD_MODELS = tuple(item["value"] for item in SAFE_REMBG_MODEL_OPTIONS)
 
 
 @dataclass(frozen=True)
@@ -148,7 +151,16 @@ class RembgProductImageProcessor:
             raise RuntimeError("rembg provider is not installed") from exc
 
         session = _get_rembg_session(self.model_name)
-        output = remove(source_content, session=session)
+        timeout_seconds = _background_removal_timeout_seconds()
+        try:
+            output = await asyncio.wait_for(
+                asyncio.to_thread(partial(remove, source_content, session=session)),
+                timeout=timeout_seconds,
+            )
+        except asyncio.TimeoutError as exc:
+            raise RuntimeError(
+                f"rembg provider timed out after {timeout_seconds}s: {self.model_name}"
+            ) from exc
         return _process_image_bytes(output, context=context)
 
 
@@ -308,8 +320,9 @@ def background_removal_provider_options() -> list[dict[str, str]]:
     ]
 
 
-def rembg_model_options() -> list[dict[str, Any]]:
-    return [dict(item) for item in REMBG_MODEL_OPTIONS]
+def rembg_model_options(*, include_experimental: bool = False) -> list[dict[str, Any]]:
+    options = REMBG_MODEL_OPTIONS if include_experimental else SAFE_REMBG_MODEL_OPTIONS
+    return [dict(item) for item in options]
 
 
 def default_rembg_model_name() -> str:

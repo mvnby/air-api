@@ -1,4 +1,5 @@
 import sys
+import time
 from io import BytesIO
 
 import pytest
@@ -67,8 +68,14 @@ def test_rembg_processor_records_model_in_provider_name():
     assert processor.provider_name == "rembg:isnet-general-use"
 
 
-def test_rembg_model_options_include_popular_candidates():
-    values = {item["value"] for item in rembg_model_options()}
+def test_rembg_model_options_expose_only_safe_default_candidates():
+    values = [item["value"] for item in rembg_model_options()]
+
+    assert values == ["u2net"]
+
+
+def test_rembg_model_options_keep_experimental_candidates_for_manual_ops():
+    values = {item["value"] for item in rembg_model_options(include_experimental=True)}
 
     assert {
         "u2net",
@@ -82,8 +89,7 @@ def test_rembg_model_options_include_popular_candidates():
 
 def test_rembg_preload_models_use_default_and_env_override(monkeypatch):
     monkeypatch.delenv("BACKGROUND_REMOVAL_REMBG_PRELOAD_MODELS", raising=False)
-    assert rembg_preload_model_names()[0] == "u2net"
-    assert "birefnet-general" in rembg_preload_model_names()
+    assert rembg_preload_model_names() == ["u2net"]
 
     monkeypatch.setenv("BACKGROUND_REMOVAL_REMBG_PRELOAD_MODELS", "u2net, birefnet-general, u2net")
     assert rembg_preload_model_names() == ["u2net", "birefnet-general"]
@@ -161,6 +167,38 @@ async def test_rembg_processor_passes_configured_session(monkeypatch):
     assert result.width == 40
     assert sessions == [{"model": "isnet-general-use"}]
     assert removed_sessions == [{"model": "isnet-general-use"}]
+
+
+@pytest.mark.asyncio
+async def test_rembg_processor_times_out_without_blocking_event_loop(monkeypatch):
+    class FakeRembgModule:
+        @staticmethod
+        def new_session(model_name):
+            return {"model": model_name}
+
+        @staticmethod
+        def remove(source_content, *, session):
+            time.sleep(0.05)
+            return source_content
+
+    monkeypatch.setitem(sys.modules, "rembg", FakeRembgModule)
+    monkeypatch.setattr(
+        "services.product_image_processing_provider._background_removal_timeout_seconds",
+        lambda: 0.01,
+    )
+    _get_rembg_session.cache_clear()
+
+    processor = RembgProductImageProcessor(model_name="u2net")
+
+    with pytest.raises(RuntimeError, match="rembg provider timed out"):
+        await processor.process(
+            source_content=image_bytes(size=(40, 30)),
+            context=ProductImageProcessingContext(
+                product_image_id=1,
+                source_url="/media/source.png",
+                variant_type="processed",
+            ),
+        )
 
 
 @pytest.mark.asyncio
