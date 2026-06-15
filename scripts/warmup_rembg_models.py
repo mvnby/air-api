@@ -23,7 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--models",
         default="",
-        help="Comma-separated rembg model names. Defaults to BACKGROUND_REMOVAL_REMBG_PRELOAD_MODELS or the popular model list.",
+        help="Comma-separated rembg model names. Defaults to BACKGROUND_REMOVAL_REMBG_PRELOAD_MODELS or the safe preload list.",
     )
     parser.add_argument(
         "--fail-fast",

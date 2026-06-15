@@ -50,11 +50,6 @@ const backgroundModel = ref('u2net');
 const backgroundModelsLoading = ref(false);
 const backgroundModelOptions = ref<BackgroundRemovalModelOption[]>([
   { value: 'u2net', label: 'U2Net', recommended: true },
-  { value: 'isnet-general-use', label: 'ISNet general', recommended: true },
-  { value: 'birefnet-general-lite', label: 'BiRefNet lite', recommended: true },
-  { value: 'birefnet-general', label: 'BiRefNet general', recommended: true },
-  { value: 'birefnet-massive', label: 'BiRefNet massive' },
-  { value: 'bria-rmbg', label: 'BRIA RMBG' },
 ]);
 const page = ref(1);
 const limit = ref(40);
