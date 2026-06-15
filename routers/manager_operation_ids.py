@@ -50,6 +50,7 @@ LINK_SEARCH_RESULT = "link_search_result"
 SET_MAIN_IMAGE = "set_main_image"
 DELETE_IMAGE = "delete_image"
 CROP_PRODUCT_IMAGE = "crop_product_image"
+REMOVE_PRODUCT_IMAGE_BACKGROUND = "remove_product_image_background"
 REUSE_IMAGE = "reuse_image"
 BULK_ADD_GALLERY_IMAGES = "bulk_add_gallery_images"
 BULK_UPLOAD_LOCAL_IMAGES = "bulk_upload_local_images"
@@ -62,6 +63,7 @@ LIST_MEDIA_ASSETS = "list_media_assets"
 GET_MEDIA_BACKGROUND_REMOVAL_CONFIG = "get_media_background_removal_config"
 UPLOAD_MEDIA_ASSETS = "upload_media_assets"
 UPLOAD_MEDIA_ASSET_FROM_URL = "upload_media_asset_from_url"
+BACKFILL_REFERENCED_MEDIA_ASSETS = "backfill_referenced_media_assets"
 UPDATE_MEDIA_ASSET = "update_media_asset"
 DELETE_MEDIA_ASSET = "delete_media_asset"
 CROP_MEDIA_ASSET = "crop_media_asset"
@@ -262,6 +264,7 @@ ALL_MANAGER_OPERATION_IDS = (
     SET_MAIN_IMAGE,
     DELETE_IMAGE,
     CROP_PRODUCT_IMAGE,
+    REMOVE_PRODUCT_IMAGE_BACKGROUND,
     REUSE_IMAGE,
     BULK_ADD_GALLERY_IMAGES,
     BULK_UPLOAD_LOCAL_IMAGES,
@@ -274,6 +277,7 @@ ALL_MANAGER_OPERATION_IDS = (
     GET_MEDIA_BACKGROUND_REMOVAL_CONFIG,
     UPLOAD_MEDIA_ASSETS,
     UPLOAD_MEDIA_ASSET_FROM_URL,
+    BACKFILL_REFERENCED_MEDIA_ASSETS,
     UPDATE_MEDIA_ASSET,
     DELETE_MEDIA_ASSET,
     CROP_MEDIA_ASSET,

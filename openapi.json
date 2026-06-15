@@ -4256,6 +4256,76 @@
         ]
       }
     },
+    "/api/manager/media/assets/backfill-references": {
+      "post": {
+        "tags": [
+          "manager media"
+        ],
+        "summary": "Backfill Referenced Media Assets",
+        "operationId": "backfill_referenced_media_assets",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "execute",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Execute"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5000,
+              "minimum": 1,
+              "default": 500,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "include_remote",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Remote"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerMediaBackfillReferencedAssetsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/media/assets/background-removal/options": {
       "get": {
         "tags": [
@@ -5270,6 +5340,106 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerMediaImageLinkResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/gallery/{image_id}/remove-background": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Remove Product Image Background",
+        "description": "Remove background from a ProductImage and replace it by default.",
+        "operationId": "remove_product_image_background",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Image Id"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Processing provider: auto, noop, manual, rembg, birefnet, ben",
+              "default": "auto",
+              "title": "Provider"
+            },
+            "description": "Processing provider: auto, noop, manual, rembg, birefnet, ben"
+          },
+          {
+            "name": "rembg_model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional rembg model override",
+              "title": "Rembg Model"
+            },
+            "description": "Optional rembg model override"
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "replace current ProductImage URL or append a new image",
+              "default": "replace",
+              "title": "Mode"
+            },
+            "description": "replace current ProductImage URL or append a new image"
+          },
+          {
+            "name": "set_main",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Set Main"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -21026,6 +21196,81 @@
           "url"
         ],
         "title": "ManagerMediaAssetUrlUploadPayload"
+      },
+      "ManagerMediaBackfillReferencedAssetsResponse": {
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run"
+          },
+          "include_remote": {
+            "type": "boolean",
+            "title": "Include Remote"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "references_seen": {
+            "type": "integer",
+            "title": "References Seen"
+          },
+          "unique_urls_seen": {
+            "type": "integer",
+            "title": "Unique Urls Seen"
+          },
+          "planned": {
+            "type": "integer",
+            "title": "Planned"
+          },
+          "created": {
+            "type": "integer",
+            "title": "Created"
+          },
+          "skipped_count": {
+            "type": "integer",
+            "title": "Skipped Count"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Items",
+            "default": []
+          },
+          "skipped": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Skipped",
+            "default": []
+          },
+          "errors": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Errors",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "dry_run",
+          "include_remote",
+          "limit",
+          "references_seen",
+          "unique_urls_seen",
+          "planned",
+          "created",
+          "skipped_count"
+        ],
+        "title": "ManagerMediaBackfillReferencedAssetsResponse"
       },
       "ManagerMediaBulkAddResponse": {
         "properties": {

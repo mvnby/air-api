@@ -15,7 +15,12 @@ import {
   Wand2,
   X,
 } from 'lucide-vue-next';
-import { api, type ManagerMediaAssetResponse, type ManagerMediaProcessingJobResponse } from '../api';
+import {
+  api,
+  type ManagerMediaAssetResponse,
+  type ManagerMediaBackfillReferencedAssetsResponse,
+  type ManagerMediaProcessingJobResponse,
+} from '../api';
 import { getApiErrorMessage } from '../utils/api-errors';
 import {
   backgroundRemovalProviderOptions,
@@ -48,6 +53,9 @@ const saving = ref(false);
 const deleting = ref(false);
 const processing = ref<'crop' | 'background' | ''>('');
 const queueing = ref(false);
+const backfillLoading = ref(false);
+const backfillResult = ref<ManagerMediaBackfillReferencedAssetsResponse | null>(null);
+const backfillLimit = ref(500);
 const backgroundProvider = ref<BackgroundRemovalProvider>('rembg');
 const backgroundModel = ref('u2net');
 const backgroundModelsLoading = ref(false);
@@ -308,6 +316,29 @@ const uploadFromUrl = async () => {
     setToast(mediaErrorMessage(err, 'Не удалось загрузить изображение по URL'), 'error');
   } finally {
     uploading.value = false;
+  }
+};
+
+const backfillReferencedAssets = async (execute = false) => {
+  backfillLoading.value = true;
+  try {
+    const result = await api.backfillReferencedMediaAssets(
+      execute,
+      backfillLimit.value,
+      false,
+    );
+    backfillResult.value = result;
+    if (execute) {
+      setToast(`Добавлено в медиатеку: ${result.created}`);
+      page.value = 1;
+      await loadAssets();
+    } else {
+      setToast(`В каталоге найдено к добавлению: ${result.planned}`);
+    }
+  } catch (err) {
+    setToast(mediaErrorMessage(err, 'Не удалось проверить каталог'), 'error');
+  } finally {
+    backfillLoading.value = false;
   }
 };
 
@@ -647,6 +678,48 @@ onUnmounted(() => {
             </button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900 lg:flex-row lg:items-center lg:justify-between">
+      <div class="min-w-0">
+        <p class="text-sm font-semibold text-gray-900 dark:text-white">Изображения из каталога</p>
+        <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+          Подхватить уже привязанные фото товаров, брендов, статей и услуг без переименования файлов.
+        </p>
+        <p v-if="backfillResult" class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          Ссылок: {{ backfillResult.unique_urls_seen }} · к добавлению: {{ backfillResult.planned }} · добавлено: {{ backfillResult.created }} · пропущено: {{ backfillResult.skipped_count }}
+        </p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <label class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+          Лимит
+          <input
+            v-model.number="backfillLimit"
+            type="number"
+            min="1"
+            max="5000"
+            class="h-9 w-24 rounded-lg border border-gray-300 bg-white px-2 text-sm text-gray-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
+          />
+        </label>
+        <button
+          type="button"
+          class="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+          :disabled="backfillLoading"
+          @click="backfillReferencedAssets(false)"
+        >
+          <RefreshCw class="h-4 w-4" :class="backfillLoading ? 'animate-spin' : ''" />
+          Проверить
+        </button>
+        <button
+          type="button"
+          class="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-teal-600 px-3 text-sm font-semibold text-white transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
+          :disabled="backfillLoading || !backfillResult?.planned"
+          @click="backfillReferencedAssets(true)"
+        >
+          <ImageIcon class="h-4 w-4" />
+          Добавить
+        </button>
       </div>
     </div>
 

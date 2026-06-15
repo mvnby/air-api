@@ -145,6 +145,7 @@ export type { ManagerMediaAssetResponse } from './models/ManagerMediaAssetRespon
 export type { ManagerMediaAssetUpdatePayload } from './models/ManagerMediaAssetUpdatePayload';
 export type { ManagerMediaAssetUploadResponse } from './models/ManagerMediaAssetUploadResponse';
 export type { ManagerMediaAssetUrlUploadPayload } from './models/ManagerMediaAssetUrlUploadPayload';
+export type { ManagerMediaBackfillReferencedAssetsResponse } from './models/ManagerMediaBackfillReferencedAssetsResponse';
 export type { ManagerMediaBulkAddResponse } from './models/ManagerMediaBulkAddResponse';
 export type { ManagerMediaBulkDeleteResponse } from './models/ManagerMediaBulkDeleteResponse';
 export type { ManagerMediaBulkUploadResponse } from './models/ManagerMediaBulkUploadResponse';

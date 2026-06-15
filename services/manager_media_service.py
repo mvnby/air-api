@@ -15,6 +15,11 @@ from sqlalchemy import func
 from sqlmodel import select, update
 
 from models import Product, ProductImage, ProductImageVariant
+from services.product_image_processing_contract import ProductImageVariantType
+from services.product_image_processing_provider import (
+    ProductImageProcessingContext,
+    get_product_image_processor,
+)
 from services.product_original_media_service import ProductOriginalMediaService
 from services.product_image_variant_service import ProductImageVariantService
 
@@ -113,6 +118,84 @@ class ManagerMediaService:
         old_url = image.url
         was_main = product.main_image == old_url
         original = await ProductOriginalMediaService.save_shared_original(cropped_content)
+
+        variant_rows = (
+            await session.execute(
+                select(ProductImageVariant).where(ProductImageVariant.product_image_id == image.id)
+            )
+        ).scalars().all()
+        variant_urls = [variant.url for variant in variant_rows if variant.url]
+        for variant in variant_rows:
+            await session.delete(variant)
+
+        image.url = original.url
+        session.add(image)
+        await session.flush()
+        await ProductImageVariantService.ensure_original_variant(
+            session,
+            image,
+            source_content=original.content,
+            extension="webp",
+            width=original.width,
+            height=original.height,
+        )
+
+        if (was_main or set_main) and not image.is_installation_photo:
+            product.main_image = original.url
+            session.add(product)
+
+        await ManagerMediaService.sync_legacy_images(session, product.id)
+        await session.commit()
+        await session.refresh(image)
+
+        await ManagerMediaService.remove_file_if_unreferenced(session, old_url)
+        for variant_url in variant_urls:
+            await ManagerMediaService.remove_file_if_unreferenced(session, variant_url)
+
+        return {"id": image.id, "url": image.url}
+
+    @staticmethod
+    async def remove_background_gallery_image(
+        session: AsyncSession,
+        image_id: int,
+        *,
+        provider: str = "auto",
+        rembg_model: str | None = None,
+        mode: str = "replace",
+        set_main: bool = False,
+    ) -> dict:
+        image = await session.get(ProductImage, image_id)
+        if not image:
+            raise ValueError("Image not found")
+
+        product = await session.get(Product, image.product_id)
+        if not product:
+            raise ValueError("Product not found")
+
+        source_content = await ManagerMediaService.load_image_source_content(image.url)
+        processor = get_product_image_processor(provider, rembg_model=rembg_model)
+        processed = await processor.process(
+            source_content=source_content,
+            context=ProductImageProcessingContext(
+                product_image_id=image.id,
+                source_url=image.url,
+                variant_type=ProductImageVariantType.PROCESSED.value,
+            ),
+        )
+
+        normalized_mode = mode if mode in {"append", "replace"} else "replace"
+        if normalized_mode == "append":
+            return await ManagerMediaService.save_image_from_bytes(
+                image_content=processed.content,
+                product_id=product.id,
+                session=session,
+                set_main=set_main and not image.is_installation_photo,
+                is_installation=image.is_installation_photo,
+            )
+
+        old_url = image.url
+        was_main = product.main_image == old_url
+        original = await ProductOriginalMediaService.save_shared_original(processed.content)
 
         variant_rows = (
             await session.execute(

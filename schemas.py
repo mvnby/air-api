@@ -94,6 +94,20 @@ class ManagerMediaAssetUploadResponse(BaseModel):
     items: List[ManagerMediaAssetResponse]
 
 
+class ManagerMediaBackfillReferencedAssetsResponse(BaseModel):
+    dry_run: bool
+    include_remote: bool
+    limit: int
+    references_seen: int
+    unique_urls_seen: int
+    planned: int
+    created: int
+    skipped_count: int
+    items: List[Dict[str, Any]] = []
+    skipped: List[Dict[str, Any]] = []
+    errors: List[Dict[str, Any]] = []
+
+
 class ManagerMediaProcessingJobCreatePayload(BaseModel):
     operation: str = "background_removal"
     provider: Optional[str] = "rembg"

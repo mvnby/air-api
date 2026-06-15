@@ -81,6 +81,7 @@ import {
     type ManagerMediaAssetUpdatePayload,
     type ManagerMediaAssetUrlUploadPayload,
     type ManagerMediaAssetUploadResponse,
+    type ManagerMediaBackfillReferencedAssetsResponse,
     type ManagerMediaProcessingJobCreatePayload,
     type ManagerMediaProcessingJobListResponse,
     type ManagerMediaProcessingJobResponse,
@@ -152,6 +153,7 @@ export type {
     ManagerMediaAssetUpdatePayload,
     ManagerMediaAssetUrlUploadPayload,
     ManagerMediaAssetUploadResponse,
+    ManagerMediaBackfillReferencedAssetsResponse,
     ManagerMediaProcessingJobCreatePayload,
     ManagerMediaProcessingJobListResponse,
     ManagerMediaProcessingJobResponse,
@@ -268,6 +270,14 @@ export const api = {
 
     async uploadMediaAssetFromUrl(payload: ManagerMediaAssetUrlUploadPayload): Promise<ManagerMediaAssetUploadResponse> {
         return await ManagerMediaService.uploadMediaAssetFromUrl(payload);
+    },
+
+    async backfillReferencedMediaAssets(
+        execute = false,
+        limit = 500,
+        includeRemote = false,
+    ): Promise<ManagerMediaBackfillReferencedAssetsResponse> {
+        return await ManagerMediaService.backfillReferencedMediaAssets(execute, limit, includeRemote);
     },
 
     async getMediaBackgroundRemovalConfig(): Promise<ManagerBackgroundRemovalConfigResponse> {
@@ -572,6 +582,22 @@ export const api = {
 
     async cropGalleryImage(imageId: number, payload: ProductImageCropPayload) {
         return await ManagerService.cropProductImage(imageId, payload);
+    },
+
+    async removeProductImageBackground(
+        imageId: number,
+        provider = 'auto',
+        rembgModel?: string | null,
+        mode = 'replace',
+        setMain = false,
+    ) {
+        return await ManagerService.removeProductImageBackground(
+            imageId,
+            provider,
+            rembgModel,
+            mode,
+            setMain,
+        );
     },
 
     async reuseSearch(q: string) {
