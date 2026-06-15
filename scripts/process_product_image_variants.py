@@ -44,6 +44,7 @@ async def process_product_image_variants(
     product_id: int | None,
     variant_type: str,
     provider: str,
+    rembg_model: str | None,
     include_installation: bool,
     only_missing: bool,
     retry_failed: bool,
@@ -55,6 +56,7 @@ async def process_product_image_variants(
         include_installation=include_installation,
         dry_run=not execute,
         provider=provider,
+        rembg_model=rembg_model,
         product_id=product_id,
         only_missing=only_missing,
         retry_failed=retry_failed,
@@ -68,6 +70,7 @@ async def run(
     product_id: int | None,
     variant_type: str,
     provider: str,
+    rembg_model: str | None,
     include_installation: bool,
     only_missing: bool,
     retry_failed: bool,
@@ -82,6 +85,7 @@ async def run(
             product_id=product_id,
             variant_type=variant_type,
             provider=provider,
+            rembg_model=rembg_model,
             include_installation=include_installation,
             only_missing=only_missing,
             retry_failed=retry_failed,
@@ -147,6 +151,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--rembg-model",
+        default=None,
+        help=(
+            "Optional rembg model override, for example u2net, isnet-general-use, "
+            "birefnet-general. Applies when provider resolves to rembg."
+        ),
+    )
+    parser.add_argument(
         "--include-installation",
         action="store_true",
         help="Include installation photos. Catalog variants skip them by default.",
@@ -208,6 +220,7 @@ def main() -> None:
             product_id=args.product_id,
             variant_type=args.variant_type,
             provider=args.provider,
+            rembg_model=args.rembg_model,
             include_installation=args.include_installation,
             only_missing=args.only_missing,
             retry_failed=args.retry_failed,

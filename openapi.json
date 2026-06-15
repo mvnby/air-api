@@ -4458,6 +4458,24 @@
               "title": "Provider"
             },
             "description": "Processing provider: auto, noop, manual, rembg, birefnet, ben"
+          },
+          {
+            "name": "rembg_model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional rembg model override",
+              "title": "Rembg Model"
+            },
+            "description": "Optional rembg model override"
           }
         ],
         "responses": {
@@ -5151,6 +5169,24 @@
               "title": "Provider"
             },
             "description": "Processing provider: auto, noop, manual, rembg, birefnet, ben"
+          },
+          {
+            "name": "rembg_model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional rembg model override",
+              "title": "Rembg Model"
+            },
+            "description": "Optional rembg model override"
           }
         ],
         "responses": {
@@ -5223,6 +5259,24 @@
               "title": "Provider"
             },
             "description": "Processing provider: auto, noop, manual, rembg, birefnet, ben"
+          },
+          {
+            "name": "rembg_model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional rembg model override",
+              "title": "Rembg Model"
+            },
+            "description": "Optional rembg model override"
           }
         ],
         "responses": {

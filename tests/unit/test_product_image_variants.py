@@ -403,6 +403,7 @@ async def test_cli_dry_run_scopes_product_and_default_missing_only(sqlite_sessio
         product_id=first.id,
         variant_type=ProductImageVariantType.CARD.value,
         provider="noop",
+        rembg_model=None,
         include_installation=False,
         only_missing=True,
         retry_failed=False,

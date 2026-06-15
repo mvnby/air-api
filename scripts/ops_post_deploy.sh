@@ -12,6 +12,10 @@ RUN_SAFE_BRAND_CLEANUP="${RUN_SAFE_BRAND_CLEANUP:-false}"
 HIDE_LEGACY_GROUPS="${HIDE_LEGACY_GROUPS:-}"
 RUN_REPORT_LEGACY_LINKS="${RUN_REPORT_LEGACY_LINKS:-true}"
 RUN_CLEANUP_LEGACY_LINKS="${RUN_CLEANUP_LEGACY_LINKS:-false}"
+RUN_BACKFILL_MEDIA_LIBRARY="${RUN_BACKFILL_MEDIA_LIBRARY:-false}"
+MEDIA_LIBRARY_BACKFILL_EXECUTE="${MEDIA_LIBRARY_BACKFILL_EXECUTE:-false}"
+MEDIA_LIBRARY_BACKFILL_LIMIT="${MEDIA_LIBRARY_BACKFILL_LIMIT:-500}"
+MEDIA_LIBRARY_BACKFILL_INCLUDE_REMOTE="${MEDIA_LIBRARY_BACKFILL_INCLUDE_REMOTE:-false}"
 DRY_RUN="${DRY_RUN:-true}"
 RUN_POST_DEPLOY_OPS="${RUN_POST_DEPLOY_OPS:-false}"
 
@@ -35,6 +39,10 @@ log init "RUN_SAFE_BRAND_CLEANUP=${RUN_SAFE_BRAND_CLEANUP}"
 log init "HIDE_LEGACY_GROUPS=${HIDE_LEGACY_GROUPS:-<empty>}"
 log init "RUN_REPORT_LEGACY_LINKS=${RUN_REPORT_LEGACY_LINKS}"
 log init "RUN_CLEANUP_LEGACY_LINKS=${RUN_CLEANUP_LEGACY_LINKS}"
+log init "RUN_BACKFILL_MEDIA_LIBRARY=${RUN_BACKFILL_MEDIA_LIBRARY}"
+log init "MEDIA_LIBRARY_BACKFILL_EXECUTE=${MEDIA_LIBRARY_BACKFILL_EXECUTE}"
+log init "MEDIA_LIBRARY_BACKFILL_LIMIT=${MEDIA_LIBRARY_BACKFILL_LIMIT}"
+log init "MEDIA_LIBRARY_BACKFILL_INCLUDE_REMOTE=${MEDIA_LIBRARY_BACKFILL_INCLUDE_REMOTE}"
 log init "DRY_RUN=${DRY_RUN}"
 
 if [[ "${RUN_POST_DEPLOY_OPS}" != "true" ]]; then
@@ -141,6 +149,29 @@ if [[ "${backfill_brand_series_enabled}" == "true" ]]; then
   fi
 else
   ops_skipped+=("backfill_brand_series:disabled")
+fi
+
+if [[ "${RUN_BACKFILL_MEDIA_LIBRARY}" == "true" ]]; then
+  if script_exists "scripts/backfill_media_library_assets.py"; then
+    media_backfill_cmd="python3 scripts/backfill_media_library_assets.py --limit ${MEDIA_LIBRARY_BACKFILL_LIMIT}"
+    if [[ "${MEDIA_LIBRARY_BACKFILL_INCLUDE_REMOTE}" == "true" ]]; then
+      media_backfill_cmd="${media_backfill_cmd} --include-remote"
+    fi
+    if [[ "${MEDIA_LIBRARY_BACKFILL_EXECUTE}" == "true" && "${DRY_RUN}" != "true" ]]; then
+      log media "Backfill media library execute"
+      run_in_app "${media_backfill_cmd} --execute"
+      ops_actions+=("backfill_media_library:execute")
+    else
+      log media "Backfill media library dry-run"
+      run_in_app "${media_backfill_cmd}"
+      ops_actions+=("backfill_media_library:dry_run")
+    fi
+  else
+    log media "Skip: scripts/backfill_media_library_assets.py not found in image"
+    ops_skipped+=("backfill_media_library:missing_script")
+  fi
+else
+  ops_skipped+=("backfill_media_library:disabled")
 fi
 
 if [[ -n "${HIDE_LEGACY_GROUPS}" ]]; then

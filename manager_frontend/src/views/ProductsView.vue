@@ -749,7 +749,7 @@ type VariantStatus = 'ready' | 'failed' | 'skipped' | 'pending' | 'unknown';
 const cropEditorOpen = ref(false);
 const cropEditorImage = ref<GalleryImage | null>(null);
 const cropSaving = ref(false);
-const cropMode = ref<'append' | 'replace'>('append');
+const cropMode = ref<'append' | 'replace'>('replace');
 const cropSetMain = ref(false);
 const cropSourceSize = ref({ width: 0, height: 0 });
 const cropForm = ref({ x: 0, y: 0, width: 0, height: 0 });
@@ -813,7 +813,7 @@ const setCenteredSquareCrop = () => {
 
 const openCropEditor = (image: GalleryImage) => {
     cropEditorImage.value = image;
-    cropMode.value = 'append';
+    cropMode.value = 'replace';
     cropSetMain.value = false;
     cropSourceSize.value = { width: 0, height: 0 };
     cropForm.value = { x: 0, y: 0, width: 0, height: 0 };
@@ -2147,12 +2147,12 @@ watchDebounced(
 
                           <div class="rounded-lg border border-gray-200 p-2">
                               <label class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                  <input v-model="cropMode" name="product-crop-mode" type="radio" value="append" class="text-teal-600 focus:ring-teal-500" />
-                                  Добавить как новое фото
-                              </label>
-                              <label class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-700 hover:bg-gray-50">
                                   <input v-model="cropMode" name="product-crop-mode" type="radio" value="replace" class="text-teal-600 focus:ring-teal-500" />
                                   Заменить это фото
+                              </label>
+                              <label class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                  <input v-model="cropMode" name="product-crop-mode" type="radio" value="append" class="text-teal-600 focus:ring-teal-500" />
+                                  Добавить как новое фото
                               </label>
                           </div>
 

@@ -173,6 +173,7 @@ class ProductImageVariantService:
         provider: str = ProductImageProcessingProvider.NOOP.value,
         storage: ProductMediaStorage | None = None,
         processor: ProductImageProcessor | None = None,
+        rembg_model: str | None = None,
         product_id: int | None = None,
         only_missing: bool = True,
         retry_failed: bool = False,
@@ -202,6 +203,7 @@ class ProductImageVariantService:
                     provider=provider,
                     storage=storage,
                     processor=processor,
+                    rembg_model=rembg_model,
                     commit=False,
                 )
                 variants.append(result)
@@ -248,6 +250,7 @@ class ProductImageVariantService:
         provider: str = ProductImageProcessingProvider.NOOP.value,
         storage: ProductMediaStorage | None = None,
         processor: ProductImageProcessor | None = None,
+        rembg_model: str | None = None,
         commit: bool = True,
     ) -> dict[str, Any]:
         normalized_type = normalize_variant_type(variant_type).value
@@ -261,7 +264,10 @@ class ProductImageVariantService:
             product_image_id=product_image_id,
             variant_type=normalized_type,
         )
-        active_processor = processor or get_product_image_processor(normalized_provider)
+        active_processor = processor or get_product_image_processor(
+            normalized_provider,
+            rembg_model=rembg_model,
+        )
         effective_provider = getattr(active_processor, "provider_name", normalized_provider)
         now = datetime.now()
         variant.processing_status = ProductImageProcessingStatus.PROCESSING.value
