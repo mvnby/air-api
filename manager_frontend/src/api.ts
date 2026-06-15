@@ -80,6 +80,7 @@ import {
     type ManagerMediaAssetUpdatePayload,
     type ManagerMediaAssetUrlUploadPayload,
     type ManagerMediaAssetUploadResponse,
+    type ProductImageCropPayload,
     type ProductImageVariantBatchProcessResponse,
     type ProductImageVariantCandidateResponse,
     type ProductImageVariantCandidatesResponse,
@@ -152,6 +153,7 @@ export type {
     ProductImageVariantCandidateResponse,
     ProductImageVariantCandidatesResponse,
     ProductImageVariantResponse,
+    ProductImageCropPayload,
 };
 export type {
     ProductMainImageCleanupBatchCreatePayload,
@@ -537,6 +539,10 @@ export const api = {
 
     async deleteGalleryImage(imageId: number) {
         return await ManagerService.deleteImage(imageId);
+    },
+
+    async cropGalleryImage(imageId: number, payload: ProductImageCropPayload) {
+        return await ManagerService.cropProductImage(imageId, payload);
     },
 
     async reuseSearch(q: string) {

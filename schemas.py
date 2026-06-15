@@ -1,4 +1,4 @@
-from typing import List, Optional, Any, Dict
+from typing import List, Optional, Any, Dict, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, computed_field
 from datetime import datetime
 from enum import Enum
@@ -1824,6 +1824,15 @@ class ManagerMediaReuseSearchItemResponse(BaseModel):
 class ManagerMediaImageLinkResponse(BaseModel):
     id: int
     url: str
+
+
+class ProductImageCropPayload(BaseModel):
+    x: int = Field(ge=0)
+    y: int = Field(ge=0)
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    mode: Literal["append", "replace"] = "append"
+    set_main: bool = False
 
 
 class ProductImageVariantResponse(BaseModel):

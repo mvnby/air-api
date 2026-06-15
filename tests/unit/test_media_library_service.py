@@ -17,6 +17,13 @@ def image_bytes(size=(120, 80), color=(20, 180, 160)) -> bytes:
     return buffer.getvalue()
 
 
+def svg_bytes() -> bytes:
+    return b"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 80">
+        <rect width="240" height="80" fill="#0f766e"/>
+        <text x="24" y="52" fill="#fff">MVN</text>
+    </svg>"""
+
+
 @pytest.fixture
 async def sqlite_session(tmp_path, monkeypatch):
     monkeypatch.setattr(media_library_service, "MEDIA_LIBRARY_BASE_DIR", tmp_path / "library")
@@ -57,6 +64,71 @@ async def test_upload_and_list_media_assets(sqlite_session):
     )
     assert listing["meta"]["total"] == 1
     assert listing["items"][0]["id"] == item["id"]
+
+
+@pytest.mark.asyncio
+async def test_upload_svg_media_asset_keeps_vector_source(sqlite_session):
+    response = await MediaLibraryService.upload_assets(
+        session=sqlite_session,
+        files=[("brand-logo.svg", svg_bytes())],
+        kind="brand",
+        tags=["logo"],
+        created_by="admin",
+    )
+
+    assert response["uploaded"] == 1
+    item = response["items"][0]
+    assert item["url"].startswith("/media/library/original/")
+    assert item["url"].endswith(".svg")
+    assert item["mime_type"] == "image/svg+xml"
+    assert item["kind"] == "brand"
+    assert item["tags"] == ["logo"]
+    assert item["width"] == 240
+    assert item["height"] == 80
+
+    with pytest.raises(ValueError, match="SVG assets cannot be cropped"):
+        await MediaLibraryService.crop_asset(
+            session=sqlite_session,
+            asset_id=item["id"],
+            x=0,
+            y=0,
+            width=20,
+            height=20,
+            title="logo crop",
+            created_by="admin",
+        )
+
+
+@pytest.mark.asyncio
+async def test_upload_svg_media_asset_rejects_script(sqlite_session):
+    with pytest.raises(ValueError, match="unsupported embedded content"):
+        await MediaLibraryService.upload_assets(
+            session=sqlite_session,
+            files=[("unsafe.svg", b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')],
+            kind="brand",
+            tags=["logo"],
+            created_by="admin",
+        )
+
+
+@pytest.mark.asyncio
+async def test_upload_svg_media_asset_allows_internal_style_references(sqlite_session):
+    content = b"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+        <defs>
+            <linearGradient id="brand"><stop offset="0" stop-color="#00a991"/></linearGradient>
+        </defs>
+        <rect width="16" height="16" style="fill:url(#brand)"/>
+    </svg>"""
+
+    response = await MediaLibraryService.upload_assets(
+        session=sqlite_session,
+        files=[("gradient-logo.svg", content)],
+        kind="brand",
+        tags=["logo"],
+        created_by="admin",
+    )
+
+    assert response["items"][0]["mime_type"] == "image/svg+xml"
 
 
 @pytest.mark.asyncio

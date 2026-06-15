@@ -49,6 +49,7 @@ GET_COMMON_GALLERY_IMAGES = "get_common_gallery_images"
 LINK_SEARCH_RESULT = "link_search_result"
 SET_MAIN_IMAGE = "set_main_image"
 DELETE_IMAGE = "delete_image"
+CROP_PRODUCT_IMAGE = "crop_product_image"
 REUSE_IMAGE = "reuse_image"
 BULK_ADD_GALLERY_IMAGES = "bulk_add_gallery_images"
 BULK_UPLOAD_LOCAL_IMAGES = "bulk_upload_local_images"
@@ -254,6 +255,7 @@ ALL_MANAGER_OPERATION_IDS = (
     LINK_SEARCH_RESULT,
     SET_MAIN_IMAGE,
     DELETE_IMAGE,
+    CROP_PRODUCT_IMAGE,
     REUSE_IMAGE,
     BULK_ADD_GALLERY_IMAGES,
     BULK_UPLOAD_LOCAL_IMAGES,

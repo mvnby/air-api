@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { api, type ManagerBrand, type ManagerBrandSeries } from '../api';
+import MediaField from '../components/MediaField.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
 
 type BrandForm = {
@@ -841,10 +842,14 @@ onMounted(() => {
                             <input v-model="form.slug" type="text" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
                         </label>
                     </div>
-                    <label class="text-sm space-y-1 block">
-                        <span class="text-gray-600 dark:text-slate-300 font-medium">Логотип (URL)</span>
-                        <input v-model="form.logo_url" type="text" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
-                    </label>
+                    <MediaField
+                        v-model="form.logo_url"
+                        label="Логотип"
+                        kind="brand"
+                        :tags="['logo', 'brand']"
+                        accept="image/svg+xml,image/png,image/jpeg,image/webp,.svg"
+                        placeholder="/media/library/original/logo.svg"
+                    />
                     <label class="text-sm space-y-1 block">
                         <span class="text-gray-600 dark:text-slate-300 font-medium">Описание</span>
                         <textarea v-model="form.description" rows="4" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
@@ -891,10 +896,14 @@ onMounted(() => {
                             <input v-model="seriesForm.slug" type="text" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
                         </label>
                     </div>
-                    <label class="text-sm space-y-1 block">
-                        <span class="text-gray-600 dark:text-slate-300 font-medium">Hero image (URL)</span>
-                        <input v-model="seriesForm.hero_image" type="text" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
-                    </label>
+                    <MediaField
+                        v-model="seriesForm.hero_image"
+                        label="Hero image"
+                        kind="brand"
+                        :tags="['series', 'hero']"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg"
+                        placeholder="/media/library/original/series.webp"
+                    />
                     <label class="text-sm space-y-1 block">
                         <span class="text-gray-600 dark:text-slate-300 font-medium">Описание серии</span>
                         <textarea v-model="seriesForm.description" rows="5" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
