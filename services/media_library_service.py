@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import ipaddress
 import math
+import mimetypes
 import os
 import re
 import socket
@@ -21,7 +22,17 @@ from sqlalchemy import func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import Article, Brand, MediaAsset, Product, ProductImage, ProductImageVariant, ProductSeries
+from models import (
+    Article,
+    Brand,
+    MediaAsset,
+    Product,
+    ProductAttachment,
+    ProductImage,
+    ProductImageVariant,
+    ProductSeries,
+    Service,
+)
 from services.product_image_processing_contract import ProductImageVariantType
 from services.product_image_processing_provider import (
     ProductImageProcessingContext,
@@ -57,6 +68,15 @@ class StoredLibraryImage:
     size_bytes: int
     mime_type: str = "image/webp"
     storage_provider: str = "local"
+
+
+@dataclass(frozen=True)
+class ExistingMediaReference:
+    url: str
+    kind: str
+    title: str
+    variant_type: str
+    tags: tuple[str, ...]
 
 
 class MediaLibraryService:
@@ -190,6 +210,116 @@ class MediaLibraryService:
         )
 
     @staticmethod
+    async def backfill_referenced_assets(
+        session: AsyncSession,
+        *,
+        execute: bool = False,
+        limit: int = 500,
+        include_remote: bool = False,
+        created_by: str | None = None,
+    ) -> dict:
+        safe_limit = max(1, min(int(limit or 500), 5000))
+        references = await MediaLibraryService._collect_existing_media_references(session)
+        grouped = MediaLibraryService._group_references_by_url(references)
+
+        planned: list[dict] = []
+        skipped: list[dict] = []
+        created: list[MediaAsset] = []
+        errors: list[dict] = []
+
+        for url, refs in grouped.items():
+            if len(planned) >= safe_limit:
+                break
+
+            existing = await session.scalar(select(MediaAsset).where(MediaAsset.url == url).limit(1))
+            if existing:
+                skipped.append({"url": url, "reason": "already_indexed"})
+                continue
+
+            metadata = MediaLibraryService._metadata_for_existing_reference(
+                url,
+                include_remote=include_remote,
+            )
+            if metadata["status"] != "ready":
+                skipped.append(
+                    {
+                        "url": url,
+                        "reason": metadata["status"],
+                        "path": metadata.get("path"),
+                    }
+                )
+                continue
+
+            primary = refs[0]
+            tags = MediaLibraryService._normalize_tags(
+                [tag for ref in refs for tag in ref.tags]
+            )
+            item = {
+                "url": url,
+                "kind": MediaLibraryService._normalize_kind(primary.kind),
+                "title": primary.title,
+                "variant_type": primary.variant_type,
+                "tags": tags,
+                "mime_type": metadata["mime_type"],
+                "storage_provider": metadata["storage_provider"],
+                "content_hash": metadata["content_hash"],
+                "width": metadata["width"],
+                "height": metadata["height"],
+                "size_bytes": metadata["size_bytes"],
+                "references": len(refs),
+            }
+            planned.append(item)
+
+            if not execute:
+                continue
+
+            try:
+                asset = MediaAsset(
+                    title=item["title"],
+                    alt_text=item["title"],
+                    kind=item["kind"],
+                    tags=item["tags"],
+                    variant_type=item["variant_type"],
+                    url=url,
+                    original_url=url,
+                    source_filename=MediaLibraryService._filename_from_url(url),
+                    mime_type=item["mime_type"],
+                    storage_provider=item["storage_provider"],
+                    processing_status="ready",
+                    content_hash=item["content_hash"],
+                    width=item["width"],
+                    height=item["height"],
+                    size_bytes=item["size_bytes"],
+                    created_by=created_by,
+                )
+                session.add(asset)
+                created.append(asset)
+            except Exception as exc:
+                errors.append({"url": url, "error": str(exc)})
+
+        if execute and created:
+            await session.commit()
+            for asset in created:
+                await session.refresh(asset)
+
+        return {
+            "dry_run": not execute,
+            "include_remote": include_remote,
+            "limit": safe_limit,
+            "references_seen": len(references),
+            "unique_urls_seen": len(grouped),
+            "planned": len(planned),
+            "created": len(created),
+            "skipped_count": len(skipped),
+            "items": [
+                {**item, "id": created[index].id if execute and index < len(created) else None}
+                for index, item in enumerate(planned)
+            ],
+            "skipped": skipped[:100],
+            "errors": errors,
+        }
+
+    @staticmethod
     async def update_asset(
         session: AsyncSession,
         *,
@@ -267,6 +397,7 @@ class MediaLibraryService:
         asset_id: int,
         created_by: str | None,
         provider: str = "auto",
+        rembg_model: str | None = None,
     ) -> dict:
         source = await MediaLibraryService._get_asset_or_raise(session, asset_id)
         if source.mime_type == SVG_MIME_TYPE:
@@ -275,7 +406,7 @@ class MediaLibraryService:
         if source_path is None or not source_path.exists():
             raise ValueError("Source file is not available in local media storage")
 
-        processor = get_product_image_processor(provider)
+        processor = get_product_image_processor(provider, rembg_model=rembg_model)
         processed = await processor.process(
             source_content=source_path.read_bytes(),
             context=ProductImageProcessingContext(
@@ -682,7 +813,209 @@ class MediaLibraryService:
                 select(func.count()).select_from(ProductSeries).where(ProductSeries.hero_image == url)
             )
         )
+        counts.append(
+            await session.scalar(select(func.count()).select_from(ProductAttachment).where(ProductAttachment.url == url))
+        )
+        counts.append(
+            await session.scalar(select(func.count()).select_from(Service).where(Service.image == url))
+        )
         return sum(int(value or 0) for value in counts)
+
+    @staticmethod
+    async def _collect_existing_media_references(session: AsyncSession) -> list[ExistingMediaReference]:
+        references: list[ExistingMediaReference] = []
+
+        products = (await session.execute(select(Product))).scalars().all()
+        for product in products:
+            title = product.title or f"Product #{product.id}"
+            if product.main_image:
+                references.append(
+                    ExistingMediaReference(
+                        url=product.main_image,
+                        kind="product",
+                        title=title,
+                        variant_type="original",
+                        tags=("legacy", "product", "main_image"),
+                    )
+                )
+            for image_url in product.images or []:
+                if image_url:
+                    references.append(
+                        ExistingMediaReference(
+                            url=str(image_url),
+                            kind="product",
+                            title=title,
+                            variant_type="original",
+                            tags=("legacy", "product", "images"),
+                        )
+                    )
+
+        product_images = (await session.execute(select(ProductImage))).scalars().all()
+        for image in product_images:
+            references.append(
+                ExistingMediaReference(
+                    url=image.url,
+                    kind="installation" if image.is_installation_photo else "product",
+                    title=f"Product image #{image.id}",
+                    variant_type="original",
+                    tags=("legacy", "product", "gallery"),
+                )
+            )
+
+        variants = (
+            await session.execute(select(ProductImageVariant).where(ProductImageVariant.url.is_not(None)))
+        ).scalars().all()
+        for variant in variants:
+            if not variant.url:
+                continue
+            references.append(
+                ExistingMediaReference(
+                    url=variant.url,
+                    kind="product",
+                    title=f"Product image variant #{variant.id}",
+                    variant_type=variant.variant_type,
+                    tags=("legacy", "product", "variant", variant.variant_type),
+                )
+            )
+
+        attachments = (await session.execute(select(ProductAttachment))).scalars().all()
+        for attachment in attachments:
+            references.append(
+                ExistingMediaReference(
+                    url=attachment.url,
+                    kind="product",
+                    title=attachment.title or f"Product attachment #{attachment.id}",
+                    variant_type="attachment",
+                    tags=("legacy", "product", "attachment", attachment.kind),
+                )
+            )
+
+        articles = (await session.execute(select(Article))).scalars().all()
+        for article in articles:
+            title = article.title or f"Article #{article.id}"
+            if article.main_image:
+                references.append(
+                    ExistingMediaReference(
+                        url=article.main_image,
+                        kind="article",
+                        title=title,
+                        variant_type="original",
+                        tags=("legacy", "article", "main_image"),
+                    )
+                )
+            if article.cover_image:
+                references.append(
+                    ExistingMediaReference(
+                        url=article.cover_image,
+                        kind="article",
+                        title=title,
+                        variant_type="cover",
+                        tags=("legacy", "article", "cover_image"),
+                    )
+                )
+
+        brands = (await session.execute(select(Brand).where(Brand.logo_url.is_not(None)))).scalars().all()
+        for brand in brands:
+            if not brand.logo_url:
+                continue
+            references.append(
+                ExistingMediaReference(
+                    url=brand.logo_url,
+                    kind="brand",
+                    title=brand.title or f"Brand #{brand.id}",
+                    variant_type="logo",
+                    tags=("legacy", "brand", "logo"),
+                )
+            )
+
+        series_rows = (
+            await session.execute(select(ProductSeries).where(ProductSeries.hero_image.is_not(None)))
+        ).scalars().all()
+        for series in series_rows:
+            if not series.hero_image:
+                continue
+            references.append(
+                ExistingMediaReference(
+                    url=series.hero_image,
+                    kind="brand",
+                    title=series.title or f"Product series #{series.id}",
+                    variant_type="hero",
+                    tags=("legacy", "series", "hero"),
+                )
+            )
+
+        services = (await session.execute(select(Service).where(Service.image.is_not(None)))).scalars().all()
+        for service in services:
+            if not service.image:
+                continue
+            references.append(
+                ExistingMediaReference(
+                    url=service.image,
+                    kind="service",
+                    title=service.title or f"Service #{service.id}",
+                    variant_type="original",
+                    tags=("legacy", "service"),
+                )
+            )
+
+        return [ref for ref in references if ref.url]
+
+    @staticmethod
+    def _group_references_by_url(
+        references: list[ExistingMediaReference],
+    ) -> dict[str, list[ExistingMediaReference]]:
+        grouped: dict[str, list[ExistingMediaReference]] = {}
+        for ref in references:
+            url = str(ref.url or "").strip()
+            if not url:
+                continue
+            grouped.setdefault(url, []).append(ref)
+        return grouped
+
+    @staticmethod
+    def _metadata_for_existing_reference(url: str, *, include_remote: bool) -> dict:
+        parsed = urlparse(url)
+        if parsed.scheme in {"http", "https"}:
+            if not include_remote:
+                return {"status": "remote_skipped"}
+            return {
+                "status": "ready",
+                "mime_type": MediaLibraryService._guess_mime_type(url),
+                "storage_provider": "remote",
+                "content_hash": None,
+                "width": None,
+                "height": None,
+                "size_bytes": 0,
+                "path": None,
+            }
+
+        path = MediaLibraryService._local_path_for_url(url)
+        if path is None:
+            return {"status": "unsupported_url"}
+        if not path.exists():
+            return {"status": "missing_file", "path": str(path)}
+
+        try:
+            content = path.read_bytes()
+            if MediaLibraryService._looks_like_svg(content):
+                _, width, height = MediaLibraryService._sanitize_svg(content)
+                mime_type = SVG_MIME_TYPE
+            else:
+                width, height = MediaLibraryService._image_size(content)
+                mime_type = MediaLibraryService._guess_mime_type(str(path))
+
+            return {
+                "status": "ready",
+                "mime_type": mime_type,
+                "storage_provider": "local",
+                "content_hash": hashlib.sha256(content).hexdigest(),
+                "width": width or None,
+                "height": height or None,
+                "size_bytes": len(content),
+                "path": str(path),
+            }
+        except Exception as exc:
+            return {"status": "metadata_error", "path": str(path), "error": str(exc)}
 
     @staticmethod
     async def _remove_file_if_unreferenced(session: AsyncSession, url: str) -> None:
@@ -728,3 +1061,8 @@ class MediaLibraryService:
     def _safe_path_segment(value: str) -> str:
         safe = "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in value)
         return safe.strip("_") or "misc"
+
+    @staticmethod
+    def _guess_mime_type(value: str) -> str:
+        guessed, _ = mimetypes.guess_type(value)
+        return guessed or "application/octet-stream"

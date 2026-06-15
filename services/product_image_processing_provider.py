@@ -8,6 +8,7 @@ import shlex
 import subprocess
 import tempfile
 from dataclasses import dataclass
+from functools import lru_cache
 from io import BytesIO
 from typing import Protocol
 
@@ -28,12 +29,14 @@ PROCESSED_MAX_EDGE = 1600
 FULL_MAX_EDGE = 1800
 MAX_SOURCE_PIXELS = 40_000_000
 BACKGROUND_REMOVAL_PROVIDER_ENV = "BACKGROUND_REMOVAL_PROVIDER"
+BACKGROUND_REMOVAL_REMBG_MODEL_ENV = "BACKGROUND_REMOVAL_REMBG_MODEL"
 BACKGROUND_REMOVAL_TIMEOUT_ENV = "BACKGROUND_REMOVAL_TIMEOUT_SECONDS"
 BACKGROUND_REMOVAL_COMMAND_ENVS = {
     ProductImageProcessingProvider.BIREFNET.value: "BACKGROUND_REMOVAL_BIREFNET_COMMAND",
     ProductImageProcessingProvider.BEN.value: "BACKGROUND_REMOVAL_BEN_COMMAND",
 }
 DEFAULT_BACKGROUND_REMOVAL_PROVIDER = ProductImageProcessingProvider.REMBG.value
+DEFAULT_BACKGROUND_REMOVAL_REMBG_MODEL = "u2net"
 DEFAULT_BACKGROUND_REMOVAL_TIMEOUT_SECONDS = 120
 
 
@@ -89,6 +92,10 @@ class RembgProductImageProcessor:
 
     provider_name = ProductImageProcessingProvider.REMBG.value
 
+    def __init__(self, *, model_name: str | None = None) -> None:
+        self.model_name = _background_removal_rembg_model(model_name)
+        self.provider_name = f"{ProductImageProcessingProvider.REMBG.value}:{self.model_name}"
+
     async def process(
         self,
         *,
@@ -100,7 +107,8 @@ class RembgProductImageProcessor:
         except ImportError as exc:
             raise RuntimeError("rembg provider is not installed") from exc
 
-        output = remove(source_content)
+        session = _get_rembg_session(self.model_name)
+        output = remove(source_content, session=session)
         return _process_image_bytes(output, context=context)
 
 
@@ -190,7 +198,11 @@ class BenProductImageProcessor(CommandProductImageProcessor):
         )
 
 
-def get_product_image_processor(provider: str) -> ProductImageProcessor:
+def get_product_image_processor(
+    provider: str,
+    *,
+    rembg_model: str | None = None,
+) -> ProductImageProcessor:
     normalized_provider = resolve_background_removal_provider(provider)
     if normalized_provider == ProductImageProcessingProvider.AUTO.value:
         normalized_provider = DEFAULT_BACKGROUND_REMOVAL_PROVIDER
@@ -199,7 +211,7 @@ def get_product_image_processor(provider: str) -> ProductImageProcessor:
     if normalized_provider == ProductImageProcessingProvider.MANUAL.value:
         return ManualProductImageProcessor()
     if normalized_provider == ProductImageProcessingProvider.REMBG.value:
-        return RembgProductImageProcessor()
+        return RembgProductImageProcessor(model_name=rembg_model)
     if normalized_provider == ProductImageProcessingProvider.BIREFNET.value:
         return BiRefNetProductImageProcessor()
     if normalized_provider == ProductImageProcessingProvider.BEN.value:
@@ -241,7 +253,7 @@ def background_removal_provider_options() -> list[dict[str, str]]:
         {
             "value": ProductImageProcessingProvider.REMBG.value,
             "label": "rembg",
-            "description": "Python rembg package",
+            "description": f"Python rembg package, model via {BACKGROUND_REMOVAL_REMBG_MODEL_ENV}",
         },
         {
             "value": ProductImageProcessingProvider.BIREFNET.value,
@@ -264,6 +276,26 @@ def _background_removal_timeout_seconds() -> int:
         return max(1, int(raw_value))
     except ValueError:
         return DEFAULT_BACKGROUND_REMOVAL_TIMEOUT_SECONDS
+
+
+def _background_removal_rembg_model(model_name: str | None = None) -> str:
+    requested = (model_name or os.getenv(BACKGROUND_REMOVAL_REMBG_MODEL_ENV, "")).strip()
+    return requested or DEFAULT_BACKGROUND_REMOVAL_REMBG_MODEL
+
+
+@lru_cache(maxsize=8)
+def _get_rembg_session(model_name: str):
+    try:
+        from rembg import new_session  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("rembg provider is not installed") from exc
+
+    try:
+        return new_session(model_name)
+    except Exception as exc:
+        raise RuntimeError(
+            f"rembg model is not configured correctly: {model_name}"
+        ) from exc
 
 
 def _process_image_bytes(

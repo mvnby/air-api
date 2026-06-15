@@ -1145,6 +1145,7 @@ export class ManagerService {
      * @param includeInstallation
      * @param dryRun
      * @param provider Processing provider: auto, noop, manual, rembg, birefnet, ben
+     * @param rembgModel Optional rembg model override
      * @returns ProductImageVariantBatchProcessResponse Successful Response
      * @throws ApiError
      */
@@ -1154,6 +1155,7 @@ export class ManagerService {
         includeInstallation: boolean = false,
         dryRun: boolean = true,
         provider: string = 'noop',
+        rembgModel?: (string | null),
     ): CancelablePromise<ProductImageVariantBatchProcessResponse> {
         return __request(OpenAPI, {
             method: 'POST',
@@ -1164,6 +1166,7 @@ export class ManagerService {
                 'include_installation': includeInstallation,
                 'dry_run': dryRun,
                 'provider': provider,
+                'rembg_model': rembgModel,
             },
             errors: {
                 422: `Validation Error`,
@@ -1176,6 +1179,7 @@ export class ManagerService {
      * @param imageId
      * @param variantType Variant to reprocess: processed, card, full
      * @param provider Processing provider: auto, noop, manual, rembg, birefnet, ben
+     * @param rembgModel Optional rembg model override
      * @returns ProductImageVariantResponse Successful Response
      * @throws ApiError
      */
@@ -1183,6 +1187,7 @@ export class ManagerService {
         imageId: number,
         variantType: string = 'card',
         provider: string = 'noop',
+        rembgModel?: (string | null),
     ): CancelablePromise<ProductImageVariantResponse> {
         return __request(OpenAPI, {
             method: 'POST',
@@ -1193,6 +1198,7 @@ export class ManagerService {
             query: {
                 'variant_type': variantType,
                 'provider': provider,
+                'rembg_model': rembgModel,
             },
             errors: {
                 422: `Validation Error`,

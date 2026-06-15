@@ -234,6 +234,7 @@ async def process_missing_image_variants(
     include_installation: bool = Query(False),
     dry_run: bool = Query(True),
     provider: str = Query("noop", description="Processing provider: auto, noop, manual, rembg, birefnet, ben"),
+    rembg_model: str | None = Query(None, description="Optional rembg model override"),
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
@@ -246,6 +247,7 @@ async def process_missing_image_variants(
             include_installation=include_installation,
             dry_run=dry_run,
             provider=provider,
+            rembg_model=rembg_model,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -260,6 +262,7 @@ async def reprocess_image_variant(
     image_id: int,
     variant_type: str = Query("card", description="Variant to reprocess: processed, card, full"),
     provider: str = Query("noop", description="Processing provider: auto, noop, manual, rembg, birefnet, ben"),
+    rembg_model: str | None = Query(None, description="Optional rembg model override"),
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
@@ -270,6 +273,7 @@ async def reprocess_image_variant(
             product_image_id=image_id,
             variant_type=variant_type,
             provider=provider,
+            rembg_model=rembg_model,
         )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

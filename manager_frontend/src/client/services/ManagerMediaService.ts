@@ -164,12 +164,14 @@ export class ManagerMediaService {
      * Remove Media Asset Background
      * @param assetId
      * @param provider Processing provider: auto, noop, manual, rembg, birefnet, ben
+     * @param rembgModel Optional rembg model override
      * @returns ManagerMediaAssetResponse Successful Response
      * @throws ApiError
      */
     public static removeMediaAssetBackground(
         assetId: number,
         provider: string = 'auto',
+        rembgModel?: (string | null),
     ): CancelablePromise<ManagerMediaAssetResponse> {
         return __request(OpenAPI, {
             method: 'POST',
@@ -179,6 +181,7 @@ export class ManagerMediaService {
             },
             query: {
                 'provider': provider,
+                'rembg_model': rembgModel,
             },
             errors: {
                 422: `Validation Error`,

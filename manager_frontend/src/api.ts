@@ -270,8 +270,8 @@ export const api = {
         return await ManagerMediaService.cropMediaAsset(assetId, payload);
     },
 
-    async removeMediaAssetBackground(assetId: number, provider = 'auto'): Promise<ManagerMediaAssetResponse> {
-        return await ManagerMediaService.removeMediaAssetBackground(assetId, provider);
+    async removeMediaAssetBackground(assetId: number, provider = 'auto', rembgModel?: string | null): Promise<ManagerMediaAssetResponse> {
+        return await ManagerMediaService.removeMediaAssetBackground(assetId, provider, rembgModel);
     },
 
     async deleteMediaAsset(assetId: number, force = false) {
@@ -613,6 +613,7 @@ export const api = {
         includeInstallation = false,
         dryRun = true,
         provider = 'noop',
+        rembgModel?: string | null,
     ) {
         return await ManagerService.processMissingImageVariants(
             variantType,
@@ -620,11 +621,12 @@ export const api = {
             includeInstallation,
             dryRun,
             provider,
+            rembgModel,
         );
     },
 
-    async reprocessImageVariant(imageId: number, variantType = 'card', provider = 'noop') {
-        return await ManagerService.reprocessImageVariant(imageId, variantType, provider);
+    async reprocessImageVariant(imageId: number, variantType = 'card', provider = 'noop', rembgModel?: string | null) {
+        return await ManagerService.reprocessImageVariant(imageId, variantType, provider, rembgModel);
     },
 
     async createMainImageCleanupBatch(payload: ProductMainImageCleanupBatchCreatePayload) {
