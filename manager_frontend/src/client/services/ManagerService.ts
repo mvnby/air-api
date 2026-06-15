@@ -46,6 +46,7 @@ import type { ManagerMediaSetMainImageResponse } from '../models/ManagerMediaSet
 import type { ManagerMediaUploadLocalImagesResponse } from '../models/ManagerMediaUploadLocalImagesResponse';
 import type { ManagerNormalizeLegacySpecsResponse } from '../models/ManagerNormalizeLegacySpecsResponse';
 import type { ManagerTagGroupResponse } from '../models/ManagerTagGroupResponse';
+import type { ProductImageCropPayload } from '../models/ProductImageCropPayload';
 import type { ProductImageVariantBatchProcessResponse } from '../models/ProductImageVariantBatchProcessResponse';
 import type { ProductImageVariantCandidatesResponse } from '../models/ProductImageVariantCandidatesResponse';
 import type { ProductImageVariantResponse } from '../models/ProductImageVariantResponse';
@@ -1022,6 +1023,31 @@ export class ManagerService {
             path: {
                 'image_id': imageId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Crop Product Image
+     * Crop a concrete ProductImage and either append or replace the gallery image.
+     * @param imageId
+     * @param requestBody
+     * @returns ManagerMediaImageLinkResponse Successful Response
+     * @throws ApiError
+     */
+    public static cropProductImage(
+        imageId: number,
+        requestBody: ProductImageCropPayload,
+    ): CancelablePromise<ManagerMediaImageLinkResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/gallery/{image_id}/crop',
+            path: {
+                'image_id': imageId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

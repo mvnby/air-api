@@ -2,11 +2,14 @@
 
 import asyncio
 import os
+from io import BytesIO
+from pathlib import Path
 from typing import List, Set
 
 import httpx
 from core.logger import logger
 from duckduckgo_search import DDGS
+from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
 from sqlmodel import select, update
@@ -63,6 +66,88 @@ class ManagerMediaService:
         for variant_url in variant_urls:
             await ManagerMediaService.remove_file_if_unreferenced(session, variant_url)
         return {"message": "Image deleted"}
+
+    @staticmethod
+    async def crop_gallery_image(
+        session: AsyncSession,
+        image_id: int,
+        *,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        mode: str = "append",
+        set_main: bool = False,
+    ) -> dict:
+        image = await session.get(ProductImage, image_id)
+        if not image:
+            raise ValueError("Image not found")
+
+        product = await session.get(Product, image.product_id)
+        if not product:
+            raise ValueError("Product not found")
+
+        try:
+            source_content = await ManagerMediaService.load_image_source_content(image.url)
+            cropped_content = await asyncio.to_thread(
+                ManagerMediaService.crop_image_bytes,
+                source_content,
+                x,
+                y,
+                width,
+                height,
+            )
+        except UnidentifiedImageError as exc:
+            raise ValueError("Source image cannot be opened") from exc
+
+        normalized_mode = mode if mode in {"append", "replace"} else "append"
+        if normalized_mode == "append":
+            return await ManagerMediaService.save_image_from_bytes(
+                image_content=cropped_content,
+                product_id=product.id,
+                session=session,
+                set_main=set_main and not image.is_installation_photo,
+                is_installation=image.is_installation_photo,
+            )
+
+        old_url = image.url
+        was_main = product.main_image == old_url
+        original = await ProductOriginalMediaService.save_shared_original(cropped_content)
+
+        variant_rows = (
+            await session.execute(
+                select(ProductImageVariant).where(ProductImageVariant.product_image_id == image.id)
+            )
+        ).scalars().all()
+        variant_urls = [variant.url for variant in variant_rows if variant.url]
+        for variant in variant_rows:
+            await session.delete(variant)
+
+        image.url = original.url
+        session.add(image)
+        await session.flush()
+        await ProductImageVariantService.ensure_original_variant(
+            session,
+            image,
+            source_content=original.content,
+            extension="webp",
+            width=original.width,
+            height=original.height,
+        )
+
+        if (was_main or set_main) and not image.is_installation_photo:
+            product.main_image = original.url
+            session.add(product)
+
+        await ManagerMediaService.sync_legacy_images(session, product.id)
+        await session.commit()
+        await session.refresh(image)
+
+        await ManagerMediaService.remove_file_if_unreferenced(session, old_url)
+        for variant_url in variant_urls:
+            await ManagerMediaService.remove_file_if_unreferenced(session, variant_url)
+
+        return {"id": image.id, "url": image.url}
 
     @staticmethod
     async def search_reuse_products(session: AsyncSession, query: str, limit: int = 10) -> List[dict]:
@@ -247,6 +332,51 @@ class ManagerMediaService:
                 os.remove(path)
             except Exception as exc:
                 logger.error(f"Failed to delete unreferenced file {url}: {exc}")
+
+    @staticmethod
+    def local_media_path_for_url(url: str) -> Path | None:
+        if not url:
+            return None
+        if url.startswith("/media/"):
+            return Path(url.lstrip("/"))
+        if url.startswith("media/"):
+            return Path(url)
+        return None
+
+    @staticmethod
+    async def load_image_source_content(url: str) -> bytes:
+        source_path = ManagerMediaService.local_media_path_for_url(url)
+        if source_path is not None and source_path.exists():
+            return await asyncio.to_thread(source_path.read_bytes)
+
+        if url.startswith("http://") or url.startswith("https://"):
+            try:
+                async with httpx.AsyncClient(follow_redirects=True) as client:
+                    response = await client.get(url, timeout=15.0)
+                    response.raise_for_status()
+                    return response.content
+            except Exception as exc:
+                logger.error(f"Failed to download source image for crop: {exc}")
+                raise ValueError("Source image is not available") from exc
+
+        raise ValueError("Source image is not available in local media storage")
+
+    @staticmethod
+    def crop_image_bytes(content: bytes, x: int, y: int, width: int, height: int) -> bytes:
+        if not content:
+            raise ValueError("Source image is empty")
+        with Image.open(BytesIO(content)) as source:
+            image = ImageOps.exif_transpose(source)
+            left = max(0, min(int(x), image.width - 1))
+            top = max(0, min(int(y), image.height - 1))
+            right = max(left + 1, min(left + int(width), image.width))
+            bottom = max(top + 1, min(top + int(height), image.height))
+            cropped = image.crop((left, top, right, bottom))
+            if cropped.mode in {"RGBA", "P"}:
+                cropped = cropped.convert("RGB")
+            output = BytesIO()
+            cropped.save(output, format="PNG")
+            return output.getvalue()
 
     @staticmethod
     async def get_common_gallery_urls(

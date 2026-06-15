@@ -5,7 +5,9 @@ import hashlib
 import ipaddress
 import math
 import os
+import re
 import socket
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime
 from io import BytesIO
@@ -19,7 +21,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import Article, MediaAsset, Product, ProductImage, ProductImageVariant
+from models import Article, Brand, MediaAsset, Product, ProductImage, ProductImageVariant, ProductSeries
 from services.product_image_processing_contract import ProductImageVariantType
 from services.product_image_processing_provider import (
     ProductImageProcessingContext,
@@ -32,6 +34,8 @@ MEDIA_LIBRARY_PUBLIC_PREFIX = "/media/library"
 MAX_LIBRARY_IMAGE_PIXELS = 50_000_000
 MAX_REMOTE_IMAGE_BYTES = 20 * 1024 * 1024
 REMOTE_IMAGE_TIMEOUT_SECONDS = 12.0
+SVG_MIME_TYPE = "image/svg+xml"
+SVG_FORBIDDEN_TAGS = {"script", "foreignobject", "iframe", "object", "embed"}
 ALLOWED_KINDS = {
     "product",
     "article",
@@ -229,6 +233,8 @@ class MediaLibraryService:
         created_by: str | None,
     ) -> dict:
         source = await MediaLibraryService._get_asset_or_raise(session, asset_id)
+        if source.mime_type == SVG_MIME_TYPE:
+            raise ValueError("SVG assets cannot be cropped")
         source_path = MediaLibraryService._local_path_for_url(source.url)
         if source_path is None or not source_path.exists():
             raise ValueError("Source file is not available in local media storage")
@@ -262,6 +268,8 @@ class MediaLibraryService:
         created_by: str | None,
     ) -> dict:
         source = await MediaLibraryService._get_asset_or_raise(session, asset_id)
+        if source.mime_type == SVG_MIME_TYPE:
+            raise ValueError("SVG assets cannot be processed by background removal")
         source_path = MediaLibraryService._local_path_for_url(source.url)
         if source_path is None or not source_path.exists():
             raise ValueError("Source file is not available in local media storage")
@@ -383,6 +391,9 @@ class MediaLibraryService:
 
     @staticmethod
     async def _store_image(content: bytes, *, variant_type: str) -> StoredLibraryImage:
+        if MediaLibraryService._looks_like_svg(content):
+            return await MediaLibraryService._store_svg(content, variant_type=variant_type)
+
         webp_content = await asyncio.to_thread(
             lambda: MediaLibraryService._export_webp(MediaLibraryService._open_image(content))
         )
@@ -487,6 +498,28 @@ class MediaLibraryService:
         )
 
     @staticmethod
+    async def _store_svg(content: bytes, *, variant_type: str) -> StoredLibraryImage:
+        sanitized, width, height = await asyncio.to_thread(MediaLibraryService._sanitize_svg, content)
+        content_hash = hashlib.sha256(sanitized).hexdigest()
+        safe_variant = MediaLibraryService._safe_path_segment(variant_type)
+        target_dir = MEDIA_LIBRARY_BASE_DIR / safe_variant
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_path = target_dir / f"{content_hash}.svg"
+        if not target_path.exists():
+            target_path.write_bytes(sanitized)
+
+        relative_path = str(target_path).replace(os.sep, "/")
+        return StoredLibraryImage(
+            url=f"{MEDIA_LIBRARY_PUBLIC_PREFIX}/{safe_variant}/{target_path.name}",
+            path=relative_path,
+            content_hash=content_hash,
+            width=width,
+            height=height,
+            size_bytes=len(sanitized),
+            mime_type=SVG_MIME_TYPE,
+        )
+
+    @staticmethod
     def _open_image(content: bytes) -> Image.Image:
         if not content:
             raise ValueError("Source image is empty")
@@ -514,6 +547,90 @@ class MediaLibraryService:
     def _image_size(content: bytes) -> tuple[int, int]:
         image = MediaLibraryService._open_image(content)
         return image.width, image.height
+
+    @staticmethod
+    def _looks_like_svg(content: bytes) -> bool:
+        prefix = content[:512].lstrip()
+        lowered = prefix.lower()
+        return lowered.startswith(b"<svg") or lowered.startswith(b"<?xml") and b"<svg" in lowered
+
+    @staticmethod
+    def _sanitize_svg(content: bytes) -> tuple[bytes, int, int]:
+        if not content:
+            raise ValueError("Source SVG is empty")
+        if len(content) > MAX_REMOTE_IMAGE_BYTES:
+            raise ValueError("Source SVG is too large")
+
+        text = content.decode("utf-8-sig").strip()
+        lowered = text.lower()
+        if "<!doctype" in lowered or "<!entity" in lowered:
+            raise ValueError("SVG doctype and entities are not allowed")
+
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError as exc:
+            raise ValueError("Source SVG cannot be parsed") from exc
+
+        if MediaLibraryService._local_xml_name(root.tag) != "svg":
+            raise ValueError("Source SVG must have an svg root element")
+
+        for element in root.iter():
+            tag_name = MediaLibraryService._local_xml_name(element.tag)
+            if tag_name.lower() in SVG_FORBIDDEN_TAGS:
+                raise ValueError("SVG contains unsupported embedded content")
+            for attr_name, attr_value in element.attrib.items():
+                local_attr = MediaLibraryService._local_xml_name(attr_name).lower()
+                value = str(attr_value or "").strip().lower()
+                if local_attr.startswith("on"):
+                    raise ValueError("SVG event handlers are not allowed")
+                if local_attr in {"href", "src"} and value and not value.startswith("#"):
+                    raise ValueError("SVG external references are not allowed")
+                if local_attr == "style" and ("javascript:" in value or "expression(" in value):
+                    raise ValueError("SVG unsafe inline styles are not allowed")
+                if MediaLibraryService._has_external_svg_url(value):
+                    raise ValueError("SVG external references are not allowed")
+
+        width, height = MediaLibraryService._svg_size(root)
+        return ET.tostring(root, encoding="utf-8", xml_declaration=True), width, height
+
+    @staticmethod
+    def _local_xml_name(name: str) -> str:
+        return name.rsplit("}", 1)[-1] if "}" in name else name
+
+    @staticmethod
+    def _has_external_svg_url(value: str) -> bool:
+        for match in re.finditer(r"url\(([^)]+)\)", value, flags=re.IGNORECASE):
+            target = match.group(1).strip(" \t\r\n'\"")
+            if target and not target.startswith("#"):
+                return True
+        return False
+
+    @staticmethod
+    def _svg_size(root: ET.Element) -> tuple[int, int]:
+        width = MediaLibraryService._svg_dimension(root.attrib.get("width"))
+        height = MediaLibraryService._svg_dimension(root.attrib.get("height"))
+        if width and height:
+            return width, height
+
+        view_box = root.attrib.get("viewBox") or root.attrib.get("viewbox")
+        if view_box:
+            try:
+                parts = [float(part) for part in re.split(r"[\s,]+", view_box.strip()) if part]
+            except ValueError:
+                parts = []
+            if len(parts) == 4 and parts[2] > 0 and parts[3] > 0:
+                return max(1, round(parts[2])), max(1, round(parts[3]))
+
+        return width or 0, height or 0
+
+    @staticmethod
+    def _svg_dimension(value: str | None) -> int:
+        if not value:
+            return 0
+        match = re.match(r"^\s*([0-9]+(?:\.[0-9]+)?)", value)
+        if not match:
+            return 0
+        return max(1, round(float(match.group(1))))
 
     @staticmethod
     def _has_alpha(image: Image.Image) -> bool:
@@ -554,6 +671,14 @@ class MediaLibraryService:
                 select(func.count()).select_from(Article).where(
                     or_(Article.main_image == url, Article.cover_image == url)
                 )
+            )
+        )
+        counts.append(
+            await session.scalar(select(func.count()).select_from(Brand).where(Brand.logo_url == url))
+        )
+        counts.append(
+            await session.scalar(
+                select(func.count()).select_from(ProductSeries).where(ProductSeries.hero_image == url)
             )
         )
         return sum(int(value or 0) for value in counts)

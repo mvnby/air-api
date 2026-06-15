@@ -4814,6 +4814,64 @@
         }
       }
     },
+    "/api/manager/gallery/{image_id}/crop": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Crop Product Image",
+        "description": "Crop a concrete ProductImage and either append or replace the gallery image.",
+        "operationId": "crop_product_image",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Image Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductImageCropPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerMediaImageLinkResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/gallery/reuse-image": {
       "post": {
         "tags": [
@@ -26375,6 +26433,52 @@
           "slug"
         ],
         "title": "ProductBrandResponse"
+      },
+      "ProductImageCropPayload": {
+        "properties": {
+          "x": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "X"
+          },
+          "y": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Y"
+          },
+          "width": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Width"
+          },
+          "height": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Height"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "append",
+              "replace"
+            ],
+            "title": "Mode",
+            "default": "append"
+          },
+          "set_main": {
+            "type": "boolean",
+            "title": "Set Main",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
+        "title": "ProductImageCropPayload"
       },
       "ProductImageResponse": {
         "properties": {

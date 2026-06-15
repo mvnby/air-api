@@ -15,8 +15,8 @@ import {
 } from 'lucide-vue-next';
 import { api, type ManagerMediaAssetResponse } from '../api';
 import { getApiErrorMessage } from '../utils/api-errors';
+import ImageCropSelector, { type ImageCropSourceSize, type ImageCropValue } from '../components/ImageCropSelector.vue';
 
-type CropBox = { x: number; y: number; width: number; height: number };
 type MediaKind = { value: string; label: string };
 
 const kindOptions: MediaKind[] = [
@@ -52,9 +52,8 @@ const toast = ref('');
 const toastType = ref<'success' | 'error'>('success');
 const dragActive = ref(false);
 const cropMode = ref(false);
-const cropBox = ref<CropBox | null>(null);
-const cropStart = ref<{ x: number; y: number } | null>(null);
-const previewImage = ref<HTMLImageElement | null>(null);
+const cropBox = ref<ImageCropValue>({ x: 0, y: 0, width: 0, height: 0 });
+const cropSourceSize = ref<ImageCropSourceSize>({ width: 0, height: 0 });
 const editForm = ref({
   title: '',
   alt_text: '',
@@ -255,7 +254,11 @@ const selectAsset = (asset: ManagerMediaAssetResponse) => {
     tagsText: (asset.tags || []).join(', '),
   };
   cropMode.value = false;
-  cropBox.value = null;
+  cropBox.value = { x: 0, y: 0, width: 0, height: 0 };
+  cropSourceSize.value = {
+    width: Number(asset.width || 0),
+    height: Number(asset.height || 0),
+  };
 };
 
 const saveSelected = async () => {
@@ -308,61 +311,41 @@ const deleteSelected = async () => {
   }
 };
 
-const relativePoint = (event: PointerEvent) => {
-  const target = event.currentTarget as HTMLElement;
-  const rect = target.getBoundingClientRect();
-  return {
-    x: Math.max(0, Math.min(event.clientX - rect.left, rect.width)),
-    y: Math.max(0, Math.min(event.clientY - rect.top, rect.height)),
-  };
-};
-
-const onCropPointerDown = (event: PointerEvent) => {
-  if (!cropMode.value) return;
-  const point = relativePoint(event);
-  cropStart.value = point;
-  cropBox.value = { x: point.x, y: point.y, width: 1, height: 1 };
-  (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-};
-
-const onCropPointerMove = (event: PointerEvent) => {
-  if (!cropMode.value || !cropStart.value) return;
-  const point = relativePoint(event);
-  const start = cropStart.value;
+const resetCropBoxToFullFrame = () => {
+  if (!cropSourceSize.value.width || !cropSourceSize.value.height) return;
   cropBox.value = {
-    x: Math.min(start.x, point.x),
-    y: Math.min(start.y, point.y),
-    width: Math.abs(point.x - start.x),
-    height: Math.abs(point.y - start.y),
+    x: 0,
+    y: 0,
+    width: cropSourceSize.value.width,
+    height: cropSourceSize.value.height,
   };
 };
 
-const onCropPointerUp = (event: PointerEvent) => {
-  if (!cropMode.value) return;
-  cropStart.value = null;
-  try {
-    (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
-  } catch {
-    // Pointer capture may already be released by the browser.
+const toggleCropMode = () => {
+  cropMode.value = !cropMode.value;
+  if (cropMode.value) resetCropBoxToFullFrame();
+};
+
+const handleCropSourceLoad = (size: ImageCropSourceSize) => {
+  cropSourceSize.value = size;
+  if (cropMode.value && (!cropBox.value.width || !cropBox.value.height)) {
+    resetCropBoxToFullFrame();
   }
 };
 
 const applyCrop = async () => {
-  if (!selectedAsset.value || !cropBox.value || !previewImage.value) return;
+  if (!selectedAsset.value) return;
   if (cropBox.value.width < 8 || cropBox.value.height < 8) {
     setToast('Выделите область крупнее', 'error');
     return;
   }
-  const image = previewImage.value;
-  const scaleX = image.naturalWidth / image.clientWidth;
-  const scaleY = image.naturalHeight / image.clientHeight;
   processing.value = 'crop';
   try {
     const cropped = await api.cropMediaAsset(selectedAsset.value.id, {
-      x: Math.round(cropBox.value.x * scaleX),
-      y: Math.round(cropBox.value.y * scaleY),
-      width: Math.round(cropBox.value.width * scaleX),
-      height: Math.round(cropBox.value.height * scaleY),
+      x: Math.round(cropBox.value.x),
+      y: Math.round(cropBox.value.y),
+      width: Math.round(cropBox.value.width),
+      height: Math.round(cropBox.value.height),
       title: `${selectedAsset.value.title || 'Image'} crop`,
     });
     assets.value = [cropped, ...assets.value];
@@ -635,24 +618,21 @@ onUnmounted(() => {
 
           <div class="space-y-5 overflow-y-auto p-4">
             <div class="rounded-xl bg-gray-100 p-3 dark:bg-gray-950">
-              <div
-                class="relative mx-auto inline-block max-h-[420px] max-w-full select-none"
-                :class="cropMode ? 'cursor-crosshair' : ''"
-                @pointerdown="onCropPointerDown"
-                @pointermove="onCropPointerMove"
-                @pointerup="onCropPointerUp"
-              >
+              <ImageCropSelector
+                v-if="cropMode"
+                v-model="cropBox"
+                :src="selectedUrl"
+                :source-width="cropSourceSize.width"
+                :source-height="cropSourceSize.height"
+                :image-alt="selectedAsset.alt_text || selectedAsset.title || 'Изображение медиатеки'"
+                @source-load="handleCropSourceLoad"
+              />
+              <div v-else class="mx-auto flex max-h-[420px] max-w-full justify-center">
                 <img
-                  ref="previewImage"
                   :src="selectedUrl"
                   :alt="selectedAsset.alt_text || selectedAsset.title"
                   class="block max-h-[420px] max-w-full rounded-lg object-contain"
                   draggable="false"
-                />
-                <div
-                  v-if="cropMode && cropBox"
-                  class="pointer-events-none absolute border-2 border-teal-400 bg-teal-400/15 shadow-[0_0_0_9999px_rgba(15,23,42,0.35)]"
-                  :style="{ left: `${cropBox.x}px`, top: `${cropBox.y}px`, width: `${cropBox.width}px`, height: `${cropBox.height}px` }"
                 />
               </div>
             </div>
@@ -662,7 +642,7 @@ onUnmounted(() => {
                 <Copy class="h-4 w-4" />
                 URL
               </button>
-              <button class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800" @click="cropMode = !cropMode; cropBox = null">
+              <button class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800" @click="toggleCropMode">
                 <Scissors class="h-4 w-4" />
                 Crop
               </button>
@@ -678,8 +658,8 @@ onUnmounted(() => {
 
             <div v-if="cropMode" class="rounded-lg border border-teal-200 bg-teal-50 p-3 dark:border-teal-900 dark:bg-teal-950/30">
               <div class="flex items-center justify-between gap-3">
-                <p class="text-sm text-teal-900 dark:text-teal-100">Выделите область на изображении.</p>
-                <button class="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-teal-700 disabled:opacity-50" :disabled="!cropBox || processing === 'crop'" @click="applyCrop">
+                <p class="text-sm text-teal-900 dark:text-teal-100">Потяните рамку или углы, чтобы выбрать область.</p>
+                <button class="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-teal-700 disabled:opacity-50" :disabled="!cropBox.width || !cropBox.height || processing === 'crop'" @click="applyCrop">
                   <Scissors class="h-4 w-4" />
                   {{ processing === 'crop' ? 'Сохраняю...' : 'Сохранить crop' }}
                 </button>

@@ -5,6 +5,7 @@ import {
     api,
     type ManagerBrand,
     type Product,
+    type ProductImageCropPayload,
     type ProductImageVariantBatchProcessResponse,
     type ProductImageVariantCandidateResponse,
     type ProductImageVariantResponse,
@@ -12,12 +13,13 @@ import {
 import {
     Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images,
     Settings, ArrowLeft, LayoutGrid, List, Package, Link2, ExternalLink,
-    Star, SlidersHorizontal, X, Trash2, Download,
+    Star, SlidersHorizontal, X, Trash2, Download, Crop,
 } from 'lucide-vue-next';
 import BulkSpecsModal from '../components/BulkSpecsModal.vue';
 import BulkCompatibilityModal from '../components/BulkCompatibilityModal.vue';
 import ProductEditModal from '../components/ProductEditModal.vue';
 import OnlinerImportModal from '../components/OnlinerImportModal.vue';
+import ImageCropSelector, { type ImageCropSourceSize } from '../components/ImageCropSelector.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
 
 // Product state
@@ -516,6 +518,7 @@ watch(showModal, (val) => {
     document.body.style.overflow = '';
     confirmDeleteUrl.value = null;
     resetVariantState();
+    resetCropEditor();
   }
 });
 
@@ -699,7 +702,6 @@ const openSearchModal = (product: Product) => {
   resetVariantState();
   showModal.value = true;
   handleImageSearch();
-  loadVariantCandidates();
 };
 
 const openEditModal = (product: Product) => {
@@ -740,6 +742,14 @@ const getImageUrl = (path: string) => {
 type GalleryImage = Product['gallery_images'][number];
 type VariantStatus = 'ready' | 'failed' | 'skipped' | 'pending' | 'unknown';
 
+const cropEditorOpen = ref(false);
+const cropEditorImage = ref<GalleryImage | null>(null);
+const cropSaving = ref(false);
+const cropMode = ref<'append' | 'replace'>('append');
+const cropSetMain = ref(false);
+const cropSourceSize = ref({ width: 0, height: 0 });
+const cropForm = ref({ x: 0, y: 0, width: 0, height: 0 });
+
 const boundedVariantLimit = computed(() => {
     const parsed = Number(variantLimit.value);
     if (!Number.isFinite(parsed)) return 50;
@@ -757,6 +767,101 @@ const variantCandidateByImageId = computed(() => {
 const displayedGalleryImages = computed<GalleryImage[]>(() => (
     selectedProduct.value?.gallery_images || []
 ).filter((image) => includeInstallationVariants.value || !image.is_installation_photo));
+
+const cropCanSetMain = computed(() => Boolean(cropEditorImage.value && !cropEditorImage.value.is_installation_photo));
+
+const clampCropForm = () => {
+    const source = cropSourceSize.value;
+    if (!source.width || !source.height) return;
+
+    const maxX = Math.max(0, source.width - 1);
+    const maxY = Math.max(0, source.height - 1);
+    const x = Math.max(0, Math.min(Math.trunc(Number(cropForm.value.x) || 0), maxX));
+    const y = Math.max(0, Math.min(Math.trunc(Number(cropForm.value.y) || 0), maxY));
+    const maxWidth = Math.max(1, source.width - x);
+    const maxHeight = Math.max(1, source.height - y);
+
+    cropForm.value = {
+        x,
+        y,
+        width: Math.max(1, Math.min(Math.trunc(Number(cropForm.value.width) || 1), maxWidth)),
+        height: Math.max(1, Math.min(Math.trunc(Number(cropForm.value.height) || 1), maxHeight)),
+    };
+};
+
+const resetCropToFullFrame = () => {
+    const source = cropSourceSize.value;
+    if (!source.width || !source.height) return;
+    cropForm.value = { x: 0, y: 0, width: source.width, height: source.height };
+};
+
+const setCenteredSquareCrop = () => {
+    const source = cropSourceSize.value;
+    if (!source.width || !source.height) return;
+    const side = Math.min(source.width, source.height);
+    cropForm.value = {
+        x: Math.round((source.width - side) / 2),
+        y: Math.round((source.height - side) / 2),
+        width: side,
+        height: side,
+    };
+};
+
+const openCropEditor = (image: GalleryImage) => {
+    cropEditorImage.value = image;
+    cropMode.value = 'append';
+    cropSetMain.value = false;
+    cropSourceSize.value = { width: 0, height: 0 };
+    cropForm.value = { x: 0, y: 0, width: 0, height: 0 };
+    cropEditorOpen.value = true;
+};
+
+const closeCropEditor = () => {
+    if (cropSaving.value) return;
+    cropEditorOpen.value = false;
+    cropEditorImage.value = null;
+};
+
+const resetCropEditor = () => {
+    cropEditorOpen.value = false;
+    cropEditorImage.value = null;
+    cropSaving.value = false;
+    cropSetMain.value = false;
+};
+
+const handleCropSourceLoad = (size: ImageCropSourceSize) => {
+    cropSourceSize.value = size;
+    resetCropToFullFrame();
+};
+
+const saveCrop = async () => {
+    if (!cropEditorImage.value) return;
+    clampCropForm();
+
+    const payload: ProductImageCropPayload = {
+        x: cropForm.value.x,
+        y: cropForm.value.y,
+        width: cropForm.value.width,
+        height: cropForm.value.height,
+        mode: cropMode.value,
+        set_main: cropCanSetMain.value ? cropSetMain.value : false,
+    };
+
+    cropSaving.value = true;
+    try {
+        await api.cropGalleryImage(cropEditorImage.value.id, payload);
+        await loadProducts();
+        refreshSelectedProduct();
+        setToast(cropMode.value === 'replace' ? 'Фото заменено после кропа' : 'Кроп добавлен в галерею');
+        cropEditorOpen.value = false;
+        cropEditorImage.value = null;
+    } catch (e) {
+        setToast(`Ошибка кропа: ${getApiErrorMessage(e)}`);
+        console.error(e);
+    } finally {
+        cropSaving.value = false;
+    }
+};
 
 const mergeVariantRecords = (variants: ProductImageVariantResponse[] = []) => {
     const next: Record<number, ProductImageVariantResponse[]> = { ...variantRecordsByImageId.value };
@@ -1706,7 +1811,7 @@ watchDebounced(
   
   <!-- Search / Manage Modal -->
   <div v-if="showModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" @click.self="showModal = false">
-      <div class="bg-white rounded-xl w-full max-w-6xl h-[90vh] flex flex-col shadow-2xl">
+      <div class="relative bg-white rounded-xl w-full max-w-6xl h-[90vh] flex flex-col shadow-2xl">
           <!-- Tabs -->
           <div class="flex border-b bg-gray-50 rounded-t-xl">
                <button 
@@ -1818,7 +1923,7 @@ watchDebounced(
           
           <!-- Current Product Gallery Preview (Footer) -->
           <div class="h-60 bg-white border-t p-4 overflow-x-auto flex gap-4 shrink-0">
-              <div class="w-72 shrink-0 border-r pr-4 text-sm">
+              <div v-if="isBulkMode" class="w-72 shrink-0 border-r pr-4 text-sm">
                   <div class="font-semibold text-gray-700">
                       {{ isBulkMode ? 'Общая галерея' : 'Текущая галерея' }}
                   </div>
@@ -1944,6 +2049,13 @@ watchDebounced(
                       <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-1 p-2 transition-opacity">
                            <button @click="setAsMain(img.id)" class="text-[10px] bg-white text-black px-2 py-1 rounded hover:bg-gray-200 w-full">Сделать главным</button>
                            <button
+                              @click="openCropEditor(img)"
+                              class="inline-flex w-full items-center justify-center gap-1 rounded bg-white px-2 py-1 text-[10px] font-medium text-gray-900 hover:bg-gray-200"
+                           >
+                              <Crop class="h-3 w-3" />
+                              Кроп
+                           </button>
+                           <button
                               @click="reprocessCardVariant(img.id)"
                               :disabled="variantReprocessingImageId === img.id || variantProcessingLoading"
                               class="text-[10px] bg-teal-600 text-white px-2 py-1 rounded hover:bg-teal-700 disabled:opacity-60 w-full"
@@ -1961,6 +2073,108 @@ watchDebounced(
                       </div>
                   </div>
               </template>
+          </div>
+          <div
+              v-if="cropEditorOpen && cropEditorImage"
+              class="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/55 p-3 sm:p-6"
+              @click.self="closeCropEditor"
+          >
+              <div class="flex max-h-full w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+                  <div class="flex items-start justify-between gap-4 border-b border-gray-200 px-4 py-3 sm:px-5">
+                      <div class="min-w-0">
+                          <h3 class="truncate text-lg font-semibold text-gray-950">Кроп фото товара</h3>
+                          <p class="mt-0.5 truncate text-sm text-gray-500">
+                              {{ cropSourceSize.width || '...' }}×{{ cropSourceSize.height || '...' }} · #{{ cropEditorImage.id }}
+                          </p>
+                      </div>
+                      <button
+                          type="button"
+                          class="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+                          @click="closeCropEditor"
+                      >
+                          <X class="h-5 w-5" />
+                      </button>
+                  </div>
+
+                  <div class="grid min-h-0 flex-1 gap-4 overflow-y-auto p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+                      <div class="flex min-h-[260px] items-center justify-center rounded-lg bg-gray-100 p-3">
+                          <ImageCropSelector
+                              v-model="cropForm"
+                              :src="getImageUrl(cropEditorImage.url)"
+                              :source-width="cropSourceSize.width"
+                              :source-height="cropSourceSize.height"
+                              image-alt="Фото товара для кропа"
+                              @source-load="handleCropSourceLoad"
+                          />
+                      </div>
+
+                      <div class="space-y-4">
+                          <div class="grid grid-cols-2 gap-3">
+                              <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                  X
+                                  <input id="product-crop-x" v-model.number="cropForm.x" name="product-crop-x" type="number" min="0" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" @change="clampCropForm" />
+                              </label>
+                              <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                  Y
+                                  <input id="product-crop-y" v-model.number="cropForm.y" name="product-crop-y" type="number" min="0" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" @change="clampCropForm" />
+                              </label>
+                              <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                  Ширина
+                                  <input id="product-crop-width" v-model.number="cropForm.width" name="product-crop-width" type="number" min="1" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" @change="clampCropForm" />
+                              </label>
+                              <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                  Высота
+                                  <input id="product-crop-height" v-model.number="cropForm.height" name="product-crop-height" type="number" min="1" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" @change="clampCropForm" />
+                              </label>
+                          </div>
+
+                          <div class="flex flex-wrap gap-2">
+                              <button type="button" class="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" @click="resetCropToFullFrame">
+                                  Весь кадр
+                              </button>
+                              <button type="button" class="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" @click="setCenteredSquareCrop">
+                                  Квадрат по центру
+                              </button>
+                          </div>
+
+                          <div class="rounded-lg border border-gray-200 p-2">
+                              <label class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                  <input v-model="cropMode" name="product-crop-mode" type="radio" value="append" class="text-teal-600 focus:ring-teal-500" />
+                                  Добавить как новое фото
+                              </label>
+                              <label class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                  <input v-model="cropMode" name="product-crop-mode" type="radio" value="replace" class="text-teal-600 focus:ring-teal-500" />
+                                  Заменить это фото
+                              </label>
+                          </div>
+
+                          <label class="flex items-center gap-2 text-sm text-gray-700" :class="{ 'opacity-50': !cropCanSetMain }">
+                              <input id="product-crop-set-main" v-model="cropSetMain" name="product-crop-set-main" type="checkbox" class="rounded border-gray-300 text-teal-600 focus:ring-teal-500" :disabled="!cropCanSetMain" />
+                              Сделать главным
+                          </label>
+                      </div>
+                  </div>
+
+                  <div class="flex flex-col-reverse gap-2 border-t border-gray-200 p-4 sm:flex-row sm:justify-end">
+                      <button
+                          type="button"
+                          class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                          :disabled="cropSaving"
+                          @click="closeCropEditor"
+                      >
+                          Отмена
+                      </button>
+                      <button
+                          type="button"
+                          class="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+                          :disabled="cropSaving || !cropSourceSize.width"
+                          @click="saveCrop"
+                      >
+                          <Crop class="h-4 w-4" />
+                          {{ cropSaving ? 'Сохраняем...' : 'Сохранить кроп' }}
+                      </button>
+                  </div>
+              </div>
           </div>
       </div>
   </div>

@@ -11,6 +11,7 @@ from routers.manager_operation_ids import (
     BULK_DELETE_COMMON_GALLERY_IMAGES,
     BULK_UPLOAD_LOCAL_IMAGES,
     CLEANUP_MEDIA,
+    CROP_PRODUCT_IMAGE,
     DELETE_IMAGE,
     LINK_SEARCH_RESULT,
     PROCESS_MISSING_IMAGE_VARIANTS,
@@ -29,6 +30,7 @@ from schemas import (
     ManagerMediaImageLinkResponse,
     ManagerMediaReuseImageResponse,
     ManagerMediaSetMainImageResponse,
+    ProductImageCropPayload,
     ProductImageVariantBatchProcessResponse,
     ProductImageVariantResponse,
 )
@@ -98,6 +100,33 @@ async def delete_gallery_image(
         return await ManagerMediaService.delete_gallery_image(session, image_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post(
+    "/gallery/{image_id}/crop",
+    response_model=ManagerMediaImageLinkResponse,
+    operation_id=CROP_PRODUCT_IMAGE,
+)
+async def crop_product_image(
+    image_id: int,
+    payload: ProductImageCropPayload,
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username),
+):
+    """Crop a concrete ProductImage and either append or replace the gallery image."""
+    try:
+        return await ManagerMediaService.crop_gallery_image(
+            session=session,
+            image_id=image_id,
+            x=payload.x,
+            y=payload.y,
+            width=payload.width,
+            height=payload.height,
+            mode=payload.mode,
+            set_main=payload.set_main,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post(
