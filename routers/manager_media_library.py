@@ -31,6 +31,7 @@ from services.product_image_processing_provider import (
     background_removal_provider_options,
     default_rembg_model_name,
     rembg_model_options,
+    rembg_process_mode,
     rembg_preload_model_names,
     resolve_background_removal_provider,
 )
@@ -128,6 +129,7 @@ async def get_media_background_removal_config(
     return {
         "default_provider": resolve_background_removal_provider("auto"),
         "default_rembg_model": default_rembg_model_name(),
+        "rembg_process_mode": rembg_process_mode(),
         "preload_models": rembg_preload_model_names(),
         "provider_options": background_removal_provider_options(),
         "rembg_models": rembg_model_options(),

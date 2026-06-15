@@ -110,6 +110,7 @@ class ManagerBackgroundRemovalProviderOption(BaseModel):
 class ManagerBackgroundRemovalConfigResponse(BaseModel):
     default_provider: str
     default_rembg_model: str
+    rembg_process_mode: str
     preload_models: List[str]
     provider_options: List[ManagerBackgroundRemovalProviderOption]
     rembg_models: List[ManagerBackgroundRemovalModelOption]

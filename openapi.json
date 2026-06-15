@@ -16678,6 +16678,10 @@
             "type": "string",
             "title": "Default Rembg Model"
           },
+          "rembg_process_mode": {
+            "type": "string",
+            "title": "Rembg Process Mode"
+          },
           "preload_models": {
             "items": {
               "type": "string"
@@ -16704,6 +16708,7 @@
         "required": [
           "default_provider",
           "default_rembg_model",
+          "rembg_process_mode",
           "preload_models",
           "provider_options",
           "rembg_models"

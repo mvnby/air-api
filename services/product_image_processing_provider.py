@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import os
+import signal
 import shlex
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
 from functools import lru_cache, partial
 from io import BytesIO
+from pathlib import Path
 from typing import Any, Protocol
 
 from PIL import Image, ImageOps, UnidentifiedImageError, features
@@ -31,6 +34,7 @@ MAX_SOURCE_PIXELS = 40_000_000
 BACKGROUND_REMOVAL_PROVIDER_ENV = "BACKGROUND_REMOVAL_PROVIDER"
 BACKGROUND_REMOVAL_REMBG_MODEL_ENV = "BACKGROUND_REMOVAL_REMBG_MODEL"
 BACKGROUND_REMOVAL_REMBG_PRELOAD_MODELS_ENV = "BACKGROUND_REMOVAL_REMBG_PRELOAD_MODELS"
+BACKGROUND_REMOVAL_REMBG_PROCESS_MODE_ENV = "BACKGROUND_REMOVAL_REMBG_PROCESS_MODE"
 BACKGROUND_REMOVAL_TIMEOUT_ENV = "BACKGROUND_REMOVAL_TIMEOUT_SECONDS"
 BACKGROUND_REMOVAL_COMMAND_ENVS = {
     ProductImageProcessingProvider.BIREFNET.value: "BACKGROUND_REMOVAL_BIREFNET_COMMAND",
@@ -38,6 +42,7 @@ BACKGROUND_REMOVAL_COMMAND_ENVS = {
 }
 DEFAULT_BACKGROUND_REMOVAL_PROVIDER = ProductImageProcessingProvider.REMBG.value
 DEFAULT_BACKGROUND_REMOVAL_REMBG_MODEL = "u2net"
+DEFAULT_BACKGROUND_REMOVAL_REMBG_PROCESS_MODE = "experimental"
 DEFAULT_BACKGROUND_REMOVAL_TIMEOUT_SECONDS = 120
 SAFE_REMBG_MODEL_OPTIONS = [
     {
@@ -145,13 +150,22 @@ class RembgProductImageProcessor:
         source_content: bytes,
         context: ProductImageProcessingContext,
     ) -> ProductImageProcessingResult:
+        timeout_seconds = _background_removal_timeout_seconds()
+        if _should_run_rembg_in_subprocess(self.model_name):
+            output = await asyncio.to_thread(
+                _run_rembg_subprocess,
+                model_name=self.model_name,
+                source_content=source_content,
+                timeout_seconds=timeout_seconds,
+            )
+            return _process_image_bytes(output, context=context)
+
         try:
             from rembg import remove  # type: ignore
         except ImportError as exc:
             raise RuntimeError("rembg provider is not installed") from exc
 
         session = _get_rembg_session(self.model_name)
-        timeout_seconds = _background_removal_timeout_seconds()
         try:
             output = await asyncio.wait_for(
                 asyncio.to_thread(partial(remove, source_content, session=session)),
@@ -212,14 +226,15 @@ class CommandProductImageProcessor:
                 input=shlex.quote(input_path),
                 output=shlex.quote(output_path),
             )
-            completed = subprocess.run(
-                command,
-                shell=True,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=self.timeout_seconds,
-            )
+            try:
+                completed = _run_shell_command_with_timeout(
+                    command,
+                    timeout=self.timeout_seconds,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError(
+                    f"{self.provider_name} provider timed out after {self.timeout_seconds}s"
+                ) from exc
             if completed.returncode != 0:
                 stderr = (completed.stderr or completed.stdout or "").strip()
                 detail = f": {stderr[:500]}" if stderr else ""
@@ -329,6 +344,10 @@ def default_rembg_model_name() -> str:
     return _background_removal_rembg_model()
 
 
+def rembg_process_mode() -> str:
+    return _background_removal_rembg_process_mode()
+
+
 def rembg_preload_model_names(raw_value: str | None = None) -> list[str]:
     configured = (
         raw_value
@@ -371,9 +390,112 @@ def _background_removal_timeout_seconds() -> int:
         return DEFAULT_BACKGROUND_REMOVAL_TIMEOUT_SECONDS
 
 
+def _background_removal_rembg_process_mode() -> str:
+    requested = os.getenv(
+        BACKGROUND_REMOVAL_REMBG_PROCESS_MODE_ENV,
+        DEFAULT_BACKGROUND_REMOVAL_REMBG_PROCESS_MODE,
+    ).strip().lower()
+    if requested in {"always", "experimental", "never"}:
+        return requested
+    return DEFAULT_BACKGROUND_REMOVAL_REMBG_PROCESS_MODE
+
+
 def _background_removal_rembg_model(model_name: str | None = None) -> str:
     requested = (model_name or os.getenv(BACKGROUND_REMOVAL_REMBG_MODEL_ENV, "")).strip()
     return requested or DEFAULT_BACKGROUND_REMOVAL_REMBG_MODEL
+
+
+def _should_run_rembg_in_subprocess(model_name: str) -> bool:
+    mode = _background_removal_rembg_process_mode()
+    if mode == "always":
+        return True
+    if mode == "never":
+        return False
+
+    safe_models = {item["value"] for item in SAFE_REMBG_MODEL_OPTIONS}
+    return model_name not in safe_models
+
+
+def _run_rembg_subprocess(
+    *,
+    model_name: str,
+    source_content: bytes,
+    timeout_seconds: int,
+) -> bytes:
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "rembg_remove.py"
+    if not script_path.exists():
+        raise RuntimeError("rembg subprocess runner is not available")
+
+    with tempfile.TemporaryDirectory(prefix="rembg-bg-") as tmp_dir:
+        input_path = os.path.join(tmp_dir, "input.bin")
+        output_path = os.path.join(tmp_dir, "output.png")
+        with open(input_path, "wb") as input_file:
+            input_file.write(source_content)
+
+        command = [
+            sys.executable,
+            str(script_path),
+            "--model",
+            model_name,
+            "--input",
+            input_path,
+            "--output",
+            output_path,
+        ]
+        try:
+            completed = subprocess.run(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                f"rembg subprocess timed out after {timeout_seconds}s: {model_name}"
+            ) from exc
+
+        if completed.returncode != 0:
+            stderr = (completed.stderr or completed.stdout or "").strip()
+            detail = f": {stderr[:500]}" if stderr else ""
+            raise RuntimeError(f"rembg subprocess failed for {model_name}{detail}")
+        if not os.path.exists(output_path):
+            raise RuntimeError(f"rembg subprocess did not create output image: {model_name}")
+        with open(output_path, "rb") as output_file:
+            return output_file.read()
+
+
+def _run_shell_command_with_timeout(
+    command: str,
+    *,
+    timeout: int,
+) -> subprocess.CompletedProcess[str]:
+    process = subprocess.Popen(
+        command,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _terminate_process(process)
+        stdout, stderr = process.communicate()
+        raise subprocess.TimeoutExpired(command, timeout, output=stdout, stderr=stderr)
+
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
+def _terminate_process(process: subprocess.Popen[str]) -> None:
+    try:
+        if os.name != "nt":
+            os.killpg(process.pid, signal.SIGKILL)
+        else:
+            process.kill()
+    except ProcessLookupError:
+        return
 
 
 @lru_cache(maxsize=8)
