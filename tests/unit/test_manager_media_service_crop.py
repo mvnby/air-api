@@ -1,4 +1,5 @@
 from io import BytesIO
+from pathlib import Path
 
 import pytest
 from PIL import Image
@@ -113,6 +114,7 @@ async def test_crop_gallery_image_replaces_source_and_main_image(sqlite_session)
     assert source_image.url == result["url"]
     assert product.main_image == result["url"]
     assert product.images == [result["url"]]
+    assert Path("media/products/source.png").exists()
 
 
 @pytest.mark.asyncio
@@ -205,6 +207,7 @@ async def test_remove_background_gallery_image_replaces_source_and_main_image(
     assert product.main_image == result["url"]
     assert product.images == [result["url"]]
     assert len(rows) == 1
+    assert Path("media/products/source.png").exists()
 
 
 @pytest.mark.asyncio
