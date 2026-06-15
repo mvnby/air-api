@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
+import shlex
+import subprocess
+import tempfile
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Protocol
@@ -22,6 +27,14 @@ CARD_PADDING_RATIO = 0.08
 PROCESSED_MAX_EDGE = 1600
 FULL_MAX_EDGE = 1800
 MAX_SOURCE_PIXELS = 40_000_000
+BACKGROUND_REMOVAL_PROVIDER_ENV = "BACKGROUND_REMOVAL_PROVIDER"
+BACKGROUND_REMOVAL_TIMEOUT_ENV = "BACKGROUND_REMOVAL_TIMEOUT_SECONDS"
+BACKGROUND_REMOVAL_COMMAND_ENVS = {
+    ProductImageProcessingProvider.BIREFNET.value: "BACKGROUND_REMOVAL_BIREFNET_COMMAND",
+    ProductImageProcessingProvider.BEN.value: "BACKGROUND_REMOVAL_BEN_COMMAND",
+}
+DEFAULT_BACKGROUND_REMOVAL_PROVIDER = ProductImageProcessingProvider.REMBG.value
+DEFAULT_BACKGROUND_REMOVAL_TIMEOUT_SECONDS = 120
 
 
 @dataclass(frozen=True)
@@ -91,14 +104,166 @@ class RembgProductImageProcessor:
         return _process_image_bytes(output, context=context)
 
 
+class CommandProductImageProcessor:
+    """Adapter for model runners wired by env command templates.
+
+    The command receives `{input}` and `{output}` placeholders. This lets ops test
+    BEN, BiRefNet, or any local/remote wrapper without changing the app contract.
+    """
+
+    def __init__(
+        self,
+        *,
+        provider_name: str,
+        command_env: str,
+        timeout_seconds: int | None = None,
+    ):
+        self.provider_name = provider_name
+        self.command_env = command_env
+        self.timeout_seconds = timeout_seconds or _background_removal_timeout_seconds()
+
+    async def process(
+        self,
+        *,
+        source_content: bytes,
+        context: ProductImageProcessingContext,
+    ) -> ProductImageProcessingResult:
+        command_template = os.getenv(self.command_env, "").strip()
+        if not command_template:
+            raise RuntimeError(
+                f"{self.provider_name} provider is not configured: set {self.command_env}"
+            )
+
+        output = await asyncio.to_thread(
+            self._run_command,
+            command_template,
+            source_content,
+        )
+        return _process_image_bytes(output, context=context)
+
+    def _run_command(self, command_template: str, source_content: bytes) -> bytes:
+        with tempfile.TemporaryDirectory(prefix=f"{self.provider_name}-bg-") as tmp_dir:
+            input_path = os.path.join(tmp_dir, "input.png")
+            output_path = os.path.join(tmp_dir, "output.png")
+            with open(input_path, "wb") as input_file:
+                input_file.write(source_content)
+
+            command = command_template.format(
+                input=shlex.quote(input_path),
+                output=shlex.quote(output_path),
+            )
+            completed = subprocess.run(
+                command,
+                shell=True,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout_seconds,
+            )
+            if completed.returncode != 0:
+                stderr = (completed.stderr or completed.stdout or "").strip()
+                detail = f": {stderr[:500]}" if stderr else ""
+                raise RuntimeError(f"{self.provider_name} provider failed{detail}")
+            if not os.path.exists(output_path):
+                raise RuntimeError(
+                    f"{self.provider_name} provider did not create output image"
+                )
+            with open(output_path, "rb") as output_file:
+                return output_file.read()
+
+
+class BiRefNetProductImageProcessor(CommandProductImageProcessor):
+    def __init__(self):
+        super().__init__(
+            provider_name=ProductImageProcessingProvider.BIREFNET.value,
+            command_env=BACKGROUND_REMOVAL_COMMAND_ENVS[
+                ProductImageProcessingProvider.BIREFNET.value
+            ],
+        )
+
+
+class BenProductImageProcessor(CommandProductImageProcessor):
+    def __init__(self):
+        super().__init__(
+            provider_name=ProductImageProcessingProvider.BEN.value,
+            command_env=BACKGROUND_REMOVAL_COMMAND_ENVS[ProductImageProcessingProvider.BEN.value],
+        )
+
+
 def get_product_image_processor(provider: str) -> ProductImageProcessor:
-    if provider == ProductImageProcessingProvider.NOOP.value:
+    normalized_provider = resolve_background_removal_provider(provider)
+    if normalized_provider == ProductImageProcessingProvider.AUTO.value:
+        normalized_provider = DEFAULT_BACKGROUND_REMOVAL_PROVIDER
+    if normalized_provider == ProductImageProcessingProvider.NOOP.value:
         return NoopProductImageProcessor()
-    if provider == ProductImageProcessingProvider.MANUAL.value:
+    if normalized_provider == ProductImageProcessingProvider.MANUAL.value:
         return ManualProductImageProcessor()
-    if provider == ProductImageProcessingProvider.REMBG.value:
+    if normalized_provider == ProductImageProcessingProvider.REMBG.value:
         return RembgProductImageProcessor()
+    if normalized_provider == ProductImageProcessingProvider.BIREFNET.value:
+        return BiRefNetProductImageProcessor()
+    if normalized_provider == ProductImageProcessingProvider.BEN.value:
+        return BenProductImageProcessor()
     raise ValueError(f"Unsupported image processing provider={provider!r}")
+
+
+def resolve_background_removal_provider(provider: str | None) -> str:
+    requested = (provider or ProductImageProcessingProvider.AUTO.value).strip().lower()
+    if requested != ProductImageProcessingProvider.AUTO.value:
+        return requested
+
+    configured = os.getenv(
+        BACKGROUND_REMOVAL_PROVIDER_ENV,
+        DEFAULT_BACKGROUND_REMOVAL_PROVIDER,
+    ).strip().lower()
+    if not configured or configured == ProductImageProcessingProvider.AUTO.value:
+        return DEFAULT_BACKGROUND_REMOVAL_PROVIDER
+    return configured
+
+
+def background_removal_provider_options() -> list[dict[str, str]]:
+    return [
+        {
+            "value": ProductImageProcessingProvider.AUTO.value,
+            "label": "auto",
+            "description": f"Use {BACKGROUND_REMOVAL_PROVIDER_ENV}, default rembg",
+        },
+        {
+            "value": ProductImageProcessingProvider.NOOP.value,
+            "label": "noop",
+            "description": "Normalize image without background removal",
+        },
+        {
+            "value": ProductImageProcessingProvider.MANUAL.value,
+            "label": "manual",
+            "description": "Manual/operator-approved processing alias",
+        },
+        {
+            "value": ProductImageProcessingProvider.REMBG.value,
+            "label": "rembg",
+            "description": "Python rembg package",
+        },
+        {
+            "value": ProductImageProcessingProvider.BIREFNET.value,
+            "label": "BiRefNet",
+            "description": f"Command adapter via {BACKGROUND_REMOVAL_COMMAND_ENVS['birefnet']}",
+        },
+        {
+            "value": ProductImageProcessingProvider.BEN.value,
+            "label": "BEN",
+            "description": f"Command adapter via {BACKGROUND_REMOVAL_COMMAND_ENVS['ben']}",
+        },
+    ]
+
+
+def _background_removal_timeout_seconds() -> int:
+    raw_value = os.getenv(BACKGROUND_REMOVAL_TIMEOUT_ENV, "").strip()
+    if not raw_value:
+        return DEFAULT_BACKGROUND_REMOVAL_TIMEOUT_SECONDS
+    try:
+        return max(1, int(raw_value))
+    except ValueError:
+        return DEFAULT_BACKGROUND_REMOVAL_TIMEOUT_SECONDS
 
 
 def _process_image_bytes(

@@ -43,9 +43,12 @@ class ProductImageManualQualityStatus(str, Enum):
 
 
 class ProductImageProcessingProvider(str, Enum):
+    AUTO = "auto"
     MANUAL = "manual"
     NOOP = "noop"
     REMBG = "rembg"
+    BIREFNET = "birefnet"
+    BEN = "ben"
 
 
 CATALOG_VARIANT_TYPES = {

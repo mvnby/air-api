@@ -4446,6 +4446,18 @@
               "type": "integer",
               "title": "Asset Id"
             }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Processing provider: auto, noop, manual, rembg, birefnet, ben",
+              "default": "auto",
+              "title": "Provider"
+            },
+            "description": "Processing provider: auto, noop, manual, rembg, birefnet, ben"
           }
         ],
         "responses": {
@@ -5134,11 +5146,11 @@
             "required": false,
             "schema": {
               "type": "string",
-              "description": "Processing provider: noop, manual, rembg",
+              "description": "Processing provider: auto, noop, manual, rembg, birefnet, ben",
               "default": "noop",
               "title": "Provider"
             },
-            "description": "Processing provider: noop, manual, rembg"
+            "description": "Processing provider: auto, noop, manual, rembg, birefnet, ben"
           }
         ],
         "responses": {
@@ -5206,11 +5218,11 @@
             "required": false,
             "schema": {
               "type": "string",
-              "description": "Processing provider: noop, manual, rembg",
+              "description": "Processing provider: auto, noop, manual, rembg, birefnet, ben",
               "default": "noop",
               "title": "Provider"
             },
-            "description": "Processing provider: noop, manual, rembg"
+            "description": "Processing provider: auto, noop, manual, rembg, birefnet, ben"
           }
         ],
         "responses": {

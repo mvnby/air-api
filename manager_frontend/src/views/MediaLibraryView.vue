@@ -15,6 +15,10 @@ import {
 } from 'lucide-vue-next';
 import { api, type ManagerMediaAssetResponse } from '../api';
 import { getApiErrorMessage } from '../utils/api-errors';
+import {
+  backgroundRemovalProviderOptions,
+  type BackgroundRemovalProvider,
+} from '../utils/media-processing';
 import ImageCropSelector, { type ImageCropSourceSize, type ImageCropValue } from '../components/ImageCropSelector.vue';
 
 type MediaKind = { value: string; label: string };
@@ -35,6 +39,7 @@ const uploading = ref(false);
 const saving = ref(false);
 const deleting = ref(false);
 const processing = ref<'crop' | 'background' | ''>('');
+const backgroundProvider = ref<BackgroundRemovalProvider>('auto');
 const page = ref(1);
 const limit = ref(40);
 const total = ref(0);
@@ -93,6 +98,9 @@ const mediaErrorMessage = (err: unknown, fallback: string) => {
   }
   if (/rembg provider is not installed/i.test(message)) {
     return 'Удаление фона пока не настроено: установите rembg в backend-окружении.';
+  }
+  if (/provider is not configured|provider is not installed/i.test(message)) {
+    return 'Провайдер удаления фона пока не настроен на backend. Проверьте env-команду или зависимости модели.';
   }
   return message;
 };
@@ -362,7 +370,10 @@ const removeBackground = async () => {
   if (!selectedAsset.value) return;
   processing.value = 'background';
   try {
-    const processed = await api.removeMediaAssetBackground(selectedAsset.value.id);
+    const processed = await api.removeMediaAssetBackground(
+      selectedAsset.value.id,
+      backgroundProvider.value,
+    );
     assets.value = [processed, ...assets.value];
     selectAsset(processed);
     setToast('Версия без фона готова');
@@ -655,6 +666,21 @@ onUnmounted(() => {
                 Удалить
               </button>
             </div>
+            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              Провайдер удаления фона
+              <select
+                v-model="backgroundProvider"
+                class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+              >
+                <option
+                  v-for="option in backgroundRemovalProviderOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
 
             <div v-if="cropMode" class="rounded-lg border border-teal-200 bg-teal-50 p-3 dark:border-teal-900 dark:bg-teal-950/30">
               <div class="flex items-center justify-between gap-3">

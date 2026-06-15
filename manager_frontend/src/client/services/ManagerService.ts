@@ -1144,7 +1144,7 @@ export class ManagerService {
      * @param limit
      * @param includeInstallation
      * @param dryRun
-     * @param provider Processing provider: noop, manual, rembg
+     * @param provider Processing provider: auto, noop, manual, rembg, birefnet, ben
      * @returns ProductImageVariantBatchProcessResponse Successful Response
      * @throws ApiError
      */
@@ -1175,7 +1175,7 @@ export class ManagerService {
      * Retry/reprocess a failed or skipped image variant.
      * @param imageId
      * @param variantType Variant to reprocess: processed, card, full
-     * @param provider Processing provider: noop, manual, rembg
+     * @param provider Processing provider: auto, noop, manual, rembg, birefnet, ben
      * @returns ProductImageVariantResponse Successful Response
      * @throws ApiError
      */

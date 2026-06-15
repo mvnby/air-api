@@ -261,10 +261,12 @@ class ProductImageVariantService:
             product_image_id=product_image_id,
             variant_type=normalized_type,
         )
+        active_processor = processor or get_product_image_processor(normalized_provider)
+        effective_provider = getattr(active_processor, "provider_name", normalized_provider)
         now = datetime.now()
         variant.processing_status = ProductImageProcessingStatus.PROCESSING.value
         variant.processing_stage = ProductImageProcessingStage.VARIANT_GENERATION.value
-        variant.processing_provider = normalized_provider
+        variant.processing_provider = effective_provider
         variant.processing_error = None
         variant.updated_at = now
         session.add(variant)
@@ -291,7 +293,6 @@ class ProductImageVariantService:
                 await session.commit()
             return ProductImageVariantService.serialize_variant(variant)
 
-        active_processor = processor or get_product_image_processor(normalized_provider)
         active_storage = storage or get_product_media_storage()
         try:
             source_content = source_path.read_bytes()

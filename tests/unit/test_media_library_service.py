@@ -24,6 +24,19 @@ def svg_bytes() -> bytes:
     </svg>"""
 
 
+class FakeBackgroundProcessor:
+    provider_name = "ben"
+
+    async def process(self, *, source_content: bytes, context):
+        class Result:
+            content = image_bytes(size=(48, 32), color=(200, 20, 80))
+            extension = "webp"
+            width = 48
+            height = 32
+
+        return Result()
+
+
 @pytest.fixture
 async def sqlite_session(tmp_path, monkeypatch):
     monkeypatch.setattr(media_library_service, "MEDIA_LIBRARY_BASE_DIR", tmp_path / "library")
@@ -159,6 +172,38 @@ async def test_crop_media_asset_creates_variant(sqlite_session):
     assert cropped["width"] == 60
     assert cropped["height"] == 40
     assert cropped["tags"] == ["обложка"]
+
+
+@pytest.mark.asyncio
+async def test_remove_background_uses_selected_provider(sqlite_session, monkeypatch):
+    requested_providers = []
+
+    def fake_get_processor(provider: str):
+        requested_providers.append(provider)
+        return FakeBackgroundProcessor()
+
+    monkeypatch.setattr(media_library_service, "get_product_image_processor", fake_get_processor)
+    upload = await MediaLibraryService.upload_assets(
+        session=sqlite_session,
+        files=[("source.png", image_bytes(size=(160, 120)))],
+        kind="product",
+        tags=["товар"],
+        created_by="admin",
+    )
+    source = upload["items"][0]
+
+    processed = await MediaLibraryService.remove_background(
+        session=sqlite_session,
+        asset_id=source["id"],
+        created_by="admin",
+        provider="ben",
+    )
+
+    assert requested_providers == ["ben"]
+    assert processed["parent_asset_id"] == source["id"]
+    assert processed["variant_type"] == "background_removed"
+    assert processed["width"] == 48
+    assert processed["height"] == 32
 
 
 @pytest.mark.asyncio
