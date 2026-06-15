@@ -92,6 +92,14 @@ const selectedUrl = computed(() => selectedAsset.value ? imageUrl(selectedAsset.
 const showRembgModelSelect = computed(() => (
   backgroundProvider.value === 'rembg' || backgroundProvider.value === 'auto'
 ));
+const selectedBackgroundModelOption = computed(() => (
+  backgroundModelOptions.value.find((option) => option.value === backgroundModel.value)
+));
+const showBackgroundExperimentWarning = computed(() => (
+  backgroundProvider.value === 'birefnet'
+  || backgroundProvider.value === 'ben'
+  || (showRembgModelSelect.value && selectedBackgroundModelOption.value?.recommended === false)
+));
 
 const setToast = (message: string, type: 'success' | 'error' = 'success') => {
   toast.value = message;
@@ -730,10 +738,13 @@ onUnmounted(() => {
                     :key="option.value"
                     :value="option.value"
                   >
-                    {{ option.label }}
+                    {{ option.recommended === false ? `${option.label} exp.` : option.label }}
                   </option>
                 </select>
               </label>
+            </div>
+            <div v-if="showBackgroundExperimentWarning" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100">
+              Экспериментальный режим: обработка может быть долгой и завершиться по timeout.
             </div>
 
             <div v-if="cropMode" class="rounded-lg border border-teal-200 bg-teal-50 p-3 dark:border-teal-900 dark:bg-teal-950/30">

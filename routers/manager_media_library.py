@@ -132,7 +132,7 @@ async def get_media_background_removal_config(
         "rembg_process_mode": rembg_process_mode(),
         "preload_models": rembg_preload_model_names(),
         "provider_options": background_removal_provider_options(),
-        "rembg_models": rembg_model_options(),
+        "rembg_models": rembg_model_options(include_experimental=True),
     }
 
 
