@@ -7,6 +7,7 @@ import type { ManagerBackgroundRemovalProviderOption } from './ManagerBackground
 export type ManagerBackgroundRemovalConfigResponse = {
     default_provider: string;
     default_rembg_model: string;
+    rembg_process_mode: string;
     preload_models: Array<string>;
     provider_options: Array<ManagerBackgroundRemovalProviderOption>;
     rembg_models: Array<ManagerBackgroundRemovalModelOption>;

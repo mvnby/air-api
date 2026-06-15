@@ -1,3 +1,4 @@
+import subprocess
 import sys
 import time
 from io import BytesIO
@@ -13,9 +14,12 @@ from services.product_image_processing_provider import (
     DEFAULT_BACKGROUND_REMOVAL_TIMEOUT_SECONDS,
     ProductImageProcessingContext,
     RembgProductImageProcessor,
+    _background_removal_rembg_process_mode,
     _background_removal_rembg_model,
     _background_removal_timeout_seconds,
     _get_rembg_session,
+    _run_rembg_subprocess,
+    _should_run_rembg_in_subprocess,
     background_removal_provider_options,
     get_product_image_processor,
     rembg_model_options,
@@ -134,6 +138,29 @@ def test_background_removal_timeout_uses_safe_default_and_env(monkeypatch):
     assert _background_removal_timeout_seconds() == DEFAULT_BACKGROUND_REMOVAL_TIMEOUT_SECONDS
 
 
+def test_rembg_process_mode_uses_experimental_default_and_env(monkeypatch):
+    monkeypatch.delenv("BACKGROUND_REMOVAL_REMBG_PROCESS_MODE", raising=False)
+    assert _background_removal_rembg_process_mode() == "experimental"
+
+    monkeypatch.setenv("BACKGROUND_REMOVAL_REMBG_PROCESS_MODE", "always")
+    assert _background_removal_rembg_process_mode() == "always"
+
+    monkeypatch.setenv("BACKGROUND_REMOVAL_REMBG_PROCESS_MODE", "invalid")
+    assert _background_removal_rembg_process_mode() == "experimental"
+
+
+def test_rembg_process_mode_isolates_experimental_models(monkeypatch):
+    monkeypatch.setenv("BACKGROUND_REMOVAL_REMBG_PROCESS_MODE", "experimental")
+    assert _should_run_rembg_in_subprocess("u2net") is False
+    assert _should_run_rembg_in_subprocess("birefnet-general") is True
+
+    monkeypatch.setenv("BACKGROUND_REMOVAL_REMBG_PROCESS_MODE", "always")
+    assert _should_run_rembg_in_subprocess("u2net") is True
+
+    monkeypatch.setenv("BACKGROUND_REMOVAL_REMBG_PROCESS_MODE", "never")
+    assert _should_run_rembg_in_subprocess("birefnet-general") is False
+
+
 @pytest.mark.asyncio
 async def test_rembg_processor_passes_configured_session(monkeypatch):
     sessions = []
@@ -152,6 +179,7 @@ async def test_rembg_processor_passes_configured_session(monkeypatch):
             return source_content
 
     monkeypatch.setitem(sys.modules, "rembg", FakeRembgModule)
+    monkeypatch.setenv("BACKGROUND_REMOVAL_REMBG_PROCESS_MODE", "never")
     _get_rembg_session.cache_clear()
 
     processor = RembgProductImageProcessor(model_name="isnet-general-use")
@@ -202,6 +230,36 @@ async def test_rembg_processor_times_out_without_blocking_event_loop(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_rembg_processor_uses_subprocess_for_experimental_model(monkeypatch):
+    calls = []
+
+    def fake_run_rembg_subprocess(*, model_name, source_content, timeout_seconds):
+        calls.append((model_name, source_content, timeout_seconds))
+        return source_content
+
+    monkeypatch.setenv("BACKGROUND_REMOVAL_REMBG_PROCESS_MODE", "experimental")
+    monkeypatch.setenv("BACKGROUND_REMOVAL_TIMEOUT_SECONDS", "7")
+    monkeypatch.setattr(
+        "services.product_image_processing_provider._run_rembg_subprocess",
+        fake_run_rembg_subprocess,
+    )
+
+    processor = RembgProductImageProcessor(model_name="birefnet-general")
+    source_content = image_bytes(size=(40, 30))
+    result = await processor.process(
+        source_content=source_content,
+        context=ProductImageProcessingContext(
+            product_image_id=1,
+            source_url="/media/source.png",
+            variant_type="processed",
+        ),
+    )
+
+    assert result.width == 40
+    assert calls == [("birefnet-general", source_content, 7)]
+
+
+@pytest.mark.asyncio
 async def test_rembg_session_is_cached_per_model(monkeypatch):
     created = []
 
@@ -216,6 +274,7 @@ async def test_rembg_session_is_cached_per_model(monkeypatch):
             return source_content
 
     monkeypatch.setitem(sys.modules, "rembg", FakeRembgModule)
+    monkeypatch.setenv("BACKGROUND_REMOVAL_REMBG_PROCESS_MODE", "never")
     _get_rembg_session.cache_clear()
     processor = RembgProductImageProcessor(model_name="u2netp")
 
@@ -243,6 +302,40 @@ def test_rembg_session_wraps_invalid_model_errors(monkeypatch):
 
     with pytest.raises(RuntimeError, match="rembg model is not configured correctly"):
         _get_rembg_session("bad-model")
+
+
+def test_rembg_subprocess_reads_output(tmp_path, monkeypatch):
+    source_content = image_bytes(size=(40, 30))
+
+    def fake_run(command, *, check, capture_output, text, timeout):
+        output_path = command[command.index("--output") + 1]
+        with open(output_path, "wb") as output_file:
+            output_file.write(source_content)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    output = _run_rembg_subprocess(
+        model_name="birefnet-general",
+        source_content=source_content,
+        timeout_seconds=5,
+    )
+
+    assert output == source_content
+
+
+def test_rembg_subprocess_wraps_timeout(monkeypatch):
+    def fake_run(command, *, check, capture_output, text, timeout):
+        raise subprocess.TimeoutExpired(command, timeout)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="rembg subprocess timed out"):
+        _run_rembg_subprocess(
+            model_name="birefnet-general",
+            source_content=image_bytes(size=(40, 30)),
+            timeout_seconds=5,
+        )
 
 
 @pytest.mark.asyncio
@@ -282,6 +375,29 @@ async def test_command_provider_requires_command_env():
     )
 
     with pytest.raises(RuntimeError, match="not configured"):
+        await processor.process(
+            source_content=image_bytes(size=(40, 30)),
+            context=ProductImageProcessingContext(
+                product_image_id=1,
+                source_url="/media/source.png",
+                variant_type="processed",
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_command_provider_wraps_timeout(tmp_path, monkeypatch):
+    script = tmp_path / "slow_image.py"
+    script.write_text("import time\n" "time.sleep(3)\n")
+    processor = CommandProductImageProcessor(
+        provider_name="birefnet",
+        command_env="TEST_SLOW_BIREFNET_COMMAND",
+        timeout_seconds=1,
+    )
+
+    monkeypatch.setenv("TEST_SLOW_BIREFNET_COMMAND", f"{sys.executable} {script}")
+
+    with pytest.raises(RuntimeError, match="provider timed out"):
         await processor.process(
             source_content=image_bytes(size=(40, 30)),
             context=ProductImageProcessingContext(
