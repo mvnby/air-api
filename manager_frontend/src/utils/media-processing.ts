@@ -8,6 +8,6 @@ export const backgroundRemovalProviderOptions: Array<{
   { value: 'noop', label: 'noop' },
   { value: 'manual', label: 'manual' },
   { value: 'rembg', label: 'rembg' },
-  { value: 'birefnet', label: 'BiRefNet' },
-  { value: 'ben', label: 'BEN' },
+  { value: 'birefnet', label: 'BiRefNet exp.' },
+  { value: 'ben', label: 'BEN exp.' },
 ];
