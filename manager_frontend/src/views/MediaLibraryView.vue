@@ -806,7 +806,12 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <aside class="rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+      <aside
+        class="xl:sticky xl:top-4 xl:self-start"
+        :class="selectedAsset ? 'fixed inset-0 z-50 flex items-end bg-gray-950/45 p-3 xl:static xl:z-auto xl:block xl:bg-transparent xl:p-0' : 'hidden xl:block'"
+        @click.self="selectedAsset = null"
+      >
+        <div class="w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900 xl:shadow-sm">
         <div v-if="!selectedAsset" class="flex min-h-[520px] items-center justify-center p-8 text-center">
           <div>
             <ImageIcon class="mx-auto h-10 w-10 text-gray-300" />
@@ -814,7 +819,7 @@ onUnmounted(() => {
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Метаданные и редактор появятся здесь.</p>
           </div>
         </div>
-        <div v-else class="flex max-h-[calc(100vh-140px)] flex-col">
+        <div v-else class="flex max-h-[calc(100vh-48px)] flex-col xl:max-h-[calc(100vh-140px)]">
           <div class="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-800">
             <div>
               <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ selectedAsset.title || 'Без названия' }}</p>
@@ -990,6 +995,7 @@ onUnmounted(() => {
               <p><span class="font-medium">Hash:</span> {{ selectedAsset.content_hash?.slice(0, 16) || '—' }}</p>
             </div>
           </div>
+        </div>
         </div>
       </aside>
     </div>

@@ -57,7 +57,6 @@ class ManagerMediaService:
                 select(ProductImageVariant).where(ProductImageVariant.product_image_id == image.id)
             )
         ).scalars().all()
-        variant_urls = [variant.url for variant in variant_rows if variant.url]
         for variant in variant_rows:
             await session.delete(variant)
 
@@ -124,7 +123,6 @@ class ManagerMediaService:
                 select(ProductImageVariant).where(ProductImageVariant.product_image_id == image.id)
             )
         ).scalars().all()
-        variant_urls = [variant.url for variant in variant_rows if variant.url]
         for variant in variant_rows:
             await session.delete(variant)
 
@@ -147,10 +145,6 @@ class ManagerMediaService:
         await ManagerMediaService.sync_legacy_images(session, product.id)
         await session.commit()
         await session.refresh(image)
-
-        await ManagerMediaService.remove_file_if_unreferenced(session, old_url)
-        for variant_url in variant_urls:
-            await ManagerMediaService.remove_file_if_unreferenced(session, variant_url)
 
         return {"id": image.id, "url": image.url}
 
@@ -225,10 +219,6 @@ class ManagerMediaService:
         await ManagerMediaService.sync_legacy_images(session, product.id)
         await session.commit()
         await session.refresh(image)
-
-        await ManagerMediaService.remove_file_if_unreferenced(session, old_url)
-        for variant_url in variant_urls:
-            await ManagerMediaService.remove_file_if_unreferenced(session, variant_url)
 
         return {"id": image.id, "url": image.url}
 
