@@ -16,6 +16,8 @@ RUN_BACKFILL_MEDIA_LIBRARY="${RUN_BACKFILL_MEDIA_LIBRARY:-false}"
 MEDIA_LIBRARY_BACKFILL_EXECUTE="${MEDIA_LIBRARY_BACKFILL_EXECUTE:-false}"
 MEDIA_LIBRARY_BACKFILL_LIMIT="${MEDIA_LIBRARY_BACKFILL_LIMIT:-500}"
 MEDIA_LIBRARY_BACKFILL_INCLUDE_REMOTE="${MEDIA_LIBRARY_BACKFILL_INCLUDE_REMOTE:-false}"
+RUN_WARMUP_REMBG_MODELS="${RUN_WARMUP_REMBG_MODELS:-false}"
+REMBG_WARMUP_MODELS="${REMBG_WARMUP_MODELS:-}"
 DRY_RUN="${DRY_RUN:-true}"
 RUN_POST_DEPLOY_OPS="${RUN_POST_DEPLOY_OPS:-false}"
 
@@ -43,6 +45,8 @@ log init "RUN_BACKFILL_MEDIA_LIBRARY=${RUN_BACKFILL_MEDIA_LIBRARY}"
 log init "MEDIA_LIBRARY_BACKFILL_EXECUTE=${MEDIA_LIBRARY_BACKFILL_EXECUTE}"
 log init "MEDIA_LIBRARY_BACKFILL_LIMIT=${MEDIA_LIBRARY_BACKFILL_LIMIT}"
 log init "MEDIA_LIBRARY_BACKFILL_INCLUDE_REMOTE=${MEDIA_LIBRARY_BACKFILL_INCLUDE_REMOTE}"
+log init "RUN_WARMUP_REMBG_MODELS=${RUN_WARMUP_REMBG_MODELS}"
+log init "REMBG_WARMUP_MODELS=${REMBG_WARMUP_MODELS:-<default>}"
 log init "DRY_RUN=${DRY_RUN}"
 
 if [[ "${RUN_POST_DEPLOY_OPS}" != "true" ]]; then
@@ -172,6 +176,23 @@ if [[ "${RUN_BACKFILL_MEDIA_LIBRARY}" == "true" ]]; then
   fi
 else
   ops_skipped+=("backfill_media_library:disabled")
+fi
+
+if [[ "${RUN_WARMUP_REMBG_MODELS}" == "true" ]]; then
+  if script_exists "scripts/warmup_rembg_models.py"; then
+    rembg_warmup_cmd="python3 scripts/warmup_rembg_models.py"
+    if [[ -n "${REMBG_WARMUP_MODELS}" ]]; then
+      rembg_warmup_cmd="${rembg_warmup_cmd} --models ${REMBG_WARMUP_MODELS}"
+    fi
+    log media "Warmup rembg models"
+    run_in_app "${rembg_warmup_cmd}"
+    ops_actions+=("warmup_rembg_models")
+  else
+    log media "Skip: scripts/warmup_rembg_models.py not found in image"
+    ops_skipped+=("warmup_rembg_models:missing_script")
+  fi
+else
+  ops_skipped+=("warmup_rembg_models:disabled")
 fi
 
 if [[ -n "${HIDE_LEGACY_GROUPS}" ]]; then

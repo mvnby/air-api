@@ -93,6 +93,27 @@ class ManagerMediaAssetUploadResponse(BaseModel):
     uploaded: int
     items: List[ManagerMediaAssetResponse]
 
+
+class ManagerBackgroundRemovalModelOption(BaseModel):
+    value: str
+    label: str
+    description: str = ""
+    recommended: bool = False
+
+
+class ManagerBackgroundRemovalProviderOption(BaseModel):
+    value: str
+    label: str
+    description: str = ""
+
+
+class ManagerBackgroundRemovalConfigResponse(BaseModel):
+    default_provider: str
+    default_rembg_model: str
+    preload_models: List[str]
+    provider_options: List[ManagerBackgroundRemovalProviderOption]
+    rembg_models: List[ManagerBackgroundRemovalModelOption]
+
 # --- CATALOG ---
 
 class ProductBase(BaseModel):

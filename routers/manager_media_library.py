@@ -9,6 +9,7 @@ from core.security import get_current_username
 from routers.manager_operation_ids import (
     CROP_MEDIA_ASSET,
     DELETE_MEDIA_ASSET,
+    GET_MEDIA_BACKGROUND_REMOVAL_CONFIG,
     LIST_MEDIA_ASSETS,
     REMOVE_MEDIA_ASSET_BACKGROUND,
     UPDATE_MEDIA_ASSET,
@@ -17,6 +18,7 @@ from routers.manager_operation_ids import (
 )
 from schemas import (
     ManagerActionMessageResponse,
+    ManagerBackgroundRemovalConfigResponse,
     ManagerMediaAssetCropPayload,
     ManagerMediaAssetListResponse,
     ManagerMediaAssetResponse,
@@ -25,6 +27,13 @@ from schemas import (
     ManagerMediaAssetUploadResponse,
 )
 from services.media_library_service import MediaLibraryService
+from services.product_image_processing_provider import (
+    background_removal_provider_options,
+    default_rembg_model_name,
+    rembg_model_options,
+    rembg_preload_model_names,
+    resolve_background_removal_provider,
+)
 
 
 router = APIRouter(prefix="/api/manager/media/assets", tags=["manager media"])
@@ -106,6 +115,23 @@ async def upload_media_asset_from_url(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get(
+    "/background-removal/options",
+    response_model=ManagerBackgroundRemovalConfigResponse,
+    operation_id=GET_MEDIA_BACKGROUND_REMOVAL_CONFIG,
+)
+async def get_media_background_removal_config(
+    _username: str = Depends(get_current_username),
+):
+    return {
+        "default_provider": resolve_background_removal_provider("auto"),
+        "default_rembg_model": default_rembg_model_name(),
+        "preload_models": rembg_preload_model_names(),
+        "provider_options": background_removal_provider_options(),
+        "rembg_models": rembg_model_options(),
+    }
 
 
 @router.patch(

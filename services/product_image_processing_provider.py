@@ -10,7 +10,7 @@ import tempfile
 from dataclasses import dataclass
 from functools import lru_cache
 from io import BytesIO
-from typing import Protocol
+from typing import Any, Protocol
 
 from PIL import Image, ImageOps, UnidentifiedImageError, features
 
@@ -30,6 +30,7 @@ FULL_MAX_EDGE = 1800
 MAX_SOURCE_PIXELS = 40_000_000
 BACKGROUND_REMOVAL_PROVIDER_ENV = "BACKGROUND_REMOVAL_PROVIDER"
 BACKGROUND_REMOVAL_REMBG_MODEL_ENV = "BACKGROUND_REMOVAL_REMBG_MODEL"
+BACKGROUND_REMOVAL_REMBG_PRELOAD_MODELS_ENV = "BACKGROUND_REMOVAL_REMBG_PRELOAD_MODELS"
 BACKGROUND_REMOVAL_TIMEOUT_ENV = "BACKGROUND_REMOVAL_TIMEOUT_SECONDS"
 BACKGROUND_REMOVAL_COMMAND_ENVS = {
     ProductImageProcessingProvider.BIREFNET.value: "BACKGROUND_REMOVAL_BIREFNET_COMMAND",
@@ -38,6 +39,45 @@ BACKGROUND_REMOVAL_COMMAND_ENVS = {
 DEFAULT_BACKGROUND_REMOVAL_PROVIDER = ProductImageProcessingProvider.REMBG.value
 DEFAULT_BACKGROUND_REMOVAL_REMBG_MODEL = "u2net"
 DEFAULT_BACKGROUND_REMOVAL_TIMEOUT_SECONDS = 120
+REMBG_MODEL_OPTIONS = [
+    {
+        "value": "u2net",
+        "label": "U2Net",
+        "description": "Stable baseline model for the first comparison pass.",
+        "recommended": True,
+    },
+    {
+        "value": "isnet-general-use",
+        "label": "ISNet general",
+        "description": "Often handles complex edges and light products more carefully.",
+        "recommended": True,
+    },
+    {
+        "value": "birefnet-general-lite",
+        "label": "BiRefNet lite",
+        "description": "Faster BiRefNet candidate for quality comparison.",
+        "recommended": True,
+    },
+    {
+        "value": "birefnet-general",
+        "label": "BiRefNet general",
+        "description": "High-quality general model, usually heavier than lite.",
+        "recommended": True,
+    },
+    {
+        "value": "birefnet-massive",
+        "label": "BiRefNet massive",
+        "description": "Heavy model candidate for difficult product images.",
+        "recommended": False,
+    },
+    {
+        "value": "bria-rmbg",
+        "label": "BRIA RMBG",
+        "description": "Additional strong candidate for transparency A/B testing.",
+        "recommended": False,
+    },
+]
+DEFAULT_REMBG_PRELOAD_MODELS = tuple(item["value"] for item in REMBG_MODEL_OPTIONS)
 
 
 @dataclass(frozen=True)
@@ -266,6 +306,46 @@ def background_removal_provider_options() -> list[dict[str, str]]:
             "description": f"Command adapter via {BACKGROUND_REMOVAL_COMMAND_ENVS['ben']}",
         },
     ]
+
+
+def rembg_model_options() -> list[dict[str, Any]]:
+    return [dict(item) for item in REMBG_MODEL_OPTIONS]
+
+
+def default_rembg_model_name() -> str:
+    return _background_removal_rembg_model()
+
+
+def rembg_preload_model_names(raw_value: str | None = None) -> list[str]:
+    configured = (
+        raw_value
+        if raw_value is not None
+        else os.getenv(BACKGROUND_REMOVAL_REMBG_PRELOAD_MODELS_ENV, "")
+    ).strip()
+    if not configured:
+        return list(DEFAULT_REMBG_PRELOAD_MODELS)
+
+    known = {item["value"] for item in REMBG_MODEL_OPTIONS}
+    model_names: list[str] = []
+    for item in configured.split(","):
+        model_name = item.strip()
+        if not model_name or model_name in model_names:
+            continue
+        if model_name not in known:
+            raise ValueError(f"Unsupported rembg preload model: {model_name}")
+        model_names.append(model_name)
+    return model_names
+
+
+def warmup_rembg_models(model_names: list[str] | None = None) -> list[dict[str, str]]:
+    results: list[dict[str, str]] = []
+    for model_name in model_names or rembg_preload_model_names():
+        try:
+            _get_rembg_session(model_name)
+            results.append({"model": model_name, "status": "ready"})
+        except Exception as exc:
+            results.append({"model": model_name, "status": "error", "error": str(exc)})
+    return results
 
 
 def _background_removal_timeout_seconds() -> int:

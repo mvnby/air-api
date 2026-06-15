@@ -17,7 +17,10 @@ from services.product_image_processing_provider import (
     _get_rembg_session,
     background_removal_provider_options,
     get_product_image_processor,
+    rembg_model_options,
+    rembg_preload_model_names,
     resolve_background_removal_provider,
+    warmup_rembg_models,
 )
 
 
@@ -62,6 +65,56 @@ def test_rembg_processor_records_model_in_provider_name():
 
     assert isinstance(processor, RembgProductImageProcessor)
     assert processor.provider_name == "rembg:isnet-general-use"
+
+
+def test_rembg_model_options_include_popular_candidates():
+    values = {item["value"] for item in rembg_model_options()}
+
+    assert {
+        "u2net",
+        "isnet-general-use",
+        "birefnet-general-lite",
+        "birefnet-general",
+        "birefnet-massive",
+        "bria-rmbg",
+    } <= values
+
+
+def test_rembg_preload_models_use_default_and_env_override(monkeypatch):
+    monkeypatch.delenv("BACKGROUND_REMOVAL_REMBG_PRELOAD_MODELS", raising=False)
+    assert rembg_preload_model_names()[0] == "u2net"
+    assert "birefnet-general" in rembg_preload_model_names()
+
+    monkeypatch.setenv("BACKGROUND_REMOVAL_REMBG_PRELOAD_MODELS", "u2net, birefnet-general, u2net")
+    assert rembg_preload_model_names() == ["u2net", "birefnet-general"]
+
+
+def test_rembg_preload_models_reject_unknown_model(monkeypatch):
+    monkeypatch.setenv("BACKGROUND_REMOVAL_REMBG_PRELOAD_MODELS", "u2net,unknown")
+
+    with pytest.raises(ValueError, match="Unsupported rembg preload model"):
+        rembg_preload_model_names()
+
+
+def test_warmup_rembg_models_creates_sessions(monkeypatch):
+    created = []
+
+    class FakeRembgModule:
+        @staticmethod
+        def new_session(model_name):
+            created.append(model_name)
+            return {"model": model_name}
+
+    monkeypatch.setitem(sys.modules, "rembg", FakeRembgModule)
+    _get_rembg_session.cache_clear()
+
+    results = warmup_rembg_models(["u2net", "birefnet-general"])
+
+    assert results == [
+        {"model": "u2net", "status": "ready"},
+        {"model": "birefnet-general", "status": "ready"},
+    ]
+    assert created == ["u2net", "birefnet-general"]
 
 
 def test_background_removal_timeout_uses_safe_default_and_env(monkeypatch):

@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { Body_upload_media_assets } from '../models/Body_upload_media_assets';
 import type { ManagerActionMessageResponse } from '../models/ManagerActionMessageResponse';
+import type { ManagerBackgroundRemovalConfigResponse } from '../models/ManagerBackgroundRemovalConfigResponse';
 import type { ManagerMediaAssetCropPayload } from '../models/ManagerMediaAssetCropPayload';
 import type { ManagerMediaAssetListResponse } from '../models/ManagerMediaAssetListResponse';
 import type { ManagerMediaAssetResponse } from '../models/ManagerMediaAssetResponse';
@@ -85,6 +86,17 @@ export class ManagerMediaService {
             errors: {
                 422: `Validation Error`,
             },
+        });
+    }
+    /**
+     * Get Media Background Removal Config
+     * @returns ManagerBackgroundRemovalConfigResponse Successful Response
+     * @throws ApiError
+     */
+    public static getMediaBackgroundRemovalConfig(): CancelablePromise<ManagerBackgroundRemovalConfigResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/media/assets/background-removal/options',
         });
     }
     /**

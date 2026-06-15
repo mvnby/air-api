@@ -74,6 +74,7 @@ import {
     type ManagerBrandSeriesResponse,
     type ManagerBrandSeriesUpdatePayload,
     type ManagerBrandUpdatePayload,
+    type ManagerBackgroundRemovalConfigResponse,
     type ManagerMediaAssetCropPayload,
     type ManagerMediaAssetListResponse,
     type ManagerMediaAssetResponse,
@@ -141,6 +142,7 @@ export type {
 };
 export type {
     Body_upload_media_assets,
+    ManagerBackgroundRemovalConfigResponse,
     ManagerMediaAssetCropPayload,
     ManagerMediaAssetListResponse,
     ManagerMediaAssetResponse,
@@ -260,6 +262,10 @@ export const api = {
 
     async uploadMediaAssetFromUrl(payload: ManagerMediaAssetUrlUploadPayload): Promise<ManagerMediaAssetUploadResponse> {
         return await ManagerMediaService.uploadMediaAssetFromUrl(payload);
+    },
+
+    async getMediaBackgroundRemovalConfig(): Promise<ManagerBackgroundRemovalConfigResponse> {
+        return await ManagerMediaService.getMediaBackgroundRemovalConfig();
     },
 
     async updateMediaAsset(assetId: number, payload: ManagerMediaAssetUpdatePayload): Promise<ManagerMediaAssetResponse> {
