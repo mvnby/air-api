@@ -81,6 +81,9 @@ import {
     type ManagerMediaAssetUpdatePayload,
     type ManagerMediaAssetUrlUploadPayload,
     type ManagerMediaAssetUploadResponse,
+    type ManagerMediaProcessingJobCreatePayload,
+    type ManagerMediaProcessingJobListResponse,
+    type ManagerMediaProcessingJobResponse,
     type ProductImageCropPayload,
     type ProductImageVariantBatchProcessResponse,
     type ProductImageVariantCandidateResponse,
@@ -149,6 +152,9 @@ export type {
     ManagerMediaAssetUpdatePayload,
     ManagerMediaAssetUrlUploadPayload,
     ManagerMediaAssetUploadResponse,
+    ManagerMediaProcessingJobCreatePayload,
+    ManagerMediaProcessingJobListResponse,
+    ManagerMediaProcessingJobResponse,
 };
 export type {
     ProductImageVariantBatchProcessResponse,
@@ -278,6 +284,23 @@ export const api = {
 
     async removeMediaAssetBackground(assetId: number, provider = 'auto', rembgModel?: string | null): Promise<ManagerMediaAssetResponse> {
         return await ManagerMediaService.removeMediaAssetBackground(assetId, provider, rembgModel);
+    },
+
+    async listMediaProcessingJobs(params: {
+        status?: string | null;
+        limit?: number;
+    } = {}): Promise<ManagerMediaProcessingJobListResponse> {
+        return await ManagerMediaService.listMediaProcessingJobs(
+            params.status ?? null,
+            params.limit ?? 20,
+        );
+    },
+
+    async createMediaProcessingJob(
+        assetId: number,
+        payload: ManagerMediaProcessingJobCreatePayload,
+    ): Promise<ManagerMediaProcessingJobResponse> {
+        return await ManagerMediaService.createMediaProcessingJob(assetId, payload);
     },
 
     async deleteMediaAsset(assetId: number, force = false) {

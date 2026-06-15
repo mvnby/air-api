@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import Column, String
 from sqlmodel import Field, JSON, SQLModel
@@ -33,3 +33,28 @@ class MediaAsset(SQLModel, table=True):
 
     def __str__(self) -> str:
         return self.title or self.source_filename or self.url
+
+
+class MediaProcessingJob(SQLModel, table=True):
+    __tablename__ = "media_processing_jobs"
+
+    job_id: str = Field(primary_key=True)
+    source_asset_id: int = Field(foreign_key="media_asset.id", index=True)
+    result_asset_id: Optional[int] = Field(default=None, foreign_key="media_asset.id", index=True)
+    operation: str = Field(default="background_removal", index=True)
+    status: str = Field(default="queued", index=True)
+    stage: str = Field(default="queued", index=True)
+    provider: Optional[str] = Field(default=None, index=True)
+    rembg_model: Optional[str] = Field(default=None, index=True)
+    priority: int = Field(default=100, index=True)
+    attempts: int = Field(default=0)
+    worker_id: Optional[str] = Field(default=None, index=True)
+    request_payload: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    result_payload: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    error: Optional[str] = Field(default=None, sa_column=Column(String))
+    created_by: Optional[str] = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=datetime.now, index=True)
+    started_at: Optional[datetime] = Field(default=None, index=True)
+    lease_expires_at: Optional[datetime] = Field(default=None, index=True)
+    finished_at: Optional[datetime] = Field(default=None, index=True)
+    updated_at: datetime = Field(default_factory=datetime.now)

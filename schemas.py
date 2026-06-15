@@ -94,6 +94,60 @@ class ManagerMediaAssetUploadResponse(BaseModel):
     items: List[ManagerMediaAssetResponse]
 
 
+class ManagerMediaProcessingJobCreatePayload(BaseModel):
+    operation: str = "background_removal"
+    provider: Optional[str] = "rembg"
+    rembg_model: Optional[str] = None
+    options: Dict[str, Any] = Field(default_factory=dict)
+    priority: int = Field(default=100, ge=0, le=10000)
+
+
+class ManagerMediaProcessingJobResponse(BaseModel):
+    job_id: str
+    source_asset_id: int
+    result_asset_id: Optional[int] = None
+    operation: str
+    status: str
+    stage: str
+    provider: Optional[str] = None
+    rembg_model: Optional[str] = None
+    priority: int
+    attempts: int
+    worker_id: Optional[str] = None
+    request_payload: Dict[str, Any] = Field(default_factory=dict)
+    result_payload: Dict[str, Any] = Field(default_factory=dict)
+    error: Optional[str] = None
+    source_url: Optional[str] = None
+    source_title: Optional[str] = None
+    result_url: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    lease_expires_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    updated_at: datetime
+
+
+class ManagerMediaProcessingJobListResponse(BaseModel):
+    items: List[ManagerMediaProcessingJobResponse]
+    meta: Meta
+
+
+class MediaWorkerClaimPayload(BaseModel):
+    worker_id: str
+    capabilities: List[str] = Field(default_factory=list)
+    lease_seconds: int = Field(default=900, ge=60, le=86400)
+
+
+class MediaWorkerClaimResponse(BaseModel):
+    job: Optional[ManagerMediaProcessingJobResponse] = None
+
+
+class MediaWorkerFailPayload(BaseModel):
+    worker_id: str
+    error: str
+
+
 class ManagerBackgroundRemovalModelOption(BaseModel):
     value: str
     label: str

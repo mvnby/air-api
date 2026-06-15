@@ -19,7 +19,7 @@ from .brand import Brand, ProductSeries
 from .cart import Cart, CartItem
 from .catalog_import import CatalogImportJob
 from .content import Article, GlobalConfig
-from .media import MediaAsset
+from .media import MediaAsset, MediaProcessingJob
 from .staff import StaffUser
 from .order import (
     BankReceipt,
@@ -98,6 +98,7 @@ __all__ = [
     "LeadSource",
     "LeadStatus",
     "MediaAsset",
+    "MediaProcessingJob",
     "Order",
     "OrderDocument",
     "OrderInstaller",

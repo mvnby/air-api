@@ -66,6 +66,11 @@ UPDATE_MEDIA_ASSET = "update_media_asset"
 DELETE_MEDIA_ASSET = "delete_media_asset"
 CROP_MEDIA_ASSET = "crop_media_asset"
 REMOVE_MEDIA_ASSET_BACKGROUND = "remove_media_asset_background"
+CREATE_MEDIA_PROCESSING_JOB = "create_media_processing_job"
+LIST_MEDIA_PROCESSING_JOBS = "list_media_processing_jobs"
+CLAIM_MEDIA_WORKER_JOB = "claim_media_worker_job"
+COMPLETE_MEDIA_WORKER_JOB = "complete_media_worker_job"
+FAIL_MEDIA_WORKER_JOB = "fail_media_worker_job"
 CREATE_MAIN_IMAGE_CLEANUP_BATCH = "create_main_image_cleanup_batch"
 LIST_MAIN_IMAGE_CLEANUP_BATCHES = "list_main_image_cleanup_batches"
 LIST_MAIN_IMAGE_CLEANUP_ITEMS = "list_main_image_cleanup_items"
@@ -273,6 +278,11 @@ ALL_MANAGER_OPERATION_IDS = (
     DELETE_MEDIA_ASSET,
     CROP_MEDIA_ASSET,
     REMOVE_MEDIA_ASSET_BACKGROUND,
+    CREATE_MEDIA_PROCESSING_JOB,
+    LIST_MEDIA_PROCESSING_JOBS,
+    CLAIM_MEDIA_WORKER_JOB,
+    COMPLETE_MEDIA_WORKER_JOB,
+    FAIL_MEDIA_WORKER_JOB,
     CREATE_MAIN_IMAGE_CLEANUP_BATCH,
     LIST_MAIN_IMAGE_CLEANUP_BATCHES,
     LIST_MAIN_IMAGE_CLEANUP_ITEMS,

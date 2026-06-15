@@ -4528,6 +4528,372 @@
         }
       }
     },
+    "/api/manager/media/processing-jobs": {
+      "get": {
+        "tags": [
+          "manager media"
+        ],
+        "summary": "List Media Processing Jobs",
+        "operationId": "list_media_processing_jobs",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerMediaProcessingJobListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/media/processing-jobs/{asset_id}": {
+      "post": {
+        "tags": [
+          "manager media"
+        ],
+        "summary": "Create Media Processing Job",
+        "operationId": "create_media_processing_job",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerMediaProcessingJobCreatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerMediaProcessingJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/media/worker/jobs/claim": {
+      "post": {
+        "tags": [
+          "manager media worker"
+        ],
+        "summary": "Claim Media Worker Job",
+        "operationId": "claim_media_worker_job",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-media-worker-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Media-Worker-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaWorkerClaimPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaWorkerClaimResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/media/worker/jobs/{job_id}/complete": {
+      "post": {
+        "tags": [
+          "manager media worker"
+        ],
+        "summary": "Complete Media Worker Job",
+        "operationId": "complete_media_worker_job",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-media-worker-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Media-Worker-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_complete_media_worker_job"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerMediaProcessingJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/media/worker/jobs/{job_id}/fail": {
+      "post": {
+        "tags": [
+          "manager media worker"
+        ],
+        "summary": "Fail Media Worker Job",
+        "operationId": "fail_media_worker_job",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-media-worker-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Media-Worker-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaWorkerFailPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerMediaProcessingJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/gallery/reuse-search": {
       "get": {
         "tags": [
@@ -13331,6 +13697,25 @@
         ],
         "title": "Body_bulk_upload_local_images"
       },
+      "Body_complete_media_worker_job": {
+        "properties": {
+          "worker_id": {
+            "type": "string",
+            "title": "Worker Id"
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "worker_id",
+          "file"
+        ],
+        "title": "Body_complete_media_worker_job"
+      },
       "Body_import_manager_bank_statement": {
         "properties": {
           "file": {
@@ -20829,6 +21214,272 @@
         ],
         "title": "ManagerMediaImageSearchResultResponse"
       },
+      "ManagerMediaProcessingJobCreatePayload": {
+        "properties": {
+          "operation": {
+            "type": "string",
+            "title": "Operation",
+            "default": "background_removal"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider",
+            "default": "rembg"
+          },
+          "rembg_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rembg Model"
+          },
+          "options": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Options"
+          },
+          "priority": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Priority",
+            "default": 100
+          }
+        },
+        "type": "object",
+        "title": "ManagerMediaProcessingJobCreatePayload"
+      },
+      "ManagerMediaProcessingJobListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerMediaProcessingJobResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "ManagerMediaProcessingJobListResponse"
+      },
+      "ManagerMediaProcessingJobResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "source_asset_id": {
+            "type": "integer",
+            "title": "Source Asset Id"
+          },
+          "result_asset_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Asset Id"
+          },
+          "operation": {
+            "type": "string",
+            "title": "Operation"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "rembg_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rembg Model"
+          },
+          "priority": {
+            "type": "integer",
+            "title": "Priority"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "worker_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Id"
+          },
+          "request_payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Request Payload"
+          },
+          "result_payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Result Payload"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "source_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Title"
+          },
+          "result_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Url"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "lease_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Expires At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "source_asset_id",
+          "operation",
+          "status",
+          "stage",
+          "priority",
+          "attempts",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ManagerMediaProcessingJobResponse"
+      },
       "ManagerMediaReuseImageResponse": {
         "properties": {
           "message": {
@@ -25120,6 +25771,67 @@
         },
         "type": "object",
         "title": "ManagerTariffUpdatePayload"
+      },
+      "MediaWorkerClaimPayload": {
+        "properties": {
+          "worker_id": {
+            "type": "string",
+            "title": "Worker Id"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Capabilities"
+          },
+          "lease_seconds": {
+            "type": "integer",
+            "maximum": 86400.0,
+            "minimum": 60.0,
+            "title": "Lease Seconds",
+            "default": 900
+          }
+        },
+        "type": "object",
+        "required": [
+          "worker_id"
+        ],
+        "title": "MediaWorkerClaimPayload"
+      },
+      "MediaWorkerClaimResponse": {
+        "properties": {
+          "job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerMediaProcessingJobResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "MediaWorkerClaimResponse"
+      },
+      "MediaWorkerFailPayload": {
+        "properties": {
+          "worker_id": {
+            "type": "string",
+            "title": "Worker Id"
+          },
+          "error": {
+            "type": "string",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "worker_id",
+          "error"
+        ],
+        "title": "MediaWorkerFailPayload"
       },
       "Meta": {
         "properties": {

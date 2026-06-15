@@ -8,9 +8,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
 import models  # noqa: F401
-from models import MediaAsset, Product, ProductAttachment, ProductImage, Service
+from models import MediaAsset, MediaProcessingJob, Product, ProductAttachment, ProductImage, Service
 from services import media_library_service
 from services.media_library_service import MediaLibraryService
+from services.media_processing_job_service import MediaProcessingJobService
 
 
 def image_bytes(size=(120, 80), color=(20, 180, 160)) -> bytes:
@@ -245,6 +246,94 @@ async def test_upload_media_asset_from_url_uses_existing_pipeline(sqlite_session
     assert item["tags"] == ["обслуживание"]
     assert item["width"] == 90
     assert item["height"] == 60
+
+
+@pytest.mark.asyncio
+async def test_media_processing_job_claim_and_complete_creates_media_variant(sqlite_session):
+    upload = await MediaLibraryService.upload_assets(
+        session=sqlite_session,
+        files=[("source.png", image_bytes(size=(160, 120)))],
+        kind="product",
+        tags=["товар"],
+        created_by="admin",
+    )
+    source = upload["items"][0]
+    created = await MediaProcessingJobService.create_job(
+        session=sqlite_session,
+        source_asset_id=source["id"],
+        operation="background_removal",
+        provider="rembg",
+        rembg_model="u2net",
+        created_by="admin",
+    )
+
+    assert created["status"] == "queued"
+    assert created["source_url"] == source["url"]
+
+    claimed = await MediaProcessingJobService.claim_next_job(
+        session=sqlite_session,
+        worker_id="gpu-box",
+        capabilities=["background_removal:rembg:u2net"],
+    )
+
+    assert claimed is not None
+    assert claimed["job_id"] == created["job_id"]
+    assert claimed["status"] == "running"
+    assert claimed["attempts"] == 1
+
+    completed = await MediaProcessingJobService.complete_job(
+        session=sqlite_session,
+        job_id=created["job_id"],
+        worker_id="gpu-box",
+        content=image_bytes(size=(80, 60), color=(220, 20, 80)),
+        filename="processed.png",
+    )
+
+    assert completed["status"] == "success"
+    assert completed["result_asset_id"] is not None
+    result_asset = await sqlite_session.get(MediaAsset, completed["result_asset_id"])
+    assert result_asset is not None
+    assert result_asset.parent_asset_id == source["id"]
+    assert result_asset.variant_type == "background_removed"
+    assert result_asset.width == 80
+    assert result_asset.height == 60
+
+
+@pytest.mark.asyncio
+async def test_media_processing_job_fail_marks_claimed_job_failed(sqlite_session):
+    upload = await MediaLibraryService.upload_assets(
+        session=sqlite_session,
+        files=[("source.png", image_bytes(size=(160, 120)))],
+        kind="product",
+        tags=[],
+        created_by="admin",
+    )
+    source = upload["items"][0]
+    created = await MediaProcessingJobService.create_job(
+        session=sqlite_session,
+        source_asset_id=source["id"],
+        operation="background_removal",
+        provider="rembg",
+        created_by="admin",
+    )
+    await MediaProcessingJobService.claim_next_job(
+        session=sqlite_session,
+        worker_id="gpu-box",
+        capabilities=["background_removal"],
+    )
+
+    failed = await MediaProcessingJobService.fail_job(
+        session=sqlite_session,
+        job_id=created["job_id"],
+        worker_id="gpu-box",
+        error="model out of memory",
+    )
+
+    assert failed["status"] == "failed"
+    assert failed["error"] == "model out of memory"
+    stored_job = await sqlite_session.get(MediaProcessingJob, created["job_id"])
+    assert stored_job is not None
+    assert stored_job.finished_at is not None
 
 
 @pytest.mark.asyncio

@@ -3,8 +3,10 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
   ClipboardPaste,
   Copy,
+  Clock3,
   Image as ImageIcon,
   Link,
+  RefreshCw,
   Save,
   Scissors,
   Search,
@@ -13,7 +15,7 @@ import {
   Wand2,
   X,
 } from 'lucide-vue-next';
-import { api, type ManagerMediaAssetResponse } from '../api';
+import { api, type ManagerMediaAssetResponse, type ManagerMediaProcessingJobResponse } from '../api';
 import { getApiErrorMessage } from '../utils/api-errors';
 import {
   backgroundRemovalProviderOptions,
@@ -45,6 +47,7 @@ const uploading = ref(false);
 const saving = ref(false);
 const deleting = ref(false);
 const processing = ref<'crop' | 'background' | ''>('');
+const queueing = ref(false);
 const backgroundProvider = ref<BackgroundRemovalProvider>('rembg');
 const backgroundModel = ref('u2net');
 const backgroundModelsLoading = ref(false);
@@ -64,6 +67,9 @@ const uploadTags = ref('');
 const uploadUrl = ref('');
 const uploadInput = ref<HTMLInputElement | null>(null);
 const selectedAsset = ref<ManagerMediaAssetResponse | null>(null);
+const processingJobs = ref<ManagerMediaProcessingJobResponse[]>([]);
+const processingJobsLoading = ref(false);
+let processingJobsTimer: ReturnType<typeof window.setInterval> | null = null;
 const toast = ref('');
 const toastType = ref<'success' | 'error'>('success');
 const dragActive = ref(false);
@@ -100,6 +106,14 @@ const showBackgroundExperimentWarning = computed(() => (
   || backgroundProvider.value === 'ben'
   || (showRembgModelSelect.value && selectedBackgroundModelOption.value?.recommended === false)
 ));
+const activeSelectedProcessingJob = computed(() => {
+  if (!selectedAsset.value) return null;
+  return processingJobs.value.find((job) => (
+    job.source_asset_id === selectedAsset.value?.id
+    && (job.status === 'queued' || job.status === 'running')
+  )) || null;
+});
+const visibleProcessingJobs = computed(() => processingJobs.value.slice(0, 5));
 
 const setToast = (message: string, type: 'success' | 'error' = 'success') => {
   toast.value = message;
@@ -148,6 +162,23 @@ const variantLabel = (value?: string | null) => {
   if (value === 'background_removed') return 'без фона';
   if (value === 'crop') return 'crop';
   return 'original';
+};
+
+const processingJobStatusLabel = (status?: string | null) => {
+  if (status === 'queued') return 'в очереди';
+  if (status === 'running') return 'в работе';
+  if (status === 'success') return 'готово';
+  if (status === 'failed') return 'ошибка';
+  if (status === 'canceled') return 'отменено';
+  return status || 'неизвестно';
+};
+
+const processingJobStatusClass = (status?: string | null) => {
+  if (status === 'queued') return 'bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-200';
+  if (status === 'running') return 'bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-200';
+  if (status === 'success') return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200';
+  if (status === 'failed') return 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-200';
+  return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300';
 };
 
 const parseTags = (value: string) => value
@@ -207,6 +238,29 @@ const loadBackgroundRemovalConfig = async () => {
     console.warn('Failed to load background removal config', err);
   } finally {
     backgroundModelsLoading.value = false;
+  }
+};
+
+const loadProcessingJobs = async () => {
+  const activeBefore = new Set(
+    processingJobs.value
+      .filter((job) => job.status === 'queued' || job.status === 'running')
+      .map((job) => job.job_id),
+  );
+  processingJobsLoading.value = true;
+  try {
+    const response = await api.listMediaProcessingJobs({ limit: 12 });
+    processingJobs.value = response.items || [];
+    const finished = processingJobs.value.some((job) => (
+      activeBefore.has(job.job_id) && (job.status === 'success' || job.status === 'failed')
+    ));
+    if (finished) {
+      void loadAssets();
+    }
+  } catch (err) {
+    console.warn('Failed to load media processing jobs', err);
+  } finally {
+    processingJobsLoading.value = false;
   }
 };
 
@@ -427,6 +481,26 @@ const removeBackground = async () => {
   }
 };
 
+const enqueueBackgroundRemoval = async () => {
+  if (!selectedAsset.value) return;
+  queueing.value = true;
+  try {
+    const job = await api.createMediaProcessingJob(selectedAsset.value.id, {
+      operation: 'background_removal',
+      provider: backgroundProvider.value,
+      rembg_model: showRembgModelSelect.value ? backgroundModel.value : null,
+      options: {},
+      priority: showBackgroundExperimentWarning.value ? 120 : 100,
+    });
+    processingJobs.value = [job, ...processingJobs.value.filter((item) => item.job_id !== job.job_id)].slice(0, 12);
+    setToast('Задача поставлена в очередь локальному worker-у');
+  } catch (err) {
+    setToast(mediaErrorMessage(err, 'Не удалось поставить задачу в очередь'), 'error');
+  } finally {
+    queueing.value = false;
+  }
+};
+
 const onDrop = (event: DragEvent) => {
   event.preventDefault();
   if (event.dataTransfer?.files?.length) {
@@ -466,11 +540,18 @@ watch(page, () => void loadAssets());
 onMounted(() => {
   document.addEventListener('paste', onPaste);
   void loadBackgroundRemovalConfig();
+  void loadProcessingJobs();
   void loadAssets();
+  processingJobsTimer = window.setInterval(() => {
+    if (processingJobs.value.some((job) => job.status === 'queued' || job.status === 'running')) {
+      void loadProcessingJobs();
+    }
+  }, 8000);
 });
 
 onUnmounted(() => {
   document.removeEventListener('paste', onPaste);
+  if (processingJobsTimer) window.clearInterval(processingJobsTimer);
 });
 </script>
 
@@ -705,6 +786,10 @@ onUnmounted(() => {
                 <Wand2 class="h-4 w-4" />
                 {{ processing === 'background' ? 'Фон...' : 'Без фона' }}
               </button>
+              <button class="inline-flex items-center justify-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-800 transition hover:bg-teal-100 disabled:opacity-50 dark:border-teal-900/70 dark:bg-teal-950/30 dark:text-teal-100 dark:hover:bg-teal-950/60" :disabled="queueing || Boolean(activeSelectedProcessingJob)" @click="enqueueBackgroundRemoval">
+                <Clock3 class="h-4 w-4" />
+                {{ queueing ? 'Очередь...' : activeSelectedProcessingJob ? 'В очереди' : 'В очередь' }}
+              </button>
               <button class="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:hover:bg-red-950/30" :disabled="deleting" @click="deleteSelected">
                 <Trash2 class="h-4 w-4" />
                 Удалить
@@ -744,7 +829,45 @@ onUnmounted(() => {
               </label>
             </div>
             <div v-if="showBackgroundExperimentWarning" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100">
-              Экспериментальный режим: обработка может быть долгой и завершиться по timeout.
+              Экспериментальный режим лучше отправлять в очередь локальному worker-у: страница не зависнет, а слабый сервер не будет держать модель в памяти.
+            </div>
+
+            <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950/70">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p class="text-sm font-semibold text-gray-900 dark:text-white">Очередь обработки</p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">Локальный worker забирает задачи с этой очереди.</p>
+                </div>
+                <button
+                  type="button"
+                  class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-gray-600 transition hover:bg-white disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-900"
+                  :disabled="processingJobsLoading"
+                  title="Обновить очередь"
+                  aria-label="Обновить очередь"
+                  @click="loadProcessingJobs"
+                >
+                  <RefreshCw class="h-4 w-4" :class="processingJobsLoading ? 'animate-spin' : ''" />
+                </button>
+              </div>
+              <div v-if="activeSelectedProcessingJob" class="mt-3 rounded-md border border-teal-200 bg-white px-3 py-2 text-sm text-teal-900 dark:border-teal-900/70 dark:bg-gray-900 dark:text-teal-100">
+                Текущий файл: {{ processingJobStatusLabel(activeSelectedProcessingJob.status) }}
+              </div>
+              <div v-if="visibleProcessingJobs.length" class="mt-3 space-y-2">
+                <div
+                  v-for="job in visibleProcessingJobs"
+                  :key="job.job_id"
+                  class="grid grid-cols-[1fr_auto] gap-2 rounded-md bg-white px-3 py-2 text-xs dark:bg-gray-900"
+                >
+                  <div class="min-w-0">
+                    <p class="truncate font-medium text-gray-900 dark:text-white">{{ job.source_title || `asset #${job.source_asset_id}` }}</p>
+                    <p class="truncate text-gray-500 dark:text-gray-400">{{ job.provider || 'worker' }}{{ job.rembg_model ? ` · ${job.rembg_model}` : '' }}</p>
+                  </div>
+                  <span class="self-start rounded px-2 py-0.5 font-medium" :class="processingJobStatusClass(job.status)">
+                    {{ processingJobStatusLabel(job.status) }}
+                  </span>
+                </div>
+              </div>
+              <p v-else class="mt-3 text-xs text-gray-500 dark:text-gray-400">Очередь пуста.</p>
             </div>
 
             <div v-if="cropMode" class="rounded-lg border border-teal-200 bg-teal-50 p-3 dark:border-teal-900 dark:bg-teal-950/30">
