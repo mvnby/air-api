@@ -98,6 +98,7 @@ class Settings(BaseSettings):
     PRODUCT_MEDIA_S3_PUBLIC_BASE_URL: str = ""
     PRODUCT_MEDIA_S3_KEY_PREFIX: str = "products/variants"
     PRODUCT_MEDIA_S3_CACHE_CONTROL: str = "public, max-age=31536000, immutable"
+    MEDIA_WORKER_TOKEN: str = ""
     
     # Logging
     LOG_LEVEL: str = "INFO"

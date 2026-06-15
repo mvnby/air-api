@@ -11,6 +11,10 @@ import type { ManagerMediaAssetResponse } from '../models/ManagerMediaAssetRespo
 import type { ManagerMediaAssetUpdatePayload } from '../models/ManagerMediaAssetUpdatePayload';
 import type { ManagerMediaAssetUploadResponse } from '../models/ManagerMediaAssetUploadResponse';
 import type { ManagerMediaAssetUrlUploadPayload } from '../models/ManagerMediaAssetUrlUploadPayload';
+import type { ManagerMediaBackfillReferencedAssetsResponse } from '../models/ManagerMediaBackfillReferencedAssetsResponse';
+import type { ManagerMediaProcessingJobCreatePayload } from '../models/ManagerMediaProcessingJobCreatePayload';
+import type { ManagerMediaProcessingJobListResponse } from '../models/ManagerMediaProcessingJobListResponse';
+import type { ManagerMediaProcessingJobResponse } from '../models/ManagerMediaProcessingJobResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -83,6 +87,32 @@ export class ManagerMediaService {
             url: '/api/manager/media/assets/from-url',
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Backfill Referenced Media Assets
+     * @param execute
+     * @param limit
+     * @param includeRemote
+     * @returns ManagerMediaBackfillReferencedAssetsResponse Successful Response
+     * @throws ApiError
+     */
+    public static backfillReferencedMediaAssets(
+        execute: boolean = false,
+        limit: number = 500,
+        includeRemote: boolean = false,
+    ): CancelablePromise<ManagerMediaBackfillReferencedAssetsResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/media/assets/backfill-references',
+            query: {
+                'execute': execute,
+                'limit': limit,
+                'include_remote': includeRemote,
+            },
             errors: {
                 422: `Validation Error`,
             },
@@ -195,6 +225,53 @@ export class ManagerMediaService {
                 'provider': provider,
                 'rembg_model': rembgModel,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Media Processing Jobs
+     * @param status
+     * @param limit
+     * @returns ManagerMediaProcessingJobListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listMediaProcessingJobs(
+        status?: (string | null),
+        limit: number = 50,
+    ): CancelablePromise<ManagerMediaProcessingJobListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/media/processing-jobs',
+            query: {
+                'status': status,
+                'limit': limit,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Media Processing Job
+     * @param assetId
+     * @param requestBody
+     * @returns ManagerMediaProcessingJobResponse Successful Response
+     * @throws ApiError
+     */
+    public static createMediaProcessingJob(
+        assetId: number,
+        requestBody: ManagerMediaProcessingJobCreatePayload,
+    ): CancelablePromise<ManagerMediaProcessingJobResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/media/processing-jobs/{asset_id}',
+            path: {
+                'asset_id': assetId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_session
 from core.security import get_current_username
 from routers.manager_operation_ids import (
+    BACKFILL_REFERENCED_MEDIA_ASSETS,
     CROP_MEDIA_ASSET,
     DELETE_MEDIA_ASSET,
     GET_MEDIA_BACKGROUND_REMOVAL_CONFIG,
@@ -20,6 +21,7 @@ from schemas import (
     ManagerActionMessageResponse,
     ManagerBackgroundRemovalConfigResponse,
     ManagerMediaAssetCropPayload,
+    ManagerMediaBackfillReferencedAssetsResponse,
     ManagerMediaAssetListResponse,
     ManagerMediaAssetResponse,
     ManagerMediaAssetUpdatePayload,
@@ -116,6 +118,27 @@ async def upload_media_asset_from_url(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post(
+    "/backfill-references",
+    response_model=ManagerMediaBackfillReferencedAssetsResponse,
+    operation_id=BACKFILL_REFERENCED_MEDIA_ASSETS,
+)
+async def backfill_referenced_media_assets(
+    execute: bool = Query(False),
+    limit: int = Query(500, ge=1, le=5000),
+    include_remote: bool = Query(False),
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username),
+):
+    return await MediaLibraryService.backfill_referenced_assets(
+        session=session,
+        execute=execute,
+        limit=limit,
+        include_remote=include_remote,
+        created_by=username,
+    )
 
 
 @router.get(

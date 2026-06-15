@@ -16,6 +16,7 @@ from routers.manager_operation_ids import (
     LINK_SEARCH_RESULT,
     PROCESS_MISSING_IMAGE_VARIANTS,
     REUSE_IMAGE,
+    REMOVE_PRODUCT_IMAGE_BACKGROUND,
     REPROCESS_IMAGE_VARIANT,
     SET_MAIN_IMAGE,
 )
@@ -127,6 +128,36 @@ async def crop_product_image(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post(
+    "/gallery/{image_id}/remove-background",
+    response_model=ManagerMediaImageLinkResponse,
+    operation_id=REMOVE_PRODUCT_IMAGE_BACKGROUND,
+)
+async def remove_product_image_background(
+    image_id: int,
+    provider: str = Query("auto", description="Processing provider: auto, noop, manual, rembg, birefnet, ben"),
+    rembg_model: str | None = Query(None, description="Optional rembg model override"),
+    mode: str = Query("replace", description="replace current ProductImage URL or append a new image"),
+    set_main: bool = Query(False),
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username),
+):
+    """Remove background from a ProductImage and replace it by default."""
+    try:
+        return await ManagerMediaService.remove_background_gallery_image(
+            session=session,
+            image_id=image_id,
+            provider=provider,
+            rembg_model=rembg_model,
+            mode=mode,
+            set_main=set_main,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.post(

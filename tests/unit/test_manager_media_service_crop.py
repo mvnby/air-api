@@ -9,11 +9,19 @@ from sqlmodel import SQLModel, select
 import models  # noqa: F401
 from models import Product, ProductImage
 from services.manager_media_service import ManagerMediaService
+from services.product_image_processing_provider import ProductImageProcessingResult
+from services.product_original_media_service import ProductOriginalMediaService
 
 
 def image_bytes(size=(120, 90), color=(30, 120, 210)) -> bytes:
     buffer = BytesIO()
     Image.new("RGB", size, color).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def transparent_image_bytes(size=(80, 60)) -> bytes:
+    buffer = BytesIO()
+    Image.new("RGBA", size, (30, 120, 210, 0)).save(buffer, format="PNG")
     return buffer.getvalue()
 
 
@@ -151,3 +159,59 @@ async def test_crop_gallery_image_downloads_remote_source(sqlite_session, monkey
 
     assert result["url"].startswith("/media/products/shared/")
     assert product.main_image == result["url"]
+
+
+@pytest.mark.asyncio
+async def test_remove_background_gallery_image_replaces_source_and_main_image(
+    sqlite_session,
+    monkeypatch,
+):
+    product, source_image = await make_product_with_image(sqlite_session)
+
+    class FakeProcessor:
+        provider_name = "fake"
+
+        async def process(self, *, source_content, context):
+            return ProductImageProcessingResult(
+                content=transparent_image_bytes(size=(72, 54)),
+                extension="webp",
+                width=72,
+                height=54,
+            )
+
+    monkeypatch.setattr(
+        "services.manager_media_service.get_product_image_processor",
+        lambda *_args, **_kwargs: FakeProcessor(),
+    )
+
+    result = await ManagerMediaService.remove_background_gallery_image(
+        sqlite_session,
+        source_image.id,
+        provider="rembg",
+        mode="replace",
+    )
+
+    await sqlite_session.refresh(product)
+    await sqlite_session.refresh(source_image)
+    rows = (
+        await sqlite_session.execute(
+            select(ProductImage).where(ProductImage.product_id == product.id)
+        )
+    ).scalars().all()
+
+    assert result["id"] == source_image.id
+    assert result["url"].startswith("/media/products/shared/")
+    assert source_image.url == result["url"]
+    assert product.main_image == result["url"]
+    assert product.images == [result["url"]]
+    assert len(rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_product_original_webp_preserves_alpha(sqlite_session):
+    original = await ProductOriginalMediaService.save_shared_original(
+        transparent_image_bytes(size=(40, 30))
+    )
+
+    with Image.open(BytesIO(original.content)) as image:
+        assert image.mode == "RGBA"

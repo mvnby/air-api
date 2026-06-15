@@ -81,6 +81,10 @@ import {
     type ManagerMediaAssetUpdatePayload,
     type ManagerMediaAssetUrlUploadPayload,
     type ManagerMediaAssetUploadResponse,
+    type ManagerMediaBackfillReferencedAssetsResponse,
+    type ManagerMediaProcessingJobCreatePayload,
+    type ManagerMediaProcessingJobListResponse,
+    type ManagerMediaProcessingJobResponse,
     type ProductImageCropPayload,
     type ProductImageVariantBatchProcessResponse,
     type ProductImageVariantCandidateResponse,
@@ -149,6 +153,10 @@ export type {
     ManagerMediaAssetUpdatePayload,
     ManagerMediaAssetUrlUploadPayload,
     ManagerMediaAssetUploadResponse,
+    ManagerMediaBackfillReferencedAssetsResponse,
+    ManagerMediaProcessingJobCreatePayload,
+    ManagerMediaProcessingJobListResponse,
+    ManagerMediaProcessingJobResponse,
 };
 export type {
     ProductImageVariantBatchProcessResponse,
@@ -264,6 +272,14 @@ export const api = {
         return await ManagerMediaService.uploadMediaAssetFromUrl(payload);
     },
 
+    async backfillReferencedMediaAssets(
+        execute = false,
+        limit = 500,
+        includeRemote = false,
+    ): Promise<ManagerMediaBackfillReferencedAssetsResponse> {
+        return await ManagerMediaService.backfillReferencedMediaAssets(execute, limit, includeRemote);
+    },
+
     async getMediaBackgroundRemovalConfig(): Promise<ManagerBackgroundRemovalConfigResponse> {
         return await ManagerMediaService.getMediaBackgroundRemovalConfig();
     },
@@ -278,6 +294,23 @@ export const api = {
 
     async removeMediaAssetBackground(assetId: number, provider = 'auto', rembgModel?: string | null): Promise<ManagerMediaAssetResponse> {
         return await ManagerMediaService.removeMediaAssetBackground(assetId, provider, rembgModel);
+    },
+
+    async listMediaProcessingJobs(params: {
+        status?: string | null;
+        limit?: number;
+    } = {}): Promise<ManagerMediaProcessingJobListResponse> {
+        return await ManagerMediaService.listMediaProcessingJobs(
+            params.status ?? null,
+            params.limit ?? 20,
+        );
+    },
+
+    async createMediaProcessingJob(
+        assetId: number,
+        payload: ManagerMediaProcessingJobCreatePayload,
+    ): Promise<ManagerMediaProcessingJobResponse> {
+        return await ManagerMediaService.createMediaProcessingJob(assetId, payload);
     },
 
     async deleteMediaAsset(assetId: number, force = false) {
@@ -549,6 +582,22 @@ export const api = {
 
     async cropGalleryImage(imageId: number, payload: ProductImageCropPayload) {
         return await ManagerService.cropProductImage(imageId, payload);
+    },
+
+    async removeProductImageBackground(
+        imageId: number,
+        provider = 'auto',
+        rembgModel?: string | null,
+        mode = 'replace',
+        setMain = false,
+    ) {
+        return await ManagerService.removeProductImageBackground(
+            imageId,
+            provider,
+            rembgModel,
+            mode,
+            setMain,
+        );
     },
 
     async reuseSearch(q: string) {

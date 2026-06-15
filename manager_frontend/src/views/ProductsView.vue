@@ -13,7 +13,7 @@ import {
 import {
     Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images,
     Settings, ArrowLeft, LayoutGrid, List, Package, Link2, ExternalLink,
-    Star, SlidersHorizontal, X, Trash2, Download, Crop,
+    Star, SlidersHorizontal, X, Trash2, Download, Crop, Wand2,
 } from 'lucide-vue-next';
 import BulkSpecsModal from '../components/BulkSpecsModal.vue';
 import BulkCompatibilityModal from '../components/BulkCompatibilityModal.vue';
@@ -51,9 +51,11 @@ const yandexPriceListLoading = ref(false);
 const variantLimit = ref(50);
 const includeInstallationVariants = ref(false);
 const variantProvider = ref<BackgroundRemovalProvider>('noop');
+const productBackgroundProvider = ref<BackgroundRemovalProvider>('rembg');
 const variantCandidatesLoading = ref(false);
 const variantProcessingLoading = ref(false);
 const variantReprocessingImageId = ref<number | null>(null);
+const backgroundRemovingImageId = ref<number | null>(null);
 const variantCandidates = ref<ProductImageVariantCandidateResponse[]>([]);
 const variantRecordsByImageId = ref<Record<number, ProductImageVariantResponse[]>>({});
 const variantBatchResult = ref<ProductImageVariantBatchProcessResponse | null>(null);
@@ -960,6 +962,7 @@ const resetVariantState = () => {
     variantCandidatesLoading.value = false;
     variantProcessingLoading.value = false;
     variantReprocessingImageId.value = null;
+    backgroundRemovingImageId.value = null;
 };
 
 const loadVariantCandidates = async () => {
@@ -1018,6 +1021,28 @@ const reprocessCardVariant = async (imageId: number) => {
         console.error(e);
     } finally {
         variantReprocessingImageId.value = null;
+    }
+};
+
+const removeGalleryImageBackground = async (image: GalleryImage) => {
+    if (backgroundRemovingImageId.value) return;
+    backgroundRemovingImageId.value = image.id;
+    try {
+        await api.removeProductImageBackground(
+            image.id,
+            productBackgroundProvider.value,
+            null,
+            'replace',
+            false,
+        );
+        await loadProducts();
+        refreshSelectedProduct();
+        setToast('Фото заменено версией без фона');
+    } catch (e) {
+        setToast(`Ошибка удаления фона: ${getApiErrorMessage(e)}`);
+        console.error(e);
+    } finally {
+        backgroundRemovingImageId.value = null;
     }
 };
 
@@ -2013,6 +2038,25 @@ watchDebounced(
                   </div>
               </template>
               <template v-else>
+                  <div class="w-36 shrink-0 border-r pr-4 text-xs text-gray-600">
+                      <div class="font-semibold text-gray-700">Текущая галерея</div>
+                      <label class="mt-3 block">
+                          <span class="text-[11px] font-medium uppercase tracking-wide text-gray-500">Без фона</span>
+                          <select
+                              v-model="productBackgroundProvider"
+                              class="mt-1 h-8 w-full rounded-md border border-gray-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+                              title="Провайдер удаления фона для текущего фото"
+                          >
+                              <option
+                                  v-for="option in backgroundRemovalProviderOptions"
+                                  :key="option.value"
+                                  :value="option.value"
+                              >
+                                  {{ option.label }}
+                              </option>
+                          </select>
+                      </label>
+                  </div>
                   <!-- Main Image -->
                   <div v-if="selectedProduct?.main_image" class="relative group w-36 shrink-0 border-2 border-teal-500 rounded-lg overflow-hidden">
                       <img :src="getImageUrl(selectedProduct.main_image)" class="w-full h-full object-cover" />
@@ -2062,6 +2106,15 @@ watchDebounced(
                            >
                               <Crop class="h-3 w-3" />
                               Кроп
+                           </button>
+                           <button
+                              @click="removeGalleryImageBackground(img)"
+                              :disabled="backgroundRemovingImageId === img.id"
+                              class="inline-flex w-full items-center justify-center gap-1 rounded bg-teal-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-teal-700 disabled:opacity-60"
+                              title="Удалить фон и заменить это фото"
+                           >
+                              <Wand2 class="h-3 w-3" />
+                              {{ backgroundRemovingImageId === img.id ? 'Обработка...' : 'Без фона' }}
                            </button>
                            <button
                               @click="reprocessCardVariant(img.id)"

@@ -1054,6 +1054,41 @@ export class ManagerService {
         });
     }
     /**
+     * Remove Product Image Background
+     * Remove background from a ProductImage and replace it by default.
+     * @param imageId
+     * @param provider Processing provider: auto, noop, manual, rembg, birefnet, ben
+     * @param rembgModel Optional rembg model override
+     * @param mode replace current ProductImage URL or append a new image
+     * @param setMain
+     * @returns ManagerMediaImageLinkResponse Successful Response
+     * @throws ApiError
+     */
+    public static removeProductImageBackground(
+        imageId: number,
+        provider: string = 'auto',
+        rembgModel?: (string | null),
+        mode: string = 'replace',
+        setMain: boolean = false,
+    ): CancelablePromise<ManagerMediaImageLinkResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/gallery/{image_id}/remove-background',
+            path: {
+                'image_id': imageId,
+            },
+            query: {
+                'provider': provider,
+                'rembg_model': rembgModel,
+                'mode': mode,
+                'set_main': setMain,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Reuse Image
      * Link an existing image URL to another product.
      * @param productId

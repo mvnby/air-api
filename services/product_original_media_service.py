@@ -53,8 +53,10 @@ class ProductOriginalMediaService:
         def process(payload: bytes) -> tuple[bytes, int | None, int | None]:
             with Image.open(BytesIO(payload)) as img:
                 width, height = img.size
-                if img.mode in ("RGBA", "P"):
-                    img = img.convert("RGB")
+                if img.mode == "P":
+                    img = img.convert("RGBA" if "transparency" in img.info else "RGB")
+                elif img.mode not in {"RGB", "RGBA"}:
+                    img = img.convert("RGBA" if "A" in img.getbands() else "RGB")
                 output = BytesIO()
                 img.save(output, format="WEBP", quality=85)
                 return output.getvalue(), width, height
