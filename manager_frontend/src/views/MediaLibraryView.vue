@@ -22,6 +22,12 @@ import {
 import ImageCropSelector, { type ImageCropSourceSize, type ImageCropValue } from '../components/ImageCropSelector.vue';
 
 type MediaKind = { value: string; label: string };
+type BackgroundRemovalModelOption = {
+  value: string;
+  label: string;
+  description?: string;
+  recommended?: boolean;
+};
 
 const kindOptions: MediaKind[] = [
   { value: 'misc', label: 'Разное' },
@@ -39,7 +45,17 @@ const uploading = ref(false);
 const saving = ref(false);
 const deleting = ref(false);
 const processing = ref<'crop' | 'background' | ''>('');
-const backgroundProvider = ref<BackgroundRemovalProvider>('auto');
+const backgroundProvider = ref<BackgroundRemovalProvider>('rembg');
+const backgroundModel = ref('u2net');
+const backgroundModelsLoading = ref(false);
+const backgroundModelOptions = ref<BackgroundRemovalModelOption[]>([
+  { value: 'u2net', label: 'U2Net', recommended: true },
+  { value: 'isnet-general-use', label: 'ISNet general', recommended: true },
+  { value: 'birefnet-general-lite', label: 'BiRefNet lite', recommended: true },
+  { value: 'birefnet-general', label: 'BiRefNet general', recommended: true },
+  { value: 'birefnet-massive', label: 'BiRefNet massive' },
+  { value: 'bria-rmbg', label: 'BRIA RMBG' },
+]);
 const page = ref(1);
 const limit = ref(40);
 const total = ref(0);
@@ -78,6 +94,9 @@ const tagList = computed(() => {
 });
 
 const selectedUrl = computed(() => selectedAsset.value ? imageUrl(selectedAsset.value.url) : '');
+const showRembgModelSelect = computed(() => (
+  backgroundProvider.value === 'rembg' || backgroundProvider.value === 'auto'
+));
 
 const setToast = (message: string, type: 'success' | 'error' = 'success') => {
   toast.value = message;
@@ -165,6 +184,26 @@ const loadAssets = async () => {
     setToast(mediaErrorMessage(err, 'Не удалось загрузить медиатеку'), 'error');
   } finally {
     loading.value = false;
+  }
+};
+
+const loadBackgroundRemovalConfig = async () => {
+  backgroundModelsLoading.value = true;
+  try {
+    const config = await api.getMediaBackgroundRemovalConfig();
+    if (config.default_provider) {
+      backgroundProvider.value = config.default_provider as BackgroundRemovalProvider;
+    }
+    if (config.rembg_models?.length) {
+      backgroundModelOptions.value = config.rembg_models;
+    }
+    if (config.default_rembg_model) {
+      backgroundModel.value = config.default_rembg_model;
+    }
+  } catch (err) {
+    console.warn('Failed to load background removal config', err);
+  } finally {
+    backgroundModelsLoading.value = false;
   }
 };
 
@@ -373,6 +412,7 @@ const removeBackground = async () => {
     const processed = await api.removeMediaAssetBackground(
       selectedAsset.value.id,
       backgroundProvider.value,
+      showRembgModelSelect.value ? backgroundModel.value : null,
     );
     assets.value = [processed, ...assets.value];
     selectAsset(processed);
@@ -422,6 +462,7 @@ watch(page, () => void loadAssets());
 
 onMounted(() => {
   document.addEventListener('paste', onPaste);
+  void loadBackgroundRemovalConfig();
   void loadAssets();
 });
 
@@ -666,21 +707,39 @@ onUnmounted(() => {
                 Удалить
               </button>
             </div>
-            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              Провайдер удаления фона
-              <select
-                v-model="backgroundProvider"
-                class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
-              >
-                <option
-                  v-for="option in backgroundRemovalProviderOptions"
-                  :key="option.value"
-                  :value="option.value"
+            <div class="grid gap-2 sm:grid-cols-2">
+              <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Провайдер
+                <select
+                  v-model="backgroundProvider"
+                  class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
                 >
-                  {{ option.label }}
-                </option>
-              </select>
-            </label>
+                  <option
+                    v-for="option in backgroundRemovalProviderOptions"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+              </label>
+              <label v-if="showRembgModelSelect" class="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Модель
+                <select
+                  v-model="backgroundModel"
+                  class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                  :disabled="backgroundModelsLoading"
+                >
+                  <option
+                    v-for="option in backgroundModelOptions"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+              </label>
+            </div>
 
             <div v-if="cropMode" class="rounded-lg border border-teal-200 bg-teal-50 p-3 dark:border-teal-900 dark:bg-teal-950/30">
               <div class="flex items-center justify-between gap-3">

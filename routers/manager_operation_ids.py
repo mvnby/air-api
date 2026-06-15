@@ -59,6 +59,7 @@ GET_IMAGE_VARIANT_CANDIDATES = "get_image_variant_candidates"
 PROCESS_MISSING_IMAGE_VARIANTS = "process_missing_image_variants"
 REPROCESS_IMAGE_VARIANT = "reprocess_image_variant"
 LIST_MEDIA_ASSETS = "list_media_assets"
+GET_MEDIA_BACKGROUND_REMOVAL_CONFIG = "get_media_background_removal_config"
 UPLOAD_MEDIA_ASSETS = "upload_media_assets"
 UPLOAD_MEDIA_ASSET_FROM_URL = "upload_media_asset_from_url"
 UPDATE_MEDIA_ASSET = "update_media_asset"
@@ -265,6 +266,7 @@ ALL_MANAGER_OPERATION_IDS = (
     PROCESS_MISSING_IMAGE_VARIANTS,
     REPROCESS_IMAGE_VARIANT,
     LIST_MEDIA_ASSETS,
+    GET_MEDIA_BACKGROUND_REMOVAL_CONFIG,
     UPLOAD_MEDIA_ASSETS,
     UPLOAD_MEDIA_ASSET_FROM_URL,
     UPDATE_MEDIA_ASSET,

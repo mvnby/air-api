@@ -4256,6 +4256,32 @@
         ]
       }
     },
+    "/api/manager/media/assets/background-removal/options": {
+      "get": {
+        "tags": [
+          "manager media"
+        ],
+        "summary": "Get Media Background Removal Config",
+        "operationId": "get_media_background_removal_config",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerBackgroundRemovalConfigResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/media/assets/{asset_id}": {
       "patch": {
         "tags": [
@@ -16641,6 +16667,99 @@
           "status"
         ],
         "title": "ManagerAuthStatusResponse"
+      },
+      "ManagerBackgroundRemovalConfigResponse": {
+        "properties": {
+          "default_provider": {
+            "type": "string",
+            "title": "Default Provider"
+          },
+          "default_rembg_model": {
+            "type": "string",
+            "title": "Default Rembg Model"
+          },
+          "preload_models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Preload Models"
+          },
+          "provider_options": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerBackgroundRemovalProviderOption"
+            },
+            "type": "array",
+            "title": "Provider Options"
+          },
+          "rembg_models": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerBackgroundRemovalModelOption"
+            },
+            "type": "array",
+            "title": "Rembg Models"
+          }
+        },
+        "type": "object",
+        "required": [
+          "default_provider",
+          "default_rembg_model",
+          "preload_models",
+          "provider_options",
+          "rembg_models"
+        ],
+        "title": "ManagerBackgroundRemovalConfigResponse"
+      },
+      "ManagerBackgroundRemovalModelOption": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "recommended": {
+            "type": "boolean",
+            "title": "Recommended",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "ManagerBackgroundRemovalModelOption"
+      },
+      "ManagerBackgroundRemovalProviderOption": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "ManagerBackgroundRemovalProviderOption"
       },
       "ManagerBackupItemResponse": {
         "properties": {
