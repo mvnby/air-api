@@ -759,8 +759,8 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <div class="grid gap-6 xl:grid-cols-[1fr_420px]">
-      <div class="xl:min-h-[440px]">
+    <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] 2xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div class="lg:min-h-[440px]">
         <div v-if="loading" class="grid grid-cols-2 gap-4 md:grid-cols-3 2xl:grid-cols-4">
           <div v-for="idx in 8" :key="idx" class="h-60 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />
         </div>
@@ -806,7 +806,12 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <aside class="rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+      <aside
+        class="lg:sticky lg:top-4 lg:self-start"
+        :class="selectedAsset ? 'fixed inset-0 z-50 flex items-end bg-gray-950/45 p-3 lg:static lg:z-auto lg:block lg:bg-transparent lg:p-0' : 'hidden lg:block'"
+        @click.self="selectedAsset = null"
+      >
+        <div class="w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900 lg:shadow-sm">
         <div v-if="!selectedAsset" class="flex min-h-[520px] items-center justify-center p-8 text-center">
           <div>
             <ImageIcon class="mx-auto h-10 w-10 text-gray-300" />
@@ -814,7 +819,7 @@ onUnmounted(() => {
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Метаданные и редактор появятся здесь.</p>
           </div>
         </div>
-        <div v-else class="flex max-h-[calc(100vh-140px)] flex-col">
+        <div v-else class="flex max-h-[calc(100vh-48px)] flex-col lg:max-h-[calc(100vh-140px)]">
           <div class="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-800">
             <div>
               <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ selectedAsset.title || 'Без названия' }}</p>
@@ -990,6 +995,7 @@ onUnmounted(() => {
               <p><span class="font-medium">Hash:</span> {{ selectedAsset.content_hash?.slice(0, 16) || '—' }}</p>
             </div>
           </div>
+        </div>
         </div>
       </aside>
     </div>
