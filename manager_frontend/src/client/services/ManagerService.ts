@@ -33,6 +33,7 @@ import type { ManagerCustomerBranchListResponse } from '../models/ManagerCustome
 import type { ManagerCustomerBranchUpdatePayload } from '../models/ManagerCustomerBranchUpdatePayload';
 import type { ManagerCustomerDocumentListResponse } from '../models/ManagerCustomerDocumentListResponse';
 import type { ManagerCustomerUpdatePayload } from '../models/ManagerCustomerUpdatePayload';
+import type { ManagerMediaApplySeriesResponse } from '../models/ManagerMediaApplySeriesResponse';
 import type { ManagerMediaBulkAddResponse } from '../models/ManagerMediaBulkAddResponse';
 import type { ManagerMediaBulkDeleteResponse } from '../models/ManagerMediaBulkDeleteResponse';
 import type { ManagerMediaBulkUploadResponse } from '../models/ManagerMediaBulkUploadResponse';
@@ -1167,6 +1168,33 @@ export class ManagerService {
             url: '/api/manager/gallery/bulk-delete-common',
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Apply Gallery To Series
+     * Replace sibling products' non-installation galleries with this product's gallery.
+     * @param productId Source product ID
+     * @param dryRun Preview changes without applying them
+     * @param deleteUnreferenced Delete physical files that become unreferenced
+     * @returns ManagerMediaApplySeriesResponse Successful Response
+     * @throws ApiError
+     */
+    public static applyGalleryToSeries(
+        productId: number,
+        dryRun: boolean = false,
+        deleteUnreferenced: boolean = false,
+    ): CancelablePromise<ManagerMediaApplySeriesResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/gallery/apply-to-series',
+            query: {
+                'product_id': productId,
+                'dry_run': dryRun,
+                'delete_unreferenced': deleteUnreferenced,
+            },
             errors: {
                 422: `Validation Error`,
             },

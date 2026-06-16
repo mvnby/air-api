@@ -7,6 +7,7 @@ from core.database import get_session
 from core.logger import logger
 from core.security import get_current_username
 from routers.manager_operation_ids import (
+    APPLY_GALLERY_TO_SERIES,
     BULK_ADD_GALLERY_IMAGES,
     BULK_DELETE_COMMON_GALLERY_IMAGES,
     BULK_UPLOAD_LOCAL_IMAGES,
@@ -24,6 +25,7 @@ from schemas import (
     BulkGalleryAddRequest,
     BulkGalleryDeleteRequest,
     ManagerMediaBulkAddResponse,
+    ManagerMediaApplySeriesResponse,
     ManagerMediaBulkDeleteResponse,
     ManagerMediaBulkUploadResponse,
     ManagerMediaCleanupResponse,
@@ -252,6 +254,32 @@ async def bulk_delete_common_gallery_images(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=exc.args[0]) from exc
+
+
+@router.post(
+    "/gallery/apply-to-series",
+    response_model=ManagerMediaApplySeriesResponse,
+    operation_id=APPLY_GALLERY_TO_SERIES,
+)
+async def apply_gallery_to_series(
+    product_id: int = Query(..., description="Source product ID"),
+    dry_run: bool = Query(False, description="Preview changes without applying them"),
+    delete_unreferenced: bool = Query(False, description="Delete physical files that become unreferenced"),
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username),
+):
+    """Replace sibling products' non-installation galleries with this product's gallery."""
+    try:
+        return await ManagerMediaService.apply_gallery_to_series(
+            session,
+            product_id,
+            dry_run=dry_run,
+            delete_unreferenced=delete_unreferenced,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post(

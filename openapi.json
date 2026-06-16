@@ -5662,6 +5662,80 @@
         ]
       }
     },
+    "/api/manager/gallery/apply-to-series": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Apply Gallery To Series",
+        "description": "Replace sibling products' non-installation galleries with this product's gallery.",
+        "operationId": "apply_gallery_to_series",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "Source product ID",
+              "title": "Product Id"
+            },
+            "description": "Source product ID"
+          },
+          {
+            "name": "dry_run",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Preview changes without applying them",
+              "default": false,
+              "title": "Dry Run"
+            },
+            "description": "Preview changes without applying them"
+          },
+          {
+            "name": "delete_unreferenced",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Delete physical files that become unreferenced",
+              "default": false,
+              "title": "Delete Unreferenced"
+            },
+            "description": "Delete physical files that become unreferenced"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerMediaApplySeriesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/gallery/variants/process-missing": {
       "post": {
         "tags": [
@@ -20834,6 +20908,88 @@
         },
         "type": "object",
         "title": "ManagerInstallerUpdatePayload"
+      },
+      "ManagerMediaApplySeriesResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": false
+          },
+          "source_product_id": {
+            "type": "integer",
+            "title": "Source Product Id"
+          },
+          "series_id": {
+            "type": "integer",
+            "title": "Series Id"
+          },
+          "series_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Title"
+          },
+          "updated_products": {
+            "type": "integer",
+            "title": "Updated Products"
+          },
+          "images_applied": {
+            "type": "integer",
+            "title": "Images Applied"
+          },
+          "main_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Image"
+          },
+          "replaced_links": {
+            "type": "integer",
+            "title": "Replaced Links",
+            "default": 0
+          },
+          "obsolete_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Obsolete Urls"
+          },
+          "preserved_installation_links": {
+            "type": "integer",
+            "title": "Preserved Installation Links",
+            "default": 0
+          },
+          "deleted_files_count": {
+            "type": "integer",
+            "title": "Deleted Files Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "source_product_id",
+          "series_id",
+          "updated_products",
+          "images_applied"
+        ],
+        "title": "ManagerMediaApplySeriesResponse"
       },
       "ManagerMediaAssetCropPayload": {
         "properties": {

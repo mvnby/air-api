@@ -55,6 +55,7 @@ REUSE_IMAGE = "reuse_image"
 BULK_ADD_GALLERY_IMAGES = "bulk_add_gallery_images"
 BULK_UPLOAD_LOCAL_IMAGES = "bulk_upload_local_images"
 BULK_DELETE_COMMON_GALLERY_IMAGES = "bulk_delete_common_gallery_images"
+APPLY_GALLERY_TO_SERIES = "apply_gallery_to_series"
 CLEANUP_MEDIA = "cleanup_media"
 GET_IMAGE_VARIANT_CANDIDATES = "get_image_variant_candidates"
 PROCESS_MISSING_IMAGE_VARIANTS = "process_missing_image_variants"
@@ -269,6 +270,7 @@ ALL_MANAGER_OPERATION_IDS = (
     BULK_ADD_GALLERY_IMAGES,
     BULK_UPLOAD_LOCAL_IMAGES,
     BULK_DELETE_COMMON_GALLERY_IMAGES,
+    APPLY_GALLERY_TO_SERIES,
     CLEANUP_MEDIA,
     GET_IMAGE_VARIANT_CANDIDATES,
     PROCESS_MISSING_IMAGE_VARIANTS,

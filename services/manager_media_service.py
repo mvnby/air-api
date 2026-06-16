@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
 from sqlmodel import select, update
 
-from models import Product, ProductImage, ProductImageVariant
+from models import Product, ProductImage, ProductImageVariant, ProductSeries
 from services.product_image_processing_contract import ProductImageVariantType
 from services.product_image_processing_provider import (
     ProductImageProcessingContext,
@@ -382,7 +382,7 @@ class ManagerMediaService:
         session.add(product)
 
     @staticmethod
-    async def remove_file_if_unreferenced(session: AsyncSession, url: str) -> None:
+    async def remove_file_if_unreferenced(session: AsyncSession, url: str) -> bool:
         """Delete physical file only when no ProductImage/Product.main_image references remain."""
         gallery_ref_stmt = select(func.count()).select_from(ProductImage).where(ProductImage.url == url)
         gallery_refs = (await session.execute(gallery_ref_stmt)).scalar_one()
@@ -396,16 +396,18 @@ class ManagerMediaService:
         variant_refs = (await session.execute(variant_ref_stmt)).scalar_one()
 
         if gallery_refs > 0 or main_refs > 0 or variant_refs > 0:
-            return
+            return False
         if not url.startswith("/media/"):
-            return
+            return False
 
         path = url.lstrip("/")
         if os.path.exists(path):
             try:
                 os.remove(path)
+                return True
             except Exception as exc:
                 logger.error(f"Failed to delete unreferenced file {url}: {exc}")
+        return False
 
     @staticmethod
     def local_media_path_for_url(url: str) -> Path | None:
@@ -604,6 +606,162 @@ class ManagerMediaService:
             "message": "Bulk delete completed",
             "products_count": len(unique_product_ids),
             "deleted_links": deleted_links,
+        }
+
+    @staticmethod
+    async def apply_gallery_to_series(
+        session: AsyncSession,
+        product_id: int,
+        *,
+        dry_run: bool = False,
+        delete_unreferenced: bool = False,
+    ) -> dict:
+        source_product = await session.get(Product, product_id)
+        if not source_product:
+            raise LookupError("Product not found")
+        if not source_product.series_id:
+            raise ValueError("Product is not assigned to a series")
+
+        series = await session.get(ProductSeries, source_product.series_id)
+
+        source_rows = (
+            await session.execute(
+                select(ProductImage)
+                .where(
+                    ProductImage.product_id == source_product.id,
+                    ProductImage.is_installation_photo == False,  # noqa: E712
+                )
+                .order_by(ProductImage.id)
+            )
+        ).scalars().all()
+
+        source_urls: list[str] = []
+        if source_product.main_image:
+            source_urls.append(source_product.main_image)
+        source_urls.extend(image.url for image in source_rows)
+        source_urls = [url for url in dict.fromkeys(source_urls) if url]
+        if not source_urls:
+            raise ValueError("Source product has no non-installation gallery images")
+
+        target_products = (
+            await session.execute(
+                select(Product).where(
+                    Product.series_id == source_product.series_id,
+                    Product.id != source_product.id,
+                )
+            )
+        ).scalars().all()
+
+        updated_products = 0
+        preserved_installation_links = 0
+        replaced_links = 0
+        obsolete_urls: list[str] = []
+        obsolete_variant_urls: list[str] = []
+
+        target_rows_by_product_id: dict[int, list[ProductImage]] = {}
+        for target_product in target_products:
+            target_rows = (
+                await session.execute(
+                    select(ProductImage).where(ProductImage.product_id == target_product.id)
+                )
+            ).scalars().all()
+            target_rows_by_product_id[target_product.id] = list(target_rows)
+            old_gallery_rows = [row for row in target_rows if not row.is_installation_photo]
+            replaced_links += len(old_gallery_rows)
+            obsolete_urls.extend(row.url for row in old_gallery_rows if row.url and row.url not in source_urls)
+            preserved_installation_links += len({row.url for row in target_rows if row.is_installation_photo})
+
+            old_gallery_ids = [row.id for row in old_gallery_rows if row.id is not None]
+            if old_gallery_ids:
+                variant_urls = (
+                    await session.execute(
+                        select(ProductImageVariant.url).where(
+                            ProductImageVariant.product_image_id.in_(old_gallery_ids),
+                            ProductImageVariant.url != None,  # noqa: E711
+                        )
+                    )
+                ).scalars().all()
+                obsolete_variant_urls.extend(url for url in variant_urls if url)
+
+        obsolete_urls = list(dict.fromkeys(obsolete_urls))
+
+        if dry_run:
+            return {
+                "message": "Series gallery preview",
+                "dry_run": True,
+                "source_product_id": source_product.id,
+                "series_id": source_product.series_id,
+                "series_title": series.title if series else None,
+                "updated_products": len(target_products),
+                "images_applied": len(source_urls),
+                "main_image": source_product.main_image,
+                "replaced_links": replaced_links,
+                "obsolete_urls": obsolete_urls,
+                "preserved_installation_links": preserved_installation_links,
+                "deleted_files_count": 0,
+            }
+
+        for target_product in target_products:
+            target_rows = target_rows_by_product_id[target_product.id]
+
+            old_gallery_rows = [row for row in target_rows if not row.is_installation_photo]
+            installation_urls = {row.url for row in target_rows if row.is_installation_photo}
+
+            old_gallery_ids = [row.id for row in old_gallery_rows if row.id is not None]
+            if old_gallery_ids:
+                variant_rows = (
+                    await session.execute(
+                        select(ProductImageVariant).where(
+                            ProductImageVariant.product_image_id.in_(old_gallery_ids)
+                        )
+                    )
+                ).scalars().all()
+                for variant in variant_rows:
+                    await session.delete(variant)
+
+            for row in old_gallery_rows:
+                await session.delete(row)
+            await session.flush()
+
+            for url in source_urls:
+                if url in installation_urls:
+                    continue
+                image = ProductImage(
+                    product_id=target_product.id,
+                    url=url,
+                    is_installation_photo=False,
+                )
+                session.add(image)
+                await session.flush()
+                await ProductImageVariantService.ensure_original_variant(session, image)
+
+            target_product.main_image = source_product.main_image
+            session.add(target_product)
+            await ManagerMediaService.sync_legacy_images(session, target_product.id)
+            updated_products += 1
+
+        await session.commit()
+
+        deleted_files_count = 0
+        if delete_unreferenced:
+            for url in dict.fromkeys([*obsolete_urls, *obsolete_variant_urls]):
+                deleted = await ManagerMediaService.remove_file_if_unreferenced(session, url)
+                if deleted:
+                    deleted_files_count += 1
+
+        return {
+            "message": "Series gallery applied",
+            "dry_run": False,
+            "source_product_id": source_product.id,
+            "series_id": source_product.series_id,
+            "series_title": series.title if series else None,
+            "updated_products": updated_products,
+            "images_applied": len(source_urls),
+            "main_image": source_product.main_image,
+            "replaced_links": replaced_links,
+            "obsolete_urls": obsolete_urls,
+            "preserved_installation_links": preserved_installation_links,
+            "deleted_files_count": deleted_files_count,
         }
 
     @staticmethod

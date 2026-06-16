@@ -139,6 +139,7 @@ export type { ManagerInstallerUpdatePayload } from './models/ManagerInstallerUpd
 export type { ManagerInstallEstimateCalculatePayload } from './models/ManagerInstallEstimateCalculatePayload';
 export type { ManagerInstallEstimateResponse } from './models/ManagerInstallEstimateResponse';
 export type { ManagerInstallEstimateSavePayload } from './models/ManagerInstallEstimateSavePayload';
+export type { ManagerMediaApplySeriesResponse } from './models/ManagerMediaApplySeriesResponse';
 export type { ManagerMediaAssetCropPayload } from './models/ManagerMediaAssetCropPayload';
 export type { ManagerMediaAssetListResponse } from './models/ManagerMediaAssetListResponse';
 export type { ManagerMediaAssetResponse } from './models/ManagerMediaAssetResponse';

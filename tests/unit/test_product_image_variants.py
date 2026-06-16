@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
-from models import Product, ProductImage, ProductImageVariant
+from models import Product, ProductImage, ProductImageVariant, ProductSeries
 from services.manager_media_service import ManagerMediaService
 from services.media_storage_service import LocalProductMediaStorage, StoredMediaObject
 from services.product_image_processing_contract import (
@@ -257,6 +257,145 @@ async def test_delete_shared_image_keeps_file_until_last_image_and_variant_refer
 
     await ManagerMediaService.delete_gallery_image(sqlite_session, second_image.id)
     assert not shared_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_apply_gallery_to_series_preserves_installation_photos_and_replaces_gallery(
+    sqlite_session,
+    monkeypatch,
+):
+    async def _skip_original_variant(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        ProductImageVariantService,
+        "ensure_original_variant",
+        _skip_original_variant,
+    )
+
+    series = ProductSeries(title="MDV Smart", slug="mdv-smart")
+    sqlite_session.add(series)
+    await sqlite_session.flush()
+
+    source = Product(
+        title="Source product",
+        slug="series-source-product",
+        price=1000,
+        area=20,
+        series_id=series.id,
+        main_image="/media/products/shared/source-main.webp",
+        specs={},
+    )
+    target = Product(
+        title="Target product",
+        slug="series-target-product",
+        price=1100,
+        area=25,
+        series_id=series.id,
+        main_image="/media/products/shared/old-main.webp",
+        specs={},
+    )
+    outside = Product(
+        title="Outside product",
+        slug="outside-product",
+        price=1200,
+        area=30,
+        main_image="/media/products/shared/outside.webp",
+        specs={},
+    )
+    sqlite_session.add_all([source, target, outside])
+    await sqlite_session.flush()
+
+    sqlite_session.add_all(
+        [
+            ProductImage(product_id=source.id, url="/media/products/shared/source-main.webp"),
+            ProductImage(product_id=source.id, url="/media/products/shared/source-extra.webp"),
+            ProductImage(
+                product_id=source.id,
+                url="/media/products/shared/source-installation.webp",
+                is_installation_photo=True,
+            ),
+            ProductImage(product_id=target.id, url="/media/products/shared/old-main.webp"),
+            ProductImage(product_id=target.id, url="/media/products/shared/old-extra.webp"),
+            ProductImage(
+                product_id=target.id,
+                url="/media/products/shared/target-installation.webp",
+                is_installation_photo=True,
+            ),
+            ProductImage(product_id=outside.id, url="/media/products/shared/outside.webp"),
+        ]
+    )
+    await sqlite_session.flush()
+
+    old_target_image = (
+        await sqlite_session.execute(
+            select(ProductImage).where(
+                ProductImage.product_id == target.id,
+                ProductImage.url == "/media/products/shared/old-main.webp",
+            )
+        )
+    ).scalar_one()
+    old_target_image_id = old_target_image.id
+    sqlite_session.add(
+        ProductImageVariant(
+            product_image_id=old_target_image_id,
+            variant_type=ProductImageVariantType.CARD.value,
+            url="/media/products/variants/card/old-main.webp",
+            processing_status=ProductImageProcessingStatus.READY.value,
+        )
+    )
+    await sqlite_session.commit()
+
+    preview = await ManagerMediaService.apply_gallery_to_series(
+        sqlite_session,
+        source.id,
+        dry_run=True,
+    )
+
+    assert preview["dry_run"] is True
+    assert preview["updated_products"] == 1
+    assert preview["replaced_links"] == 2
+    assert preview["obsolete_urls"] == [
+        "/media/products/shared/old-main.webp",
+        "/media/products/shared/old-extra.webp",
+    ]
+
+    result = await ManagerMediaService.apply_gallery_to_series(sqlite_session, source.id)
+
+    await sqlite_session.refresh(target)
+    await sqlite_session.refresh(outside)
+    target_images = (
+        await sqlite_session.execute(
+            select(ProductImage).where(ProductImage.product_id == target.id).order_by(ProductImage.id)
+        )
+    ).scalars().all()
+    outside_images = (
+        await sqlite_session.execute(select(ProductImage).where(ProductImage.product_id == outside.id))
+    ).scalars().all()
+    old_variants = (
+        await sqlite_session.execute(
+            select(ProductImageVariant).where(ProductImageVariant.product_image_id == old_target_image_id)
+        )
+    ).scalars().all()
+
+    assert result["updated_products"] == 1
+    assert result["images_applied"] == 2
+    assert result["replaced_links"] == 2
+    assert result["deleted_files_count"] == 0
+    assert result["preserved_installation_links"] == 1
+    assert target.main_image == source.main_image
+    assert [image.url for image in target_images] == [
+        "/media/products/shared/target-installation.webp",
+        "/media/products/shared/source-main.webp",
+        "/media/products/shared/source-extra.webp",
+    ]
+    assert target.images == [
+        "/media/products/shared/source-main.webp",
+        "/media/products/shared/source-extra.webp",
+    ]
+    assert [image.url for image in outside_images] == ["/media/products/shared/outside.webp"]
+    assert outside.main_image == "/media/products/shared/outside.webp"
+    assert old_variants == []
 
 
 @pytest.mark.asyncio
