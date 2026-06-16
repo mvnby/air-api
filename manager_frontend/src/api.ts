@@ -81,6 +81,7 @@ import {
     type ManagerMediaAssetUpdatePayload,
     type ManagerMediaAssetUrlUploadPayload,
     type ManagerMediaAssetUploadResponse,
+    type ManagerMediaApplySeriesResponse,
     type ManagerMediaBackfillReferencedAssetsResponse,
     type ManagerMediaProcessingJobCreatePayload,
     type ManagerMediaProcessingJobListResponse,
@@ -153,6 +154,7 @@ export type {
     ManagerMediaAssetUpdatePayload,
     ManagerMediaAssetUrlUploadPayload,
     ManagerMediaAssetUploadResponse,
+    ManagerMediaApplySeriesResponse,
     ManagerMediaBackfillReferencedAssetsResponse,
     ManagerMediaProcessingJobCreatePayload,
     ManagerMediaProcessingJobListResponse,
@@ -638,6 +640,14 @@ export const api = {
             urls,
             exclude_installation: excludeInstallation,
         });
+    },
+
+    async applyGalleryToSeries(
+        productId: number,
+        dryRun = false,
+        deleteUnreferenced = false,
+    ): Promise<ManagerMediaApplySeriesResponse> {
+        return await ManagerService.applyGalleryToSeries(productId, dryRun, deleteUnreferenced);
     },
 
     async bulkUploadLocalImages(

@@ -1998,6 +1998,20 @@ class ManagerMediaBulkUploadResponse(ManagerActionMessageResponse):
     uploaded_links: int
 
 
+class ManagerMediaApplySeriesResponse(ManagerActionMessageResponse):
+    dry_run: bool = False
+    source_product_id: int
+    series_id: int
+    series_title: Optional[str] = None
+    updated_products: int
+    images_applied: int
+    main_image: Optional[str] = None
+    replaced_links: int = 0
+    obsolete_urls: List[str] = Field(default_factory=list)
+    preserved_installation_links: int = 0
+    deleted_files_count: int = 0
+
+
 class ManagerMediaUploadLocalImagesResponse(BaseModel):
     uploaded: int
     images: List[ManagerMediaImageLinkResponse]

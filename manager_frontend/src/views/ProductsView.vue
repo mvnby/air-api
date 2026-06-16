@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue';
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { watchDebounced } from '@vueuse/core';
 import {
     api,
@@ -13,7 +13,7 @@ import {
 import {
     Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images,
     Settings, ArrowLeft, LayoutGrid, List, Package, Link2, ExternalLink,
-    Star, SlidersHorizontal, X, Trash2, Download, Crop, Wand2,
+    Star, SlidersHorizontal, X, Trash2, Download, Crop, Wand2, MoreHorizontal, ClipboardPaste,
 } from 'lucide-vue-next';
 import BulkSpecsModal from '../components/BulkSpecsModal.vue';
 import BulkCompatibilityModal from '../components/BulkCompatibilityModal.vue';
@@ -44,6 +44,7 @@ const reuseQuery = ref('');
 const reuseResults = ref<any[]>([]);
 const activeTab = ref<'search' | 'reuse' | 'upload'>('search');
 const uploadDragActive = ref(false);
+const uploadUrl = ref('');
 const fileInput = ref<HTMLInputElement | null>(null);
 const toast = ref('');
 const showOnlinerImportModal = ref(false);
@@ -52,6 +53,8 @@ const variantLimit = ref(50);
 const includeInstallationVariants = ref(false);
 const variantProvider = ref<BackgroundRemovalProvider>('noop');
 const productBackgroundProvider = ref<BackgroundRemovalProvider>('rembg');
+const productGallerySettingsOpen = ref(false);
+const applyingSeriesGallery = ref(false);
 const variantCandidatesLoading = ref(false);
 const variantProcessingLoading = ref(false);
 const variantReprocessingImageId = ref<number | null>(null);
@@ -494,7 +497,7 @@ const handleDrop = async (e: DragEvent) => {
     }
 };
 
-const uploadFiles = async (files: FileList) => {
+const uploadFiles = async (files: FileList | File[]) => {
     if (!selectedProduct.value && !isBulkMode.value) return;
     searchLoading.value = true;
     try {
@@ -513,6 +516,98 @@ const uploadFiles = async (files: FileList) => {
         console.error(e);
     } finally {
         searchLoading.value = false;
+        if (fileInput.value) fileInput.value.value = '';
+    }
+};
+
+type ClipboardImageItem = {
+    types: readonly string[];
+    getType: (type: string) => Promise<Blob>;
+};
+
+const extensionFromMime = (mimeType: string) => mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+
+const uploadClipboardFiles = async (files: File[]) => {
+    if (!files.length) {
+        setToast('В буфере нет изображения');
+        return;
+    }
+    await uploadFiles(files);
+};
+
+const pasteFromClipboard = async () => {
+    const clipboard = navigator.clipboard as Clipboard & { read?: () => Promise<ClipboardImageItem[]> };
+    if (!clipboard?.read) {
+        setToast('Вставьте изображение через Ctrl+V или Cmd+V');
+        return;
+    }
+
+    try {
+        const items = await clipboard.read();
+        const files: File[] = [];
+        for (const item of items) {
+            const imageType = item.types.find((type) => type.startsWith('image/'));
+            if (!imageType) continue;
+            const blob = await item.getType(imageType);
+            files.push(new File([blob], `clipboard-${Date.now()}.${extensionFromMime(imageType)}`, { type: imageType }));
+        }
+        await uploadClipboardFiles(files);
+    } catch (e) {
+        setToast(`Не удалось прочитать изображение из буфера: ${getApiErrorMessage(e)}`);
+    }
+};
+
+const uploadFromUrl = async () => {
+    const url = uploadUrl.value.trim();
+    if (!url) {
+        setToast('Укажите URL изображения');
+        return;
+    }
+    if (!/^https?:\/\//i.test(url)) {
+        setToast('URL должен начинаться с http:// или https://');
+        return;
+    }
+    if (!selectedProduct.value && !isBulkMode.value) return;
+
+    uploadingImageId.value = url;
+    searchLoading.value = true;
+    try {
+        if (isBulkMode.value) {
+            await bulkAddFromUrls([url], false);
+            setToast('Изображение добавлено выбранным товарам');
+        } else {
+            await api.linkSearchResult(selectedProduct.value!.id, url);
+            await loadProducts();
+            refreshSelectedProduct();
+            setToast('Изображение загружено по URL');
+        }
+        uploadUrl.value = '';
+    } catch (e) {
+        setToast(`Ошибка загрузки по URL: ${getApiErrorMessage(e)}`);
+    } finally {
+        uploadingImageId.value = null;
+        searchLoading.value = false;
+    }
+};
+
+const onProductImagePaste = (event: ClipboardEvent) => {
+    if (!showModal.value || activeTab.value !== 'upload') return;
+
+    const files: File[] = [];
+    for (const item of Array.from(event.clipboardData?.items || [])) {
+        if (item.kind !== 'file' || !item.type.startsWith('image/')) continue;
+        const file = item.getAsFile();
+        if (file) files.push(file);
+    }
+    if (files.length) {
+        event.preventDefault();
+        void uploadClipboardFiles(files);
+        return;
+    }
+
+    const text = event.clipboardData?.getData('text/plain')?.trim() || '';
+    if (/^https?:\/\//i.test(text)) {
+        uploadUrl.value = text;
     }
 };
 
@@ -774,6 +869,14 @@ const displayedGalleryImages = computed<GalleryImage[]>(() => (
     selectedProduct.value?.gallery_images || []
 ).filter((image) => includeInstallationVariants.value || !image.is_installation_photo));
 
+const selectedMainGalleryImage = computed<GalleryImage | null>(() => {
+    const mainUrl = selectedProduct.value?.main_image;
+    if (!mainUrl) return null;
+    return selectedProduct.value?.gallery_images.find((image) => image.url === mainUrl) || null;
+});
+
+const canApplyGalleryToSeries = computed(() => Boolean(selectedProduct.value?.id && selectedProduct.value?.series_id));
+
 const cropCanSetMain = computed(() => Boolean(cropEditorImage.value && !cropEditorImage.value.is_installation_photo));
 
 const clampCropForm = () => {
@@ -963,6 +1066,7 @@ const resetVariantState = () => {
     variantProcessingLoading.value = false;
     variantReprocessingImageId.value = null;
     backgroundRemovingImageId.value = null;
+    productGallerySettingsOpen.value = false;
 };
 
 const loadVariantCandidates = async () => {
@@ -1043,6 +1147,38 @@ const removeGalleryImageBackground = async (image: GalleryImage) => {
         console.error(e);
     } finally {
         backgroundRemovingImageId.value = null;
+    }
+};
+
+const applyGalleryToSeries = async () => {
+    if (!selectedProduct.value?.id || applyingSeriesGallery.value) return;
+    applyingSeriesGallery.value = true;
+    try {
+        const preview = await api.applyGalleryToSeries(selectedProduct.value.id, true, false);
+        const shownUrls = (preview.obsolete_urls || []).slice(0, 8);
+        const hiddenCount = Math.max(0, (preview.obsolete_urls?.length || 0) - shownUrls.length);
+        const obsoleteList = shownUrls.length
+            ? `\n\nБудут сняты из серии:\n${shownUrls.map((url: string) => `- ${url}`).join('\n')}${hiddenCount ? `\n...и еще ${hiddenCount}` : ''}`
+            : '';
+        const proceed = window.confirm(
+            `Применить галерею к товарам серии?\n\nТоваров будет обновлено: ${preview.updated_products}.\nИзображений в новой галерее: ${preview.images_applied}.\nСсылок будет заменено: ${preview.replaced_links}.\nМонтажные фото будут сохранены: ${preview.preserved_installation_links}.${obsoleteList}`,
+        );
+        if (!proceed) return;
+
+        const deleteUnreferenced = (preview.obsolete_urls?.length || 0) > 0
+            ? window.confirm('Удалить физические файлы, которые после отвязки больше нигде не используются?')
+            : false;
+        const result = await api.applyGalleryToSeries(selectedProduct.value.id, false, deleteUnreferenced);
+        await loadProducts();
+        refreshSelectedProduct();
+        productGallerySettingsOpen.value = false;
+        const cleanupText = deleteUnreferenced ? `, файлов удалено: ${result.deleted_files_count}` : '';
+        setToast(`Галерея применена к серии: ${result.updated_products} товаров${cleanupText}`);
+    } catch (e) {
+        setToast(`Ошибка применения к серии: ${getApiErrorMessage(e)}`);
+        console.error(e);
+    } finally {
+        applyingSeriesGallery.value = false;
     }
 };
 
@@ -1207,6 +1343,7 @@ onMounted(() => {
             searchQuery.value = String(pendingEditProductId.value);
         }
     }
+    document.addEventListener('paste', onProductImagePaste);
     loadBrands();
     loadProducts();
 
@@ -1220,6 +1357,10 @@ onMounted(() => {
     watch(sentinel, (el) => {
         if (el) observer.observe(el);
     });
+});
+
+onUnmounted(() => {
+    document.removeEventListener('paste', onProductImagePaste);
 });
 
 const isDeletingProduct = ref<number | null>(null);
@@ -1925,9 +2066,9 @@ watchDebounced(
               </div>
 
               <!-- UPLOAD TAB -->
-              <div v-if="activeTab === 'upload'" class="flex flex-col flex-1 min-h-0 p-8 items-center justify-center bg-gray-50">
+              <div v-if="activeTab === 'upload'" class="flex flex-col flex-1 min-h-0 items-center justify-center gap-4 bg-gray-50 p-4 sm:p-8">
                   <div 
-                      class="w-full max-w-2xl border-4 border-dashed rounded-xl p-12 flex flex-col items-center justify-center transition-colors cursor-pointer"
+                      class="w-full max-w-2xl border-4 border-dashed rounded-xl p-8 sm:p-12 flex flex-col items-center justify-center transition-colors cursor-pointer"
                       :class="uploadDragActive ? 'border-teal-500 bg-teal-50' : 'border-gray-300 hover:border-gray-400 bg-white'"
                       @dragenter.prevent="uploadDragActive = true"
                       @dragleave.prevent="uploadDragActive = false"
@@ -1947,11 +2088,45 @@ watchDebounced(
                           Загрузка...
                       </div>
                   </div>
+                  <div class="w-full max-w-2xl rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                      <div class="relative">
+                          <Link2 class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                          <input
+                              v-model="uploadUrl"
+                              type="url"
+                              placeholder="https://site.by/image.jpg"
+                              class="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-9 pr-24 text-sm text-gray-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
+                              @keydown.enter.prevent="uploadFromUrl"
+                          />
+                          <div class="absolute right-1 top-1/2 flex -translate-y-1/2 gap-1">
+                              <button
+                                  type="button"
+                                  class="inline-flex h-8 w-8 items-center justify-center rounded-md text-teal-700 transition hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                  :disabled="searchLoading"
+                                  title="Скачать по URL"
+                                  aria-label="Скачать по URL"
+                                  @click="uploadFromUrl"
+                              >
+                                  <UploadCloud class="h-4 w-4" />
+                              </button>
+                              <button
+                                  type="button"
+                                  class="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                  :disabled="searchLoading"
+                                  title="Вставить из буфера"
+                                  aria-label="Вставить из буфера"
+                                  @click="pasteFromClipboard"
+                              >
+                                  <ClipboardPaste class="h-4 w-4" />
+                              </button>
+                          </div>
+                      </div>
+                  </div>
               </div>
           </div>
           
           <!-- Current Product Gallery Preview (Footer) -->
-          <div class="h-60 bg-white border-t p-4 overflow-x-auto flex gap-4 shrink-0">
+          <div class="relative h-60 bg-white border-t p-4 overflow-x-auto flex gap-4 shrink-0">
               <div v-if="isBulkMode" class="w-72 shrink-0 border-r pr-4 text-sm">
                   <div class="font-semibold text-gray-700">
                       {{ isBulkMode ? 'Общая галерея' : 'Текущая галерея' }}
@@ -2038,30 +2213,84 @@ watchDebounced(
                   </div>
               </template>
               <template v-else>
-                  <div class="w-36 shrink-0 border-r pr-4 text-xs text-gray-600">
-                      <div class="font-semibold text-gray-700">Текущая галерея</div>
-                      <label class="mt-3 block">
-                          <span class="text-[11px] font-medium uppercase tracking-wide text-gray-500">Без фона</span>
-                          <select
-                              v-model="productBackgroundProvider"
-                              class="mt-1 h-8 w-full rounded-md border border-gray-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
-                              title="Провайдер удаления фона для текущего фото"
-                          >
-                              <option
-                                  v-for="option in backgroundRemovalProviderOptions"
-                                  :key="option.value"
-                                  :value="option.value"
+                  <div class="absolute right-3 top-3 z-30" @click.stop>
+                      <button
+                          type="button"
+                          class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white/95 text-gray-600 shadow-sm transition hover:border-teal-300 hover:text-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                          title="Настройки обработки галереи"
+                          @click="productGallerySettingsOpen = !productGallerySettingsOpen"
+                      >
+                          <MoreHorizontal class="h-5 w-5" />
+                      </button>
+                      <div
+                          v-if="productGallerySettingsOpen"
+                          class="absolute right-0 top-11 w-56 rounded-xl border border-gray-200 bg-white p-3 text-xs text-gray-700 shadow-xl"
+                      >
+                          <label class="block">
+                              <span class="font-semibold uppercase tracking-wide text-gray-500">Без фона</span>
+                              <select
+                                  v-model="productBackgroundProvider"
+                                  class="mt-2 h-9 w-full rounded-md border border-gray-300 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                  title="Провайдер удаления фона для текущего фото"
                               >
-                                  {{ option.label }}
-                              </option>
-                          </select>
-                      </label>
+                                  <option
+                                      v-for="option in backgroundRemovalProviderOptions"
+                                      :key="option.value"
+                                      :value="option.value"
+                                  >
+                                      {{ option.label }}
+                                  </option>
+                              </select>
+                          </label>
+                          <button
+                              type="button"
+                              class="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-teal-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              :disabled="!canApplyGalleryToSeries || applyingSeriesGallery"
+                              title="Заменить галерею остальных товаров этой серии текущей галереей"
+                              @click="applyGalleryToSeries"
+                          >
+                              <Images class="h-4 w-4" />
+                              {{ applyingSeriesGallery ? 'Применяем...' : 'Ко всей серии' }}
+                          </button>
+                          <p v-if="!canApplyGalleryToSeries" class="mt-2 text-[11px] leading-snug text-gray-500">
+                              Доступно для товаров, привязанных к серии.
+                          </p>
+                      </div>
                   </div>
                   <!-- Main Image -->
                   <div v-if="selectedProduct?.main_image" class="relative group w-36 shrink-0 border-2 border-teal-500 rounded-lg overflow-hidden">
                       <img :src="getImageUrl(selectedProduct.main_image)" class="w-full h-full object-cover" />
                       <span class="absolute top-0 left-0 bg-teal-500 text-white text-[10px] px-1.5 py-0.5 rounded-br-md">Главное</span>
                       <span class="absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-1 text-[10px] font-medium text-white">Оригинал URL</span>
+                      <div
+                          v-if="selectedMainGalleryImage"
+                          class="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/50 p-2 opacity-0 transition-opacity group-hover:opacity-100"
+                      >
+                          <button
+                              @click="openCropEditor(selectedMainGalleryImage)"
+                              class="inline-flex w-full items-center justify-center gap-1 rounded bg-white px-2 py-1 text-[10px] font-medium text-gray-900 hover:bg-gray-200"
+                          >
+                              <Crop class="h-3 w-3" />
+                              Кроп
+                          </button>
+                          <button
+                              @click="removeGalleryImageBackground(selectedMainGalleryImage)"
+                              :disabled="backgroundRemovingImageId === selectedMainGalleryImage.id"
+                              class="inline-flex w-full items-center justify-center gap-1 rounded bg-teal-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-teal-700 disabled:opacity-60"
+                              title="Удалить фон и заменить главное фото"
+                          >
+                              <Wand2 class="h-3 w-3" />
+                              {{ backgroundRemovingImageId === selectedMainGalleryImage.id ? 'Обработка...' : 'Без фона' }}
+                          </button>
+                          <button
+                              @click="reprocessCardVariant(selectedMainGalleryImage.id)"
+                              :disabled="variantReprocessingImageId === selectedMainGalleryImage.id || variantProcessingLoading"
+                              class="w-full rounded bg-teal-600 px-2 py-1 text-[10px] text-white hover:bg-teal-700 disabled:opacity-60"
+                              title="Обновить card variant только для главной картинки"
+                          >
+                              {{ variantReprocessingImageId === selectedMainGalleryImage.id ? 'variant...' : 'Обновить card' }}
+                          </button>
+                      </div>
                   </div>
 
                   <!-- Gallery Items -->
