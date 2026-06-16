@@ -42,7 +42,7 @@ const cleanupStats = ref<any>(null);
 const showCleanupModal = ref(false);
 const reuseQuery = ref('');
 const reuseResults = ref<any[]>([]);
-const activeTab = ref<'search' | 'reuse' | 'upload'>('search');
+const activeTab = ref<'upload' | 'search' | 'reuse'>('upload');
 const uploadDragActive = ref(false);
 const uploadUrl = ref('');
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -472,7 +472,7 @@ const openBulkImageModal = async () => {
     imageSearchResults.value = [];
     reuseQuery.value = '';
     reuseResults.value = [];
-    activeTab.value = 'search';
+    activeTab.value = 'upload';
     showModal.value = true;
     await loadCommonGallery();
 };
@@ -800,9 +800,9 @@ const openSearchModal = (product: Product) => {
   selectedProduct.value = product;
   imageQuery.value = product.title;
   imageSearchResults.value = [];
+  activeTab.value = 'upload';
   resetVariantState();
   showModal.value = true;
-  handleImageSearch();
 };
 
 const openEditModal = (product: Product) => {
@@ -1985,6 +1985,11 @@ watchDebounced(
           <!-- Tabs -->
           <div class="flex border-b bg-gray-50 rounded-t-xl">
                <button 
+                  @click="activeTab = 'upload'" 
+                  class="px-6 py-3 font-medium border-b-2 text-sm transition-colors"
+                  :class="activeTab === 'upload' ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
+               >Загрузить</button>
+               <button 
                   @click="activeTab = 'search'" 
                   class="px-6 py-3 font-medium border-b-2 text-sm transition-colors"
                   :class="activeTab === 'search' ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
@@ -1994,11 +1999,6 @@ watchDebounced(
                   class="px-6 py-3 font-medium border-b-2 text-sm transition-colors"
                   :class="activeTab === 'reuse' ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
                >Из каталога</button>
-               <button 
-                  @click="activeTab = 'upload'" 
-                  class="px-6 py-3 font-medium border-b-2 text-sm transition-colors"
-                  :class="activeTab === 'upload' ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
-               >Загрузить</button>
                <div v-if="isBulkMode" class="flex items-center text-sm text-teal-700 font-medium px-3">
                   {{ selectedIdsArray.length }} товаров
                </div>
