@@ -6,6 +6,8 @@ echo "🚀 Starting deployment script on server..."
 
 cd /opt/air-api
 
+mkdir -p media model-cache/u2net
+
 # 1. Login to GHCR
 echo "🔑 Logging into GHCR..."
 echo "$GHCR_PAT" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin

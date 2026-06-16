@@ -772,14 +772,26 @@ onUnmounted(() => {
           </div>
         </div>
         <div v-else class="grid grid-cols-2 gap-4 md:grid-cols-3 2xl:grid-cols-4">
-          <button
+          <article
             v-for="asset in assets"
             :key="asset.id"
-            type="button"
-            class="group overflow-hidden rounded-xl border bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:bg-gray-900"
+            role="button"
+            tabindex="0"
+            class="group relative overflow-hidden rounded-xl border bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:bg-gray-900"
             :class="selectedAsset?.id === asset.id ? 'border-teal-500 ring-2 ring-teal-500/20' : 'border-gray-200 dark:border-gray-800'"
             @click="selectAsset(asset)"
+            @keydown.enter.prevent="selectAsset(asset)"
+            @keydown.space.prevent="selectAsset(asset)"
           >
+            <button
+              type="button"
+              title="Копировать URL"
+              aria-label="Копировать URL"
+              class="absolute right-2 top-2 z-10 rounded-full bg-white/95 p-1.5 text-gray-700 shadow-sm ring-1 ring-gray-200 transition hover:bg-white hover:text-teal-700 dark:bg-gray-900/95 dark:text-gray-200 dark:ring-gray-700"
+              @click.stop="copyUrl(asset)"
+            >
+              <Copy class="h-4 w-4" />
+            </button>
             <div class="flex aspect-[4/3] items-center justify-center bg-gray-100 dark:bg-gray-950">
               <img :src="imageUrl(asset.url)" :alt="asset.alt_text || asset.title" class="h-full w-full object-contain" loading="lazy" />
             </div>
@@ -794,7 +806,7 @@ onUnmounted(() => {
               </div>
               <p class="text-xs text-gray-500 dark:text-gray-400">{{ asset.width || 0 }}×{{ asset.height || 0 }} · {{ bytesLabel(asset.size_bytes) }}</p>
             </div>
-          </button>
+          </article>
         </div>
 
         <div class="mt-4 flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">

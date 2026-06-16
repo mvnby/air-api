@@ -37,6 +37,7 @@ token.json
 g-vision-ocr.json
 backups/*
 /media/*
+/model-cache/*
 web/temp/*
 var/seo/*
 !var/seo/.gitkeep

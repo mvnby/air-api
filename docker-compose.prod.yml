@@ -26,6 +26,7 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./media:/app/media
+      - ./model-cache/u2net:/root/.u2net
       - ./token.json:/app/token.json
       - ./client_secret.json:/app/client_secret.json
       - ./credentials.json:/app/credentials.json
