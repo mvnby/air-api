@@ -57,6 +57,7 @@ class ManagerMediaService:
                 select(ProductImageVariant).where(ProductImageVariant.product_image_id == image.id)
             )
         ).scalars().all()
+        variant_urls = [variant.url for variant in variant_rows if variant.url]
         for variant in variant_rows:
             await session.delete(variant)
 
