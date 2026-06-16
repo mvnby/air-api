@@ -243,7 +243,8 @@ async def test_requisites_photo_prompts_for_action_without_recognition(monkeypat
     args, kwargs = message.answer.await_args
     assert "Что сделать" in args[0]
     assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "req_file_extract"
-    assert kwargs["reply_markup"].inline_keyboard[1][0].callback_data == "req_file_attach"
+    assert kwargs["reply_markup"].inline_keyboard[1][0].callback_data == "repair_nameplate_start"
+    assert kwargs["reply_markup"].inline_keyboard[2][0].callback_data == "req_file_attach"
 
 
 @pytest.mark.asyncio
@@ -264,7 +265,7 @@ async def test_requisites_photo_for_staff_non_admin_allows_attach_only(monkeypat
         row[0].callback_data
         for row in kwargs["reply_markup"].inline_keyboard
     ]
-    assert callbacks == ["req_file_attach", "req_file_cancel"]
+    assert callbacks == ["repair_nameplate_start", "req_file_attach", "req_file_cancel"]
     assert state._data["pending_requisites_file"]["file_id"] == "large-photo"
 
 
@@ -303,6 +304,9 @@ async def test_requisites_document_prompts_for_pdf(monkeypatch):
     download_mock.assert_not_called()
     assert state._data["pending_requisites_file"]["file_id"] == "pdf-file"
     assert state._data["pending_requisites_file"]["mime_type"] == "application/pdf"
+    args, kwargs = message.answer.await_args
+    callbacks = [row[0].callback_data for row in kwargs["reply_markup"].inline_keyboard]
+    assert "repair_nameplate_start" not in callbacks
 
 
 @pytest.mark.asyncio
@@ -510,6 +514,245 @@ async def test_requisites_file_attach_typed_order_validates_number(monkeypatch):
 
     message.answer.assert_awaited_once_with("Введите номер заказа числом, например: 123")
     assert state._data["pending_requisites_file"]["file_id"] == "file-1"
+
+
+@pytest.mark.asyncio
+async def test_repair_nameplate_start_shows_repair_orders(monkeypatch):
+    callback = _DummyCallback(data="repair_nameplate_start", user_id=5)
+    state = _DummyState(
+        {
+            "pending_requisites_file": {
+                "file_id": "photo-file",
+                "filename": "nameplate.jpg",
+                "mime_type": "image/jpeg",
+            }
+        }
+    )
+
+    async def fake_list_repair_orders(session, *, telegram_user_id, can_attach_any, limit):
+        assert telegram_user_id == 5
+        assert can_attach_any is True
+        assert limit == 5
+        return [
+            {
+                "id": 42,
+                "title": "Ремонт",
+                "customer_name": "Иван",
+                "address": "Победы 15",
+            }
+        ]
+
+    monkeypatch.setattr(
+        admin_handler,
+        "_get_bot_access_context",
+        AsyncMock(return_value=SimpleNamespace(is_staff=True, is_manager=True)),
+    )
+    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
+    monkeypatch.setattr(admin_handler.BotRepairNameplateService, "list_repair_orders", fake_list_repair_orders)
+
+    await admin_handler.choose_order_for_repair_nameplate(callback, state)
+
+    callback.message.edit_text.assert_awaited_once()
+    args, kwargs = callback.message.edit_text.await_args
+    assert "ремонтному заказу" in args[0]
+    assert "#42" in args[0]
+    assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "repair_nameplate_order_42"
+    callback.answer.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_repair_nameplate_chosen_order_runs_recognition_preview(monkeypatch):
+    callback = _DummyCallback(data="repair_nameplate_order_42", user_id=5)
+    state = _DummyState(
+        {
+            "pending_requisites_file": {
+                "file_id": "photo-file",
+                "filename": "nameplate.jpg",
+                "mime_type": "image/jpeg",
+                "telegram_message_id": 77,
+                "telegram_chat_id": 200,
+            }
+        }
+    )
+
+    monkeypatch.setattr(
+        admin_handler,
+        "_get_bot_access_context",
+        AsyncMock(return_value=SimpleNamespace(is_staff=True, is_manager=True)),
+    )
+    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
+    monkeypatch.setattr(admin_handler.BotRepairNameplateService, "can_use_order", AsyncMock(return_value=True))
+    monkeypatch.setattr(admin_handler, "_download_telegram_file", AsyncMock(return_value=b"image"))
+    monkeypatch.setattr(
+        admin_handler.BotRepairNameplateService,
+        "recognize_bytes",
+        AsyncMock(
+            return_value={
+                "raw_text": "MODEL ALASKA AL-12LHJ",
+                "extracted": {
+                    "equipment_model": "ALASKA AL-12LHJ",
+                    "refrigerant_type": "R22",
+                },
+                "validation_flags": {"warnings": {}, "is_valid": True},
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        admin_handler.BotRepairNameplateService,
+        "build_merge_preview",
+        AsyncMock(
+            return_value={
+                "applied": {"equipment_model": "ALASKA AL-12LHJ"},
+                "conflicts": {},
+                "skipped": {},
+            }
+        ),
+    )
+
+    await admin_handler.recognize_repair_nameplate_for_chosen_order(callback, state)
+
+    assert callback.message.edit_text.await_count == 2
+    final_args, final_kwargs = callback.message.edit_text.await_args
+    assert "ALASKA AL-12LHJ" in final_args[0]
+    assert final_kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "repair_nameplate_confirm"
+    assert state._data["pending_repair_nameplate"]["order_id"] == 42
+    assert state._data["pending_repair_nameplate"]["extracted"]["refrigerant_type"] == "R22"
+
+
+@pytest.mark.asyncio
+async def test_repair_nameplate_confirm_applies_and_clears_pending(monkeypatch):
+    callback = _DummyCallback(data="repair_nameplate_confirm", user_id=5)
+    state = _DummyState(
+        {
+            "pending_requisites_file": {"file_id": "photo-file"},
+            "pending_repair_nameplate": {
+                "order_id": 42,
+                "file": {
+                    "file_id": "photo-file",
+                    "filename": "nameplate.jpg",
+                    "mime_type": "image/jpeg",
+                    "telegram_message_id": 77,
+                    "telegram_chat_id": 200,
+                },
+                "raw_text": "MODEL ALASKA",
+                "extracted": {"equipment_model": "ALASKA"},
+                "validation_flags": {"warnings": {}, "is_valid": True},
+            },
+        }
+    )
+
+    async def fake_apply(session, order_id, **kwargs):
+        assert order_id == 42
+        assert kwargs["file_id"] == "photo-file"
+        assert kwargs["telegram_user_id"] == 5
+        assert kwargs["can_attach_any"] is True
+        return {"id": 42, "applied": {"equipment_model": "ALASKA"}, "conflicts": {}}
+
+    monkeypatch.setattr(
+        admin_handler,
+        "_get_bot_access_context",
+        AsyncMock(return_value=SimpleNamespace(is_staff=True, is_manager=True)),
+    )
+    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
+    monkeypatch.setattr(admin_handler.BotRepairNameplateService, "apply_to_order", fake_apply)
+
+    await admin_handler.confirm_repair_nameplate(callback, state)
+
+    assert state._data["pending_repair_nameplate"] is None
+    assert state._data["pending_requisites_file"] is None
+    assert state._data["active_repair_order_context"] == {"order_id": 42}
+    state.set_state.assert_awaited_with(admin_handler.ShopState.waiting_for_repair_context_comment)
+    callback.message.edit_text.assert_awaited_once()
+    args, kwargs = callback.message.edit_text.await_args
+    assert "Данные со шильдика записаны" in args[0]
+    assert "можно отправлять комментарии" in args[0]
+    assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "repair_context_finish"
+
+
+@pytest.mark.asyncio
+async def test_repair_context_comment_builds_ai_preview(monkeypatch):
+    message = _DummyMessage(text="фреона нет, утечку нашли, компрессор не качает", user_id=5)
+    state = _DummyState({"active_repair_order_context": {"order_id": 42}})
+    progress = _DummyProgress()
+    message.answer = AsyncMock(return_value=progress)
+
+    async def fake_build(session, *, order_id, comment):
+        assert order_id == 42
+        assert "компрессор" in comment
+        return {
+            "order": {"id": 42},
+            "comment": comment,
+            "repair_meta": {"diagnostic_result": "Компрессор не создает давление."},
+            "merge_preview": {
+                "changes": {
+                    "diagnostic_result": {
+                        "existing": "",
+                        "candidate": "Компрессор не создает давление.",
+                    }
+                },
+                "unchanged": {},
+            },
+        }
+
+    monkeypatch.setattr(
+        admin_handler,
+        "_get_bot_access_context",
+        AsyncMock(return_value=SimpleNamespace(is_staff=True, is_manager=True)),
+    )
+    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
+    monkeypatch.setattr(admin_handler.BotRepairNameplateService, "build_diagnostic_comment_draft", fake_build)
+
+    await admin_handler.handle_repair_context_comment(message, state)
+
+    message.answer.assert_awaited_once_with("Готовлю поля дефектного акта из комментария…")
+    progress.edit_text.assert_awaited_once()
+    args, kwargs = progress.edit_text.await_args
+    assert "Компрессор не создает давление" in args[0]
+    assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "repair_comment_confirm"
+    assert state._data["pending_repair_comment"]["repair_meta"]["diagnostic_result"] == "Компрессор не создает давление."
+
+
+@pytest.mark.asyncio
+async def test_repair_context_comment_confirm_applies_and_keeps_context(monkeypatch):
+    callback = _DummyCallback(data="repair_comment_confirm", user_id=5)
+    state = _DummyState(
+        {
+            "active_repair_order_context": {"order_id": 42},
+            "pending_repair_comment": {
+                "comment": "компрессор не качает",
+                "repair_meta": {"diagnostic_result": "Компрессор не создает давление."},
+                "telegram_message_id": 77,
+                "telegram_chat_id": 200,
+            },
+        }
+    )
+
+    async def fake_apply(session, order_id, **kwargs):
+        assert order_id == 42
+        assert kwargs["telegram_user_id"] == 5
+        assert kwargs["can_attach_any"] is True
+        return {
+            "id": 42,
+            "changes": {"diagnostic_result": {"existing": "", "candidate": "Компрессор не создает давление."}},
+            "unchanged": {},
+        }
+
+    monkeypatch.setattr(
+        admin_handler,
+        "_get_bot_access_context",
+        AsyncMock(return_value=SimpleNamespace(is_staff=True, is_manager=True)),
+    )
+    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
+    monkeypatch.setattr(admin_handler.BotRepairNameplateService, "apply_diagnostic_comment", fake_apply)
+
+    await admin_handler.confirm_repair_context_comment(callback, state)
+
+    assert state._data["pending_repair_comment"] is None
+    state.set_state.assert_awaited_with(admin_handler.ShopState.waiting_for_repair_context_comment)
+    callback.message.edit_text.assert_awaited_once()
+    args, kwargs = callback.message.edit_text.await_args
+    assert "Комментарий записан" in args[0]
+    assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "repair_context_finish"
 
 
 @pytest.mark.asyncio

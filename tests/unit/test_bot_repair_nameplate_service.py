@@ -1,0 +1,271 @@
+from pathlib import Path
+
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
+from sqlmodel import SQLModel
+
+from models import Customer, Order, OrderInstaller, OrderStatus, OrderWorkStage, StaffUser
+from services.bot_order_attachment_service import BotOrderAttachmentService
+from services.bot_repair_nameplate_service import BotRepairNameplateService
+from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
+from services.defect_act_ai_service import DefectActAIService
+
+
+@pytest.fixture
+async def sqlite_repair_nameplate_session(tmp_path: Path):
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'bot_repair_nameplate.db'}")
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+
+    session_factory = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    async with session_factory() as session:
+        yield session
+
+    await engine.dispose()
+
+
+def test_nameplate_normalization_cleans_repair_fields():
+    extracted, flags = BotRepairNameplateService.normalize_extracted(
+        {
+            "brand": " Alaska ",
+            "model": " ALASKA AL-12LHJ ",
+            "serial_number": " SN 001 ",
+            "capacity_btu": "12000 BTU/h",
+            "refrigerant": " R-22 ",
+            "refrigerant_charge": "R22/0.600kg",
+            "confidence": "0.72",
+        },
+        "MODEL ALASKA AL-12LHJ\nRefrigerant/Charge R22/0.600kg",
+    )
+
+    assert extracted["equipment_brand"] == "Alaska"
+    assert extracted["equipment_model"] == "ALASKA AL-12LHJ"
+    assert extracted["equipment_serial_number"] == "SN 001"
+    assert extracted["equipment_power"] == "12000 BTU/h"
+    assert extracted["refrigerant_type"] == "R22"
+    assert extracted["refrigerant_amount"] == "0,600 кг"
+    assert flags["confidence"] == 0.72
+    assert flags["is_valid"] is True
+
+
+@pytest.mark.asyncio
+async def test_nameplate_recognize_rejects_too_large_file_before_ocr(monkeypatch):
+    async def fail_extract(*args, **kwargs):
+        raise AssertionError("OCR should not run for oversized files")
+
+    monkeypatch.setattr(CustomerRequisitesRecognitionService, "extract_ocr_text", fail_extract)
+
+    with pytest.raises(ValueError, match="Файл слишком большой"):
+        await BotRepairNameplateService.recognize_bytes(
+            content=b"x" * (CustomerRequisitesRecognitionService.MAX_FILE_SIZE_BYTES + 1),
+            filename="nameplate.jpg",
+            mime_type="image/jpeg",
+        )
+
+
+@pytest.mark.asyncio
+async def test_lists_only_execution_repair_orders_for_manager(sqlite_repair_nameplate_session):
+    repair_execution = Order(title="Ремонт в работе", status=OrderStatus.EXECUTION, workflow_type="repair")
+    repair_negotiation = Order(title="Ремонт в переговорах", status=OrderStatus.NEGOTIATION, workflow_type="repair")
+    install_execution = Order(title="Монтаж", status=OrderStatus.EXECUTION, workflow_type="sales_installation")
+    sqlite_repair_nameplate_session.add(repair_execution)
+    sqlite_repair_nameplate_session.add(repair_negotiation)
+    sqlite_repair_nameplate_session.add(install_execution)
+    await sqlite_repair_nameplate_session.commit()
+
+    orders = await BotRepairNameplateService.list_repair_orders(
+        sqlite_repair_nameplate_session,
+        telegram_user_id=777,
+        can_attach_any=True,
+    )
+
+    assert [item["id"] for item in orders] == [repair_execution.id]
+
+
+@pytest.mark.asyncio
+async def test_executor_sees_only_assigned_repair_orders(sqlite_repair_nameplate_session):
+    staff = StaffUser(
+        display_name="Монтажник",
+        status="active",
+        primary_role="installer",
+        roles=["installer"],
+        telegram_id=777,
+        legacy_installer_id=10,
+    )
+    assigned = Order(title="Назначенный ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
+    legacy_assigned = Order(title="Старый ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
+    other = Order(title="Чужой ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
+    sqlite_repair_nameplate_session.add(staff)
+    sqlite_repair_nameplate_session.add(assigned)
+    sqlite_repair_nameplate_session.add(legacy_assigned)
+    sqlite_repair_nameplate_session.add(other)
+    await sqlite_repair_nameplate_session.flush()
+    sqlite_repair_nameplate_session.add(OrderWorkStage(order_id=assigned.id, installer_id=10, name="Диагностика"))
+    sqlite_repair_nameplate_session.add(OrderInstaller(order_id=legacy_assigned.id, installer_id=10))
+    await sqlite_repair_nameplate_session.commit()
+
+    orders = await BotRepairNameplateService.list_repair_orders(
+        sqlite_repair_nameplate_session,
+        telegram_user_id=777,
+        can_attach_any=False,
+    )
+
+    assert {item["id"] for item in orders} == {assigned.id, legacy_assigned.id}
+
+
+@pytest.mark.asyncio
+async def test_apply_to_order_merges_without_overwriting_existing_repair_meta(sqlite_repair_nameplate_session):
+    customer = Customer(name="Иван", phone="+375291234567")
+    order = Order(
+        customer=customer,
+        title="Ремонт",
+        status=OrderStatus.EXECUTION,
+        workflow_type="repair",
+        technical_meta={
+            "repair": {
+                "repair_status": "scheduled",
+                "equipment_model": "Введено вручную",
+                "customer_complaint": "Не охлаждает",
+            }
+        },
+    )
+    sqlite_repair_nameplate_session.add(order)
+    await sqlite_repair_nameplate_session.commit()
+
+    result = await BotRepairNameplateService.apply_to_order(
+        sqlite_repair_nameplate_session,
+        int(order.id),
+        extracted={
+            "equipment_model": "ALASKA AL-12LHJ",
+            "equipment_serial_number": "SN-001",
+            "refrigerant_type": "R22",
+            "refrigerant_amount": "0,600 кг",
+        },
+        raw_text="MODEL ALASKA AL-12LHJ",
+        validation_flags={"warnings": {}, "is_valid": True},
+        file_id="photo-file",
+        filename="nameplate.jpg",
+        mime_type="image/jpeg",
+        telegram_user_id=777,
+        telegram_chat_id=100,
+        telegram_message_id=55,
+        can_attach_any=True,
+    )
+
+    assert result is not None
+    assert result["applied"] == {
+        "equipment_serial_number": "SN-001",
+        "refrigerant_type": "R22",
+        "refrigerant_amount": "0,600 кг",
+    }
+    assert result["conflicts"]["equipment_model"] == {
+        "existing": "Введено вручную",
+        "candidate": "ALASKA AL-12LHJ",
+    }
+
+    await sqlite_repair_nameplate_session.refresh(order)
+    repair_meta = order.technical_meta["repair"]
+    assert repair_meta["equipment_model"] == "Введено вручную"
+    assert repair_meta["equipment_serial_number"] == "SN-001"
+    assert repair_meta["customer_complaint"] == "Не охлаждает"
+    assert repair_meta["repair_status"] == "scheduled"
+    assert repair_meta["nameplate_recognitions"][0]["purpose"] == "repair_nameplate"
+    assert order.technical_meta[BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY][0]["purpose"] == "repair_nameplate"
+
+
+@pytest.mark.asyncio
+async def test_apply_to_order_rejects_non_repair_order(sqlite_repair_nameplate_session):
+    order = Order(title="Монтаж", status=OrderStatus.EXECUTION, workflow_type="sales_installation")
+    sqlite_repair_nameplate_session.add(order)
+    await sqlite_repair_nameplate_session.commit()
+
+    result = await BotRepairNameplateService.apply_to_order(
+        sqlite_repair_nameplate_session,
+        int(order.id),
+        extracted={"equipment_model": "ALASKA"},
+        raw_text="MODEL ALASKA",
+        validation_flags={},
+        file_id="photo-file",
+        filename="nameplate.jpg",
+        mime_type="image/jpeg",
+        telegram_user_id=777,
+        telegram_chat_id=100,
+        telegram_message_id=55,
+        can_attach_any=True,
+    )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_build_diagnostic_comment_draft_uses_ai_and_previews_changes(sqlite_repair_nameplate_session, monkeypatch):
+    order = Order(
+        title="Ремонт",
+        status=OrderStatus.EXECUTION,
+        workflow_type="repair",
+        technical_meta={
+            "repair": {
+                "equipment_model": "ALASKA AL-12LHJ",
+                "diagnostic_result": "Старая диагностика",
+            }
+        },
+    )
+    sqlite_repair_nameplate_session.add(order)
+    await sqlite_repair_nameplate_session.commit()
+
+    async def fake_generate(payload):
+        assert payload.equipment_model == "ALASKA AL-12LHJ"
+        assert "компрессор" in payload.extra_context
+        return {
+            "diagnostic_result": "Компрессор не создает давление в контуре.",
+            "compressor_check_result": "Напряжение 220 В присутствует, рабочий ток компрессора отсутствует.",
+            "repair_recommendation": "Рекомендована замена компрессора или оборудования.",
+        }
+
+    monkeypatch.setattr(DefectActAIService, "generate_repair_meta", fake_generate)
+
+    draft = await BotRepairNameplateService.build_diagnostic_comment_draft(
+        sqlite_repair_nameplate_session,
+        order_id=int(order.id),
+        comment="подключили шланги, утечку устранили, компрессор не качает",
+    )
+
+    assert draft is not None
+    changes = draft["merge_preview"]["changes"]
+    assert changes["diagnostic_result"]["existing"] == "Старая диагностика"
+    assert changes["diagnostic_result"]["candidate"] == "Компрессор не создает давление в контуре."
+    assert changes["compressor_check_result"]["candidate"].startswith("Напряжение 220 В")
+
+
+@pytest.mark.asyncio
+async def test_apply_diagnostic_comment_updates_repair_meta_and_keeps_history(sqlite_repair_nameplate_session):
+    order = Order(title="Ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
+    sqlite_repair_nameplate_session.add(order)
+    await sqlite_repair_nameplate_session.commit()
+
+    result = await BotRepairNameplateService.apply_diagnostic_comment(
+        sqlite_repair_nameplate_session,
+        int(order.id),
+        repair_meta_draft={
+            "diagnostic_result": "Выявлен отказ компрессора.",
+            "repair_recommendation": "Рекомендована замена компрессора.",
+        },
+        raw_comment="компрессор не качает",
+        telegram_user_id=777,
+        telegram_chat_id=100,
+        telegram_message_id=55,
+        can_attach_any=True,
+    )
+
+    assert result is not None
+    assert set(result["changes"]) == {"diagnostic_result", "repair_recommendation"}
+    await sqlite_repair_nameplate_session.refresh(order)
+    repair_meta = order.technical_meta["repair"]
+    assert repair_meta["diagnostic_result"] == "Выявлен отказ компрессора."
+    assert repair_meta["repair_recommendation"] == "Рекомендована замена компрессора."
+    assert repair_meta["bot_diagnostic_comments"][0]["comment"] == "компрессор не качает"
+    assert repair_meta["bot_diagnostic_comments"][0]["applied_fields"] == [
+        "diagnostic_result",
+        "repair_recommendation",
+    ]

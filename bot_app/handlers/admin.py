@@ -11,6 +11,7 @@ from services.product_service import ProductService
 from services.staff_user_service import StaffUserService
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
 from services.bot_order_attachment_service import BotOrderAttachmentService
+from services.bot_repair_nameplate_service import BotRepairNameplateService
 from services.bot_task_service import BotTaskService
 from ..config import bot
 from ..states import ShopState
@@ -97,10 +98,16 @@ def _preview_keyboard(data: dict) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def _requisites_file_intent_keyboard(*, can_extract_requisites: bool = True) -> InlineKeyboardMarkup:
+def _requisites_file_intent_keyboard(
+    *,
+    can_extract_requisites: bool = True,
+    can_repair_nameplate: bool = False,
+) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     if can_extract_requisites:
         rows.append([InlineKeyboardButton(text="Извлечь реквизиты", callback_data="req_file_extract")])
+    if can_repair_nameplate:
+        rows.append([InlineKeyboardButton(text="Шильдик к ремонту", callback_data="repair_nameplate_start")])
     rows.append([InlineKeyboardButton(text="Прикрепить к заказу", callback_data="req_file_attach")])
     rows.append([InlineKeyboardButton(text="Отмена", callback_data="req_file_cancel")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -123,6 +130,23 @@ def _order_attachment_keyboard(orders: list[dict]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _repair_nameplate_order_keyboard(orders: list[dict]) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for order in orders[:5]:
+        order_id = int(order.get("id") or 0)
+        if not order_id:
+            continue
+        title = " ".join(str(order.get("title") or order.get("customer_name") or "ремонт").split())
+        if len(title) > 34:
+            title = f"{title[:31]}..."
+        rows.append(
+            [InlineKeyboardButton(text=f"#{order_id} - {title}", callback_data=f"repair_nameplate_order_{order_id}")]
+        )
+    rows.append([InlineKeyboardButton(text="Ввести номер/id заказа", callback_data="repair_nameplate_manual")])
+    rows.append([InlineKeyboardButton(text="Отмена", callback_data="repair_nameplate_cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def _format_order_attachment_choices(orders: list[dict]) -> str:
     if not orders:
         return "Быстрых вариантов не нашел. Введите номер/id заказа сообщением."
@@ -132,6 +156,20 @@ def _format_order_attachment_choices(orders: list[dict]) -> str:
         order_id = int(order.get("id") or 0)
         customer = order.get("customer_name") or "клиент не указан"
         title = order.get("title") or "заказ"
+        address = order.get("address") or "адрес не указан"
+        lines.append(f"#{order_id}: {escape(str(title))}, {escape(str(customer))}, {escape(str(address))}")
+    return "\n".join(lines)
+
+
+def _format_repair_nameplate_order_choices(orders: list[dict]) -> str:
+    if not orders:
+        return "Быстрых ремонтных заказов в исполнении не нашел. Введите номер/id заказа сообщением."
+
+    lines = ["К какому ремонтному заказу добавить данные со шильдика?"]
+    for order in orders[:5]:
+        order_id = int(order.get("id") or 0)
+        customer = order.get("customer_name") or "клиент не указан"
+        title = order.get("title") or "ремонт"
         address = order.get("address") or "адрес не указан"
         lines.append(f"#{order_id}: {escape(str(title))}, {escape(str(customer))}, {escape(str(address))}")
     return "\n".join(lines)
@@ -162,6 +200,105 @@ def _parse_order_id(text: str | None) -> int | None:
         return None
     order_id = int(cleaned)
     return order_id if order_id > 0 else None
+
+
+def _repair_nameplate_preview_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Записать в ремонт", callback_data="repair_nameplate_confirm")],
+            [InlineKeyboardButton(text="Отмена", callback_data="repair_nameplate_cancel")],
+        ]
+    )
+
+
+def _repair_context_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Завершить заметки", callback_data="repair_context_finish")],
+        ]
+    )
+
+
+def _repair_comment_preview_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Записать и продолжить", callback_data="repair_comment_confirm")],
+            [InlineKeyboardButton(text="Не записывать", callback_data="repair_comment_cancel")],
+            [InlineKeyboardButton(text="Завершить заметки", callback_data="repair_context_finish")],
+        ]
+    )
+
+
+def _repair_nameplate_preview_text(data: dict[str, object]) -> str:
+    extracted = data.get("extracted") if isinstance(data.get("extracted"), dict) else {}
+    validation_flags = data.get("validation_flags") if isinstance(data.get("validation_flags"), dict) else {}
+    merge_preview = data.get("merge_preview") if isinstance(data.get("merge_preview"), dict) else {}
+    applied = merge_preview.get("applied") if isinstance(merge_preview.get("applied"), dict) else {}
+    conflicts = merge_preview.get("conflicts") if isinstance(merge_preview.get("conflicts"), dict) else {}
+    skipped = merge_preview.get("skipped") if isinstance(merge_preview.get("skipped"), dict) else {}
+    warnings = validation_flags.get("warnings") if isinstance(validation_flags.get("warnings"), dict) else {}
+
+    lines = ["<b>Распознал шильдик. Проверьте перед записью:</b>", ""]
+    for field in BotRepairNameplateService.REPAIR_FIELDS:
+        label = BotRepairNameplateService.FIELD_LABELS.get(field, field)
+        value = extracted.get(field)
+        if value:
+            lines.append(f"<b>{escape(label)}:</b> {escape(str(value))}")
+
+    if applied:
+        lines.extend(["", "<b>Будет записано:</b>"])
+        lines.extend(
+            f"• {escape(BotRepairNameplateService.FIELD_LABELS.get(field, field))}: {escape(str(value))}"
+            for field, value in applied.items()
+        )
+    if skipped:
+        lines.extend(["", "<b>Уже было заполнено таким же значением:</b>"])
+        lines.extend(
+            f"• {escape(BotRepairNameplateService.FIELD_LABELS.get(field, field))}: {escape(str(value))}"
+            for field, value in skipped.items()
+        )
+    if conflicts:
+        lines.extend(["", "<b>Конфликты, не перезапишу автоматически:</b>"])
+        for field, values in conflicts.items():
+            label = BotRepairNameplateService.FIELD_LABELS.get(field, field)
+            existing = values.get("existing") if isinstance(values, dict) else ""
+            candidate = values.get("candidate") if isinstance(values, dict) else ""
+            lines.append(f"• {escape(label)}: сейчас {escape(str(existing))}, распознано {escape(str(candidate))}")
+    if warnings:
+        lines.extend(["", "<b>Предупреждения:</b>"])
+        lines.extend(f"• {escape(str(message))}" for message in warnings.values())
+    if not extracted:
+        lines.append("Данных не нашел. Лучше отправить фото ближе и ровнее.")
+    return "\n".join(lines)
+
+
+def _repair_comment_preview_text(data: dict[str, object]) -> str:
+    merge_preview = data.get("merge_preview") if isinstance(data.get("merge_preview"), dict) else {}
+    changes = merge_preview.get("changes") if isinstance(merge_preview.get("changes"), dict) else {}
+    unchanged = merge_preview.get("unchanged") if isinstance(merge_preview.get("unchanged"), dict) else {}
+
+    lines = ["<b>Подготовил поля дефектного акта из комментария:</b>"]
+    if changes:
+        lines.extend(["", "<b>Будет записано/обновлено:</b>"])
+        for field, values in changes.items():
+            label = BotRepairNameplateService.COMMENT_FIELD_LABELS.get(field, field)
+            candidate = values.get("candidate") if isinstance(values, dict) else values
+            existing = values.get("existing") if isinstance(values, dict) else ""
+            if existing:
+                lines.append(f"• <b>{escape(label)}:</b> {escape(str(candidate))}")
+                lines.append(f"  Было: {escape(str(existing))}")
+            else:
+                lines.append(f"• <b>{escape(label)}:</b> {escape(str(candidate))}")
+    if unchanged:
+        lines.extend(["", "<b>Без изменений:</b>"])
+        lines.extend(
+            f"• {escape(BotRepairNameplateService.COMMENT_FIELD_LABELS.get(field, field))}"
+            for field in unchanged.keys()
+        )
+    if not changes and not unchanged:
+        lines.append("")
+        lines.append("AI не вернул полезных полей. Лучше отправить комментарий подробнее.")
+    return "\n".join(lines)
 
 
 async def _download_telegram_file(file_id: str) -> bytes:
@@ -254,7 +391,10 @@ async def _ask_requisites_file_action(
     )
     await message.answer(
         "Файл получил. Что сделать?",
-        reply_markup=_requisites_file_intent_keyboard(can_extract_requisites=can_extract_requisites),
+        reply_markup=_requisites_file_intent_keyboard(
+            can_extract_requisites=can_extract_requisites,
+            can_repair_nameplate=str(mime_type or "").startswith("image/"),
+        ),
     )
 
 
@@ -462,9 +602,352 @@ async def attach_pending_file_to_typed_order(message: types.Message, state: FSMC
     await message.answer(f"✅ Файл {status} к заказу #{result['id']}.")
 
 
+@router.callback_query(F.data == "repair_nameplate_start")
+async def choose_order_for_repair_nameplate(callback: CallbackQuery, state: FSMContext):
+    context = await _get_bot_access_context(callback.from_user.id)
+    if not context.is_staff:
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    data = await state.get_data()
+    pending = data.get("pending_requisites_file") or {}
+    if not isinstance(pending, dict) or not pending.get("file_id"):
+        await callback.answer("Фото не найдено. Отправьте его еще раз.", show_alert=True)
+        return
+    if not str(pending.get("mime_type") or "").startswith("image/"):
+        await callback.answer("Шильдик распознаем только по фото.", show_alert=True)
+        return
+
+    async with async_session_maker() as session:
+        orders = await BotRepairNameplateService.list_repair_orders(
+            session,
+            telegram_user_id=callback.from_user.id,
+            can_attach_any=context.is_manager,
+            limit=5,
+        )
+
+    if orders:
+        await callback.message.edit_text(
+            _format_repair_nameplate_order_choices(orders),
+            reply_markup=_repair_nameplate_order_keyboard(orders),
+            parse_mode="HTML",
+        )
+    else:
+        await state.set_state(ShopState.waiting_for_repair_nameplate_order_id)
+        await callback.message.edit_text(
+            "Быстрых ремонтных заказов в исполнении не нашел. Введите номер/id заказа сообщением."
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "repair_nameplate_manual")
+async def enter_order_id_for_repair_nameplate(callback: CallbackQuery, state: FSMContext):
+    context = await _get_bot_access_context(callback.from_user.id)
+    if not context.is_staff:
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    data = await state.get_data()
+    pending = data.get("pending_requisites_file") or {}
+    if not isinstance(pending, dict) or not pending.get("file_id"):
+        await callback.answer("Фото не найдено. Отправьте его еще раз.", show_alert=True)
+        return
+
+    await state.set_state(ShopState.waiting_for_repair_nameplate_order_id)
+    await callback.message.edit_text("Введите номер/id ремонтного заказа сообщением.")
+    await callback.answer()
+
+
+async def _run_repair_nameplate_recognition_for_order(
+    progress_message: types.Message,
+    *,
+    order_id: int,
+    telegram_user_id: int | None,
+    can_attach_any: bool,
+    state: FSMContext,
+):
+    data = await state.get_data()
+    pending = data.get("pending_requisites_file") or {}
+    if not isinstance(pending, dict) or not pending.get("file_id"):
+        await progress_message.edit_text("Фото не найдено. Отправьте его еще раз.")
+        return
+
+    async with async_session_maker() as session:
+        allowed = await BotRepairNameplateService.can_use_order(
+            session,
+            order_id,
+            telegram_user_id=telegram_user_id,
+            can_attach_any=can_attach_any,
+        )
+    if not allowed:
+        await progress_message.edit_text(
+            "Этот заказ не найден среди ремонтных заказов в исполнении или не назначен вам."
+        )
+        return
+
+    try:
+        content = await _download_telegram_file(str(pending.get("file_id")))
+        recognized = await BotRepairNameplateService.recognize_bytes(
+            content=content,
+            filename=str(pending.get("filename") or "telegram-nameplate.jpg"),
+            mime_type=str(pending.get("mime_type") or "image/jpeg"),
+        )
+        async with async_session_maker() as session:
+            merge_preview = await BotRepairNameplateService.build_merge_preview(
+                session,
+                order_id=order_id,
+                extracted=recognized.get("extracted") or {},
+            )
+    except Exception as exc:
+        await progress_message.edit_text(f"❌ Не удалось распознать шильдик: {escape(str(exc))}")
+        return
+
+    draft = {
+        "order_id": order_id,
+        "file": pending,
+        "raw_text": recognized.get("raw_text") or "",
+        "extracted": recognized.get("extracted") or {},
+        "validation_flags": recognized.get("validation_flags") or {},
+        "merge_preview": merge_preview or {"applied": {}, "conflicts": {}, "skipped": {}},
+    }
+    await state.update_data(pending_repair_nameplate=draft)
+    await state.set_state(None)
+    await progress_message.edit_text(
+        _repair_nameplate_preview_text(draft),
+        reply_markup=_repair_nameplate_preview_keyboard(),
+        parse_mode="HTML",
+    )
+
+
+@router.callback_query(F.data.startswith("repair_nameplate_order_"))
+async def recognize_repair_nameplate_for_chosen_order(callback: CallbackQuery, state: FSMContext):
+    context = await _get_bot_access_context(callback.from_user.id)
+    if not context.is_staff:
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    order_id = _parse_order_id((callback.data or "").rsplit("_", 1)[-1])
+    if not order_id:
+        await callback.answer("Не понял номер заказа", show_alert=True)
+        return
+
+    await callback.answer()
+    await callback.message.edit_text("Распознаю шильдик…")
+    await _run_repair_nameplate_recognition_for_order(
+        callback.message,
+        order_id=order_id,
+        telegram_user_id=callback.from_user.id,
+        can_attach_any=context.is_manager,
+        state=state,
+    )
+
+
+@router.message(ShopState.waiting_for_repair_nameplate_order_id)
+async def recognize_repair_nameplate_for_typed_order(message: types.Message, state: FSMContext):
+    context = await _get_bot_access_context(message.from_user.id if message.from_user else None)
+    if not context.is_staff:
+        await state.clear()
+        return
+
+    order_id = _parse_order_id(message.text)
+    if not order_id:
+        await message.answer("Введите номер ремонтного заказа числом, например: 123")
+        return
+
+    progress = await message.answer("Распознаю шильдик…")
+    await _run_repair_nameplate_recognition_for_order(
+        progress,
+        order_id=order_id,
+        telegram_user_id=message.from_user.id if message.from_user else None,
+        can_attach_any=context.is_manager,
+        state=state,
+    )
+
+
+@router.callback_query(F.data == "repair_nameplate_confirm")
+async def confirm_repair_nameplate(callback: CallbackQuery, state: FSMContext):
+    context = await _get_bot_access_context(callback.from_user.id)
+    if not context.is_staff:
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    data = await state.get_data()
+    draft = data.get("pending_repair_nameplate") or {}
+    if not isinstance(draft, dict) or not draft.get("order_id"):
+        await callback.answer("Черновик не найден. Отправьте фото еще раз.", show_alert=True)
+        return
+    pending_file = draft.get("file") if isinstance(draft.get("file"), dict) else {}
+    if not pending_file or not pending_file.get("file_id"):
+        await callback.answer("Фото не найдено. Отправьте его еще раз.", show_alert=True)
+        return
+
+    async with async_session_maker() as session:
+        result = await BotRepairNameplateService.apply_to_order(
+            session,
+            int(draft["order_id"]),
+            extracted=draft.get("extracted") or {},
+            raw_text=str(draft.get("raw_text") or ""),
+            validation_flags=draft.get("validation_flags") or {},
+            file_id=str(pending_file.get("file_id")),
+            filename=str(pending_file.get("filename") or "telegram-nameplate.jpg"),
+            mime_type=str(pending_file.get("mime_type") or "image/jpeg"),
+            telegram_user_id=callback.from_user.id,
+            telegram_chat_id=pending_file.get("telegram_chat_id"),
+            telegram_message_id=pending_file.get("telegram_message_id"),
+            can_attach_any=context.is_manager,
+        )
+
+    if not result:
+        await callback.answer("Заказ не найден или недоступен.", show_alert=True)
+        return
+
+    await state.update_data(
+        pending_repair_nameplate=None,
+        pending_requisites_file=None,
+        active_repair_order_context={"order_id": int(result["id"])},
+    )
+    await state.set_state(ShopState.waiting_for_repair_context_comment)
+    applied_count = len(result.get("applied") or {})
+    conflict_count = len(result.get("conflicts") or {})
+    lines = [f"✅ Данные со шильдика записаны в ремонт #{result['id']}."]
+    if applied_count:
+        lines.append(f"Заполнено полей: {applied_count}.")
+    if conflict_count:
+        lines.append(f"Конфликты оставил без перезаписи: {conflict_count}.")
+    lines.append("")
+    lines.append("Теперь можно отправлять комментарии по диагностике текстом или голосом в текст. Я подготовлю поля дефектного акта по этому заказу.")
+    await callback.message.edit_text("\n".join(lines), reply_markup=_repair_context_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "repair_nameplate_cancel")
+async def cancel_repair_nameplate(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(pending_repair_nameplate=None, pending_requisites_file=None)
+    await state.set_state(None)
+    await callback.message.edit_text("Ок, шильдик оставил без обработки.")
+    await callback.answer()
+
+
+@router.message(ShopState.waiting_for_repair_context_comment)
+async def handle_repair_context_comment(message: types.Message, state: FSMContext):
+    context = await _get_bot_access_context(message.from_user.id if message.from_user else None)
+    if not context.is_staff:
+        await state.clear()
+        return
+
+    text = str(message.text or "").strip()
+    if not text:
+        await message.answer("Пришлите диагностический комментарий текстом.")
+        return
+    if text.casefold() in {"стоп", "завершить", "готово", "отмена"}:
+        await state.update_data(active_repair_order_context=None, pending_repair_comment=None)
+        await state.set_state(None)
+        await message.answer("Ок, вышел из режима заметок по ремонту.")
+        return
+
+    data = await state.get_data()
+    active_context = data.get("active_repair_order_context") or {}
+    order_id = _parse_order_id(str(active_context.get("order_id") if isinstance(active_context, dict) else ""))
+    if not order_id:
+        await state.set_state(None)
+        await message.answer("Контекст ремонтного заказа потерян. Отправьте шильдик или выберите заказ заново.")
+        return
+
+    progress = await message.answer("Готовлю поля дефектного акта из комментария…")
+    try:
+        async with async_session_maker() as session:
+            draft = await BotRepairNameplateService.build_diagnostic_comment_draft(
+                session,
+                order_id=order_id,
+                comment=text,
+            )
+    except Exception as exc:
+        await progress.edit_text(f"❌ Не удалось обработать комментарий: {escape(str(exc))}")
+        return
+
+    if not draft:
+        await progress.edit_text("Ремонтный заказ не найден. Выйдите из режима и выберите заказ заново.")
+        return
+
+    draft["telegram_message_id"] = message.message_id
+    draft["telegram_chat_id"] = message.chat.id if message.chat else None
+    await state.update_data(pending_repair_comment=draft)
+    await progress.edit_text(
+        _repair_comment_preview_text(draft),
+        reply_markup=_repair_comment_preview_keyboard(),
+        parse_mode="HTML",
+    )
+
+
+@router.callback_query(F.data == "repair_comment_confirm")
+async def confirm_repair_context_comment(callback: CallbackQuery, state: FSMContext):
+    context = await _get_bot_access_context(callback.from_user.id)
+    if not context.is_staff:
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    data = await state.get_data()
+    active_context = data.get("active_repair_order_context") or {}
+    order_id = _parse_order_id(str(active_context.get("order_id") if isinstance(active_context, dict) else ""))
+    draft = data.get("pending_repair_comment") or {}
+    if not order_id or not isinstance(draft, dict):
+        await callback.answer("Черновик комментария не найден.", show_alert=True)
+        return
+
+    async with async_session_maker() as session:
+        result = await BotRepairNameplateService.apply_diagnostic_comment(
+            session,
+            order_id,
+            repair_meta_draft=draft.get("repair_meta") or {},
+            raw_comment=str(draft.get("comment") or ""),
+            telegram_user_id=callback.from_user.id,
+            telegram_chat_id=draft.get("telegram_chat_id"),
+            telegram_message_id=draft.get("telegram_message_id"),
+            can_attach_any=context.is_manager,
+        )
+
+    if not result:
+        await callback.answer("Заказ не найден или недоступен.", show_alert=True)
+        return
+
+    await state.update_data(pending_repair_comment=None)
+    await state.set_state(ShopState.waiting_for_repair_context_comment)
+    changed_count = len(result.get("changes") or {})
+    await callback.message.edit_text(
+        f"✅ Комментарий записан в ремонт #{result['id']}.\n"
+        f"Обновлено полей: {changed_count}.\n\n"
+        "Можно отправить следующий диагностический комментарий.",
+        reply_markup=_repair_context_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "repair_comment_cancel")
+async def cancel_repair_context_comment(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(pending_repair_comment=None)
+    await state.set_state(ShopState.waiting_for_repair_context_comment)
+    await callback.message.edit_text(
+        "Ок, комментарий не записал. Можно отправить следующий диагностический комментарий.",
+        reply_markup=_repair_context_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "repair_context_finish")
+async def finish_repair_context(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(active_repair_order_context=None, pending_repair_comment=None)
+    await state.set_state(None)
+    await callback.message.edit_text("Ок, вышел из режима заметок по ремонту.")
+    await callback.answer()
+
+
 @router.callback_query(F.data == "req_file_cancel")
 async def cancel_pending_requisites_file(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(pending_requisites_file=None)
+    await state.update_data(
+        pending_requisites_file=None,
+        pending_repair_nameplate=None,
+        pending_repair_comment=None,
+    )
     await state.set_state(None)
     await callback.message.edit_text("Ок, файл оставил без обработки.")
     await callback.answer()
