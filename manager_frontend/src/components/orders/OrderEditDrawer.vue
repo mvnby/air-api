@@ -350,6 +350,7 @@ const serviceKindForWorkflow = (value: OrderWorkflowType) => {
 
 type OrderDrawerDraft = {
   productLines: ProductLine[];
+  serviceLines: ServiceLine[];
 };
 
 const productOptions = ref<ProductOption[]>([]);
@@ -493,7 +494,9 @@ const createDefaultDrawerSections = () => ({
   documents: false,
   payments: false,
 });
+type DrawerSectionsState = ReturnType<typeof createDefaultDrawerSections>;
 const expandedDrawerSections = ref(createDefaultDrawerSections());
+const initializedOrderId = ref<number | null>(null);
 
 const localFormError = ref('');
 const showCustomerModal = ref(false);
@@ -830,6 +833,9 @@ const candidateBankReceipts = computed(() => bankReceipts.value.filter((receipt)
 const hasDebtForBankReceipts = computed(() => balanceDuePreview.value > 0 && Boolean(props.order?.customer?.inn));
 const draftKey = computed(() => (
   props.order ? `manager_order_drawer_draft_${props.order.id}_${activeProposalId.value || 'default'}` : ''
+));
+const drawerSectionsKey = computed(() => (
+  props.order ? `manager_order_drawer_sections_${props.order.id}` : ''
 ));
 const hasManualEurRate = computed(() => Boolean(currentFxRate.value?.eur_byn));
 
@@ -1343,6 +1349,7 @@ const persistDraft = () => {
   try {
     const payload: OrderDrawerDraft = {
       productLines: productLines.value.map((line) => ({ ...line })),
+      serviceLines: serviceLines.value.map((line) => ({ ...line })),
     };
     window.sessionStorage.setItem(draftKey.value, JSON.stringify(payload));
   } catch (error) {
@@ -1356,7 +1363,7 @@ const restoreDraft = () => {
     const raw = window.sessionStorage.getItem(draftKey.value);
     if (!raw) return;
     const payload = JSON.parse(raw) as Partial<OrderDrawerDraft>;
-    if (Array.isArray(payload.productLines) && payload.productLines.length) {
+    if (Array.isArray(payload.productLines)) {
       productLines.value = payload.productLines.map((line) => ({
         product_id: Number(line.product_id || 0),
         product_query: String(line.product_query || ''),
@@ -1372,8 +1379,44 @@ const restoreDraft = () => {
           : null,
       }));
     }
+    if (Array.isArray(payload.serviceLines)) {
+      serviceLines.value = payload.serviceLines.map((line) => ({
+        service_id: line.service_id ?? null,
+        title: String(line.title || ''),
+        quantity: Number(line.quantity || 1),
+        price: Number(line.price || 0),
+        cost: Number(line.cost || 0),
+      }));
+    }
   } catch (error) {
     console.warn('Failed to restore order drawer draft', error);
+  }
+};
+
+const persistDrawerSections = () => {
+  if (!drawerSectionsKey.value) return;
+  try {
+    window.sessionStorage.setItem(drawerSectionsKey.value, JSON.stringify(expandedDrawerSections.value));
+  } catch (error) {
+    console.warn('Failed to persist order drawer sections', error);
+  }
+};
+
+const restoreDrawerSections = (): DrawerSectionsState => {
+  if (!drawerSectionsKey.value) return createDefaultDrawerSections();
+  try {
+    const raw = window.sessionStorage.getItem(drawerSectionsKey.value);
+    if (!raw) return createDefaultDrawerSections();
+    const stored = JSON.parse(raw) as Partial<DrawerSectionsState>;
+    return {
+      ...createDefaultDrawerSections(),
+      ...Object.fromEntries(
+        Object.entries(stored).filter(([, value]) => typeof value === 'boolean'),
+      ),
+    } as DrawerSectionsState;
+  } catch (error) {
+    console.warn('Failed to restore order drawer sections', error);
+    return createDefaultDrawerSections();
   }
 };
 
@@ -1417,6 +1460,7 @@ const loadProposalLines = (proposal: OrderProposalResponse | null | undefined, f
     serviceLines.value = (proposal.service_lines || []).map(mapServiceLineFromResponse);
     return;
   }
+  activeProposalId.value = null;
   productLines.value = (fallbackOrder?.product_lines ?? []).map(mapProductLineFromResponse);
   serviceLines.value = (fallbackOrder?.service_lines ?? []).map(mapServiceLineFromResponse);
 };
@@ -1425,7 +1469,10 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   if (!order) return;
   localServerErrors.value = {};
   localFormError.value = '';
-  expandedDrawerSections.value = createDefaultDrawerSections();
+  if (initializedOrderId.value !== order.id) {
+    initializedOrderId.value = order.id;
+    expandedDrawerSections.value = restoreDrawerSections();
+  }
   status.value = order.status;
   orderTitle.value = order.title ?? '';
   workflowType.value = normalizeWorkflowType((order as any).workflow_type);
@@ -1709,7 +1756,7 @@ const validateProposalLines = () => {
 };
 
 const saveCurrentProposalLines = async () => {
-  if (!props.order?.id || !activeProposalId.value) return props.order || null;
+  if (!props.order?.id) return props.order || null;
   const validationError = validateProposalLines();
   if (validationError) {
     localFormError.value = validationError;
@@ -2294,6 +2341,22 @@ watch(
   () => productLines.value,
   () => {
     persistDraft();
+  },
+  { deep: true },
+);
+
+watch(
+  () => serviceLines.value,
+  () => {
+    persistDraft();
+  },
+  { deep: true },
+);
+
+watch(
+  () => expandedDrawerSections.value,
+  () => {
+    persistDrawerSections();
   },
   { deep: true },
 );
@@ -3203,6 +3266,7 @@ watch(
                 : 'border-gray-200 bg-white text-gray-600 hover:border-teal-200 hover:text-teal-800'"
               :disabled="proposalActionLoading"
               @click="onProposalClick(proposal)"
+              @dblclick.stop="selectProposalForOrder(proposal)"
             >
               <span class="flex items-center gap-1 font-semibold">
                 {{ proposal.name }}
