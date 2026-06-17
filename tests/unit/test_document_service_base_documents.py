@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
-from models import Customer, CustomerContract, DocumentTemplate, Order, OrderDocument
+from models import Customer, CustomerContract, DocumentTemplate, Order, OrderDocument, OrderProductLink, OrderServiceLink, Product, Service
 from services.document_service import DocumentService
 from services.documents.factory import DocumentFactory
 from services.documents.standard import ActStrategy, DefectActStrategy
@@ -315,7 +315,7 @@ async def test_repair_order_existing_document_types_prepare_replacements(sqlite_
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
 
-    for doc_type in ("contract", "invoice", "offer", "act", "defect_act"):
+    for doc_type in ("contract", "invoice", "retail_receipt", "service_act", "offer", "act", "defect_act"):
         strategy = DocumentFactory.get_strategy(doc_type, sqlite_session, order.id)
         await strategy.fetch_order()
         replacements = await strategy._prepare_base_variables(
@@ -331,6 +331,84 @@ async def test_repair_order_existing_document_types_prepare_replacements(sqlite_
             assert replacements["{{repair_status}}"] == "scheduled"
             assert replacements["{{customer_approval_status}}"] == "pending"
             assert replacements["{{parts_status}}"] == "awaiting"
+
+
+@pytest.mark.asyncio
+async def test_b2c_retail_receipt_placeholders_use_offer_basis_and_order_lines(sqlite_session):
+    customer = Customer(name="Private Customer", phone="+375291111111")
+    product = Product(title="Кондиционер Test 09", slug="test-09", price=1500, cost=1000)
+    service = Service(title="Стандартный монтаж", slug="standard-install", base_price=500)
+    order = Order(
+        customer=customer,
+        delivery_address="г. Витебск, адрес установки",
+        total_amount=2000,
+    )
+    sqlite_session.add_all([customer, product, service, order])
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+    sqlite_session.add_all(
+        [
+            OrderProductLink(order_id=order.id, product_id=product.id, quantity=1, price=1500, cost=1000),
+            OrderServiceLink(order_id=order.id, service_id=service.id, quantity=1, price=500, cost=0),
+        ]
+    )
+    await sqlite_session.commit()
+
+    strategy = DocumentFactory.get_strategy("retail_receipt", sqlite_session, order.id)
+    await strategy.fetch_order()
+    replacements = await strategy._prepare_base_variables(
+        doc_number="ТЧ-2026-001",
+        doc_type="retail_receipt",
+        document_date=datetime(2026, 6, 5),
+    )
+    strategy._add_specific_replacements(replacements)
+    strategy._append_placeholder_aliases(replacements)
+
+    assert replacements["{{base_document_type}}"] == "Публичная оферта"
+    assert replacements["{{base_document_number}}"] == "https://mvn.by/offer/"
+    assert replacements["{{offer_url}}"] == "https://mvn.by/offer/"
+    assert replacements["{{client_name}}"] == "Private Customer"
+    assert replacements["{{object_address}}"] == "г. Витебск, адрес установки"
+    assert replacements["{{receipt_product_lines}}"] == "Кондиционер Test 09"
+    assert replacements["{{receipt_product_qty}}"] == "1"
+    assert replacements["{{receipt_product_price}}"] == "1500,00"
+    assert replacements["{{receipt_product_total}}"] == "1500,00"
+    assert replacements["{{receipt_service_lines}}"] == "Стандартный монтаж"
+    assert replacements["{{receipt_service_total}}"] == "500,00"
+    assert replacements["{{receipt_total}}"] == "2000,00"
+    assert replacements["{{RECEIPT_TOTAL}}"] == "2000,00"
+
+
+@pytest.mark.asyncio
+async def test_b2c_service_act_placeholders_support_service_only_order(sqlite_session):
+    customer = Customer(name="Service Customer", phone="+375292222222")
+    service = Service(title="Обслуживание кондиционера", slug="maintenance", base_price=180)
+    order = Order(
+        customer=customer,
+        delivery_address="г. Витебск, сервисный адрес",
+        total_amount=180,
+        title="Обслуживание",
+    )
+    sqlite_session.add_all([customer, service, order])
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+    sqlite_session.add(OrderServiceLink(order_id=order.id, service_id=service.id, quantity=1, price=180, cost=0))
+    await sqlite_session.commit()
+
+    strategy = DocumentFactory.get_strategy("service_act", sqlite_session, order.id)
+    await strategy.fetch_order()
+    replacements = await strategy._prepare_base_variables(
+        doc_number="ЗА-2026-001",
+        doc_type="service_act",
+        document_date=datetime(2026, 6, 6),
+    )
+    strategy._add_specific_replacements(replacements)
+
+    assert replacements["{{base_document_type}}"] == "Публичная оферта"
+    assert replacements["{{equipment_primary}}"] == "кондиционер / сплит-система"
+    assert replacements["{{service_act_lines}}"] == "Обслуживание кондиционера"
+    assert replacements["{{service_act_total}}"] == "180,00"
+    assert replacements["{{date_text}}"] == "06 июня 2026 г."
 
 
 @pytest.mark.asyncio

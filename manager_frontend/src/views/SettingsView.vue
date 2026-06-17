@@ -25,7 +25,7 @@ const toastType = ref<'success' | 'error'>('success');
 const savingKeys = ref<Set<string>>(new Set());
 type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
 type SettingsTab = 'general' | 'documentTemplates' | 'repairComplaints' | 'emailLeads' | 'botSelection';
-type ManagedDocumentType = 'contract' | 'act' | 'invoice' | 'defect_act';
+type ManagedDocumentType = 'contract' | 'act' | 'invoice' | 'retail_receipt' | 'service_act' | 'defect_act';
 type DocumentTemplateFileOption = {
     id: string;
     name: string;
@@ -299,6 +299,8 @@ const resetBotSelectionRulesDraft = () => {
 const DOCUMENT_TYPE_OPTIONS: Array<{ value: ManagedDocumentType; label: string; addLabel: string }> = [
     { value: 'contract', label: 'Договор', addLabel: 'Договор' },
     { value: 'invoice', label: 'Счет / счет-договор', addLabel: 'Счет' },
+    { value: 'retail_receipt', label: 'Товарный чек', addLabel: 'Товарный чек' },
+    { value: 'service_act', label: 'Заказ-акт', addLabel: 'Заказ-акт' },
     { value: 'act', label: 'Акт', addLabel: 'Акт' },
     { value: 'defect_act', label: 'Дефектный акт', addLabel: 'Дефектный акт' },
 ];
@@ -658,7 +660,7 @@ const normalizeRoleType = (value: unknown): DocumentRoleType => {
 
 const normalizeDocumentType = (value: unknown): ManagedDocumentType => {
     const raw = String(value || '').trim();
-    if (raw === 'act' || raw === 'invoice' || raw === 'defect_act') return raw;
+    if (raw === 'act' || raw === 'invoice' || raw === 'retail_receipt' || raw === 'service_act' || raw === 'defect_act') return raw;
     return 'contract';
 };
 
@@ -1305,7 +1307,12 @@ onMounted(() => {
                             </select>
                         </div>
                         <div v-else class="rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-500 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                            <template v-if="template.doc_type === 'retail_receipt' || template.doc_type === 'service_act'">
+                                Шаблон используется для заказов физических лиц без привязки к договору или счету.
+                            </template>
+                            <template v-else>
                             Дефектный акт выбирается как отдельный шаблон без привязки к договору или счету.
+                            </template>
                         </div>
                     </div>
 

@@ -70,6 +70,8 @@ const CLOSING_DOCUMENT_TYPES = new Set(['act', 'tn2', 'ttn1']);
 const DOCUMENT_TYPES = [
   { type: 'contract', label: 'Договор' },
   { type: 'invoice', label: 'Счет' },
+  { type: 'retail_receipt', label: 'Товарный чек' },
+  { type: 'service_act', label: 'Заказ-акт' },
   { type: 'act', label: 'Акт' },
   { type: 'defect_act', label: 'Дефектный акт' },
   { type: 'offer', label: 'КП' },
@@ -393,7 +395,8 @@ const suggestedDocumentType = computed(() => {
   if (isCompanyOrder.value && hasClosingBaseDocument.value) return 'act';
   if (isCompanyOrder.value && !hasContract.value) return 'contract';
   if (isCompanyOrder.value && !hasOrderInvoice.value) return 'invoice';
-  return 'act';
+  if ((props.order.product_lines || []).length) return 'retail_receipt';
+  return 'service_act';
 });
 const needsContractBinding = computed(() => (
   isClosingDocumentType(selectedDocumentType.value)
@@ -408,10 +411,13 @@ const showsAdditionalConditions = computed(() => (
   selectedDocumentType.value === 'contract'
   || selectedDocumentType.value === 'invoice'
   || selectedDocumentType.value === 'offer'
+  || selectedDocumentType.value === 'retail_receipt'
+  || selectedDocumentType.value === 'service_act'
 ));
 const additionalConditionsMode = computed(() => (selectedDocumentType.value === 'contract' ? 'contract' : 'invoice'));
 const contractBindingLabel = computed(() => {
   if (selectedDocumentType.value === 'contract') return 'будет создан разовый договор заказа';
+  if (selectedDocumentType.value === 'retail_receipt' || selectedDocumentType.value === 'service_act') return 'публичная оферта';
   if (!needsContractBinding.value) return 'не требуется';
   return baseDocumentOptions.value.find((option) => option.value === selectedBaseDocumentValue.value)?.label || 'не выбран';
 });
@@ -423,7 +429,7 @@ const createChecklist = computed(() => {
     { label: 'Тип', value: selectedDocumentTypeItem.value.label },
     { label: 'Дата', value: new Date(`${documentDate.value}T00:00:00`).toLocaleDateString('ru-RU') },
     { label: 'Шаблон', value: selectedTemplateLabel.value },
-    { label: 'Договор', value: contractBindingLabel.value },
+    { label: 'Основание', value: contractBindingLabel.value },
   ];
   if (showsAdditionalConditions.value) {
     items.push({ label: 'Условия', value: additionalConditions.value.trim() ? 'есть выбранные условия' : 'Оставить по шаблону' });
@@ -434,7 +440,7 @@ const createChecklist = computed(() => {
   return items;
 });
 
-const datedDocumentTypes = new Set(['contract', 'act', 'defect_act', 'tn2', 'ttn1']);
+const datedDocumentTypes = new Set(['contract', 'retail_receipt', 'service_act', 'act', 'defect_act', 'tn2', 'ttn1']);
 const getDocumentDateForType = (type: string) => (
   datedDocumentTypes.has(type) && documentDate.value ? `${documentDate.value}T00:00:00` : undefined
 );
@@ -721,7 +727,9 @@ const generateDocument = async (type: string) => {
     const template = (type === 'contract' && selectedContractTemplateId.value)
       ? selectedContractTemplate.value
       : undefined;
-    const proposalId = (type === 'offer' || isWaybillType(type)) ? (activeWaybillProposalId.value ?? undefined) : undefined;
+    const proposalId = (type === 'offer' || type === 'retail_receipt' || type === 'service_act' || isWaybillType(type))
+      ? (activeWaybillProposalId.value ?? undefined)
+      : undefined;
     const baseDocumentId = getSelectedBaseDocumentId(type);
     const res = await ManagerOrdersService.generateManagerOrderDocument(
       props.order.id,

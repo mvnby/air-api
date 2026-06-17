@@ -142,6 +142,47 @@ async def test_non_managed_document_type_uses_legacy_template_id(sqlite_session)
 
 
 @pytest.mark.asyncio
+async def test_b2c_document_templates_are_managed_and_have_defaults(sqlite_session):
+    customer = Customer(name="Частный клиент", phone="+375291111111")
+    receipt_template = DocumentTemplate(
+        name="Товарный чек B2C",
+        doc_type="retail_receipt",
+        google_template_id="managed-receipt",
+        is_active=True,
+        is_default=True,
+    )
+    service_act_template = DocumentTemplate(
+        name="Заказ-акт B2C",
+        doc_type="service_act",
+        google_template_id="managed-service-act",
+        is_active=True,
+        is_default=True,
+    )
+    order = Order(customer=customer, status="negotiation")
+    sqlite_session.add_all([customer, receipt_template, service_act_template, order])
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+    await sqlite_session.refresh(receipt_template)
+    await sqlite_session.refresh(service_act_template)
+
+    receipt_id, receipt_google_id = await DocumentTemplateService.resolve_template_for_generation(
+        sqlite_session,
+        order_id=order.id,
+        doc_type="retail_receipt",
+    )
+    act_id, act_google_id = await DocumentTemplateService.resolve_template_for_generation(
+        sqlite_session,
+        order_id=order.id,
+        doc_type="service_act",
+    )
+
+    assert receipt_id == receipt_template.id
+    assert receipt_google_id == "managed-receipt"
+    assert act_id == service_act_template.id
+    assert act_google_id == "managed-service-act"
+
+
+@pytest.mark.asyncio
 async def test_act_template_can_be_selected_from_invoice_template_link(sqlite_session):
     customer = Customer(name="Белагробанк", phone="+375293333333", type="company")
     invoice_template = DocumentTemplate(

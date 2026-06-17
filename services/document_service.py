@@ -18,14 +18,27 @@ from services.document_template_service import DocumentTemplateService
 class DocumentService:
     """Сервис для работы с документами заказов через Google Drive"""
 
-    ALLOWED_DOC_TYPES = {"contract", "invoice", "work_order", "act", "defect_act", "offer", "tn2", "ttn1"}
-    PROPOSAL_SCOPED_DOC_TYPES = {"offer", "tn2", "ttn1"}
+    ALLOWED_DOC_TYPES = {
+        "contract",
+        "invoice",
+        "retail_receipt",
+        "service_act",
+        "work_order",
+        "act",
+        "defect_act",
+        "offer",
+        "tn2",
+        "ttn1",
+    }
+    PROPOSAL_SCOPED_DOC_TYPES = {"offer", "retail_receipt", "service_act", "tn2", "ttn1"}
     CLOSING_DOC_TYPES = {"act", "tn2", "ttn1"}
     BASE_DOC_TYPES = {"offer", "contract", "invoice"}
     DOC_NUMBER_PREFIXES = {
         "contract": "Д",
         "offer": "КП",
         "invoice": "С",
+        "retail_receipt": "ТЧ",
+        "service_act": "ЗА",
         "act": "А",
         "defect_act": "ДА",
         "work_order": "НЗ",

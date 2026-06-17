@@ -31,6 +31,40 @@ Closing document templates for acts, ТН-2 and ТТН-1 can use a neutral base 
 
 When the selected base document is an invoice, `{{invoice_number}}` and `{{invoice_date}}` are also populated. When it is a one-time order contract, `{{contract_number}}` and `{{contract_date}}` use that document.
 
+For B2C templates (`retail_receipt`, `service_act`) the base document is populated as the public offer:
+
+- `{{offer_url}}`
+- `{{base_document_type}}`
+- `{{base_document_number}}`
+- `{{base_document_date}}`
+- `{{date_text}}`
+- `{{date_day}}`
+- `{{date_month}}`
+- `{{date_year}}`
+
+## B2C Documents
+
+Product receipt templates can use:
+
+- `{{receipt_product_lines}}`
+- `{{receipt_product_qty}}`
+- `{{receipt_product_price}}`
+- `{{receipt_product_total}}`
+- `{{receipt_service_lines}}`
+- `{{receipt_service_qty}}`
+- `{{receipt_service_price}}`
+- `{{receipt_service_total}}`
+- `{{receipt_total}}`
+- `{{receipt_total_in_words}}`
+
+Service act templates can use:
+
+- `{{equipment_primary}}`
+- `{{equipment_list}}`
+- `{{service_act_lines}}`
+- `{{service_act_total}}`
+- `{{service_act_total_in_words}}`
+
 ## Additional Conditions
 
 Use `{{additional_conditions}}` in contract templates for order-specific terms. The value comes from the manager order document block.
