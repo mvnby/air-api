@@ -5,9 +5,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.security import get_current_username
-from routers.manager_operation_ids import GET_MANAGER_ORDER_DETAIL, GET_MANAGER_ORDERS, LIST_MANAGER_STALE_ORDER_STAGES
-from schemas import ManagerOrderDetailResponse, ManagerOrderListResponse, ManagerStaleWorkStageListResponse
+from routers.manager_operation_ids import (
+    EXPORT_MANAGER_ORDERS,
+    GET_MANAGER_ORDER_DETAIL,
+    GET_MANAGER_ORDERS,
+    LIST_MANAGER_STALE_ORDER_STAGES,
+)
+from schemas import (
+    ManagerOrderDetailResponse,
+    ManagerOrderExportRequest,
+    ManagerOrderListResponse,
+    ManagerOrderTransferPackage,
+    ManagerStaleWorkStageListResponse,
+)
 from services.order_service import OrderService
+from services.order_transfer_service import OrderTransferService
 
 
 router = APIRouter(prefix="/api/manager/orders", tags=["manager-orders"])
@@ -58,6 +70,18 @@ async def list_manager_stale_order_stages(
         include_unscheduled=include_unscheduled,
         limit=limit,
     )
+
+
+@router.post("/export", response_model=ManagerOrderTransferPackage, operation_id=EXPORT_MANAGER_ORDERS)
+async def export_manager_orders(
+    payload: ManagerOrderExportRequest,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await OrderTransferService.export_orders(session, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/{order_id}", response_model=ManagerOrderDetailResponse, operation_id=GET_MANAGER_ORDER_DETAIL)

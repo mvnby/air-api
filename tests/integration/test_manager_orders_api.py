@@ -19,6 +19,7 @@ from models import (
     OrderInstaller,
     OrderProductLink,
     OrderServiceLink,
+    OrderStageStatus,
     OrderStatus,
     Payment,
     PaymentCurrency,
@@ -960,6 +961,152 @@ async def test_manager_order_proposals_can_duplicate_edit_and_select(async_clien
     list_item = next(item for item in list_resp.json()["items"] if item["id"] == order.id)
     assert list_item["total_amount"] == 1100
     assert list_item["margin"] == 340
+
+
+@pytest.mark.asyncio
+async def test_manager_order_export_preview_and_import_creates_new_order(async_client, db):
+    customer = Customer(name="Transfer Customer", phone="+375291234000", type=CustomerType.individual)
+    product = Product(title="Transfer Product", slug="transfer-product", price=1800, area=25)
+    service = Service(title="Transfer Service", slug="transfer-service", base_price=250)
+    installer = Installer(name="Transfer Installer", is_active=True)
+    db.add(customer)
+    db.add(product)
+    db.add(service)
+    db.add(installer)
+    await db.commit()
+    await db.refresh(customer)
+    await db.refresh(product)
+    await db.refresh(service)
+    await db.refresh(installer)
+
+    order = Order(
+        customer_id=customer.id,
+        status=OrderStatus.NEGOTIATION,
+        title="Переносимый заказ",
+        comment="Собран на локальном сервере",
+    )
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+    patch_resp = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={
+            "products": [{"product_id": product.id, "quantity": 2, "price": 1700, "cost": 1100}],
+            "services": [{"service_id": service.id, "title": service.title, "quantity": 1, "price": 250, "cost": 100}],
+        },
+        headers=headers,
+    )
+    assert patch_resp.status_code == 200, patch_resp.text
+
+    db.add(Payment(order_id=order.id, amount=500, currency=PaymentCurrency.BYN, comment="Аванс"))
+    db.add(
+        OrderWorkStage(
+            order_id=order.id,
+            name="Монтаж",
+            status=OrderStageStatus.PLANNED,
+            installer_id=installer.id,
+            manager_comment="Проверить перенос",
+        )
+    )
+    await db.commit()
+
+    export_resp = await async_client.post(
+        "/api/manager/orders/export",
+        json={"order_ids": [order.id], "include_payments": True, "include_work_stages": True},
+        headers=headers,
+    )
+    assert export_resp.status_code == 200, export_resp.text
+    package = export_resp.json()
+    assert package["orders"][0]["source_id"] == order.id
+    assert package["orders"][0]["payments"][0]["amount"] == 500
+
+    preview_resp = await async_client.post(
+        "/api/manager/orders/import/preview",
+        json={"package": package},
+        headers=headers,
+    )
+    assert preview_resp.status_code == 200, preview_resp.text
+    preview = preview_resp.json()
+    assert preview["orders_count"] == 1
+    assert preview["products_missing"] == 0
+    assert preview["can_import"] is True
+    assert preview["customers"][0]["status"] == "matched"
+
+    import_resp = await async_client.post(
+        "/api/manager/orders/import",
+        json={"package": package},
+        headers=headers,
+    )
+    assert import_resp.status_code == 200, import_resp.text
+    imported_id = import_resp.json()["created_order_ids"][0]
+    assert imported_id != order.id
+
+    detail_resp = await async_client.get(f"/api/manager/orders/{imported_id}", headers=headers)
+    assert detail_resp.status_code == 200, detail_resp.text
+    detail = detail_resp.json()
+    assert detail["title"] == "Переносимый заказ"
+    assert detail["customer"]["id"] == customer.id
+    assert detail["product_lines"][0]["product_id"] == product.id
+    assert detail["product_lines"][0]["quantity"] == 2
+    assert detail["service_lines"][0]["service_id"] == service.id
+    assert detail["payments"][0]["amount"] == 500
+    assert detail["work_stages"][0]["name"] == "Монтаж"
+    assert detail["total_amount"] == 3650
+
+
+@pytest.mark.asyncio
+async def test_manager_order_import_preview_blocks_missing_products(async_client, db):
+    customer = Customer(name="Transfer Missing", phone="+375291234001", type=CustomerType.individual)
+    product = Product(title="Existing Transfer Product", slug="existing-transfer-product", price=900, area=20)
+    db.add(customer)
+    db.add(product)
+    await db.commit()
+    await db.refresh(customer)
+    await db.refresh(product)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+    patch_resp = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={"products": [{"product_id": product.id, "quantity": 1, "price": 900, "cost": 600}], "services": []},
+        headers=headers,
+    )
+    assert patch_resp.status_code == 200, patch_resp.text
+
+    export_resp = await async_client.post(
+        "/api/manager/orders/export",
+        json={"order_ids": [order.id]},
+        headers=headers,
+    )
+    assert export_resp.status_code == 200, export_resp.text
+    package = export_resp.json()
+    product_ref = package["orders"][0]["proposals"][0]["product_lines"][0]["product"]
+    product_ref["title"] = "Definitely Missing Product"
+    product_ref["slug"] = "definitely-missing-product"
+    product_ref["source_url"] = None
+
+    preview_resp = await async_client.post(
+        "/api/manager/orders/import/preview",
+        json={"package": package},
+        headers=headers,
+    )
+    assert preview_resp.status_code == 200, preview_resp.text
+    preview = preview_resp.json()
+    assert preview["products_missing"] == 1
+    assert preview["can_import"] is False
+
+    import_resp = await async_client.post(
+        "/api/manager/orders/import",
+        json={"package": package},
+        headers=headers,
+    )
+    assert import_resp.status_code == 400
 
 
 @pytest.mark.asyncio

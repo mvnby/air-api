@@ -7107,6 +7107,52 @@
         }
       }
     },
+    "/api/manager/orders/export": {
+      "post": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Export Manager Orders",
+        "operationId": "export_manager_orders",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerOrderExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderTransferPackage-Output"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/orders/{order_id}": {
       "get": {
         "tags": [
@@ -7350,6 +7396,98 @@
             }
           }
         }
+      }
+    },
+    "/api/manager/orders/import/preview": {
+      "post": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Preview Import Manager Orders",
+        "operationId": "preview_import_manager_orders",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerOrderImportPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderImportPreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/orders/import": {
+      "post": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Import Manager Orders",
+        "operationId": "import_manager_orders",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerOrderImportCommitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderImportCommitResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       }
     },
     "/api/manager/orders/{order_id}/proposals": {
@@ -22864,6 +23002,282 @@
         ],
         "title": "ManagerOrderDocumentResponse"
       },
+      "ManagerOrderExportRequest": {
+        "properties": {
+          "order_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Order Ids"
+          },
+          "include_payments": {
+            "type": "boolean",
+            "title": "Include Payments",
+            "default": true
+          },
+          "include_work_stages": {
+            "type": "boolean",
+            "title": "Include Work Stages",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "ManagerOrderExportRequest"
+      },
+      "ManagerOrderImportCommitRequest": {
+        "properties": {
+          "package": {
+            "$ref": "#/components/schemas/ManagerOrderTransferPackage-Input"
+          }
+        },
+        "type": "object",
+        "required": [
+          "package"
+        ],
+        "title": "ManagerOrderImportCommitRequest"
+      },
+      "ManagerOrderImportCommitResponse": {
+        "properties": {
+          "created_order_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Created Order Ids"
+          },
+          "created_count": {
+            "type": "integer",
+            "title": "Created Count"
+          },
+          "skipped_payments": {
+            "type": "integer",
+            "title": "Skipped Payments",
+            "default": 0
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "created_count"
+        ],
+        "title": "ManagerOrderImportCommitResponse"
+      },
+      "ManagerOrderImportCustomerMatch": {
+        "properties": {
+          "source_order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Order Id"
+          },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
+          "matched_customer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Customer Id"
+          },
+          "matched_customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Customer Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ManagerOrderImportCustomerMatch"
+      },
+      "ManagerOrderImportPreviewRequest": {
+        "properties": {
+          "package": {
+            "$ref": "#/components/schemas/ManagerOrderTransferPackage-Input"
+          }
+        },
+        "type": "object",
+        "required": [
+          "package"
+        ],
+        "title": "ManagerOrderImportPreviewRequest"
+      },
+      "ManagerOrderImportPreviewResponse": {
+        "properties": {
+          "orders_count": {
+            "type": "integer",
+            "title": "Orders Count"
+          },
+          "products_total": {
+            "type": "integer",
+            "title": "Products Total"
+          },
+          "products_matched": {
+            "type": "integer",
+            "title": "Products Matched"
+          },
+          "products_missing": {
+            "type": "integer",
+            "title": "Products Missing"
+          },
+          "customers": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderImportCustomerMatch"
+            },
+            "type": "array",
+            "title": "Customers"
+          },
+          "products": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderImportProductMatch"
+            },
+            "type": "array",
+            "title": "Products"
+          },
+          "can_import": {
+            "type": "boolean",
+            "title": "Can Import"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "orders_count",
+          "products_total",
+          "products_matched",
+          "products_missing",
+          "can_import"
+        ],
+        "title": "ManagerOrderImportPreviewResponse"
+      },
+      "ManagerOrderImportProductMatch": {
+        "properties": {
+          "source_order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Order Id"
+          },
+          "product_title": {
+            "type": "string",
+            "title": "Product Title"
+          },
+          "product_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Slug"
+          },
+          "matched_product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Product Id"
+          },
+          "matched_product_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Product Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_title",
+          "status"
+        ],
+        "title": "ManagerOrderImportProductMatch"
+      },
       "ManagerOrderListItemResponse": {
         "properties": {
           "id": {
@@ -23420,6 +23834,1298 @@
           "price"
         ],
         "title": "ManagerOrderServiceLinePayload"
+      },
+      "ManagerOrderTransferCustomer": {
+        "properties": {
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "default": "individual"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "phone": {
+            "type": "string",
+            "title": "Phone",
+            "default": ""
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "full_legal_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Legal Name"
+          },
+          "inn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inn"
+          },
+          "legal_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Address"
+          },
+          "actual_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Address"
+          },
+          "bank_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bank Name"
+          },
+          "bic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bic"
+          },
+          "iban": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iban"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ManagerOrderTransferCustomer"
+      },
+      "ManagerOrderTransferCustomerBranch": {
+        "properties": {
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "delivery_address": {
+            "type": "string",
+            "title": "Delivery Address"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "delivery_address"
+        ],
+        "title": "ManagerOrderTransferCustomerBranch"
+      },
+      "ManagerOrderTransferOrder-Input": {
+        "properties": {
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "negotiation"
+          },
+          "lead_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source",
+            "default": "manager"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "workflow_type": {
+            "type": "string",
+            "title": "Workflow Type",
+            "default": "sales_installation"
+          },
+          "repair_meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Repair Meta"
+          },
+          "manager_labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Manager Labels"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "next_followup_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Followup Date"
+          },
+          "measurement_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measurement Date"
+          },
+          "installation_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Date"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "delivery_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Address"
+          },
+          "document_role_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role Type"
+          },
+          "additional_conditions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Conditions"
+          },
+          "closing_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closing Result"
+          },
+          "reject_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reject Reason"
+          },
+          "is_on_hold": {
+            "type": "boolean",
+            "title": "Is On Hold",
+            "default": false
+          },
+          "on_hold_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Hold Reason"
+          },
+          "measurement_required": {
+            "type": "boolean",
+            "title": "Measurement Required",
+            "default": false
+          },
+          "measurement_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measurement Result"
+          },
+          "proposal_status": {
+            "type": "string",
+            "title": "Proposal Status",
+            "default": "draft"
+          },
+          "proposal_sent_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Sent At"
+          },
+          "equipment_status": {
+            "type": "string",
+            "title": "Equipment Status",
+            "default": "pending"
+          },
+          "standard_install_kit_issued": {
+            "type": "boolean",
+            "title": "Standard Install Kit Issued",
+            "default": false
+          },
+          "target_currency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentCurrency"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target_currency_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Currency Amount"
+          },
+          "customer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerOrderTransferCustomer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "customer_branch": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerOrderTransferCustomerBranch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderTransferProposal-Input"
+            },
+            "type": "array",
+            "title": "Proposals"
+          },
+          "payments": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderTransferPayment"
+            },
+            "type": "array",
+            "title": "Payments"
+          },
+          "work_stages": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderTransferWorkStage"
+            },
+            "type": "array",
+            "title": "Work Stages"
+          }
+        },
+        "type": "object",
+        "title": "ManagerOrderTransferOrder"
+      },
+      "ManagerOrderTransferOrder-Output": {
+        "properties": {
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "negotiation"
+          },
+          "lead_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source",
+            "default": "manager"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "workflow_type": {
+            "type": "string",
+            "title": "Workflow Type",
+            "default": "sales_installation"
+          },
+          "repair_meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Repair Meta"
+          },
+          "manager_labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Manager Labels"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "next_followup_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Followup Date"
+          },
+          "measurement_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measurement Date"
+          },
+          "installation_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Date"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "delivery_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Address"
+          },
+          "document_role_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role Type"
+          },
+          "additional_conditions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Conditions"
+          },
+          "closing_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closing Result"
+          },
+          "reject_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reject Reason"
+          },
+          "is_on_hold": {
+            "type": "boolean",
+            "title": "Is On Hold",
+            "default": false
+          },
+          "on_hold_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Hold Reason"
+          },
+          "measurement_required": {
+            "type": "boolean",
+            "title": "Measurement Required",
+            "default": false
+          },
+          "measurement_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measurement Result"
+          },
+          "proposal_status": {
+            "type": "string",
+            "title": "Proposal Status",
+            "default": "draft"
+          },
+          "proposal_sent_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Sent At"
+          },
+          "equipment_status": {
+            "type": "string",
+            "title": "Equipment Status",
+            "default": "pending"
+          },
+          "standard_install_kit_issued": {
+            "type": "boolean",
+            "title": "Standard Install Kit Issued",
+            "default": false
+          },
+          "target_currency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentCurrency"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target_currency_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Currency Amount"
+          },
+          "customer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerOrderTransferCustomer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "customer_branch": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerOrderTransferCustomerBranch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderTransferProposal-Output"
+            },
+            "type": "array",
+            "title": "Proposals"
+          },
+          "payments": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderTransferPayment"
+            },
+            "type": "array",
+            "title": "Payments"
+          },
+          "work_stages": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderTransferWorkStage"
+            },
+            "type": "array",
+            "title": "Work Stages"
+          }
+        },
+        "type": "object",
+        "title": "ManagerOrderTransferOrder"
+      },
+      "ManagerOrderTransferPackage-Input": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "default": 1
+          },
+          "exported_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Exported At"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": "manager"
+          },
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderTransferOrder-Input"
+            },
+            "type": "array",
+            "title": "Orders"
+          }
+        },
+        "type": "object",
+        "required": [
+          "exported_at"
+        ],
+        "title": "ManagerOrderTransferPackage"
+      },
+      "ManagerOrderTransferPackage-Output": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "default": 1
+          },
+          "exported_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Exported At"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": "manager"
+          },
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderTransferOrder-Output"
+            },
+            "type": "array",
+            "title": "Orders"
+          }
+        },
+        "type": "object",
+        "required": [
+          "exported_at"
+        ],
+        "title": "ManagerOrderTransferPackage"
+      },
+      "ManagerOrderTransferPayment": {
+        "properties": {
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "amount": {
+            "type": "number",
+            "title": "Amount"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/PaymentCurrency",
+            "default": "BYN"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Date"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "default": "prepayment"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "amount",
+          "date"
+        ],
+        "title": "ManagerOrderTransferPayment"
+      },
+      "ManagerOrderTransferProductLine": {
+        "properties": {
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "product": {
+            "$ref": "#/components/schemas/ManagerOrderTransferProductRef"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "price": {
+            "type": "integer",
+            "title": "Price"
+          },
+          "cost": {
+            "type": "integer",
+            "title": "Cost",
+            "default": 0
+          },
+          "is_installation_included": {
+            "type": "boolean",
+            "title": "Is Installation Included",
+            "default": false
+          },
+          "installation_price": {
+            "type": "integer",
+            "title": "Installation Price",
+            "default": 0
+          },
+          "installation_details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Details"
+          },
+          "logistics_components": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OrderProductLogisticsComponent"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logistics Components"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product",
+          "quantity",
+          "price"
+        ],
+        "title": "ManagerOrderTransferProductLine"
+      },
+      "ManagerOrderTransferProductRef": {
+        "properties": {
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "ManagerOrderTransferProductRef"
+      },
+      "ManagerOrderTransferProposal-Input": {
+        "properties": {
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "default": "\u041e\u0441\u043d\u043e\u0432\u043d\u043e\u0435"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "draft"
+          },
+          "is_selected": {
+            "type": "boolean",
+            "title": "Is Selected",
+            "default": false
+          },
+          "is_archived": {
+            "type": "boolean",
+            "title": "Is Archived",
+            "default": false
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order",
+            "default": 0
+          },
+          "product_lines": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderTransferProductLine"
+            },
+            "type": "array",
+            "title": "Product Lines"
+          },
+          "service_lines": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderTransferServiceLine"
+            },
+            "type": "array",
+            "title": "Service Lines"
+          }
+        },
+        "type": "object",
+        "title": "ManagerOrderTransferProposal"
+      },
+      "ManagerOrderTransferProposal-Output": {
+        "properties": {
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "default": "\u041e\u0441\u043d\u043e\u0432\u043d\u043e\u0435"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "draft"
+          },
+          "is_selected": {
+            "type": "boolean",
+            "title": "Is Selected",
+            "default": false
+          },
+          "is_archived": {
+            "type": "boolean",
+            "title": "Is Archived",
+            "default": false
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order",
+            "default": 0
+          },
+          "product_lines": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderTransferProductLine"
+            },
+            "type": "array",
+            "title": "Product Lines"
+          },
+          "service_lines": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderTransferServiceLine"
+            },
+            "type": "array",
+            "title": "Service Lines"
+          }
+        },
+        "type": "object",
+        "title": "ManagerOrderTransferProposal"
+      },
+      "ManagerOrderTransferServiceLine": {
+        "properties": {
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "service": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerOrderTransferServiceRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "price": {
+            "type": "integer",
+            "title": "Price"
+          },
+          "cost": {
+            "type": "integer",
+            "title": "Cost",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "quantity",
+          "price"
+        ],
+        "title": "ManagerOrderTransferServiceLine"
+      },
+      "ManagerOrderTransferServiceRef": {
+        "properties": {
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "ManagerOrderTransferServiceRef"
+      },
+      "ManagerOrderTransferWorkStage": {
+        "properties": {
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "planned"
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time"
+          },
+          "end_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Time"
+          },
+          "installer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installer Name"
+          },
+          "manager_comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manager Comment"
+          },
+          "installer_report": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installer Report"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ManagerOrderTransferWorkStage"
       },
       "ManagerOrderUpdatePayload": {
         "properties": {

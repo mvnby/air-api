@@ -8,12 +8,15 @@ const props = defineProps<{
   order: ManagerOrderListItemResponse;
   segment: Segment;
   nested?: boolean;
+  selectable?: boolean;
+  selected?: boolean;
 }>();
 
 const emit = defineEmits<{
   open: [orderId: number];
   generate: [payload: { orderId: number; docType: string }];
   renameOrder: [payload: { orderId: number; title: string | null }];
+  toggleSelect: [payload: { orderId: number; selected: boolean }];
 }>();
 
 const customerName = (order: ManagerOrderListItemResponse) => getOrderCustomerName(order, props.segment);
@@ -21,6 +24,16 @@ const customerName = (order: ManagerOrderListItemResponse) => getOrderCustomerNa
 
 <template>
   <tr class="border-t border-gray-100" :class="[isOverdue(order) ? 'bg-red-50' : '', nested ? 'bg-slate-50/60' : '']">
+    <td v-if="selectable" class="w-10 px-3 py-3 align-top">
+      <input
+        type="checkbox"
+        class="mt-1 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600"
+        :checked="selected"
+        :aria-label="`Выбрать заказ #${order.id}`"
+        @click.stop
+        @change="emit('toggleSelect', { orderId: order.id, selected: ($event.target as HTMLInputElement).checked })"
+      />
+    </td>
     <td class="px-3 py-3">
       <div class="flex min-w-0 items-start gap-2">
         <span v-if="nested" class="mt-1 h-2 w-2 shrink-0 rounded-full bg-slate-300" />
