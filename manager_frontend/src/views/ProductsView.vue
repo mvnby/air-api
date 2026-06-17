@@ -14,6 +14,7 @@ import {
     Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images,
     Settings, ArrowLeft, LayoutGrid, List, Package, Link2, ExternalLink,
     Star, SlidersHorizontal, X, Trash2, Download, Crop, Wand2, MoreHorizontal, ClipboardPaste,
+    Plus, Copy,
 } from 'lucide-vue-next';
 import BulkSpecsModal from '../components/BulkSpecsModal.vue';
 import BulkCompatibilityModal from '../components/BulkCompatibilityModal.vue';
@@ -32,6 +33,7 @@ const loading = ref(false);
 const showModal = ref(false);
 const selectedProduct = ref<Product | null>(null);
 const editingProduct = ref<Product | null>(null);
+const productEditorMode = ref<'create' | 'edit' | 'duplicate'>('edit');
 const showEditModal = ref(false);
 const modalMode = ref<'single' | 'bulk'>('single');
 const imageSearchResults = ref<any[]>([]);
@@ -807,6 +809,19 @@ const openSearchModal = (product: Product) => {
 
 const openEditModal = (product: Product) => {
     editingProduct.value = product;
+    productEditorMode.value = 'edit';
+    showEditModal.value = true;
+};
+
+const openCreateProductModal = () => {
+    editingProduct.value = null;
+    productEditorMode.value = 'create';
+    showEditModal.value = true;
+};
+
+const openDuplicateProductModal = (product: Product) => {
+    editingProduct.value = product;
+    productEditorMode.value = 'duplicate';
     showEditModal.value = true;
 };
 
@@ -818,6 +833,11 @@ const navigateBackFromProducts = () => {
 
 const handleEditSuccess = async () => {
     await loadProducts();
+    setToast(productEditorMode.value === 'create'
+        ? 'Товар создан'
+        : productEditorMode.value === 'duplicate'
+            ? 'Дубликат товара создан'
+            : 'Товар обновлен');
 };
 
 const handleImageSearch = async () => {
@@ -1520,8 +1540,16 @@ watchDebounced(
               Выбрать все
           </button>
           <button
-            @click="showOnlinerImportModal = true"
+            @click="openCreateProductModal"
             class="flex items-center gap-1.5 px-3 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+            title="Создать товар вручную"
+          >
+            <Plus class="w-4 h-4" />
+            Создать
+          </button>
+          <button
+            @click="showOnlinerImportModal = true"
+            class="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-lg text-sm font-medium transition-colors shadow-sm"
             title="Импорт товаров"
           >
             <span class="material-icons-round text-base leading-none">cloud_download</span>
@@ -1788,6 +1816,9 @@ watchDebounced(
                     <button @click="openEditModal(product)" class="bg-white text-gray-900 px-4 py-2 rounded-full flex items-center gap-2 hover:bg-gray-100 text-sm font-medium transition-colors w-36 justify-center">
                         <Settings class="w-4 h-4 text-teal-600" /> Изменить
                     </button>
+                    <button @click="openDuplicateProductModal(product)" class="bg-white text-gray-900 px-4 py-2 rounded-full flex items-center gap-2 hover:bg-gray-100 text-sm font-medium transition-colors w-36 justify-center">
+                        <Copy class="w-4 h-4 text-teal-600" /> Дублировать
+                    </button>
                     <button @click="copyPublicProductLink(product)" class="bg-white text-gray-900 px-4 py-2 rounded-full flex items-center gap-2 hover:bg-gray-100 text-sm font-medium transition-colors w-36 justify-center">
                         <Link2 class="w-4 h-4 text-teal-600" /> Ссылка
                     </button>
@@ -1934,6 +1965,9 @@ watchDebounced(
                   </button>
                   <button @click="openEditModal(product)" class="p-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" title="Изменить">
                     <Settings class="w-4 h-4" />
+                  </button>
+                  <button @click="openDuplicateProductModal(product)" class="p-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" title="Дублировать">
+                    <Copy class="w-4 h-4" />
                   </button>
                   <button @click.stop="deleteProduct(product)" :disabled="isDeletingProduct === product.id" class="p-2 hover:text-red-600 transition-colors" title="Удалить">
                     <span class="material-icons-round text-[18px]">delete</span>
@@ -2523,6 +2557,7 @@ watchDebounced(
     <ProductEditModal 
         v-model="showEditModal"
         :product="editingProduct"
+        :mode="productEditorMode"
         @success="handleEditSuccess"
     />
 

@@ -28,6 +28,8 @@ ARCHIVE_MANAGER_CUSTOMER_CONTRACT = "archive_manager_customer_contract"
 DELETE_MANAGER_CUSTOMER_CONTRACT = "delete_manager_customer_contract"
 PATCH_MANAGER_CUSTOMER = "patch_manager_customer"
 DELETE_MANAGER_CUSTOMER = "delete_manager_customer"
+CREATE_MANAGER_PRODUCT = "create_manager_product"
+DUPLICATE_MANAGER_PRODUCT = "duplicate_manager_product"
 UPDATE_PRODUCT = "update_product"
 DELETE_MANAGER_PRODUCT = "delete_manager_product"
 BULK_ROUND_PRICE = "bulk_round_price"
@@ -246,6 +248,8 @@ ALL_MANAGER_OPERATION_IDS = (
     DELETE_MANAGER_CUSTOMER_CONTRACT,
     PATCH_MANAGER_CUSTOMER,
     DELETE_MANAGER_CUSTOMER,
+    CREATE_MANAGER_PRODUCT,
+    DUPLICATE_MANAGER_PRODUCT,
     UPDATE_PRODUCT,
     DELETE_MANAGER_PRODUCT,
     BULK_ROUND_PRICE,

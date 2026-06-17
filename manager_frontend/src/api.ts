@@ -17,6 +17,8 @@ import {
     SystemService,
     ApiService,
     type Body_upload_media_assets,
+    type ProductCreate,
+    type ProductDuplicatePayload,
     type ProductUpdate,
     type ManagerCustomerBranchCreatePayload,
     type ManagerCustomerBranchUpdatePayload,
@@ -108,6 +110,7 @@ OpenAPI.WITH_CREDENTIALS = true;
 export type Segment = 'b2c' | 'b2b';
 export type DashboardView = 'kanban' | 'list';
 export { type Product, type DashboardStatsResponse, type DashboardTouchpoint };
+export type { ProductCreate, ProductDuplicatePayload, ProductUpdate };
 export type { LeadsInboxItemResponse };
 export type { ManagerGoogleAuthStatusResponse, ManagerGoogleAuthUrlResponse };
 export type { ManagerStaffCreatePayload, ManagerStaffResponse, ManagerStaffUpdatePayload, TelegramLoginPayload };
@@ -778,6 +781,14 @@ export const api = {
 
     async updateProduct(id: number, data: ProductUpdate) {
         return await ManagerService.updateProduct(id, data);
+    },
+
+    async createProduct(data: ProductCreate) {
+        return await ManagerService.createManagerProduct(data);
+    },
+
+    async duplicateProduct(id: number, data: ProductDuplicatePayload) {
+        return await ManagerService.duplicateManagerProduct(id, data);
     },
 
     async deleteProduct(id: number) {

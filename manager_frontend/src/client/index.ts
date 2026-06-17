@@ -241,6 +241,8 @@ export type { PaymentResponse } from './models/PaymentResponse';
 export type { ProductAvailabilityLeadPayload } from './models/ProductAvailabilityLeadPayload';
 export type { ProductAvailabilityLeadResponse } from './models/ProductAvailabilityLeadResponse';
 export type { ProductBrandResponse } from './models/ProductBrandResponse';
+export type { ProductCreate } from './models/ProductCreate';
+export type { ProductDuplicatePayload } from './models/ProductDuplicatePayload';
 export type { ProductImageCropPayload } from './models/ProductImageCropPayload';
 export type { ProductImageResponse } from './models/ProductImageResponse';
 export type { ProductImageVariantBatchProcessResponse } from './models/ProductImageVariantBatchProcessResponse';

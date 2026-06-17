@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
-import { api, type Product, type ManagerBrand } from '../api';
+import { api, type Product, type ManagerBrand, type ProductCreate, type ProductDuplicatePayload, type ProductUpdate } from '../api';
 import { X, Save, Plus, Trash2, Edit3, Globe, Hash, Tag } from 'lucide-vue-next';
 import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
 import SpecKeyCombobox from './SpecKeyCombobox.vue';
@@ -44,10 +44,15 @@ interface ProductLogisticsComponent {
     kind: LogisticsComponentKind;
 }
 
-const props = defineProps<{
+type ProductEditorMode = 'create' | 'edit' | 'duplicate';
+
+const props = withDefaults(defineProps<{
     modelValue: boolean;
     product: Product | null;
-}>();
+    mode?: ProductEditorMode;
+}>(), {
+    mode: 'edit',
+});
 
 const emit = defineEmits<{
     (e: 'update:modelValue', value: boolean): void;
@@ -58,7 +63,7 @@ const form = ref<any>({
     title: '',
     slug: '',
     price: 0,
-    old_price: 0,
+    old_price: null,
     is_published: true,
 });
 
@@ -105,6 +110,25 @@ const compatibilityInfo = ref('');
 const creatingBrand = ref(false);
 const newBrandTitle = ref('');
 const logisticsComponents = ref<ProductLogisticsComponent[]>([]);
+const isCreateMode = computed(() => props.mode === 'create');
+const isDuplicateMode = computed(() => props.mode === 'duplicate');
+const isPersistedProduct = computed(() => props.mode === 'edit' && Boolean(props.product?.id));
+const modalTitle = computed(() => {
+    if (isCreateMode.value) return 'Создание товара';
+    if (isDuplicateMode.value) return 'Дублирование товара';
+    return 'Редактирование товара';
+});
+const modalSubtitle = computed(() => {
+    if (isCreateMode.value) return 'Новая ручная карточка';
+    if (isDuplicateMode.value) return props.product?.id ? `Донор: #${props.product.id}` : 'Донор не выбран';
+    return props.product?.id ? `ID: ${props.product.id}` : 'Товар не выбран';
+});
+const saveButtonText = computed(() => {
+    if (loading.value) return 'Сохраняем...';
+    if (isCreateMode.value) return 'Создать товар';
+    if (isDuplicateMode.value) return 'Создать дубликат';
+    return 'Сохранить';
+});
 
 const normalizeText = (value: unknown): string => String(value ?? '').toLowerCase().replace(/ё/g, 'е').trim();
 const normalizeBrandToken = (value: unknown): string => normalizeText(value).replace(/[^a-z0-9а-я]/g, '');
@@ -907,82 +931,107 @@ const isCurrentProductMulti = computed<boolean>(() => {
     );
 });
 
-watch(() => props.modelValue, async (val) => {
-    if (val && props.product) {
-        formMessage.value = '';
-        formServerErrors.value = {};
-        form.value = {
-            title: props.product.title,
-            slug: props.product.slug,
-            price: props.product.price,
-            old_price: props.product.old_price,
-            is_published: props.product.is_published,
-        };
-        
-        // Convert specs object to array
-        const s = props.product.specs || {};
-        compatibilityIndoorSlugs.value = parseSlugList((s as any)[COMPATIBLE_INDOOR_KEY]);
-        compatibilityOutdoorSlugs.value = parseSlugList((s as any)[COMPATIBLE_OUTDOOR_KEY]);
-        logisticsComponents.value = parseLogisticsComponents((s as any)[LOGISTICS_COMPONENTS_KEY]);
-        multiComboRules.value = parseMultiComboRules((s as any)[MULTI_COMBO_RULES_KEY]);
-        multiCompatMode.value = String((s as any)[MULTI_COMPAT_MODE_KEY] || 'free_match') === 'strict'
-            ? 'strict'
-            : 'free_match';
-        capacityCombosInput.value = parseCapacityCombos((s as any)[MULTI_CAPACITY_COMBOS_KEY]).join(', ');
-        specs.value = Object.entries(s)
+const resetEditorState = () => {
+    formMessage.value = '';
+    formServerErrors.value = {};
+    specs.value = [];
+    manuals.value = [];
+    compatibilityIndoorSlugs.value = [];
+    compatibilityOutdoorSlugs.value = [];
+    logisticsComponents.value = [];
+    multiComboRules.value = [];
+    multiCompatMode.value = 'free_match';
+    capacityCombosInput.value = '';
+    compatibilityQuery.value = '';
+    compatibilityResults.value = [];
+    compatibilityInfo.value = '';
+    selectedTagIds.value = new Set();
+    tagSearchQuery.value = '';
+    selectedBrandEntityId.value = null;
+    vitebskQty.value = 0;
+    supplierOffers.value = [];
+};
+
+const getDuplicateSlug = (product: Product | null): string => {
+    const sourceSlug = String(product?.slug || '').trim();
+    if (sourceSlug) return `${sourceSlug}-copy`;
+    return '';
+};
+
+const initializeEditor = async () => {
+    resetEditorState();
+    const source = props.product;
+    form.value = {
+        title: source?.title || '',
+        slug: isDuplicateMode.value ? getDuplicateSlug(source) : (source?.slug || ''),
+        price: Number(source?.price || 0),
+        old_price: source?.old_price ?? null,
+        is_published: source?.is_published ?? true,
+    };
+
+    const s = source?.specs || {};
+    compatibilityIndoorSlugs.value = parseSlugList((s as any)[COMPATIBLE_INDOOR_KEY]);
+    compatibilityOutdoorSlugs.value = parseSlugList((s as any)[COMPATIBLE_OUTDOOR_KEY]);
+    logisticsComponents.value = parseLogisticsComponents((s as any)[LOGISTICS_COMPONENTS_KEY]);
+    multiComboRules.value = parseMultiComboRules((s as any)[MULTI_COMBO_RULES_KEY]);
+    multiCompatMode.value = String((s as any)[MULTI_COMPAT_MODE_KEY] || 'free_match') === 'strict'
+        ? 'strict'
+        : 'free_match';
+    capacityCombosInput.value = parseCapacityCombos((s as any)[MULTI_CAPACITY_COMBOS_KEY]).join(', ');
+    specs.value = Object.entries(s)
         .filter(([key]) => !COMPATIBILITY_KEYS.has(key))
         .map(([key, value]) => {
             let sVal = String(value);
             const config = specsTranslations[key];
             if (config?.type === 'number' && config.unit) {
-                // remove unit, handle case and spaces
                 sVal = sVal.replace(new RegExp(config.unit + '$', 'i'), '').trim();
                 const match = sVal.match(/^-?\d*[.,]?\d*/);
                 sVal = match && match[0] ? match[0].replace(',', '.') : '';
             }
             return { key, value: sVal };
         });
-        manuals.value = (((props.product as any).manuals || []) as Array<any>)
-            .map((item) => ({
-                title: String(item?.title || 'Инструкция').trim() || 'Инструкция',
-                url: String(item?.url || '').trim(),
-            }))
-            .filter((item) => Boolean(item.url));
-        compatibilityQuery.value = '';
-        compatibilityResults.value = [];
-        compatibilityInfo.value = '';
-        
-        // Load tags
-        const productTags = (props.product as any).tags || [];
-        selectedTagIds.value = new Set(productTags.map((t: any) => t.id));
-        tagSearchQuery.value = '';
-        selectedBrandEntityId.value = null;
-        
-        if (knownKeys.value.length === 0) fetchKeys();
-        await Promise.all([fetchTags(), fetchBrands()]);
+    manuals.value = (((source as any)?.manuals || []) as Array<any>)
+        .map((item) => ({
+            title: String(item?.title || 'Инструкция').trim() || 'Инструкция',
+            url: String(item?.url || '').trim(),
+        }))
+        .filter((item) => Boolean(item.url));
 
-        const explicitBrandId = Number((props.product as any)?.brand_id || 0);
-        if (Number.isFinite(explicitBrandId) && explicitBrandId > 0) {
-            selectedBrandEntityId.value = explicitBrandId;
+    const productTags = (source as any)?.tags || [];
+    selectedTagIds.value = new Set(productTags.map((t: any) => t.id));
+
+    if (knownKeys.value.length === 0) fetchKeys();
+    await Promise.all([fetchTags(), fetchBrands()]);
+
+    const explicitBrandId = Number((source as any)?.brand_id || 0);
+    if (Number.isFinite(explicitBrandId) && explicitBrandId > 0) {
+        selectedBrandEntityId.value = explicitBrandId;
+    } else {
+        const byTag = selectedBrandTag.value;
+        if (byTag) {
+            const matched = managerBrands.value.find((brand) => (
+                normalizeText(brand.slug) === normalizeText(byTag.slug)
+                || normalizeText(brand.title) === normalizeText(byTag.title)
+            ));
+            selectedBrandEntityId.value = matched?.id ?? null;
         } else {
-            const byTag = selectedBrandTag.value;
-            if (byTag) {
-                const matched = managerBrands.value.find((brand) => (
-                    normalizeText(brand.slug) === normalizeText(byTag.slug)
-                    || normalizeText(brand.title) === normalizeText(byTag.title)
-                ));
+            const bySpec = getCurrentEditedBrandFromSpecs();
+            if (bySpec) {
+                const matched = managerBrands.value.find((brand) => normalizeText(brand.title) === normalizeText(bySpec));
                 selectedBrandEntityId.value = matched?.id ?? null;
-            } else {
-                const bySpec = getCurrentEditedBrandFromSpecs();
-                if (bySpec) {
-                    const matched = managerBrands.value.find((brand) => normalizeText(brand.title) === normalizeText(bySpec));
-                    selectedBrandEntityId.value = matched?.id ?? null;
-                }
             }
         }
+    }
 
-        vitebskQty.value = Number((props.product as any).vitebsk_qty || 0);
+    if (isPersistedProduct.value) {
+        vitebskQty.value = Number((source as any)?.vitebsk_qty || 0);
         loadSupplierOffers();
+    }
+};
+
+watch(() => [props.modelValue, props.mode, props.product?.id] as const, async ([val]) => {
+    if (val) {
+        await initializeEditor();
     }
 });
 
@@ -1019,7 +1068,7 @@ const saveLocalStock = async () => {
 };
 
 const save = async () => {
-    if (!props.product) return;
+    if ((isDuplicateMode.value || props.mode === 'edit') && !props.product) return;
     
     // Process specs back to object
     const validSpecs: Record<string, any> = {};
@@ -1093,14 +1142,27 @@ const save = async () => {
                 source: 'manager',
             }));
 
-        const updateData = {
+        const updateData: ProductUpdate = {
             ...form.value,
             brand_id: selectedBrandEntityId.value ?? null,
             specs: validSpecs,
             tag_ids: Array.from(selectedTagIds.value),
             manuals: validManuals,
         };
-        await api.updateProduct(props.product.id, updateData);
+        if (isCreateMode.value) {
+            await api.createProduct(updateData as ProductCreate);
+        } else if (isDuplicateMode.value) {
+            const duplicateData: ProductDuplicatePayload = {
+                ...updateData,
+                copy_gallery: true,
+                copy_manuals: true,
+                copy_tags: false,
+                make_unpublished: false,
+            };
+            await api.duplicateProduct(props.product!.id, duplicateData);
+        } else {
+            await api.updateProduct(props.product!.id, updateData);
+        }
         emit('success');
         close();
     } catch (e) {
@@ -1151,8 +1213,8 @@ const unlinkSupplierOffer = async (offer: any) => {
                         <Edit3 class="w-5 h-5" />
                     </div>
                     <div>
-                        <h2 class="text-lg font-bold text-gray-900 dark:text-white">Редактирование товара</h2>
-                        <p class="text-xs text-gray-500 dark:text-slate-400 font-medium uppercase tracking-wider">ID: {{ product?.id }}</p>
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white">{{ modalTitle }}</h2>
+                        <p class="text-xs text-gray-500 dark:text-slate-400 font-medium uppercase tracking-wider">{{ modalSubtitle }}</p>
                     </div>
                 </div>
                 <button @click="close" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all">
@@ -1233,7 +1295,7 @@ const unlinkSupplierOffer = async (offer: any) => {
                             </label>
                         </div>
 
-                        <div class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3">
+                        <div v-if="isPersistedProduct" class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3">
                             <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-slate-500">Supply</h4>
                             <div class="flex items-end gap-2">
                                 <div class="flex-1">
@@ -1917,7 +1979,7 @@ const unlinkSupplierOffer = async (offer: any) => {
                 >
                     <div v-if="loading" class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                     <Save v-else class="w-4 h-4" />
-                    Сохранить
+                    {{ saveButtonText }}
                 </button>
             </footer>
         </div>

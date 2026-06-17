@@ -6,6 +6,8 @@ from schemas import (
     ManagerCustomerBranchCreatePayload,
     ManagerCustomerBranchUpdatePayload,
     ManagerCustomerUpdatePayload,
+    ProductCreate,
+    ProductDuplicatePayload,
     ProductUpdate,
 )
 from services.customer_service import CustomerService
@@ -152,6 +154,40 @@ class ManagerCatalogService:
         update_data = data.dict(exclude_unset=True)
         tag_ids = update_data.pop("tag_ids", None)
         return await ProductService.update_product(session, product_id, update_data, tag_ids)
+
+    @staticmethod
+    async def create_product(
+        session: AsyncSession,
+        *,
+        data: ProductCreate,
+    ) -> Dict[str, Any]:
+        payload = data.model_dump(exclude_unset=True)
+        tag_ids = payload.pop("tag_ids", [])
+        return await ProductService.create_product(session, payload, tag_ids)
+
+    @staticmethod
+    async def duplicate_product(
+        session: AsyncSession,
+        *,
+        product_id: int,
+        data: ProductDuplicatePayload,
+    ) -> Optional[Dict[str, Any]]:
+        payload = data.model_dump(exclude_unset=True)
+        tag_ids = payload.pop("tag_ids", None)
+        copy_gallery = bool(payload.pop("copy_gallery", True))
+        copy_manuals = bool(payload.pop("copy_manuals", True))
+        copy_tags = bool(payload.pop("copy_tags", True))
+        make_unpublished = bool(payload.pop("make_unpublished", False))
+        return await ProductService.duplicate_product(
+            session,
+            source_product_id=product_id,
+            overrides=payload,
+            tag_ids=tag_ids,
+            copy_gallery=copy_gallery,
+            copy_manuals=copy_manuals,
+            copy_tags=copy_tags,
+            make_unpublished=make_unpublished,
+        )
 
     @staticmethod
     async def delete_product(
