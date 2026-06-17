@@ -379,6 +379,127 @@ class DefectActStrategy(GoogleDocStrategy):
         )
 
 
+class B2CDocumentStrategy(GoogleDocStrategy):
+    """Retail receipt and service act for individual customers."""
+
+    MONTHS_RU_GENITIVE = {
+        1: "января",
+        2: "февраля",
+        3: "марта",
+        4: "апреля",
+        5: "мая",
+        6: "июня",
+        7: "июля",
+        8: "августа",
+        9: "сентября",
+        10: "октября",
+        11: "ноября",
+        12: "декабря",
+    }
+
+    @staticmethod
+    def _money(value: Any) -> str:
+        return f"{float(value or 0):.2f}".replace(".", ",")
+
+    @staticmethod
+    def _quantity(value: Any) -> str:
+        number = float(value or 0)
+        return str(int(number)) if number.is_integer() else str(number).replace(".", ",")
+
+    @classmethod
+    def _date_text(cls, value: datetime) -> str:
+        month = cls.MONTHS_RU_GENITIVE.get(value.month, value.strftime("%m"))
+        return f"{value.day:02d} {month} {value.year} г."
+
+    @staticmethod
+    def _line_title(link: Any, fallback: str) -> str:
+        title = str(getattr(link, "title", "") or "").strip()
+        if title:
+            return title
+        item = getattr(link, "product", None) or getattr(link, "service", None)
+        return str(getattr(item, "title", "") or fallback).strip() or fallback
+
+    @staticmethod
+    def _line_total(link: Any) -> float:
+        return float(getattr(link, "price", 0) or 0) * float(getattr(link, "quantity", 0) or 0)
+
+    @classmethod
+    def _join_titles(cls, links: list[Any], fallback: str) -> str:
+        titles = [cls._line_title(link, fallback) for link in links]
+        return "\n".join(titles)
+
+    @classmethod
+    def _sum_amount(cls, links: list[Any]) -> float:
+        return sum(cls._line_total(link) for link in links)
+
+    @classmethod
+    def _sum_quantity(cls, links: list[Any]) -> str:
+        quantity = sum(float(getattr(link, "quantity", 0) or 0) for link in links)
+        return cls._quantity(quantity)
+
+    @classmethod
+    def _unit_price_text(cls, links: list[Any]) -> str:
+        if len(links) != 1:
+            return ""
+        return cls._money(getattr(links[0], "price", 0))
+
+    def _prepare_table_data(self) -> List[List[str]]:
+        # B2C templates have custom table layouts; they are filled via placeholders.
+        return []
+
+    def _add_specific_replacements(self, replacements: dict):
+        effective_date = datetime.strptime(replacements.get("{{date}}", ""), "%d.%m.%Y") if replacements.get("{{date}}") else datetime.now()
+        product_links = list(getattr(self.order, "product_links", []) or [])
+        service_links = list(getattr(self.order, "service_links", []) or [])
+        total_amount = float(getattr(self.order, "total_amount", 0) or 0)
+        product_total = self._sum_amount(product_links)
+        service_total = self._sum_amount(service_links)
+        customer = getattr(self.order, "customer", None)
+
+        primary_product = self._line_title(product_links[0], "кондиционер / сплит-система") if product_links else "кондиционер / сплит-система"
+        service_lines = service_links or []
+        if not service_lines and not product_links:
+            fallback_title = str(getattr(self.order, "title", "") or "Работы / услуги").strip()
+            service_text = fallback_title
+            service_total = total_amount
+            service_quantity = "1"
+            service_price = self._money(total_amount)
+        else:
+            service_text = self._join_titles(service_lines, "Услуга")
+            service_quantity = self._sum_quantity(service_lines) if service_lines else ""
+            service_price = self._unit_price_text(service_lines)
+
+        replacements.update(
+            {
+                "{{offer_url}}": "https://mvn.by/offer/",
+                "{{base_document_type}}": "Публичная оферта",
+                "{{base_document_number}}": "https://mvn.by/offer/",
+                "{{base_document_date}}": self._date_text(effective_date),
+                "{{date_text}}": self._date_text(effective_date),
+                "{{date_day}}": f"{effective_date.day:02d}",
+                "{{date_month}}": self.MONTHS_RU_GENITIVE.get(effective_date.month, effective_date.strftime("%m")),
+                "{{date_year}}": str(effective_date.year),
+                "{{client_phone}}": str(getattr(customer, "phone", "") or ""),
+                "{{customer_phone}}": str(getattr(customer, "phone", "") or ""),
+                "{{equipment_primary}}": primary_product,
+                "{{equipment_list}}": self._join_titles(product_links, "Оборудование") or primary_product,
+                "{{receipt_product_lines}}": self._join_titles(product_links, "Товар"),
+                "{{receipt_product_qty}}": self._sum_quantity(product_links) if product_links else "",
+                "{{receipt_product_price}}": self._unit_price_text(product_links),
+                "{{receipt_product_total}}": self._money(product_total) if product_links else "",
+                "{{receipt_service_lines}}": service_text,
+                "{{receipt_service_qty}}": service_quantity,
+                "{{receipt_service_price}}": service_price,
+                "{{receipt_service_total}}": self._money(service_total) if service_text else "",
+                "{{receipt_total}}": self._money(total_amount),
+                "{{receipt_total_in_words}}": self._amount_in_words(total_amount),
+                "{{service_act_lines}}": service_text,
+                "{{service_act_total}}": self._money(service_total or total_amount),
+                "{{service_act_total_in_words}}": self._amount_in_words(service_total or total_amount),
+            }
+        )
+
+
 class GeneralDocStrategy(GoogleDocStrategy):
     """Contract, Offer, Invoice: Products + Services table."""
     
