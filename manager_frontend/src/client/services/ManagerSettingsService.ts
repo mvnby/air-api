@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { AddressSuggestResponse } from '../models/AddressSuggestResponse';
 import type { FxRateResponse } from '../models/FxRateResponse';
 import type { ManagerSettingCreatePayload } from '../models/ManagerSettingCreatePayload';
 import type { ManagerSettingListResponse } from '../models/ManagerSettingListResponse';
@@ -55,12 +56,12 @@ export class ManagerSettingsService {
     /**
      * Suggest Address
      * @param q
-     * @returns any Successful Response
+     * @returns AddressSuggestResponse Successful Response
      * @throws ApiError
      */
     public static suggestAddress(
         q: string,
-    ): CancelablePromise<any> {
+    ): CancelablePromise<AddressSuggestResponse> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/settings/address-suggest',

@@ -1,100 +1,65 @@
-import { onBeforeUnmount, ref, watch, type Ref } from 'vue';
-import IMask, { type InputMask } from 'imask';
+import { computed, onBeforeUnmount, ref, watch, type Ref } from 'vue';
+import { formatPhoneForDisplay, isInternationalPhoneComplete, normalizePhoneForApi } from '../utils/phone';
 
 type PhoneModelRef = Ref<string>;
 
 export function useBelarusPhoneMask(
   inputRef: Ref<HTMLInputElement | null>,
   modelRef: PhoneModelRef,
-  options?: { lazy?: boolean; placeholderChar?: string },
+  options?: { lazy?: boolean; placeholderChar?: string; defaultPrefix?: string },
 ) {
-  const isComplete = ref(false);
+  const defaultPrefix = options?.defaultPrefix ?? '+375 ';
+  const isComplete = computed(() => isInternationalPhoneComplete(modelRef.value || ''));
   const unmaskedValue = ref('');
-
-  let mask: InputMask<any> | null = null;
+  let currentInput: HTMLInputElement | null = null;
 
   const syncState = () => {
-    if (!mask) {
-      isComplete.value = false;
-      unmaskedValue.value = '';
-      return;
-    }
-    isComplete.value = Boolean(mask.masked.isComplete);
-    unmaskedValue.value = mask.unmaskedValue || '';
+    unmaskedValue.value = normalizePhoneForApi(modelRef.value || '');
   };
 
-  const destroyMask = () => {
-    if (mask) {
-      mask.destroy();
-      mask = null;
+  const applyDefaultPrefix = () => {
+    if (!(modelRef.value || '').trim()) {
+      modelRef.value = defaultPrefix;
     }
     syncState();
   };
 
-  // Helper: raw phone from DB looks like '375XXXXXXXXX' (12 digits)
-  // IMask `unmaskedValue` only needs digits after the fixed '+375 ' prefix (9 digits)
-  const applyValueToMask = (value: string) => {
-    if (!mask) return;
-    if (/^375\d{9}$/.test(value)) {
-      // Raw format: strip the 375 country code
-      mask.unmaskedValue = value.slice(3);
-    } else {
-      // Already formatted or partial
-      mask.value = value;
+  const formatCurrentValue = () => {
+    const formatted = formatPhoneForDisplay(modelRef.value || '');
+    if (formatted !== modelRef.value) {
+      modelRef.value = formatted;
     }
-    mask.updateValue();
+    syncState();
   };
 
-  const initMask = (input: HTMLInputElement | null) => {
-    destroyMask();
-    if (!input) return;
-
-    mask = IMask(input, {
-      mask: '+{375} (00) 000-00-00',
-      lazy: options?.lazy ?? false,
-      placeholderChar: options?.placeholderChar ?? '_',
-    });
-
-    if (modelRef.value) {
-      applyValueToMask(modelRef.value);
-      syncState();
-      // Sync model to what the mask actually shows
-      if (modelRef.value !== mask.value) {
-        modelRef.value = mask.value;
-      }
+  const detachInput = () => {
+    if (currentInput) {
+      currentInput.removeEventListener('focus', applyDefaultPrefix);
+      currentInput.removeEventListener('blur', formatCurrentValue);
+      currentInput = null;
     }
+  };
 
-    mask.on('accept', () => {
-      if (!mask) return;
-      if (modelRef.value !== mask.value) {
-        modelRef.value = mask.value;
-      }
-      syncState();
-    });
-
+  const attachInput = (input: HTMLInputElement | null) => {
+    detachInput();
+    currentInput = input;
+    currentInput?.addEventListener('focus', applyDefaultPrefix);
+    currentInput?.addEventListener('blur', formatCurrentValue);
     syncState();
   };
 
   watch(inputRef, (input) => {
-    initMask(input);
-  });
+    attachInput(input);
+  }, { immediate: true });
 
   watch(
     modelRef,
-    (value) => {
-      if (!mask) return;
-      if (value !== mask.value) {
-        mask.value = value || '';
-        // Keep IMask internals aligned when model changes programmatically.
-        mask.updateValue();
-        syncState();
-      }
-    },
+    () => syncState(),
     { flush: 'post' },
   );
 
   onBeforeUnmount(() => {
-    destroyMask();
+    detachInput();
   });
 
   return {

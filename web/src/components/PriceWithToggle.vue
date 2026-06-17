@@ -1,10 +1,9 @@
 <script setup>
-import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue';
-import IMask from 'imask';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { getInstallationRates, getGlobalConfig, getProductById, submitProductAvailabilityLead } from '../utils/api';
 import { addItem } from '../store/cart';
 import { addToast } from '../store/toast';
-import { validateRequiredBelarusPhone } from '../utils/validation';
+import { formatPhoneForDisplay, validateRequiredBelarusPhone } from '../utils/validation';
 import {
     formatProductPrice,
     hasKnownProductPrice,
@@ -47,7 +46,6 @@ const notifyForm = ref({
     phone: '',
 });
 const notifyPhoneInputRef = ref(null);
-let notifyMask = null;
 
 const liveBasePrice = ref(Number(props.basePrice) || 0);
 const liveOldPrice = ref(Number(props.oldPrice) || 0);
@@ -85,32 +83,16 @@ onMounted(async () => {
 watch(showNotifyModal, async (isOpen) => {
     if (isOpen) {
         await nextTick();
-        if (notifyPhoneInputRef.value && !notifyMask) {
-            notifyMask = IMask(notifyPhoneInputRef.value, {
-                mask: '+{375} (00) 000-00-00',
-                lazy: false,
-                placeholderChar: '_',
-            });
-            notifyMask.on('accept', () => {
-                notifyForm.value.phone = notifyMask.value;
+        if (notifyPhoneInputRef.value) {
+            notifyPhoneInputRef.value.onfocus = () => {
+                if (!notifyForm.value.phone.trim()) notifyForm.value.phone = '+375 ';
                 notifyPhoneError.value = '';
-            });
+            };
         }
         return;
     }
 
     notifyPhoneError.value = '';
-    if (notifyMask) {
-        notifyMask.destroy();
-        notifyMask = null;
-    }
-});
-
-onBeforeUnmount(() => {
-    if (notifyMask) {
-        notifyMask.destroy();
-        notifyMask = null;
-    }
 });
 
 // Helper to normalize strings for comparison
@@ -356,9 +338,10 @@ const inquirySuccessText = computed(() => {
 });
 
 const validateNotifyPhone = () => {
+    notifyForm.value.phone = formatPhoneForDisplay(notifyForm.value.phone);
     notifyPhoneError.value = validateRequiredBelarusPhone(
         notifyForm.value.phone,
-        Boolean(notifyMask && notifyMask.masked.isComplete),
+        true,
     );
     return !notifyPhoneError.value;
 };
@@ -514,7 +497,7 @@ const submitNotifyLead = async () => {
                 type="tel"
                 class="form-input"
                 :class="{ invalid: notifyPhoneError }"
-                placeholder="+375 (XX) XXX-XX-XX"
+                placeholder="+375 (XX) XXX-XX-XX или +7 XXX XXX-XX-XX"
                 @blur="validateNotifyPhone"
               />
               <span v-if="notifyPhoneError" class="err-msg">{{ notifyPhoneError }}</span>

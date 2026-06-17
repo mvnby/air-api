@@ -3,8 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useStore } from '@nanostores/vue';
 import { cartItems, cartTotal, clearCart, refreshPrices } from '../../store/cart';
 import { createOrder, getProductBySlug, getCompanyByUnp, getBankBySearch, getAddressSuggestions } from '../../utils/api';
-import IMask from 'imask';
-import { validateOptionalByIban, validateOptionalByUnp, validateRequiredBelarusPhone } from '../../utils/validation';
+import { formatPhoneForDisplay, validateOptionalByIban, validateOptionalByUnp, validateRequiredBelarusPhone } from '../../utils/validation';
 
 // State
 const form = ref({
@@ -22,7 +21,6 @@ const form = ref({
 });
 const isLegalEntity = ref(false);
 const phoneInput = ref(null);
-let mask = null;
 const errors = ref({});
 const isSubmitting = ref(false);
 const isLoadingData = ref(false);
@@ -89,7 +87,8 @@ const validate = () => {
     errors.value = {};
     if (!form.value.name) errors.value.name = 'Введите имя';
 
-    const phoneError = validateRequiredBelarusPhone(form.value.phone, Boolean(mask && mask.masked.isComplete));
+    form.value.phone = formatPhoneForDisplay(form.value.phone);
+    const phoneError = validateRequiredBelarusPhone(form.value.phone, true);
     if (phoneError) errors.value.phone = phoneError;
 
     if (isLegalEntity.value) {
@@ -116,16 +115,13 @@ onMounted(() => {
 // Init phone mask when the input element appears in DOM
 // (The form is behind v-if on cart items, so phoneInput may be null at mount time)
 watch(phoneInput, (el) => {
-    if (el && !mask) {
-        mask = IMask(el, {
-            mask: '+{375} (00) 000-00-00',
-            lazy: false,
-            placeholderChar: '_'
-        });
-        
-        mask.on('accept', () => {
-            form.value.phone = mask.value;
-        });
+    if (el) {
+        el.onfocus = () => {
+            if (!form.value.phone.trim()) form.value.phone = '+375 ';
+        };
+        el.onblur = () => {
+            form.value.phone = formatPhoneForDisplay(form.value.phone);
+        };
     }
 });
 
@@ -326,8 +322,9 @@ const submitOrderHandler = async () => {
                         type="tel" 
                         id="phone" 
                         ref="phoneInput"
+                        v-model="form.phone"
                         :class="{ invalid: errors.phone }"
-                        placeholder="+375 (XX) XXX-XX-XX"
+                        placeholder="+375 (XX) XXX-XX-XX или +7 XXX XXX-XX-XX"
                     />
                     <span v-if="errors.phone" class="err-msg">{{ errors.phone }}</span>
                 </div>

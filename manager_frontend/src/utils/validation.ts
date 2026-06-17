@@ -1,5 +1,5 @@
 import { normalizeIban, normalizeUnp } from './legal-requisites';
-import { isBelarusPhoneComplete } from './phone';
+import { isInternationalPhoneComplete, normalizePhoneDigits } from './phone';
 
 export function normalizeEmail(value: string): string {
   return (value || '').trim().toLowerCase();
@@ -37,8 +37,10 @@ export function validateOptionalByIban(value: string): string {
 export function validateOptionalBelarusPhone(masked: string, isMaskComplete: boolean): string {
   const raw = (masked || '').trim();
   if (!raw) return '';
-  if (!isMaskComplete || !isBelarusPhoneComplete(raw)) {
-    return 'Введите телефон полностью в формате +375 (XX) XXX-XX-XX';
+  const digits = normalizePhoneDigits(raw);
+  if (digits === '375') return '';
+  if (!isMaskComplete || !isInternationalPhoneComplete(raw)) {
+    return 'Введите телефон в международном формате, например +375 (XX) XXX-XX-XX или +7 XXX XXX-XX-XX';
   }
   return '';
 }

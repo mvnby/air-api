@@ -1573,7 +1573,7 @@ const fetchAddressSuggestions = async (query: string) => {
   addressLookupLoading.value = true;
   try {
     const res = await ManagerSettingsService.suggestAddress(query);
-    addressSuggestions.value = res.results || [];
+    addressSuggestions.value = res.items || [];
   } catch (err) {
     console.warn('Failed to fetch address suggestions', err);
   } finally {
@@ -1589,8 +1589,7 @@ const onAddressInput = () => {
 };
 
 const selectAddressSuggestion = (item: any) => {
-  customerDeliveryAddress.value = item.title?.text || '';
-  if (item.subtitle?.text) customerDeliveryAddress.value += `, ${item.subtitle.text}`;
+  customerDeliveryAddress.value = item.value || item.title || '';
   addressSuggestActive.value = false;
   addressSuggestions.value = [];
 };
@@ -2626,8 +2625,8 @@ watch(
                 class="flex cursor-pointer flex-col px-3 py-2 text-sm hover:bg-gray-50 rounded-lg transition-colors border-b border-gray-50 last:border-0"
                 @mousedown.prevent="selectAddressSuggestion(item)"
               >
-                <div class="font-medium text-gray-900">{{ item.title?.text }}</div>
-                <div v-if="item.subtitle?.text" class="text-xs text-gray-500 mt-0.5 truncate">{{ item.subtitle?.text }}</div>
+                <div class="font-medium text-gray-900">{{ item.title || item.value }}</div>
+                <div v-if="item.subtitle" class="text-xs text-gray-500 mt-0.5 truncate">{{ item.subtitle }}</div>
               </li>
             </ul>
           </label>

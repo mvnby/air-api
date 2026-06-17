@@ -203,7 +203,7 @@ const fetchAddressSuggestions = async (query: string) => {
   addressLookupLoading.value = true;
   try {
     const res = await ManagerSettingsService.suggestAddress(query);
-    addressSuggestions.value = res.results || [];
+    addressSuggestions.value = res.items || [];
   } catch (err) {
     console.warn('Failed to fetch address suggestions', err);
   } finally {
@@ -219,8 +219,7 @@ const onAddressInput = () => {
 };
 
 const selectAddressSuggestion = (item: any) => {
-  createForm.value.address = item.title?.text || '';
-  if (item.subtitle?.text) createForm.value.address += `, ${item.subtitle.text}`;
+  createForm.value.address = item.value || item.title || '';
   addressSuggestActive.value = false;
   addressSuggestions.value = [];
 };
@@ -629,7 +628,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
               v-model="phoneModelRef"
               @input="onSearchInput"
               type="text"
-              placeholder="+375 (29) 000-00-00"
+              placeholder="+375 (29) 000-00-00 или +7 916 000-00-00"
               class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
             />
 
@@ -707,8 +706,8 @@ const scopeOptions: { value: Scope; label: string }[] = [
                     @click.prevent="selectAddressSuggestion(sug)"
                     class="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-700 border-b border-slate-100 dark:border-slate-700 last:border-0"
                   >
-                    <div class="text-sm font-semibold text-slate-800 dark:text-white">{{ sug.title?.text || sug.value }}</div>
-                    <div v-if="sug.subtitle?.text" class="text-xs text-slate-500 dark:text-slate-400">{{ sug.subtitle.text }}</div>
+                    <div class="text-sm font-semibold text-slate-800 dark:text-white">{{ sug.title || sug.value }}</div>
+                    <div v-if="sug.subtitle" class="text-xs text-slate-500 dark:text-slate-400">{{ sug.subtitle }}</div>
                   </button>
                 </div>
               </div>
