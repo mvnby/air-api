@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Any, List, Optional
+from sqlmodel import select
 from services.google_service import get_google_service
 from services.documents.base import BaseDocumentStrategy, TEMPLATES, DOC_NAMES
-from models import CustomerContract, OrderDocument
+from models import CustomerContract, CustomerEquipment, EquipmentComponent, OrderDocument
 
 class GoogleDocStrategy(BaseDocumentStrategy):
     """Base for documents using Google Docs API."""
@@ -498,6 +499,95 @@ class B2CDocumentStrategy(GoogleDocStrategy):
                 "{{service_act_total_in_words}}": self._amount_in_words(service_total or total_amount),
             }
         )
+
+
+class WarrantyCertificateStrategy(B2CDocumentStrategy):
+    """Warranty certificate based on equipment created from an order."""
+
+    @staticmethod
+    def _format_date(value: Optional[datetime]) -> str:
+        return value.strftime("%d.%m.%Y") if value else ""
+
+    @staticmethod
+    def _component_title(component: EquipmentComponent) -> str:
+        return " ".join(
+            part
+            for part in [
+                component.title,
+                component.brand,
+                component.model,
+                f"SN {component.serial}" if component.serial else "",
+            ]
+            if str(part or "").strip()
+        ) or "Блок оборудования"
+
+    async def _prepare_base_variables(self, *args, **kwargs) -> dict[str, str]:
+        replacements = await super()._prepare_base_variables(*args, **kwargs)
+        if not self.order or self.order.id is None:
+            return replacements
+
+        equipment_result = await self.session.execute(
+            select(CustomerEquipment)
+            .where(
+                CustomerEquipment.source_order_id == self.order.id,
+                CustomerEquipment.is_archived == False,
+            )
+            .order_by(CustomerEquipment.id.asc())
+        )
+        equipment_items = list(equipment_result.scalars().all())
+        equipment_ids = [int(item.id) for item in equipment_items if item.id is not None]
+        components_by_equipment: dict[int, list[EquipmentComponent]] = {equipment_id: [] for equipment_id in equipment_ids}
+        if equipment_ids:
+            component_result = await self.session.execute(
+                select(EquipmentComponent)
+                .where(
+                    EquipmentComponent.equipment_id.in_(equipment_ids),
+                    EquipmentComponent.is_archived == False,
+                )
+                .order_by(EquipmentComponent.equipment_id.asc(), EquipmentComponent.component_type.asc(), EquipmentComponent.id.asc())
+            )
+            for component in component_result.scalars().all():
+                components_by_equipment.setdefault(int(component.equipment_id), []).append(component)
+
+        equipment_lines: list[str] = []
+        component_lines: list[str] = []
+        serial_lines: list[str] = []
+        warranty_until = ""
+        for index, equipment in enumerate(equipment_items, start=1):
+            title = " ".join(
+                part
+                for part in [
+                    equipment.display_name,
+                    equipment.brand,
+                    equipment.model,
+                    f"SN {equipment.serial}" if equipment.serial else "",
+                ]
+                if str(part or "").strip()
+            ) or f"Оборудование #{equipment.id}"
+            equipment_lines.append(f"{index}. {title}")
+            if equipment.warranty_expires_at and not warranty_until:
+                warranty_until = self._format_date(equipment.warranty_expires_at)
+            components = components_by_equipment.get(int(equipment.id or 0), [])
+            for component in components:
+                component_lines.append(f"{index}. {self._component_title(component)}")
+                if component.serial:
+                    serial_lines.append(f"{component.title or component.component_type}: {component.serial}")
+
+        replacements.update(
+            {
+                "{{warranty_equipment_list}}": "\n".join(equipment_lines),
+                "{{warranty_component_list}}": "\n".join(component_lines),
+                "{{warranty_serial_list}}": "\n".join(serial_lines),
+                "{{warranty_started_at}}": (
+                    self._format_date(equipment_items[0].warranty_started_at) if equipment_items else ""
+                ),
+                "{{warranty_expires_at}}": warranty_until,
+                "{{warranty_terms}}": "\n".join(
+                    item.warranty_terms for item in equipment_items if str(item.warranty_terms or "").strip()
+                ),
+            }
+        )
+        return replacements
 
 
 class GeneralDocStrategy(GoogleDocStrategy):

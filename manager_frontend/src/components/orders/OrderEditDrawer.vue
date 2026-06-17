@@ -469,6 +469,7 @@ const selectedRepairEquipmentId = ref<number | null>(null);
 const selectedRepairEquipmentDetail = ref<ManagerEquipmentDetailResponse | null>(null);
 const repairEquipmentHistoryLoading = ref(false);
 const creatingRepairEquipment = ref(false);
+const creatingOrderEquipment = ref(false);
 const recordingRepairHistory = ref(false);
 const repairHistoryEventType = ref<EquipmentServiceEventType | ''>('');
 const repairHistoryNotes = ref('');
@@ -1073,6 +1074,12 @@ const documentSectionSummary = computed(() => {
   return `${orderDocuments.value.length} док. · ${contractText}`;
 });
 const documentSectionHasError = computed(() => isCompanyOrder.value && !props.order?.customer_contract_id && !hasClosingBaseDocument.value);
+const canCreateEquipmentFromOrder = computed(() => (
+  Boolean(props.order?.id)
+  && Boolean(customer.value?.id)
+  && !isRepairWorkflow.value
+  && productLines.value.some((line) => Boolean(line.product_id))
+));
 
 const beforeDocumentGenerate = async (type: string) => {
   if (!props.order?.id) return false;
@@ -1088,6 +1095,28 @@ const beforeDocumentGenerate = async (type: string) => {
     emit('reload', props.order.id);
   }
   return true;
+};
+
+const createEquipmentFromOrder = async () => {
+  if (!props.order?.id || creatingOrderEquipment.value || !canCreateEquipmentFromOrder.value) return;
+  creatingOrderEquipment.value = true;
+  try {
+    await saveCurrentProposalLines();
+    const result = await ManagerEquipmentService.createManagerEquipmentFromOrder(props.order.id, {
+      warranty_months: 24,
+      include_component_placeholders: true,
+    });
+    if (result.created_count) {
+      setToast(`Создано паспортов оборудования: ${result.created_count}`, 'success');
+    } else {
+      setToast('Паспорта уже созданы по текущим товарам заказа', 'success');
+    }
+    emit('reload', props.order.id);
+  } catch (error) {
+    setToast(`Не удалось создать паспорта оборудования: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    creatingOrderEquipment.value = false;
+  }
 };
 
 const handleDocumentPanelToast = (payload: { message: string; type?: 'success' | 'error' }) => {
@@ -3608,6 +3637,16 @@ watch(
             >
               <span class="material-icons-round text-[18px]">chat</span> Viber
             </a>
+            <button
+              v-if="canCreateEquipmentFromOrder"
+              type="button"
+              class="flex items-center gap-1 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-medium text-teal-700 shadow-sm transition hover:bg-teal-100 disabled:cursor-wait disabled:opacity-70"
+              :disabled="creatingOrderEquipment"
+              @click="createEquipmentFromOrder"
+            >
+              <span class="material-icons-round text-[18px]">verified</span>
+              {{ creatingOrderEquipment ? 'Создаем...' : 'Создать паспорта оборудования' }}
+            </button>
           </div>
         </div>
 

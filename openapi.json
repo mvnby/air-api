@@ -8382,6 +8382,63 @@
         }
       }
     },
+    "/api/manager/equipment/from-order/{order_id}": {
+      "post": {
+        "tags": [
+          "manager-equipment"
+        ],
+        "summary": "Create Manager Equipment From Order",
+        "operationId": "create_manager_equipment_from_order",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerEquipmentFromOrderPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerEquipmentFromOrderResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/equipment/{equipment_id}": {
       "get": {
         "tags": [
@@ -8479,6 +8536,129 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ManagerEquipmentItemResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/equipment/{equipment_id}/components": {
+      "post": {
+        "tags": [
+          "manager-equipment"
+        ],
+        "summary": "Create Manager Equipment Component",
+        "operationId": "create_manager_equipment_component",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "equipment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Equipment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerEquipmentComponentCreatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerEquipmentComponentItemResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/equipment/{equipment_id}/components/{component_id}": {
+      "patch": {
+        "tags": [
+          "manager-equipment"
+        ],
+        "summary": "Patch Manager Equipment Component",
+        "operationId": "patch_manager_equipment_component",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "equipment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Equipment Id"
+            }
+          },
+          {
+            "name": "component_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Component Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerEquipmentComponentUpdatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerEquipmentComponentItemResponse"
                 }
               }
             }
@@ -19758,6 +19938,436 @@
         "type": "object",
         "title": "ManagerCustomerUpdatePayload"
       },
+      "ManagerEquipmentComponentCreatePayload": {
+        "properties": {
+          "catalog_product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Product Id"
+          },
+          "supplier_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Id"
+          },
+          "component_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Type",
+            "default": "other"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
+          "inventory_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory Number"
+          },
+          "supplier_invoice_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Invoice Number"
+          },
+          "supplier_invoice_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Invoice Date"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "is_archived": {
+            "type": "boolean",
+            "title": "Is Archived",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "ManagerEquipmentComponentCreatePayload"
+      },
+      "ManagerEquipmentComponentItemResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "equipment_id": {
+            "type": "integer",
+            "title": "Equipment Id"
+          },
+          "catalog_product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Product Id"
+          },
+          "supplier_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Id"
+          },
+          "component_type": {
+            "type": "string",
+            "title": "Component Type",
+            "default": "other"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
+          "inventory_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory Number"
+          },
+          "supplier_invoice_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Invoice Number"
+          },
+          "supplier_invoice_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Invoice Date"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "is_archived": {
+            "type": "boolean",
+            "title": "Is Archived",
+            "default": false
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "equipment_id",
+          "created_at"
+        ],
+        "title": "ManagerEquipmentComponentItemResponse"
+      },
+      "ManagerEquipmentComponentUpdatePayload": {
+        "properties": {
+          "catalog_product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Product Id"
+          },
+          "supplier_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Id"
+          },
+          "component_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Type"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
+          "inventory_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory Number"
+          },
+          "supplier_invoice_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Invoice Number"
+          },
+          "supplier_invoice_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Invoice Date"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "is_archived": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Archived"
+          }
+        },
+        "type": "object",
+        "title": "ManagerEquipmentComponentUpdatePayload"
+      },
       "ManagerEquipmentCreatePayload": {
         "properties": {
           "customer_id": {
@@ -19775,6 +20385,28 @@
             ],
             "title": "Customer Branch Id"
           },
+          "catalog_product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Product Id"
+          },
+          "source_order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Order Id"
+          },
           "equipment_type": {
             "anyOf": [
               {
@@ -19786,6 +20418,18 @@
             ],
             "title": "Equipment Type",
             "default": "hvac"
+          },
+          "equipment_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Source",
+            "default": "unknown"
           },
           "display_name": {
             "anyOf": [
@@ -19863,6 +20507,65 @@
               }
             ],
             "title": "Refrigerant Type"
+          },
+          "installed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installed At"
+          },
+          "commissioned_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commissioned At"
+          },
+          "warranty_started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Started At"
+          },
+          "warranty_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Expires At"
+          },
+          "warranty_terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Terms"
           },
           "notes": {
             "anyOf": [
@@ -19908,10 +20611,37 @@
             ],
             "title": "Customer Branch Id"
           },
+          "catalog_product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Product Id"
+          },
+          "source_order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Order Id"
+          },
           "equipment_type": {
             "type": "string",
             "title": "Equipment Type",
             "default": "hvac"
+          },
+          "equipment_source": {
+            "type": "string",
+            "title": "Equipment Source",
+            "default": "unknown"
           },
           "display_name": {
             "anyOf": [
@@ -19990,6 +20720,70 @@
             ],
             "title": "Refrigerant Type"
           },
+          "installed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installed At"
+          },
+          "commissioned_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commissioned At"
+          },
+          "warranty_started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Started At"
+          },
+          "warranty_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Expires At"
+          },
+          "warranty_terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Terms"
+          },
+          "warranty_status": {
+            "type": "string",
+            "title": "Warranty Status",
+            "default": "unknown"
+          },
           "notes": {
             "anyOf": [
               {
@@ -20023,6 +20817,13 @@
             ],
             "title": "Updated At"
           },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerEquipmentComponentItemResponse"
+            },
+            "type": "array",
+            "title": "Components"
+          },
           "recent_history": {
             "items": {
               "$ref": "#/components/schemas/ManagerEquipmentServiceHistoryItemResponse"
@@ -20038,6 +20839,66 @@
           "created_at"
         ],
         "title": "ManagerEquipmentDetailResponse"
+      },
+      "ManagerEquipmentFromOrderPayload": {
+        "properties": {
+          "warranty_months": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 120.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Months",
+            "default": 24
+          },
+          "warranty_start_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Start Date"
+          },
+          "include_component_placeholders": {
+            "type": "boolean",
+            "title": "Include Component Placeholders",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "ManagerEquipmentFromOrderPayload"
+      },
+      "ManagerEquipmentFromOrderResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerEquipmentDetailResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "created_count": {
+            "type": "integer",
+            "title": "Created Count",
+            "default": 0
+          },
+          "skipped_count": {
+            "type": "integer",
+            "title": "Skipped Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "ManagerEquipmentFromOrderResponse"
       },
       "ManagerEquipmentHistoryFromRepairOrderPayload": {
         "properties": {
@@ -20106,10 +20967,37 @@
             ],
             "title": "Customer Branch Id"
           },
+          "catalog_product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Product Id"
+          },
+          "source_order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Order Id"
+          },
           "equipment_type": {
             "type": "string",
             "title": "Equipment Type",
             "default": "hvac"
+          },
+          "equipment_source": {
+            "type": "string",
+            "title": "Equipment Source",
+            "default": "unknown"
           },
           "display_name": {
             "anyOf": [
@@ -20187,6 +21075,70 @@
               }
             ],
             "title": "Refrigerant Type"
+          },
+          "installed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installed At"
+          },
+          "commissioned_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commissioned At"
+          },
+          "warranty_started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Started At"
+          },
+          "warranty_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Expires At"
+          },
+          "warranty_terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Terms"
+          },
+          "warranty_status": {
+            "type": "string",
+            "title": "Warranty Status",
+            "default": "unknown"
           },
           "notes": {
             "anyOf": [
@@ -20537,6 +21489,28 @@
             ],
             "title": "Customer Branch Id"
           },
+          "catalog_product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Product Id"
+          },
+          "source_order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Order Id"
+          },
           "equipment_type": {
             "anyOf": [
               {
@@ -20547,6 +21521,17 @@
               }
             ],
             "title": "Equipment Type"
+          },
+          "equipment_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Source"
           },
           "display_name": {
             "anyOf": [
@@ -20624,6 +21609,65 @@
               }
             ],
             "title": "Refrigerant Type"
+          },
+          "installed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installed At"
+          },
+          "commissioned_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commissioned At"
+          },
+          "warranty_started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Started At"
+          },
+          "warranty_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Expires At"
+          },
+          "warranty_terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Terms"
           },
           "notes": {
             "anyOf": [

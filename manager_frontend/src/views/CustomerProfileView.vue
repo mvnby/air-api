@@ -16,6 +16,9 @@ import {
   type ManagerCatalogCustomerItemResponse,
   type ManagerCustomerContractItemResponse,
   type ManagerCustomerDocumentItem,
+  type ManagerEquipmentComponentCreatePayload,
+  type ManagerEquipmentComponentItemResponse,
+  type ManagerEquipmentComponentUpdatePayload,
   type ManagerEquipmentCreatePayload,
   type ManagerEquipmentDetailResponse,
   type ManagerEquipmentItemResponse,
@@ -57,7 +60,10 @@ type CustomerForm = {
 
 type EquipmentForm = {
   customer_branch_id: number | null;
+  catalog_product_id: string;
+  source_order_id: string;
   equipment_type: string;
+  equipment_source: string;
   display_name: string;
   brand: string;
   model: string;
@@ -65,6 +71,11 @@ type EquipmentForm = {
   inventory_number: string;
   location_hint: string;
   refrigerant_type: string;
+  installed_at: string;
+  commissioned_at: string;
+  warranty_started_at: string;
+  warranty_expires_at: string;
+  warranty_terms: string;
   notes: string;
 };
 
@@ -78,6 +89,20 @@ type EquipmentHistoryForm = {
   refrigerant_amount: string;
   not_repairable: boolean;
   not_repairable_reason: string;
+  notes: string;
+};
+
+type EquipmentComponentForm = {
+  catalog_product_id: string;
+  supplier_id: string;
+  component_type: string;
+  title: string;
+  brand: string;
+  model: string;
+  serial: string;
+  inventory_number: string;
+  supplier_invoice_number: string;
+  supplier_invoice_date: string;
   notes: string;
 };
 
@@ -116,6 +141,20 @@ const EQUIPMENT_EVENT_OPTIONS: Array<{ value: EquipmentServiceEventType; label: 
   { value: 'leak', label: 'Утечка' },
   { value: 'recommendation', label: 'Рекомендация' },
   { value: 'not_repairable', label: 'Не ремонтируется' },
+  { value: 'other', label: 'Другое' },
+];
+const EQUIPMENT_SOURCE_OPTIONS = [
+  { value: 'unknown', label: 'Не указано' },
+  { value: 'sold_by_us', label: 'Продано нами' },
+  { value: 'installed_by_us', label: 'Установлено нами' },
+  { value: 'customer_owned', label: 'Оборудование клиента' },
+];
+const EQUIPMENT_COMPONENT_OPTIONS = [
+  { value: 'indoor_unit', label: 'Внутренний блок' },
+  { value: 'outdoor_unit', label: 'Наружный блок' },
+  { value: 'system', label: 'Система целиком' },
+  { value: 'remote', label: 'Пульт' },
+  { value: 'wifi_module', label: 'Wi-Fi модуль' },
   { value: 'other', label: 'Другое' },
 ];
 
@@ -221,7 +260,10 @@ const contractUploadForm = ref({
 
 const emptyEquipmentForm = (): EquipmentForm => ({
   customer_branch_id: null,
+  catalog_product_id: '',
+  source_order_id: '',
   equipment_type: 'hvac',
+  equipment_source: 'unknown',
   display_name: '',
   brand: '',
   model: '',
@@ -229,6 +271,11 @@ const emptyEquipmentForm = (): EquipmentForm => ({
   inventory_number: '',
   location_hint: '',
   refrigerant_type: '',
+  installed_at: '',
+  commissioned_at: '',
+  warranty_started_at: '',
+  warranty_expires_at: '',
+  warranty_terms: '',
   notes: '',
 });
 
@@ -245,10 +292,26 @@ const emptyHistoryForm = (): EquipmentHistoryForm => ({
   notes: '',
 });
 
+const emptyComponentForm = (): EquipmentComponentForm => ({
+  catalog_product_id: '',
+  supplier_id: '',
+  component_type: 'indoor_unit',
+  title: '',
+  brand: '',
+  model: '',
+  serial: '',
+  inventory_number: '',
+  supplier_invoice_number: '',
+  supplier_invoice_date: '',
+  notes: '',
+});
+
 const equipment = ref<ManagerEquipmentItemResponse[]>([]);
 const equipmentLoading = ref(false);
 const equipmentSaving = ref(false);
 const equipmentActionId = ref<number | null>(null);
+const componentSaving = ref(false);
+const componentActionId = ref<number | null>(null);
 const equipmentError = ref('');
 const includeArchivedEquipment = ref(true);
 const showEquipmentForm = ref(false);
@@ -256,6 +319,9 @@ const editingEquipmentId = ref<number | null>(null);
 const equipmentForm = ref<EquipmentForm>(emptyEquipmentForm());
 const selectedEquipmentId = ref<number | null>(null);
 const selectedEquipmentDetail = ref<ManagerEquipmentDetailResponse | null>(null);
+const showComponentForm = ref(false);
+const editingComponentId = ref<number | null>(null);
+const componentForm = ref<EquipmentComponentForm>(emptyComponentForm());
 const equipmentHistoryLoading = ref(false);
 const historySaving = ref(false);
 const showHistoryForm = ref(false);
@@ -283,6 +349,50 @@ const equipmentEventLabel = (value?: EquipmentServiceEventType | null) => (
   EQUIPMENT_EVENT_OPTIONS.find((option) => option.value === value)?.label || 'Другое'
 );
 
+const equipmentSourceLabel = (value?: string | null) => (
+  EQUIPMENT_SOURCE_OPTIONS.find((option) => option.value === value)?.label || 'Не указано'
+);
+
+const componentTypeLabel = (value?: string | null) => (
+  EQUIPMENT_COMPONENT_OPTIONS.find((option) => option.value === value)?.label || 'Другое'
+);
+
+const warrantyStatusLabel = (value?: string | null) => {
+  const labels: Record<string, string> = {
+    active: 'Гарантия действует',
+    expired: 'Гарантия истекла',
+    scheduled: 'Гарантия начнется',
+    none: 'Без гарантии',
+    unknown: 'Гарантия не указана',
+  };
+  return labels[value || 'unknown'] || 'Гарантия не указана';
+};
+
+const warrantyStatusClass = (value?: string | null) => {
+  const classes: Record<string, string> = {
+    active: 'bg-emerald-500/15 text-emerald-400',
+    expired: 'bg-red-500/15 text-red-400',
+    scheduled: 'bg-sky-500/15 text-sky-400',
+    none: 'bg-slate-500/20 text-slate-400',
+    unknown: 'bg-amber-500/15 text-amber-400',
+  };
+  return classes[value || 'unknown'] || classes.unknown;
+};
+
+const toDateInputValue = (iso?: string | null) => {
+  if (!iso) return '';
+  return iso.slice(0, 10);
+};
+
+const parseOptionalNumber = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const toDateTimePayload = (value: string) => (value ? `${value}T00:00:00` : null);
+
 const equipmentTitle = (item?: Pick<ManagerEquipmentItemResponse, 'display_name' | 'brand' | 'model' | 'serial' | 'inventory_number'> | null) => {
   if (!item) return 'Оборудование';
   const name = item.display_name?.trim();
@@ -306,7 +416,10 @@ const equipmentSubtitle = (item: ManagerEquipmentItemResponse | ManagerEquipment
 
 const equipmentFormPayload = (): ManagerEquipmentCreatePayload | ManagerEquipmentUpdatePayload => ({
   customer_branch_id: equipmentForm.value.customer_branch_id,
+  catalog_product_id: parseOptionalNumber(equipmentForm.value.catalog_product_id),
+  source_order_id: parseOptionalNumber(equipmentForm.value.source_order_id),
   equipment_type: trimOrNull(equipmentForm.value.equipment_type) || 'hvac',
+  equipment_source: trimOrNull(equipmentForm.value.equipment_source) || 'unknown',
   display_name: trimOrNull(equipmentForm.value.display_name),
   brand: trimOrNull(equipmentForm.value.brand),
   model: trimOrNull(equipmentForm.value.model),
@@ -314,7 +427,26 @@ const equipmentFormPayload = (): ManagerEquipmentCreatePayload | ManagerEquipmen
   inventory_number: trimOrNull(equipmentForm.value.inventory_number),
   location_hint: trimOrNull(equipmentForm.value.location_hint),
   refrigerant_type: trimOrNull(equipmentForm.value.refrigerant_type),
+  installed_at: toDateTimePayload(equipmentForm.value.installed_at),
+  commissioned_at: toDateTimePayload(equipmentForm.value.commissioned_at),
+  warranty_started_at: toDateTimePayload(equipmentForm.value.warranty_started_at),
+  warranty_expires_at: toDateTimePayload(equipmentForm.value.warranty_expires_at),
+  warranty_terms: trimOrNull(equipmentForm.value.warranty_terms),
   notes: trimOrNull(equipmentForm.value.notes),
+});
+
+const componentPayload = (): ManagerEquipmentComponentCreatePayload | ManagerEquipmentComponentUpdatePayload => ({
+  catalog_product_id: parseOptionalNumber(componentForm.value.catalog_product_id),
+  supplier_id: parseOptionalNumber(componentForm.value.supplier_id),
+  component_type: trimOrNull(componentForm.value.component_type) || 'other',
+  title: trimOrNull(componentForm.value.title),
+  brand: trimOrNull(componentForm.value.brand),
+  model: trimOrNull(componentForm.value.model),
+  serial: trimOrNull(componentForm.value.serial),
+  inventory_number: trimOrNull(componentForm.value.inventory_number),
+  supplier_invoice_number: trimOrNull(componentForm.value.supplier_invoice_number),
+  supplier_invoice_date: toDateTimePayload(componentForm.value.supplier_invoice_date),
+  notes: trimOrNull(componentForm.value.notes),
 });
 
 const historyPayload = (): ManagerEquipmentServiceHistoryCreatePayload => ({
@@ -342,6 +474,28 @@ const historyLine = (item: ManagerEquipmentServiceHistoryItemResponse) => {
     item.notes,
   ].map((value) => value?.trim()).filter(Boolean);
   return parts.join(' · ') || 'Без подробностей';
+};
+
+const componentTitle = (item: ManagerEquipmentComponentItemResponse) => {
+  const title = item.title?.trim();
+  if (title) return title;
+  const parts = [item.brand, item.model, item.serial ? `SN ${item.serial}` : ''].map((value) => value?.trim()).filter(Boolean);
+  return parts.join(' ') || componentTypeLabel(item.component_type);
+};
+
+const componentLine = (item: ManagerEquipmentComponentItemResponse) => {
+  const parts = [
+    componentTypeLabel(item.component_type),
+    item.brand,
+    item.model,
+    item.serial ? `SN ${item.serial}` : '',
+    item.inventory_number ? `Инв. ${item.inventory_number}` : '',
+    item.catalog_product_id ? `Товар #${item.catalog_product_id}` : '',
+    item.supplier_id ? `Поставщик #${item.supplier_id}` : '',
+    item.supplier_invoice_number ? `Накладная ${item.supplier_invoice_number}` : '',
+    item.supplier_invoice_date ? formatDateOnly(item.supplier_invoice_date) : '',
+  ].map((value) => value?.trim()).filter(Boolean);
+  return parts.join(' · ') || 'Паспортные данные не заполнены';
 };
 
 const toForm = (item: ManagerCatalogCustomerItemResponse): CustomerForm => ({
@@ -512,7 +666,10 @@ const loadEquipmentDetail = async (equipmentId: number) => {
 const selectEquipment = async (equipmentId: number) => {
   selectedEquipmentId.value = equipmentId;
   showHistoryForm.value = false;
+  showComponentForm.value = false;
+  editingComponentId.value = null;
   historyForm.value = emptyHistoryForm();
+  componentForm.value = emptyComponentForm();
   await loadEquipmentDetail(equipmentId);
 };
 
@@ -555,7 +712,10 @@ const openEquipmentCreateForm = () => {
 const openEquipmentEditForm = (item: ManagerEquipmentItemResponse) => {
   equipmentForm.value = {
     customer_branch_id: item.customer_branch_id ?? null,
+    catalog_product_id: item.catalog_product_id ? String(item.catalog_product_id) : '',
+    source_order_id: item.source_order_id ? String(item.source_order_id) : '',
     equipment_type: item.equipment_type || 'hvac',
+    equipment_source: item.equipment_source || 'unknown',
     display_name: item.display_name || '',
     brand: item.brand || '',
     model: item.model || '',
@@ -563,6 +723,11 @@ const openEquipmentEditForm = (item: ManagerEquipmentItemResponse) => {
     inventory_number: item.inventory_number || '',
     location_hint: item.location_hint || '',
     refrigerant_type: item.refrigerant_type || '',
+    installed_at: toDateInputValue(item.installed_at),
+    commissioned_at: toDateInputValue(item.commissioned_at),
+    warranty_started_at: toDateInputValue(item.warranty_started_at),
+    warranty_expires_at: toDateInputValue(item.warranty_expires_at),
+    warranty_terms: item.warranty_terms || '',
     notes: item.notes || '',
   };
   editingEquipmentId.value = item.id;
@@ -613,6 +778,87 @@ const toggleEquipmentArchive = async (item: ManagerEquipmentItemResponse) => {
     equipmentError.value = `Не удалось изменить архив: ${getApiErrorMessage(e)}`;
   } finally {
     equipmentActionId.value = null;
+  }
+};
+
+const openComponentCreateForm = () => {
+  componentForm.value = {
+    ...emptyComponentForm(),
+    brand: selectedEquipmentDetail.value?.brand || '',
+  };
+  editingComponentId.value = null;
+  showComponentForm.value = true;
+};
+
+const openComponentEditForm = (item: ManagerEquipmentComponentItemResponse) => {
+  componentForm.value = {
+    catalog_product_id: item.catalog_product_id ? String(item.catalog_product_id) : '',
+    supplier_id: item.supplier_id ? String(item.supplier_id) : '',
+    component_type: item.component_type || 'other',
+    title: item.title || '',
+    brand: item.brand || '',
+    model: item.model || '',
+    serial: item.serial || '',
+    inventory_number: item.inventory_number || '',
+    supplier_invoice_number: item.supplier_invoice_number || '',
+    supplier_invoice_date: toDateInputValue(item.supplier_invoice_date),
+    notes: item.notes || '',
+  };
+  editingComponentId.value = item.id;
+  showComponentForm.value = true;
+};
+
+const saveEquipmentComponent = async () => {
+  if (!selectedEquipmentId.value || componentSaving.value) return;
+  const payload = componentPayload();
+  if (!payload.title && !payload.brand && !payload.model && !payload.serial && !payload.inventory_number) {
+    equipmentError.value = 'Укажите название, бренд, модель, серийный или инвентарный номер компонента';
+    return;
+  }
+  componentSaving.value = true;
+  equipmentError.value = '';
+  try {
+    if (editingComponentId.value) {
+      await ManagerEquipmentService.patchManagerEquipmentComponent(
+        selectedEquipmentId.value,
+        editingComponentId.value,
+        payload as ManagerEquipmentComponentUpdatePayload,
+      );
+      setToast('Компонент обновлен');
+    } else {
+      await ManagerEquipmentService.createManagerEquipmentComponent(
+        selectedEquipmentId.value,
+        payload as ManagerEquipmentComponentCreatePayload,
+      );
+      setToast('Компонент добавлен');
+    }
+    showComponentForm.value = false;
+    editingComponentId.value = null;
+    componentForm.value = emptyComponentForm();
+    await loadEquipmentDetail(selectedEquipmentId.value);
+  } catch (e) {
+    equipmentError.value = `Не удалось сохранить компонент: ${getApiErrorMessage(e)}`;
+  } finally {
+    componentSaving.value = false;
+  }
+};
+
+const toggleEquipmentComponentArchive = async (item: ManagerEquipmentComponentItemResponse) => {
+  if (!selectedEquipmentId.value || componentActionId.value) return;
+  componentActionId.value = item.id;
+  equipmentError.value = '';
+  try {
+    await ManagerEquipmentService.patchManagerEquipmentComponent(
+      selectedEquipmentId.value,
+      item.id,
+      { is_archived: !item.is_archived },
+    );
+    setToast(item.is_archived ? 'Компонент возвращен из архива' : 'Компонент архивирован');
+    await loadEquipmentDetail(selectedEquipmentId.value);
+  } catch (e) {
+    equipmentError.value = `Не удалось изменить компонент: ${getApiErrorMessage(e)}`;
+  } finally {
+    componentActionId.value = null;
   }
 };
 
@@ -1340,8 +1586,24 @@ onMounted(() => {
                 </select>
               </label>
               <label class="field-label">
+                Источник
+                <select v-model="equipmentForm.equipment_source" class="field-input">
+                  <option v-for="option in EQUIPMENT_SOURCE_OPTIONS" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
+              </label>
+              <label class="field-label">
                 Тип
                 <input v-model="equipmentForm.equipment_type" class="field-input" placeholder="hvac, chiller..." />
+              </label>
+              <label class="field-label">
+                ID товара каталога
+                <input v-model="equipmentForm.catalog_product_id" class="field-input" inputmode="numeric" placeholder="Можно оставить пустым" />
+              </label>
+              <label class="field-label">
+                ID исходного заказа
+                <input v-model="equipmentForm.source_order_id" class="field-input" inputmode="numeric" placeholder="Заказ продажи/монтажа" />
               </label>
               <label class="field-label">
                 Название
@@ -1370,6 +1632,26 @@ onMounted(() => {
               <label class="field-label">
                 Хладагент
                 <input v-model="equipmentForm.refrigerant_type" class="field-input" placeholder="R32, R410A" />
+              </label>
+              <label class="field-label">
+                Дата установки
+                <input v-model="equipmentForm.installed_at" class="field-input" type="date" />
+              </label>
+              <label class="field-label">
+                Ввод в эксплуатацию
+                <input v-model="equipmentForm.commissioned_at" class="field-input" type="date" />
+              </label>
+              <label class="field-label">
+                Гарантия с
+                <input v-model="equipmentForm.warranty_started_at" class="field-input" type="date" />
+              </label>
+              <label class="field-label">
+                Гарантия до
+                <input v-model="equipmentForm.warranty_expires_at" class="field-input" type="date" />
+              </label>
+              <label class="field-label md:col-span-3">
+                Условия гарантии
+                <textarea v-model="equipmentForm.warranty_terms" class="field-input min-h-[72px]" placeholder="Например: 24 месяца на оборудование, 12 месяцев на монтаж. Гарантия сохраняется при ежегодном ТО." />
               </label>
               <label class="field-label md:col-span-3">
                 Заметки
@@ -1401,10 +1683,14 @@ onMounted(() => {
                   <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
                       <p class="break-words text-sm font-semibold text-[var(--mv-text)]">{{ equipmentTitle(item) }}</p>
+                      <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold" :class="warrantyStatusClass(item.warranty_status)">
+                        {{ warrantyStatusLabel(item.warranty_status) }}
+                      </span>
                       <span v-if="item.is_archived" class="rounded-full bg-slate-500/20 px-2 py-0.5 text-[11px] font-semibold text-slate-400">Архив</span>
                     </div>
                     <p class="mt-1 break-words text-xs text-[var(--mv-text-muted)]">{{ equipmentSubtitle(item) }}</p>
-                    <p class="mt-1 text-xs text-[var(--mv-text-muted)]">{{ equipmentBranchLabel(item.customer_branch_id) }}</p>
+                    <p class="mt-1 text-xs text-[var(--mv-text-muted)]">{{ equipmentBranchLabel(item.customer_branch_id) }} · {{ equipmentSourceLabel(item.equipment_source) }}</p>
+                    <p v-if="item.warranty_expires_at" class="mt-1 text-xs text-[var(--mv-text-muted)]">Гарантия до {{ formatDateOnly(item.warranty_expires_at) }}</p>
                   </div>
                   <div class="flex shrink-0 flex-wrap gap-2">
                     <button class="btn-mini-outline text-xs" type="button" @click.stop="openEquipmentEditForm(item)">Править</button>
@@ -1423,8 +1709,124 @@ onMounted(() => {
                   <div class="min-w-0">
                     <p class="break-words text-base font-semibold">{{ equipmentTitle(selectedEquipmentDetail) }}</p>
                     <p class="mt-1 break-words text-xs text-[var(--mv-text-muted)]">{{ equipmentSubtitle(selectedEquipmentDetail) }}</p>
+                    <div class="mt-2 flex flex-wrap gap-2 text-xs">
+                      <span class="rounded-full px-2 py-0.5 font-semibold" :class="warrantyStatusClass(selectedEquipmentDetail.warranty_status)">
+                        {{ warrantyStatusLabel(selectedEquipmentDetail.warranty_status) }}
+                      </span>
+                      <span class="rounded-full bg-slate-500/20 px-2 py-0.5 text-slate-400">{{ equipmentSourceLabel(selectedEquipmentDetail.equipment_source) }}</span>
+                    </div>
+                    <div class="mt-3 grid gap-2 text-xs text-[var(--mv-text-muted)] sm:grid-cols-2">
+                      <p v-if="selectedEquipmentDetail.catalog_product_id">Товар каталога: #{{ selectedEquipmentDetail.catalog_product_id }}</p>
+                      <p v-if="selectedEquipmentDetail.source_order_id">Исходный заказ: #{{ selectedEquipmentDetail.source_order_id }}</p>
+                      <p v-if="selectedEquipmentDetail.installed_at">Установка: {{ formatDateOnly(selectedEquipmentDetail.installed_at) }}</p>
+                      <p v-if="selectedEquipmentDetail.commissioned_at">Ввод: {{ formatDateOnly(selectedEquipmentDetail.commissioned_at) }}</p>
+                      <p v-if="selectedEquipmentDetail.warranty_started_at">Гарантия с: {{ formatDateOnly(selectedEquipmentDetail.warranty_started_at) }}</p>
+                      <p v-if="selectedEquipmentDetail.warranty_expires_at">Гарантия до: {{ formatDateOnly(selectedEquipmentDetail.warranty_expires_at) }}</p>
+                      <p v-if="selectedEquipmentDetail.warranty_terms" class="break-words sm:col-span-2">Условия: {{ selectedEquipmentDetail.warranty_terms }}</p>
+                    </div>
                   </div>
                   <button class="btn-mini whitespace-nowrap text-xs" type="button" @click="openHistoryCreateForm">Добавить событие</button>
+                </div>
+
+                <div class="mt-4 rounded-xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-3">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p class="text-sm font-semibold text-[var(--mv-text)]">Состав оборудования</p>
+                      <p class="text-xs text-[var(--mv-text-muted)]">Внутренний блок, наружный блок и серийные номера</p>
+                    </div>
+                    <button class="btn-mini-outline text-xs" type="button" @click="openComponentCreateForm">
+                      Добавить блок
+                    </button>
+                  </div>
+
+                  <form v-if="showComponentForm" class="mt-3 rounded-xl border border-[var(--mv-border)] bg-[var(--mv-surface)] p-3" @submit.prevent="saveEquipmentComponent">
+                    <div class="grid gap-3 md:grid-cols-2">
+                      <label class="field-label">
+                        Тип блока
+                        <select v-model="componentForm.component_type" class="field-input">
+                          <option v-for="option in EQUIPMENT_COMPONENT_OPTIONS" :key="option.value" :value="option.value">
+                            {{ option.label }}
+                          </option>
+                        </select>
+                      </label>
+                      <label class="field-label">
+                        Название
+                        <input v-model="componentForm.title" class="field-input" placeholder="Например: внутренний блок спальня" />
+                      </label>
+                      <label class="field-label">
+                        Бренд
+                        <input v-model="componentForm.brand" class="field-input" placeholder="TCL, Gree..." />
+                      </label>
+                      <label class="field-label">
+                        Модель
+                        <input v-model="componentForm.model" class="field-input" placeholder="Модель блока" />
+                      </label>
+                      <label class="field-label">
+                        Серийный номер
+                        <input v-model="componentForm.serial" class="field-input" placeholder="SN..." />
+                      </label>
+                      <label class="field-label">
+                        Инвентарный номер
+                        <input v-model="componentForm.inventory_number" class="field-input" placeholder="Если ведется у клиента" />
+                      </label>
+                      <label class="field-label">
+                        ID товара каталога
+                        <input v-model="componentForm.catalog_product_id" class="field-input" inputmode="numeric" placeholder="Опционально" />
+                      </label>
+                      <label class="field-label">
+                        ID поставщика
+                        <input v-model="componentForm.supplier_id" class="field-input" inputmode="numeric" placeholder="Опционально" />
+                      </label>
+                      <label class="field-label">
+                        Накладная поставщика
+                        <input v-model="componentForm.supplier_invoice_number" class="field-input" placeholder="Номер документа" />
+                      </label>
+                      <label class="field-label">
+                        Дата накладной
+                        <input v-model="componentForm.supplier_invoice_date" class="field-input" type="date" />
+                      </label>
+                      <label class="field-label md:col-span-2">
+                        Заметки
+                        <textarea v-model="componentForm.notes" class="field-input min-h-[58px]" />
+                      </label>
+                    </div>
+                    <div class="mt-3 flex flex-wrap justify-end gap-2">
+                      <button class="btn-mini-outline" type="button" :disabled="componentSaving" @click="showComponentForm = false">Отмена</button>
+                      <button class="btn-mini" type="submit" :disabled="componentSaving">
+                        {{ componentSaving ? 'Сохраняем...' : (editingComponentId ? 'Сохранить блок' : 'Добавить блок') }}
+                      </button>
+                    </div>
+                  </form>
+
+                  <div class="mt-3 space-y-2">
+                    <div
+                      v-for="component in selectedEquipmentDetail.components || []"
+                      :key="component.id"
+                      class="rounded-xl border border-[var(--mv-border)] bg-[var(--mv-surface)] p-3 text-sm"
+                      :class="component.is_archived ? 'opacity-60' : ''"
+                    >
+                      <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div class="min-w-0">
+                          <div class="flex flex-wrap items-center gap-2">
+                            <span class="rounded-full bg-teal-500/10 px-2 py-0.5 text-xs font-semibold text-teal-400">{{ componentTypeLabel(component.component_type) }}</span>
+                            <span v-if="component.is_archived" class="rounded-full bg-slate-500/20 px-2 py-0.5 text-xs font-semibold text-slate-400">Архив</span>
+                          </div>
+                          <p class="mt-2 break-words font-semibold text-[var(--mv-text)]">{{ componentTitle(component) }}</p>
+                          <p class="mt-1 break-words text-xs text-[var(--mv-text-muted)]">{{ componentLine(component) }}</p>
+                          <p v-if="component.notes" class="mt-1 break-words text-xs text-[var(--mv-text-muted)]">{{ component.notes }}</p>
+                        </div>
+                        <div class="flex shrink-0 flex-wrap gap-2">
+                          <button class="btn-mini-outline text-xs" type="button" @click="openComponentEditForm(component)">Править</button>
+                          <button class="btn-mini-outline text-xs" type="button" :disabled="componentActionId === component.id" @click="toggleEquipmentComponentArchive(component)">
+                            {{ componentActionId === component.id ? '...' : (component.is_archived ? 'Вернуть' : 'Архив') }}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div v-if="!(selectedEquipmentDetail.components || []).length" class="rounded-xl border border-dashed border-[var(--mv-border)] px-3 py-4 text-center text-sm text-[var(--mv-text-muted)]">
+                      Блоки и серийные номера пока не добавлены
+                    </div>
+                  </div>
                 </div>
 
                 <form v-if="showHistoryForm" class="mt-4 rounded-xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-3" @submit.prevent="createEquipmentHistory">

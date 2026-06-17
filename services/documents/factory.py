@@ -1,6 +1,13 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from services.documents.base import BaseDocumentStrategy, TEMPLATES
-from services.documents.standard import B2CDocumentStrategy, WorkOrderStrategy, ActStrategy, DefectActStrategy, GeneralDocStrategy
+from services.documents.standard import (
+    B2CDocumentStrategy,
+    WorkOrderStrategy,
+    ActStrategy,
+    DefectActStrategy,
+    GeneralDocStrategy,
+    WarrantyCertificateStrategy,
+)
 from services.documents.logistics import LogisticsSheetStrategy
 
 class DocumentFactory:
@@ -19,6 +26,8 @@ class DocumentFactory:
             return LogisticsSheetStrategy(session, order_id)
         elif doc_type in ["retail_receipt", "service_act"]:
             return B2CDocumentStrategy(session, order_id)
+        elif doc_type == "warranty_certificate":
+            return WarrantyCertificateStrategy(session, order_id)
         elif doc_type in ["contract", "offer", "invoice"]:
             return GeneralDocStrategy(session, order_id)
         else:

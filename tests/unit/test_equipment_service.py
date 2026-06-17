@@ -1,9 +1,43 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
-from models import EquipmentServiceEventType, EquipmentServiceHistory, Order, OrderStatus
+from models import CustomerEquipment, EquipmentServiceEventType, EquipmentServiceHistory, Order, OrderStatus
 from services.equipment_service import EquipmentService
+
+
+def test_warranty_status_uses_equipment_warranty_dates():
+    now = datetime.now()
+
+    assert EquipmentService._warranty_status(CustomerEquipment(customer_id=1)) == "none"
+    assert EquipmentService._warranty_status(
+        CustomerEquipment(customer_id=1, warranty_started_at=now - timedelta(days=1))
+    ) == "unknown"
+    assert EquipmentService._warranty_status(
+        CustomerEquipment(customer_id=1, warranty_started_at=now - timedelta(days=1), warranty_expires_at=now + timedelta(days=1))
+    ) == "active"
+    assert EquipmentService._warranty_status(
+        CustomerEquipment(customer_id=1, warranty_started_at=now - timedelta(days=3), warranty_expires_at=now - timedelta(days=1))
+    ) == "expired"
+    assert EquipmentService._warranty_status(
+        CustomerEquipment(customer_id=1, warranty_started_at=now + timedelta(days=1), warranty_expires_at=now + timedelta(days=3))
+    ) == "scheduled"
+
+
+def test_add_months_clamps_month_end_for_warranty_expiry():
+    assert EquipmentService._add_months(datetime(2026, 1, 31, 10, 0, 0), 1) == datetime(2026, 2, 28, 10, 0, 0)
+    assert EquipmentService._add_months(datetime(2026, 2, 28, 10, 0, 0), 12) == datetime(2027, 2, 28, 10, 0, 0)
+
+
+def test_normalize_component_type_accepts_known_split_blocks():
+    assert EquipmentService._normalize_component_type(" indoor_unit ") == "indoor_unit"
+    assert EquipmentService._normalize_component_type("outdoor_unit") == "outdoor_unit"
+    assert EquipmentService._normalize_component_type(None) == "other"
+
+
+def test_normalize_component_type_rejects_unknown_values():
+    with pytest.raises(ValueError, match="Invalid component_type"):
+        EquipmentService._normalize_component_type("compressor")
 
 
 def test_build_history_payload_from_repair_order_maps_repair_meta_fields():

@@ -25,7 +25,7 @@ const toastType = ref<'success' | 'error'>('success');
 const savingKeys = ref<Set<string>>(new Set());
 type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
 type SettingsTab = 'general' | 'documentTemplates' | 'repairComplaints' | 'emailLeads' | 'botSelection';
-type ManagedDocumentType = 'contract' | 'act' | 'invoice' | 'retail_receipt' | 'service_act' | 'defect_act';
+type ManagedDocumentType = 'contract' | 'act' | 'invoice' | 'retail_receipt' | 'service_act' | 'warranty_certificate' | 'defect_act';
 type DocumentTemplateFileOption = {
     id: string;
     name: string;
@@ -301,6 +301,7 @@ const DOCUMENT_TYPE_OPTIONS: Array<{ value: ManagedDocumentType; label: string; 
     { value: 'invoice', label: 'Счет / счет-договор', addLabel: 'Счет' },
     { value: 'retail_receipt', label: 'Товарный чек', addLabel: 'Товарный чек' },
     { value: 'service_act', label: 'Заказ-акт', addLabel: 'Заказ-акт' },
+    { value: 'warranty_certificate', label: 'Гарантийный талон', addLabel: 'Гарантийный талон' },
     { value: 'act', label: 'Акт', addLabel: 'Акт' },
     { value: 'defect_act', label: 'Дефектный акт', addLabel: 'Дефектный акт' },
 ];
@@ -400,7 +401,7 @@ const documentTemplatePayload = (template: DocumentTemplateForm): DocumentTempla
     sort_order: Number(template.sort_order || 0),
     customer_ids: template.customer_ids,
     linked_contract_template_ids: template.doc_type === 'act' ? template.linked_contract_template_ids : [],
-    linked_act_template_ids: template.doc_type === 'contract' || template.doc_type === 'invoice' ? template.linked_act_template_ids : [],
+    linked_act_template_ids: template.doc_type === 'contract' || template.doc_type === 'invoice' || template.doc_type === 'warranty_certificate' ? template.linked_act_template_ids : [],
 });
 
 const contractDocumentTemplates = computed(() =>
@@ -660,7 +661,7 @@ const normalizeRoleType = (value: unknown): DocumentRoleType => {
 
 const normalizeDocumentType = (value: unknown): ManagedDocumentType => {
     const raw = String(value || '').trim();
-    if (raw === 'act' || raw === 'invoice' || raw === 'retail_receipt' || raw === 'service_act' || raw === 'defect_act') return raw;
+    if (raw === 'act' || raw === 'invoice' || raw === 'retail_receipt' || raw === 'service_act' || raw === 'warranty_certificate' || raw === 'defect_act') return raw;
     return 'contract';
 };
 

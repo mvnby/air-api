@@ -14,7 +14,7 @@ from .common import (
     PaymentType,
 )
 from .customer import Customer, CustomerBranch, CustomerContract, CustomerRequisitesRecognition, Lead
-from .equipment import CustomerEquipment, EquipmentServiceHistory
+from .equipment import CustomerEquipment, EquipmentComponent, EquipmentServiceHistory
 from .brand import Brand, ProductSeries
 from .cart import Cart, CartItem
 from .catalog_import import CatalogImportJob
@@ -84,6 +84,7 @@ __all__ = [
     "DocumentTemplateActLink",
     "DocumentTemplateCustomerLink",
     "CustomerEquipment",
+    "EquipmentComponent",
     "EquipmentServiceEventType",
     "EquipmentServiceHistory",
     "Favorite",

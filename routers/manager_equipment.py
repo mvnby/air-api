@@ -8,17 +8,25 @@ from core.manager_api_errors import manager_http_error
 from core.manager_error_codes import BAD_REQUEST, CUSTOMER_NOT_FOUND, EQUIPMENT_NOT_FOUND
 from core.security import get_current_username
 from routers.manager_operation_ids import (
+    CREATE_MANAGER_EQUIPMENT_COMPONENT,
     CREATE_MANAGER_EQUIPMENT,
+    CREATE_MANAGER_EQUIPMENT_FROM_ORDER,
     CREATE_MANAGER_EQUIPMENT_HISTORY,
     CREATE_MANAGER_EQUIPMENT_HISTORY_FROM_REPAIR_ORDER,
     GET_MANAGER_EQUIPMENT,
     LIST_MANAGER_EQUIPMENT,
     LIST_MANAGER_EQUIPMENT_HISTORY,
+    PATCH_MANAGER_EQUIPMENT_COMPONENT,
     PATCH_MANAGER_EQUIPMENT,
 )
 from schemas import (
+    ManagerEquipmentComponentCreatePayload,
+    ManagerEquipmentComponentItemResponse,
+    ManagerEquipmentComponentUpdatePayload,
     ManagerEquipmentCreatePayload,
     ManagerEquipmentDetailResponse,
+    ManagerEquipmentFromOrderPayload,
+    ManagerEquipmentFromOrderResponse,
     ManagerEquipmentHistoryFromRepairOrderPayload,
     ManagerEquipmentItemResponse,
     ManagerEquipmentListResponse,
@@ -100,6 +108,33 @@ async def create_manager_equipment(
     return data
 
 
+@router.post(
+    "/from-order/{order_id}",
+    response_model=ManagerEquipmentFromOrderResponse,
+    status_code=status.HTTP_201_CREATED,
+    operation_id=CREATE_MANAGER_EQUIPMENT_FROM_ORDER,
+)
+async def create_manager_equipment_from_order(
+    order_id: int,
+    payload: ManagerEquipmentFromOrderPayload,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await EquipmentService.create_equipment_from_order(
+            session=session,
+            order_id=order_id,
+            payload=payload.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=CREATE_MANAGER_EQUIPMENT_FROM_ORDER,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
 @router.get("/{equipment_id}", response_model=ManagerEquipmentDetailResponse, operation_id=GET_MANAGER_EQUIPMENT)
 async def get_manager_equipment(
     equipment_id: int,
@@ -145,6 +180,75 @@ async def patch_manager_equipment(
         raise manager_http_error(
             status_code=404,
             endpoint=PATCH_MANAGER_EQUIPMENT,
+            error_code=EQUIPMENT_NOT_FOUND,
+        )
+    return data
+
+
+@router.post(
+    "/{equipment_id}/components",
+    response_model=ManagerEquipmentComponentItemResponse,
+    status_code=status.HTTP_201_CREATED,
+    operation_id=CREATE_MANAGER_EQUIPMENT_COMPONENT,
+)
+async def create_manager_equipment_component(
+    equipment_id: int,
+    payload: ManagerEquipmentComponentCreatePayload,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        data = await EquipmentService.create_component(
+            session=session,
+            equipment_id=equipment_id,
+            payload=payload.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=CREATE_MANAGER_EQUIPMENT_COMPONENT,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+    if data is None:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=CREATE_MANAGER_EQUIPMENT_COMPONENT,
+            error_code=EQUIPMENT_NOT_FOUND,
+        )
+    return data
+
+
+@router.patch(
+    "/{equipment_id}/components/{component_id}",
+    response_model=ManagerEquipmentComponentItemResponse,
+    operation_id=PATCH_MANAGER_EQUIPMENT_COMPONENT,
+)
+async def patch_manager_equipment_component(
+    equipment_id: int,
+    component_id: int,
+    payload: ManagerEquipmentComponentUpdatePayload,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        data = await EquipmentService.update_component(
+            session=session,
+            equipment_id=equipment_id,
+            component_id=component_id,
+            payload=payload.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=PATCH_MANAGER_EQUIPMENT_COMPONENT,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+    if data is None:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=PATCH_MANAGER_EQUIPMENT_COMPONENT,
             error_code=EQUIPMENT_NOT_FOUND,
         )
     return data

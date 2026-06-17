@@ -118,8 +118,13 @@ export type { ManagerCustomerContractUpdatePayload } from './models/ManagerCusto
 export type { ManagerCustomerDocumentItem } from './models/ManagerCustomerDocumentItem';
 export type { ManagerCustomerDocumentListResponse } from './models/ManagerCustomerDocumentListResponse';
 export type { ManagerCustomerUpdatePayload } from './models/ManagerCustomerUpdatePayload';
+export type { ManagerEquipmentComponentCreatePayload } from './models/ManagerEquipmentComponentCreatePayload';
+export type { ManagerEquipmentComponentItemResponse } from './models/ManagerEquipmentComponentItemResponse';
+export type { ManagerEquipmentComponentUpdatePayload } from './models/ManagerEquipmentComponentUpdatePayload';
 export type { ManagerEquipmentCreatePayload } from './models/ManagerEquipmentCreatePayload';
 export type { ManagerEquipmentDetailResponse } from './models/ManagerEquipmentDetailResponse';
+export type { ManagerEquipmentFromOrderPayload } from './models/ManagerEquipmentFromOrderPayload';
+export type { ManagerEquipmentFromOrderResponse } from './models/ManagerEquipmentFromOrderResponse';
 export type { ManagerEquipmentHistoryFromRepairOrderPayload } from './models/ManagerEquipmentHistoryFromRepairOrderPayload';
 export type { ManagerEquipmentItemResponse } from './models/ManagerEquipmentItemResponse';
 export type { ManagerEquipmentListResponse } from './models/ManagerEquipmentListResponse';

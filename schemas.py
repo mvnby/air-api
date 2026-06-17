@@ -1562,11 +1562,33 @@ class ManagerEquipmentServiceHistoryItemResponse(BaseModel):
     updated_at: Optional[datetime] = None
 
 
+class ManagerEquipmentComponentItemResponse(BaseModel):
+    id: int
+    equipment_id: int
+    catalog_product_id: Optional[int] = None
+    supplier_id: Optional[int] = None
+    component_type: str = "other"
+    title: Optional[str] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    serial: Optional[str] = None
+    inventory_number: Optional[str] = None
+    supplier_invoice_number: Optional[str] = None
+    supplier_invoice_date: Optional[datetime] = None
+    notes: Optional[str] = None
+    is_archived: bool = False
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
 class ManagerEquipmentItemResponse(BaseModel):
     id: int
     customer_id: int
     customer_branch_id: Optional[int] = None
+    catalog_product_id: Optional[int] = None
+    source_order_id: Optional[int] = None
     equipment_type: str = "hvac"
+    equipment_source: str = "unknown"
     display_name: Optional[str] = None
     brand: Optional[str] = None
     model: Optional[str] = None
@@ -1574,6 +1596,12 @@ class ManagerEquipmentItemResponse(BaseModel):
     inventory_number: Optional[str] = None
     location_hint: Optional[str] = None
     refrigerant_type: Optional[str] = None
+    installed_at: Optional[datetime] = None
+    commissioned_at: Optional[datetime] = None
+    warranty_started_at: Optional[datetime] = None
+    warranty_expires_at: Optional[datetime] = None
+    warranty_terms: Optional[str] = None
+    warranty_status: str = "unknown"
     notes: Optional[str] = None
     is_archived: bool = False
     created_at: datetime
@@ -1581,6 +1609,7 @@ class ManagerEquipmentItemResponse(BaseModel):
 
 
 class ManagerEquipmentDetailResponse(ManagerEquipmentItemResponse):
+    components: List[ManagerEquipmentComponentItemResponse] = Field(default_factory=list)
     recent_history: List[ManagerEquipmentServiceHistoryItemResponse] = Field(default_factory=list)
 
 
@@ -1594,10 +1623,89 @@ class ManagerEquipmentServiceHistoryListResponse(BaseModel):
     meta: Meta
 
 
+class ManagerEquipmentComponentCreatePayload(BaseModel):
+    catalog_product_id: Optional[int] = None
+    supplier_id: Optional[int] = None
+    component_type: Optional[str] = "other"
+    title: Optional[str] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    serial: Optional[str] = None
+    inventory_number: Optional[str] = None
+    supplier_invoice_number: Optional[str] = None
+    supplier_invoice_date: Optional[datetime] = None
+    notes: Optional[str] = None
+    is_archived: bool = False
+
+    @field_validator(
+        "component_type",
+        "title",
+        "brand",
+        "model",
+        "serial",
+        "inventory_number",
+        "supplier_invoice_number",
+        "notes",
+    )
+    @classmethod
+    def _trim_string_fields(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+
+class ManagerEquipmentComponentUpdatePayload(BaseModel):
+    catalog_product_id: Optional[int] = None
+    supplier_id: Optional[int] = None
+    component_type: Optional[str] = None
+    title: Optional[str] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    serial: Optional[str] = None
+    inventory_number: Optional[str] = None
+    supplier_invoice_number: Optional[str] = None
+    supplier_invoice_date: Optional[datetime] = None
+    notes: Optional[str] = None
+    is_archived: Optional[bool] = None
+
+    @field_validator(
+        "component_type",
+        "title",
+        "brand",
+        "model",
+        "serial",
+        "inventory_number",
+        "supplier_invoice_number",
+        "notes",
+    )
+    @classmethod
+    def _trim_string_fields(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+
+class ManagerEquipmentFromOrderPayload(BaseModel):
+    warranty_months: Optional[int] = Field(default=24, ge=0, le=120)
+    warranty_start_date: Optional[datetime] = None
+    include_component_placeholders: bool = True
+
+
+class ManagerEquipmentFromOrderResponse(BaseModel):
+    items: List[ManagerEquipmentDetailResponse] = Field(default_factory=list)
+    created_count: int = 0
+    skipped_count: int = 0
+
+
 class ManagerEquipmentCreatePayload(BaseModel):
     customer_id: int
     customer_branch_id: Optional[int] = None
+    catalog_product_id: Optional[int] = None
+    source_order_id: Optional[int] = None
     equipment_type: Optional[str] = "hvac"
+    equipment_source: Optional[str] = "unknown"
     display_name: Optional[str] = None
     brand: Optional[str] = None
     model: Optional[str] = None
@@ -1605,11 +1713,17 @@ class ManagerEquipmentCreatePayload(BaseModel):
     inventory_number: Optional[str] = None
     location_hint: Optional[str] = None
     refrigerant_type: Optional[str] = None
+    installed_at: Optional[datetime] = None
+    commissioned_at: Optional[datetime] = None
+    warranty_started_at: Optional[datetime] = None
+    warranty_expires_at: Optional[datetime] = None
+    warranty_terms: Optional[str] = None
     notes: Optional[str] = None
     is_archived: bool = False
 
     @field_validator(
         "equipment_type",
+        "equipment_source",
         "display_name",
         "brand",
         "model",
@@ -1617,6 +1731,7 @@ class ManagerEquipmentCreatePayload(BaseModel):
         "inventory_number",
         "location_hint",
         "refrigerant_type",
+        "warranty_terms",
         "notes",
     )
     @classmethod
@@ -1629,7 +1744,10 @@ class ManagerEquipmentCreatePayload(BaseModel):
 
 class ManagerEquipmentUpdatePayload(BaseModel):
     customer_branch_id: Optional[int] = None
+    catalog_product_id: Optional[int] = None
+    source_order_id: Optional[int] = None
     equipment_type: Optional[str] = None
+    equipment_source: Optional[str] = None
     display_name: Optional[str] = None
     brand: Optional[str] = None
     model: Optional[str] = None
@@ -1637,11 +1755,17 @@ class ManagerEquipmentUpdatePayload(BaseModel):
     inventory_number: Optional[str] = None
     location_hint: Optional[str] = None
     refrigerant_type: Optional[str] = None
+    installed_at: Optional[datetime] = None
+    commissioned_at: Optional[datetime] = None
+    warranty_started_at: Optional[datetime] = None
+    warranty_expires_at: Optional[datetime] = None
+    warranty_terms: Optional[str] = None
     notes: Optional[str] = None
     is_archived: Optional[bool] = None
 
     @field_validator(
         "equipment_type",
+        "equipment_source",
         "display_name",
         "brand",
         "model",
@@ -1649,6 +1773,7 @@ class ManagerEquipmentUpdatePayload(BaseModel):
         "inventory_number",
         "location_hint",
         "refrigerant_type",
+        "warranty_terms",
         "notes",
     )
     @classmethod
