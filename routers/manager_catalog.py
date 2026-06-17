@@ -27,6 +27,8 @@ from routers.manager_operation_ids import (
     GET_MANAGER_PRODUCTS,
     PATCH_MANAGER_CUSTOMER,
     DELETE_MANAGER_CUSTOMER,
+    CREATE_MANAGER_PRODUCT,
+    DUPLICATE_MANAGER_PRODUCT,
     SMART_SEARCH_PRODUCTS,
     UPDATE_PRODUCT,
     DELETE_MANAGER_PRODUCT,
@@ -59,6 +61,8 @@ from schemas import (
     ManagerTagGroupResponse,
     OnlinerImportPayload,
     OnlinerImportResultResponse,
+    ProductCreate,
+    ProductDuplicatePayload,
     ProductUpdate,
 )
 from services.catalog_import_runtime_service import catalog_import_runtime_service
@@ -431,6 +435,65 @@ async def delete_customer_for_manager(
             error_code=BAD_REQUEST,
             message=str(exc),
         ) from exc
+
+
+@router.post(
+    "/products",
+    response_model=ManagerActionMessageResponse,
+    operation_id=CREATE_MANAGER_PRODUCT,
+)
+async def create_product(
+    data: ProductCreate,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    """Create a manual product card from the manager UI."""
+    try:
+        return await ManagerCatalogService.create_product(
+            session=session,
+            data=data,
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=CREATE_MANAGER_PRODUCT,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/products/{product_id}/duplicate",
+    response_model=ManagerActionMessageResponse,
+    operation_id=DUPLICATE_MANAGER_PRODUCT,
+)
+async def duplicate_product(
+    product_id: int,
+    data: ProductDuplicatePayload,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    """Duplicate a product card, optionally overriding selected fields."""
+    try:
+        result = await ManagerCatalogService.duplicate_product(
+            session=session,
+            product_id=product_id,
+            data=data,
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=DUPLICATE_MANAGER_PRODUCT,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+    if not result:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=DUPLICATE_MANAGER_PRODUCT,
+            error_code=PRODUCT_NOT_FOUND,
+        )
+    return result
 
 
 @router.patch(

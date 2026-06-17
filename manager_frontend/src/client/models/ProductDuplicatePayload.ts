@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ProductManualPayload } from './ProductManualPayload';
-export type ProductUpdate = {
+export type ProductDuplicatePayload = {
     title?: (string | null);
     price?: (number | null);
     old_price?: (number | null);
@@ -20,5 +20,9 @@ export type ProductUpdate = {
     series_id?: (number | null);
     tag_ids?: (Array<number> | null);
     manuals?: Array<ProductManualPayload>;
+    copy_gallery?: boolean;
+    copy_manuals?: boolean;
+    copy_tags?: boolean;
+    make_unpublished?: boolean;
 };
 

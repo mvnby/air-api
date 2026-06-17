@@ -47,6 +47,8 @@ import type { ManagerMediaSetMainImageResponse } from '../models/ManagerMediaSet
 import type { ManagerMediaUploadLocalImagesResponse } from '../models/ManagerMediaUploadLocalImagesResponse';
 import type { ManagerNormalizeLegacySpecsResponse } from '../models/ManagerNormalizeLegacySpecsResponse';
 import type { ManagerTagGroupResponse } from '../models/ManagerTagGroupResponse';
+import type { ProductCreate } from '../models/ProductCreate';
+import type { ProductDuplicatePayload } from '../models/ProductDuplicatePayload';
 import type { ProductImageCropPayload } from '../models/ProductImageCropPayload';
 import type { ProductImageVariantBatchProcessResponse } from '../models/ProductImageVariantBatchProcessResponse';
 import type { ProductImageVariantCandidatesResponse } from '../models/ProductImageVariantCandidatesResponse';
@@ -395,6 +397,51 @@ export class ManagerService {
                 'customer_id': customerId,
                 'branch_id': branchId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Product
+     * Create a manual product card from the manager UI.
+     * @param requestBody
+     * @returns ManagerActionMessageResponse Successful Response
+     * @throws ApiError
+     */
+    public static createManagerProduct(
+        requestBody: ProductCreate,
+    ): CancelablePromise<ManagerActionMessageResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/products',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Duplicate Product
+     * Duplicate a product card, optionally overriding selected fields.
+     * @param productId
+     * @param requestBody
+     * @returns ManagerActionMessageResponse Successful Response
+     * @throws ApiError
+     */
+    public static duplicateManagerProduct(
+        productId: number,
+        requestBody: ProductDuplicatePayload,
+    ): CancelablePromise<ManagerActionMessageResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/products/{product_id}/duplicate',
+            path: {
+                'product_id': productId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

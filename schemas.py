@@ -2132,12 +2132,44 @@ class ProductUpdate(BaseModel):
     price: Optional[int] = None
     old_price: Optional[int] = None
     slug: Optional[str] = None
+    description: Optional[str] = None
+    area: Optional[int] = None
+    is_inverter: Optional[bool] = None
+    power_cooling: Optional[float] = None
+    main_image: Optional[str] = None
+    source_url: Optional[str] = None
     specs: Optional[Dict[str, Any]] = None
     is_published: Optional[bool] = None
     brand_id: Optional[int] = None
     series_id: Optional[int] = None
     tag_ids: Optional[List[int]] = None
     manuals: List[ProductManualPayload] = Field(default_factory=list)
+
+
+class ProductCreate(BaseModel):
+    title: str = Field(min_length=1)
+    price: int = Field(default=0, ge=0)
+    old_price: Optional[int] = None
+    slug: Optional[str] = None
+    description: str = ""
+    area: int = Field(default=0, ge=0)
+    is_inverter: bool = False
+    power_cooling: Optional[float] = None
+    main_image: Optional[str] = None
+    source_url: Optional[str] = None
+    specs: Dict[str, Any] = Field(default_factory=dict)
+    is_published: bool = True
+    brand_id: Optional[int] = None
+    series_id: Optional[int] = None
+    tag_ids: List[int] = Field(default_factory=list)
+    manuals: List[ProductManualPayload] = Field(default_factory=list)
+
+
+class ProductDuplicatePayload(ProductUpdate):
+    copy_gallery: bool = True
+    copy_manuals: bool = True
+    copy_tags: bool = True
+    make_unpublished: bool = False
 
 
 class SupplierResponse(BaseModel):

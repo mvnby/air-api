@@ -3,22 +3,22 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ProductManualPayload } from './ProductManualPayload';
-export type ProductUpdate = {
-    title?: (string | null);
-    price?: (number | null);
+export type ProductCreate = {
+    title: string;
+    price?: number;
     old_price?: (number | null);
     slug?: (string | null);
-    description?: (string | null);
-    area?: (number | null);
-    is_inverter?: (boolean | null);
+    description?: string;
+    area?: number;
+    is_inverter?: boolean;
     power_cooling?: (number | null);
     main_image?: (string | null);
     source_url?: (string | null);
-    specs?: (Record<string, any> | null);
-    is_published?: (boolean | null);
+    specs?: Record<string, any>;
+    is_published?: boolean;
     brand_id?: (number | null);
     series_id?: (number | null);
-    tag_ids?: (Array<number> | null);
+    tag_ids?: Array<number>;
     manuals?: Array<ProductManualPayload>;
 };
 

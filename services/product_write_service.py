@@ -1,10 +1,12 @@
 """Write-oriented product service operations (mutations/updates)."""
 
+from copy import deepcopy
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
+from slugify import slugify
 
 from crud.product import ProductDAO
 from models import Product, ProductImage, Tag
@@ -16,6 +18,232 @@ from services.product_supply_metrics_service import ProductSupplyMetricsService
 
 
 class ProductWriteService:
+    @staticmethod
+    async def _unique_slug(
+        session: AsyncSession,
+        *,
+        requested_slug: Optional[str],
+        title: str,
+    ) -> str:
+        base = slugify(str(requested_slug or "").strip(), lowercase=True)
+        if not base:
+            base = slugify(str(title or "").strip(), lowercase=True)
+        if not base:
+            raise ValueError("Не удалось сформировать slug товара.")
+
+        candidate = base
+        suffix = 2
+        while True:
+            existing = (
+                await session.execute(select(Product.id).where(Product.slug == candidate))
+            ).scalar_one_or_none()
+            if existing is None:
+                return candidate
+            candidate = f"{base}-{suffix}"
+            suffix += 1
+
+    @staticmethod
+    async def _resolve_tags(session: AsyncSession, tag_ids: Optional[List[int]]) -> List[Tag]:
+        if not tag_ids:
+            return []
+        rows = (
+            await session.execute(
+                select(Tag).where(Tag.id.in_(tag_ids)).options(selectinload(Tag.group))
+            )
+        ).scalars().all()
+        return list(rows)
+
+    @staticmethod
+    def _wifi_tag_slugs(tags: List[Tag]) -> List[str]:
+        return [tag.slug for tag in tags if tag.slug in {"wifi-builtin", "wifi-ready"}]
+
+    @staticmethod
+    async def create_product(
+        session: AsyncSession,
+        create_data: Dict[str, Any],
+        tag_ids: Optional[List[int]] = None,
+    ) -> Dict[str, Any]:
+        payload = dict(create_data)
+        manuals_payload = payload.pop("manuals", [])
+        selected_tags = await ProductWriteService._resolve_tags(session, tag_ids)
+        title = str(payload.get("title") or "").strip()
+        if not title:
+            raise ValueError("Название товара обязательно.")
+
+        slug = await ProductWriteService._unique_slug(
+            session,
+            requested_slug=payload.get("slug"),
+            title=title,
+        )
+        specs = normalize_specs(
+            deepcopy(payload.get("specs") or {}),
+            wifi_tag_slugs=ProductWriteService._wifi_tag_slugs(selected_tags),
+            strict_wifi_from_tags=False,
+            title=title,
+        )
+
+        product = Product(
+            title=title,
+            slug=slug,
+            description=str(payload.get("description") or ""),
+            price=int(payload.get("price") or 0),
+            old_price=payload.get("old_price"),
+            area=int(payload.get("area") or 0),
+            is_inverter=bool(payload.get("is_inverter", False)),
+            power_cooling=payload.get("power_cooling"),
+            main_image=payload.get("main_image"),
+            images=[],
+            tags=selected_tags,
+            specs=specs,
+            is_published=bool(payload.get("is_published", True)),
+            source_url=payload.get("source_url"),
+            brand_id=payload.get("brand_id"),
+            series_id=payload.get("series_id"),
+        )
+        session.add(product)
+        await session.flush()
+
+        await replace_manuals(
+            session,
+            product_id=product.id,
+            manuals=manuals_payload,
+        )
+        await sync_product_brand_series(
+            session,
+            product=product,
+            specs=specs,
+            title=title,
+            tags=selected_tags,
+            explicit_brand_id=payload.get("brand_id"),
+            explicit_brand_override="brand_id" in payload,
+        )
+        await CatalogRevisionService.bump_commit_and_purge(
+            session,
+            scope="product_create",
+            product_ids=[product.id],
+            slugs=[product.slug],
+        )
+        return {"message": "Product created", "id": product.id}
+
+    @staticmethod
+    async def duplicate_product(
+        session: AsyncSession,
+        source_product_id: int,
+        overrides: Dict[str, Any],
+        tag_ids: Optional[List[int]] = None,
+        *,
+        copy_gallery: bool = True,
+        copy_manuals: bool = True,
+        copy_tags: bool = True,
+        make_unpublished: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        source = await ProductDAO.get_by_id(session, source_product_id)
+        if not source:
+            return None
+
+        payload = dict(overrides)
+        manuals_payload = payload.pop("manuals", None)
+        title = str(payload.get("title") or source.title or "").strip()
+        if not title:
+            raise ValueError("Название товара обязательно.")
+
+        if tag_ids is not None:
+            selected_tags = await ProductWriteService._resolve_tags(session, tag_ids)
+        elif copy_tags:
+            selected_tags = list(source.tags or [])
+        else:
+            selected_tags = []
+
+        source_specs = deepcopy(source.specs or {})
+        specs_payload = payload.get("specs", source_specs)
+        specs = normalize_specs(
+            deepcopy(specs_payload or {}),
+            wifi_tag_slugs=ProductWriteService._wifi_tag_slugs(selected_tags),
+            strict_wifi_from_tags=False,
+            title=title,
+        )
+        slug = await ProductWriteService._unique_slug(
+            session,
+            requested_slug=payload.get("slug") or f"{source.slug}-copy",
+            title=title,
+        )
+        is_published = bool(payload.get("is_published", source.is_published))
+        if make_unpublished:
+            is_published = False
+
+        product = Product(
+            title=title,
+            slug=slug,
+            description=str(payload.get("description", source.description or "")),
+            price=int(payload.get("price", source.price) or 0),
+            old_price=payload.get("old_price", source.old_price),
+            area=int(payload.get("area", source.area) or 0),
+            is_inverter=bool(payload.get("is_inverter", source.is_inverter)),
+            power_cooling=payload.get("power_cooling", source.power_cooling),
+            main_image=payload.get("main_image", source.main_image),
+            images=list(source.images or []),
+            tags=selected_tags,
+            specs=specs,
+            is_published=is_published,
+            source_url=payload.get("source_url"),
+            brand_id=payload.get("brand_id", source.brand_id),
+            series_id=payload.get("series_id", source.series_id),
+        )
+        session.add(product)
+        await session.flush()
+
+        if copy_gallery:
+            seen_urls: set[str] = set()
+            for image in source.gallery_images or []:
+                if not image.url or image.url in seen_urls:
+                    continue
+                seen_urls.add(image.url)
+                session.add(
+                    ProductImage(
+                        product_id=product.id,
+                        url=image.url,
+                        is_installation_photo=image.is_installation_photo,
+                    )
+                )
+
+        if manuals_payload is not None:
+            manuals_to_save = manuals_payload
+        elif copy_manuals:
+            manuals_to_save = [
+                {
+                    "kind": item.kind,
+                    "title": item.title,
+                    "url": item.url,
+                    "source": item.source,
+                }
+                for item in (source.attachments or [])
+                if item.kind == "manual"
+            ]
+        else:
+            manuals_to_save = []
+        await replace_manuals(
+            session,
+            product_id=product.id,
+            manuals=manuals_to_save,
+        )
+
+        await sync_product_brand_series(
+            session,
+            product=product,
+            specs=specs,
+            title=title,
+            tags=selected_tags,
+            explicit_brand_id=payload.get("brand_id"),
+            explicit_brand_override="brand_id" in payload,
+        )
+        await CatalogRevisionService.bump_commit_and_purge(
+            session,
+            scope="product_duplicate",
+            product_ids=[product.id],
+            slugs=[product.slug],
+        )
+        return {"message": "Product duplicated", "id": product.id}
+
     @staticmethod
     async def save_main_image(
         session: AsyncSession,
