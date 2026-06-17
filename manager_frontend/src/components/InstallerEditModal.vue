@@ -153,7 +153,7 @@ const submit = async () => {
 
                                 <label class="block">
                                     <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Телефон</span>
-                                    <input v-model="formData.phone" type="text" class="field-input" placeholder="+375..." :disabled="loading" />
+                                    <input v-model="formData.phone" type="text" class="field-input" placeholder="+375... или +7..." :disabled="loading" />
                                 </label>
 
                                 <label class="block">

@@ -8,9 +8,24 @@ function normalizePhoneDigits(value: string): string {
   return digits;
 }
 
-function isBelarusPhoneComplete(masked: string): boolean {
-  const normalized = normalizePhoneDigits(masked);
-  return normalized.length === 12 && normalized.startsWith('375');
+function isInternationalPhoneComplete(value: string): boolean {
+  const raw = (value || '').trim();
+  if (!raw || !/^\+?[\d\s().-]+$/.test(raw)) return false;
+  const normalized = normalizePhoneDigits(raw);
+  return normalized.length >= 7 && normalized.length <= 15;
+}
+
+export function formatPhoneForDisplay(value: string): string {
+  const trimmed = (value || '').trim();
+  const normalized = normalizePhoneDigits(trimmed);
+  if (normalized.length === 12 && normalized.startsWith('375')) {
+    return `+375 (${normalized.slice(3, 5)}) ${normalized.slice(5, 8)}-${normalized.slice(8, 10)}-${normalized.slice(10, 12)}`;
+  }
+  if (normalized.length === 11 && (normalized.startsWith('7') || normalized.startsWith('8'))) {
+    const national = normalized.startsWith('8') ? `7${normalized.slice(1)}` : normalized;
+    return `+7 (${national.slice(1, 4)}) ${national.slice(4, 7)}-${national.slice(7, 9)}-${national.slice(9, 11)}`;
+  }
+  return trimmed;
 }
 
 function normalizeIban(value: string): string {
@@ -48,14 +63,14 @@ export function validateOptionalByIban(value: string): string {
   return ibanChecksumValid(iban) ? '' : 'Введите корректный IBAN BY';
 }
 
-export function validateRequiredBelarusPhone(masked: string, isMaskComplete: boolean): string {
+export function validateRequiredBelarusPhone(masked: string, _isMaskComplete: boolean): string {
   const raw = (masked || '').trim();
   if (!raw) return 'Введите номер телефона';
-  if (!isMaskComplete || !isBelarusPhoneComplete(raw)) {
-    return 'Введите телефон полностью в формате +375 (XX) XXX-XX-XX';
+  if (!isInternationalPhoneComplete(raw)) {
+    return 'Введите телефон в международном формате, например +375 (XX) XXX-XX-XX или +7 XXX XXX-XX-XX';
   }
   const digits = normalizePhoneDigits(raw);
-  return digits.length === 12 && digits.startsWith('375')
+  return digits.length >= 7 && digits.length <= 15
     ? ''
-    : 'Введите телефон полностью в формате +375 (XX) XXX-XX-XX';
+    : 'Введите телефон в международном формате, например +375 (XX) XXX-XX-XX или +7 XXX XXX-XX-XX';
 }

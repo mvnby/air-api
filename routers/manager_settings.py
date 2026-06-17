@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_session
 from core.security import get_current_username
 from routers.manager_operation_ids import CREATE_MANAGER_SETTING, GET_FX_RATE, LIST_MANAGER_SETTINGS, SUGGEST_ADDRESS, UPDATE_MANAGER_SETTING
-from schemas import ManagerSettingCreatePayload, ManagerSettingListResponse, ManagerSettingResponse, ManagerSettingUpdatePayload, FxRateResponse
+from schemas import AddressSuggestResponse, ManagerSettingCreatePayload, ManagerSettingListResponse, ManagerSettingResponse, ManagerSettingUpdatePayload, FxRateResponse
 from services.address_suggest_service import AddressSuggestService
 from services.settings_service import SettingsService
 from services.fx_rate_service import FxRateService
@@ -35,10 +35,10 @@ async def get_fx_rate(session: AsyncSession = Depends(get_session)):
         source=source
     )
 
-@router.get("/address-suggest", operation_id=SUGGEST_ADDRESS)
+@router.get("/address-suggest", response_model=AddressSuggestResponse, operation_id=SUGGEST_ADDRESS)
 async def suggest_address(q: str = Query(..., min_length=2)):
     try:
-        return await AddressSuggestService.fetch_raw(q)
+        return AddressSuggestResponse(items=await AddressSuggestService.suggest(q))
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except httpx.HTTPError:

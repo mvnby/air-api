@@ -1,10 +1,9 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useStore } from '@nanostores/vue';
 import { getInstallationRates, getGlobalConfig, createOrder } from '../utils/api';
 import { installationOptions, fetchInstallationOptions } from '../store/installation';
-import IMask from 'imask';
-import { validateRequiredBelarusPhone } from '../utils/validation';
+import { formatPhoneForDisplay, validateRequiredBelarusPhone } from '../utils/validation';
 
 const rates = ref([]);
 const loading = ref(true);
@@ -51,14 +50,12 @@ const RANGE_MAP = {
 
 onMounted(async () => {
   if (phoneInputRef.value) {
-    phoneMask = IMask(phoneInputRef.value, {
-      mask: '+{375} (00) 000-00-00',
-      lazy: false,
-      placeholderChar: '_'
-    });
-    phoneMask.on('accept', () => {
-      form.value.phone = phoneMask.value;
-    });
+    phoneInputRef.value.onfocus = () => {
+      if (!form.value.phone.trim()) form.value.phone = '+375 ';
+    };
+    phoneInputRef.value.onblur = () => {
+      form.value.phone = formatPhoneForDisplay(form.value.phone);
+    };
   }
 
   try {
@@ -88,13 +85,6 @@ onMounted(async () => {
     error.value = err.message;
   } finally {
     loading.value = false;
-  }
-});
-
-onBeforeUnmount(() => {
-  if (phoneMask) {
-    phoneMask.destroy();
-    phoneMask = null;
   }
 });
 
@@ -188,7 +178,6 @@ const submitting = ref(false);
 const success = ref(false);
 const phoneError = ref('');
 const phoneInputRef = ref(null);
-let phoneMask = null;
 const form = ref({
     name: '',
     phone: ''
@@ -201,7 +190,8 @@ const openOrderModal = () => {
 };
 
 const validatePhoneField = () => {
-    phoneError.value = validateRequiredBelarusPhone(form.value.phone, Boolean(phoneMask && phoneMask.masked.isComplete));
+    form.value.phone = formatPhoneForDisplay(form.value.phone);
+    phoneError.value = validateRequiredBelarusPhone(form.value.phone, true);
 };
 
 const submitOrder = async () => {
@@ -240,7 +230,6 @@ const submitOrder = async () => {
     if (res) {
         success.value = true;
         form.value = { name: '', phone: '' };
-        if (phoneMask) phoneMask.value = '';
         setTimeout(() => {
             showModal.value = false;
         }, 3000);
@@ -425,7 +414,7 @@ const submitOrder = async () => {
                           type="tel"
                           v-model="form.phone"
                           required
-                          placeholder="+375 (XX) XXX-XX-XX"
+                          placeholder="+375 (XX) XXX-XX-XX или +7 XXX XXX-XX-XX"
                           class="form-input"
                           :class="{ invalid: phoneError }"
                           @blur="validatePhoneField"

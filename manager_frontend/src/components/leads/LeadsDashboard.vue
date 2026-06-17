@@ -1623,7 +1623,7 @@ const onQualifyIbanBlur = async () => {
               :class="createPhoneError ? 'border-red-500 focus:outline-red-400' : ''"
               type="tel"
               inputmode="tel"
-              placeholder="+375 (XX) XXX-XX-XX"
+              placeholder="+375 (XX) XXX-XX-XX или +7 XXX XXX-XX-XX"
               @blur="onCreatePhoneBlur"
             />
             <span v-if="createPhoneError" class="text-xs text-red-300">{{ createPhoneError }}</span>
@@ -1839,7 +1839,7 @@ const onQualifyIbanBlur = async () => {
               :class="qualifyPhoneError ? 'border-red-500 focus:outline-red-400' : ''"
               type="tel"
               inputmode="tel"
-              placeholder="+375 (XX) XXX-XX-XX"
+              placeholder="+375 (XX) XXX-XX-XX или +7 XXX XXX-XX-XX"
               @blur="validateQualifyPhoneOnBlur"
             />
             <span v-if="qualifyPhoneError" class="text-xs text-red-300">{{ qualifyPhoneError }}</span>

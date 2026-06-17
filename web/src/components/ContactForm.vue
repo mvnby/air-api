@@ -1,8 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { submitContactForm } from '../utils/api';
-import IMask from 'imask';
-import { validateRequiredBelarusPhone } from '../utils/validation';
+import { formatPhoneForDisplay, validateRequiredBelarusPhone } from '../utils/validation';
 
 const props = defineProps({
   title: {
@@ -30,27 +29,22 @@ const form = ref({
 });
 
 const phoneInput = ref(null);
-let mask = null;
 const isSubmitting = ref(false);
 const isSuccess = ref(false);
 
 onMounted(() => {
-    if (phoneInput.value) {
-        mask = IMask(phoneInput.value, {
-            mask: '+{375} (00) 000-00-00',
-            lazy: false,
-            placeholderChar: '_'
-        });
-        
-        // Initial sync
-        mask.on('accept', () => {
-            form.value.phone = mask.value;
-        });
-    }
+    if (!phoneInput.value) return;
+    phoneInput.value.onfocus = () => {
+        if (!form.value.phone.trim()) form.value.phone = '+375 ';
+    };
+    phoneInput.value.onblur = () => {
+        form.value.phone = formatPhoneForDisplay(form.value.phone);
+    };
 });
 
 const submitForm = async () => {
-  const phoneError = validateRequiredBelarusPhone(form.value.phone, Boolean(mask && mask.masked.isComplete));
+  form.value.phone = formatPhoneForDisplay(form.value.phone);
+  const phoneError = validateRequiredBelarusPhone(form.value.phone, true);
   if (phoneError) {
       alert(phoneError);
       return;
@@ -75,7 +69,6 @@ const submitForm = async () => {
     setTimeout(() => {
         isSuccess.value = false;
         form.value = { name: '', phone: '', message: '' };
-        if (mask) mask.value = ''; // Reset mask value
     }, 5000);
   } else {
     alert('Ошибка отправки. Попробуйте позже.');
@@ -115,7 +108,7 @@ const submitForm = async () => {
           id="phone" 
           ref="phoneInput"
           v-model="form.phone" 
-          placeholder="+375 (XX) XXX-XX-XX"
+          placeholder="+375 (XX) XXX-XX-XX или +7 XXX XXX-XX-XX"
           required
         >
       </div>

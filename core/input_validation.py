@@ -1,12 +1,13 @@
 import re
 from typing import Optional
 
-PHONE_ERROR = "Телефон должен быть в формате +375XXXXXXXXX"
+PHONE_ERROR = "Телефон должен быть в международном формате, например +375XXXXXXXXX или +7XXXXXXXXXX"
 UNP_ERROR = "УНП должен содержать 9 цифр"
 IBAN_ERROR = "IBAN должен быть валидным BY-счетом"
 BIC_ERROR = "BIC должен содержать 8-11 латинских символов/цифр"
 
 _EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+_PHONE_PATTERN = re.compile(r"^\+?[\d\s().-]+$")
 _BIC_PATTERN = re.compile(r"^[A-Z0-9]{8,11}$")
 _IBAN_BY_PATTERN = re.compile(r"^BY\d{2}[A-Z0-9]{24}$")
 
@@ -33,22 +34,26 @@ def normalize_phone_digits(value: str) -> str:
     return digits
 
 
+def is_valid_phone(value: str) -> bool:
+    cleaned = clean_optional(value)
+    if not cleaned or not _PHONE_PATTERN.match(cleaned):
+        return False
+    normalized = normalize_phone_digits(cleaned)
+    return 7 <= len(normalized) <= 15
+
+
 def validate_optional_phone(value: Optional[str]) -> Optional[str]:
     cleaned = clean_optional(value)
     if not cleaned:
         return None
-    normalized = normalize_phone_digits(cleaned)
-    if len(normalized) != 12 or not normalized.startswith("375"):
+    if not is_valid_phone(cleaned):
         raise ValueError(PHONE_ERROR)
     return cleaned
 
 
 def validate_required_phone(value: str) -> str:
     cleaned = clean_optional(value)
-    if not cleaned:
-        raise ValueError(PHONE_ERROR)
-    normalized = normalize_phone_digits(cleaned)
-    if len(normalized) != 12 or not normalized.startswith("375"):
+    if not cleaned or not is_valid_phone(cleaned):
         raise ValueError(PHONE_ERROR)
     return cleaned
 
