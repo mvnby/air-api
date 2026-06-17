@@ -1,9 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { SlidersHorizontal } from 'lucide-vue-next';
+import { Download, SlidersHorizontal, Upload } from 'lucide-vue-next';
 import type { DashboardView, Segment } from '../../api';
 import { api } from '../../api';
-import type { ManagerOrderDetailResponse, ManagerOrderListItemResponse, ManagerOrderUpdatePayload } from '../../client';
+import {
+  ManagerOrdersService,
+  type ManagerOrderDetailResponse,
+  type ManagerOrderImportPreviewResponse,
+  type ManagerOrderListItemResponse,
+  type ManagerOrderTransferPackage_Input,
+  type ManagerOrderUpdatePayload,
+} from '../../client';
 import OrdersTabSwitcher from './OrdersTabSwitcher.vue';
 import OrdersViewToggle from './OrdersViewToggle.vue';
 import OrderKanbanBoard from './OrderKanbanBoard.vue';
@@ -47,6 +54,13 @@ const hideOnHold = ref(true);
 const groupByCustomer = ref(true);
 const filtersOpen = ref(false);
 const customerAliases = ref<Record<number, string>>({});
+const selectedOrderIds = ref<number[]>([]);
+const transferLoading = ref(false);
+const importFileInput = ref<HTMLInputElement | null>(null);
+const importPackage = ref<ManagerOrderTransferPackage_Input | null>(null);
+const importPreview = ref<ManagerOrderImportPreviewResponse | null>(null);
+const importFileName = ref('');
+const importModalOpen = ref(false);
 
 const visibleOrders = computed(() => (
   hideOnHold.value ? orders.value.filter((order) => !order.is_on_hold) : orders.value
@@ -73,12 +87,127 @@ const groupedOrderItems = computed(() => {
 });
 
 const listItems = computed(() => buildCustomerOrderRenderItems(visibleOrders.value, segment.value, groupByCustomer.value, customerAliases.value));
+const visibleOrderIds = computed(() => visibleOrders.value.map((order) => order.id));
 
 const setToast = (message: string) => {
   toast.value = message;
   window.setTimeout(() => {
     if (toast.value === message) toast.value = '';
   }, 2500);
+};
+
+const toggleOrderSelection = (payload: { orderId: number; selected: boolean }) => {
+  const next = new Set(selectedOrderIds.value);
+  if (payload.selected) next.add(payload.orderId);
+  else next.delete(payload.orderId);
+  selectedOrderIds.value = Array.from(next);
+};
+
+const toggleManySelection = (payload: { orderIds: number[]; selected: boolean }) => {
+  const next = new Set(selectedOrderIds.value);
+  payload.orderIds.forEach((orderId) => {
+    if (payload.selected) next.add(orderId);
+    else next.delete(orderId);
+  });
+  selectedOrderIds.value = Array.from(next);
+};
+
+const selectAllVisible = () => {
+  selectedOrderIds.value = Array.from(new Set([...selectedOrderIds.value, ...visibleOrderIds.value]));
+};
+
+const clearSelection = () => {
+  selectedOrderIds.value = [];
+};
+
+const downloadJson = (payload: unknown, filename: string) => {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+};
+
+const exportSelectedOrders = async () => {
+  if (!selectedOrderIds.value.length) {
+    setToast('Выберите заказы для экспорта');
+    return;
+  }
+  transferLoading.value = true;
+  try {
+    const payload = await ManagerOrdersService.exportManagerOrders({
+      order_ids: selectedOrderIds.value,
+      include_payments: true,
+      include_work_stages: true,
+    });
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    downloadJson(payload, `orders-export-${stamp}.json`);
+    setToast(`Экспортировано: ${selectedOrderIds.value.length}`);
+  } catch (error) {
+    console.error(error);
+    setToast(`Ошибка экспорта: ${getApiErrorMessage(error)}`);
+  } finally {
+    transferLoading.value = false;
+  }
+};
+
+const openImportPicker = () => {
+  importFileInput.value?.click();
+};
+
+const resetImportState = () => {
+  importPackage.value = null;
+  importPreview.value = null;
+  importFileName.value = '';
+  importModalOpen.value = false;
+  if (importFileInput.value) importFileInput.value.value = '';
+};
+
+const handleImportFile = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  transferLoading.value = true;
+  try {
+    const raw = await file.text();
+    const parsed = JSON.parse(raw) as ManagerOrderTransferPackage_Input;
+    const preview = await ManagerOrdersService.previewImportManagerOrders({ package: parsed });
+    importPackage.value = parsed;
+    importPreview.value = preview;
+    importFileName.value = file.name;
+    importModalOpen.value = true;
+  } catch (error) {
+    console.error(error);
+    setToast(`Ошибка импорта: ${getApiErrorMessage(error)}`);
+    if (input) input.value = '';
+  } finally {
+    transferLoading.value = false;
+  }
+};
+
+const commitImport = async () => {
+  if (!importPackage.value || !importPreview.value?.can_import || transferLoading.value) return;
+  transferLoading.value = true;
+  try {
+    const response = await ManagerOrdersService.importManagerOrders({ package: importPackage.value });
+    setToast(`Создано заказов: ${response.created_count}`);
+    resetImportState();
+    clearSelection();
+    await loadOrders();
+    const firstCreatedOrderId = response.created_order_ids?.[0];
+    if (firstCreatedOrderId) {
+      await openOrder(firstCreatedOrderId);
+    }
+  } catch (error) {
+    console.error(error);
+    setToast(`Ошибка импорта: ${getApiErrorMessage(error)}`);
+  } finally {
+    transferLoading.value = false;
+  }
 };
 
 let loadRequestId = 0;
@@ -191,6 +320,8 @@ const loadOrders = async () => {
     if (requestId !== loadRequestId) return;
     // Leads are managed in the dedicated Leads section and should not appear in Orders.
     orders.value = response.items.filter((item) => item.status !== 'new_lead');
+    const loadedIds = new Set(orders.value.map((order) => order.id));
+    selectedOrderIds.value = selectedOrderIds.value.filter((orderId) => loadedIds.has(orderId));
     if (pendingOpenOrderId.value && openedByUrlOrderId.value !== pendingOpenOrderId.value) {
       await openOrder(pendingOpenOrderId.value, false);
       openedByUrlOrderId.value = pendingOpenOrderId.value;
@@ -403,6 +534,28 @@ watch(drawerOpen, (isOpen) => {
             <OrdersTabSwitcher v-model="segment" />
           </div>
           <div class="ml-auto flex shrink-0 items-center justify-end gap-1 sm:gap-2">
+            <button
+              type="button"
+              class="inline-flex h-8 items-center justify-center gap-1 rounded-xl border border-gray-200 bg-gray-50 px-2 text-xs font-semibold text-gray-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 sm:h-9 sm:px-3"
+              :disabled="transferLoading || !selectedOrderIds.length"
+              title="Экспорт выбранных заказов"
+              @click="exportSelectedOrders"
+            >
+              <Download class="h-4 w-4" />
+              <span class="hidden sm:inline">Экспорт</span>
+              <span v-if="selectedOrderIds.length" class="rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px] text-teal-800">{{ selectedOrderIds.length }}</span>
+            </button>
+            <button
+              type="button"
+              class="inline-flex h-8 items-center justify-center gap-1 rounded-xl border border-gray-200 bg-gray-50 px-2 text-xs font-semibold text-gray-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 sm:h-9 sm:px-3"
+              :disabled="transferLoading"
+              title="Импорт заказов из JSON"
+              @click="openImportPicker"
+            >
+              <Upload class="h-4 w-4" />
+              <span class="hidden sm:inline">Импорт</span>
+            </button>
+            <input ref="importFileInput" class="hidden" type="file" accept="application/json,.json" @change="handleImportFile" />
             <OrdersViewToggle v-model="view" />
             <button
               type="button"
@@ -441,6 +594,11 @@ watch(drawerOpen, (isOpen) => {
               <input v-model="hideOnHold" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
               <span class="text-sm font-medium">Скрывать отложенные</span>
             </label>
+            <div v-if="view === 'list'" class="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
+              <button type="button" class="text-sm font-medium text-teal-700 disabled:text-gray-400" :disabled="!visibleOrderIds.length" @click="selectAllVisible">Выбрать все</button>
+              <span class="text-xs text-gray-400">/</span>
+              <button type="button" class="text-sm font-medium text-gray-600 disabled:text-gray-400" :disabled="!selectedOrderIds.length" @click="clearSelection">Сбросить</button>
+            </div>
           </div>
         </Transition>
       </header>
@@ -470,10 +628,13 @@ watch(drawerOpen, (isOpen) => {
         :items="listItems"
         :segment="segment"
         :sort="sort"
+        :selected-order-ids="selectedOrderIds"
         @update:sort="sort = $event"
         @open="openOrder"
         @generate="onGenerateDoc"
         @rename-order="renameOrderTitle"
+        @toggle-select="toggleOrderSelection"
+        @toggle-select-many="toggleManySelection"
       />
     </div>
 
@@ -497,6 +658,61 @@ watch(drawerOpen, (isOpen) => {
           <p v-if="loginError" class="text-sm text-red-400">{{ loginError }}</p>
           <button class="btn-mini w-full justify-center" :disabled="loginLoading" @click="handleLogin">
             {{ loginLoading ? 'Входим...' : 'Войти' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="importModalOpen && importPreview" class="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4">
+      <div class="w-full max-w-2xl rounded-[1.5rem] border border-gray-200 bg-white p-5 text-gray-700 shadow-2xl">
+        <div class="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-semibold text-gray-900">Импорт заказов</h2>
+            <p class="mt-1 text-sm text-gray-500">{{ importFileName || 'orders-export.json' }}</p>
+          </div>
+          <button class="btn-mini-outline" type="button" @click="resetImportState">Закрыть</button>
+        </div>
+
+        <div class="grid gap-3 sm:grid-cols-3">
+          <div class="rounded-xl border border-gray-100 bg-slate-50 p-3">
+            <p class="text-xs text-gray-500">Заказы</p>
+            <p class="text-xl font-bold text-gray-900">{{ importPreview.orders_count }}</p>
+          </div>
+          <div class="rounded-xl border border-gray-100 bg-slate-50 p-3">
+            <p class="text-xs text-gray-500">Товары найдены</p>
+            <p class="text-xl font-bold text-teal-700">{{ importPreview.products_matched }} / {{ importPreview.products_total }}</p>
+          </div>
+          <div class="rounded-xl border border-gray-100 bg-slate-50 p-3">
+            <p class="text-xs text-gray-500">Новые клиенты</p>
+            <p class="text-xl font-bold text-gray-900">{{ importPreview.customers?.filter((item) => item.status === 'will_create').length || 0 }}</p>
+          </div>
+        </div>
+
+        <div v-if="importPreview.warnings?.length" class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <p v-for="warning in importPreview.warnings" :key="warning">{{ warning }}</p>
+        </div>
+
+        <div v-if="importPreview.products_missing" class="mt-4 max-h-56 overflow-auto rounded-xl border border-red-100">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-red-50 text-xs uppercase text-red-700">
+              <tr>
+                <th class="px-3 py-2">Товар</th>
+                <th class="px-3 py-2">Причина</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in importPreview.products?.filter((product) => product.status !== 'matched')" :key="`${item.source_order_id}-${item.product_title}`" class="border-t border-red-100">
+                <td class="px-3 py-2">{{ item.product_title }}</td>
+                <td class="px-3 py-2 text-red-700">{{ item.reason || 'not_found' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button class="btn-mini-outline justify-center" type="button" :disabled="transferLoading" @click="resetImportState">Отмена</button>
+          <button class="btn-mini justify-center" type="button" :disabled="transferLoading || !importPreview.can_import" @click="commitImport">
+            {{ transferLoading ? 'Импорт...' : 'Создать заказы' }}
           </button>
         </div>
       </div>

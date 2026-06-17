@@ -23,8 +23,14 @@ from routers.manager_operation_ids import (
     DELETE_MANAGER_ORDER_STAGE,
     CANCEL_MANAGER_ORDER_STAGE_DIRECT,
     DELETE_MANAGER_ORDER_STAGE_DIRECT,
+    IMPORT_MANAGER_ORDERS,
+    PREVIEW_IMPORT_MANAGER_ORDERS,
 )
 from schemas import (
+    ManagerOrderImportCommitRequest,
+    ManagerOrderImportCommitResponse,
+    ManagerOrderImportPreviewRequest,
+    ManagerOrderImportPreviewResponse,
     ManagerOrderCreatePayload,
     ManagerOrderDetailResponse,
     ManagerOrderDocumentResponse,
@@ -39,6 +45,7 @@ from schemas import (
 )
 from services.document_service import DocumentService
 from services.order_service import OrderService
+from services.order_transfer_service import OrderTransferService
 
 
 router = APIRouter(prefix="/api/manager/orders", tags=["manager-orders"])
@@ -128,6 +135,48 @@ async def patch_manager_order(
             error_code=ORDER_NOT_FOUND,
         )
     return data
+
+
+@router.post(
+    "/import/preview",
+    response_model=ManagerOrderImportPreviewResponse,
+    operation_id=PREVIEW_IMPORT_MANAGER_ORDERS,
+)
+async def preview_import_manager_orders(
+    payload: ManagerOrderImportPreviewRequest,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await OrderTransferService.preview_import(session, payload)
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=PREVIEW_IMPORT_MANAGER_ORDERS,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/import",
+    response_model=ManagerOrderImportCommitResponse,
+    operation_id=IMPORT_MANAGER_ORDERS,
+)
+async def import_manager_orders(
+    payload: ManagerOrderImportCommitRequest,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await OrderTransferService.import_orders(session, payload)
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=IMPORT_MANAGER_ORDERS,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
 
 
 @router.post(

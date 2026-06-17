@@ -5,7 +5,13 @@
 import type { ManagerOrderCreatePayload } from '../models/ManagerOrderCreatePayload';
 import type { ManagerOrderDetailResponse } from '../models/ManagerOrderDetailResponse';
 import type { ManagerOrderDocumentResponse } from '../models/ManagerOrderDocumentResponse';
+import type { ManagerOrderExportRequest } from '../models/ManagerOrderExportRequest';
+import type { ManagerOrderImportCommitRequest } from '../models/ManagerOrderImportCommitRequest';
+import type { ManagerOrderImportCommitResponse } from '../models/ManagerOrderImportCommitResponse';
+import type { ManagerOrderImportPreviewRequest } from '../models/ManagerOrderImportPreviewRequest';
+import type { ManagerOrderImportPreviewResponse } from '../models/ManagerOrderImportPreviewResponse';
 import type { ManagerOrderListResponse } from '../models/ManagerOrderListResponse';
+import type { ManagerOrderTransferPackage_Output } from '../models/ManagerOrderTransferPackage_Output';
 import type { ManagerOrderUpdatePayload } from '../models/ManagerOrderUpdatePayload';
 import type { ManagerStaleWorkStageItem } from '../models/ManagerStaleWorkStageItem';
 import type { ManagerStaleWorkStageListResponse } from '../models/ManagerStaleWorkStageListResponse';
@@ -97,6 +103,25 @@ export class ManagerOrdersService {
                 'include_unscheduled': includeUnscheduled,
                 'limit': limit,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Export Manager Orders
+     * @param requestBody
+     * @returns ManagerOrderTransferPackage_Output Successful Response
+     * @throws ApiError
+     */
+    public static exportManagerOrders(
+        requestBody: ManagerOrderExportRequest,
+    ): CancelablePromise<ManagerOrderTransferPackage_Output> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/export',
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },
@@ -201,6 +226,44 @@ export class ManagerOrdersService {
             path: {
                 'stage_id': stageId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Preview Import Manager Orders
+     * @param requestBody
+     * @returns ManagerOrderImportPreviewResponse Successful Response
+     * @throws ApiError
+     */
+    public static previewImportManagerOrders(
+        requestBody: ManagerOrderImportPreviewRequest,
+    ): CancelablePromise<ManagerOrderImportPreviewResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/import/preview',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Import Manager Orders
+     * @param requestBody
+     * @returns ManagerOrderImportCommitResponse Successful Response
+     * @throws ApiError
+     */
+    public static importManagerOrders(
+        requestBody: ManagerOrderImportCommitRequest,
+    ): CancelablePromise<ManagerOrderImportCommitResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/import',
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },
