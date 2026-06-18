@@ -2,8 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ManagerEquipmentComponentCreatePayload } from '../models/ManagerEquipmentComponentCreatePayload';
+import type { ManagerEquipmentComponentItemResponse } from '../models/ManagerEquipmentComponentItemResponse';
+import type { ManagerEquipmentComponentUpdatePayload } from '../models/ManagerEquipmentComponentUpdatePayload';
 import type { ManagerEquipmentCreatePayload } from '../models/ManagerEquipmentCreatePayload';
 import type { ManagerEquipmentDetailResponse } from '../models/ManagerEquipmentDetailResponse';
+import type { ManagerEquipmentFromOrderPayload } from '../models/ManagerEquipmentFromOrderPayload';
+import type { ManagerEquipmentFromOrderResponse } from '../models/ManagerEquipmentFromOrderResponse';
 import type { ManagerEquipmentHistoryFromRepairOrderPayload } from '../models/ManagerEquipmentHistoryFromRepairOrderPayload';
 import type { ManagerEquipmentItemResponse } from '../models/ManagerEquipmentItemResponse';
 import type { ManagerEquipmentListResponse } from '../models/ManagerEquipmentListResponse';
@@ -67,6 +72,30 @@ export class ManagerEquipmentService {
         });
     }
     /**
+     * Create Manager Equipment From Order
+     * @param orderId
+     * @param requestBody
+     * @returns ManagerEquipmentFromOrderResponse Successful Response
+     * @throws ApiError
+     */
+    public static createManagerEquipmentFromOrder(
+        orderId: number,
+        requestBody: ManagerEquipmentFromOrderPayload,
+    ): CancelablePromise<ManagerEquipmentFromOrderResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/equipment/from-order/{order_id}',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Get Manager Equipment
      * @param equipmentId
      * @param historyLimit
@@ -107,6 +136,57 @@ export class ManagerEquipmentService {
             url: '/api/manager/equipment/{equipment_id}',
             path: {
                 'equipment_id': equipmentId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Manager Equipment Component
+     * @param equipmentId
+     * @param requestBody
+     * @returns ManagerEquipmentComponentItemResponse Successful Response
+     * @throws ApiError
+     */
+    public static createManagerEquipmentComponent(
+        equipmentId: number,
+        requestBody: ManagerEquipmentComponentCreatePayload,
+    ): CancelablePromise<ManagerEquipmentComponentItemResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/equipment/{equipment_id}/components',
+            path: {
+                'equipment_id': equipmentId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Patch Manager Equipment Component
+     * @param equipmentId
+     * @param componentId
+     * @param requestBody
+     * @returns ManagerEquipmentComponentItemResponse Successful Response
+     * @throws ApiError
+     */
+    public static patchManagerEquipmentComponent(
+        equipmentId: number,
+        componentId: number,
+        requestBody: ManagerEquipmentComponentUpdatePayload,
+    ): CancelablePromise<ManagerEquipmentComponentItemResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/equipment/{equipment_id}/components/{component_id}',
+            path: {
+                'equipment_id': equipmentId,
+                'component_id': componentId,
             },
             body: requestBody,
             mediaType: 'application/json',

@@ -72,6 +72,7 @@ const DOCUMENT_TYPES = [
   { type: 'invoice', label: 'Счет' },
   { type: 'retail_receipt', label: 'Товарный чек' },
   { type: 'service_act', label: 'Заказ-акт' },
+  { type: 'warranty_certificate', label: 'Гарантийный талон' },
   { type: 'act', label: 'Акт' },
   { type: 'defect_act', label: 'Дефектный акт' },
   { type: 'offer', label: 'КП' },
@@ -440,7 +441,7 @@ const createChecklist = computed(() => {
   return items;
 });
 
-const datedDocumentTypes = new Set(['contract', 'retail_receipt', 'service_act', 'act', 'defect_act', 'tn2', 'ttn1']);
+const datedDocumentTypes = new Set(['contract', 'retail_receipt', 'service_act', 'warranty_certificate', 'act', 'defect_act', 'tn2', 'ttn1']);
 const getDocumentDateForType = (type: string) => (
   datedDocumentTypes.has(type) && documentDate.value ? `${documentDate.value}T00:00:00` : undefined
 );

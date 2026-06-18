@@ -11,6 +11,7 @@ from models import (
     EquipmentServiceHistory,
     Order,
     OrderStatus,
+    Product,
 )
 
 
@@ -39,6 +40,19 @@ async def test_manager_equipment_create_list_detail_and_history_ordering(async_c
     db.add(branch)
     await db.commit()
     await db.refresh(branch)
+    product = Product(title="Daikin RXQ", slug="daikin-rxq-test", price=1000)
+    db.add(product)
+    await db.commit()
+    await db.refresh(product)
+    source_order = Order(
+        customer_id=customer.id,
+        customer_branch_id=branch.id,
+        status=OrderStatus.NEGOTIATION,
+        workflow_type="installation",
+    )
+    db.add(source_order)
+    await db.commit()
+    await db.refresh(source_order)
 
     create_resp = await async_client.post(
         "/api/manager/equipment",
@@ -46,7 +60,10 @@ async def test_manager_equipment_create_list_detail_and_history_ordering(async_c
         json={
             "customer_id": customer.id,
             "customer_branch_id": branch.id,
+            "catalog_product_id": product.id,
+            "source_order_id": source_order.id,
             "equipment_type": "vrf",
+            "equipment_source": "sold_by_us",
             "display_name": "VRF серверной",
             "brand": "Daikin",
             "model": "RXQ",
@@ -54,6 +71,11 @@ async def test_manager_equipment_create_list_detail_and_history_ordering(async_c
             "inventory_number": "INV-9",
             "location_hint": "стойка A",
             "refrigerant_type": "R410A",
+            "installed_at": "2026-01-09T10:00:00",
+            "commissioned_at": "2026-01-10T10:00:00",
+            "warranty_started_at": "2026-01-10T10:00:00",
+            "warranty_expires_at": "2028-01-10T10:00:00",
+            "warranty_terms": "2 года на оборудование, 1 год на монтаж.",
             "notes": "Критичная зона",
         },
     )
@@ -62,8 +84,51 @@ async def test_manager_equipment_create_list_detail_and_history_ordering(async_c
     equipment_id = equipment["id"]
     assert equipment["customer_id"] == customer.id
     assert equipment["customer_branch_id"] == branch.id
+    assert equipment["catalog_product_id"] == product.id
+    assert equipment["source_order_id"] == source_order.id
+    assert equipment["equipment_source"] == "sold_by_us"
     assert equipment["display_name"] == "VRF серверной"
     assert equipment["refrigerant_type"] == "R410A"
+    assert equipment["installed_at"].startswith("2026-01-09T10:00:00")
+    assert equipment["warranty_expires_at"].startswith("2028-01-10T10:00:00")
+    assert equipment["warranty_terms"] == "2 года на оборудование, 1 год на монтаж."
+    assert equipment["warranty_status"] == "active"
+
+    indoor_resp = await async_client.post(
+        f"/api/manager/equipment/{equipment_id}/components",
+        headers=headers,
+        json={
+            "component_type": "indoor_unit",
+            "title": "Внутренний блок серверной",
+            "brand": "Daikin",
+            "model": "FXAQ25",
+            "serial": "IN-100",
+            "catalog_product_id": product.id,
+            "supplier_invoice_number": "INV-SUP-1",
+            "supplier_invoice_date": "2026-01-05T00:00:00",
+        },
+    )
+    assert indoor_resp.status_code == 201, indoor_resp.text
+    indoor = indoor_resp.json()
+    assert indoor["component_type"] == "indoor_unit"
+    assert indoor["serial"] == "IN-100"
+    assert indoor["catalog_product_id"] == product.id
+
+    outdoor_resp = await async_client.post(
+        f"/api/manager/equipment/{equipment_id}/components",
+        headers=headers,
+        json={
+            "component_type": "outdoor_unit",
+            "title": "Наружный блок",
+            "brand": "Daikin",
+            "model": "RXQ25",
+            "serial": "OUT-100",
+        },
+    )
+    assert outdoor_resp.status_code == 201, outdoor_resp.text
+    outdoor = outdoor_resp.json()
+    assert outdoor["component_type"] == "outdoor_unit"
+    assert outdoor["serial"] == "OUT-100"
 
     older_resp = await async_client.post(
         f"/api/manager/equipment/{equipment_id}/history",
@@ -116,6 +181,9 @@ async def test_manager_equipment_create_list_detail_and_history_ordering(async_c
     assert detail_resp.status_code == 200
     detail = detail_resp.json()
     assert detail["id"] == equipment_id
+    assert detail["warranty_status"] == "active"
+    assert [item["component_type"] for item in detail["components"]] == ["indoor_unit", "outdoor_unit"]
+    assert [item["serial"] for item in detail["components"]] == ["IN-100", "OUT-100"]
     assert len(detail["recent_history"]) == 1
     assert detail["recent_history"][0]["event_type"] == "not_repairable"
 
