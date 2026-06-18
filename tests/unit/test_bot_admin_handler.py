@@ -244,7 +244,8 @@ async def test_requisites_photo_prompts_for_action_without_recognition(monkeypat
     assert "Что сделать" in args[0]
     assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "req_file_extract"
     assert kwargs["reply_markup"].inline_keyboard[1][0].callback_data == "repair_nameplate_start"
-    assert kwargs["reply_markup"].inline_keyboard[2][0].callback_data == "req_file_attach"
+    assert kwargs["reply_markup"].inline_keyboard[2][0].callback_data == "warranty_nameplate_start"
+    assert kwargs["reply_markup"].inline_keyboard[3][0].callback_data == "req_file_attach"
 
 
 @pytest.mark.asyncio
@@ -265,7 +266,7 @@ async def test_requisites_photo_for_staff_non_admin_allows_attach_only(monkeypat
         row[0].callback_data
         for row in kwargs["reply_markup"].inline_keyboard
     ]
-    assert callbacks == ["repair_nameplate_start", "req_file_attach", "req_file_cancel"]
+    assert callbacks == ["repair_nameplate_start", "warranty_nameplate_start", "req_file_attach", "req_file_cancel"]
     assert state._data["pending_requisites_file"]["file_id"] == "large-photo"
 
 
@@ -307,6 +308,7 @@ async def test_requisites_document_prompts_for_pdf(monkeypatch):
     args, kwargs = message.answer.await_args
     callbacks = [row[0].callback_data for row in kwargs["reply_markup"].inline_keyboard]
     assert "repair_nameplate_start" not in callbacks
+    assert "warranty_nameplate_start" not in callbacks
 
 
 @pytest.mark.asyncio
@@ -667,6 +669,141 @@ async def test_repair_nameplate_confirm_applies_and_clears_pending(monkeypatch):
     assert "Данные со шильдика записаны" in args[0]
     assert "можно отправлять комментарии" in args[0]
     assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "repair_context_finish"
+
+
+@pytest.mark.asyncio
+async def test_warranty_nameplate_start_asks_unit_type(monkeypatch):
+    callback = _DummyCallback(data="warranty_nameplate_start", user_id=5)
+    state = _DummyState(
+        {
+            "pending_requisites_file": {
+                "file_id": "photo-file",
+                "filename": "nameplate.jpg",
+                "mime_type": "image/jpeg",
+            }
+        }
+    )
+
+    monkeypatch.setattr(
+        admin_handler,
+        "_get_bot_access_context",
+        AsyncMock(return_value=SimpleNamespace(is_staff=True, is_manager=True)),
+    )
+
+    await admin_handler.choose_warranty_nameplate_unit(callback, state)
+
+    callback.message.edit_text.assert_awaited_once()
+    args, kwargs = callback.message.edit_text.await_args
+    assert "Что фотографируем" in args[0]
+    callbacks = [row[0].callback_data for row in kwargs["reply_markup"].inline_keyboard]
+    assert callbacks[:2] == ["warranty_nameplate_unit_indoor_unit", "warranty_nameplate_unit_outdoor_unit"]
+
+
+@pytest.mark.asyncio
+async def test_warranty_nameplate_unit_shows_installation_orders(monkeypatch):
+    callback = _DummyCallback(data="warranty_nameplate_unit_indoor_unit", user_id=5)
+    state = _DummyState(
+        {
+            "pending_requisites_file": {
+                "file_id": "photo-file",
+                "filename": "nameplate.jpg",
+                "mime_type": "image/jpeg",
+            }
+        }
+    )
+
+    async def fake_list_installation_orders(session, *, telegram_user_id, can_attach_any, limit):
+        assert telegram_user_id == 5
+        assert can_attach_any is True
+        assert limit == 5
+        return {
+            "scope": "today",
+            "items": [
+                {
+                    "id": 42,
+                    "title": "Монтаж",
+                    "customer_name": "Иван",
+                    "address": "Победы 15",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(
+        admin_handler,
+        "_get_bot_access_context",
+        AsyncMock(return_value=SimpleNamespace(is_staff=True, is_manager=True)),
+    )
+    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
+    monkeypatch.setattr(admin_handler.BotWarrantyNameplateService, "list_installation_orders", fake_list_installation_orders)
+
+    await admin_handler.choose_order_for_warranty_nameplate(callback, state)
+
+    assert state._data["pending_warranty_nameplate"] == {"unit_type": "indoor_unit"}
+    args, kwargs = callback.message.edit_text.await_args
+    assert "сегодняшнему монтажу" in args[0]
+    assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "warranty_nameplate_order_42"
+
+
+@pytest.mark.asyncio
+async def test_warranty_nameplate_chosen_order_runs_recognition_preview(monkeypatch):
+    callback = _DummyCallback(data="warranty_nameplate_order_42", user_id=5)
+    state = _DummyState(
+        {
+            "pending_requisites_file": {
+                "file_id": "photo-file",
+                "filename": "nameplate.jpg",
+                "mime_type": "image/jpeg",
+                "telegram_message_id": 77,
+                "telegram_chat_id": 200,
+            },
+            "pending_warranty_nameplate": {"unit_type": "outdoor_unit"},
+        }
+    )
+
+    monkeypatch.setattr(
+        admin_handler,
+        "_get_bot_access_context",
+        AsyncMock(return_value=SimpleNamespace(is_staff=True, is_manager=True)),
+    )
+    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
+    monkeypatch.setattr(admin_handler.BotWarrantyNameplateService, "can_use_order", AsyncMock(return_value=True))
+    monkeypatch.setattr(admin_handler, "_download_telegram_file", AsyncMock(return_value=b"image"))
+    monkeypatch.setattr(
+        admin_handler.BotRepairNameplateService,
+        "recognize_bytes",
+        AsyncMock(
+            return_value={
+                "raw_text": "MODEL 1U25S2SM1FA",
+                "extracted": {
+                    "equipment_model": "1U25S2SM1FA",
+                    "equipment_serial_number": "SN-OUT-001",
+                },
+                "validation_flags": {"warnings": {}, "is_valid": True},
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        admin_handler.BotWarrantyNameplateService,
+        "build_merge_preview",
+        AsyncMock(
+            return_value={
+                "unit_type": "outdoor_unit",
+                "unit_label": "наружный блок",
+                "will_create_equipment": False,
+                "will_create_component": False,
+                "component": {"applied": {"serial": "SN-OUT-001"}, "conflicts": {}, "skipped": {}},
+                "equipment": {"applied": {}, "conflicts": {}, "skipped": {}},
+            }
+        ),
+    )
+
+    await admin_handler.recognize_warranty_nameplate_for_chosen_order(callback, state)
+
+    final_args, final_kwargs = callback.message.edit_text.await_args
+    assert "наружный блок" in final_args[0]
+    assert "SN-OUT-001" in final_args[0]
+    assert final_kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "warranty_nameplate_confirm"
+    assert state._data["pending_warranty_nameplate"]["order_id"] == 42
 
 
 @pytest.mark.asyncio

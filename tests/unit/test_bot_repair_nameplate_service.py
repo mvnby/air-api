@@ -1,13 +1,26 @@
 from pathlib import Path
+from datetime import datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
-from models import Customer, Order, OrderInstaller, OrderStatus, OrderWorkStage, StaffUser
+from models import (
+    Customer,
+    CustomerEquipment,
+    EquipmentComponent,
+    Order,
+    OrderInstaller,
+    OrderProductLink,
+    OrderStatus,
+    OrderWorkStage,
+    Product,
+    StaffUser,
+)
 from services.bot_order_attachment_service import BotOrderAttachmentService
 from services.bot_repair_nameplate_service import BotRepairNameplateService
+from services.bot_warranty_nameplate_service import BotWarrantyNameplateService
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
 from services.defect_act_ai_service import DefectActAIService
 
@@ -269,3 +282,122 @@ async def test_apply_diagnostic_comment_updates_repair_meta_and_keeps_history(sq
         "diagnostic_result",
         "repair_recommendation",
     ]
+
+
+@pytest.mark.asyncio
+async def test_warranty_nameplate_lists_today_installations_first(sqlite_repair_nameplate_session):
+    today_order = Order(
+        title="Сегодняшний монтаж",
+        status=OrderStatus.EXECUTION,
+        workflow_type="sales_installation",
+        installation_date=datetime(2026, 6, 18, 14, 0, 0),
+    )
+    other_execution = Order(
+        title="Другой монтаж",
+        status=OrderStatus.EXECUTION,
+        workflow_type="sales_installation",
+        installation_date=datetime(2026, 6, 17, 14, 0, 0),
+    )
+    repair = Order(title="Ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
+    sqlite_repair_nameplate_session.add(today_order)
+    sqlite_repair_nameplate_session.add(other_execution)
+    sqlite_repair_nameplate_session.add(repair)
+    await sqlite_repair_nameplate_session.commit()
+
+    result = await BotWarrantyNameplateService.list_installation_orders(
+        sqlite_repair_nameplate_session,
+        telegram_user_id=777,
+        can_attach_any=True,
+        now=datetime(2026, 6, 18, 10, 0, 0),
+    )
+
+    assert result["scope"] == "today"
+    assert [item["id"] for item in result["items"]] == [today_order.id]
+
+
+@pytest.mark.asyncio
+async def test_warranty_nameplate_falls_back_to_execution_installations(sqlite_repair_nameplate_session):
+    order = Order(
+        title="Монтаж без даты сегодня",
+        status=OrderStatus.EXECUTION,
+        workflow_type="service_work",
+        installation_date=datetime(2026, 6, 17, 14, 0, 0),
+    )
+    sqlite_repair_nameplate_session.add(order)
+    await sqlite_repair_nameplate_session.commit()
+
+    result = await BotWarrantyNameplateService.list_installation_orders(
+        sqlite_repair_nameplate_session,
+        telegram_user_id=777,
+        can_attach_any=True,
+        now=datetime(2026, 6, 18, 10, 0, 0),
+    )
+
+    assert result["scope"] == "execution"
+    assert [item["id"] for item in result["items"]] == [order.id]
+
+
+@pytest.mark.asyncio
+async def test_warranty_nameplate_creates_order_equipment_and_updates_selected_component(sqlite_repair_nameplate_session):
+    customer = Customer(name="Иван", phone="+375291234567")
+    product = Product(
+        title="Haier Flexis 12",
+        slug="haier-flexis-12",
+        price=2000,
+        specs={
+            "indoor_model": "AS25S2SF1FA",
+            "outdoor_model": "1U25S2SM1FA",
+            "refrigerant": "R32",
+        },
+    )
+    sqlite_repair_nameplate_session.add(customer)
+    sqlite_repair_nameplate_session.add(product)
+    await sqlite_repair_nameplate_session.flush()
+    order = Order(
+        customer_id=customer.id,
+        title="Продажа и монтаж",
+        status=OrderStatus.EXECUTION,
+        workflow_type="sales_installation",
+        installation_date=datetime(2026, 6, 18, 14, 0, 0),
+    )
+    sqlite_repair_nameplate_session.add(order)
+    await sqlite_repair_nameplate_session.flush()
+    sqlite_repair_nameplate_session.add(OrderProductLink(order_id=order.id, product_id=product.id, quantity=1))
+    await sqlite_repair_nameplate_session.commit()
+
+    result = await BotWarrantyNameplateService.apply_to_order(
+        sqlite_repair_nameplate_session,
+        int(order.id),
+        unit_type="indoor_unit",
+        extracted={
+            "equipment_brand": "Haier",
+            "equipment_model": "AS25S2SF1FA",
+            "equipment_serial_number": "SN-IN-001",
+            "refrigerant_type": "R32",
+        },
+        raw_text="MODEL AS25S2SF1FA SERIAL SN-IN-001",
+        validation_flags={"warnings": {}, "is_valid": True},
+        file_id="photo-file",
+        filename="nameplate.jpg",
+        mime_type="image/jpeg",
+        telegram_user_id=777,
+        telegram_chat_id=100,
+        telegram_message_id=55,
+        can_attach_any=True,
+    )
+
+    assert result is not None
+    assert result["component"]["applied"]["serial"] == "SN-IN-001"
+    equipment = await sqlite_repair_nameplate_session.get(CustomerEquipment, result["equipment_id"])
+    component = await sqlite_repair_nameplate_session.get(EquipmentComponent, result["component_id"])
+    await sqlite_repair_nameplate_session.refresh(order)
+
+    assert equipment is not None
+    assert equipment.source_order_id == order.id
+    assert equipment.warranty_started_at == datetime(2026, 6, 18, 14, 0, 0)
+    assert equipment.warranty_expires_at.year == 2028
+    assert component is not None
+    assert component.component_type == "indoor_unit"
+    assert component.model == "AS25S2SF1FA"
+    assert component.serial == "SN-IN-001"
+    assert order.technical_meta["warranty_nameplate_recognitions"][0]["purpose"] == "warranty_nameplate"

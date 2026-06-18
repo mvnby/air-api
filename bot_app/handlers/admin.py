@@ -12,6 +12,7 @@ from services.staff_user_service import StaffUserService
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
 from services.bot_order_attachment_service import BotOrderAttachmentService
 from services.bot_repair_nameplate_service import BotRepairNameplateService
+from services.bot_warranty_nameplate_service import BotWarrantyNameplateService
 from services.bot_task_service import BotTaskService
 from ..config import bot
 from ..states import ShopState
@@ -102,12 +103,15 @@ def _requisites_file_intent_keyboard(
     *,
     can_extract_requisites: bool = True,
     can_repair_nameplate: bool = False,
+    can_warranty_nameplate: bool = False,
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     if can_extract_requisites:
         rows.append([InlineKeyboardButton(text="Извлечь реквизиты", callback_data="req_file_extract")])
     if can_repair_nameplate:
         rows.append([InlineKeyboardButton(text="Шильдик к ремонту", callback_data="repair_nameplate_start")])
+    if can_warranty_nameplate:
+        rows.append([InlineKeyboardButton(text="Шильдик для гарантии", callback_data="warranty_nameplate_start")])
     rows.append([InlineKeyboardButton(text="Прикрепить к заказу", callback_data="req_file_attach")])
     rows.append([InlineKeyboardButton(text="Отмена", callback_data="req_file_cancel")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -147,6 +151,33 @@ def _repair_nameplate_order_keyboard(orders: list[dict]) -> InlineKeyboardMarkup
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _warranty_unit_type_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Внутренний блок", callback_data="warranty_nameplate_unit_indoor_unit")],
+            [InlineKeyboardButton(text="Наружный блок", callback_data="warranty_nameplate_unit_outdoor_unit")],
+            [InlineKeyboardButton(text="Отмена", callback_data="warranty_nameplate_cancel")],
+        ]
+    )
+
+
+def _warranty_nameplate_order_keyboard(orders: list[dict]) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for order in orders[:5]:
+        order_id = int(order.get("id") or 0)
+        if not order_id:
+            continue
+        title = " ".join(str(order.get("title") or order.get("customer_name") or "монтаж").split())
+        if len(title) > 34:
+            title = f"{title[:31]}..."
+        rows.append(
+            [InlineKeyboardButton(text=f"#{order_id} - {title}", callback_data=f"warranty_nameplate_order_{order_id}")]
+        )
+    rows.append([InlineKeyboardButton(text="Ввести номер/id заказа", callback_data="warranty_nameplate_manual")])
+    rows.append([InlineKeyboardButton(text="Отмена", callback_data="warranty_nameplate_cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def _format_order_attachment_choices(orders: list[dict]) -> str:
     if not orders:
         return "Быстрых вариантов не нашел. Введите номер/id заказа сообщением."
@@ -172,6 +203,29 @@ def _format_repair_nameplate_order_choices(orders: list[dict]) -> str:
         title = order.get("title") or "ремонт"
         address = order.get("address") or "адрес не указан"
         lines.append(f"#{order_id}: {escape(str(title))}, {escape(str(customer))}, {escape(str(address))}")
+    return "\n".join(lines)
+
+
+def _format_warranty_nameplate_order_choices(orders: list[dict], *, scope: str, unit_type: str) -> str:
+    unit_label = BotWarrantyNameplateService.UNIT_LABELS.get(unit_type, "блок")
+    if not orders:
+        return f"Подходящих заказов в монтаже не нашел. Введите номер/id заказа для {escape(unit_label)} сообщением."
+
+    heading = (
+        f"К какому сегодняшнему монтажу привязать {unit_label}?"
+        if scope == "today"
+        else f"Сегодняшних монтажей не нашел. Выберите заказ в состоянии монтаж для {unit_label}:"
+    )
+    lines = [heading]
+    for order in orders[:5]:
+        order_id = int(order.get("id") or 0)
+        customer = order.get("customer_name") or "клиент не указан"
+        title = order.get("title") or "монтаж"
+        address = order.get("address") or "адрес не указан"
+        date = order.get("installation_date")
+        date_text = date.strftime("%d.%m %H:%M") if hasattr(date, "strftime") else ""
+        suffix = f", {escape(date_text)}" if date_text else ""
+        lines.append(f"#{order_id}: {escape(str(title))}, {escape(str(customer))}, {escape(str(address))}{suffix}")
     return "\n".join(lines)
 
 
@@ -207,6 +261,15 @@ def _repair_nameplate_preview_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="Записать в ремонт", callback_data="repair_nameplate_confirm")],
             [InlineKeyboardButton(text="Отмена", callback_data="repair_nameplate_cancel")],
+        ]
+    )
+
+
+def _warranty_nameplate_preview_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Записать в гарантию", callback_data="warranty_nameplate_confirm")],
+            [InlineKeyboardButton(text="Отмена", callback_data="warranty_nameplate_cancel")],
         ]
     )
 
@@ -269,6 +332,60 @@ def _repair_nameplate_preview_text(data: dict[str, object]) -> str:
         lines.extend(f"• {escape(str(message))}" for message in warnings.values())
     if not extracted:
         lines.append("Данных не нашел. Лучше отправить фото ближе и ровнее.")
+    return "\n".join(lines)
+
+
+def _warranty_nameplate_preview_text(data: dict[str, object]) -> str:
+    extracted = data.get("extracted") if isinstance(data.get("extracted"), dict) else {}
+    validation_flags = data.get("validation_flags") if isinstance(data.get("validation_flags"), dict) else {}
+    merge_preview = data.get("merge_preview") if isinstance(data.get("merge_preview"), dict) else {}
+    component = merge_preview.get("component") if isinstance(merge_preview.get("component"), dict) else {}
+    equipment = merge_preview.get("equipment") if isinstance(merge_preview.get("equipment"), dict) else {}
+    warnings = validation_flags.get("warnings") if isinstance(validation_flags.get("warnings"), dict) else {}
+    unit_label = merge_preview.get("unit_label") or BotWarrantyNameplateService.UNIT_LABELS.get(str(data.get("unit_type")), "блок")
+
+    lines = [f"<b>Распознал шильдик для гарантии: {escape(str(unit_label))}.</b>", ""]
+    fields = {
+        "brand": extracted.get("equipment_brand"),
+        "model": extracted.get("equipment_model"),
+        "serial": extracted.get("equipment_serial_number"),
+        "refrigerant_type": extracted.get("refrigerant_type"),
+    }
+    for field, value in fields.items():
+        if value:
+            lines.append(f"<b>{escape(BotWarrantyNameplateService.FIELD_LABELS.get(field, field))}:</b> {escape(str(value))}")
+
+    if merge_preview.get("will_create_equipment"):
+        lines.extend(["", "Создам карточку оборудования из заказа, если ее еще нет."])
+    if merge_preview.get("will_create_component"):
+        lines.append("Создам компонент выбранного блока.")
+
+    applied = component.get("applied") if isinstance(component.get("applied"), dict) else {}
+    conflicts = component.get("conflicts") if isinstance(component.get("conflicts"), dict) else {}
+    skipped = component.get("skipped") if isinstance(component.get("skipped"), dict) else {}
+    equipment_applied = equipment.get("applied") if isinstance(equipment.get("applied"), dict) else {}
+    if applied or equipment_applied:
+        lines.extend(["", "<b>Будет записано:</b>"])
+        for field, value in applied.items():
+            lines.append(f"• {escape(BotWarrantyNameplateService.FIELD_LABELS.get(field, field))}: {escape(str(value))}")
+        for field, value in equipment_applied.items():
+            lines.append(f"• карточка: {escape(BotWarrantyNameplateService.FIELD_LABELS.get(field, field))}: {escape(str(value))}")
+    if skipped:
+        lines.extend(["", "<b>Уже заполнено таким же значением:</b>"])
+        for field in skipped.keys():
+            lines.append(f"• {escape(BotWarrantyNameplateService.FIELD_LABELS.get(field, field))}")
+    if conflicts:
+        lines.extend(["", "<b>Конфликты, не перезапишу автоматически:</b>"])
+        for field, values in conflicts.items():
+            existing = values.get("existing") if isinstance(values, dict) else ""
+            candidate = values.get("candidate") if isinstance(values, dict) else ""
+            lines.append(
+                f"• {escape(BotWarrantyNameplateService.FIELD_LABELS.get(field, field))}: "
+                f"сейчас {escape(str(existing))}, распознано {escape(str(candidate))}"
+            )
+    if warnings:
+        lines.extend(["", "<b>Предупреждения:</b>"])
+        lines.extend(f"• {escape(str(message))}" for message in warnings.values())
     return "\n".join(lines)
 
 
@@ -394,6 +511,7 @@ async def _ask_requisites_file_action(
         reply_markup=_requisites_file_intent_keyboard(
             can_extract_requisites=can_extract_requisites,
             can_repair_nameplate=str(mime_type or "").startswith("image/"),
+            can_warranty_nameplate=str(mime_type or "").startswith("image/"),
         ),
     )
 
@@ -828,6 +946,267 @@ async def cancel_repair_nameplate(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@router.callback_query(F.data == "warranty_nameplate_start")
+async def choose_warranty_nameplate_unit(callback: CallbackQuery, state: FSMContext):
+    context = await _get_bot_access_context(callback.from_user.id)
+    if not context.is_staff:
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    data = await state.get_data()
+    pending = data.get("pending_requisites_file") or {}
+    if not isinstance(pending, dict) or not pending.get("file_id"):
+        await callback.answer("Фото не найдено. Отправьте его еще раз.", show_alert=True)
+        return
+    if not str(pending.get("mime_type") or "").startswith("image/"):
+        await callback.answer("Шильдик для гарантии распознаем только по фото.", show_alert=True)
+        return
+
+    await callback.message.edit_text(
+        "Что фотографируем для гарантийного талона?",
+        reply_markup=_warranty_unit_type_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("warranty_nameplate_unit_"))
+async def choose_order_for_warranty_nameplate(callback: CallbackQuery, state: FSMContext):
+    context = await _get_bot_access_context(callback.from_user.id)
+    if not context.is_staff:
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    unit_type = str(callback.data or "").removeprefix("warranty_nameplate_unit_")
+    if unit_type not in BotWarrantyNameplateService.UNIT_TYPES:
+        await callback.answer("Не понял тип блока", show_alert=True)
+        return
+
+    data = await state.get_data()
+    pending = data.get("pending_requisites_file") or {}
+    if not isinstance(pending, dict) or not pending.get("file_id"):
+        await callback.answer("Фото не найдено. Отправьте его еще раз.", show_alert=True)
+        return
+
+    await state.update_data(pending_warranty_nameplate={"unit_type": unit_type})
+    async with async_session_maker() as session:
+        result = await BotWarrantyNameplateService.list_installation_orders(
+            session,
+            telegram_user_id=callback.from_user.id,
+            can_attach_any=context.is_manager,
+            limit=5,
+        )
+
+    orders = result.get("items") or []
+    if orders:
+        await callback.message.edit_text(
+            _format_warranty_nameplate_order_choices(orders, scope=str(result.get("scope") or ""), unit_type=unit_type),
+            reply_markup=_warranty_nameplate_order_keyboard(orders),
+            parse_mode="HTML",
+        )
+    else:
+        await state.set_state(ShopState.waiting_for_warranty_nameplate_order_id)
+        unit_label = BotWarrantyNameplateService.UNIT_LABELS.get(unit_type, "блок")
+        await callback.message.edit_text(
+            f"Подходящих заказов в монтаже не нашел. Введите номер/id заказа для {unit_label} сообщением."
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "warranty_nameplate_manual")
+async def enter_order_id_for_warranty_nameplate(callback: CallbackQuery, state: FSMContext):
+    context = await _get_bot_access_context(callback.from_user.id)
+    if not context.is_staff:
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    data = await state.get_data()
+    draft = data.get("pending_warranty_nameplate") or {}
+    if not isinstance(draft, dict) or draft.get("unit_type") not in BotWarrantyNameplateService.UNIT_TYPES:
+        await callback.answer("Тип блока не выбран. Отправьте фото еще раз.", show_alert=True)
+        return
+
+    await state.set_state(ShopState.waiting_for_warranty_nameplate_order_id)
+    await callback.message.edit_text("Введите номер/id заказа в монтаже сообщением.")
+    await callback.answer()
+
+
+async def _run_warranty_nameplate_recognition_for_order(
+    progress_message: types.Message,
+    *,
+    order_id: int,
+    telegram_user_id: int | None,
+    can_attach_any: bool,
+    state: FSMContext,
+):
+    data = await state.get_data()
+    pending = data.get("pending_requisites_file") or {}
+    draft = data.get("pending_warranty_nameplate") or {}
+    unit_type = draft.get("unit_type") if isinstance(draft, dict) else None
+    if unit_type not in BotWarrantyNameplateService.UNIT_TYPES:
+        await progress_message.edit_text("Тип блока не выбран. Отправьте фото еще раз.")
+        return
+    if not isinstance(pending, dict) or not pending.get("file_id"):
+        await progress_message.edit_text("Фото не найдено. Отправьте его еще раз.")
+        return
+
+    async with async_session_maker() as session:
+        allowed = await BotWarrantyNameplateService.can_use_order(
+            session,
+            order_id,
+            telegram_user_id=telegram_user_id,
+            can_attach_any=can_attach_any,
+        )
+    if not allowed:
+        await progress_message.edit_text(
+            "Этот заказ не найден среди монтажей или не назначен вам."
+        )
+        return
+
+    try:
+        content = await _download_telegram_file(str(pending.get("file_id")))
+        recognized = await BotRepairNameplateService.recognize_bytes(
+            content=content,
+            filename=str(pending.get("filename") or "telegram-warranty-nameplate.jpg"),
+            mime_type=str(pending.get("mime_type") or "image/jpeg"),
+        )
+        async with async_session_maker() as session:
+            merge_preview = await BotWarrantyNameplateService.build_merge_preview(
+                session,
+                order_id=order_id,
+                unit_type=str(unit_type),
+                extracted=recognized.get("extracted") or {},
+            )
+    except Exception as exc:
+        await progress_message.edit_text(f"❌ Не удалось распознать шильдик для гарантии: {escape(str(exc))}")
+        return
+
+    draft = {
+        "order_id": order_id,
+        "unit_type": unit_type,
+        "file": pending,
+        "raw_text": recognized.get("raw_text") or "",
+        "extracted": recognized.get("extracted") or {},
+        "validation_flags": recognized.get("validation_flags") or {},
+        "merge_preview": merge_preview or {"component": {"applied": {}, "conflicts": {}, "skipped": {}}},
+    }
+    await state.update_data(pending_warranty_nameplate=draft)
+    await state.set_state(None)
+    await progress_message.edit_text(
+        _warranty_nameplate_preview_text(draft),
+        reply_markup=_warranty_nameplate_preview_keyboard(),
+        parse_mode="HTML",
+    )
+
+
+@router.callback_query(F.data.startswith("warranty_nameplate_order_"))
+async def recognize_warranty_nameplate_for_chosen_order(callback: CallbackQuery, state: FSMContext):
+    context = await _get_bot_access_context(callback.from_user.id)
+    if not context.is_staff:
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    order_id = _parse_order_id((callback.data or "").rsplit("_", 1)[-1])
+    if not order_id:
+        await callback.answer("Не понял номер заказа", show_alert=True)
+        return
+
+    await callback.answer()
+    await callback.message.edit_text("Распознаю шильдик для гарантии…")
+    await _run_warranty_nameplate_recognition_for_order(
+        callback.message,
+        order_id=order_id,
+        telegram_user_id=callback.from_user.id,
+        can_attach_any=context.is_manager,
+        state=state,
+    )
+
+
+@router.message(ShopState.waiting_for_warranty_nameplate_order_id)
+async def recognize_warranty_nameplate_for_typed_order(message: types.Message, state: FSMContext):
+    context = await _get_bot_access_context(message.from_user.id if message.from_user else None)
+    if not context.is_staff:
+        await state.clear()
+        return
+
+    order_id = _parse_order_id(message.text)
+    if not order_id:
+        await message.answer("Введите номер заказа числом, например: 123")
+        return
+
+    progress = await message.answer("Распознаю шильдик для гарантии…")
+    await _run_warranty_nameplate_recognition_for_order(
+        progress,
+        order_id=order_id,
+        telegram_user_id=message.from_user.id if message.from_user else None,
+        can_attach_any=context.is_manager,
+        state=state,
+    )
+
+
+@router.callback_query(F.data == "warranty_nameplate_confirm")
+async def confirm_warranty_nameplate(callback: CallbackQuery, state: FSMContext):
+    context = await _get_bot_access_context(callback.from_user.id)
+    if not context.is_staff:
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    data = await state.get_data()
+    draft = data.get("pending_warranty_nameplate") or {}
+    if not isinstance(draft, dict) or not draft.get("order_id"):
+        await callback.answer("Черновик не найден. Отправьте фото еще раз.", show_alert=True)
+        return
+    pending_file = draft.get("file") if isinstance(draft.get("file"), dict) else {}
+    if not pending_file or not pending_file.get("file_id"):
+        await callback.answer("Фото не найдено. Отправьте его еще раз.", show_alert=True)
+        return
+
+    try:
+        async with async_session_maker() as session:
+            result = await BotWarrantyNameplateService.apply_to_order(
+                session,
+                int(draft["order_id"]),
+                unit_type=str(draft.get("unit_type") or ""),
+                extracted=draft.get("extracted") or {},
+                raw_text=str(draft.get("raw_text") or ""),
+                validation_flags=draft.get("validation_flags") or {},
+                file_id=str(pending_file.get("file_id")),
+                filename=str(pending_file.get("filename") or "telegram-warranty-nameplate.jpg"),
+                mime_type=str(pending_file.get("mime_type") or "image/jpeg"),
+                telegram_user_id=callback.from_user.id,
+                telegram_chat_id=pending_file.get("telegram_chat_id"),
+                telegram_message_id=pending_file.get("telegram_message_id"),
+                can_attach_any=context.is_manager,
+            )
+    except Exception as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+
+    if not result:
+        await callback.answer("Заказ не найден или недоступен.", show_alert=True)
+        return
+
+    await state.update_data(pending_warranty_nameplate=None, pending_requisites_file=None)
+    await state.set_state(None)
+    component_changes = len((result.get("component") or {}).get("applied") or {})
+    equipment_changes = len((result.get("equipment") or {}).get("applied") or {})
+    unit_label = BotWarrantyNameplateService.UNIT_LABELS.get(str(result.get("unit_type")), "блок")
+    await callback.message.edit_text(
+        f"✅ Шильдик для гарантии записан в заказ #{result['id']}.\n"
+        f"Блок: {unit_label}.\n"
+        f"Оборудование #{result['equipment_id']}, компонент #{result['component_id']}.\n"
+        f"Заполнено полей: {component_changes + equipment_changes}."
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "warranty_nameplate_cancel")
+async def cancel_warranty_nameplate(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(pending_warranty_nameplate=None, pending_requisites_file=None)
+    await state.set_state(None)
+    await callback.message.edit_text("Ок, гарантийный шильдик оставил без обработки.")
+    await callback.answer()
+
+
 @router.message(ShopState.waiting_for_repair_context_comment)
 async def handle_repair_context_comment(message: types.Message, state: FSMContext):
     context = await _get_bot_access_context(message.from_user.id if message.from_user else None)
@@ -947,6 +1326,7 @@ async def cancel_pending_requisites_file(callback: CallbackQuery, state: FSMCont
         pending_requisites_file=None,
         pending_repair_nameplate=None,
         pending_repair_comment=None,
+        pending_warranty_nameplate=None,
     )
     await state.set_state(None)
     await callback.message.edit_text("Ок, файл оставил без обработки.")

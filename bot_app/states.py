@@ -10,6 +10,7 @@ class ShopState(StatesGroup):
     waiting_for_order_attachment_order_id = State()
     waiting_for_repair_nameplate_order_id = State()
     waiting_for_repair_context_comment = State()
+    waiting_for_warranty_nameplate_order_id = State()
     select_area = State()
     select_type = State()
     select_winter = State()  # Выбор зимнего обогрева
