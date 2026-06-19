@@ -806,6 +806,46 @@ async def test_warranty_nameplate_chosen_order_runs_recognition_preview(monkeypa
     assert state._data["pending_warranty_nameplate"]["order_id"] == 42
 
 
+def test_nameplate_preview_shows_serial_candidates():
+    text = admin_handler._warranty_nameplate_preview_text(
+        {
+            "unit_type": "outdoor_unit",
+            "extracted": {
+                "equipment_model": "TAC-12CHSD/UG11V3AH",
+                "equipment_serial_number": "140202APZ5W16254N000085",
+            },
+            "validation_flags": {
+                "serial_candidates": [
+                    "140202APZ5W16254N000085",
+                    "MO250310695980",
+                    "2503106959",
+                ],
+                "serial_details": {
+                    "format": "tcl_factory_20",
+                    "unit_type_label": "наружный блок",
+                    "batch_code": "44",
+                    "production_date": "2016-01-25",
+                    "product_serial_number": "00060",
+                },
+                "warnings": {},
+            },
+            "merge_preview": {
+                "unit_type": "outdoor_unit",
+                "unit_label": "наружный блок",
+                "component": {"applied": {}, "conflicts": {}, "skipped": {}},
+                "equipment": {"applied": {}, "conflicts": {}, "skipped": {}},
+            },
+        }
+    )
+
+    assert "Возможные серийные номера" in text
+    assert "140202APZ5W16254N000085 (выбран)" in text
+    assert "MO250310695980" in text
+    assert "Расшифровка серийника TCL" in text
+    assert "25.01.2016" in text
+    assert "партия: 44" in text
+
+
 @pytest.mark.asyncio
 async def test_repair_context_comment_builds_ai_preview(monkeypatch):
     message = _DummyMessage(text="фреона нет, утечку нашли, компрессор не качает", user_id=5)
