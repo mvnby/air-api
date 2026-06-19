@@ -62,6 +62,59 @@ def test_nameplate_normalization_cleans_repair_fields():
     assert flags["is_valid"] is True
 
 
+def test_nameplate_normalization_prefers_tcl_barcode_serial_candidate():
+    extracted, flags = BotRepairNameplateService.normalize_extracted(
+        {
+            "brand": "TCL",
+            "model": "TAC-12CHSD/UG11V3AH",
+            "serial_number": "MO250310695980",
+            "serial_candidates": [
+                "MO250310695980",
+                "2503106959",
+                "140202APZ5W16254N000085",
+            ],
+            "confidence": 0.83,
+        },
+        "TAC-12CHSD/UG11V3AH\nMO250310695980\n2503106959\n140202APZ5W16254N000085",
+    )
+
+    assert extracted["equipment_model"] == "TAC-12CHSD/UG11V3AH"
+    assert extracted["equipment_serial_number"] == "140202APZ5W16254N000085"
+    assert flags["serial_candidates"][0] == "140202APZ5W16254N000085"
+    assert "MO250310695980" in flags["serial_candidates"]
+    assert "2503106959" in flags["serial_candidates"]
+    assert "несколько похожих номеров" in flags["warnings"]["serial_candidates"]
+
+
+def test_nameplate_normalization_decodes_tcl_factory_serial_details():
+    extracted, flags = BotRepairNameplateService.normalize_extracted(
+        {
+            "brand": "TCL",
+            "model": "TAC-09CHS/E",
+            "serial_number": "11175WFC44ZG12500060",
+        },
+        "TAC-09CHS/E\n11175WFC44ZG12500060",
+    )
+
+    assert extracted["equipment_serial_number"] == "11175WFC44ZG12500060"
+    assert flags["serial_details"] == {
+        "format": "tcl_factory_20",
+        "manufacturer_code": "1",
+        "model_code": "1175",
+        "unit_type_code": "W",
+        "unit_type_label": "наружный блок",
+        "order_date_code": "FC",
+        "order_year": 2015,
+        "order_month": 12,
+        "batch_code": "44",
+        "product_mark_code": "Z",
+        "product_mark_label": "собранный блок",
+        "production_date_code": "G125",
+        "production_date": "2016-01-25",
+        "product_serial_number": "00060",
+    }
+
+
 @pytest.mark.asyncio
 async def test_nameplate_recognize_rejects_too_large_file_before_ocr(monkeypatch):
     async def fail_extract(*args, **kwargs):

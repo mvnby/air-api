@@ -22,6 +22,16 @@ from schemas import ManagerRepairActAiDraftPayload
 class BotRepairNameplateService:
     """Recognizes AC nameplates and safely applies passport fields to repair orders."""
 
+    TCL_YEAR_BASE = 2010
+    TCL_UNIT_TYPE_LABELS = {
+        "W": "наружный блок",
+        "N": "внутренний блок",
+        "Z": "оконный/моноблок",
+    }
+    TCL_PRODUCT_MARK_LABELS = {
+        "S": "SKD-компоненты",
+        "Z": "собранный блок",
+    }
     REPAIR_STATUS = OrderStatus.EXECUTION
     REPAIR_FIELDS = (
         "equipment_name",
@@ -100,6 +110,215 @@ class BotRepairNameplateService:
         text = re.sub(r"[ \t]+", " ", text)
         text = re.sub(r"\n{3,}", "\n\n", text)
         return text[:max_length].strip() or None
+
+    @classmethod
+    def _clean_serial_candidate(cls, value: Any) -> Optional[str]:
+        text = cls._clean_text(value, max_length=240)
+        if not text:
+            return None
+        text = text.upper().strip(" .,:;")
+        text = re.sub(r"\s+", " ", text)
+        comparable = re.sub(r"[^A-Z0-9]", "", text)
+        if len(comparable) < 5:
+            return None
+        if "/" in text:
+            return None
+        return text
+
+    @classmethod
+    def _serial_candidate_tokens(cls, value: Any) -> list[str]:
+        text = cls._clean_text(value, max_length=4000)
+        if not text:
+            return []
+        candidates = []
+        if "\n" not in text and len(text) <= 80 and not re.search(
+            r"\b(MODEL|МОДЕЛЬ|REFRIGERANT|CAPACITY|МОЩНОСТЬ)\b",
+            text,
+            flags=re.IGNORECASE,
+        ):
+            candidates.append(text)
+        candidates.extend(re.findall(r"\b[A-Z0-9][A-Z0-9/-]{5,}[A-Z0-9]\b", text, flags=re.IGNORECASE))
+        cleaned: list[str] = []
+        for candidate in candidates:
+            normalized = cls._clean_serial_candidate(candidate)
+            if normalized:
+                cleaned.append(normalized)
+        return cleaned
+
+    @staticmethod
+    def _serial_identity(value: str) -> str:
+        return re.sub(r"[^A-Z0-9]", "", value.upper())
+
+    @classmethod
+    def _collect_serial_candidates(
+        cls,
+        raw: dict[str, Any],
+        raw_text: str,
+        *,
+        equipment_model: str | None,
+    ) -> list[str]:
+        values: list[Any] = []
+        for key in (
+            "equipment_serial_number",
+            "serial_number",
+            "serial",
+            "sn",
+            "s_n",
+            "barcode_text",
+            "barcode_value",
+            "barcode",
+        ):
+            values.append(raw.get(key))
+
+        for key in (
+            "serial_candidates",
+            "serial_number_candidates",
+            "serials",
+            "barcode_values",
+            "barcodes",
+            "raw_markings",
+        ):
+            value = raw.get(key)
+            if isinstance(value, list):
+                values.extend(value)
+            elif isinstance(value, dict):
+                values.extend(value.values())
+            else:
+                values.append(value)
+        values.append(raw_text)
+
+        model_identity = cls._serial_identity(equipment_model or "")
+        seen: set[str] = set()
+        result: list[str] = []
+        for value in values:
+            for candidate in cls._serial_candidate_tokens(value):
+                identity = cls._serial_identity(candidate)
+                if (
+                    not identity
+                    or identity == model_identity
+                    or bool(model_identity and identity in model_identity)
+                    or identity in seen
+                ):
+                    continue
+                seen.add(identity)
+                result.append(candidate)
+        return result
+
+    @classmethod
+    def _serial_candidate_score(cls, candidate: str, *, brand: str | None, model: str | None) -> int:
+        identity = cls._serial_identity(candidate)
+        score = min(len(identity), 30)
+        has_letters = bool(re.search(r"[A-Z]", identity))
+        has_digits = bool(re.search(r"\d", identity))
+        if has_letters and has_digits:
+            score += 25
+        if len(identity) >= 18:
+            score += 35
+        elif len(identity) >= 14:
+            score += 20
+        elif len(identity) <= 10 and identity.isdigit():
+            score -= 20
+
+        brand_text = (brand or "").upper()
+        model_text = (model or "").upper()
+        looks_like_tcl = "TCL" in brand_text or model_text.startswith("TAC-")
+        if looks_like_tcl:
+            if has_letters and has_digits and len(identity) >= 18:
+                score += 60
+            if re.fullmatch(r"MO\d+", identity):
+                score -= 60
+            if identity.isdigit() and len(identity) <= 12:
+                score -= 35
+        elif re.fullmatch(r"MO\d+", identity):
+            score -= 25
+        return score
+
+    @classmethod
+    def _select_serial_candidate(
+        cls,
+        candidates: list[str],
+        *,
+        brand: str | None,
+        model: str | None,
+    ) -> Optional[str]:
+        if not candidates:
+            return None
+        return max(candidates, key=lambda candidate: cls._serial_candidate_score(candidate, brand=brand, model=model))
+
+    @classmethod
+    def _decode_tcl_year(cls, value: str) -> Optional[int]:
+        if not re.fullmatch(r"[A-Z]", value):
+            return None
+        return cls.TCL_YEAR_BASE + (ord(value) - ord("A"))
+
+    @staticmethod
+    def _decode_tcl_month(value: str) -> Optional[int]:
+        if value in {"1", "2", "3", "4", "5", "6", "7", "8", "9"}:
+            return int(value)
+        return {"A": 10, "B": 11, "C": 12}.get(value)
+
+    @classmethod
+    def _decode_tcl_month_code(cls, value: str) -> tuple[Optional[int], Optional[int]]:
+        if len(value) != 2:
+            return None, None
+        return cls._decode_tcl_year(value[0]), cls._decode_tcl_month(value[1])
+
+    @classmethod
+    def _decode_tcl_date_code(cls, value: str) -> tuple[Optional[int], Optional[int], Optional[int]]:
+        if len(value) != 4:
+            return None, None, None
+        year = cls._decode_tcl_year(value[0])
+        month = cls._decode_tcl_month(value[1])
+        day = int(value[2:4]) if value[2:4].isdigit() else None
+        if day is not None and not 1 <= day <= 31:
+            day = None
+        return year, month, day
+
+    @classmethod
+    def _decode_tcl_factory_serial(cls, serial: str | None) -> Optional[dict[str, Any]]:
+        identity = cls._serial_identity(serial or "")
+        if len(identity) != 20:
+            return None
+
+        manufacturer_code = identity[0]
+        model_code = identity[1:5]
+        unit_code = identity[5]
+        order_code = identity[6:8]
+        batch_code = identity[8:10]
+        product_mark_code = identity[10]
+        production_code = identity[11:15]
+        running_number = identity[15:20]
+
+        if manufacturer_code != "1":
+            return None
+        if unit_code not in cls.TCL_UNIT_TYPE_LABELS:
+            return None
+        if product_mark_code not in cls.TCL_PRODUCT_MARK_LABELS:
+            return None
+        if not running_number.isdigit():
+            return None
+
+        order_year, order_month = cls._decode_tcl_month_code(order_code)
+        production_year, production_month, production_day = cls._decode_tcl_date_code(production_code)
+        if not all([order_year, order_month, production_year, production_month, production_day]):
+            return None
+
+        return {
+            "format": "tcl_factory_20",
+            "manufacturer_code": manufacturer_code,
+            "model_code": model_code,
+            "unit_type_code": unit_code,
+            "unit_type_label": cls.TCL_UNIT_TYPE_LABELS[unit_code],
+            "order_date_code": order_code,
+            "order_year": order_year,
+            "order_month": order_month,
+            "batch_code": batch_code,
+            "product_mark_code": product_mark_code,
+            "product_mark_label": cls.TCL_PRODUCT_MARK_LABELS[product_mark_code],
+            "production_date_code": production_code,
+            "production_date": f"{production_year:04d}-{production_month:02d}-{production_day:02d}",
+            "product_serial_number": running_number,
+        }
 
     @classmethod
     def _normalize_refrigerant_type(cls, value: Any) -> Optional[str]:
@@ -247,11 +466,14 @@ class BotRepairNameplateService:
             "Ключи JSON:\n"
             "equipment_name, equipment_brand, equipment_model, equipment_power, equipment_serial_number, "
             "equipment_inventory_number, equipment_commissioning_date, refrigerant_type, refrigerant_amount, "
-            "unit_type, capacity_btu, cooling_capacity_kw, raw_markings, confidence, warnings.\n\n"
+            "unit_type, capacity_btu, cooling_capacity_kw, serial_candidates, raw_markings, confidence, warnings.\n\n"
             "Правила:\n"
             "- equipment_name: человекочитаемо, например 'Кондиционер, наружный блок' или 'Кондиционер'.\n"
             "- equipment_model: модель блока ровно как на шильдике.\n"
             "- equipment_serial_number: серийный номер/SN/Serial No, только если он явно виден.\n"
+            "- serial_candidates: если на наклейке несколько похожих номеров, верни массив всех вариантов.\n"
+            "- Для TCL/TAC часто серийный номер — длинный буквенно-цифровой код под штрихкодом; короткие MO/даты/партии не выбирай серийником, если есть длинный код.\n"
+            "- Для TCL factory SN формата 20 символов учитывай сегменты: 1 + 4 + W/N/Z + год/месяц заказа + batch + S/Z + год/месяц/день производства + 5 цифр серийного номера.\n"
             "- equipment_power: полезная холодопроизводительность/мощность, как на шильдике; не путай с потребляемой мощностью.\n"
             "- refrigerant_type: R32, R410A, R22 и т.п.\n"
             "- refrigerant_amount: заводская заправка, например '0,60 кг'.\n"
@@ -308,10 +530,6 @@ class BotRepairNameplateService:
                 max_length=200,
             ),
             "equipment_power": cls._normalize_power(raw.get("equipment_power") or raw.get("power"), raw),
-            "equipment_serial_number": cls._clean_text(
-                raw.get("equipment_serial_number") or raw.get("serial_number") or raw.get("serial"),
-                max_length=160,
-            ),
             "equipment_inventory_number": cls._clean_text(
                 raw.get("equipment_inventory_number") or raw.get("inventory_number"),
                 max_length=160,
@@ -325,6 +543,18 @@ class BotRepairNameplateService:
                 raw.get("refrigerant_amount") or raw.get("refrigerant_charge")
             ),
         }
+        serial_candidates = cls._collect_serial_candidates(
+            raw,
+            raw_text,
+            equipment_model=data.get("equipment_model"),
+        )
+        selected_serial = cls._select_serial_candidate(
+            serial_candidates,
+            brand=data.get("equipment_brand"),
+            model=data.get("equipment_model"),
+        )
+        if selected_serial:
+            data["equipment_serial_number"] = selected_serial
         data = {key: value for key, value in data.items() if value}
 
         warnings: dict[str, str] = {}
@@ -343,6 +573,10 @@ class BotRepairNameplateService:
             warnings["equipment_model"] = "Модель не распознана уверенно"
         if not data.get("equipment_serial_number"):
             warnings["equipment_serial_number"] = "Серийный номер не найден на шильдике"
+        elif len(serial_candidates) > 1:
+            warnings["serial_candidates"] = (
+                "Нашел несколько похожих номеров; выбрал наиболее вероятный серийник, проверьте перед записью"
+            )
         if not data.get("refrigerant_type"):
             warnings["refrigerant_type"] = "Хладагент не распознан"
 
@@ -351,12 +585,26 @@ class BotRepairNameplateService:
             confidence_value = float(confidence) if confidence is not None else None
         except (TypeError, ValueError):
             confidence_value = None
+        serial_candidates = sorted(
+            serial_candidates,
+            key=lambda candidate: cls._serial_candidate_score(
+                candidate,
+                brand=data.get("equipment_brand"),
+                model=data.get("equipment_model"),
+            ),
+            reverse=True,
+        )
         flags = {
             "warnings": warnings,
             "confidence": confidence_value,
             "is_valid": bool(data),
             "raw_markings": cls._clean_text(raw.get("raw_markings") or raw_text, max_length=2000),
         }
+        if serial_candidates:
+            flags["serial_candidates"] = serial_candidates[:8]
+        serial_details = cls._decode_tcl_factory_serial(data.get("equipment_serial_number"))
+        if serial_details:
+            flags["serial_details"] = serial_details
         return data, flags
 
     @classmethod

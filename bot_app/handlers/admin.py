@@ -274,6 +274,47 @@ def _warranty_nameplate_preview_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def _serial_candidate_preview_lines(extracted: dict, validation_flags: dict) -> list[str]:
+    candidates = validation_flags.get("serial_candidates")
+    if not isinstance(candidates, list) or len(candidates) <= 1:
+        return []
+    selected = str(extracted.get("equipment_serial_number") or "")
+    lines = ["", "<b>Возможные серийные номера:</b>"]
+    for candidate in candidates[:5]:
+        candidate_text = str(candidate)
+        suffix = " (выбран)" if candidate_text == selected else ""
+        lines.append(f"• {escape(candidate_text)}{escape(suffix)}")
+    return lines
+
+
+def _format_iso_date_ru(value: object) -> str:
+    text = str(value or "")
+    parts = text.split("-")
+    if len(parts) == 3 and all(part.isdigit() for part in parts):
+        return f"{parts[2]}.{parts[1]}.{parts[0]}"
+    return text
+
+
+def _serial_details_preview_lines(validation_flags: dict) -> list[str]:
+    details = validation_flags.get("serial_details")
+    if not isinstance(details, dict) or details.get("format") != "tcl_factory_20":
+        return []
+    lines = ["", "<b>Расшифровка серийника TCL:</b>"]
+    production_date = details.get("production_date")
+    if production_date:
+        lines.append(f"• дата производства: {escape(_format_iso_date_ru(production_date))}")
+    unit_type_label = details.get("unit_type_label")
+    if unit_type_label:
+        lines.append(f"• тип блока по коду: {escape(str(unit_type_label))}")
+    batch_code = details.get("batch_code")
+    if batch_code:
+        lines.append(f"• партия: {escape(str(batch_code))}")
+    product_serial_number = details.get("product_serial_number")
+    if product_serial_number:
+        lines.append(f"• порядковый номер: {escape(str(product_serial_number))}")
+    return lines
+
+
 def _repair_context_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -307,6 +348,8 @@ def _repair_nameplate_preview_text(data: dict[str, object]) -> str:
         value = extracted.get(field)
         if value:
             lines.append(f"<b>{escape(label)}:</b> {escape(str(value))}")
+    lines.extend(_serial_candidate_preview_lines(extracted, validation_flags))
+    lines.extend(_serial_details_preview_lines(validation_flags))
 
     if applied:
         lines.extend(["", "<b>Будет записано:</b>"])
@@ -354,6 +397,8 @@ def _warranty_nameplate_preview_text(data: dict[str, object]) -> str:
     for field, value in fields.items():
         if value:
             lines.append(f"<b>{escape(BotWarrantyNameplateService.FIELD_LABELS.get(field, field))}:</b> {escape(str(value))}")
+    lines.extend(_serial_candidate_preview_lines(extracted, validation_flags))
+    lines.extend(_serial_details_preview_lines(validation_flags))
 
     if merge_preview.get("will_create_equipment"):
         lines.extend(["", "Создам карточку оборудования из заказа, если ее еще нет."])
