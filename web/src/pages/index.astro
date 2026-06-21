@@ -82,49 +82,49 @@ const serviceCards = [
 		title: "Монтаж кондиционеров",
 		description:
 			"Устанавливаем по согласованной стоимости и срокам, с гарантией на выполненные работы.",
-		href: "/montaj-konditionerov",
+		href: "/montaj-konditionerov/",
 		icon: "construction",
 	},
 	{
 		title: "Закладка трассы",
 		description:
 			"Смонтируем коммуникации под кондиционер во время ремонта, для установки без коробов в будущем.",
-		href: "/zakladka-kommunikaciy-kondicionera",
+		href: "/services/zakladka-kommunikaciy-kondicionera/",
 		icon: "construction",
 	},
 	{
 		title: "Демонтаж кондиционеров",
 		description:
 			"Безопасно демонтируем старые кондиционеры, сохраняя фреон. Возможен демонтаж только внутреннего или наружного блока.",
-		href: "/demontazh-kondicionerov",
+		href: "/services/demontazh-kondicionera/",
 		icon: "delete_forever",
 	},
 	{
 		title: "Обслуживание",
 		description:
 			"Чистка, дезинфекция и профилактика для квартир, офисов, магазинов, серверных и объектов с несколькими блоками.",
-		href: "/obslujivanie-kondicionerov",
+		href: "/obslujivanie-kondicionerov/",
 		icon: "cleaning_services",
 	},
 	{
 		title: "Ремонт",
 		description:
 			"Диагностика и восстановление кондиционеров, если система не охлаждает, шумит или работает нестабильно.",
-		href: "/services/repair",
+		href: "/services/repair/",
 		icon: "engineering",
 	},
 	{
 		title: "Мультизональные системы",
 		description:
 			"Решения для объектов с несколькими помещениями: офисов, административных зданий, предприятий, складов и коммерческих площадей",
-		href: "#",
+		href: "/services/vrf-sistemy/",
 		icon: "settings_ethernet",
 	},
 	{
 		title: "Серверные и технические помещения",
 		description:
 			"Подбор и обслуживание кондиционирования для помещений, где важна стабильная температура и надёжная работа оборудования.",
-		href: "#",
+		href: "/services/kondicionery-dlya-servernoy/",
 		icon: "computer",
 	},
 ];
@@ -605,8 +605,8 @@ const organizationCapabilities = [
 				<ul class="audience-list">
 					{promBenefits.map((item) => <li>{item}</li>)}
 				</ul>
-				<a href="/contacts/" class="audience-link">
-					Обсудить объект
+				<a href="/services/vrf-sistemy/" class="audience-link">
+					Подробнее про VRF
 					<span class="material-icons-round" aria-hidden="true">
 						arrow_forward
 					</span>
@@ -621,8 +621,8 @@ const organizationCapabilities = [
 				<ul class="audience-list">
 					{serverBenefits.map((item) => <li>{item}</li>)}
 				</ul>
-				<a href="/contacts/" class="audience-link">
-					Обсудить задачу
+				<a href="/services/kondicionery-dlya-servernoy/" class="audience-link">
+					Подробнее для серверной
 					<span class="material-icons-round" aria-hidden="true">
 						arrow_forward
 					</span>
