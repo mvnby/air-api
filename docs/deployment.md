@@ -246,6 +246,43 @@ Post-cutover verification:
 5. Roll back by restoring DNS and/or GitHub secrets to the legacy `mvn-web`
    values and running the manual rebuild workflow.
 
+### Storefront Media Proxy
+
+Backend-managed public media lives on the API host under `/media/...`, but
+storefront content should prefer same-origin references such as
+`/media/library/crop/example.webp`. The web VPS proxies those paths to the API
+origin with the nginx snippet in
+`deployment/nginx/mvn-media-proxy-location.conf`.
+
+Install or refresh the snippet on the web VPS:
+
+```bash
+scp deployment/nginx/mvn-media-proxy-location.conf mvn:/etc/nginx/snippets/mvn-media-proxy-location.conf
+ssh mvn
+cp /etc/nginx/sites-available/mvn.by /etc/nginx/sites-available/mvn.by.bak-media-$(date +%Y%m%d%H%M%S)
+# Include the snippet inside both mvn.by server blocks before the generic
+# static asset regex location.
+nginx -t
+systemctl reload nginx
+```
+
+Origin smoke, bypassing Cloudflare:
+
+```bash
+curl -I -H 'Host: mvn.by' http://153.80.244.78/media/library/crop/<file>.webp
+curl -I --resolve mvn.by:443:153.80.244.78 https://mvn.by/media/library/crop/<file>.webp
+```
+
+After enabling a new `/media/...` URL that previously returned 404 through
+Cloudflare, purge that URL from Cloudflare cache or wait for the cached 404 to
+expire. The Cloudflare token used for certbot DNS challenges may not have cache
+purge permissions, so use a token with `Zone.Cache Purge` when clearing this
+manually. Public smoke:
+
+```bash
+curl -I https://mvn.by/media/library/crop/<file>.webp
+```
+
 ### Web SSH Reliability
 
 `deploy-frontend` and the manual `rebuild-web.yml` workflow use bounded SSH port/login preflight checks before rsync. They retry 5 times with backoff and write a summary with separate `ssh_port_failures`, `ssh_login_failures`, `rsync_failures`, and `failure_kind` fields.
