@@ -118,6 +118,7 @@ const selectedActBranchId = ref<number | null>(props.order.customer_branch?.id ?
 const actScopeTitle = ref(props.order.customer_branch?.name || '');
 const actScopeAddress = ref(props.order.delivery_address || props.order.customer_branch?.delivery_address || '');
 const selectedActServiceLineIds = ref<number[]>([]);
+const selectedActServiceLineQuantities = ref<Record<number, number>>({});
 const newActBranchName = ref('');
 const newActBranchAddress = ref('');
 const creatingActBranch = ref(false);
@@ -502,8 +503,24 @@ const fallbackActAddress = () => (
   || ''
 );
 
+const maxActServiceQuantity = (line: OrderServiceLineResponse) => Math.max(0, Math.trunc(Number(line.quantity) || 0));
+
+const actServiceQuantity = (lineId: number) => Math.max(0, Math.trunc(Number(selectedActServiceLineQuantities.value[lineId]) || 0));
+
+const syncActServiceIdsFromQuantities = () => {
+  selectedActServiceLineIds.value = activeActServiceLines.value
+    .filter((line) => actServiceQuantity(line.id) > 0)
+    .map((line) => line.id);
+};
+
 const syncActServiceSelection = () => {
-  selectedActServiceLineIds.value = activeActServiceLines.value.map((line) => line.id);
+  const nextQuantities: Record<number, number> = {};
+  activeActServiceLines.value.forEach((line) => {
+    const maxQuantity = maxActServiceQuantity(line);
+    if (maxQuantity > 0) nextQuantities[line.id] = maxQuantity;
+  });
+  selectedActServiceLineQuantities.value = nextQuantities;
+  syncActServiceIdsFromQuantities();
 };
 
 const syncActScopeDefaults = () => {
@@ -760,13 +777,25 @@ const onActBranchChange = () => {
   actScopeAddress.value = branch.delivery_address;
 };
 
+const setActServiceLineQuantity = (line: OrderServiceLineResponse, rawValue: number | string) => {
+  const maxQuantity = maxActServiceQuantity(line);
+  const nextQuantity = Math.max(0, Math.min(maxQuantity, Math.trunc(Number(rawValue) || 0)));
+  selectedActServiceLineQuantities.value = {
+    ...selectedActServiceLineQuantities.value,
+    [line.id]: nextQuantity,
+  };
+  if (nextQuantity <= 0) {
+    const rest = { ...selectedActServiceLineQuantities.value };
+    delete rest[line.id];
+    selectedActServiceLineQuantities.value = rest;
+  }
+  syncActServiceIdsFromQuantities();
+};
+
 const toggleActServiceLine = (lineId: number, checked: boolean) => {
-  const current = new Set(selectedActServiceLineIds.value);
-  if (checked) current.add(lineId);
-  else current.delete(lineId);
-  selectedActServiceLineIds.value = activeActServiceLines.value
-    .map((line) => line.id)
-    .filter((lineId) => current.has(lineId));
+  const line = activeActServiceLines.value.find((item) => item.id === lineId);
+  if (!line) return;
+  setActServiceLineQuantity(line, checked ? maxActServiceQuantity(line) : 0);
 };
 
 const onActServiceCheckboxChange = (lineId: number, event: Event) => {
@@ -874,6 +903,12 @@ const generateDocument = async (type: string) => {
     const scopeServiceLineIds = type === 'act' && selectedActServiceLineIds.value.length
       ? selectedActServiceLineIds.value
       : undefined;
+    const scopeServiceLineQuantities = type === 'act' && selectedActServiceLineIds.value.length
+      ? JSON.stringify(selectedActServiceLineIds.value.map((lineId) => ({
+        service_line_id: lineId,
+        quantity: actServiceQuantity(lineId),
+      })).filter((item) => item.quantity > 0))
+      : undefined;
     const res = await ManagerOrdersService.generateManagerOrderDocument(
       props.order.id,
       type,
@@ -886,6 +921,7 @@ const generateDocument = async (type: string) => {
       scopeTitle,
       scopeAddress,
       scopeServiceLineIds,
+      scopeServiceLineQuantities,
       undefined,
     );
     window.open(res.edit_url, '_blank');
@@ -1395,13 +1431,27 @@ const registerExternalContract = async () => {
                   <input
                     type="checkbox"
                     class="mt-1 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                    :checked="selectedActServiceLineIds.includes(line.id)"
+                    :checked="actServiceQuantity(line.id) > 0"
                     @change="onActServiceCheckboxChange(line.id, $event)"
                   />
                   <span class="min-w-0 flex-1">
                     <span class="block font-medium text-slate-800 dark:text-slate-100">{{ line.service_title }}</span>
-                    <span class="text-xs text-slate-500 dark:text-slate-400">
-                      {{ line.quantity }} шт. · {{ formatMoney(line.line_total) }}
+                    <span class="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                      <span>{{ line.quantity }} шт. · {{ formatMoney(line.line_total) }}</span>
+                      <span class="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700">
+                        <span>В акт</span>
+                        <input
+                          type="number"
+                          min="0"
+                          :max="maxActServiceQuantity(line)"
+                          step="1"
+                          inputmode="numeric"
+                          class="h-7 w-14 rounded border border-slate-200 bg-white px-2 text-center text-sm font-semibold text-slate-800 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:ring-teal-900/40"
+                          :value="actServiceQuantity(line.id)"
+                          @input="setActServiceLineQuantity(line, ($event.target as HTMLInputElement).value)"
+                        />
+                        <span>из {{ maxActServiceQuantity(line) }}</span>
+                      </span>
                     </span>
                   </span>
                 </label>

@@ -654,7 +654,7 @@ async def test_manager_order_act_generation_can_be_scoped_to_object_and_service_
     await db.refresh(service_b)
 
     service_link_a = OrderServiceLink(order_id=order.id, service_id=service_a.id, quantity=1, price=300, cost=100)
-    service_link_b = OrderServiceLink(order_id=order.id, service_id=service_b.id, quantity=1, price=150, cost=50)
+    service_link_b = OrderServiceLink(order_id=order.id, service_id=service_b.id, quantity=2, price=150, cost=50)
     db.add_all([service_link_a, service_link_b])
     await db.commit()
     await db.refresh(service_link_a)
@@ -692,6 +692,7 @@ async def test_manager_order_act_generation_can_be_scoped_to_object_and_service_
             ("base_document_id", "0"),
             ("scope_customer_branch_id", str(branch.id)),
             ("scope_service_line_ids", str(service_link_b.id)),
+            ("scope_service_line_quantities", json.dumps([{"service_line_id": service_link_b.id, "quantity": 1}])),
         ],
     )
     assert response.status_code == 200, response.text
@@ -705,12 +706,14 @@ async def test_manager_order_act_generation_can_be_scoped_to_object_and_service_
     assert generated_replacements["{{object_address}}"] == "Полоцк, Скорины 8А"
     assert generated_replacements["{{total_amount}}"] == "150.00"
     assert table_captures[-1][0][1] == "Демонтаж кондиционера"
+    assert table_captures[-1][0][3] == "1"
     assert table_captures[-1][-1][-1] == "150.00"
 
     doc = await db.get(OrderDocument, payload["doc_id"])
     assert doc is not None
     assert doc.scope_customer_branch_id == branch.id
     assert doc.scope_meta["service_line_ids"] == [service_link_b.id]
+    assert doc.scope_meta["service_line_quantities"] == {str(service_link_b.id): 1}
 
 
 @pytest.mark.asyncio

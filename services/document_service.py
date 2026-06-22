@@ -7,7 +7,7 @@ from sqlmodel import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
-from models import CustomerBranch, CustomerContract, CustomerType, DocumentTemplate, OrderDocument, Order, GlobalConfig
+from models import CustomerBranch, CustomerContract, CustomerType, DocumentTemplate, GlobalConfig, Order, OrderDocument, OrderServiceLink
 from services.google_service import get_google_service
 from services.documents.base import TEMPLATES, DOC_NAMES, BaseDocumentStrategy
 from services.documents.factory import DocumentFactory
@@ -157,6 +157,7 @@ class DocumentService:
         scope_title: Optional[str] = None,
         scope_address: Optional[str] = None,
         scope_service_line_ids: Optional[List[int]] = None,
+        scope_service_line_quantities: Any = None,
         scope_product_line_ids: Optional[List[int]] = None,
     ) -> OrderDocument:
         """
@@ -185,6 +186,7 @@ class DocumentService:
                 scope_title=scope_title,
                 scope_address=scope_address,
                 scope_service_line_ids=scope_service_line_ids,
+                scope_service_line_quantities=scope_service_line_quantities,
                 scope_product_line_ids=scope_product_line_ids,
             )
 
@@ -214,6 +216,7 @@ class DocumentService:
             scope_title=scope_title,
             scope_address=scope_address,
             scope_service_line_ids=scope_service_line_ids,
+            scope_service_line_quantities=scope_service_line_quantities,
             scope_product_line_ids=scope_product_line_ids,
         )
 
@@ -231,6 +234,7 @@ class DocumentService:
         scope_title: Optional[str] = None,
         scope_address: Optional[str] = None,
         scope_service_line_ids: Optional[List[int]] = None,
+        scope_service_line_quantities: Any = None,
         scope_product_line_ids: Optional[List[int]] = None,
     ) -> dict:
         if doc_type not in DocumentService.ALLOWED_DOC_TYPES:
@@ -249,6 +253,7 @@ class DocumentService:
             scope_title=scope_title,
             scope_address=scope_address,
             scope_service_line_ids=scope_service_line_ids,
+            scope_service_line_quantities=scope_service_line_quantities,
             scope_product_line_ids=scope_product_line_ids,
         )
         return {
@@ -667,6 +672,56 @@ class DocumentService:
         return normalized
 
     @staticmethod
+    def _normalize_quantity_map(value: Any) -> dict[int, int]:
+        if not value:
+            return {}
+        raw_items: Any = value
+        if isinstance(value, str):
+            try:
+                raw_items = json.loads(value)
+            except json.JSONDecodeError as exc:
+                raise ValueError("Некорректный формат количества услуг в акте") from exc
+
+        normalized: dict[int, int] = {}
+        if isinstance(raw_items, dict):
+            iterable = raw_items.items()
+        elif isinstance(raw_items, list):
+            iterable = []
+            for item in raw_items:
+                if not isinstance(item, dict):
+                    continue
+                line_id = item.get("service_line_id") or item.get("line_id") or item.get("id")
+                quantity = item.get("quantity")
+                iterable.append((line_id, quantity))
+        else:
+            return {}
+
+        for raw_line_id, raw_quantity in iterable:
+            try:
+                line_id = int(raw_line_id)
+                quantity = int(raw_quantity)
+            except (TypeError, ValueError):
+                continue
+            if line_id > 0 and quantity > 0:
+                normalized[line_id] = quantity
+        return normalized
+
+    @staticmethod
+    def _clone_service_link_for_scope(link: OrderServiceLink, quantity: int) -> OrderServiceLink:
+        scoped_link = OrderServiceLink(
+            id=link.id,
+            order_id=link.order_id,
+            proposal_id=link.proposal_id,
+            service_id=link.service_id,
+            title=link.title,
+            quantity=quantity,
+            price=link.price,
+            cost=link.cost,
+        )
+        set_committed_value(scoped_link, "service", link.service)
+        return scoped_link
+
+    @staticmethod
     async def _build_document_scope(
         session: AsyncSession,
         order: Optional[Order],
@@ -675,6 +730,7 @@ class DocumentService:
         scope_title: Optional[str],
         scope_address: Optional[str],
         scope_service_line_ids: Optional[List[int]],
+        scope_service_line_quantities: Any,
         scope_product_line_ids: Optional[List[int]],
     ) -> dict[str, Any]:
         if not order:
@@ -683,7 +739,14 @@ class DocumentService:
         cleaned_title = str(scope_title or "").strip()
         cleaned_address = str(scope_address or "").strip()
         service_line_ids = DocumentService._normalize_id_list(scope_service_line_ids)
+        service_line_quantities = DocumentService._normalize_quantity_map(scope_service_line_quantities)
         product_line_ids = DocumentService._normalize_id_list(scope_product_line_ids)
+        if service_line_quantities:
+            quantity_line_ids = list(service_line_quantities.keys())
+            service_line_ids = service_line_ids or quantity_line_ids
+            for line_id in quantity_line_ids:
+                if line_id not in service_line_ids:
+                    service_line_ids.append(line_id)
 
         branch = None
         if scope_customer_branch_id:
@@ -702,6 +765,8 @@ class DocumentService:
             scope["address"] = cleaned_address
         if service_line_ids:
             scope["service_line_ids"] = service_line_ids
+        if service_line_quantities:
+            scope["service_line_quantities"] = {str(line_id): quantity for line_id, quantity in service_line_quantities.items()}
         if product_line_ids:
             scope["product_line_ids"] = product_line_ids
         return scope
@@ -715,10 +780,22 @@ class DocumentService:
             set_committed_value(order, "delivery_address", str(scope["address"]))
 
         service_ids = set(DocumentService._normalize_id_list(scope.get("service_line_ids")))
+        service_quantities = DocumentService._normalize_quantity_map(scope.get("service_line_quantities"))
         product_ids = set(DocumentService._normalize_id_list(scope.get("product_line_ids")))
 
         if service_ids:
-            scoped_services = [link for link in order.service_links if link.id in service_ids]
+            scoped_services = []
+            for link in order.service_links:
+                if link.id not in service_ids:
+                    continue
+                scoped_quantity = service_quantities.get(int(link.id)) if link.id is not None else None
+                if scoped_quantity is None:
+                    scoped_services.append(link)
+                    continue
+                max_quantity = int(link.quantity or 0)
+                if scoped_quantity > max_quantity:
+                    raise ValueError("Количество услуги в акте не может быть больше количества в заказе")
+                scoped_services.append(DocumentService._clone_service_link_for_scope(link, scoped_quantity))
             if len(scoped_services) != len(service_ids):
                 raise ValueError("В акте выбрана услуга не из этого заказа или предложения")
             set_committed_value(order, "service_links", scoped_services)
@@ -755,6 +832,7 @@ class DocumentService:
         scope_title: Optional[str] = None,
         scope_address: Optional[str] = None,
         scope_service_line_ids: Optional[List[int]] = None,
+        scope_service_line_quantities: Any = None,
         scope_product_line_ids: Optional[List[int]] = None,
     ) -> OrderDocument:
         """Создает новый документ в Google Drive и сохраняет в БД"""
@@ -819,6 +897,7 @@ class DocumentService:
             scope_title=scope_title,
             scope_address=scope_address,
             scope_service_line_ids=scope_service_line_ids,
+            scope_service_line_quantities=scope_service_line_quantities,
             scope_product_line_ids=scope_product_line_ids,
         )
         if doc_type == "act":

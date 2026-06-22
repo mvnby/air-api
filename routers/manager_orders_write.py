@@ -292,6 +292,7 @@ async def generate_manager_order_document(
     scope_title: Optional[str] = Query(None, description="Human-readable object title for scoped closing document"),
     scope_address: Optional[str] = Query(None, description="Object address override for scoped closing document"),
     scope_service_line_ids: Optional[List[int]] = Query(None, description="Order service line IDs included in scoped closing document"),
+    scope_service_line_quantities: Optional[str] = Query(None, description="JSON map/list of service line quantities included in scoped closing document"),
     scope_product_line_ids: Optional[List[int]] = Query(None, description="Order product line IDs included in scoped closing document"),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
@@ -314,6 +315,7 @@ async def generate_manager_order_document(
             scope_title=scope_title,
             scope_address=scope_address,
             scope_service_line_ids=scope_service_line_ids,
+            scope_service_line_quantities=scope_service_line_quantities,
             scope_product_line_ids=scope_product_line_ids,
         )
     except ValueError as exc:

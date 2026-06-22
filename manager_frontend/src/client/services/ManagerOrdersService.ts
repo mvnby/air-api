@@ -406,6 +406,7 @@ export class ManagerOrdersService {
      * @param scopeTitle Human-readable object title for scoped closing document
      * @param scopeAddress Object address override for scoped closing document
      * @param scopeServiceLineIds Order service line IDs included in scoped closing document
+     * @param scopeServiceLineQuantities JSON map/list of service line quantities included in scoped closing document
      * @param scopeProductLineIds Order product line IDs included in scoped closing document
      * @returns ManagerOrderDocumentResponse Successful Response
      * @throws ApiError
@@ -422,6 +423,7 @@ export class ManagerOrdersService {
         scopeTitle?: (string | null),
         scopeAddress?: (string | null),
         scopeServiceLineIds?: (Array<number> | null),
+        scopeServiceLineQuantities?: (string | null),
         scopeProductLineIds?: (Array<number> | null),
     ): CancelablePromise<ManagerOrderDocumentResponse> {
         return __request(OpenAPI, {
@@ -441,6 +443,7 @@ export class ManagerOrdersService {
                 'scope_title': scopeTitle,
                 'scope_address': scopeAddress,
                 'scope_service_line_ids': scopeServiceLineIds,
+                'scope_service_line_quantities': scopeServiceLineQuantities,
                 'scope_product_line_ids': scopeProductLineIds,
             },
             errors: {

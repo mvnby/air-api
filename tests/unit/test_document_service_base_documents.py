@@ -280,7 +280,7 @@ async def test_act_scope_filters_services_and_overrides_object(sqlite_session):
         order_id=order.id,
         proposal_id=proposal.id,
         service_id=service_b.id,
-        quantity=1,
+        quantity=2,
         price=150,
         cost=50,
     )
@@ -298,6 +298,7 @@ async def test_act_scope_filters_services_and_overrides_object(sqlite_session):
         scope_title=None,
         scope_address=None,
         scope_service_line_ids=[link_b.id],
+        scope_service_line_quantities=[{"service_line_id": link_b.id, "quantity": 1}],
         scope_product_line_ids=None,
     )
     DocumentService._apply_document_scope(strategy.order, scope)
@@ -312,6 +313,7 @@ async def test_act_scope_filters_services_and_overrides_object(sqlite_session):
     assert replacements["{{object_address}}"] == "Полоцк, Скорины 8А"
     assert replacements["{{total_amount}}"] == "150.00"
     assert table_rows[0][1] == "Демонтаж"
+    assert table_rows[0][3] == "1"
     assert table_rows[-1][-1] == "150.00"
 
 
@@ -342,6 +344,7 @@ async def test_act_scope_rejects_service_line_from_another_order(sqlite_session)
         scope_title=None,
         scope_address=None,
         scope_service_line_ids=[foreign_link.id],
+        scope_service_line_quantities=None,
         scope_product_line_ids=None,
     )
 
