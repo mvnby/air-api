@@ -7988,6 +7988,24 @@
             "description": "Order service line IDs included in scoped closing document"
           },
           {
+            "name": "scope_service_line_quantities",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "JSON map/list of service line quantities included in scoped closing document",
+              "title": "Scope Service Line Quantities"
+            },
+            "description": "JSON map/list of service line quantities included in scoped closing document"
+          },
+          {
             "name": "scope_product_line_ids",
             "in": "query",
             "required": false,
