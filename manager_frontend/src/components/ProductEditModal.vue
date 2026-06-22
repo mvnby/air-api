@@ -1779,34 +1779,34 @@ const unlinkSupplierOffer = async (offer: any) => {
                                 <div
                                     v-for="(component, idx) in logisticsComponents"
                                     :key="`logistics-component-${idx}`"
-                                    class="grid gap-2 rounded-xl border border-white/70 bg-white/80 p-2 dark:border-slate-700/50 dark:bg-slate-900/70 md:grid-cols-[1.4fr_100px_70px_80px_90px_32px]"
+                                    class="grid grid-cols-2 gap-2 rounded-xl border border-white/70 bg-white/80 p-2 dark:border-slate-700/50 dark:bg-slate-900/70 xl:grid-cols-[minmax(220px,1fr)_100px_70px_80px_90px_32px]"
                                 >
                                     <input
                                         v-model="component.title"
                                         type="text"
-                                        class="field-input h-9 text-xs"
+                                        class="field-input h-9 min-w-0 text-xs"
                                         placeholder="Название позиции"
                                     />
                                     <input
                                         v-model="component.country"
                                         type="text"
-                                        class="field-input h-9 text-xs"
+                                        class="field-input h-9 min-w-0 text-xs"
                                         placeholder="Страна"
                                     />
                                     <input
                                         v-model="component.unit"
                                         type="text"
-                                        class="field-input h-9 text-xs"
+                                        class="field-input h-9 min-w-0 text-xs"
                                         placeholder="Ед."
                                     />
                                     <input
                                         v-model.number="component.quantity_per_parent"
                                         type="number"
                                         min="1"
-                                        class="field-input h-9 text-xs"
+                                        class="field-input h-9 min-w-0 text-xs"
                                         title="Количество на комплект"
                                     />
-                                    <select v-model="component.kind" class="field-input h-9 text-xs">
+                                    <select v-model="component.kind" class="field-input h-9 min-w-0 text-xs">
                                         <option value="indoor">внутр.</option>
                                         <option value="outdoor">наруж.</option>
                                         <option value="accessory">акс.</option>
@@ -1814,12 +1814,12 @@ const unlinkSupplierOffer = async (offer: any) => {
                                     </select>
                                     <button
                                         type="button"
-                                        class="flex h-9 w-8 items-center justify-center rounded-lg text-gray-300 transition-all hover:bg-red-50 hover:text-red-500"
+                                        class="flex h-9 w-full items-center justify-center rounded-lg text-gray-300 transition-all hover:bg-red-50 hover:text-red-500 xl:w-8"
                                         @click="removeLogisticsComponent(idx)"
                                     >
                                         <Trash2 class="w-3.5 h-3.5" />
                                     </button>
-                                    <label class="md:col-span-6 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                                    <label class="col-span-2 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 xl:col-span-6">
                                         <span class="shrink-0">Вес цены</span>
                                         <input
                                             v-model.number="component.price_weight"
