@@ -619,12 +619,24 @@ async def test_manager_order_contract_selection_and_act_guard(async_client, db, 
         params={"base_document_id": one_time_contract_id},
     )
     assert one_time_contract_act.status_code == 200
+    assert captured_replacements[-1]["{{act_number}}"] == "1"
+    assert captured_replacements[-1]["{{act_sequence_number}}"] == "1"
     assert one_time_contract_act.json()["base_document_id"] == one_time_contract_id
     assert one_time_contract_act.json()["base_customer_contract_id"] is None
     one_time_contract_act_doc = await db.get(OrderDocument, one_time_contract_act.json()["doc_id"])
     assert one_time_contract_act_doc is not None
     assert one_time_contract_act_doc.base_document_id == one_time_contract_id
     assert one_time_contract_act_doc.base_customer_contract_id is None
+
+    second_one_time_contract_act = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/act",
+        headers=headers,
+        params={"base_document_id": one_time_contract_id},
+    )
+    assert second_one_time_contract_act.status_code == 200
+    assert captured_replacements[-1]["{{act_number}}"] == "2"
+    assert captured_replacements[-1]["{{act_sequence_number}}"] == "2"
+    assert second_one_time_contract_act.json()["base_document_id"] == one_time_contract_id
 
 
 @pytest.mark.asyncio
