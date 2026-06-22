@@ -288,6 +288,11 @@ async def generate_manager_order_document(
     contract_date: Optional[str] = Query(None, description="Document/contract date as ISO datetime"),
     proposal_id: Optional[int] = Query(None, description="Order proposal ID for generated commercial offer"),
     base_document_id: Optional[int] = Query(None, description="Order document ID used as basis for closing documents; 0 means selected open customer contract"),
+    scope_customer_branch_id: Optional[int] = Query(None, description="Customer branch/object for scoped closing document"),
+    scope_title: Optional[str] = Query(None, description="Human-readable object title for scoped closing document"),
+    scope_address: Optional[str] = Query(None, description="Object address override for scoped closing document"),
+    scope_service_line_ids: Optional[List[int]] = Query(None, description="Order service line IDs included in scoped closing document"),
+    scope_product_line_ids: Optional[List[int]] = Query(None, description="Order product line IDs included in scoped closing document"),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
 ):
@@ -305,6 +310,11 @@ async def generate_manager_order_document(
             contract_date=parsed_contract_date,
             proposal_id=proposal_id,
             base_document_id=base_document_id,
+            scope_customer_branch_id=scope_customer_branch_id,
+            scope_title=scope_title,
+            scope_address=scope_address,
+            scope_service_line_ids=scope_service_line_ids,
+            scope_product_line_ids=scope_product_line_ids,
         )
     except ValueError as exc:
         raise manager_http_error(

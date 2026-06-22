@@ -7911,6 +7911,102 @@
               "title": "Base Document Id"
             },
             "description": "Order document ID used as basis for closing documents; 0 means selected open customer contract"
+          },
+          {
+            "name": "scope_customer_branch_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Customer branch/object for scoped closing document",
+              "title": "Scope Customer Branch Id"
+            },
+            "description": "Customer branch/object for scoped closing document"
+          },
+          {
+            "name": "scope_title",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Human-readable object title for scoped closing document",
+              "title": "Scope Title"
+            },
+            "description": "Human-readable object title for scoped closing document"
+          },
+          {
+            "name": "scope_address",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Object address override for scoped closing document",
+              "title": "Scope Address"
+            },
+            "description": "Object address override for scoped closing document"
+          },
+          {
+            "name": "scope_service_line_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Order service line IDs included in scoped closing document",
+              "title": "Scope Service Line Ids"
+            },
+            "description": "Order service line IDs included in scoped closing document"
+          },
+          {
+            "name": "scope_product_line_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Order product line IDs included in scoped closing document",
+              "title": "Scope Product Line Ids"
+            },
+            "description": "Order product line IDs included in scoped closing document"
           }
         ],
         "responses": {
@@ -19655,6 +19751,44 @@
             ],
             "title": "Base Customer Contract Id"
           },
+          "scope_customer_branch_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Customer Branch Id"
+          },
+          "scope_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Title"
+          },
+          "scope_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Address"
+          },
+          "scope_meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Scope Meta"
+          },
           "base_document_type": {
             "anyOf": [
               {
@@ -23892,6 +24026,44 @@
             ],
             "title": "Base Customer Contract Id"
           },
+          "scope_customer_branch_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Customer Branch Id"
+          },
+          "scope_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Title"
+          },
+          "scope_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Address"
+          },
+          "scope_meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Scope Meta"
+          },
           "base_document_type": {
             "anyOf": [
               {
@@ -24030,6 +24202,44 @@
               }
             ],
             "title": "Base Customer Contract Id"
+          },
+          "scope_customer_branch_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Customer Branch Id"
+          },
+          "scope_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Title"
+          },
+          "scope_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Address"
+          },
+          "scope_meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Scope Meta"
           },
           "doc_type": {
             "type": "string",

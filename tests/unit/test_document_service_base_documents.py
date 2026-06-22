@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
-from models import Customer, CustomerContract, DocumentTemplate, Order, OrderDocument, OrderProductLink, OrderServiceLink, Product, Service
+from models import Customer, CustomerBranch, CustomerContract, DocumentTemplate, Order, OrderDocument, OrderProductLink, OrderProposal, OrderServiceLink, Product, Service
 from services.document_service import DocumentService
 from services.documents.factory import DocumentFactory
 from services.documents.standard import ActStrategy, DefectActStrategy
@@ -251,6 +251,102 @@ async def test_base_document_type_uses_invoice_template_label(sqlite_session):
     assert replacements["{{base_document_type}}"] == "Счет-договор"
     assert replacements["{{BASE_DOCUMENT_TYPE}}"] == "Счет-договор"
     assert replacements["{{base_document_number}}"] == "С-2026-005"
+
+
+@pytest.mark.asyncio
+async def test_act_scope_filters_services_and_overrides_object(sqlite_session):
+    customer = Customer(name="Scoped Act", phone="+375291111111", type="company")
+    branch = CustomerBranch(customer=customer, name="Объект Полоцк", delivery_address="Полоцк, Скорины 8А")
+    order = Order(customer=customer, customer_branch=branch, delivery_address="Витебск, старый адрес")
+    proposal = OrderProposal(order=order, name="Основное", is_selected=True)
+    service_a = Service(title="Монтаж", slug="scope-install", base_price=300)
+    service_b = Service(title="Демонтаж", slug="scope-dismantle", base_price=150)
+    sqlite_session.add_all([customer, branch, order, proposal, service_a, service_b])
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+    await sqlite_session.refresh(proposal)
+    await sqlite_session.refresh(service_a)
+    await sqlite_session.refresh(service_b)
+
+    link_a = OrderServiceLink(
+        order_id=order.id,
+        proposal_id=proposal.id,
+        service_id=service_a.id,
+        quantity=1,
+        price=300,
+        cost=100,
+    )
+    link_b = OrderServiceLink(
+        order_id=order.id,
+        proposal_id=proposal.id,
+        service_id=service_b.id,
+        quantity=1,
+        price=150,
+        cost=50,
+    )
+    sqlite_session.add_all([link_a, link_b])
+    await sqlite_session.commit()
+    await sqlite_session.refresh(link_b)
+
+    strategy = ActStrategy(sqlite_session, order.id)
+    await strategy.fetch_order()
+    DocumentService._apply_proposal_lines(strategy.order, proposal.id)
+    scope = await DocumentService._build_document_scope(
+        sqlite_session,
+        strategy.order,
+        scope_customer_branch_id=branch.id,
+        scope_title=None,
+        scope_address=None,
+        scope_service_line_ids=[link_b.id],
+        scope_product_line_ids=None,
+    )
+    DocumentService._apply_document_scope(strategy.order, scope)
+    replacements = await strategy._prepare_base_variables(
+        doc_number="А-2026-100",
+        doc_type="act",
+        document_date=datetime(2026, 6, 22),
+    )
+    table_rows = strategy._prepare_table_data()
+
+    assert replacements["{{object_name}}"] == "Объект Полоцк"
+    assert replacements["{{object_address}}"] == "Полоцк, Скорины 8А"
+    assert replacements["{{total_amount}}"] == "150.00"
+    assert table_rows[0][1] == "Демонтаж"
+    assert table_rows[-1][-1] == "150.00"
+
+
+@pytest.mark.asyncio
+async def test_act_scope_rejects_service_line_from_another_order(sqlite_session):
+    customer = Customer(name="Scope Guard", phone="+375291111111")
+    order = Order(customer=customer)
+    other_order = Order(customer=customer)
+    service = Service(title="Монтаж guard", slug="scope-guard-install", base_price=300)
+    sqlite_session.add_all([customer, order, other_order, service])
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+    await sqlite_session.refresh(other_order)
+    await sqlite_session.refresh(service)
+
+    own_link = OrderServiceLink(order_id=order.id, service_id=service.id, quantity=1, price=300, cost=100)
+    foreign_link = OrderServiceLink(order_id=other_order.id, service_id=service.id, quantity=1, price=300, cost=100)
+    sqlite_session.add_all([own_link, foreign_link])
+    await sqlite_session.commit()
+    await sqlite_session.refresh(foreign_link)
+
+    strategy = ActStrategy(sqlite_session, order.id)
+    await strategy.fetch_order()
+    scope = await DocumentService._build_document_scope(
+        sqlite_session,
+        strategy.order,
+        scope_customer_branch_id=None,
+        scope_title=None,
+        scope_address=None,
+        scope_service_line_ids=[foreign_link.id],
+        scope_product_line_ids=None,
+    )
+
+    with pytest.raises(ValueError, match="услуг"):
+        DocumentService._apply_document_scope(strategy.order, scope)
 
 
 @pytest.mark.asyncio

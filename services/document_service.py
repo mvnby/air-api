@@ -1,13 +1,13 @@
 import json
 from datetime import datetime
-from typing import Optional, List
+from typing import Any, Optional, List
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
-from models import CustomerContract, CustomerType, DocumentTemplate, OrderDocument, Order, GlobalConfig
+from models import CustomerBranch, CustomerContract, CustomerType, DocumentTemplate, OrderDocument, Order, GlobalConfig
 from services.google_service import get_google_service
 from services.documents.base import TEMPLATES, DOC_NAMES, BaseDocumentStrategy
 from services.documents.factory import DocumentFactory
@@ -153,6 +153,11 @@ class DocumentService:
         contract_date: Optional[datetime] = None,
         proposal_id: Optional[int] = None,
         base_document_id: Optional[int] = None,
+        scope_customer_branch_id: Optional[int] = None,
+        scope_title: Optional[str] = None,
+        scope_address: Optional[str] = None,
+        scope_service_line_ids: Optional[List[int]] = None,
+        scope_product_line_ids: Optional[List[int]] = None,
     ) -> OrderDocument:
         """
         Создает документ или возвращает существующий.
@@ -176,6 +181,11 @@ class DocumentService:
                 contract_date=contract_date,
                 proposal_id=proposal_id,
                 base_document_id=base_document_id,
+                scope_customer_branch_id=scope_customer_branch_id,
+                scope_title=scope_title,
+                scope_address=scope_address,
+                scope_service_line_ids=scope_service_line_ids,
+                scope_product_line_ids=scope_product_line_ids,
             )
 
         # 1. Проверяем, есть ли уже такой документ
@@ -200,6 +210,11 @@ class DocumentService:
             contract_date=contract_date,
             proposal_id=proposal_id,
             base_document_id=base_document_id,
+            scope_customer_branch_id=scope_customer_branch_id,
+            scope_title=scope_title,
+            scope_address=scope_address,
+            scope_service_line_ids=scope_service_line_ids,
+            scope_product_line_ids=scope_product_line_ids,
         )
 
     @staticmethod
@@ -212,6 +227,11 @@ class DocumentService:
         contract_date: Optional[datetime] = None,
         proposal_id: Optional[int] = None,
         base_document_id: Optional[int] = None,
+        scope_customer_branch_id: Optional[int] = None,
+        scope_title: Optional[str] = None,
+        scope_address: Optional[str] = None,
+        scope_service_line_ids: Optional[List[int]] = None,
+        scope_product_line_ids: Optional[List[int]] = None,
     ) -> dict:
         if doc_type not in DocumentService.ALLOWED_DOC_TYPES:
             raise ValueError(f"Unsupported document type: {doc_type}")
@@ -225,12 +245,21 @@ class DocumentService:
             contract_date=contract_date,
             proposal_id=proposal_id,
             base_document_id=base_document_id,
+            scope_customer_branch_id=scope_customer_branch_id,
+            scope_title=scope_title,
+            scope_address=scope_address,
+            scope_service_line_ids=scope_service_line_ids,
+            scope_product_line_ids=scope_product_line_ids,
         )
         return {
             "doc_id": doc.id,
             "proposal_id": getattr(doc, "proposal_id", None),
             "base_document_id": getattr(doc, "base_document_id", None),
             "base_customer_contract_id": getattr(doc, "base_customer_contract_id", None),
+            "scope_customer_branch_id": getattr(doc, "scope_customer_branch_id", None),
+            "scope_title": getattr(doc, "scope_title", None),
+            "scope_address": getattr(doc, "scope_address", None),
+            "scope_meta": getattr(doc, "scope_meta", None) or {},
             "doc_type": doc.doc_type,
             "edit_url": doc.google_edit_url,
         }
@@ -620,6 +649,97 @@ class DocumentService:
                 }
         return lookup
 
+    @staticmethod
+    def _normalize_id_list(values: Optional[List[int]]) -> list[int]:
+        if not values:
+            return []
+        normalized: list[int] = []
+        seen: set[int] = set()
+        for value in values:
+            try:
+                item = int(value)
+            except (TypeError, ValueError):
+                continue
+            if item <= 0 or item in seen:
+                continue
+            seen.add(item)
+            normalized.append(item)
+        return normalized
+
+    @staticmethod
+    async def _build_document_scope(
+        session: AsyncSession,
+        order: Optional[Order],
+        *,
+        scope_customer_branch_id: Optional[int],
+        scope_title: Optional[str],
+        scope_address: Optional[str],
+        scope_service_line_ids: Optional[List[int]],
+        scope_product_line_ids: Optional[List[int]],
+    ) -> dict[str, Any]:
+        if not order:
+            return {}
+
+        cleaned_title = str(scope_title or "").strip()
+        cleaned_address = str(scope_address or "").strip()
+        service_line_ids = DocumentService._normalize_id_list(scope_service_line_ids)
+        product_line_ids = DocumentService._normalize_id_list(scope_product_line_ids)
+
+        branch = None
+        if scope_customer_branch_id:
+            branch = await session.get(CustomerBranch, scope_customer_branch_id)
+            if not branch or branch.customer_id != order.customer_id:
+                raise ValueError("Объект акта не найден у клиента заказа")
+            cleaned_title = cleaned_title or str(branch.name or "").strip()
+            cleaned_address = cleaned_address or str(branch.delivery_address or "").strip()
+
+        scope: dict[str, Any] = {}
+        if branch and branch.id is not None:
+            scope["customer_branch_id"] = int(branch.id)
+        if cleaned_title:
+            scope["title"] = cleaned_title
+        if cleaned_address:
+            scope["address"] = cleaned_address
+        if service_line_ids:
+            scope["service_line_ids"] = service_line_ids
+        if product_line_ids:
+            scope["product_line_ids"] = product_line_ids
+        return scope
+
+    @staticmethod
+    def _apply_document_scope(order: Optional[Order], scope: dict[str, Any]) -> None:
+        if not order or not scope:
+            return
+
+        if scope.get("address"):
+            set_committed_value(order, "delivery_address", str(scope["address"]))
+
+        service_ids = set(DocumentService._normalize_id_list(scope.get("service_line_ids")))
+        product_ids = set(DocumentService._normalize_id_list(scope.get("product_line_ids")))
+
+        if service_ids:
+            scoped_services = [link for link in order.service_links if link.id in service_ids]
+            if len(scoped_services) != len(service_ids):
+                raise ValueError("В акте выбрана услуга не из этого заказа или предложения")
+            set_committed_value(order, "service_links", scoped_services)
+
+        if product_ids:
+            scoped_products = [link for link in order.product_links if link.id in product_ids]
+            if len(scoped_products) != len(product_ids):
+                raise ValueError("В акте выбран товар не из этого заказа или предложения")
+            set_committed_value(order, "product_links", scoped_products)
+        elif service_ids:
+            set_committed_value(order, "product_links", [])
+
+        if service_ids or product_ids:
+            total_amount = sum((link.price or 0) * (link.quantity or 0) for link in order.product_links)
+            total_amount += sum((link.price or 0) * (link.quantity or 0) for link in order.service_links)
+            total_cost = sum((link.cost or 0) * (link.quantity or 0) for link in order.product_links)
+            total_cost += sum((link.cost or 0) * (link.quantity or 0) for link in order.service_links)
+            set_committed_value(order, "total_amount", total_amount)
+            set_committed_value(order, "total_cost", total_cost)
+            set_committed_value(order, "margin", total_amount - total_cost)
+
     
     @staticmethod
     async def _create_new_document(
@@ -631,6 +751,11 @@ class DocumentService:
         contract_date: Optional[datetime] = None,
         proposal_id: Optional[int] = None,
         base_document_id: Optional[int] = None,
+        scope_customer_branch_id: Optional[int] = None,
+        scope_title: Optional[str] = None,
+        scope_address: Optional[str] = None,
+        scope_service_line_ids: Optional[List[int]] = None,
+        scope_product_line_ids: Optional[List[int]] = None,
     ) -> OrderDocument:
         """Создает новый документ в Google Drive и сохраняет в БД"""
 
@@ -684,9 +809,20 @@ class DocumentService:
         await strategy.fetch_order()
         effective_proposal_id = (
             DocumentService._apply_proposal_lines(strategy.order, proposal_id)
-            if doc_type in DocumentService.PROPOSAL_SCOPED_DOC_TYPES
+            if doc_type in DocumentService.PROPOSAL_SCOPED_DOC_TYPES or doc_type == "act"
             else None
         )
+        document_scope = await DocumentService._build_document_scope(
+            session,
+            strategy.order,
+            scope_customer_branch_id=scope_customer_branch_id,
+            scope_title=scope_title,
+            scope_address=scope_address,
+            scope_service_line_ids=scope_service_line_ids,
+            scope_product_line_ids=scope_product_line_ids,
+        )
+        if doc_type == "act":
+            DocumentService._apply_document_scope(strategy.order, document_scope)
         if doc_type == "contract" and strategy.order:
             if not strategy.order.document_role_type:
                 strategy.order.document_role_type = await DocumentService._get_contract_template_role_type(session, template_id)
@@ -703,6 +839,17 @@ class DocumentService:
             act_number = await DocumentService._get_act_number_for_order_contract(session, strategy.order)
             replacements["{{act_number}}"] = str(act_number)
             replacements["{{act_sequence_number}}"] = str(act_number)
+            object_title = str(document_scope.get("title") or "").strip()
+            object_address = str(document_scope.get("address") or "").strip()
+            if object_title:
+                replacements["{{object_name}}"] = object_title
+                replacements["{{object_title}}"] = object_title
+            if object_address:
+                replacements["{{object_address}}"] = object_address
+            if object_title or object_address:
+                object_label = " — ".join(part for part in [object_title, object_address] if part)
+                replacements["{{act_object}}"] = object_label
+                replacements["{{work_object}}"] = object_label
         
         # Добавляем номер документа в замены
         replacements["{{doc_number}}"] = doc_number
@@ -776,6 +923,10 @@ class DocumentService:
             base_customer_contract_id=base_customer_contract.id if base_customer_contract else None,
             document_template_id=document_template_id,
             template_id=template_id,
+            scope_customer_branch_id=document_scope.get("customer_branch_id"),
+            scope_title=document_scope.get("title"),
+            scope_address=document_scope.get("address"),
+            scope_meta=document_scope or None,
             doc_type=doc_type,
             number=doc_number,
             date=effective_doc_date,

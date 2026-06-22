@@ -770,6 +770,10 @@ class ManagerOrderDocumentItem(BaseModel):
     proposal_id: Optional[int] = None
     base_document_id: Optional[int] = None
     base_customer_contract_id: Optional[int] = None
+    scope_customer_branch_id: Optional[int] = None
+    scope_title: Optional[str] = None
+    scope_address: Optional[str] = None
+    scope_meta: Dict[str, Any] = Field(default_factory=dict)
     base_document_type: Optional[str] = None
     base_document_type_label: Optional[str] = None
     base_document_number: Optional[str] = None
@@ -791,6 +795,10 @@ class ManagerCustomerDocumentItem(BaseModel):
     proposal_id: Optional[int] = None
     base_document_id: Optional[int] = None
     base_customer_contract_id: Optional[int] = None
+    scope_customer_branch_id: Optional[int] = None
+    scope_title: Optional[str] = None
+    scope_address: Optional[str] = None
+    scope_meta: Dict[str, Any] = Field(default_factory=dict)
     base_document_type: Optional[str] = None
     base_document_type_label: Optional[str] = None
     base_document_number: Optional[str] = None
@@ -1228,6 +1236,10 @@ class ManagerOrderDocumentResponse(BaseModel):
     proposal_id: Optional[int] = None
     base_document_id: Optional[int] = None
     base_customer_contract_id: Optional[int] = None
+    scope_customer_branch_id: Optional[int] = None
+    scope_title: Optional[str] = None
+    scope_address: Optional[str] = None
+    scope_meta: Dict[str, Any] = Field(default_factory=dict)
     doc_type: str
     edit_url: str
 
