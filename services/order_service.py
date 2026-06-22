@@ -149,6 +149,55 @@ class OrderService:
         return out or None
 
     @staticmethod
+    def _order_logistics_to_product_template(raw_components: Any) -> List[Dict[str, Any]]:
+        components = OrderService._serialize_order_logistics_components(raw_components)
+        if not components:
+            return []
+
+        out: List[Dict[str, Any]] = []
+        for item in components:
+            quantity_per_parent = int(item.get("quantity_per_parent") or 1)
+            try:
+                price_weight = float(item.get("unit_price") or 0) * quantity_per_parent
+            except (TypeError, ValueError):
+                price_weight = 0.0
+            out.append(
+                {
+                    "title": item["title"],
+                    "country": item.get("country"),
+                    "unit": item.get("unit") or "шт.",
+                    "quantity_per_parent": quantity_per_parent,
+                    "price_weight": price_weight if price_weight > 0 else 1.0,
+                    "kind": item.get("kind"),
+                }
+            )
+        return out
+
+    @staticmethod
+    async def _backfill_product_logistics_template(
+        session: AsyncSession,
+        product_id: Optional[int],
+        raw_components: Any,
+    ) -> None:
+        if not product_id or not raw_components:
+            return
+        template_components = OrderService._order_logistics_to_product_template(raw_components)
+        if not template_components:
+            return
+
+        product = await session.get(Product, product_id)
+        if not product:
+            return
+        if OrderService._serialize_product_logistics_components(product):
+            return
+
+        specs = dict(product.specs or {})
+        specs["logistics_components"] = template_components
+        product.specs = specs
+        flag_modified(product, "specs")
+        session.add(product)
+
+    @staticmethod
     def _clean_order_title(raw: Any) -> Optional[str]:
         title = " ".join(str(raw or "").split())
         return title or None
@@ -1274,15 +1323,21 @@ class OrderService:
         
         # 2. Добавляем товары
         for p in items_data.get("products", []):
+            logistics_components = OrderService._serialize_order_logistics_components(
+                p.get("logistics_components")
+            )
+            await OrderService._backfill_product_logistics_template(
+                session,
+                p.get("product_id"),
+                logistics_components,
+            )
             link = OrderProductLink(
                 order_id=order_id,
                 proposal_id=proposal.id,
                 product_id=p["product_id"],
                 quantity=p["quantity"],
                 price=p["price"], # Цена должна приходить актуальная
-                logistics_components=OrderService._serialize_order_logistics_components(
-                    p.get("logistics_components")
-                ),
+                logistics_components=logistics_components,
             )
             session.add(link)
         
@@ -1435,15 +1490,21 @@ class OrderService:
         
         # 2. Add products
         for prod in items_data.get("products", []):
+            logistics_components = OrderService._serialize_order_logistics_components(
+                prod.get("logistics_components")
+            )
+            await OrderService._backfill_product_logistics_template(
+                session,
+                int(prod["product_id"]),
+                logistics_components,
+            )
             link = OrderProductLink(
                 order_id=order_id,
                 proposal_id=proposal.id,
                 product_id=int(prod["product_id"]),
                 quantity=int(prod["quantity"]),
                 price=int(prod["price"]),
-                logistics_components=OrderService._serialize_order_logistics_components(
-                    prod.get("logistics_components")
-                ),
+                logistics_components=logistics_components,
             )
             session.add(link)
         
@@ -2529,6 +2590,14 @@ class OrderService:
                         session=session,
                         product_id=product_line.product_id,
                     )
+                    logistics_components = OrderService._serialize_order_logistics_components(
+                        product_line.logistics_components
+                    )
+                    await OrderService._backfill_product_logistics_template(
+                        session,
+                        product_line.product_id,
+                        logistics_components,
+                    )
                     new_product_link = OrderProductLink(
                         order_id=order_id,
                         proposal_id=target_proposal_id,
@@ -2536,9 +2605,7 @@ class OrderService:
                         quantity=product_line.quantity,
                         price=product_line.price,
                         cost=product_line.cost if product_line.cost is not None else defaults["cost"],
-                        logistics_components=OrderService._serialize_order_logistics_components(
-                            product_line.logistics_components
-                        ),
+                        logistics_components=logistics_components,
                     )
                     session.add(new_product_link)
 

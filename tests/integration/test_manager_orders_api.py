@@ -943,6 +943,89 @@ async def test_manager_order_patch_lines_persists_logistics_components(async_cli
     product_lines = response.json()["product_lines"]
     assert product_lines[0]["logistics_components"] == payload["products"][0]["logistics_components"]
 
+    await db.refresh(product)
+    assert product.specs["logistics_components"] == [
+        {
+            "title": "Внутренний блок TEST-IN",
+            "country": "Китай",
+            "unit": "шт.",
+            "quantity_per_parent": 1,
+            "price_weight": 600.0,
+            "kind": "indoor",
+        },
+        {
+            "title": "Наружный блок TEST-OUT",
+            "country": "Китай",
+            "unit": "шт.",
+            "quantity_per_parent": 1,
+            "price_weight": 1203.0,
+            "kind": "outdoor",
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_manager_order_patch_lines_does_not_overwrite_product_logistics_template(async_client, db):
+    customer = Customer(name="Logistics Existing", phone="+375296666665", type=CustomerType.individual)
+    existing_template = [
+        {
+            "title": "Заводской внутренний блок",
+            "country": "Китай",
+            "unit": "шт.",
+            "quantity_per_parent": 1,
+            "price_weight": 1.0,
+            "kind": "indoor",
+        }
+    ]
+    product = Product(
+        title="Split Logistics Existing",
+        slug="split-logistics-existing",
+        price=2000,
+        area=30,
+        specs={"logistics_components": existing_template},
+    )
+    db.add(customer)
+    db.add(product)
+    await db.commit()
+    await db.refresh(customer)
+    await db.refresh(product)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={
+            "products": [
+                {
+                    "product_id": product.id,
+                    "quantity": 1,
+                    "price": 2000,
+                    "cost": 1200,
+                    "logistics_components": [
+                        {
+                            "title": "Ручной блок из заказа",
+                            "country": "Китай",
+                            "unit": "шт.",
+                            "quantity_per_parent": 1,
+                            "unit_price": 2000,
+                            "kind": "outdoor",
+                        }
+                    ],
+                }
+            ],
+            "services": [],
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200
+
+    await db.refresh(product)
+    assert product.specs["logistics_components"] == existing_template
+
 
 @pytest.mark.asyncio
 async def test_manager_order_proposals_can_duplicate_edit_and_select(async_client, db):
