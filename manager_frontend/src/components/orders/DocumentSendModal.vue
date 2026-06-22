@@ -21,6 +21,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   invoice: 'Счет',
   retail_receipt: 'Товарный чек',
   service_act: 'Заказ-акт',
+  maintenance_service_act: 'Заказ-акт ТО',
   act: 'Акт',
   defect_act: 'Дефектный акт',
   tn2: 'ТН-2',

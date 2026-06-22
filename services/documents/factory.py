@@ -24,7 +24,7 @@ class DocumentFactory:
             return DefectActStrategy(session, order_id)
         elif doc_type in ["tn2", "ttn1"]:
             return LogisticsSheetStrategy(session, order_id)
-        elif doc_type in ["retail_receipt", "service_act"]:
+        elif doc_type in ["retail_receipt", "service_act", "maintenance_service_act"]:
             return B2CDocumentStrategy(session, order_id)
         elif doc_type == "warranty_certificate":
             return WarrantyCertificateStrategy(session, order_id)

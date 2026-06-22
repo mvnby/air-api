@@ -20,7 +20,7 @@ from services.documents.base import DOC_NAMES, TEMPLATES
 
 
 class DocumentTemplateService:
-    MANAGED_TYPES = {"contract", "act", "invoice", "defect_act", "retail_receipt", "service_act", "warranty_certificate"}
+    MANAGED_TYPES = {"contract", "act", "invoice", "defect_act", "retail_receipt", "service_act", "maintenance_service_act", "warranty_certificate"}
 
     @staticmethod
     def _normalize_bool(value: object) -> bool:
@@ -330,7 +330,7 @@ class DocumentTemplateService:
                 continue
             if customer_ids and customer_id not in customer_ids and template.client_restricted:
                 continue
-            if normalized_doc_type in {"contract", "invoice", "retail_receipt", "service_act", "warranty_certificate"}:
+            if normalized_doc_type in {"contract", "invoice", "retail_receipt", "service_act", "maintenance_service_act", "warranty_certificate"}:
                 result.append(template)
                 continue
             if contract_template_id:

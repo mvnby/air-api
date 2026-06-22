@@ -7,6 +7,7 @@ export type OrderServiceLineResponse = {
     proposal_id?: (number | null);
     service_id?: (number | null);
     service_title: string;
+    service_category?: (string | null);
     quantity: number;
     price: number;
     cost: number;

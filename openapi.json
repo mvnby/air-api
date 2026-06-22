@@ -30015,6 +30015,17 @@
             "type": "string",
             "title": "Service Title"
           },
+          "service_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Category"
+          },
           "quantity": {
             "type": "integer",
             "title": "Quantity"

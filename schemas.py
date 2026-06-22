@@ -683,6 +683,7 @@ class OrderServiceLineResponse(BaseModel):
     proposal_id: Optional[int] = None
     service_id: Optional[int] = None
     service_title: str
+    service_category: Optional[str] = None
     quantity: int
     price: int
     cost: int
