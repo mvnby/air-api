@@ -1032,7 +1032,7 @@ async def test_manager_order_proposals_can_duplicate_edit_and_select(async_clien
     customer = Customer(name="Proposal Customer", phone="+375296666667", type=CustomerType.individual)
     p1 = Product(title="Proposal P1", slug="proposal-p1", price=1000, area=25)
     p2 = Product(title="Proposal P2", slug="proposal-p2", price=2000, area=35)
-    s1 = Service(title="Proposal S1", slug="proposal-s1", base_price=100)
+    s1 = Service(title="Proposal S1", slug="proposal-s1", category="maintenance", base_price=100)
     s2 = Service(title="Proposal S2", slug="proposal-s2", base_price=300)
     db.add(customer)
     db.add(p1)
@@ -1102,6 +1102,7 @@ async def test_manager_order_proposals_can_duplicate_edit_and_select(async_clien
     assert updated_second["total_amount"] == 2300
     assert edit_second_data["product_lines"][0]["product_id"] == p1.id
     assert edit_second_data["service_lines"][0]["service_id"] == s1.id
+    assert edit_second_data["service_lines"][0]["service_category"] == "maintenance"
 
     select_resp = await async_client.post(
         f"/api/manager/orders/{order.id}/proposals/{second_proposal['id']}/select",

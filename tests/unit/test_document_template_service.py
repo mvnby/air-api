@@ -158,12 +158,20 @@ async def test_b2c_document_templates_are_managed_and_have_defaults(sqlite_sessi
         is_active=True,
         is_default=True,
     )
+    maintenance_act_template = DocumentTemplate(
+        name="Заказ-акт ТО B2C",
+        doc_type="maintenance_service_act",
+        google_template_id="managed-maintenance-act",
+        is_active=True,
+        is_default=True,
+    )
     order = Order(customer=customer, status="negotiation")
-    sqlite_session.add_all([customer, receipt_template, service_act_template, order])
+    sqlite_session.add_all([customer, receipt_template, service_act_template, maintenance_act_template, order])
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
     await sqlite_session.refresh(receipt_template)
     await sqlite_session.refresh(service_act_template)
+    await sqlite_session.refresh(maintenance_act_template)
 
     receipt_id, receipt_google_id = await DocumentTemplateService.resolve_template_for_generation(
         sqlite_session,
@@ -175,11 +183,18 @@ async def test_b2c_document_templates_are_managed_and_have_defaults(sqlite_sessi
         order_id=order.id,
         doc_type="service_act",
     )
+    maintenance_id, maintenance_google_id = await DocumentTemplateService.resolve_template_for_generation(
+        sqlite_session,
+        order_id=order.id,
+        doc_type="maintenance_service_act",
+    )
 
     assert receipt_id == receipt_template.id
     assert receipt_google_id == "managed-receipt"
     assert act_id == service_act_template.id
     assert act_google_id == "managed-service-act"
+    assert maintenance_id == maintenance_act_template.id
+    assert maintenance_google_id == "managed-maintenance-act"
 
 
 @pytest.mark.asyncio

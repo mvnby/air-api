@@ -1882,6 +1882,7 @@ class OrderService:
             "proposal_id": link.proposal_id,
             "service_id": link.service_id,
             "service_title": service_title,
+            "service_category": link.service.category if link.service else None,
             "quantity": link.quantity,
             "price": link.price,
             "cost": link.cost,

@@ -414,7 +414,7 @@ async def test_repair_order_existing_document_types_prepare_replacements(sqlite_
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
 
-    for doc_type in ("contract", "invoice", "retail_receipt", "service_act", "offer", "act", "defect_act"):
+    for doc_type in ("contract", "invoice", "retail_receipt", "service_act", "maintenance_service_act", "offer", "act", "defect_act"):
         strategy = DocumentFactory.get_strategy(doc_type, sqlite_session, order.id)
         await strategy.fetch_order()
         replacements = await strategy._prepare_base_variables(
@@ -508,6 +508,37 @@ async def test_b2c_service_act_placeholders_support_service_only_order(sqlite_se
     assert replacements["{{service_act_lines}}"] == "Обслуживание кондиционера"
     assert replacements["{{service_act_total}}"] == "180,00"
     assert replacements["{{date_text}}"] == "06 июня 2026 г."
+
+
+@pytest.mark.asyncio
+async def test_b2c_maintenance_service_act_uses_to_template_type(sqlite_session):
+    customer = Customer(name="Maintenance Customer", phone="+375292222333")
+    service = Service(title="Техническое обслуживание кондиционера", slug="maintenance-to", category="maintenance", base_price=220)
+    order = Order(
+        customer=customer,
+        delivery_address="г. Витебск, адрес ТО",
+        total_amount=220,
+        title="ТО кондиционера",
+    )
+    sqlite_session.add_all([customer, service, order])
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+    sqlite_session.add(OrderServiceLink(order_id=order.id, service_id=service.id, quantity=1, price=220, cost=0))
+    await sqlite_session.commit()
+
+    strategy = DocumentFactory.get_strategy("maintenance_service_act", sqlite_session, order.id)
+    await strategy.fetch_order()
+    replacements = await strategy._prepare_base_variables(
+        doc_number="ЗАТО-2026-001",
+        doc_type="maintenance_service_act",
+        document_date=datetime(2026, 6, 7),
+    )
+    strategy._add_specific_replacements(replacements)
+
+    assert replacements["{{base_document_type}}"] == "Публичная оферта"
+    assert replacements["{{object_address}}"] == "г. Витебск, адрес ТО"
+    assert replacements["{{service_act_lines}}"] == "Техническое обслуживание кондиционера"
+    assert replacements["{{service_act_total}}"] == "220,00"
 
 
 @pytest.mark.asyncio

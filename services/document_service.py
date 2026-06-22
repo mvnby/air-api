@@ -23,6 +23,7 @@ class DocumentService:
         "invoice",
         "retail_receipt",
         "service_act",
+        "maintenance_service_act",
         "warranty_certificate",
         "work_order",
         "act",
@@ -31,7 +32,7 @@ class DocumentService:
         "tn2",
         "ttn1",
     }
-    PROPOSAL_SCOPED_DOC_TYPES = {"offer", "retail_receipt", "service_act", "tn2", "ttn1"}
+    PROPOSAL_SCOPED_DOC_TYPES = {"offer", "retail_receipt", "service_act", "maintenance_service_act", "tn2", "ttn1"}
     CLOSING_DOC_TYPES = {"act", "tn2", "ttn1"}
     BASE_DOC_TYPES = {"offer", "contract", "invoice"}
     DOC_NUMBER_PREFIXES = {
@@ -40,6 +41,7 @@ class DocumentService:
         "invoice": "С",
         "retail_receipt": "ТЧ",
         "service_act": "ЗА",
+        "maintenance_service_act": "ЗАТО",
         "warranty_certificate": "ГТ",
         "act": "А",
         "defect_act": "ДА",

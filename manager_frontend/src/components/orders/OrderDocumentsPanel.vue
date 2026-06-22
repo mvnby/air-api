@@ -76,6 +76,7 @@ const DOCUMENT_TYPES = [
   { type: 'invoice', label: 'Счет' },
   { type: 'retail_receipt', label: 'Товарный чек' },
   { type: 'service_act', label: 'Заказ-акт' },
+  { type: 'maintenance_service_act', label: 'Заказ-акт ТО' },
   { type: 'warranty_certificate', label: 'Гарантийный талон' },
   { type: 'act', label: 'Акт' },
   { type: 'defect_act', label: 'Дефектный акт' },
@@ -186,6 +187,17 @@ const activeActServiceLines = computed<OrderServiceLineResponse[]>(() => {
   if (proposal?.service_lines?.length) return proposal.service_lines;
   return props.order.service_lines || [];
 });
+const normalizeServiceSearchText = (value: unknown) => String(value || '').toLowerCase().replace(/ё/g, 'е');
+const isMaintenanceServiceLine = (line: OrderServiceLineResponse) => {
+  const category = normalizeServiceSearchText(line.service_category);
+  const title = normalizeServiceSearchText(line.service_title);
+  const titleWords = title.split(/[^a-zа-я0-9]+/u).filter(Boolean);
+  return category === 'maintenance'
+    || title.includes('техническое обслуживание')
+    || title.includes('обслуживание')
+    || titleWords.includes('то');
+};
+const hasMaintenanceServiceLines = computed(() => activeActServiceLines.value.some(isMaintenanceServiceLine));
 const selectedActServiceLines = computed(() => {
   const selectedIds = new Set(selectedActServiceLineIds.value);
   return activeActServiceLines.value.filter((line) => selectedIds.has(line.id));
@@ -422,6 +434,7 @@ const suggestedDocumentType = computed(() => {
   if (isCompanyOrder.value && !hasContract.value) return 'contract';
   if (isCompanyOrder.value && !hasOrderInvoice.value) return 'invoice';
   if ((props.order.product_lines || []).length) return 'retail_receipt';
+  if (hasMaintenanceServiceLines.value) return 'maintenance_service_act';
   return 'service_act';
 });
 const needsContractBinding = computed(() => (
@@ -439,11 +452,12 @@ const showsAdditionalConditions = computed(() => (
   || selectedDocumentType.value === 'offer'
   || selectedDocumentType.value === 'retail_receipt'
   || selectedDocumentType.value === 'service_act'
+  || selectedDocumentType.value === 'maintenance_service_act'
 ));
 const additionalConditionsMode = computed(() => (selectedDocumentType.value === 'contract' ? 'contract' : 'invoice'));
 const contractBindingLabel = computed(() => {
   if (selectedDocumentType.value === 'contract') return 'будет создан разовый договор заказа';
-  if (selectedDocumentType.value === 'retail_receipt' || selectedDocumentType.value === 'service_act') return 'публичная оферта';
+  if (selectedDocumentType.value === 'retail_receipt' || selectedDocumentType.value === 'service_act' || selectedDocumentType.value === 'maintenance_service_act') return 'публичная оферта';
   if (!needsContractBinding.value) return 'не требуется';
   return baseDocumentOptions.value.find((option) => option.value === selectedBaseDocumentValue.value)?.label || 'не выбран';
 });
@@ -478,7 +492,7 @@ const createChecklist = computed(() => {
   return items;
 });
 
-const datedDocumentTypes = new Set(['contract', 'retail_receipt', 'service_act', 'warranty_certificate', 'act', 'defect_act', 'tn2', 'ttn1']);
+const datedDocumentTypes = new Set(['contract', 'retail_receipt', 'service_act', 'maintenance_service_act', 'warranty_certificate', 'act', 'defect_act', 'tn2', 'ttn1']);
 const getDocumentDateForType = (type: string) => (
   datedDocumentTypes.has(type) && documentDate.value ? `${documentDate.value}T00:00:00` : undefined
 );
@@ -937,7 +951,7 @@ const generateDocument = async (type: string) => {
     const template = (type === 'contract' && selectedContractTemplateId.value)
       ? selectedContractTemplate.value
       : undefined;
-    const proposalId = (type === 'offer' || type === 'retail_receipt' || type === 'service_act' || type === 'act' || isWaybillType(type))
+    const proposalId = (type === 'offer' || type === 'retail_receipt' || type === 'service_act' || type === 'maintenance_service_act' || type === 'act' || isWaybillType(type))
       ? (activeWaybillProposalId.value ?? undefined)
       : undefined;
     const baseDocumentId = getSelectedBaseDocumentId(type);
