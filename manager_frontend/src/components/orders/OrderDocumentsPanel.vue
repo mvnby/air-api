@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { ManagerContractsService, ManagerDocsService, ManagerOrdersService, ManagerService } from '../../client';
+import { useDebounceFn } from '@vueuse/core';
+import { ManagerContractsService, ManagerDocsService, ManagerOrdersService, ManagerService, ManagerSettingsService } from '../../client';
 import { downloadManagerDocBlob } from '../../api';
 import type {
+  AddressSuggestionItem,
   DocumentTemplateItem,
   ManagerCustomerBranchItemResponse,
   ManagerCustomerContractItemResponse,
@@ -119,6 +121,9 @@ const actScopeTitle = ref(props.order.customer_branch?.name || '');
 const actScopeAddress = ref(props.order.delivery_address || props.order.customer_branch?.delivery_address || '');
 const selectedActServiceLineIds = ref<number[]>([]);
 const selectedActServiceLineQuantities = ref<Record<number, number>>({});
+const actAddressSuggestions = ref<AddressSuggestionItem[]>([]);
+const actAddressSuggestActive = ref(false);
+const actAddressLookupLoading = ref(false);
 const newActBranchName = ref('');
 const newActBranchAddress = ref('');
 const creatingActBranch = ref(false);
@@ -775,6 +780,45 @@ const onActBranchChange = () => {
   if (!branch) return;
   actScopeTitle.value = branch.name || '';
   actScopeAddress.value = branch.delivery_address;
+  actAddressSuggestActive.value = false;
+  actAddressSuggestions.value = [];
+};
+
+const fetchActAddressSuggestions = async (query: string) => {
+  const cleaned = query.trim();
+  if (cleaned.length < 3) {
+    actAddressSuggestions.value = [];
+    return;
+  }
+  actAddressLookupLoading.value = true;
+  try {
+    const res = await ManagerSettingsService.suggestAddress(cleaned);
+    actAddressSuggestions.value = res.items || [];
+  } catch (error) {
+    console.warn('Failed to fetch act address suggestions', error);
+  } finally {
+    actAddressLookupLoading.value = false;
+  }
+};
+
+const debouncedFetchActAddressSuggestions = useDebounceFn(fetchActAddressSuggestions, 400);
+
+const onActAddressInput = () => {
+  actAddressSuggestActive.value = true;
+  selectedActBranchId.value = null;
+  debouncedFetchActAddressSuggestions(actScopeAddress.value);
+};
+
+const selectActAddressSuggestion = (item: AddressSuggestionItem) => {
+  actScopeAddress.value = item.value || item.title || '';
+  actAddressSuggestActive.value = false;
+  actAddressSuggestions.value = [];
+};
+
+const hideActAddressSuggestions = () => {
+  setTimeout(() => {
+    actAddressSuggestActive.value = false;
+  }, 200);
 };
 
 const setActServiceLineQuantity = (line: OrderServiceLineResponse, rawValue: number | string) => {
@@ -1381,11 +1425,32 @@ const registerExternalContract = async () => {
                 class="field-input text-sm"
                 placeholder="Название объекта, если нужно"
               />
-              <input
-                v-model="actScopeAddress"
-                class="field-input text-sm"
-                placeholder="Адрес объекта"
-              />
+              <label class="relative">
+                <input
+                  v-model="actScopeAddress"
+                  class="field-input text-sm"
+                  placeholder="Адрес объекта"
+                  autocomplete="off"
+                  @input="onActAddressInput"
+                  @focus="actAddressSuggestActive = true"
+                  @blur="hideActAddressSuggestions"
+                />
+                <span v-if="actAddressLookupLoading" class="material-icons-round absolute right-3 top-2.5 animate-spin text-[18px] text-slate-400">refresh</span>
+                <ul
+                  v-if="actAddressSuggestActive && actAddressSuggestions.length > 0"
+                  class="absolute left-0 top-full z-50 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-slate-200 bg-white p-1 shadow-2xl ring-1 ring-black/5 dark:border-slate-700 dark:bg-slate-900"
+                >
+                  <li
+                    v-for="(item, index) in actAddressSuggestions"
+                    :key="`act-address-suggestion-${index}`"
+                    class="flex cursor-pointer flex-col rounded-lg border-b border-slate-100 px-3 py-2 text-sm transition-colors last:border-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800"
+                    @mousedown.prevent="selectActAddressSuggestion(item)"
+                  >
+                    <span class="font-medium text-slate-900 dark:text-slate-100">{{ item.title || item.value }}</span>
+                    <span v-if="item.subtitle" class="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">{{ item.subtitle }}</span>
+                  </li>
+                </ul>
+              </label>
             </div>
 
             <div class="mt-3 grid gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-800/40 md:grid-cols-[1fr_1.4fr_auto]">

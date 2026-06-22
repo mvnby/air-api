@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from typing import Any, Optional, List
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from sqlalchemy.orm import selectinload
@@ -915,7 +915,12 @@ class DocumentService:
             base_customer_contract=base_customer_contract,
         )
         if doc_type == "act":
-            act_number = await DocumentService._get_act_number_for_order_contract(session, strategy.order)
+            act_number = await DocumentService._get_act_number_for_document_basis(
+                session,
+                strategy.order,
+                base_document=base_document,
+                base_customer_contract=base_customer_contract,
+            )
             replacements["{{act_number}}"] = str(act_number)
             replacements["{{act_sequence_number}}"] = str(act_number)
             object_title = str(document_scope.get("title") or "").strip()
@@ -1093,18 +1098,54 @@ class DocumentService:
         return f"{prefix}-{current_year}-{next_num:03d}"
 
     @staticmethod
-    async def _get_act_number_for_order_contract(session: AsyncSession, order: Optional[Order]) -> int:
-        if not order or not order.customer_contract_id:
-            return 1
-
-        query = (
-            select(func.count(OrderDocument.id))
-            .join(Order, OrderDocument.order_id == Order.id)
-            .where(
+    async def _get_act_number_for_document_basis(
+        session: AsyncSession,
+        order: Optional[Order],
+        *,
+        base_document: Optional[OrderDocument] = None,
+        base_customer_contract: Optional[CustomerContract] = None,
+    ) -> int:
+        if base_document and base_document.id is not None:
+            query = select(func.count(OrderDocument.id)).where(
                 OrderDocument.doc_type == "act",
-                Order.customer_contract_id == order.customer_contract_id,
+                OrderDocument.base_document_id == base_document.id,
             )
-        )
+        elif base_customer_contract and base_customer_contract.id is not None:
+            query = (
+                select(func.count(OrderDocument.id))
+                .join(Order, OrderDocument.order_id == Order.id)
+                .where(
+                    OrderDocument.doc_type == "act",
+                    or_(
+                        OrderDocument.base_customer_contract_id == base_customer_contract.id,
+                        and_(
+                            OrderDocument.base_customer_contract_id.is_(None),
+                            OrderDocument.base_document_id.is_(None),
+                            Order.customer_contract_id == base_customer_contract.id,
+                        ),
+                    ),
+                )
+            )
+        elif order and order.customer_contract_id:
+            query = (
+                select(func.count(OrderDocument.id))
+                .join(Order, OrderDocument.order_id == Order.id)
+                .where(
+                    OrderDocument.doc_type == "act",
+                    OrderDocument.base_customer_contract_id.is_(None),
+                    OrderDocument.base_document_id.is_(None),
+                    Order.customer_contract_id == order.customer_contract_id,
+                )
+            )
+        elif order and order.id is not None:
+            query = select(func.count(OrderDocument.id)).where(
+                OrderDocument.doc_type == "act",
+                OrderDocument.base_customer_contract_id.is_(None),
+                OrderDocument.base_document_id.is_(None),
+                OrderDocument.order_id == order.id,
+            )
+        else:
+            return 1
         result = await session.execute(query)
         existing_count = int(result.scalar_one() or 0)
         return existing_count + 1
