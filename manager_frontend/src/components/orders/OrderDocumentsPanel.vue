@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { ManagerContractsService, ManagerDocsService, ManagerOrdersService } from '../../client';
+import { ManagerContractsService, ManagerDocsService, ManagerOrdersService, ManagerService } from '../../client';
 import { downloadManagerDocBlob } from '../../api';
 import type {
   DocumentTemplateItem,
+  ManagerCustomerBranchItemResponse,
   ManagerCustomerContractItemResponse,
   ManagerOrderDetailResponse,
   ManagerOrderDocumentItem,
   OrderProductLineResponse,
   OrderProposalResponse,
+  OrderServiceLineResponse,
 } from '../../client';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import AdditionalConditionsLibrary from './AdditionalConditionsLibrary.vue';
@@ -87,6 +89,7 @@ const DOCUMENT_ROLE_OPTIONS: Array<{ value: DocumentRoleType; label: string }> =
 ];
 
 const documents = ref<ManagerOrderDocumentItem[]>([]);
+const customerBranches = ref<ManagerCustomerBranchItemResponse[]>([]);
 const customerContracts = ref<ManagerCustomerContractItemResponse[]>([]);
 const contractTemplates = ref<DocumentTemplateItem[]>([]);
 const selectedCustomerContractId = ref<number | null>(props.order.customer_contract_id || null);
@@ -111,6 +114,13 @@ const externalContractDate = ref(new Date().toISOString().slice(0, 10));
 const externalContractUrl = ref('');
 const externalContractFile = ref<File | null>(null);
 const isRegisteringExternalContract = ref(false);
+const selectedActBranchId = ref<number | null>(props.order.customer_branch?.id ?? null);
+const actScopeTitle = ref(props.order.customer_branch?.name || '');
+const actScopeAddress = ref(props.order.delivery_address || props.order.customer_branch?.delivery_address || '');
+const selectedActServiceLineIds = ref<number[]>([]);
+const newActBranchName = ref('');
+const newActBranchAddress = ref('');
+const creatingActBranch = ref(false);
 
 const notify = (message: string, type: ToastType = 'success') => {
   emit('toast', { message, type });
@@ -164,6 +174,15 @@ const orderFallbackProductLines = computed<WaybillProductLine[]>(() => {
     return proposal.product_lines.map(mapOrderProductLineToWaybillLine);
   }
   return (props.order.product_lines || []).map(mapOrderProductLineToWaybillLine);
+});
+const activeActServiceLines = computed<OrderServiceLineResponse[]>(() => {
+  const proposal = selectedOrderProposal.value as OrderProposalResponse | null;
+  if (proposal?.service_lines?.length) return proposal.service_lines;
+  return props.order.service_lines || [];
+});
+const selectedActServiceLines = computed(() => {
+  const selectedIds = new Set(selectedActServiceLineIds.value);
+  return activeActServiceLines.value.filter((line) => selectedIds.has(line.id));
 });
 const resolvedWaybillProductLines = computed(() => (
   ((props.productLines || []).some(hasUsableWaybillProductLine)
@@ -432,6 +451,18 @@ const createChecklist = computed(() => {
     { label: 'Шаблон', value: selectedTemplateLabel.value },
     { label: 'Основание', value: contractBindingLabel.value },
   ];
+  if (selectedDocumentType.value === 'act') {
+    items.push({
+      label: 'Объект',
+      value: [actScopeTitle.value.trim(), actScopeAddress.value.trim()].filter(Boolean).join(' · ') || 'адрес заказа',
+    });
+    items.push({
+      label: 'Строки акта',
+      value: selectedActServiceLines.value.length
+        ? `${selectedActServiceLines.value.length} услуг`
+        : 'все услуги предложения',
+    });
+  }
   if (showsAdditionalConditions.value) {
     items.push({ label: 'Условия', value: additionalConditions.value.trim() ? 'есть выбранные условия' : 'Оставить по шаблону' });
   }
@@ -457,6 +488,29 @@ const documentProposalName = (doc: ManagerOrderDocumentItem) => {
   if (!doc.proposal_id) return '';
   const proposal = (props.order.proposals || []).find((item) => item.id === doc.proposal_id);
   return proposal?.name || `вариант #${doc.proposal_id}`;
+};
+
+const documentScopeLabel = (doc: ManagerOrderDocumentItem) => {
+  const title = String(doc.scope_title || '').trim();
+  const address = String(doc.scope_address || '').trim();
+  return [title, address].filter(Boolean).join(' · ');
+};
+
+const fallbackActAddress = () => (
+  props.order.delivery_address
+  || props.order.customer_branch?.delivery_address
+  || ''
+);
+
+const syncActServiceSelection = () => {
+  selectedActServiceLineIds.value = activeActServiceLines.value.map((line) => line.id);
+};
+
+const syncActScopeDefaults = () => {
+  selectedActBranchId.value = props.order.customer_branch?.id ?? null;
+  actScopeTitle.value = props.order.customer_branch?.name || '';
+  actScopeAddress.value = fallbackActAddress();
+  syncActServiceSelection();
 };
 
 const syncBaseDocumentSelection = () => {
@@ -534,11 +588,30 @@ const loadCustomerContracts = async () => {
   }
 };
 
+const loadCustomerBranches = async () => {
+  if (!props.order.customer?.id) {
+    customerBranches.value = [];
+    syncActScopeDefaults();
+    return;
+  }
+  try {
+    const res = await ManagerService.getManagerCustomerBranches(props.order.customer.id);
+    customerBranches.value = res.items || [];
+    if (selectedActBranchId.value && !customerBranches.value.some((branch) => branch.id === selectedActBranchId.value)) {
+      selectedActBranchId.value = null;
+    }
+  } catch (error) {
+    console.warn('Failed to load customer branches', error);
+    customerBranches.value = [];
+  }
+};
+
 const resetFromOrder = () => {
   selectedCustomerContractId.value = props.order.customer_contract_id || null;
   selectedDocumentRoleType.value = props.order.document_role_type || null;
   additionalConditionsSaved.value = props.order.additional_conditions || '';
   additionalConditions.value = props.order.additional_conditions || '';
+  syncActScopeDefaults();
 };
 
 watch(() => props.order.id, () => {
@@ -551,11 +624,15 @@ watch(() => props.order.id, () => {
   void loadDocuments();
   void loadContractTemplates();
   void loadCustomerContracts();
+  void loadCustomerBranches();
 }, { immediate: true });
 
 watch(selectedDocumentType, () => {
   if (!showsAdditionalConditions.value) showAdvancedSettings.value = false;
   syncBaseDocumentSelection();
+  if (selectedDocumentType.value === 'act' && selectedActServiceLineIds.value.length === 0) {
+    syncActServiceSelection();
+  }
 });
 
 watch(() => [
@@ -645,6 +722,7 @@ const openCreatePanel = () => {
   selectedDocumentType.value = suggestedDocumentType.value;
   showAdvancedSettings.value = false;
   isCreatePanelOpen.value = true;
+  if (selectedDocumentType.value === 'act') syncActScopeDefaults();
   syncBaseDocumentSelection();
   if (isWaybillDocument.value) {
     syncWaybillProductLines();
@@ -659,6 +737,7 @@ const selectDocumentType = (type: string) => {
     syncWaybillProductLines();
     ensureAllWaybillComponents();
   }
+  if (type === 'act') syncActScopeDefaults();
 };
 
 const activeWaybillProposalId = computed(() => props.activeProposalId ?? selectedOrderProposal.value?.id ?? null);
@@ -672,6 +751,59 @@ const getSelectedBaseDocumentId = (type: string) => {
   }
   if (value.startsWith(OPEN_CONTRACT_PREFIX)) return 0;
   return undefined;
+};
+
+const onActBranchChange = () => {
+  const branch = customerBranches.value.find((item) => item.id === selectedActBranchId.value) || null;
+  if (!branch) return;
+  actScopeTitle.value = branch.name || '';
+  actScopeAddress.value = branch.delivery_address;
+};
+
+const toggleActServiceLine = (lineId: number, checked: boolean) => {
+  const current = new Set(selectedActServiceLineIds.value);
+  if (checked) current.add(lineId);
+  else current.delete(lineId);
+  selectedActServiceLineIds.value = activeActServiceLines.value
+    .map((line) => line.id)
+    .filter((lineId) => current.has(lineId));
+};
+
+const onActServiceCheckboxChange = (lineId: number, event: Event) => {
+  toggleActServiceLine(lineId, (event.target as HTMLInputElement).checked);
+};
+
+const createActBranch = async () => {
+  const customerId = props.order.customer?.id;
+  const deliveryAddress = newActBranchAddress.value.trim();
+  if (!customerId) {
+    notify('Сначала выберите клиента', 'error');
+    return;
+  }
+  if (!deliveryAddress) {
+    notify('Введите адрес объекта', 'error');
+    return;
+  }
+
+  creatingActBranch.value = true;
+  try {
+    const created = await ManagerService.createManagerCustomerBranch(customerId, {
+      name: newActBranchName.value.trim() || undefined,
+      delivery_address: deliveryAddress,
+      is_default: customerBranches.value.length === 0,
+    });
+    customerBranches.value = [created, ...customerBranches.value.filter((branch) => branch.id !== created.id)];
+    selectedActBranchId.value = created.id;
+    actScopeTitle.value = created.name || '';
+    actScopeAddress.value = created.delivery_address;
+    newActBranchName.value = '';
+    newActBranchAddress.value = '';
+    notify('Объект создан', 'success');
+  } catch (error) {
+    notify(`Ошибка создания объекта: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    creatingActBranch.value = false;
+  }
 };
 
 const saveWaybillProductLines = async () => {
@@ -721,6 +853,10 @@ const generateDocument = async (type: string) => {
     const beforeResult = await props.beforeGenerate?.(type);
     if (beforeResult === false) return;
     if (isWaybillType(type) && !(await saveWaybillProductLines())) return;
+    if (type === 'act' && activeActServiceLines.value.length > 0 && selectedActServiceLineIds.value.length === 0) {
+      notify('Выберите хотя бы одну услугу для акта', 'error');
+      return;
+    }
     if (!(await saveAdditionalConditions(false))) return;
     if (type === 'contract' && isCompanyOrder.value) {
       await useOneTimeContractForClosingDocs();
@@ -728,10 +864,16 @@ const generateDocument = async (type: string) => {
     const template = (type === 'contract' && selectedContractTemplateId.value)
       ? selectedContractTemplate.value
       : undefined;
-    const proposalId = (type === 'offer' || type === 'retail_receipt' || type === 'service_act' || isWaybillType(type))
+    const proposalId = (type === 'offer' || type === 'retail_receipt' || type === 'service_act' || type === 'act' || isWaybillType(type))
       ? (activeWaybillProposalId.value ?? undefined)
       : undefined;
     const baseDocumentId = getSelectedBaseDocumentId(type);
+    const scopeCustomerBranchId = type === 'act' ? (selectedActBranchId.value ?? undefined) : undefined;
+    const scopeTitle = type === 'act' ? (actScopeTitle.value.trim() || undefined) : undefined;
+    const scopeAddress = type === 'act' ? (actScopeAddress.value.trim() || undefined) : undefined;
+    const scopeServiceLineIds = type === 'act' && selectedActServiceLineIds.value.length
+      ? selectedActServiceLineIds.value
+      : undefined;
     const res = await ManagerOrdersService.generateManagerOrderDocument(
       props.order.id,
       type,
@@ -740,6 +882,11 @@ const generateDocument = async (type: string) => {
       getDocumentDateForType(type),
       proposalId,
       baseDocumentId,
+      scopeCustomerBranchId,
+      scopeTitle,
+      scopeAddress,
+      scopeServiceLineIds,
+      undefined,
     );
     window.open(res.edit_url, '_blank');
     await loadDocuments();
@@ -949,6 +1096,9 @@ const registerExternalContract = async () => {
                 </p>
                 <p v-if="doc.base_document_number" class="truncate text-[11px] text-slate-400 dark:text-slate-500">
                   Основание: {{ doc.base_document_type_label || documentTypeLabel(doc.base_document_type) }} · {{ doc.base_document_number }}
+                </p>
+                <p v-if="documentScopeLabel(doc)" class="truncate text-[11px] text-teal-600 dark:text-teal-300">
+                  Объект: {{ documentScopeLabel(doc) }}
                 </p>
               </div>
             </div>
@@ -1165,6 +1315,102 @@ const registerExternalContract = async () => {
           Для актов и накладных нужен договор, счет или оферта.
         </p>
       </div>
+
+          <div
+            v-if="selectedDocumentType === 'act'"
+            class="rounded-xl border border-teal-200 bg-white p-3 dark:border-teal-800/70 dark:bg-slate-900/70"
+          >
+            <div class="mb-3">
+              <p class="text-xs font-semibold text-slate-700 dark:text-slate-200">Шаг 3: объект и строки акта</p>
+              <p class="text-[11px] text-slate-500 dark:text-slate-400">
+                Можно выпустить несколько актов по одному договору, разделив услуги по объектам.
+              </p>
+            </div>
+
+            <div class="grid gap-3 md:grid-cols-2">
+              <label class="text-xs font-medium text-slate-600 dark:text-slate-300 md:col-span-2">Объект клиента
+                <select
+                  v-model.number="selectedActBranchId"
+                  class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                  @change="onActBranchChange"
+                >
+                  <option :value="null">Адрес из заказа / вручную</option>
+                  <option v-for="branch in customerBranches" :key="`act-branch-${branch.id}`" :value="branch.id">
+                    {{ branch.name || `Объект #${branch.id}` }} — {{ branch.delivery_address }}
+                  </option>
+                </select>
+              </label>
+              <input
+                v-model="actScopeTitle"
+                class="field-input text-sm"
+                placeholder="Название объекта, если нужно"
+              />
+              <input
+                v-model="actScopeAddress"
+                class="field-input text-sm"
+                placeholder="Адрес объекта"
+              />
+            </div>
+
+            <div class="mt-3 grid gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-800/40 md:grid-cols-[1fr_1.4fr_auto]">
+              <input
+                v-model="newActBranchName"
+                class="field-input text-sm"
+                placeholder="Новый объект"
+              />
+              <input
+                v-model="newActBranchAddress"
+                class="field-input text-sm"
+                placeholder="Адрес нового объекта"
+              />
+              <button
+                type="button"
+                class="inline-flex items-center justify-center gap-1 rounded-lg border border-teal-300 bg-white px-3 py-2 text-xs font-semibold text-teal-700 hover:bg-teal-50 disabled:opacity-60 dark:border-teal-700 dark:bg-slate-900 dark:text-teal-300 dark:hover:bg-teal-950/30"
+                :disabled="creatingActBranch"
+                @click="createActBranch"
+              >
+                <span v-if="creatingActBranch" class="material-icons-round animate-spin text-[16px]">loop</span>
+                <span v-else class="material-icons-round text-[16px]">add_location_alt</span>
+                Добавить
+              </button>
+            </div>
+
+            <div class="mt-3">
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <p class="text-xs font-semibold text-slate-700 dark:text-slate-200">Услуги в акте</p>
+                <button
+                  type="button"
+                  class="text-xs font-semibold text-teal-700 hover:text-teal-800 dark:text-teal-300"
+                  @click="syncActServiceSelection"
+                >
+                  Выбрать все
+                </button>
+              </div>
+              <div v-if="activeActServiceLines.length" class="space-y-2">
+                <label
+                  v-for="line in activeActServiceLines"
+                  :key="`act-service-${line.id}`"
+                  class="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50/80 p-2 text-sm dark:border-slate-700 dark:bg-slate-800/50"
+                >
+                  <input
+                    type="checkbox"
+                    class="mt-1 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                    :checked="selectedActServiceLineIds.includes(line.id)"
+                    @change="onActServiceCheckboxChange(line.id, $event)"
+                  />
+                  <span class="min-w-0 flex-1">
+                    <span class="block font-medium text-slate-800 dark:text-slate-100">{{ line.service_title }}</span>
+                    <span class="text-xs text-slate-500 dark:text-slate-400">
+                      {{ line.quantity }} шт. · {{ formatMoney(line.line_total) }}
+                    </span>
+                  </span>
+                </label>
+              </div>
+              <p v-else class="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-3 text-xs font-semibold text-amber-700 dark:border-amber-900/70 dark:bg-amber-950/20 dark:text-amber-300">
+                В активном предложении нет услуг для акта.
+              </p>
+            </div>
+          </div>
 
           <div
             v-if="isWaybillDocument"

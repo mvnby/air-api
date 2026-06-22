@@ -402,6 +402,11 @@ export class ManagerOrdersService {
      * @param contractDate Document/contract date as ISO datetime
      * @param proposalId Order proposal ID for generated commercial offer
      * @param baseDocumentId Order document ID used as basis for closing documents; 0 means selected open customer contract
+     * @param scopeCustomerBranchId Customer branch/object for scoped closing document
+     * @param scopeTitle Human-readable object title for scoped closing document
+     * @param scopeAddress Object address override for scoped closing document
+     * @param scopeServiceLineIds Order service line IDs included in scoped closing document
+     * @param scopeProductLineIds Order product line IDs included in scoped closing document
      * @returns ManagerOrderDocumentResponse Successful Response
      * @throws ApiError
      */
@@ -413,6 +418,11 @@ export class ManagerOrdersService {
         contractDate?: (string | null),
         proposalId?: (number | null),
         baseDocumentId?: (number | null),
+        scopeCustomerBranchId?: (number | null),
+        scopeTitle?: (string | null),
+        scopeAddress?: (string | null),
+        scopeServiceLineIds?: (Array<number> | null),
+        scopeProductLineIds?: (Array<number> | null),
     ): CancelablePromise<ManagerOrderDocumentResponse> {
         return __request(OpenAPI, {
             method: 'POST',
@@ -427,6 +437,11 @@ export class ManagerOrdersService {
                 'contract_date': contractDate,
                 'proposal_id': proposalId,
                 'base_document_id': baseDocumentId,
+                'scope_customer_branch_id': scopeCustomerBranchId,
+                'scope_title': scopeTitle,
+                'scope_address': scopeAddress,
+                'scope_service_line_ids': scopeServiceLineIds,
+                'scope_product_line_ids': scopeProductLineIds,
             },
             errors: {
                 422: `Validation Error`,

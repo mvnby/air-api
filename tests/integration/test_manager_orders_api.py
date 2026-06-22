@@ -628,6 +628,92 @@ async def test_manager_order_contract_selection_and_act_guard(async_client, db, 
 
 
 @pytest.mark.asyncio
+async def test_manager_order_act_generation_can_be_scoped_to_object_and_service_lines(async_client, db, monkeypatch):
+    customer = Customer(name="Scoped Act Company", phone="+375296001133", type=CustomerType.company, inn="123456780")
+    contract = CustomerContract(
+        customer=customer,
+        number="ОД-2026-900",
+        valid_from=datetime(2026, 1, 1),
+        valid_until=datetime(2026, 12, 31),
+        status="active",
+        google_file_id="open-contract",
+        google_edit_url="https://docs.google.com/document/d/open-contract/edit",
+    )
+    branch = CustomerBranch(customer=customer, name="Полоцк", delivery_address="Полоцк, Скорины 8А")
+    order = Order(customer=customer, customer_contract=contract, customer_branch=branch, delivery_address="Минск, старый объект")
+    db.add_all([customer, contract, branch, order])
+    await db.commit()
+    await db.refresh(order)
+    await db.refresh(branch)
+
+    service_a = Service(title="Монтаж кондиционера", slug="scoped-act-install", base_price=300)
+    service_b = Service(title="Демонтаж кондиционера", slug="scoped-act-dismantle", base_price=150)
+    db.add_all([service_a, service_b])
+    await db.commit()
+    await db.refresh(service_a)
+    await db.refresh(service_b)
+
+    service_link_a = OrderServiceLink(order_id=order.id, service_id=service_a.id, quantity=1, price=300, cost=100)
+    service_link_b = OrderServiceLink(order_id=order.id, service_id=service_b.id, quantity=1, price=150, cost=50)
+    db.add_all([service_link_a, service_link_b])
+    await db.commit()
+    await db.refresh(service_link_a)
+    await db.refresh(service_link_b)
+
+    captured_replacements = []
+    table_captures = []
+
+    class _FakeGoogleService:
+        creds = object()
+
+        def copy_template(self, template_id, title):
+            return {
+                "file_id": "scoped-act-file",
+                "edit_url": "https://docs.google.com/document/d/scoped-act-file/edit",
+            }
+
+        def replace_placeholders(self, file_id, replacements):
+            captured_replacements.append(dict(replacements))
+
+        def _fill_table(self, docs_service, file_id, table_data, has_footer):
+            table_captures.append(table_data)
+
+    from services import document_service
+    import googleapiclient.discovery
+
+    monkeypatch.setattr(document_service, "get_google_service", lambda: _FakeGoogleService())
+    monkeypatch.setattr(googleapiclient.discovery, "build", lambda *args, **kwargs: object())
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/act",
+        headers=headers,
+        params=[
+            ("base_document_id", "0"),
+            ("scope_customer_branch_id", str(branch.id)),
+            ("scope_service_line_ids", str(service_link_b.id)),
+        ],
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["scope_customer_branch_id"] == branch.id
+    assert payload["scope_title"] == "Полоцк"
+    assert payload["scope_address"] == "Полоцк, Скорины 8А"
+
+    generated_replacements = next(item for item in reversed(captured_replacements) if "{{object_address}}" in item)
+    assert generated_replacements["{{object_name}}"] == "Полоцк"
+    assert generated_replacements["{{object_address}}"] == "Полоцк, Скорины 8А"
+    assert generated_replacements["{{total_amount}}"] == "150.00"
+    assert table_captures[-1][0][1] == "Демонтаж кондиционера"
+    assert table_captures[-1][-1][-1] == "150.00"
+
+    doc = await db.get(OrderDocument, payload["doc_id"])
+    assert doc is not None
+    assert doc.scope_customer_branch_id == branch.id
+    assert doc.scope_meta["service_line_ids"] == [service_link_b.id]
+
+
+@pytest.mark.asyncio
 async def test_manager_document_roles_from_template_contract_and_order_override(async_client, db, monkeypatch):
     headers = await _auth_headers(async_client)
     db.add(
@@ -1390,8 +1476,9 @@ async def test_manager_order_generate_document(async_client, db, monkeypatch):
         contract_date=None,
         proposal_id=None,
         base_document_id=None,
+        **kwargs,
     ):
-        _ = (session, order_id, doc_type, document_template_id, template_id, proposal_id, base_document_id)
+        _ = (session, order_id, doc_type, document_template_id, template_id, proposal_id, base_document_id, kwargs)
         captured["contract_date"] = contract_date
         return _FakeDoc()
 

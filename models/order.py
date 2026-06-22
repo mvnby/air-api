@@ -509,6 +509,10 @@ class OrderDocument(SQLModel, table=True):
     base_customer_contract_id: Optional[int] = Field(default=None, foreign_key="customer_contract.id", index=True)
     document_template_id: Optional[int] = Field(default=None, foreign_key="document_template.id", index=True)
     template_id: Optional[str] = Field(default=None, index=True)
+    scope_customer_branch_id: Optional[int] = Field(default=None, foreign_key="customer_branches.id", index=True)
+    scope_title: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
+    scope_address: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
+    scope_meta: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     doc_type: str = Field(index=True)
     number: str
     date: datetime = Field(default_factory=datetime.now)
@@ -525,6 +529,7 @@ class OrderDocument(SQLModel, table=True):
     )
     base_customer_contract: Optional["CustomerContract"] = Relationship()
     document_template: Optional["DocumentTemplate"] = Relationship()
+    scope_customer_branch: Optional["CustomerBranch"] = Relationship()
 
     def __str__(self):
         return f"{self.doc_type.upper()} {self.number} от {self.date.strftime('%d.%m.%Y')}"

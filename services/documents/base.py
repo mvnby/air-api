@@ -131,6 +131,10 @@ class BaseDocumentStrategy(ABC):
             "{{total_amount}}": f"{order.total_amount:.2f}",
             "{{total_amount_in_words}}": self._amount_in_words(order.total_amount), 
             "{{object_address}}": order.delivery_address or (order.customer_branch.delivery_address if order.customer_branch else "") or "",
+            "{{object_name}}": (order.customer_branch.name if order.customer_branch and order.customer_branch.name else ""),
+            "{{object_title}}": (order.customer_branch.name if order.customer_branch and order.customer_branch.name else ""),
+            "{{act_object}}": order.delivery_address or (order.customer_branch.delivery_address if order.customer_branch else "") or "",
+            "{{work_object}}": order.delivery_address or (order.customer_branch.delivery_address if order.customer_branch else "") or "",
             
             # Defaults
             "{{client_name}}": "Клиент",

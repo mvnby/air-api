@@ -8,6 +8,10 @@ export type ManagerCustomerDocumentItem = {
     proposal_id?: (number | null);
     base_document_id?: (number | null);
     base_customer_contract_id?: (number | null);
+    scope_customer_branch_id?: (number | null);
+    scope_title?: (string | null);
+    scope_address?: (string | null);
+    scope_meta?: Record<string, any>;
     base_document_type?: (string | null);
     base_document_type_label?: (string | null);
     base_document_number?: (string | null);
