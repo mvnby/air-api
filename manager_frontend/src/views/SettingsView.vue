@@ -109,6 +109,42 @@ const EMAIL_LEAD_SETTING_KEYS = new Set([
 ]);
 const BOT_SELECTION_RULES_KEY = 'bot_product_selection_rules';
 const BOT_SELECTION_RULES_DESCRIPTION = 'JSON-правила подбора кондиционеров для staff Telegram-бота';
+const COMPANY_REQUISITE_KEYS = [
+    'company_name',
+    'company_full_legal_name',
+    'company_unp',
+    'company_legal_address',
+    'company_bank_name',
+    'company_iban',
+    'company_bic',
+    'company_signer_position',
+    'company_signer_name',
+    'company_acting_basis',
+] as const;
+const COMPANY_REQUISITE_DESCRIPTIONS: Record<(typeof COMPANY_REQUISITE_KEYS)[number], string> = {
+    company_name: 'Краткое название нашей организации для внутренних списков.',
+    company_full_legal_name: 'Полное наименование нашей организации для документов.',
+    company_unp: 'УНП нашей организации.',
+    company_legal_address: 'Юридический адрес нашей организации.',
+    company_bank_name: 'Банк нашей организации.',
+    company_iban: 'IBAN расчетного счета нашей организации.',
+    company_bic: 'BIC банка нашей организации.',
+    company_signer_position: 'Должность подписанта в документах.',
+    company_signer_name: 'ФИО подписанта в документах.',
+    company_acting_basis: 'Основание полномочий подписанта.',
+};
+const DEFAULT_COMPANY_REQUISITES = {
+    company_name: 'ИП Янулевич Д.В.',
+    company_full_legal_name: 'ИП Янулевич Д.В.',
+    company_unp: '',
+    company_legal_address: '',
+    company_bank_name: '',
+    company_iban: '',
+    company_bic: '',
+    company_signer_position: '',
+    company_signer_name: 'Янулевич Д.В.',
+    company_acting_basis: '',
+};
 const DEFAULT_BOT_SELECTION_RULES = {
     power_classes: {
         '7': { kw: 1.9, area_min: 15, area_max: 24 },
@@ -143,6 +179,8 @@ const emailLeadSettingsSaving = ref(false);
 const botSelectionRulesText = ref('');
 const botSelectionRulesUpdatedAt = ref('');
 const botSelectionRulesSaving = ref(false);
+const companyRequisites = ref({ ...DEFAULT_COMPANY_REQUISITES });
+const companyRequisitesSaving = ref(false);
 
 const goToBackups = () => {
     if (window.location.pathname !== '/manager/settings/backup') {
@@ -188,6 +226,16 @@ const hydrateBotSelectionRules = (items: ManagerSettingResponse[]) => {
     const setting = items.find((item) => item.key === BOT_SELECTION_RULES_KEY);
     botSelectionRulesText.value = formatJsonSettingValue(setting?.value);
     botSelectionRulesUpdatedAt.value = setting?.updated_at || '';
+};
+
+const hydrateCompanyRequisites = (items: ManagerSettingResponse[]) => {
+    const byKey = new Map(items.map((item) => [item.key, item.value]));
+    companyRequisites.value = {
+        ...DEFAULT_COMPANY_REQUISITES,
+        ...Object.fromEntries(
+            COMPANY_REQUISITE_KEYS.map((key) => [key, byKey.get(key) || DEFAULT_COMPANY_REQUISITES[key]]),
+        ),
+    };
 };
 
 const parsedBotSelectionRules = computed(() => {
@@ -244,6 +292,26 @@ const upsertSettingValue = async (key: string, value: string, description: strin
         return await ManagerSettingsService.updateManagerSetting(key, { value, description });
     } catch {
         return await ManagerSettingsService.createManagerSetting({ key, value, description });
+    }
+};
+
+const saveCompanyRequisites = async () => {
+    companyRequisitesSaving.value = true;
+    error.value = '';
+    try {
+        for (const key of COMPANY_REQUISITE_KEYS) {
+            await upsertSettingValue(
+                key,
+                companyRequisites.value[key] || '',
+                COMPANY_REQUISITE_DESCRIPTIONS[key],
+            );
+        }
+        setToast('Реквизиты сохранены');
+        await loadSettings();
+    } catch (e) {
+        setToast(getApiErrorMessage(e), 'error');
+    } finally {
+        companyRequisitesSaving.value = false;
     }
 };
 
@@ -448,10 +516,12 @@ const loadSettings = async () => {
         const res = await api.listManagerSettings();
         hydrateEmailLeadSettings(res.items);
         hydrateBotSelectionRules(res.items);
+        hydrateCompanyRequisites(res.items);
         settings.value = res.items.filter(
             (setting) =>
                 setting.key !== 'contract_templates' &&
                 setting.key !== BOT_SELECTION_RULES_KEY &&
+                !COMPANY_REQUISITE_KEYS.includes(setting.key as (typeof COMPANY_REQUISITE_KEYS)[number]) &&
                 !EMAIL_LEAD_SETTING_KEYS.has(setting.key),
         );
         contractTemplateDrafts.value = Object.fromEntries(
@@ -1566,6 +1636,69 @@ onMounted(() => {
         </div>
 
         <div v-else-if="activeSettingsTab === 'general'" class="space-y-4">
+            <section class="bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-gray-200 dark:border-slate-700/60 p-6">
+                <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white">Наши реквизиты</h2>
+                        <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">
+                            Используются в актах сверки и следующих документах компании.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        class="flex items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-teal-500 active:bg-teal-700 disabled:opacity-50"
+                        :disabled="companyRequisitesSaving"
+                        @click="saveCompanyRequisites"
+                    >
+                        <span v-if="companyRequisitesSaving" class="material-icons-round text-sm animate-spin">refresh</span>
+                        <span v-else class="material-icons-round text-sm">save</span>
+                        Сохранить реквизиты
+                    </button>
+                </div>
+                <div class="mt-5 grid gap-4 md:grid-cols-2">
+                    <label class="block text-sm">
+                        <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Краткое название</span>
+                        <input v-model="companyRequisites.company_name" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                    </label>
+                    <label class="block text-sm">
+                        <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Полное наименование</span>
+                        <input v-model="companyRequisites.company_full_legal_name" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                    </label>
+                    <label class="block text-sm">
+                        <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">УНП</span>
+                        <input v-model="companyRequisites.company_unp" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                    </label>
+                    <label class="block text-sm">
+                        <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Юридический адрес</span>
+                        <input v-model="companyRequisites.company_legal_address" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                    </label>
+                    <label class="block text-sm">
+                        <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">IBAN</span>
+                        <input v-model="companyRequisites.company_iban" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                    </label>
+                    <label class="block text-sm">
+                        <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Банк</span>
+                        <input v-model="companyRequisites.company_bank_name" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                    </label>
+                    <label class="block text-sm">
+                        <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">BIC</span>
+                        <input v-model="companyRequisites.company_bic" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                    </label>
+                    <label class="block text-sm">
+                        <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Должность подписанта</span>
+                        <input v-model="companyRequisites.company_signer_position" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                    </label>
+                    <label class="block text-sm">
+                        <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">ФИО подписанта</span>
+                        <input v-model="companyRequisites.company_signer_name" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                    </label>
+                    <label class="block text-sm">
+                        <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Основание полномочий</span>
+                        <input v-model="companyRequisites.company_acting_basis" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                    </label>
+                </div>
+            </section>
+
             <div v-for="setting in settings" :key="setting.key" class="bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-gray-200 dark:border-slate-700/60 p-6 flex flex-col md:flex-row gap-6 items-start md:items-center transition-colors">
                 <div class="flex-1 space-y-2 w-full">
                     <div>

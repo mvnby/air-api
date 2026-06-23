@@ -1,6 +1,6 @@
 from typing import List, Optional, Any, Dict, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, computed_field
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 from core.input_validation import (
     validate_optional_bic,
@@ -813,6 +813,62 @@ class ManagerCustomerDocumentItem(BaseModel):
 
 class ManagerCustomerDocumentListResponse(BaseModel):
     items: List[ManagerCustomerDocumentItem]
+
+
+class ManagerCustomerReconciliationBasisDocument(BaseModel):
+    id: int
+    doc_type: str
+    doc_type_label: str
+    number: str
+    date: datetime
+    edit_url: Optional[str] = None
+
+
+class ManagerCustomerReconciliationDocumentItem(BaseModel):
+    order_id: int
+    order_title: str
+    date: datetime
+    amount: float
+    basis: str
+    delivery_address: Optional[str] = None
+    documents: List[ManagerCustomerReconciliationBasisDocument] = Field(default_factory=list)
+
+
+class ManagerCustomerReconciliationPaymentItem(BaseModel):
+    payment_id: int
+    order_id: int
+    order_title: str
+    date: datetime
+    amount: float
+    currency: PaymentCurrency
+    payment_type: str
+    comment: Optional[str] = None
+    bank_receipt_id: Optional[int] = None
+    payer_name: Optional[str] = None
+    payer_unp: Optional[str] = None
+    payer_account: Optional[str] = None
+    our_account: Optional[str] = None
+    payment_document_number: Optional[str] = None
+    payment_document_raw: Optional[str] = None
+    payment_purpose: Optional[str] = None
+
+
+class ManagerCustomerReconciliationResponse(BaseModel):
+    customer_id: int
+    date_from: date
+    date_to: date
+    opening_balance: float = 0.0
+    documents_total: float = 0.0
+    payments_total: float = 0.0
+    closing_balance: float = 0.0
+    documents: List[ManagerCustomerReconciliationDocumentItem] = Field(default_factory=list)
+    payments: List[ManagerCustomerReconciliationPaymentItem] = Field(default_factory=list)
+
+
+class ManagerCustomerReconciliationDocumentResponse(BaseModel):
+    file_id: str
+    edit_url: str
+    title: str
 
 
 class PaymentCreatePayload(BaseModel):

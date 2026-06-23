@@ -1,3 +1,4 @@
+from datetime import date
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -18,6 +19,8 @@ from routers.manager_operation_ids import (
     GET_MANAGER_CUSTOMERS,
     GET_MANAGER_CUSTOMER_DETAIL,
     GET_MANAGER_CUSTOMER_DOCS,
+    GET_MANAGER_CUSTOMER_RECONCILIATION,
+    CREATE_MANAGER_CUSTOMER_RECONCILIATION_DOCUMENT,
     RECOGNIZE_MANAGER_CUSTOMER_REQUISITES,
     CONFIRM_MANAGER_CUSTOMER_REQUISITES,
     GET_MANAGER_CUSTOMER_BRANCHES,
@@ -56,6 +59,8 @@ from schemas import (
     ManagerCustomerBranchListResponse,
     ManagerCustomerBranchUpdatePayload,
     ManagerCustomerDocumentListResponse,
+    ManagerCustomerReconciliationDocumentResponse,
+    ManagerCustomerReconciliationResponse,
     ManagerCatalogProductListResponse,
     ManagerCustomerUpdatePayload,
     ManagerTagGroupResponse,
@@ -66,6 +71,7 @@ from schemas import (
     ProductUpdate,
 )
 from services.catalog_import_runtime_service import catalog_import_runtime_service
+from services.customer_reconciliation_service import CustomerReconciliationService
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
 from services.manager_catalog_service import ManagerCatalogService
 from services.document_service import DocumentService
@@ -265,6 +271,60 @@ async def get_customer_docs_for_manager(
             for doc in docs
         ]
     }
+
+
+@router.get(
+    "/customers/{customer_id}/reconciliation",
+    response_model=ManagerCustomerReconciliationResponse,
+    operation_id=GET_MANAGER_CUSTOMER_RECONCILIATION,
+)
+async def get_customer_reconciliation_for_manager(
+    customer_id: int,
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    data = await CustomerReconciliationService.build(
+        session=session,
+        customer_id=customer_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    if data is None:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=GET_MANAGER_CUSTOMER_RECONCILIATION,
+            error_code=CUSTOMER_NOT_FOUND,
+        )
+    return data
+
+
+@router.post(
+    "/customers/{customer_id}/reconciliation/document",
+    response_model=ManagerCustomerReconciliationDocumentResponse,
+    operation_id=CREATE_MANAGER_CUSTOMER_RECONCILIATION_DOCUMENT,
+)
+async def create_customer_reconciliation_document_for_manager(
+    customer_id: int,
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    data = await CustomerReconciliationService.generate_google_doc(
+        session=session,
+        customer_id=customer_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    if data is None:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=CREATE_MANAGER_CUSTOMER_RECONCILIATION_DOCUMENT,
+            error_code=CUSTOMER_NOT_FOUND,
+        )
+    return data
 
 
 @router.get(

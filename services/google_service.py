@@ -8,7 +8,7 @@ from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
+from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload, MediaIoBaseUpload
 import datetime
 
 logger = logging.getLogger(__name__)
@@ -999,6 +999,41 @@ class GoogleDocsService:
             return file.get('id')
         except Exception as e:
             raise Exception(f"Google Drive Upload Error: {str(e)}")
+
+    def create_document_from_html(self, title: str, html: str, folder_id: str = None) -> Dict[str, str]:
+        """Creates an editable Google Doc by uploading HTML and converting it."""
+        if not self.creds or not self.creds.valid:
+            self._authenticate()
+            if not self.creds:
+                 raise Exception("Ошибка: Нет доступа к Google API.")
+
+        try:
+            drive_service = build('drive', 'v3', credentials=self.creds)
+            file_metadata = {
+                'name': title,
+                'mimeType': 'application/vnd.google-apps.document',
+            }
+            target_folder_id = folder_id or DESTINATION_FOLDER_ID
+            if target_folder_id:
+                file_metadata['parents'] = [target_folder_id]
+
+            media = MediaIoBaseUpload(
+                BytesIO(html.encode('utf-8')),
+                mimetype='text/html',
+                resumable=False,
+            )
+            file = drive_service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields='id, webViewLink',
+            ).execute()
+            file_id = file.get('id')
+            return {
+                'file_id': file_id,
+                'edit_url': file.get('webViewLink') or f"https://docs.google.com/document/d/{file_id}/edit",
+            }
+        except Exception as e:
+            raise Exception(f"Google Drive HTML Upload Error: {str(e)}")
 
     def download_file(self, file_id: str) -> BytesIO:
         """

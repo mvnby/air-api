@@ -32,6 +32,8 @@ import type { ManagerCustomerBranchItemResponse } from '../models/ManagerCustome
 import type { ManagerCustomerBranchListResponse } from '../models/ManagerCustomerBranchListResponse';
 import type { ManagerCustomerBranchUpdatePayload } from '../models/ManagerCustomerBranchUpdatePayload';
 import type { ManagerCustomerDocumentListResponse } from '../models/ManagerCustomerDocumentListResponse';
+import type { ManagerCustomerReconciliationDocumentResponse } from '../models/ManagerCustomerReconciliationDocumentResponse';
+import type { ManagerCustomerReconciliationResponse } from '../models/ManagerCustomerReconciliationResponse';
 import type { ManagerCustomerUpdatePayload } from '../models/ManagerCustomerUpdatePayload';
 import type { ManagerMediaApplySeriesResponse } from '../models/ManagerMediaApplySeriesResponse';
 import type { ManagerMediaBulkAddResponse } from '../models/ManagerMediaBulkAddResponse';
@@ -302,6 +304,62 @@ export class ManagerService {
             url: '/api/manager/customers/{customer_id}/docs',
             path: {
                 'customer_id': customerId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Customer Reconciliation For Manager
+     * @param customerId
+     * @param dateFrom
+     * @param dateTo
+     * @returns ManagerCustomerReconciliationResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerCustomerReconciliation(
+        customerId: number,
+        dateFrom?: (string | null),
+        dateTo?: (string | null),
+    ): CancelablePromise<ManagerCustomerReconciliationResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/customers/{customer_id}/reconciliation',
+            path: {
+                'customer_id': customerId,
+            },
+            query: {
+                'date_from': dateFrom,
+                'date_to': dateTo,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Customer Reconciliation Document For Manager
+     * @param customerId
+     * @param dateFrom
+     * @param dateTo
+     * @returns ManagerCustomerReconciliationDocumentResponse Successful Response
+     * @throws ApiError
+     */
+    public static createManagerCustomerReconciliationDocument(
+        customerId: number,
+        dateFrom?: (string | null),
+        dateTo?: (string | null),
+    ): CancelablePromise<ManagerCustomerReconciliationDocumentResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/customers/{customer_id}/reconciliation/document',
+            path: {
+                'customer_id': customerId,
+            },
+            query: {
+                'date_from': dateFrom,
+                'date_to': dateTo,
             },
             errors: {
                 422: `Validation Error`,

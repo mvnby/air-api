@@ -16,6 +16,9 @@ import {
   type ManagerCatalogCustomerItemResponse,
   type ManagerCustomerContractItemResponse,
   type ManagerCustomerDocumentItem,
+  type ManagerCustomerReconciliationDocumentItem,
+  type ManagerCustomerReconciliationPaymentItem,
+  type ManagerCustomerReconciliationResponse,
   type ManagerEquipmentComponentCreatePayload,
   type ManagerEquipmentComponentItemResponse,
   type ManagerEquipmentComponentUpdatePayload,
@@ -119,6 +122,11 @@ const serverErrors = ref<Record<string, string>>({});
 
 const documents = ref<ManagerCustomerDocumentItem[]>([]);
 const docsLoading = ref(false);
+const reconciliation = ref<ManagerCustomerReconciliationResponse | null>(null);
+const reconciliationLoading = ref(false);
+const reconciliationDocumentCreating = ref(false);
+const reconciliationDocumentUrl = ref('');
+const reconciliationError = ref('');
 const contracts = ref<ManagerCustomerContractItemResponse[]>([]);
 const contractsLoading = ref(false);
 const contractSaving = ref(false);
@@ -234,7 +242,22 @@ const formatDateOnly = (iso?: string | null) => {
   return new Date(iso).toLocaleDateString('ru-RU');
 };
 
-const toInputDate = (date: Date) => date.toISOString().slice(0, 10);
+const formatMoney = (value?: number | null) => `${Math.round(Number(value || 0)).toLocaleString('ru-RU')} BYN`;
+
+const toInputDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const currentYearStart = () => {
+  const now = new Date();
+  return toInputDate(new Date(now.getFullYear(), 0, 1));
+};
+
+const reconciliationDateFrom = ref(currentYearStart());
+const reconciliationDateTo = ref(toInputDate(new Date()));
 
 const buildDefaultContractForm = () => {
   const start = new Date();
@@ -635,6 +658,69 @@ const loadCustomerDocs = async () => {
     docsLoading.value = false;
   }
 };
+
+const loadCustomerReconciliation = async () => {
+  if (!customerId.value) return;
+  reconciliationLoading.value = true;
+  reconciliationError.value = '';
+  try {
+    reconciliation.value = await ManagerService.getManagerCustomerReconciliation(
+      customerId.value,
+      reconciliationDateFrom.value || null,
+      reconciliationDateTo.value || null,
+    );
+  } catch (e) {
+    console.error('Failed to load customer reconciliation', e);
+    reconciliation.value = null;
+    reconciliationError.value = `Не удалось собрать акт сверки: ${getApiErrorMessage(e)}`;
+  } finally {
+    reconciliationLoading.value = false;
+  }
+};
+
+const createReconciliationDocument = async () => {
+  if (!customerId.value || reconciliationDocumentCreating.value) return;
+  reconciliationDocumentCreating.value = true;
+  reconciliationError.value = '';
+  reconciliationDocumentUrl.value = '';
+  try {
+    const doc = await ManagerService.createManagerCustomerReconciliationDocument(
+      customerId.value,
+      reconciliationDateFrom.value || null,
+      reconciliationDateTo.value || null,
+    );
+    reconciliationDocumentUrl.value = doc.edit_url;
+    setToast('Акт сверки создан');
+  } catch (e) {
+    console.error('Failed to create customer reconciliation document', e);
+    reconciliationError.value = `Не удалось создать акт сверки: ${getApiErrorMessage(e)}`;
+  } finally {
+    reconciliationDocumentCreating.value = false;
+  }
+};
+
+const reconciliationRowsCount = computed(() => {
+  const docsCount = reconciliation.value?.documents?.length || 0;
+  const paymentsCount = reconciliation.value?.payments?.length || 0;
+  return docsCount + paymentsCount;
+});
+
+const reconciliationBalanceClass = computed(() => {
+  const value = reconciliation.value?.closing_balance || 0;
+  if (value > 0) return 'text-red-600 dark:text-red-300';
+  if (value < 0) return 'text-sky-600 dark:text-sky-300';
+  return 'text-teal-700 dark:text-teal-300';
+});
+
+const paymentDocLabel = (payment: ManagerCustomerReconciliationPaymentItem) => {
+  if (payment.payment_document_raw) return payment.payment_document_raw;
+  if (payment.payment_document_number) return `ПП №${payment.payment_document_number}`;
+  return payment.bank_receipt_id ? `Выписка #${payment.bank_receipt_id}` : `Платеж #${payment.payment_id}`;
+};
+
+const reconciliationDocLinks = (item: ManagerCustomerReconciliationDocumentItem) => (
+  item.documents?.filter((doc) => doc.edit_url) || []
+);
 
 const loadCustomerContracts = async () => {
   if (!customerId.value) return;
@@ -1209,6 +1295,7 @@ const deleteCustomer = async () => {
 watch(customerId, () => {
   void loadCustomer();
   void loadCustomerDocs();
+  void loadCustomerReconciliation();
   void loadCustomerContracts();
   void loadCustomerEquipment();
   void loadContractTemplates();
@@ -1221,6 +1308,7 @@ watch(includeArchivedEquipment, () => {
 onMounted(() => {
   void loadCustomer();
   void loadCustomerDocs();
+  void loadCustomerReconciliation();
   void loadCustomerContracts();
   void loadCustomerEquipment();
   void loadContractTemplates();
@@ -1282,6 +1370,121 @@ onMounted(() => {
           <h1 class="mt-2 text-2xl font-bold">{{ customer.full_legal_name || customer.name || `Клиент #${customer.id}` }}</h1>
           <p class="mt-1 text-sm text-[var(--mv-text-muted)]">ID: #{{ customer.id }} · {{ customer.type === 'company' ? 'Юр. лицо' : 'Физ. лицо' }}</p>
         </header>
+
+        <section v-if="!editMode && isCompany" class="rounded-[1.5rem] border border-[var(--mv-border)] bg-[var(--mv-surface)] p-5 shadow-sm">
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 class="flex items-center gap-2 text-lg font-bold">
+                <span class="material-icons-round text-teal-500">fact_check</span>
+                Акт сверки
+              </h2>
+              <p class="mt-1 text-sm text-[var(--mv-text-muted)]">
+                {{ reconciliationRowsCount }} движений · {{ formatDateOnly(reconciliation?.date_from) }} - {{ formatDateOnly(reconciliation?.date_to) }}
+              </p>
+            </div>
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input v-model="reconciliationDateFrom" class="field-input h-10 sm:w-40" type="date" />
+              <input v-model="reconciliationDateTo" class="field-input h-10 sm:w-40" type="date" />
+              <button class="btn-mini whitespace-nowrap" type="button" :disabled="reconciliationLoading" @click="loadCustomerReconciliation">
+                {{ reconciliationLoading ? 'Собираем...' : 'Обновить' }}
+              </button>
+              <button class="btn-mini-outline whitespace-nowrap" type="button" :disabled="reconciliationDocumentCreating" @click="createReconciliationDocument">
+                {{ reconciliationDocumentCreating ? 'Создаем...' : 'Создать акт' }}
+              </button>
+              <a v-if="reconciliationDocumentUrl" class="btn-mini-outline whitespace-nowrap" :href="reconciliationDocumentUrl" target="_blank">
+                Открыть акт
+              </a>
+            </div>
+          </div>
+
+          <p v-if="reconciliationError" class="mt-4 rounded-xl border border-red-500/40 bg-red-900/20 px-4 py-3 text-sm text-red-200">
+            {{ reconciliationError }}
+          </p>
+
+          <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="rounded-xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-3">
+              <p class="text-xs uppercase tracking-[0.14em] text-[var(--mv-text-muted)]">На начало</p>
+              <p class="mt-1 text-lg font-bold">{{ formatMoney(reconciliation?.opening_balance) }}</p>
+            </div>
+            <div class="rounded-xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-3">
+              <p class="text-xs uppercase tracking-[0.14em] text-[var(--mv-text-muted)]">Начислено</p>
+              <p class="mt-1 text-lg font-bold">{{ formatMoney(reconciliation?.documents_total) }}</p>
+            </div>
+            <div class="rounded-xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-3">
+              <p class="text-xs uppercase tracking-[0.14em] text-[var(--mv-text-muted)]">Оплачено</p>
+              <p class="mt-1 text-lg font-bold text-teal-700 dark:text-teal-300">{{ formatMoney(reconciliation?.payments_total) }}</p>
+            </div>
+            <div class="rounded-xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-3">
+              <p class="text-xs uppercase tracking-[0.14em] text-[var(--mv-text-muted)]">Остаток</p>
+              <p class="mt-1 text-lg font-bold" :class="reconciliationBalanceClass">{{ formatMoney(reconciliation?.closing_balance) }}</p>
+            </div>
+          </div>
+
+          <div class="mt-4 grid gap-4 lg:grid-cols-2">
+            <div class="rounded-xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-4">
+              <div class="mb-3 flex items-center justify-between gap-2">
+                <h3 class="text-sm font-semibold text-[var(--mv-text)]">Документы и начисления</h3>
+                <span class="text-xs text-[var(--mv-text-muted)]">{{ reconciliation?.documents?.length || 0 }}</span>
+              </div>
+              <div v-if="reconciliation?.documents?.length" class="space-y-3">
+                <div v-for="item in reconciliation.documents" :key="`${item.order_id}-${item.date}`" class="rounded-xl border border-[var(--mv-border)] bg-[var(--mv-surface)] p-3 text-sm">
+                  <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div class="min-w-0">
+                      <p class="font-semibold text-[var(--mv-text)]">{{ item.order_title }}</p>
+                      <p class="mt-1 text-xs text-[var(--mv-text-muted)]">{{ formatDateOnly(item.date) }} · {{ item.basis }}</p>
+                      <p v-if="item.delivery_address" class="mt-1 break-words text-xs text-[var(--mv-text-muted)]">{{ item.delivery_address }}</p>
+                      <div v-if="reconciliationDocLinks(item).length" class="mt-2 flex flex-wrap gap-2">
+                        <a
+                          v-for="doc in reconciliationDocLinks(item)"
+                          :key="doc.id"
+                          class="rounded-lg border border-[var(--mv-border)] px-2 py-1 text-xs font-semibold text-teal-700 hover:border-teal-400 dark:text-teal-300"
+                          :href="doc.edit_url || '#'"
+                          target="_blank"
+                        >
+                          {{ doc.doc_type_label }} №{{ doc.number }}
+                        </a>
+                      </div>
+                    </div>
+                    <p class="shrink-0 whitespace-nowrap font-bold text-[var(--mv-text)]">{{ formatMoney(item.amount) }}</p>
+                  </div>
+                </div>
+              </div>
+              <p v-else class="rounded-xl border border-dashed border-[var(--mv-border)] p-4 text-center text-sm text-[var(--mv-text-muted)]">
+                Начислений за период нет
+              </p>
+            </div>
+
+            <div class="rounded-xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-4">
+              <div class="mb-3 flex items-center justify-between gap-2">
+                <h3 class="text-sm font-semibold text-[var(--mv-text)]">Оплаты</h3>
+                <span class="text-xs text-[var(--mv-text-muted)]">{{ reconciliation?.payments?.length || 0 }}</span>
+              </div>
+              <div v-if="reconciliation?.payments?.length" class="space-y-3">
+                <div v-for="payment in reconciliation.payments" :key="payment.payment_id" class="rounded-xl border border-[var(--mv-border)] bg-[var(--mv-surface)] p-3 text-sm">
+                  <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div class="min-w-0">
+                      <p class="font-semibold text-[var(--mv-text)]">{{ paymentDocLabel(payment) }}</p>
+                      <p class="mt-1 text-xs text-[var(--mv-text-muted)]">{{ formatDateOnly(payment.date) }} · {{ payment.order_title }}</p>
+                      <p v-if="payment.payer_name || payment.payer_unp" class="mt-1 break-words text-xs text-[var(--mv-text-muted)]">
+                        {{ payment.payer_name || 'Плательщик' }}<template v-if="payment.payer_unp"> · УНП {{ payment.payer_unp }}</template>
+                      </p>
+                      <p v-if="payment.payer_account || payment.our_account" class="mt-1 break-words text-xs text-[var(--mv-text-muted)]">
+                        {{ payment.payer_account || '—' }} → {{ payment.our_account || '—' }}
+                      </p>
+                      <p v-if="payment.payment_purpose || payment.comment" class="mt-1 break-words text-xs text-[var(--mv-text-muted)]">
+                        {{ payment.payment_purpose || payment.comment }}
+                      </p>
+                    </div>
+                    <p class="shrink-0 whitespace-nowrap font-bold text-teal-700 dark:text-teal-300">{{ formatMoney(payment.amount) }}</p>
+                  </div>
+                </div>
+              </div>
+              <p v-else class="rounded-xl border border-dashed border-[var(--mv-border)] p-4 text-center text-sm text-[var(--mv-text-muted)]">
+                Оплат за период нет
+              </p>
+            </div>
+          </div>
+        </section>
 
         <section class="grid gap-4 md:grid-cols-2">
           <article class="rounded-[1.5rem] border border-[var(--mv-border)] bg-[var(--mv-surface)] p-5 shadow-sm">

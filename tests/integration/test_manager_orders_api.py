@@ -1768,6 +1768,194 @@ async def test_manager_order_act_can_use_invoice_as_base_document(async_client, 
 
 
 @pytest.mark.asyncio
+async def test_manager_customer_reconciliation_groups_documents_and_payments(async_client, db):
+    customer = Customer(name='ООО "Сверка"', phone="+375297777778", type=CustomerType.company, inn="192663084")
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order_before = Order(
+        customer_id=customer.id,
+        status=OrderStatus.CLOSED,
+        title="Старый заказ",
+        total_amount=300,
+        balance_due=100,
+        created_at=datetime(2025, 12, 20),
+        contract_date=datetime(2025, 12, 20),
+    )
+    order_inside = Order(
+        customer_id=customer.id,
+        status=OrderStatus.CLOSED,
+        title="Монтаж",
+        total_amount=1200,
+        balance_due=700,
+        created_at=datetime(2026, 2, 1),
+        contract_date=datetime(2026, 2, 1),
+        delivery_address="Витебск, ул. Ленина, д. 1",
+    )
+    db.add_all([order_before, order_inside])
+    await db.commit()
+    await db.refresh(order_before)
+    await db.refresh(order_inside)
+
+    db.add_all(
+        [
+            OrderDocument(
+                order_id=order_before.id,
+                doc_type="act",
+                number="1",
+                date=datetime(2025, 12, 21),
+                google_file_id="old-act",
+                google_edit_url="https://example.com/old-act",
+            ),
+            OrderDocument(
+                order_id=order_inside.id,
+                doc_type="act",
+                number="2",
+                date=datetime(2026, 2, 2),
+                google_file_id="act",
+                google_edit_url="https://example.com/act",
+            ),
+            OrderDocument(
+                order_id=order_inside.id,
+                doc_type="tn2",
+                number="3",
+                date=datetime(2026, 2, 2),
+                google_file_id="tn2",
+                google_edit_url="https://example.com/tn2",
+            ),
+        ]
+    )
+    receipt = BankReceipt(
+        status="matched",
+        sender_email="bank@example.com",
+        subject="Платеж",
+        fingerprint="reconciliation-payment",
+        received_at=datetime(2026, 2, 5),
+        our_account="BY00TEST",
+        amount=500,
+        currency=PaymentCurrency.BYN,
+        payer_name='ООО "Сверка"',
+        payer_unp="192663084",
+        payer_account="BY99PAYER",
+        payment_document_number="42",
+        payment_document_raw="ПП №42",
+        payment_purpose="Оплата по договору",
+        raw_body="body",
+    )
+    db.add(receipt)
+    await db.commit()
+    await db.refresh(receipt)
+
+    db.add_all(
+        [
+            Payment(order_id=order_before.id, amount=200, currency=PaymentCurrency.BYN, date=datetime(2025, 12, 25)),
+            Payment(
+                order_id=order_inside.id,
+                bank_receipt_id=receipt.id,
+                amount=500,
+                currency=PaymentCurrency.BYN,
+                date=datetime(2026, 2, 5),
+            ),
+        ]
+    )
+    await db.commit()
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.get(
+        f"/api/manager/customers/{customer.id}/reconciliation",
+        params={"date_from": "2026-01-01", "date_to": "2026-12-31"},
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["opening_balance"] == 100
+    assert data["documents_total"] == 1200
+    assert data["payments_total"] == 500
+    assert data["closing_balance"] == 800
+    assert len(data["documents"]) == 1
+    assert data["documents"][0]["order_id"] == order_inside.id
+    assert data["documents"][0]["basis"] == "Акт №2, ТН-2 №3"
+    assert len(data["documents"][0]["documents"]) == 2
+    assert len(data["payments"]) == 1
+    assert data["payments"][0]["payment_document_number"] == "42"
+    assert data["payments"][0]["payer_account"] == "BY99PAYER"
+
+
+@pytest.mark.asyncio
+async def test_manager_customer_reconciliation_document_generation(async_client, db, monkeypatch):
+    customer = Customer(
+        name='ООО "Док сверки"',
+        full_legal_name='Общество с ограниченной ответственностью "Док сверки"',
+        phone="+375297777779",
+        type=CustomerType.company,
+        inn="192663085",
+        legal_address="г. Витебск, ул. Советская, д. 1",
+    )
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(
+        customer_id=customer.id,
+        status=OrderStatus.CLOSED,
+        title="Поставка и монтаж",
+        total_amount=900,
+        created_at=datetime(2026, 3, 1),
+        contract_date=datetime(2026, 3, 1),
+    )
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    db.add_all(
+        [
+            OrderDocument(
+                order_id=order.id,
+                doc_type="act",
+                number="4",
+                date=datetime(2026, 3, 2),
+                google_file_id="act-4",
+                google_edit_url="https://example.com/act-4",
+            ),
+            Payment(order_id=order.id, amount=400, currency=PaymentCurrency.BYN, date=datetime(2026, 3, 5)),
+        ]
+    )
+    await db.commit()
+
+    captured = {}
+
+    class _FakeGoogleService:
+        def create_document_from_html(self, title, html):
+            captured["title"] = title
+            captured["html"] = html
+            return {"file_id": "reconciliation-file", "edit_url": "https://docs.google.com/document/d/reconciliation-file/edit"}
+
+    from services import customer_reconciliation_service
+
+    monkeypatch.setattr(customer_reconciliation_service, "get_google_service", lambda: _FakeGoogleService())
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.post(
+        f"/api/manager/customers/{customer.id}/reconciliation/document",
+        params={"date_from": "2026-01-01", "date_to": "2026-12-31"},
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["file_id"] == "reconciliation-file"
+    assert data["edit_url"].endswith("/edit")
+    assert "Акт сверки" in captured["title"]
+    assert "Акт сверки взаимных расчетов" in captured["html"]
+    assert "Дебет, BYN" in captured["html"]
+    assert "Кредит, BYN" in captured["html"]
+    assert "Акт №4" in captured["html"]
+    assert "Задолженность в пользу ИП Янулевич Д.В. составляет 500,00 BYN." in captured["html"]
+
+
+@pytest.mark.asyncio
 async def test_manager_order_waybills_can_use_invoice_as_base_document(async_client, db, monkeypatch):
     customer = Customer(name="Waybill Base", phone="+375297777777", type=CustomerType.individual)
     product = Product(title="Кондиционер", slug="base-waybill-product", price=1000)

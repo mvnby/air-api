@@ -117,6 +117,11 @@ export type { ManagerCustomerContractListResponse } from './models/ManagerCustom
 export type { ManagerCustomerContractUpdatePayload } from './models/ManagerCustomerContractUpdatePayload';
 export type { ManagerCustomerDocumentItem } from './models/ManagerCustomerDocumentItem';
 export type { ManagerCustomerDocumentListResponse } from './models/ManagerCustomerDocumentListResponse';
+export type { ManagerCustomerReconciliationBasisDocument } from './models/ManagerCustomerReconciliationBasisDocument';
+export type { ManagerCustomerReconciliationDocumentItem } from './models/ManagerCustomerReconciliationDocumentItem';
+export type { ManagerCustomerReconciliationDocumentResponse } from './models/ManagerCustomerReconciliationDocumentResponse';
+export type { ManagerCustomerReconciliationPaymentItem } from './models/ManagerCustomerReconciliationPaymentItem';
+export type { ManagerCustomerReconciliationResponse } from './models/ManagerCustomerReconciliationResponse';
 export type { ManagerCustomerUpdatePayload } from './models/ManagerCustomerUpdatePayload';
 export type { ManagerEquipmentComponentCreatePayload } from './models/ManagerEquipmentComponentCreatePayload';
 export type { ManagerEquipmentComponentItemResponse } from './models/ManagerEquipmentComponentItemResponse';
