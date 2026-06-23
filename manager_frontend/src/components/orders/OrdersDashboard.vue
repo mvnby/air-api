@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { Download, SlidersHorizontal, Upload } from 'lucide-vue-next';
+import { Download, SlidersHorizontal, Upload, X } from 'lucide-vue-next';
 import type { DashboardView, Segment } from '../../api';
 import { api } from '../../api';
 import {
@@ -65,6 +65,8 @@ const importModalOpen = ref(false);
 const visibleOrders = computed(() => (
   hideOnHold.value ? orders.value.filter((order) => !order.is_on_hold) : orders.value
 ));
+const normalizedSearch = computed(() => search.value.trim());
+const hasActiveOrderFilters = computed(() => Boolean(normalizedSearch.value || statusFilter.value || overdueOnly.value));
 
 const groupedOrders = computed(() => {
   const groups: Record<string, ManagerOrderListItemResponse[]> = {};
@@ -360,11 +362,20 @@ watch(groupByCustomer, () => {
 });
 watch(search, () => {
   if (!isHydrated.value) return;
+  setQueryParam('search', normalizedSearch.value);
   if (searchTimer) window.clearTimeout(searchTimer);
   searchTimer = window.setTimeout(async () => {
     await loadOrders();
   }, 250);
 });
+
+const clearOrderFilters = async () => {
+  search.value = '';
+  statusFilter.value = '';
+  overdueOnly.value = false;
+  setQueryParam('search', '');
+  await loadOrders();
+};
 
 const applyStatusLocally = (orderId: number, status: string) => {
   const item = orders.value.find((order) => order.id === orderId);
@@ -496,6 +507,7 @@ onMounted(async () => {
   const searchParam = params.get('search');
   if (searchParam) {
     search.value = searchParam;
+    filtersOpen.value = true;
   }
   const orderIdParam = params.get('orderId');
   if (orderIdParam) {
@@ -560,10 +572,10 @@ watch(drawerOpen, (isOpen) => {
             <button
               type="button"
               class="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-700 transition hover:bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 sm:h-9 sm:w-9"
-              :class="filtersOpen ? 'bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300' : ''"
+              :class="filtersOpen || hasActiveOrderFilters ? 'bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300' : ''"
               :aria-expanded="filtersOpen"
               aria-label="Опции и фильтры"
-              title="Опции и фильтры"
+              :title="hasActiveOrderFilters ? 'Есть активные фильтры' : 'Опции и фильтры'"
               @click="filtersOpen = !filtersOpen"
             >
               <SlidersHorizontal class="h-4 w-4" />
@@ -573,19 +585,17 @@ watch(drawerOpen, (isOpen) => {
         
         <Transition name="fade">
           <div v-if="filtersOpen" class="mt-3 grid gap-3 rounded-2xl border border-gray-100 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50 md:grid-cols-3 lg:grid-cols-4">
-            <template v-if="view === 'list'">
-              <input v-model="search" class="field-input" placeholder="Поиск (клиент, УНП, ID)..." />
-              <select v-model="statusFilter" class="field-input">
-                <option value="">Все статусы</option>
-                <option v-for="statusKey in STATUS_ORDER" :key="statusKey" :value="statusKey">
-                  {{ STATUS_LABELS[statusKey] || statusKey }}
-                </option>
-              </select>
-              <label class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-gray-700 transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
-                <input v-model="overdueOnly" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
-                <span class="text-sm font-medium">Только просроченные</span>
-              </label>
-            </template>
+            <input v-model="search" class="field-input" placeholder="Поиск (клиент, УНП, ID)..." />
+            <select v-model="statusFilter" class="field-input">
+              <option value="">Все статусы</option>
+              <option v-for="statusKey in STATUS_ORDER" :key="statusKey" :value="statusKey">
+                {{ STATUS_LABELS[statusKey] || statusKey }}
+              </option>
+            </select>
+            <label class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-gray-700 transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
+              <input v-model="overdueOnly" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+              <span class="text-sm font-medium">Только просроченные</span>
+            </label>
             <label class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-gray-700 transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
               <input v-model="groupByCustomer" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
               <span class="text-sm font-medium">Группировать</span>
@@ -594,6 +604,15 @@ watch(drawerOpen, (isOpen) => {
               <input v-model="hideOnHold" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
               <span class="text-sm font-medium">Скрывать отложенные</span>
             </label>
+            <button
+              type="button"
+              class="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+              :disabled="!hasActiveOrderFilters"
+              @click="clearOrderFilters"
+            >
+              <X class="h-4 w-4" />
+              Сбросить фильтры
+            </button>
             <div v-if="view === 'list'" class="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
               <button type="button" class="text-sm font-medium text-teal-700 disabled:text-gray-400" :disabled="!visibleOrderIds.length" @click="selectAllVisible">Выбрать все</button>
               <span class="text-xs text-gray-400">/</span>
