@@ -2558,6 +2558,168 @@
         }
       }
     },
+    "/api/manager/customers/{customer_id}/reconciliation": {
+      "get": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Get Customer Reconciliation For Manager",
+        "operationId": "get_manager_customer_reconciliation",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Customer Id"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerCustomerReconciliationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/customers/{customer_id}/reconciliation/document": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Create Customer Reconciliation Document For Manager",
+        "operationId": "create_manager_customer_reconciliation_document",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Customer Id"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerCustomerReconciliationDocumentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/customers/{customer_id}/branches": {
       "get": {
         "tags": [
@@ -19907,6 +20069,327 @@
           "items"
         ],
         "title": "ManagerCustomerDocumentListResponse"
+      },
+      "ManagerCustomerReconciliationBasisDocument": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "doc_type": {
+            "type": "string",
+            "title": "Doc Type"
+          },
+          "doc_type_label": {
+            "type": "string",
+            "title": "Doc Type Label"
+          },
+          "number": {
+            "type": "string",
+            "title": "Number"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Date"
+          },
+          "edit_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edit Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "doc_type",
+          "doc_type_label",
+          "number",
+          "date"
+        ],
+        "title": "ManagerCustomerReconciliationBasisDocument"
+      },
+      "ManagerCustomerReconciliationDocumentItem": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "order_title": {
+            "type": "string",
+            "title": "Order Title"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Date"
+          },
+          "amount": {
+            "type": "number",
+            "title": "Amount"
+          },
+          "basis": {
+            "type": "string",
+            "title": "Basis"
+          },
+          "delivery_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Address"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCustomerReconciliationBasisDocument"
+            },
+            "type": "array",
+            "title": "Documents"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "order_title",
+          "date",
+          "amount",
+          "basis"
+        ],
+        "title": "ManagerCustomerReconciliationDocumentItem"
+      },
+      "ManagerCustomerReconciliationDocumentResponse": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "edit_url": {
+            "type": "string",
+            "title": "Edit Url"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "edit_url",
+          "title"
+        ],
+        "title": "ManagerCustomerReconciliationDocumentResponse"
+      },
+      "ManagerCustomerReconciliationPaymentItem": {
+        "properties": {
+          "payment_id": {
+            "type": "integer",
+            "title": "Payment Id"
+          },
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "order_title": {
+            "type": "string",
+            "title": "Order Title"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Date"
+          },
+          "amount": {
+            "type": "number",
+            "title": "Amount"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/PaymentCurrency"
+          },
+          "payment_type": {
+            "type": "string",
+            "title": "Payment Type"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "bank_receipt_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bank Receipt Id"
+          },
+          "payer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payer Name"
+          },
+          "payer_unp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payer Unp"
+          },
+          "payer_account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payer Account"
+          },
+          "our_account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Our Account"
+          },
+          "payment_document_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Document Number"
+          },
+          "payment_document_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Document Raw"
+          },
+          "payment_purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Purpose"
+          }
+        },
+        "type": "object",
+        "required": [
+          "payment_id",
+          "order_id",
+          "order_title",
+          "date",
+          "amount",
+          "currency",
+          "payment_type"
+        ],
+        "title": "ManagerCustomerReconciliationPaymentItem"
+      },
+      "ManagerCustomerReconciliationResponse": {
+        "properties": {
+          "customer_id": {
+            "type": "integer",
+            "title": "Customer Id"
+          },
+          "date_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Date From"
+          },
+          "date_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Date To"
+          },
+          "opening_balance": {
+            "type": "number",
+            "title": "Opening Balance",
+            "default": 0.0
+          },
+          "documents_total": {
+            "type": "number",
+            "title": "Documents Total",
+            "default": 0.0
+          },
+          "payments_total": {
+            "type": "number",
+            "title": "Payments Total",
+            "default": 0.0
+          },
+          "closing_balance": {
+            "type": "number",
+            "title": "Closing Balance",
+            "default": 0.0
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCustomerReconciliationDocumentItem"
+            },
+            "type": "array",
+            "title": "Documents"
+          },
+          "payments": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCustomerReconciliationPaymentItem"
+            },
+            "type": "array",
+            "title": "Payments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "customer_id",
+          "date_from",
+          "date_to"
+        ],
+        "title": "ManagerCustomerReconciliationResponse"
       },
       "ManagerCustomerUpdatePayload": {
         "properties": {

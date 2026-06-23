@@ -29,6 +29,15 @@ class SettingsService:
         return setting
 
     @staticmethod
+    async def get_optional_value(session: AsyncSession, key: str, default: str = "") -> str:
+        stmt = select(GlobalConfig).where(GlobalConfig.key == key)
+        res = await session.execute(stmt)
+        setting = res.scalar_one_or_none()
+        if not setting or setting.value is None:
+            return default
+        return setting.value
+
+    @staticmethod
     async def update_setting(session: AsyncSession, key: str, payload: ManagerSettingUpdatePayload) -> GlobalConfig:
         setting = await SettingsService.get_setting_by_key(session, key)
         
