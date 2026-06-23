@@ -106,6 +106,12 @@ const onGroupClick = () => {
         <div class="mt-2 flex flex-wrap gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
           <span>Сумма: <strong class="text-slate-800 dark:text-slate-200">{{ formatMoney(group.totalAmount) }}</strong></span>
           <span>Маржа: <strong class="text-teal-700 dark:text-teal-300">{{ formatMoney(group.margin) }}</strong></span>
+          <span>
+            Долг:
+            <strong :class="group.balanceDue > 0 ? 'text-red-600 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300'">
+              {{ formatMoney(group.balanceDue) }}
+            </strong>
+          </span>
           <span v-if="group.needsAttention" class="font-semibold text-red-600 dark:text-red-300">Нужно внимание</span>
         </div>
       </div>
