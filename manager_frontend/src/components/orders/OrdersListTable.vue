@@ -51,7 +51,7 @@ const isGroupSelected = (item: OrderRenderItem) => {
 
 <template>
   <div class="overflow-x-auto rounded-[2rem] border border-gray-200 bg-white p-3">
-    <table class="w-full min-w-[1020px] text-sm text-gray-700">
+    <table class="w-full min-w-[1120px] text-sm text-gray-700">
       <thead>
         <tr class="text-left text-xs uppercase text-slate-500">
           <th class="w-10 px-3 py-2"></th>
@@ -72,6 +72,7 @@ const isGroupSelected = (item: OrderRenderItem) => {
             Маржа
             <span class="inline-block ml-1 opacity-50 text-teal-600 transition-opacity" :class="sort === 'margin_desc' ? 'opacity-100 font-bold' : 'opacity-0 group-hover:opacity-50'">↓</span>
           </th>
+          <th class="px-3 py-2">Долг</th>
           <th class="px-3 py-2">Действия</th>
         </tr>
       </thead>
@@ -109,6 +110,12 @@ const isGroupSelected = (item: OrderRenderItem) => {
               <td class="px-3 py-3 text-xs text-gray-500">Группа клиента</td>
               <td class="px-3 py-3">{{ formatMoney(item.group.totalAmount) }}</td>
               <td class="px-3 py-3 font-semibold text-teal-700">{{ formatMoney(item.group.margin) }}</td>
+              <td
+                class="px-3 py-3 font-semibold"
+                :class="item.group.balanceDue > 0 ? 'text-red-600' : 'text-emerald-700'"
+              >
+                {{ formatMoney(item.group.balanceDue) }}
+              </td>
               <td class="px-3 py-3">
                 <button class="btn-mini-outline" type="button" @click="toggleGroup(item.group.id)">
                   {{ expandedGroupIds.includes(item.group.id) ? 'Скрыть' : 'Показать' }}
@@ -142,7 +149,7 @@ const isGroupSelected = (item: OrderRenderItem) => {
           />
         </template>
         <tr v-if="!totalOrderCount">
-          <td colspan="8" class="px-3 py-8 text-center text-sm text-gray-500">Заказы не найдены</td>
+          <td colspan="9" class="px-3 py-8 text-center text-sm text-gray-500">Заказы не найдены</td>
         </tr>
       </tbody>
     </table>

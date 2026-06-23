@@ -53,6 +53,7 @@ export type CustomerOrderGroup = {
     orders: ManagerOrderListItemResponse[];
     totalAmount: number;
     margin: number;
+    balanceDue: number;
     statusCounts: Array<{ status: string; count: number }>;
     addresses: string[];
     hiddenAddressCount: number;
@@ -158,6 +159,7 @@ function createCustomerOrderGroup(
         orders,
         totalAmount: orders.reduce((sum, order) => sum + order.total_amount, 0),
         margin: orders.reduce((sum, order) => sum + order.margin, 0),
+        balanceDue: orders.reduce((sum, order) => sum + Number(order.balance_due || 0), 0),
         statusCounts: Array.from(statusCounter.entries()).map(([status, count]) => ({ status, count })),
         addresses: addresses.slice(0, 3),
         hiddenAddressCount: Math.max(addresses.length - 3, 0),

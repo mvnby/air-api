@@ -81,6 +81,12 @@ const customerName = (order: ManagerOrderListItemResponse) => getOrderCustomerNa
     <td class="px-3 py-3">{{ formatDate(order.next_followup_date) }}</td>
     <td class="px-3 py-3">{{ formatMoney(order.total_amount) }}</td>
     <td class="px-3 py-3 font-semibold text-teal-700">{{ formatMoney(order.margin) }}</td>
+    <td
+      class="px-3 py-3 font-semibold"
+      :class="(order.balance_due || 0) > 0 ? 'text-red-600' : 'text-emerald-700'"
+    >
+      {{ formatMoney(order.balance_due || 0) }}
+    </td>
     <td class="px-3 py-3">
       <div class="flex flex-wrap gap-2">
         <button
