@@ -102,6 +102,19 @@ class LeadService:
         return value
 
     @staticmethod
+    def _order_source_for_lead(lead: Lead) -> OrderLeadSource:
+        source_value = lead.source.value if hasattr(lead.source, "value") else str(lead.source or "")
+        mapping = {
+            LeadIntakeSource.phone.value: OrderLeadSource.PHONE,
+            LeadIntakeSource.site.value: OrderLeadSource.SITE,
+            LeadIntakeSource.bot.value: OrderLeadSource.BOT,
+            LeadIntakeSource.email.value: OrderLeadSource.EMAIL,
+            LeadIntakeSource.manager.value: OrderLeadSource.MANAGER,
+            LeadIntakeSource.other.value: OrderLeadSource.OTHER,
+        }
+        return mapping.get(source_value, OrderLeadSource.MANAGER)
+
+    @staticmethod
     def _map_lead(lead: Lead) -> Dict[str, Any]:
         return {
             "id": int(lead.id or 0),
@@ -249,7 +262,10 @@ class LeadService:
         should_recompute_segment = False
 
         if "status" in fields_set and payload.status is not None:
-            lead.status = LeadStatus(payload.status)
+            next_status = LeadStatus(payload.status)
+            if next_status in {LeadStatus.qualified, LeadStatus.lost, LeadStatus.spam}:
+                raise ValueError("Use dedicated lead workflow endpoints for terminal statuses")
+            lead.status = next_status
         if "source" in fields_set and payload.source is not None:
             lead.source = LeadIntakeSource(payload.source)
         if "name" in fields_set:
@@ -296,7 +312,10 @@ class LeadService:
         if not lead:
             return None
 
-        lead.status = LeadStatus(payload.status)
+        next_status = LeadStatus(payload.status)
+        if next_status not in {LeadStatus.lost, LeadStatus.spam}:
+            raise ValueError("Lead can only be marked lost or spam here")
+        lead.status = next_status
         lead.loss_reason = LeadLossReason(payload.loss_reason) if payload.loss_reason else (
             LeadLossReason.spam if lead.status == LeadStatus.spam else lead.loss_reason
         )
@@ -345,11 +364,23 @@ class LeadService:
 
     @staticmethod
     async def qualify_lead(session: AsyncSession, lead_id: int, payload: Any) -> Optional[Dict[str, Any]]:
-        lead = await session.get(Lead, lead_id)
+        result = await session.execute(select(Lead).where(Lead.id == lead_id).with_for_update())
+        lead = result.scalars().first()
         if not lead:
             return None
         if lead.status in {LeadStatus.spam, LeadStatus.lost}:
             raise ValueError("Cannot qualify a lost/spam lead")
+        if lead.status == LeadStatus.qualified:
+            if not lead.converted_order_id:
+                raise ValueError("Lead is already qualified")
+            converted_order = await session.get(Order, int(lead.converted_order_id))
+            if not converted_order:
+                raise ValueError("Converted order not found")
+            return {
+                "lead": LeadService._map_lead(lead),
+                "customer_id": int(converted_order.customer_id or 0),
+                "order_id": int(converted_order.id),
+            }
 
         name = LeadService._clean_optional(payload.name) or LeadService._clean_optional(lead.name)
         phone = LeadService._clean_optional(payload.phone) or LeadService._clean_optional(lead.phone)
@@ -437,7 +468,7 @@ class LeadService:
             customer_id=customer.id,
             customer_branch_id=int(selected_branch.id) if selected_branch and selected_branch.id is not None else None,
             status=OrderStatus.NEW_LEAD,
-            lead_source=OrderLeadSource.MANAGER,
+            lead_source=LeadService._order_source_for_lead(lead),
             comment=order_comment,
             title=f"Лид #{lead.id}" if not title_suffix else f"Лид #{lead.id}: {title_suffix[:96]}",
             delivery_address=order_delivery_address,

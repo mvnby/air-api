@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta
 
 import pytest
+from sqlmodel import select
 
 from models import Customer, CustomerBranch, CustomerType, Lead, Order
-from schemas import LeadCreatePayload, LeadLossPayload, LeadQualifyPayload
+from schemas import LeadCreatePayload, LeadLossPayload, LeadQualifyPayload, LeadUpdatePayload
 from services.lead_service import LeadService
 
 
@@ -94,7 +95,85 @@ async def test_qualify_lead_creates_order_and_updates_status(db):
     order = await db.get(Order, result["order_id"])
     assert order is not None
     assert order.customer_id == result["customer_id"]
+    assert order.lead_source == "email"
     assert order.comment == "Квалифицированный лид"
+
+
+@pytest.mark.asyncio
+async def test_qualify_lead_is_idempotent_after_conversion(db):
+    lead_data = await LeadService.create_lead(
+        db,
+        LeadCreatePayload(
+            source="email",
+            name="Retry Lead",
+            email="retry@example.com",
+            request_text="Повторная квалификация",
+        ),
+    )
+
+    first = await LeadService.qualify_lead(
+        db,
+        lead_id=lead_data["id"],
+        payload=LeadQualifyPayload(order_comment="Первый запуск"),
+    )
+    second = await LeadService.qualify_lead(
+        db,
+        lead_id=lead_data["id"],
+        payload=LeadQualifyPayload(order_comment="Повторный запуск"),
+    )
+
+    assert first is not None
+    assert second is not None
+    assert second["order_id"] == first["order_id"]
+    orders = (await db.execute(select(Order))).scalars().all()
+    assert len(orders) == 1
+
+
+@pytest.mark.asyncio
+async def test_update_lead_rejects_terminal_status_shortcut(db):
+    lead_data = await LeadService.create_lead(
+        db,
+        LeadCreatePayload(
+            source="manager",
+            name="Shortcut Lead",
+            request_text="Нельзя обходить квалификацию",
+        ),
+    )
+
+    with pytest.raises(ValueError, match="dedicated lead workflow"):
+        await LeadService.update_lead(
+            db,
+            lead_id=lead_data["id"],
+            payload=LeadUpdatePayload(status="qualified"),
+        )
+
+    lead = await db.get(Lead, lead_data["id"])
+    assert lead is not None
+    assert lead.status == "new"
+    assert lead.converted_order_id is None
+
+
+@pytest.mark.asyncio
+async def test_mark_lost_rejects_non_loss_status(db):
+    lead_data = await LeadService.create_lead(
+        db,
+        LeadCreatePayload(
+            source="manager",
+            name="Bad Lost Status",
+            request_text="Нельзя отмечать qualified через mark-lost",
+        ),
+    )
+
+    with pytest.raises(ValueError, match="lost or spam"):
+        await LeadService.mark_lead_lost(
+            db,
+            lead_id=lead_data["id"],
+            payload=LeadLossPayload(status="qualified"),
+        )
+
+    lead = await db.get(Lead, lead_data["id"])
+    assert lead is not None
+    assert lead.status == "new"
 
 
 @pytest.mark.asyncio

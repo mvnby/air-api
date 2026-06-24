@@ -1,6 +1,7 @@
 from io import BytesIO
 from html import escape
 import os
+import secrets
 
 from aiogram import Router, types, F
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
@@ -463,10 +464,40 @@ def _repair_comment_preview_text(data: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
-async def _download_telegram_file(file_id: str) -> bytes:
+def _file_too_large_message(max_bytes: int = CustomerRequisitesRecognitionService.MAX_FILE_SIZE_BYTES) -> str:
+    max_mb = max_bytes / (1024 * 1024)
+    return f"Файл слишком большой. Максимум {max_mb:g} МБ."
+
+
+def _normalize_file_size(value: object) -> int | None:
+    try:
+        size = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    return size if size >= 0 else None
+
+
+async def _download_telegram_file(file_id: str, *, expected_size: int | None = None) -> bytes:
+    max_bytes = CustomerRequisitesRecognitionService.MAX_FILE_SIZE_BYTES
+    if expected_size is not None and expected_size > max_bytes:
+        raise ValueError(_file_too_large_message(max_bytes))
+
+    telegram_file = await bot.get_file(file_id)
+    actual_size = _normalize_file_size(getattr(telegram_file, "file_size", None))
+    if expected_size is None and actual_size is None:
+        raise ValueError("Telegram не вернул размер файла.")
+    if actual_size is not None and actual_size > max_bytes:
+        raise ValueError(_file_too_large_message(max_bytes))
+    file_path = getattr(telegram_file, "file_path", None)
+    if not file_path:
+        raise ValueError("Telegram не вернул путь к файлу.")
+
     buffer = BytesIO()
-    await bot.download(file_id, destination=buffer)
-    return buffer.getvalue()
+    await bot.download_file(file_path, destination=buffer)
+    content = buffer.getvalue()
+    if len(content) > max_bytes:
+        raise ValueError(_file_too_large_message(max_bytes))
+    return content
 
 
 async def _run_requisites_recognition(
@@ -475,12 +506,13 @@ async def _run_requisites_recognition(
     file_id: str,
     filename: str,
     mime_type: str,
+    file_size: int | None = None,
     telegram_user_id: int | None,
     telegram_chat_id: int | None,
     telegram_message_id: int | None,
 ):
     try:
-        content = await _download_telegram_file(file_id)
+        content = await _download_telegram_file(file_id, expected_size=_normalize_file_size(file_size))
         async with async_session_maker() as session:
             data = await CustomerRequisitesRecognitionService.recognize_bytes(
                 session,
@@ -505,6 +537,7 @@ async def _handle_requisites_file(
     file_id: str,
     filename: str,
     mime_type: str,
+    file_size: int | None = None,
     telegram_user_id: int | None = None,
     telegram_chat_id: int | None = None,
     telegram_message_id: int | None = None,
@@ -520,6 +553,7 @@ async def _handle_requisites_file(
         file_id=file_id,
         filename=filename,
         mime_type=mime_type,
+        file_size=file_size,
         telegram_user_id=user_id,
         telegram_chat_id=telegram_chat_id if telegram_chat_id is not None else (message.chat.id if message.chat else None),
         telegram_message_id=telegram_message_id if telegram_message_id is not None else message.message_id,
@@ -533,12 +567,17 @@ async def _ask_requisites_file_action(
     file_id: str,
     filename: str,
     mime_type: str,
+    file_size: int | None = None,
 ):
     user_id = message.from_user.id if message.from_user else None
     if not await _is_staff_user(user_id):
         await message.answer(
             "Файл получил, но действия с файлами доступны только сотрудникам."
         )
+        return
+    normalized_size = _normalize_file_size(file_size)
+    if normalized_size is not None and normalized_size > CustomerRequisitesRecognitionService.MAX_FILE_SIZE_BYTES:
+        await message.answer(_file_too_large_message())
         return
     can_extract_requisites = await _is_admin_user(user_id)
 
@@ -547,6 +586,7 @@ async def _ask_requisites_file_action(
             "file_id": file_id,
             "filename": filename,
             "mime_type": mime_type,
+            "file_size": normalized_size,
             "telegram_message_id": message.message_id,
             "telegram_chat_id": message.chat.id if message.chat else None,
         }
@@ -572,6 +612,7 @@ async def recognize_requisites_photo(message: types.Message, state: FSMContext):
         file_id=photo.file_id,
         filename=f"telegram-photo-{message.message_id}.jpg",
         mime_type="image/jpeg",
+        file_size=getattr(photo, "file_size", None),
     )
 
 
@@ -589,6 +630,7 @@ async def recognize_requisites_document(message: types.Message, state: FSMContex
         file_id=document.file_id,
         filename=document.file_name or f"telegram-document-{message.message_id}",
         mime_type=mime_type,
+        file_size=getattr(document, "file_size", None),
     )
 
 
@@ -613,6 +655,7 @@ async def extract_pending_requisites_file(callback: CallbackQuery, state: FSMCon
         file_id=str(pending.get("file_id")),
         filename=str(pending.get("filename") or "telegram-file"),
         mime_type=str(pending.get("mime_type") or "application/octet-stream"),
+        file_size=_normalize_file_size(pending.get("file_size")),
         telegram_user_id=callback.from_user.id,
         telegram_chat_id=pending.get("telegram_chat_id") or (callback.message.chat.id if callback.message and callback.message.chat else None),
         telegram_message_id=pending.get("telegram_message_id"),
@@ -849,7 +892,10 @@ async def _run_repair_nameplate_recognition_for_order(
         return
 
     try:
-        content = await _download_telegram_file(str(pending.get("file_id")))
+        content = await _download_telegram_file(
+            str(pending.get("file_id")),
+            expected_size=_normalize_file_size(pending.get("file_size")),
+        )
         recognized = await BotRepairNameplateService.recognize_bytes(
             content=content,
             filename=str(pending.get("filename") or "telegram-nameplate.jpg"),
@@ -1108,7 +1154,10 @@ async def _run_warranty_nameplate_recognition_for_order(
         return
 
     try:
-        content = await _download_telegram_file(str(pending.get("file_id")))
+        content = await _download_telegram_file(
+            str(pending.get("file_id")),
+            expected_size=_normalize_file_size(pending.get("file_size")),
+        )
         recognized = await BotRepairNameplateService.recognize_bytes(
             content=content,
             filename=str(pending.get("filename") or "telegram-warranty-nameplate.jpg"),
@@ -1445,14 +1494,58 @@ async def edit_price_finish(message: types.Message, state: FSMContext):
     await message.answer("✅ Цена обновлена.")
     await state.clear()
 
-@router.callback_query(F.data.startswith("del_confirm_"))
-async def delete_item(callback: CallbackQuery):
+@router.callback_query(F.data.startswith("del_prompt_"))
+async def prompt_delete_item(callback: CallbackQuery, state: FSMContext):
     if not await _is_admin_user(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    product_id = int(callback.data.split("_")[-1])
+    token = secrets.token_hex(4)
+    await state.update_data(delete_product_confirmation={"product_id": product_id, "token": token})
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="Да, удалить", callback_data=f"del_confirm_{product_id}_{token}"),
+                InlineKeyboardButton(text="Отмена", callback_data="del_cancel"),
+            ]
+        ]
+    )
+    await callback.message.answer(
+        f"Удалить товар #{product_id}? Действие нельзя отменить.",
+        reply_markup=keyboard,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "del_cancel")
+async def cancel_delete_item(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(delete_product_confirmation={})
+    await callback.message.edit_text("Удаление отменено.")
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("del_confirm_"))
+async def delete_item(callback: CallbackQuery, state: FSMContext):
+    if not await _is_admin_user(callback.from_user.id):
+        return
+
+    parts = str(callback.data or "").split("_")
+    product_id = int(parts[2]) if len(parts) >= 3 and parts[2].isdigit() else 0
+    token = parts[3] if len(parts) >= 4 else ""
+    data = await state.get_data()
+    confirmation = data.get("delete_product_confirmation") if isinstance(data, dict) else None
+    if (
+        not isinstance(confirmation, dict)
+        or confirmation.get("product_id") != product_id
+        or confirmation.get("token") != token
+    ):
+        await callback.answer("Подтверждение устарело. Нажмите удалить ещё раз.", show_alert=True)
         return
     
     async with async_session_maker() as session:
         try:
-            deleted = await ProductService.delete(session, int(callback.data.split("_")[-1]))
+            deleted = await ProductService.delete(session, product_id)
         except ValueError as exc:
             await callback.answer(str(exc), show_alert=True)
             return
@@ -1461,5 +1554,6 @@ async def delete_item(callback: CallbackQuery):
         await callback.answer("Товар не найден", show_alert=True)
         return
 
+    await state.update_data(delete_product_confirmation={})
     await callback.message.delete()
     await callback.answer("Удалено")

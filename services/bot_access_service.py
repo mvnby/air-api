@@ -54,7 +54,9 @@ class BotAccessService:
             .order_by(StaffUser.id.asc())
         )
         user = result.scalars().first()
-        if user and StaffUserService.is_active(user):
+        if user:
+            if not StaffUserService.is_active(user):
+                return context
             roles = StaffUserService.normalize_roles(user.roles)
             primary_role = StaffUserService.primary_role(user)
             return BotAccessContext(

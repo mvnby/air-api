@@ -51,7 +51,7 @@ async def main(*, wait_when_disabled: bool = True):
     dp.include_router(admin.router)
     
     await _setup_bot_commands()
-    await bot.delete_webhook(drop_pending_updates=True)
+    await bot.delete_webhook(drop_pending_updates=settings.BOT_DROP_PENDING_UPDATES)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":

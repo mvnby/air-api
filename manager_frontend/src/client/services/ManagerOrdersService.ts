@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { ManagerOrderCreatePayload } from '../models/ManagerOrderCreatePayload';
 import type { ManagerOrderDetailResponse } from '../models/ManagerOrderDetailResponse';
+import type { ManagerOrderDocumentGeneratePayload } from '../models/ManagerOrderDocumentGeneratePayload';
 import type { ManagerOrderDocumentResponse } from '../models/ManagerOrderDocumentResponse';
 import type { ManagerOrderExportRequest } from '../models/ManagerOrderExportRequest';
 import type { ManagerOrderImportCommitRequest } from '../models/ManagerOrderImportCommitRequest';
@@ -408,6 +409,7 @@ export class ManagerOrdersService {
      * @param scopeServiceLineIds Order service line IDs included in scoped closing document
      * @param scopeServiceLineQuantities JSON map/list of service line quantities included in scoped closing document
      * @param scopeProductLineIds Order product line IDs included in scoped closing document
+     * @param requestBody
      * @returns ManagerOrderDocumentResponse Successful Response
      * @throws ApiError
      */
@@ -425,6 +427,7 @@ export class ManagerOrdersService {
         scopeServiceLineIds?: (Array<number> | null),
         scopeServiceLineQuantities?: (string | null),
         scopeProductLineIds?: (Array<number> | null),
+        requestBody?: (ManagerOrderDocumentGeneratePayload | null),
     ): CancelablePromise<ManagerOrderDocumentResponse> {
         return __request(OpenAPI, {
             method: 'POST',
@@ -446,6 +449,8 @@ export class ManagerOrdersService {
                 'scope_service_line_quantities': scopeServiceLineQuantities,
                 'scope_product_line_ids': scopeProductLineIds,
             },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

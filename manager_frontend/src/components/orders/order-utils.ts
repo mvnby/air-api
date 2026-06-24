@@ -109,6 +109,13 @@ export function buildCustomerOrderRenderItems(
     }
 
     const groupedByCustomer = new Map<number, ManagerOrderListItemResponse[]>();
+    for (const order of orders) {
+        const customerId = order.customer?.id;
+        if (!customerId || (customerCounts.get(customerId) || 0) < 2) continue;
+        const group = groupedByCustomer.get(customerId);
+        if (group) group.push(order);
+        else groupedByCustomer.set(customerId, [order]);
+    }
     const emittedCustomers = new Set<number>();
     const items: OrderRenderItem[] = [];
 
@@ -119,9 +126,6 @@ export function buildCustomerOrderRenderItems(
             continue;
         }
 
-        if (!groupedByCustomer.has(customerId)) {
-            groupedByCustomer.set(customerId, orders.filter((item) => item.customer?.id === customerId));
-        }
         if (emittedCustomers.has(customerId)) continue;
 
         emittedCustomers.add(customerId);

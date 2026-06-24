@@ -111,12 +111,52 @@ async def test_delete_item_uses_callback_answer(monkeypatch):
     service_mock = AsyncMock(return_value=False)
     monkeypatch.setattr(admin_handler.ProductService, "delete", service_mock)
 
-    callback = _DummyCallback(data="del_confirm_10", user_id=2)
-    await admin_handler.delete_item(callback)
+    callback = _DummyCallback(data="del_confirm_10_abcd1234", user_id=2)
+    state = _DummyState({"delete_product_confirmation": {"product_id": 10, "token": "abcd1234"}})
+    await admin_handler.delete_item(callback, state)
 
     service_mock.assert_awaited_once()
     admin_check.assert_awaited_once_with(2)
     callback.answer.assert_awaited_with("Товар не найден", show_alert=True)
+
+
+@pytest.mark.asyncio
+async def test_delete_item_prompt_requires_second_confirmation(monkeypatch):
+    admin_check = AsyncMock(return_value=True)
+    monkeypatch.setattr(admin_handler, "_is_admin_user", admin_check)
+    service_mock = AsyncMock(return_value=True)
+    monkeypatch.setattr(admin_handler.ProductService, "delete", service_mock)
+
+    callback = _DummyCallback(data="del_prompt_10", user_id=2)
+    state = _DummyState({})
+    await admin_handler.prompt_delete_item(callback, state)
+
+    service_mock.assert_not_called()
+    callback.message.answer.assert_awaited_once()
+    text = callback.message.answer.await_args.args[0]
+    keyboard = callback.message.answer.await_args.kwargs["reply_markup"]
+    assert "Удалить товар #10" in text
+    confirm_data = keyboard.inline_keyboard[0][0].callback_data
+    assert confirm_data.startswith("del_confirm_10_")
+    assert keyboard.inline_keyboard[0][1].callback_data == "del_cancel"
+    assert state._data["delete_product_confirmation"]["product_id"] == 10
+    assert state._data["delete_product_confirmation"]["token"] == confirm_data.split("_")[-1]
+    callback.answer.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_delete_item_rejects_stale_direct_confirmation(monkeypatch):
+    admin_check = AsyncMock(return_value=True)
+    monkeypatch.setattr(admin_handler, "_is_admin_user", admin_check)
+    service_mock = AsyncMock(return_value=True)
+    monkeypatch.setattr(admin_handler.ProductService, "delete", service_mock)
+
+    callback = _DummyCallback(data="del_confirm_10", user_id=2)
+    state = _DummyState({})
+    await admin_handler.delete_item(callback, state)
+
+    service_mock.assert_not_called()
+    callback.answer.assert_awaited_with("Подтверждение устарело. Нажмите удалить ещё раз.", show_alert=True)
 
 
 @pytest.mark.asyncio
@@ -127,7 +167,7 @@ async def test_delete_item_skips_service_for_non_admin(monkeypatch):
     monkeypatch.setattr(admin_handler.ProductService, "delete", service_mock)
 
     callback = _DummyCallback(data="del_confirm_10", user_id=3)
-    await admin_handler.delete_item(callback)
+    await admin_handler.delete_item(callback, _DummyState({}))
 
     admin_check.assert_awaited_once_with(3)
     service_mock.assert_not_called()
@@ -236,6 +276,7 @@ async def test_requisites_photo_prompts_for_action_without_recognition(monkeypat
         "file_id": "large-photo",
         "filename": "telegram-photo-55.jpg",
         "mime_type": "image/jpeg",
+        "file_size": None,
         "telegram_message_id": 55,
         "telegram_chat_id": 100,
     }
@@ -292,6 +333,7 @@ async def test_requisites_document_prompts_for_pdf(monkeypatch):
         file_id="pdf-file",
         file_name="requisites.pdf",
         mime_type="application/pdf",
+        file_size=512,
     )
     state = _DummyState({})
 
@@ -305,10 +347,71 @@ async def test_requisites_document_prompts_for_pdf(monkeypatch):
     download_mock.assert_not_called()
     assert state._data["pending_requisites_file"]["file_id"] == "pdf-file"
     assert state._data["pending_requisites_file"]["mime_type"] == "application/pdf"
+    assert state._data["pending_requisites_file"]["file_size"] == 512
     args, kwargs = message.answer.await_args
     callbacks = [row[0].callback_data for row in kwargs["reply_markup"].inline_keyboard]
     assert "repair_nameplate_start" not in callbacks
     assert "warranty_nameplate_start" not in callbacks
+
+
+@pytest.mark.asyncio
+async def test_requisites_document_rejects_large_file_before_pending(monkeypatch):
+    message = _DummyMessage(text="", user_id=5)
+    message.document = SimpleNamespace(
+        file_id="large-pdf-file",
+        file_name="large.pdf",
+        mime_type="application/pdf",
+        file_size=admin_handler.CustomerRequisitesRecognitionService.MAX_FILE_SIZE_BYTES + 1,
+    )
+    state = _DummyState({})
+
+    monkeypatch.setattr(admin_handler, "_is_staff_user", AsyncMock(return_value=True))
+    admin_check = AsyncMock(return_value=True)
+    monkeypatch.setattr(admin_handler, "_is_admin_user", admin_check)
+
+    await admin_handler.recognize_requisites_document(message, state)
+
+    assert "pending_requisites_file" not in state._data
+    state.update_data.assert_not_called()
+    admin_check.assert_not_called()
+    message.answer.assert_awaited_once_with("Файл слишком большой. Максимум 10 МБ.")
+
+
+@pytest.mark.asyncio
+async def test_download_telegram_file_rejects_large_metadata_before_download(monkeypatch):
+    download_file = AsyncMock()
+    fake_bot = SimpleNamespace(
+        get_file=AsyncMock(
+            return_value=SimpleNamespace(
+                file_path="documents/large.pdf",
+                file_size=admin_handler.CustomerRequisitesRecognitionService.MAX_FILE_SIZE_BYTES + 1,
+            )
+        ),
+        download_file=download_file,
+    )
+    monkeypatch.setattr(admin_handler, "bot", fake_bot)
+
+    with pytest.raises(ValueError, match="Файл слишком большой"):
+        await admin_handler._download_telegram_file("large-file")
+
+    fake_bot.get_file.assert_awaited_once_with("large-file")
+    download_file.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_download_telegram_file_rejects_unknown_size_before_download(monkeypatch):
+    download_file = AsyncMock()
+    fake_bot = SimpleNamespace(
+        get_file=AsyncMock(return_value=SimpleNamespace(file_path="documents/unknown.pdf", file_size=None)),
+        download_file=download_file,
+    )
+    monkeypatch.setattr(admin_handler, "bot", fake_bot)
+
+    with pytest.raises(ValueError, match="размер файла"):
+        await admin_handler._download_telegram_file("unknown-file")
+
+    fake_bot.get_file.assert_awaited_once_with("unknown-file")
+    download_file.assert_not_called()
 
 
 @pytest.mark.asyncio

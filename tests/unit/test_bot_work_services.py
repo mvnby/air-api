@@ -2,14 +2,16 @@ from datetime import datetime, timedelta
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, select
 
+from core.config import settings
 from crud.product import ProductDAO
-from models import Customer, GlobalConfig, Installer, Order, OrderInstaller, OrderStatus, OrderWorkStage, StaffUser
+from models import Customer, GlobalConfig, Installer, Lead, Order, OrderInstaller, OrderStatus, OrderWorkStage, StaffUser
 from models.common import OrderStageStatus
 from services.bot_access_service import BotAccessService
 from services.bot_product_selection_service import BotProductSelectionService
@@ -33,6 +35,19 @@ async def sqlite_staff_session(tmp_path: Path):
         yield session
 
     await engine.dispose()
+
+
+class _NoRowsResult:
+    def scalars(self):
+        return self
+
+    def first(self):
+        return None
+
+
+class _NoExistingQuickOrderSession:
+    async def execute(self, *args, **kwargs):
+        return _NoRowsResult()
 
 
 def test_quick_order_fallback_parses_service_phone_address_and_date():
@@ -392,6 +407,24 @@ def test_staff_product_keyboard_has_client_text_action(monkeypatch):
     assert keyboard.inline_keyboard[0][0].url == "https://example.test/product/midea-12/"
     assert keyboard.inline_keyboard[1][0].text == "Текст клиенту"
     assert keyboard.inline_keyboard[1][0].callback_data == "product_client_text_42"
+
+
+def test_admin_product_keyboard_uses_delete_prompt(monkeypatch):
+    monkeypatch.setattr(
+        "services.bot_product_selection_service.settings",
+        SimpleNamespace(PUBLIC_SITE_URL="https://example.test"),
+    )
+
+    keyboard = get_product_keyboard(
+        42,
+        is_admin=True,
+        product={"id": 42, "slug": "midea-12"},
+        staff_mode=True,
+    )
+
+    delete_button = keyboard.inline_keyboard[-1][1]
+    assert delete_button.text == "❌ Удалить"
+    assert delete_button.callback_data == "del_prompt_42"
 
 
 def test_product_client_text_is_forwardable(monkeypatch):
@@ -833,6 +866,26 @@ async def test_bot_access_context_for_staff_and_non_staff(sqlite_staff_session):
 
 
 @pytest.mark.asyncio
+async def test_bot_access_context_blocked_staff_overrides_legacy_admin_ids(sqlite_staff_session, monkeypatch):
+    monkeypatch.setattr(settings, "ADMIN_IDS", "999", raising=False)
+    sqlite_staff_session.add(
+        StaffUser(
+            display_name="Заблокированный",
+            status="blocked",
+            primary_role="owner",
+            roles=["owner"],
+            telegram_id=999,
+        )
+    )
+    await sqlite_staff_session.commit()
+
+    context = await BotAccessService.get_context(sqlite_staff_session, 999)
+
+    assert not context.is_staff
+    assert not context.is_manager
+
+
+@pytest.mark.asyncio
 async def test_product_selection_builds_tiers(monkeypatch):
     async def fake_get_curated(session, area, is_inverter, limit=12, **kwargs):
         if is_inverter:
@@ -1122,7 +1175,7 @@ async def test_product_read_curated_passes_power_range_to_dao(monkeypatch):
     monkeypatch.setattr(ProductDAO, "get_filtered", fake_get_filtered)
 
     items = await ProductReadService.get_curated(
-        object(),
+        _NoExistingQuickOrderSession(),
         area=15,
         area_min=15,
         area_max=24,
@@ -1144,9 +1197,17 @@ async def test_product_read_curated_passes_power_range_to_dao(monkeypatch):
 async def test_quick_order_create_uses_order_service_and_stage_for_dated_work(monkeypatch):
     calls = {}
 
-    async def fake_create_manager_order(session, payload):
-        calls["payload"] = payload
-        return {"id": 42}
+    async def fake_create_lead(session, payload):
+        calls["lead_payload"] = payload
+        return {"id": 7}
+
+    async def fake_qualify_lead(session, lead_id, payload):
+        calls["qualify"] = {"lead_id": lead_id, "payload": payload}
+        return {"lead": {"id": lead_id, "status": "qualified"}, "customer_id": 5, "order_id": 42}
+
+    async def fake_update_order(session, order_id, payload):
+        calls["update"] = {"order_id": order_id, "payload": payload}
+        return {"id": order_id, "status": "new_lead"}
 
     async def fake_add_order_stage(session, order_id, payload):
         calls["stage_order_id"] = order_id
@@ -1157,9 +1218,12 @@ async def test_quick_order_create_uses_order_service_and_stage_for_dated_work(mo
         calls["notify"] = {"order_id": order_id, "source_label": source_label}
         return 1
 
+    monkeypatch.setattr("services.bot_quick_order_service.LeadService.create_lead", fake_create_lead)
+    monkeypatch.setattr("services.bot_quick_order_service.LeadService.qualify_lead", fake_qualify_lead)
+    monkeypatch.setattr("services.bot_quick_order_service.OrderService.update_order_for_manager", fake_update_order)
     monkeypatch.setattr(
         "services.bot_quick_order_service.OrderService.create_manager_order",
-        fake_create_manager_order,
+        AsyncMock(side_effect=AssertionError("quick order must go through LeadService")),
     )
     monkeypatch.setattr(
         "services.bot_quick_order_service.OrderService.add_order_stage",
@@ -1171,7 +1235,7 @@ async def test_quick_order_create_uses_order_service_and_stage_for_dated_work(mo
     )
 
     order = await BotQuickOrderService.create_order_from_draft(
-        object(),
+        _NoExistingQuickOrderSession(),
         {
             "name": "Иван",
             "phone": "+375291234567",
@@ -1183,8 +1247,14 @@ async def test_quick_order_create_uses_order_service_and_stage_for_dated_work(mo
     )
 
     assert order["id"] == 42
-    assert calls["payload"].source == "bot"
-    assert calls["payload"].service_type == "install_only"
+    assert calls["lead_payload"].source == "bot"
+    assert calls["lead_payload"].segment_hint == "b2c"
+    assert calls["lead_payload"].next_followup_date.isoformat() == "2026-06-15T14:00:00"
+    assert calls["qualify"]["lead_id"] == 7
+    assert calls["qualify"]["payload"].delivery_address == "Победы 15"
+    assert calls["update"]["order_id"] == 42
+    assert calls["update"]["payload"].title == "Монтаж"
+    assert calls["update"]["payload"].service_type == "install_only"
     assert calls["stage_order_id"] == 42
     assert calls["stage_payload"].name == "Монтаж"
     assert calls["notify"] == {"order_id": 42, "source_label": "Telegram-бот"}
@@ -1194,9 +1264,17 @@ async def test_quick_order_create_uses_order_service_and_stage_for_dated_work(mo
 async def test_quick_order_create_notifies_admins_for_maintenance_without_stage(monkeypatch):
     calls = {}
 
-    async def fake_create_manager_order(session, payload):
-        calls["payload"] = payload
-        return {"id": 43}
+    async def fake_create_lead(session, payload):
+        calls["lead_payload"] = payload
+        return {"id": 8}
+
+    async def fake_qualify_lead(session, lead_id, payload):
+        calls["qualify"] = {"lead_id": lead_id, "payload": payload}
+        return {"lead": {"id": lead_id, "status": "qualified"}, "customer_id": 5, "order_id": 43}
+
+    async def fake_update_order(session, order_id, payload):
+        calls["update"] = {"order_id": order_id, "payload": payload}
+        return {"id": order_id, "status": payload.status}
 
     async def fake_add_order_stage(session, order_id, payload):
         raise AssertionError("maintenance quick orders should use order installation_date, not a work stage")
@@ -1205,9 +1283,12 @@ async def test_quick_order_create_notifies_admins_for_maintenance_without_stage(
         calls["notify"] = {"order_id": order_id, "source_label": source_label}
         return 1
 
+    monkeypatch.setattr("services.bot_quick_order_service.LeadService.create_lead", fake_create_lead)
+    monkeypatch.setattr("services.bot_quick_order_service.LeadService.qualify_lead", fake_qualify_lead)
+    monkeypatch.setattr("services.bot_quick_order_service.OrderService.update_order_for_manager", fake_update_order)
     monkeypatch.setattr(
         "services.bot_quick_order_service.OrderService.create_manager_order",
-        fake_create_manager_order,
+        AsyncMock(side_effect=AssertionError("quick order must go through LeadService")),
     )
     monkeypatch.setattr(
         "services.bot_quick_order_service.OrderService.add_order_stage",
@@ -1219,7 +1300,7 @@ async def test_quick_order_create_notifies_admins_for_maintenance_without_stage(
     )
 
     order = await BotQuickOrderService.create_order_from_draft(
-        object(),
+        _NoExistingQuickOrderSession(),
         {
             "name": "Иван",
             "phone": "+375291234567",
@@ -1231,7 +1312,137 @@ async def test_quick_order_create_notifies_admins_for_maintenance_without_stage(
     )
 
     assert order["id"] == 43
-    assert calls["payload"].source == "bot"
-    assert calls["payload"].service_type == "maintenance"
-    assert calls["payload"].target_date.isoformat() == "2026-06-15T14:00:00"
+    assert calls["lead_payload"].source == "bot"
+    assert calls["qualify"]["payload"].delivery_address == "Победы 15"
+    assert calls["update"]["payload"].title == "Обслуживание"
+    assert calls["update"]["payload"].service_type == "maintenance"
+    assert calls["update"]["payload"].status == "negotiation"
+    assert calls["update"]["payload"].installation_date.isoformat() == "2026-06-15T14:00:00"
     assert calls["notify"] == {"order_id": 43, "source_label": "Telegram-бот"}
+
+
+@pytest.mark.asyncio
+async def test_quick_order_create_persists_lead_funnel_and_calendar_stage(db, monkeypatch):
+    notify = AsyncMock(return_value=1)
+    monkeypatch.setattr(
+        "services.bot_quick_order_service.NotificationService.notify_admins_staff_order_created",
+        notify,
+    )
+
+    order = await BotQuickOrderService.create_order_from_draft(
+        db,
+        {
+            "name": "Иван",
+            "phone": "+375291234567",
+            "address": "Победы 15",
+            "service_type": "install_only",
+            "target_date": "2026-06-15T14:00:00",
+            "request_text": "Монтаж, Иван, Победы 15",
+        },
+    )
+
+    assert order["id"] > 0
+    lead = (await db.execute(select(Lead))).scalars().one()
+    assert lead.source == "bot"
+    assert lead.status == "qualified"
+    assert lead.converted_order_id == order["id"]
+
+    persisted_order = await db.get(Order, order["id"])
+    assert persisted_order is not None
+    assert persisted_order.lead_source == "bot"
+    assert persisted_order.delivery_address == "Победы 15"
+    assert persisted_order.title == "Монтаж"
+    assert persisted_order.technical_meta["service_type"] == "install_only"
+
+    stage = (await db.execute(select(OrderWorkStage))).scalars().one()
+    assert stage.order_id == order["id"]
+    assert stage.name == "Монтаж"
+    assert stage.start_time.isoformat() == "2026-06-15T14:00:00"
+    notify.assert_awaited_once_with(db, order["id"], source_label="Telegram-бот")
+
+
+@pytest.mark.asyncio
+async def test_quick_order_retry_after_partial_failure_reuses_lead_and_order(db, monkeypatch):
+    from services.order_service import OrderService
+
+    notify = AsyncMock(return_value=1)
+    monkeypatch.setattr(
+        "services.bot_quick_order_service.NotificationService.notify_admins_staff_order_created",
+        notify,
+    )
+    original_add_order_stage = OrderService.add_order_stage
+    stage_attempts = 0
+
+    async def flaky_add_order_stage(session, order_id, payload):
+        nonlocal stage_attempts
+        stage_attempts += 1
+        if stage_attempts == 1:
+            raise RuntimeError("stage failed")
+        return await original_add_order_stage(session, order_id, payload)
+
+    monkeypatch.setattr("services.bot_quick_order_service.OrderService.add_order_stage", flaky_add_order_stage)
+
+    draft = {
+        "name": "Иван",
+        "phone": "+375291234567",
+        "address": "Победы 15",
+        "service_type": "install_only",
+        "target_date": "2026-06-15T14:00:00",
+        "request_text": "Монтаж, Иван, Победы 15",
+    }
+
+    with pytest.raises(RuntimeError, match="stage failed"):
+        await BotQuickOrderService.create_order_from_draft(db, draft)
+
+    leads_after_failure = (await db.execute(select(Lead))).scalars().all()
+    orders_after_failure = (await db.execute(select(Order))).scalars().all()
+    stages_after_failure = (await db.execute(select(OrderWorkStage))).scalars().all()
+    assert len(leads_after_failure) == 1
+    assert len(orders_after_failure) == 1
+    assert leads_after_failure[0].source_fingerprint.startswith("bot_quick_order:")
+    assert leads_after_failure[0].converted_order_id == orders_after_failure[0].id
+    assert stages_after_failure == []
+
+    order = await BotQuickOrderService.create_order_from_draft(db, draft)
+
+    leads = (await db.execute(select(Lead))).scalars().all()
+    orders = (await db.execute(select(Order))).scalars().all()
+    stages = (await db.execute(select(OrderWorkStage))).scalars().all()
+    assert len(leads) == 1
+    assert len(orders) == 1
+    assert order["id"] == orders_after_failure[0].id
+    assert len(stages) == 1
+    assert stages[0].order_id == order["id"]
+    assert notify.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_quick_order_create_ignores_duplicate_callback(monkeypatch):
+    async def fake_access_context(user_id):
+        return SimpleNamespace(is_staff=True, is_manager=True)
+
+    class _State:
+        async def get_data(self):
+            return {"quick_order_creating": True, "quick_order_draft": {"request_text": "Тест"}}
+
+        async def update_data(self, **kwargs):
+            raise AssertionError("duplicate callback should not update state")
+
+        async def clear(self):
+            raise AssertionError("duplicate callback should not clear state")
+
+    callback = SimpleNamespace(
+        from_user=SimpleNamespace(id=123),
+        message=SimpleNamespace(edit_text=AsyncMock(), answer=AsyncMock()),
+        answer=AsyncMock(),
+    )
+
+    async def fake_create_order(*args, **kwargs):
+        raise AssertionError("duplicate callback should not create order")
+
+    monkeypatch.setattr(work_handlers, "_access_context", fake_access_context)
+    monkeypatch.setattr(work_handlers.BotQuickOrderService, "create_order_from_draft", fake_create_order)
+
+    await work_handlers.quick_order_create(callback, _State())
+
+    callback.answer.assert_awaited_once_with("Заказ уже создается", show_alert=False)

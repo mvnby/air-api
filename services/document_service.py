@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from typing import Any, Optional, List
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, func, or_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from sqlalchemy.orm import selectinload
@@ -144,7 +144,7 @@ class DocumentService:
             if template.get("id") == template_id:
                 return DocumentRoleService.normalize_role_type(template.get("document_role_type"))
         return DocumentRoleService.normalize_role_type(None)
-    
+
     @staticmethod
     async def create_or_get_document(
         session: AsyncSession,
@@ -161,20 +161,21 @@ class DocumentService:
         scope_service_line_ids: Optional[List[int]] = None,
         scope_service_line_quantities: Any = None,
         scope_product_line_ids: Optional[List[int]] = None,
+        force_create: bool = False,
     ) -> OrderDocument:
         """
         Создает документ или возвращает существующий.
-        
+
         Args:
             session: Асинхронная сессия БД
             order_id: ID заказа
             doc_type: Тип документа (contract, invoice, offer, act, etc.)
             template_id: Опциональный ID шаблона (Google Drive file ID)
-            
+
         Returns:
             OrderDocument объект с данными о документе
         """
-        if doc_type in DocumentService.PROPOSAL_SCOPED_DOC_TYPES or doc_type in DocumentService.CLOSING_DOC_TYPES:
+        if force_create or doc_type in DocumentService.PROPOSAL_SCOPED_DOC_TYPES or doc_type in DocumentService.CLOSING_DOC_TYPES:
             return await DocumentService._create_new_document(
                 session,
                 order_id,
@@ -200,10 +201,10 @@ class DocumentService:
         ).order_by(OrderDocument.created_at.desc())
         result = await session.execute(query)
         existing_doc = result.scalars().first()
-        
+
         if existing_doc:
             return existing_doc
-        
+
         # 2. Создаем новый документ
         return await DocumentService._create_new_document(
             session,
@@ -238,9 +239,19 @@ class DocumentService:
         scope_service_line_ids: Optional[List[int]] = None,
         scope_service_line_quantities: Any = None,
         scope_product_line_ids: Optional[List[int]] = None,
+        additional_conditions: Optional[str] = None,
     ) -> dict:
         if doc_type not in DocumentService.ALLOWED_DOC_TYPES:
             raise ValueError(f"Unsupported document type: {doc_type}")
+
+        if additional_conditions is not None:
+            order = await session.get(Order, order_id)
+            if not order:
+                raise ValueError("Order not found")
+            cleaned_conditions = additional_conditions.strip()
+            order.additional_conditions = cleaned_conditions or None
+            session.add(order)
+            await session.flush()
 
         doc = await DocumentService.create_or_get_document(
             session=session,
@@ -257,6 +268,7 @@ class DocumentService:
             scope_service_line_ids=scope_service_line_ids,
             scope_service_line_quantities=scope_service_line_quantities,
             scope_product_line_ids=scope_product_line_ids,
+            force_create=additional_conditions is not None,
         )
         return {
             "doc_id": doc.id,
@@ -291,11 +303,11 @@ class DocumentService:
 
         try:
             pdf_content = get_google_service().export_file(document.google_file_id, mime_type='application/pdf')
-            
+
             from urllib.parse import quote
             filename = f"{document.number}.pdf"
             filename_encoded = quote(filename)
-            
+
             return pdf_content, filename_encoded
         except Exception as exc:
             raise ValueError(f"Error exporting PDF: {str(exc)}")
@@ -326,7 +338,7 @@ class DocumentService:
 
         await session.delete(document)
         await session.commit()
-        
+
         return order_id
 
     @staticmethod
@@ -345,7 +357,7 @@ class DocumentService:
 
         try:
             from services.google_service import get_google_service, DESTINATION_FOLDER_ID
-            
+
             doc_type = "uploaded_doc"
             file_id = get_google_service().upload_file(
                 file_path=tmp_path,
@@ -353,9 +365,9 @@ class DocumentService:
                 mime_type=DocumentService._upload_mime_type(file, suffix),
                 folder_id=DESTINATION_FOLDER_ID
             )
-            
+
             edit_url = f"https://drive.google.com/file/d/{file_id}/view?usp=sharing"
-            
+
             current_year = datetime.now().year
             query = select(OrderDocument).where(OrderDocument.order_id == order_id)
             result = await session.execute(query)
@@ -370,12 +382,12 @@ class DocumentService:
                 google_file_id=file_id,
                 google_edit_url=edit_url
             )
-            
+
             session.add(new_doc)
             await session.commit()
             await session.refresh(new_doc)
             return new_doc
-            
+
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
@@ -524,7 +536,7 @@ class DocumentService:
         query = select(OrderDocument).where(
             OrderDocument.order_id == order_id
         ).order_by(OrderDocument.created_at.desc())
-        
+
         result = await session.execute(query)
         return result.scalars().all()
 
@@ -537,7 +549,7 @@ class DocumentService:
         query = select(OrderDocument).join(Order).where(
             Order.customer_id == customer_id
         ).order_by(OrderDocument.date.desc())
-        
+
         result = await session.execute(query)
         return result.scalars().all()
 
@@ -819,7 +831,7 @@ class DocumentService:
             set_committed_value(order, "total_cost", total_cost)
             set_committed_value(order, "margin", total_amount - total_cost)
 
-    
+
     @staticmethod
     async def _create_new_document(
         session: AsyncSession,
@@ -873,17 +885,17 @@ class DocumentService:
         )
         if not template_id:
             raise ValueError(f"Unknown document type: {doc_type}")
-        
+
         # 2. Генерируем номер документа
         effective_doc_date = contract_date or datetime.now()
         if effective_doc_date.tzinfo is not None:
             effective_doc_date = effective_doc_date.replace(tzinfo=None)
         doc_number = await DocumentService._get_next_number(session, doc_type, base_date=effective_doc_date)
-        
+
         # 3. Формируем название документа
         doc_name = DOC_NAMES.get(doc_type, doc_type.upper())
         title = f"{doc_name} {doc_number}"
-        
+
         # 4. Получаем стратегию для подготовки данных
         strategy = DocumentFactory.get_strategy(doc_type, session, order_id)
         await strategy.fetch_order()
@@ -936,104 +948,114 @@ class DocumentService:
                 object_label = " — ".join(part for part in [object_title, object_address] if part)
                 replacements["{{act_object}}"] = object_label
                 replacements["{{work_object}}"] = object_label
-        
+
         # Добавляем номер документа в замены
         replacements["{{doc_number}}"] = doc_number
         replacements["{{number}}"] = doc_number
         strategy._append_placeholder_aliases(replacements)
-        
+
         # Добавляем специфичные для типа документа замены
         if hasattr(strategy, '_add_specific_replacements'):
             strategy._add_specific_replacements(replacements)
             strategy._append_placeholder_aliases(replacements)
-        
-        # 5. Определяем тип документа (Docs или Sheets)
-        is_sheet = doc_type in ["tn2", "ttn1"]
-        
-        if is_sheet:
-            # Google Sheets документ
-            from services.documents.logistics import LogisticsSheetStrategy
-            if isinstance(strategy, LogisticsSheetStrategy):
-                # Используем старый метод generate для Sheets
-                edit_url = await strategy.generate(
-                    doc_type,
-                    template_id=template_id,
-                    doc_number=doc_number,
-                    document_date=effective_doc_date,
-                    base_document=base_document,
-                    base_customer_contract=base_customer_contract,
-                )
-                
-                # Извлекаем file_id из URL
-                # URL формат: https://docs.google.com/spreadsheets/d/{file_id}/edit
-                import re
-                match = re.search(r'/spreadsheets/d/([a-zA-Z0-9-_]+)', edit_url)
-                if match:
-                    file_id = match.group(1)
-                else:
-                    raise ValueError(f"Could not extract file_id from URL: {edit_url}")
-            else:
-                raise ValueError(f"Expected LogisticsSheetStrategy for {doc_type}")
-        else:
-            # Google Docs документ
-            # 4. Копируем шаблон в Google Drive
-            file_info = get_google_service().copy_template(template_id, title)
-            file_id = file_info['file_id']
-            edit_url = file_info['edit_url']
-            
-            # 6. Заменяем плейсхолдеры в документе
-            get_google_service().replace_placeholders(file_id, replacements)
-            if doc_type in {"act", "invoice"} and strategy.order:
-                role_replacements = DocumentRoleService.build_word_replacements(
-                    DocumentRoleService.effective_role_type(strategy.order)
-                )
-                if role_replacements:
-                    get_google_service().replace_placeholders(file_id, role_replacements)
-            
-            # 7. Заполняем таблицу (если есть данные)
-            table_data = strategy._prepare_table_data() if hasattr(strategy, '_prepare_table_data') else []
-            if table_data and len(table_data) > 0:
-                # Определяем, нужен ли footer (строка "Всего")
-                has_footer = (doc_type not in ["work_order"])
-                
-                # Используем внутренний метод get_google_service() для заполнения таблицы
-                from googleapiclient.discovery import build
-                docs_service = build('docs', 'v1', credentials=get_google_service().creds)
-                get_google_service()._fill_table(docs_service, file_id, table_data, has_footer)
-        
-        # 8. Создаем запись в БД
-        new_doc = OrderDocument(
-            order_id=order_id,
-            proposal_id=effective_proposal_id,
-            base_document_id=base_document.id if base_document else None,
-            base_customer_contract_id=base_customer_contract.id if base_customer_contract else None,
-            document_template_id=document_template_id,
-            template_id=template_id,
-            scope_customer_branch_id=document_scope.get("customer_branch_id"),
-            scope_title=document_scope.get("title"),
-            scope_address=document_scope.get("address"),
-            scope_meta=document_scope or None,
-            doc_type=doc_type,
-            number=doc_number,
-            date=effective_doc_date,
-            google_file_id=file_id,
-            google_edit_url=edit_url
-        )
-        
-        session.add(new_doc)
-        
-        if doc_type in ["invoice", "offer"]:
-            order = await session.get(Order, order_id)
-            if order and order.status in ["new_lead", "measurement"]:
-                from models.common import OrderStatus
-                order.status = OrderStatus.NEGOTIATION
-                order.proposal_status = "sent"
-                session.add(order)
 
-        await session.commit()
-        await session.refresh(new_doc)
-        
-        return new_doc
+        file_id: Optional[str] = None
+        try:
+            # 5. Определяем тип документа (Docs или Sheets)
+            is_sheet = doc_type in ["tn2", "ttn1"]
+
+            if is_sheet:
+                # Google Sheets документ
+                from services.documents.logistics import LogisticsSheetStrategy
+                if isinstance(strategy, LogisticsSheetStrategy):
+                    # Используем старый метод generate для Sheets
+                    edit_url = await strategy.generate(
+                        doc_type,
+                        template_id=template_id,
+                        doc_number=doc_number,
+                        document_date=effective_doc_date,
+                        base_document=base_document,
+                        base_customer_contract=base_customer_contract,
+                    )
+
+                    # Извлекаем file_id из URL
+                    # URL формат: https://docs.google.com/spreadsheets/d/{file_id}/edit
+                    import re
+                    match = re.search(r'/spreadsheets/d/([a-zA-Z0-9-_]+)', edit_url)
+                    if match:
+                        file_id = match.group(1)
+                    else:
+                        raise ValueError(f"Could not extract file_id from URL: {edit_url}")
+                else:
+                    raise ValueError(f"Expected LogisticsSheetStrategy for {doc_type}")
+            else:
+                # Google Docs документ
+                # 4. Копируем шаблон в Google Drive
+                google_service = get_google_service()
+                file_info = google_service.copy_template(template_id, title)
+                file_id = file_info['file_id']
+                edit_url = file_info['edit_url']
+
+                # 6. Заменяем плейсхолдеры в документе
+                google_service.replace_placeholders(file_id, replacements)
+                if doc_type in {"act", "invoice"} and strategy.order:
+                    role_replacements = DocumentRoleService.build_word_replacements(
+                        DocumentRoleService.effective_role_type(strategy.order)
+                    )
+                    if role_replacements:
+                        google_service.replace_placeholders(file_id, role_replacements)
+
+                # 7. Заполняем таблицу (если есть данные)
+                table_data = strategy._prepare_table_data() if hasattr(strategy, '_prepare_table_data') else []
+                if table_data and len(table_data) > 0:
+                    # Определяем, нужен ли footer (строка "Всего")
+                    has_footer = (doc_type not in ["work_order"])
+
+                    # Используем внутренний метод get_google_service() для заполнения таблицы
+                    from googleapiclient.discovery import build
+                    docs_service = build('docs', 'v1', credentials=google_service.creds)
+                    google_service._fill_table(docs_service, file_id, table_data, has_footer)
+
+            # 8. Создаем запись в БД
+            new_doc = OrderDocument(
+                order_id=order_id,
+                proposal_id=effective_proposal_id,
+                base_document_id=base_document.id if base_document else None,
+                base_customer_contract_id=base_customer_contract.id if base_customer_contract else None,
+                document_template_id=document_template_id,
+                template_id=template_id,
+                scope_customer_branch_id=document_scope.get("customer_branch_id"),
+                scope_title=document_scope.get("title"),
+                scope_address=document_scope.get("address"),
+                scope_meta=document_scope or None,
+                doc_type=doc_type,
+                number=doc_number,
+                date=effective_doc_date,
+                google_file_id=file_id,
+                google_edit_url=edit_url
+            )
+
+            session.add(new_doc)
+
+            if doc_type in ["invoice", "offer"]:
+                order = await session.get(Order, order_id)
+                if order and order.status in ["new_lead", "measurement"]:
+                    from models.common import OrderStatus
+                    order.status = OrderStatus.NEGOTIATION
+                    order.proposal_status = "sent"
+                    session.add(order)
+
+            await session.commit()
+            await session.refresh(new_doc)
+
+            return new_doc
+        except Exception:
+            if file_id:
+                try:
+                    get_google_service().delete_file(file_id)
+                except Exception:
+                    pass
+            raise
 
     @staticmethod
     def _apply_proposal_lines(order: Optional[Order], proposal_id: Optional[int]) -> Optional[int]:
@@ -1069,7 +1091,7 @@ class DocumentService:
         set_committed_value(order, "total_cost", total_cost)
         set_committed_value(order, "margin", total_amount - total_cost)
         return selected_id
-    
+
     @staticmethod
     async def _get_next_number(session: AsyncSession, doc_type: str, base_date: Optional[datetime] = None) -> str:
         """
@@ -1080,6 +1102,12 @@ class DocumentService:
 
         prefix = DocumentService.DOC_NUMBER_PREFIXES.get(doc_type, doc_type.upper()[:2])
         number_prefix = f"{prefix}-{current_year}-"
+        bind = session.get_bind()
+        if getattr(getattr(bind, "dialect", None), "name", "") == "postgresql":
+            await session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:lock_key)::bigint)"),
+                {"lock_key": f"order_document_number:{number_prefix}"},
+            )
 
         query = (
             select(OrderDocument)
@@ -1096,7 +1124,7 @@ class DocumentService:
                 break
             except (ValueError, IndexError):
                 continue
-        
+
         return f"{prefix}-{current_year}-{next_num:03d}"
 
     @staticmethod
@@ -1151,7 +1179,7 @@ class DocumentService:
         result = await session.execute(query)
         existing_count = int(result.scalar_one() or 0)
         return existing_count + 1
-    
+
     @staticmethod
     def _amount_in_words(amount: float) -> str:
         """

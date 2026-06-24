@@ -3,8 +3,10 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { LeadsInboxItemResponse } from './LeadsInboxItemResponse';
+import type { Meta } from './Meta';
 export type LeadsInboxListResponse = {
     items: Array<LeadsInboxItemResponse>;
     total: number;
+    meta: Meta;
 };
 

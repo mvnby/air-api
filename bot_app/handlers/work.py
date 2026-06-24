@@ -85,14 +85,19 @@ async def quick_order_create(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Недостаточно прав", show_alert=True)
         return
     data = await state.get_data()
+    if data.get("quick_order_creating"):
+        await callback.answer("Заказ уже создается", show_alert=False)
+        return
     draft = data.get("quick_order_draft")
     if not isinstance(draft, dict):
         await callback.answer("Черновик не найден", show_alert=True)
         return
+    await state.update_data(quick_order_creating=True)
     try:
         async with async_session_maker() as session:
             order = await BotQuickOrderService.create_order_from_draft(session, draft)
     except Exception as exc:
+        await state.update_data(quick_order_creating=False)
         await callback.answer(str(exc), show_alert=True)
         return
 

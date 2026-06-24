@@ -13,7 +13,7 @@ load_dotenv()
 
 class Settings(BaseSettings):
     # Bot Settings
-    BOT_TOKEN: str
+    BOT_TOKEN: str = ""
     ADMIN_IDS: str = ""
     ADMIN_ID: int = 0
     SECRET_KEY: str
@@ -108,6 +108,7 @@ class Settings(BaseSettings):
     SCHEDULER_INTERVAL: int = 6 # hours
     SCHEDULER_ENABLED: bool | None = None
     BOT_ENABLED: bool | None = None
+    BOT_DROP_PENDING_UPDATES: bool = False
 
     @field_validator("SCHEDULER_ENABLED", "BOT_ENABLED", mode="before")
     @classmethod

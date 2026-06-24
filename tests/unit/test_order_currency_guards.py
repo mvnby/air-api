@@ -1,5 +1,6 @@
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from models import Order, OrderProductLink, Payment, PaymentCurrency
 from routers import manager_settings
@@ -41,6 +42,11 @@ def test_payment_payload_rejects_invalid_currency():
 
     with pytest.raises(Exception):
         PaymentCreatePayload(amount=10, currency="USDT", type="prepayment")
+
+
+def test_payment_payload_rejects_non_positive_amounts():
+    with pytest.raises(ValidationError):
+        PaymentCreatePayload(amount=0, currency=PaymentCurrency.BYN, type="prepayment")
 
 
 @pytest.mark.asyncio

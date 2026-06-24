@@ -6,6 +6,7 @@ import { formatMoney } from './order-utils';
 import DateTimeField from '../ui/DateTimeField.vue';
 import OrderDocumentsPanel from './OrderDocumentsPanel.vue';
 import { getApiErrorMessage } from '../../utils/api-errors';
+import { fromLocalDateTimeInput } from '../../utils/datetime';
 
 const props = defineProps<{
   order: ManagerOrderDetailResponse;
@@ -35,7 +36,7 @@ const addStage = async () => {
     try {
         await ManagerOrdersService.createManagerOrderStage(props.order.id, {
             name: newStageName.value,
-            start_time: newStageStart.value ? newStageStart.value + ':00Z' : undefined,
+            start_time: fromLocalDateTimeInput(newStageStart.value) || undefined,
             installer_id: newStageInstaller.value,
         });
         showAddStage.value = false;
@@ -114,19 +115,36 @@ const bankReceiptsLoading = ref(false);
 const attachingReceiptId = ref<number | null>(null);
 const newPaymentAmount = ref<number | null>(null);
 const newPaymentType = ref<string>('postpayment');
+const isAddingPayment = ref(false);
+type PaymentCurrencyValue = 'BYN' | 'USD' | 'EUR';
+
+const paymentCurrency = computed<PaymentCurrencyValue>(() => {
+  const currency = props.order.target_currency;
+  return currency === 'USD' || currency === 'EUR' ? currency : 'BYN';
+});
+
+const formatPaymentAmount = (amount: number | null | undefined, currency?: string | null) => (
+  currency && currency !== 'BYN'
+    ? `${Number(amount || 0).toFixed(2)} ${currency}`
+    : formatMoney(amount || 0)
+);
 
 const addPayment = async () => {
-  if (!newPaymentAmount.value) return;
+  if (!newPaymentAmount.value || isAddingPayment.value) return;
+  isAddingPayment.value = true;
   try {
     await ManagerOrdersService.addManagerOrderPayment(props.order.id, {
         amount: newPaymentAmount.value,
         type: newPaymentType.value,
+        currency: paymentCurrency.value,
     });
     newPaymentAmount.value = null;
     emit('refresh');
     setToast('Платеж добавлен');
   } catch (error) {
     setToast(`Ошибка: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    isAddingPayment.value = false;
   }
 };
 
@@ -322,10 +340,12 @@ watch(() => props.order.id, () => {
           </div>
           
           <div class="flex items-end gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-              <label class="flex-1 field-label !mb-0 text-xs">Внести сумму
+              <label class="flex-1 field-label !mb-0 text-xs">Внести сумму ({{ paymentCurrency }})
                   <input v-model.number="newPaymentAmount" type="number" min="0" class="field-input mt-1 shadow-sm" placeholder="0.00" />
               </label>
-              <button class="btn-mini h-[38px] w-[100px]" :disabled="!newPaymentAmount" @click="addPayment">Внести</button>
+              <button class="btn-mini h-[38px] w-[100px]" :disabled="!newPaymentAmount || isAddingPayment" @click="addPayment">
+                {{ isAddingPayment ? '...' : 'Внести' }}
+              </button>
           </div>
 
           <div v-if="(order.balance_due || 0) > 0 && order.customer?.inn" class="mt-4 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
@@ -372,7 +392,9 @@ watch(() => props.order.id, () => {
                         Банк
                       </span>
                     </div>
-                    <span class="font-bold text-slate-800">{{ formatMoney(p.amount) }}</span>
+                    <span class="font-bold text-slate-800" :class="p.currency !== 'BYN' ? 'text-blue-600' : ''">
+                      {{ formatPaymentAmount(p.amount, p.currency) }}
+                    </span>
                     <span class="text-slate-400 w-16 text-right">{{ formatPaymentType(p.type) }}</span>
                   </div>
                   <div v-if="p.bank_receipt" class="mt-2 rounded-lg border border-emerald-100 bg-emerald-50/40 p-2 text-[11px] text-slate-600">

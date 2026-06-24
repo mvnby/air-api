@@ -16,6 +16,7 @@ from .common import (
 from .customer import Customer, CustomerBranch, CustomerContract, CustomerRequisitesRecognition, Lead
 from .equipment import CustomerEquipment, EquipmentComponent, EquipmentServiceHistory
 from .brand import Brand, ProductSeries
+from .bot_fsm import BotFsmState
 from .cart import Cart, CartItem
 from .catalog_import import CatalogImportJob
 from .content import Article, GlobalConfig
@@ -73,6 +74,7 @@ __all__ = [
     "Cart",
     "CartItem",
     "Brand",
+    "BotFsmState",
     "CatalogImportJob",
     "Customer",
     "CustomerBranch",

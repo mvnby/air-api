@@ -81,7 +81,7 @@ def get_product_keyboard(product_id, is_admin=False, in_favorites=False, product
             buttons.append(
                 [
                     InlineKeyboardButton(text="✏️ Цена", callback_data=f"edit_price_{product_id}"),
-                    InlineKeyboardButton(text="❌ Удалить", callback_data=f"del_confirm_{product_id}"),
+                    InlineKeyboardButton(text="❌ Удалить", callback_data=f"del_prompt_{product_id}"),
                 ]
             )
         return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -94,7 +94,7 @@ def get_product_keyboard(product_id, is_admin=False, in_favorites=False, product
     if is_admin:
         admin_row = [
             InlineKeyboardButton(text="✏️ Цена", callback_data=f"edit_price_{product_id}"),
-            InlineKeyboardButton(text="❌ Удалить", callback_data=f"del_confirm_{product_id}")
+            InlineKeyboardButton(text="❌ Удалить", callback_data=f"del_prompt_{product_id}")
         ]
         buttons.append(admin_row)
     return InlineKeyboardMarkup(inline_keyboard=buttons)

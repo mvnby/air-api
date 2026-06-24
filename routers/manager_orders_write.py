@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
@@ -33,6 +33,7 @@ from schemas import (
     ManagerOrderImportPreviewResponse,
     ManagerOrderCreatePayload,
     ManagerOrderDetailResponse,
+    ManagerOrderDocumentGeneratePayload,
     ManagerOrderDocumentResponse,
     ManagerOrderUpdatePayload,
     OrderProposalCreatePayload,
@@ -283,6 +284,7 @@ async def select_manager_order_proposal(
 async def generate_manager_order_document(
     order_id: int,
     doc_type: str,
+    payload: Optional[ManagerOrderDocumentGeneratePayload] = Body(None),
     document_template_id: Optional[int] = Query(None, description="Managed document template ID"),
     template_id: Optional[str] = Query(None, description="Google Drive template file ID"),
     contract_date: Optional[str] = Query(None, description="Document/contract date as ISO datetime"),
@@ -297,6 +299,7 @@ async def generate_manager_order_document(
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
 ):
+    draft_conditions_requested = payload is not None and payload.additional_conditions is not None
     try:
         parsed_contract_date = None
         if contract_date:
@@ -317,8 +320,11 @@ async def generate_manager_order_document(
             scope_service_line_ids=scope_service_line_ids,
             scope_service_line_quantities=scope_service_line_quantities,
             scope_product_line_ids=scope_product_line_ids,
+            additional_conditions=payload.additional_conditions if payload else None,
         )
     except ValueError as exc:
+        if draft_conditions_requested:
+            await session.rollback()
         raise manager_http_error(
             status_code=400,
             endpoint=GENERATE_MANAGER_ORDER_DOCUMENT,
@@ -326,6 +332,7 @@ async def generate_manager_order_document(
             message=str(exc),
         ) from exc
     except Exception as exc:
+        await session.rollback()
         raise manager_http_error(
             status_code=500,
             endpoint=GENERATE_MANAGER_ORDER_DOCUMENT,
@@ -349,10 +356,11 @@ async def add_manager_order_payment(
     try:
         return await OrderService.add_payment(session, order_id, payload)
     except ValueError as exc:
+        is_not_found = str(exc) == "Order not found"
         raise manager_http_error(
-            status_code=400,
+            status_code=404 if is_not_found else 400,
             endpoint=ADD_MANAGER_ORDER_PAYMENT,
-            error_code=BAD_REQUEST,
+            error_code=ORDER_NOT_FOUND if is_not_found else BAD_REQUEST,
             message=str(exc),
         ) from exc
 
@@ -371,10 +379,11 @@ async def delete_manager_order_payment(
     try:
         return await OrderService.delete_payment(session, order_id, payment_id)
     except ValueError as exc:
+        is_not_found = str(exc) == "Order not found"
         raise manager_http_error(
-            status_code=400,
+            status_code=404 if is_not_found else 400,
             endpoint=DELETE_MANAGER_ORDER_PAYMENT,
-            error_code=BAD_REQUEST,
+            error_code=ORDER_NOT_FOUND if is_not_found else BAD_REQUEST,
             message=str(exc),
         ) from exc
 

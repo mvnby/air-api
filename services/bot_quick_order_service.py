@@ -1,17 +1,21 @@
 import json
 import logging
 import re
+from hashlib import sha256
 from datetime import datetime, timedelta
 from html import escape
 from typing import Any, Optional
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from core.config import settings
 from core.input_validation import normalize_phone_digits
-from schemas import ManagerOrderCreatePayload, OrderWorkStageCreatePayload
+from models import Lead, Order, OrderWorkStage
+from schemas import LeadCreatePayload, LeadQualifyPayload, ManagerOrderUpdatePayload, OrderWorkStageCreatePayload
 from services.address_suggest_service import AddressSuggestService
+from services.lead_service import LeadService
 from services.notification_service import NotificationService
 from services.order_service import OrderService
 
@@ -283,6 +287,15 @@ class BotQuickOrderService:
             normalized["target_date"] = None
         return normalized
 
+    @classmethod
+    def _source_fingerprint(cls, normalized: dict[str, Any]) -> str:
+        fingerprint_payload = {
+            key: normalized.get(key)
+            for key in ("name", "phone", "address", "service_type", "target_date", "request_text")
+        }
+        raw = json.dumps(fingerprint_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return f"bot_quick_order:{sha256(raw.encode('utf-8')).hexdigest()}"
+
     @staticmethod
     def _address_tokens(value: str) -> set[str]:
         return set(re.findall(r"\d+[а-яa-z]?", value.casefold().replace("ё", "е")))
@@ -420,38 +433,106 @@ class BotQuickOrderService:
         if normalized.get("target_date"):
             target_date = datetime.fromisoformat(str(normalized["target_date"]).replace("Z", "+00:00"))
 
-        payload = ManagerOrderCreatePayload(
-            source="bot",
-            request_text=normalized["request_text"] or "Быстрый заказ из Telegram",
-            name=normalized.get("name"),
-            phone=normalized.get("phone"),
-            address=normalized.get("address"),
-            service_type=normalized.get("service_type"),
-            target_date=target_date,
-            customer_type="individual",
+        request_text = normalized["request_text"] or "Быстрый заказ из Telegram"
+        source_fingerprint = cls._source_fingerprint(normalized)
+        result = await session.execute(
+            select(Lead)
+            .where(Lead.source == "bot", Lead.source_fingerprint == source_fingerprint)
+            .order_by(Lead.created_at.desc())
+            .with_for_update()
         )
-        order = await OrderService.create_manager_order(session=session, payload=payload)
+        existing_lead = result.scalars().first()
+        if existing_lead and existing_lead.converted_order_id:
+            converted_order = await session.get(Order, int(existing_lead.converted_order_id))
+            if not converted_order:
+                raise ValueError("Связанный заказ для лида не найден")
+            qualification = {
+                "lead": LeadService._map_lead(existing_lead),
+                "customer_id": int(converted_order.customer_id or 0),
+                "order_id": int(converted_order.id or 0),
+            }
+        else:
+            if existing_lead:
+                lead_id = int(existing_lead.id or 0)
+            else:
+                lead = await LeadService.create_lead(
+                    session,
+                    LeadCreatePayload(
+                        source="bot",
+                        request_text=request_text,
+                        name=normalized.get("name"),
+                        phone=normalized.get("phone"),
+                        segment_hint="b2c",
+                        source_fingerprint=source_fingerprint,
+                        next_followup_date=target_date,
+                    ),
+                )
+                lead_id = int(lead["id"])
+            qualification = await LeadService.qualify_lead(
+                session,
+                lead_id,
+                LeadQualifyPayload(
+                    name=normalized.get("name"),
+                    phone=normalized.get("phone"),
+                    delivery_address=normalized.get("address"),
+                    customer_type="individual",
+                    order_comment=request_text,
+                ),
+            )
+        if not qualification:
+            raise ValueError("Не удалось квалифицировать лид")
+
+        order_id = int(qualification["order_id"])
+        service_type = normalized.get("service_type")
+        update_fields: dict[str, Any] = {}
+        default_title = OrderService._build_default_order_title(
+            service_type=service_type,
+            comment=request_text,
+        )
+        if default_title:
+            update_fields["title"] = default_title
+        if service_type:
+            update_fields["service_type"] = service_type
+        if target_date and service_type == "maintenance":
+            update_fields["installation_date"] = target_date
+            update_fields["status"] = "negotiation"
+
+        order = await OrderService.update_order_for_manager(
+            session,
+            order_id,
+            ManagerOrderUpdatePayload(**update_fields),
+        ) if update_fields else await OrderService.get_order_detail_for_manager(session, order_id)
         if not order:
             raise ValueError("Не удалось создать заказ")
 
-        service_type = normalized.get("service_type")
-        result = order
         if target_date and service_type != "maintenance":
             stage_payload = OrderWorkStageCreatePayload(
                 name=cls.SERVICE_LABELS.get(service_type, "Рабочая задача"),
                 start_time=target_date,
-                manager_comment=normalized["request_text"],
+                manager_comment=request_text,
             )
-            updated = await OrderService.add_order_stage(session, int(order["id"]), stage_payload)
-            result = updated or order
+            existing_stage = (
+                await session.execute(
+                    select(OrderWorkStage).where(
+                        OrderWorkStage.order_id == order_id,
+                        OrderWorkStage.name == stage_payload.name,
+                        OrderWorkStage.start_time == stage_payload.start_time,
+                    )
+                )
+            ).scalars().first()
+            if existing_stage:
+                order = await OrderService.get_order_detail_for_manager(session, order_id) or order
+            else:
+                updated = await OrderService.add_order_stage(session, order_id, stage_payload)
+                order = updated or order
 
         try:
             await NotificationService.notify_admins_staff_order_created(
                 session,
-                int(order["id"]),
+                order_id,
                 source_label="Telegram-бот",
             )
         except Exception:
-            logger.exception("BOT_QUICK_ORDER_NOTIFY_FAILED order_id=%s", order.get("id"))
+            logger.exception("BOT_QUICK_ORDER_NOTIFY_FAILED order_id=%s", order_id)
 
-        return result
+        return order

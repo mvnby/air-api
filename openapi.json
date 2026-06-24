@@ -8189,6 +8189,23 @@
             "description": "Order product line IDs included in scoped closing document"
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ManagerOrderDocumentGeneratePayload"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -17920,12 +17937,16 @@
           "total": {
             "type": "integer",
             "title": "Total"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
           }
         },
         "type": "object",
         "required": [
           "items",
-          "total"
+          "total",
+          "meta"
         ],
         "title": "LeadsInboxListResponse"
       },
@@ -24408,48 +24429,42 @@
               "$ref": "#/components/schemas/OrderProductLineResponse"
             },
             "type": "array",
-            "title": "Product Lines",
-            "default": []
+            "title": "Product Lines"
           },
           "service_lines": {
             "items": {
               "$ref": "#/components/schemas/OrderServiceLineResponse"
             },
             "type": "array",
-            "title": "Service Lines",
-            "default": []
+            "title": "Service Lines"
           },
           "proposals": {
             "items": {
               "$ref": "#/components/schemas/OrderProposalResponse"
             },
             "type": "array",
-            "title": "Proposals",
-            "default": []
+            "title": "Proposals"
           },
           "documents": {
             "items": {
               "$ref": "#/components/schemas/ManagerOrderDocumentItem"
             },
             "type": "array",
-            "title": "Documents",
-            "default": []
+            "title": "Documents"
           },
           "payments": {
             "items": {
               "$ref": "#/components/schemas/PaymentResponse"
             },
             "type": "array",
-            "title": "Payments",
-            "default": []
+            "title": "Payments"
           },
           "work_stages": {
             "items": {
               "$ref": "#/components/schemas/OrderWorkStageResponse"
             },
             "type": "array",
-            "title": "Work Stages",
-            "default": []
+            "title": "Work Stages"
           },
           "needs_attention": {
             "type": "boolean",
@@ -24487,6 +24502,23 @@
           "ready_for_execution"
         ],
         "title": "ManagerOrderDetailResponse"
+      },
+      "ManagerOrderDocumentGeneratePayload": {
+        "properties": {
+          "additional_conditions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Conditions"
+          }
+        },
+        "type": "object",
+        "title": "ManagerOrderDocumentGeneratePayload"
       },
       "ManagerOrderDocumentItem": {
         "properties": {
@@ -31120,6 +31152,7 @@
         "properties": {
           "amount": {
             "type": "number",
+            "exclusiveMinimum": 0.0,
             "title": "Amount"
           },
           "currency": {

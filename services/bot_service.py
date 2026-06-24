@@ -9,6 +9,15 @@ from core.config import settings
 logger = logging.getLogger(__name__)
 
 class BotService:
+    DISABLED_BOT_TOKEN_PLACEHOLDER = "0:disabled-bot-token"
+
+    @staticmethod
+    def _get_bot_token() -> str | None:
+        token = str(settings.BOT_TOKEN or "").strip()
+        if not token or token == BotService.DISABLED_BOT_TOKEN_PLACEHOLDER:
+            return None
+        return token
+
     @staticmethod
     def _serialize_reply_markup(reply_markup: Any) -> dict[str, Any] | None:
         if reply_markup is None:
@@ -25,8 +34,12 @@ class BotService:
         Sends a message to a specific Telegram user.
         Uses the shared BOT_TOKEN from settings.
         """
+        token = BotService._get_bot_token()
+        if not token:
+            logger.warning("Telegram message skipped because BOT_TOKEN is not configured")
+            return
         try:
-            bot = Bot(token=settings.BOT_TOKEN)
+            bot = Bot(token=token)
             async with bot.context():
                 await bot.send_message(
                     chat_id=user_id,
@@ -51,6 +64,10 @@ class BotService:
         aiogram may lag behind new Bot API methods, so this uses the HTTP API
         directly and falls back to the existing HTML message path on failure.
         """
+        token = BotService._get_bot_token()
+        if not token:
+            logger.warning("Telegram rich message skipped because BOT_TOKEN is not configured")
+            return False
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 body: dict[str, Any] = {
@@ -64,7 +81,7 @@ class BotService:
                     body["reply_markup"] = serialized_reply_markup
 
                 response = await client.post(
-                    f"https://api.telegram.org/bot{settings.BOT_TOKEN}/sendRichMessage",
+                    f"https://api.telegram.org/bot{token}/sendRichMessage",
                     json=body,
                 )
                 response.raise_for_status()
