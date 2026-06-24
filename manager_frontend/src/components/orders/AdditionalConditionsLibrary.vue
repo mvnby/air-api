@@ -232,7 +232,7 @@ watch(() => props.defaultMode, (mode) => {
       <div>
         <label class="block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Дополнительные условия</label>
         <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          {{ saving ? 'Сохраняю перед генерацией...' : 'Выбранные строки сохранятся перед созданием документа.' }}
+          {{ saving ? 'Сохраняю...' : 'Выбранные строки будут применены при создании документа.' }}
         </p>
       </div>
       <button

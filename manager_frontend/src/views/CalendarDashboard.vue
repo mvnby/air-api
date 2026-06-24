@@ -178,6 +178,11 @@ const saveOrder = async (payload: { orderId: number; data: ManagerOrderUpdatePay
   }
 };
 
+const applyOrderUpdate = (order: ManagerOrderDetailResponse) => {
+  selectedOrder.value = order;
+  refreshCalendar();
+};
+
 const handleOrderDeleted = (orderId: number) => {
   drawerOpen.value = false;
   if (selectedOrder.value?.id === orderId) {
@@ -378,6 +383,7 @@ const calendarOptions = ref<CalendarOptions>({
       :form-error="orderFormError"
       :saving="saving"
       @save="saveOrder"
+      @updated="applyOrderUpdate"
       @deleted="handleOrderDeleted"
       @reload="openOrder($event)"
     />

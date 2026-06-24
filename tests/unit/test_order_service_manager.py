@@ -22,7 +22,7 @@ from models import (
     Service,
     ServiceTariff,
 )
-from schemas import ManagerOrderUpdatePayload
+from schemas import ManagerOrderUpdatePayload, OrderWorkStageCreatePayload, OrderWorkStageUpdatePayload
 from services.order_service import OrderService
 
 
@@ -116,6 +116,44 @@ async def test_service_lists_cancels_and_deletes_stale_work_stages(sqlite_order_
     deleted = await OrderService.delete_order_stage_direct(sqlite_order_session, unscheduled_stage.id)
     assert deleted == {"ok": True, "id": unscheduled_stage.id}
     assert await sqlite_order_session.get(OrderWorkStage, unscheduled_stage.id) is None
+
+
+@pytest.mark.asyncio
+async def test_service_validates_work_stage_status_and_order(sqlite_order_session):
+    customer = Customer(name="Stage Customer", phone="+375291234500")
+    sqlite_order_session.add(customer)
+    await sqlite_order_session.commit()
+    await sqlite_order_session.refresh(customer)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.EXECUTION, title="Монтаж")
+    sqlite_order_session.add(order)
+    await sqlite_order_session.commit()
+    await sqlite_order_session.refresh(order)
+
+    created = await OrderService.add_order_stage(
+        sqlite_order_session,
+        int(order.id),
+        OrderWorkStageCreatePayload(name="Монтаж", status="in_progress"),
+    )
+    assert created["work_stages"][0]["status"] == "in_progress"
+
+    stage = (await sqlite_order_session.execute(select(OrderWorkStage))).scalars().first()
+    assert stage is not None
+
+    with pytest.raises(ValueError, match="Invalid work stage status"):
+        await OrderService.update_order_stage(
+            sqlite_order_session,
+            int(order.id),
+            int(stage.id),
+            OrderWorkStageUpdatePayload(status="waiting_for_magic"),
+        )
+
+    with pytest.raises(ValueError, match="Order not found"):
+        await OrderService.add_order_stage(
+            sqlite_order_session,
+            999999,
+            OrderWorkStageCreatePayload(name="Невозможный заказ"),
+        )
 
 
 def test_service_display_order_title_hides_legacy_site_title():
@@ -247,8 +285,8 @@ async def test_service_get_orders_for_manager_segment_and_search(db):
     await db.refresh(c1)
     await db.refresh(c2)
 
-    db.add(Order(customer_id=c1.id, status=OrderStatus.NEW_LEAD, comment="note 1"))
-    db.add(Order(customer_id=c2.id, status=OrderStatus.NEW_LEAD, comment="note 2"))
+    db.add(Order(customer_id=c1.id, status=OrderStatus.NEGOTIATION, comment="note 1"))
+    db.add(Order(customer_id=c2.id, status=OrderStatus.NEGOTIATION, comment="note 2"))
     await db.commit()
 
     b2c = await OrderService.get_orders_for_manager(db, "b2c", page=1, limit=20)
@@ -270,7 +308,7 @@ async def test_service_get_orders_for_manager_title_and_labels(db):
     db.add(
         Order(
             customer_id=customer.id,
-            status=OrderStatus.NEW_LEAD,
+            status=OrderStatus.NEGOTIATION,
             title="Монтаж магазина в Дубровно",
             technical_meta={"manager_labels": ["срочно", "уточнить оплату"]},
         )
@@ -288,7 +326,7 @@ async def test_service_get_orders_for_manager_title_and_labels(db):
 
 @pytest.mark.asyncio
 async def test_service_get_orders_for_manager_b2c_includes_legacy_without_customer(db):
-    db.add(Order(customer_id=None, status=OrderStatus.NEW_LEAD, comment="legacy"))
+    db.add(Order(customer_id=None, status=OrderStatus.NEGOTIATION, comment="legacy"))
     await db.commit()
 
     b2c = await OrderService.get_orders_for_manager(db, "b2c", page=1, limit=20)
@@ -306,8 +344,8 @@ async def test_service_get_orders_for_manager_overdue_filter(db):
     await db.commit()
     await db.refresh(customer)
 
-    db.add(Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD, next_followup_date=datetime.now() - timedelta(days=1)))
-    db.add(Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD, next_followup_date=datetime.now() + timedelta(days=1)))
+    db.add(Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION, next_followup_date=datetime.now() - timedelta(days=1)))
+    db.add(Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION, next_followup_date=datetime.now() + timedelta(days=1)))
     await db.commit()
 
     result = await OrderService.get_orders_for_manager(db, "b2c", page=1, limit=20, overdue_only=True)
@@ -334,14 +372,16 @@ async def test_service_update_order_for_manager_line_sync(db):
 
     payload = ManagerOrderUpdatePayload(
         status="negotiation",
-        products=[{"product_id": product.id, "quantity": 2, "price": 1300, "cost": 700}],
-        services=[{"service_id": service.id, "title": "Srv", "quantity": 1, "price": 200, "cost": 50}],
+        products=[{"product_id": product.id, "quantity": 2, "price": 1300}],
+        services=[{"service_id": service.id, "title": "Srv", "quantity": 1, "price": 200}],
     )
 
     data = await OrderService.update_order_for_manager(db, order.id, payload)
     assert data is not None
     assert data["status"] == "negotiation"
     assert len(data["product_lines"]) == 1
+    assert data["product_lines"][0]["cost"] == 0
+    assert data["service_lines"][0]["cost"] == 150
     assert data["total_amount"] == 2800
 
 
@@ -431,6 +471,68 @@ async def test_service_update_order_for_manager_validation(db):
             order.id,
             ManagerOrderUpdatePayload(products=[{"product_id": 1, "quantity": 1, "price": -1}]),
         )
+
+    with pytest.raises(ValueError, match="Product not found"):
+        await OrderService.update_order_for_manager(
+            db,
+            order.id,
+            ManagerOrderUpdatePayload(products=[{"product_id": 999999, "quantity": 1, "price": 100}]),
+        )
+
+    product = Product(title="Validation Product", slug="validation-product", price=100)
+    service = Service(title="Validation Service", slug="validation-service", base_price=50)
+    db.add(product)
+    db.add(service)
+    await db.commit()
+    await db.refresh(product)
+    await db.refresh(service)
+
+    with pytest.raises(ValueError, match="Product cost cannot be negative"):
+        await OrderService.update_order_for_manager(
+            db,
+            order.id,
+            ManagerOrderUpdatePayload(products=[{"product_id": product.id, "quantity": 1, "price": 100, "cost": -1}]),
+        )
+
+    with pytest.raises(ValueError, match="Service not found"):
+        await OrderService.update_order_for_manager(
+            db,
+            order.id,
+            ManagerOrderUpdatePayload(services=[{"service_id": 999999, "title": "Bad", "quantity": 1, "price": 100}]),
+        )
+
+    with pytest.raises(ValueError, match="Service cost cannot be negative"):
+        await OrderService.update_order_for_manager(
+            db,
+            order.id,
+            ManagerOrderUpdatePayload(
+                services=[{"service_id": service.id, "title": service.title, "quantity": 1, "price": 100, "cost": -1}]
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_service_update_order_lost_archives_customer_in_same_flow(db):
+    customer = Customer(name="Lost Only", phone="+375295551111", type=CustomerType.individual)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    updated = await OrderService.update_order_for_manager(
+        db,
+        order.id,
+        ManagerOrderUpdatePayload(status="closed", closing_result="lost"),
+    )
+
+    assert updated is not None
+    refreshed_customer = await db.get(Customer, customer.id)
+    assert refreshed_customer is not None
+    assert refreshed_customer.is_archived is True
 
 
 @pytest.mark.asyncio

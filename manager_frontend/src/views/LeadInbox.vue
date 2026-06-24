@@ -19,6 +19,7 @@ const toast = ref('');
 const emailLeadImporting = ref(false);
 const emailLeadImportJob = ref<EmailLeadImportJobResponse | null>(null);
 const emailLeadImportResult = ref<EmailLeadImportResponse | null>(null);
+let loadRequestId = 0;
 
 // Qualify / Reject modals
 const qualifyTarget = ref<LeadsInboxItemResponse | null>(null);
@@ -51,8 +52,10 @@ const { unmaskedValue: createPhoneUnmasked } = useBelarusPhoneMask(createPhoneIn
 const searchTimeout = ref<number | null>(null);
 const foundCustomers = ref<any[]>([]);
 const existingCustomerId = ref<number | null>(null);
+let customerSearchRequestId = 0;
 
 const searchCustomer = async () => {
+  const requestId = ++customerSearchRequestId;
   if (existingCustomerId.value) return; 
 
   const query = phoneModelRef.value.replace(/\D/g, '').length >= 3 ? phoneModelRef.value : createForm.value.name;
@@ -64,8 +67,10 @@ const searchCustomer = async () => {
 
   try {
     const res = await api.getManagerCustomers(1, 4, query);
+    if (requestId !== customerSearchRequestId) return;
     foundCustomers.value = res.items || [];
   } catch (e) {
+    if (requestId !== customerSearchRequestId) return;
     console.error('Customer search failed', e);
     foundCustomers.value = [];
   }
@@ -80,6 +85,7 @@ const onSearchInput = () => {
 };
 
 const selectCustomer = (c: any) => {
+  customerSearchRequestId += 1;
   existingCustomerId.value = c.id;
   createForm.value.name = c.name || c.full_legal_name || '';
   phoneModelRef.value = c.phone || c.inn || '';
@@ -87,6 +93,7 @@ const selectCustomer = (c: any) => {
 };
 
 const clearSelectedCustomer = () => {
+  customerSearchRequestId += 1;
   existingCustomerId.value = null;
   createForm.value.name = '';
   phoneModelRef.value = '';
@@ -172,16 +179,33 @@ const importEmailLeads = async () => {
 };
 
 const load = async () => {
+  const requestId = ++loadRequestId;
+  const currentScope = scope.value;
   loading.value = true;
   try {
-    const res = await api.getLeadsInbox(scope.value);
-    items.value = res.items;
-    total.value = res.total;
+    const pageLimit = 100;
+    const firstPage = await api.getLeadsInbox(currentScope, 1, pageLimit);
+    if (requestId !== loadRequestId) return;
+    const loadedItems = [...firstPage.items];
+    const totalPages = Math.max(1, firstPage.meta?.pages || 1);
+    const pageBatchSize = 4;
+    const remainingPages = Array.from({ length: Math.max(0, totalPages - 1) }, (_, index) => index + 2);
+    for (let index = 0; index < remainingPages.length; index += pageBatchSize) {
+      const pageBatch = remainingPages.slice(index, index + pageBatchSize);
+      const nextPages = await Promise.all(
+        pageBatch.map((page) => api.getLeadsInbox(currentScope, page, pageLimit)),
+      );
+      if (requestId !== loadRequestId) return;
+      nextPages.forEach((page) => loadedItems.push(...page.items));
+    }
+    items.value = loadedItems;
+    total.value = firstPage.meta?.total ?? firstPage.total;
   } catch (e) {
+    if (requestId !== loadRequestId) return;
     console.error(e);
     setToast('Не удалось загрузить входящие');
   } finally {
-    loading.value = false;
+    if (requestId === loadRequestId) loading.value = false;
   }
 };
 

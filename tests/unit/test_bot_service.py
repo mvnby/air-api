@@ -88,6 +88,7 @@ async def test_send_rich_message_falls_back_to_html_message(monkeypatch):
     _FakeAsyncClient.requests = []
     _FakeAsyncClient.response = _FakeResponse({"ok": False})
     monkeypatch.setattr("services.bot_service.httpx.AsyncClient", _FakeAsyncClient)
+    monkeypatch.setattr("services.bot_service.settings.BOT_TOKEN", "123:test", raising=False)
     fallback = AsyncMock()
     monkeypatch.setattr(BotService, "send_message", fallback)
 
@@ -95,3 +96,18 @@ async def test_send_rich_message_falls_back_to_html_message(monkeypatch):
 
     assert delivered is False
     fallback.assert_awaited_once_with(777, "fallback", reply_markup=None)
+
+
+@pytest.mark.asyncio
+async def test_send_rich_message_skips_without_bot_token(monkeypatch):
+    _FakeAsyncClient.requests = []
+    monkeypatch.setattr("services.bot_service.httpx.AsyncClient", _FakeAsyncClient)
+    monkeypatch.setattr("services.bot_service.settings.BOT_TOKEN", "", raising=False)
+    fallback = AsyncMock()
+    monkeypatch.setattr(BotService, "send_message", fallback)
+
+    delivered = await BotService.send_rich_message(777, "<h3>Заказ</h3>", fallback_text="fallback")
+
+    assert delivered is False
+    assert _FakeAsyncClient.requests == []
+    fallback.assert_not_awaited()

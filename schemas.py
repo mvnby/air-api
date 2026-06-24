@@ -872,7 +872,7 @@ class ManagerCustomerReconciliationDocumentResponse(BaseModel):
 
 
 class PaymentCreatePayload(BaseModel):
-    amount: float
+    amount: float = Field(gt=0)
     currency: PaymentCurrency = PaymentCurrency.BYN
     type: str # prepayment or postpayment
     comment: Optional[str] = None
@@ -994,12 +994,12 @@ class OrderProposalListResponse(BaseModel):
 
 
 class ManagerOrderDetailResponse(ManagerOrderListItemResponse):
-    product_lines: List[OrderProductLineResponse] = []
-    service_lines: List[OrderServiceLineResponse] = []
-    proposals: List[OrderProposalResponse] = []
-    documents: List[ManagerOrderDocumentItem] = []
-    payments: List[PaymentResponse] = []
-    work_stages: List[OrderWorkStageResponse] = []
+    product_lines: List[OrderProductLineResponse] = Field(default_factory=list)
+    service_lines: List[OrderServiceLineResponse] = Field(default_factory=list)
+    proposals: List[OrderProposalResponse] = Field(default_factory=list)
+    documents: List[ManagerOrderDocumentItem] = Field(default_factory=list)
+    payments: List[PaymentResponse] = Field(default_factory=list)
+    work_stages: List[OrderWorkStageResponse] = Field(default_factory=list)
 
 
 class ManagerOrderListResponse(BaseModel):
@@ -1299,6 +1299,10 @@ class ManagerOrderDocumentResponse(BaseModel):
     scope_meta: Dict[str, Any] = Field(default_factory=dict)
     doc_type: str
     edit_url: str
+
+
+class ManagerOrderDocumentGeneratePayload(BaseModel):
+    additional_conditions: Optional[str] = None
 
 
 class DocumentTemplateItem(BaseModel):
@@ -2849,6 +2853,7 @@ class LeadsInboxItemResponse(BaseModel):
 class LeadsInboxListResponse(BaseModel):
     items: List[LeadsInboxItemResponse]
     total: int
+    meta: Meta
 
 
 # --- CATALOG IMPORT (universal) ---

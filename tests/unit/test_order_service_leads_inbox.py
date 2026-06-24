@@ -27,6 +27,10 @@ async def test_leads_inbox_is_paginated(db):
     response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=2)
 
     assert response.total == 3
+    assert response.meta.total == 3
+    assert response.meta.page == 1
+    assert response.meta.limit == 2
+    assert response.meta.pages == 2
     assert len(response.items) == 2
     assert [item.customer_name for item in response.items] == ["Lead 2", "Lead 1"]
 
@@ -73,6 +77,26 @@ async def test_leads_inbox_extracts_legacy_email_date_from_comment(db):
     response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10)
 
     assert response.items[0].source_created_at == datetime(2026, 5, 11, 12, 33)
+
+
+@pytest.mark.asyncio
+async def test_leads_inbox_ignores_invalid_no_answer_at(db):
+    customer = Customer(name="Bad Date Lead", phone="+375292222223", email="bad-date@example.com")
+    db.add(customer)
+    await db.flush()
+    db.add(
+        Order(
+            customer_id=customer.id,
+            status=OrderStatus.NEW_LEAD,
+            lead_source=LeadSource.MANAGER,
+            technical_meta={"no_answer_at": "not-a-date"},
+        )
+    )
+    await db.commit()
+
+    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10)
+
+    assert response.items[0].no_answer_at is None
 
 
 @pytest.mark.asyncio

@@ -44,6 +44,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: boolean];
   save: [payload: { orderId: number; data: ManagerOrderUpdatePayload }];
+  updated: [order: ManagerOrderDetailResponse];
   deleted: [orderId: number];
   reload: [orderId: number];
 }>();
@@ -443,10 +444,13 @@ const installersList = ref<ManagerInstallerResponse[]>([]);
 
 const productLines = ref<ProductLine[]>([]);
 const serviceLines = ref<ServiceLine[]>([]);
+const savedLinesSnapshot = ref('');
+const pendingDraftClearOrderId = ref<number | null>(null);
 const activeServiceSuggestionIndex = ref<number | null>(null);
 const serviceTariffOptions = ref<ManagerQuickTariffResponse[]>([]);
 const serviceTariffLookupLoading = ref(false);
 let serviceTariffSearchRequestId = 0;
+let customerBranchesRequestId = 0;
 const estimateOptions = ref<ManagerServiceEstimateResponse[]>([]);
 const estimateOptionsLoading = ref(false);
 const estimateImportMode = ref<'detailed' | 'collapsed'>('detailed');
@@ -509,20 +513,27 @@ const showChangeCustomerModal = ref(false);
 const customerSearchQuery = ref('');
 const customerSearchResults = ref<any[]>([]);
 const isCustomerSearchLoading = ref(false);
+let customerSearchRequestId = 0;
 
 const debouncedSearchCustomer = useDebounceFn(async (query: string) => {
+  const requestId = ++customerSearchRequestId;
   if (!query || query.length < 3) {
     customerSearchResults.value = [];
+    isCustomerSearchLoading.value = false;
     return;
   }
   isCustomerSearchLoading.value = true;
   try {
     const res = await api.getManagerCustomers(1, 10, query);
+    if (requestId !== customerSearchRequestId || query !== customerSearchQuery.value) return;
     customerSearchResults.value = res.items || [];
   } catch (error) {
+    if (requestId !== customerSearchRequestId) return;
     console.error('Customer search error', error);
   } finally {
-    isCustomerSearchLoading.value = false;
+    if (requestId === customerSearchRequestId) {
+      isCustomerSearchLoading.value = false;
+    }
   }
 }, 400);
 
@@ -534,17 +545,18 @@ const assignNewCustomer = async (newCustomer: any) => {
   if (!props.order?.id) return;
   try {
     const res = await api.patchManagerOrder(props.order.id, { customer_id: newCustomer.id });
-    Object.assign(props.order, res);
-    await initForm(props.order);
+    emit('updated', res);
+    await initForm(res);
     showChangeCustomerModal.value = false;
     setToast('Клиент успешно изменен', 'success');
-    emit('reload', props.order.id); // Reload parent list if necessary
+    emit('reload', res.id);
   } catch (error) {
     setToast(`Ошибка смены клиента: ${getApiErrorMessage(error)}`, 'error');
   }
 };
 
 const resetCustomerBranches = () => {
+  customerBranchesRequestId += 1;
   customerBranches.value = [];
   customerBranchId.value = null;
   customerBranchesLoading.value = false;
@@ -554,9 +566,11 @@ const resetCustomerBranches = () => {
 };
 
 const loadCustomerBranches = async (customerId: number, preferredBranchId?: number | null) => {
+  const requestId = ++customerBranchesRequestId;
   customerBranchesLoading.value = true;
   try {
     const response = await api.getManagerCustomerBranches(customerId);
+    if (requestId !== customerBranchesRequestId) return;
     customerBranches.value = response.items || [];
     if (!customerBranches.value.length) {
       customerBranchId.value = null;
@@ -576,10 +590,13 @@ const loadCustomerBranches = async (customerId: number, preferredBranchId?: numb
       || null;
     customerBranchId.value = preferred?.id || null;
   } catch (error) {
+    if (requestId !== customerBranchesRequestId) return;
     console.error('Failed to load customer branches', error);
     resetCustomerBranches();
   } finally {
-    customerBranchesLoading.value = false;
+    if (requestId === customerBranchesRequestId) {
+      customerBranchesLoading.value = false;
+    }
   }
 };
 
@@ -978,10 +995,12 @@ const toggleHold = async () => {
     if (!props.order) return;
     const hold = !props.order.is_on_hold;
     try {
-        await api.patchManagerOrder(props.order.id, { is_on_hold: hold, on_hold_reason: hold ? 'Переговоры / Ручная пауза' : '' });
-        props.order.is_on_hold = hold;
-        props.order.on_hold_reason = hold ? 'Переговоры / Ручная пауза' : '';
-        emit('save', { orderId: props.order.id, data: { status: props.order.status } });
+        const updatedOrder = await api.patchManagerOrder(
+            props.order.id,
+            { is_on_hold: hold, on_hold_reason: hold ? 'Переговоры / Ручная пауза' : '' },
+        );
+        emit('updated', updatedOrder);
+        setToast(hold ? 'Сделка поставлена на паузу' : 'Сделка снята с паузы', 'success');
     } catch {
         setToast('Ошибка паузы', 'error');
     }
@@ -1083,8 +1102,10 @@ const canCreateEquipmentFromOrder = computed(() => (
 
 const beforeDocumentGenerate = async (type: string) => {
   if (!props.order?.id) return false;
+  let mutated = false;
   if (type === 'offer' || type === 'tn2' || type === 'ttn1') {
     await saveCurrentProposalLines();
+    mutated = true;
   }
   if (type === 'defect_act') {
     repairMeta.value = buildRepairMetaPayload();
@@ -1092,9 +1113,10 @@ const beforeDocumentGenerate = async (type: string) => {
       repair_meta: buildRepairMetaPayload() as any,
       measurement_result: measurementResult.value,
     });
+    mutated = true;
     emit('reload', props.order.id);
   }
-  return true;
+  return { mutated };
 };
 
 const createEquipmentFromOrder = async () => {
@@ -1373,6 +1395,31 @@ const debouncedLoadProductOptions = useDebounceFn(async (index: number, q: strin
   }
 }, 400);
 
+const currentLinesSnapshot = () => JSON.stringify({
+  activeProposalId: activeProposalId.value,
+  products: productLines.value.map((line) => ({
+    product_id: Number(line.product_id || 0),
+    product_query: String(line.product_query || '').trim(),
+    quantity: Number(line.quantity || 0),
+    price: Number(line.price || 0),
+    cost: Number(line.cost || 0),
+    product_country: line.product_country || null,
+    product_logistics_components: line.product_logistics_components || [],
+    logistics_components: line.logistics_components || null,
+  })),
+  services: serviceLines.value.map((line) => ({
+    service_id: line.service_id ?? null,
+    title: String(line.title || '').trim(),
+    quantity: Number(line.quantity || 0),
+    price: Number(line.price || 0),
+    cost: Number(line.cost || 0),
+  })),
+});
+
+const hasUnsavedLineChanges = computed(() => (
+  Boolean(props.order?.id) && Boolean(savedLinesSnapshot.value) && currentLinesSnapshot() !== savedLinesSnapshot.value
+));
+
 const persistDraft = () => {
   if (!draftKey.value) return;
   try {
@@ -1553,6 +1600,11 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
     || (order.proposals || []).find((proposal) => !proposal.is_archived)
     || null;
   loadProposalLines(selectedProposal, order);
+  if (pendingDraftClearOrderId.value === order.id) {
+    clearDraft();
+    pendingDraftClearOrderId.value = null;
+  }
+  savedLinesSnapshot.value = currentLinesSnapshot();
   showEstimateImport.value = false;
   await loadEstimateOptions();
 
@@ -1740,9 +1792,7 @@ const applyOrderResponse = async (
   preferredProposalId?: number | null,
   emitReload = true,
 ) => {
-  if (props.order) {
-    Object.assign(props.order, order);
-  }
+  emit('updated', order);
   const nextProposal = preferredProposalId
     ? (order.proposals || []).find((proposal) => proposal.id === preferredProposalId && !proposal.is_archived)
     : ((order.proposals || []).find((proposal) => proposal.is_selected && !proposal.is_archived)
@@ -1794,6 +1844,7 @@ const saveCurrentProposalLines = async () => {
   const order = await ManagerOrdersService.patchManagerOrder(props.order.id, buildProposalLinesPayload());
   clearDraft();
   await applyOrderResponse(order, currentProposalId, false);
+  savedLinesSnapshot.value = currentLinesSnapshot();
   return order;
 };
 
@@ -2290,7 +2341,7 @@ const handleSave = () => {
     return;
   }
 
-  clearDraft();
+  pendingDraftClearOrderId.value = props.order.id;
   const linePayload = buildProposalLinesPayload();
   repairMeta.value = buildRepairMetaPayload();
   const payload: ManagerOrderUpdatePayload = {
@@ -2320,7 +2371,15 @@ const handleSave = () => {
   emit('save', { orderId: props.order.id, data: payload });
 };
 
-const closeDrawer = () => {
+const closeDrawer = (options?: { force?: boolean } | Event) => {
+  const isDomEvent = typeof Event !== 'undefined' && options instanceof Event;
+  const force = Boolean(options && !isDomEvent && (options as { force?: boolean }).force);
+  if (!force && hasUnsavedLineChanges.value) {
+    persistDraft();
+    const discard = window.confirm('Есть несохраненные строки заказа. Закрыть карточку и сбросить изменения?');
+    if (!discard) return;
+  }
+  pendingDraftClearOrderId.value = null;
   clearDraft();
   emit('update:modelValue', false);
 };
@@ -2338,7 +2397,7 @@ const deleteOrder = async () => {
     setTimeout(() => {
       toast.value = '';
       emit('deleted', props.order!.id);
-      closeDrawer();
+      closeDrawer({ force: true });
     }, 1500);
   } catch (err: any) {
     localFormError.value = getApiErrorMessage(err) || 'Ошибка при удалении заказа';

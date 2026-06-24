@@ -11,6 +11,7 @@ from sqlalchemy.orm.attributes import NO_VALUE, flag_modified
 from crud.order import OrderDAO
 from crud.product import ProductDAO
 from models import Order, OrderProductLink, OrderProposal, OrderServiceLink, Customer, CustomerBranch, CustomerContract, CustomerType, OrderStageStatus, OrderStatus, PaymentCurrency, Product, LeadSource, Service, ServiceTariff, OrderInstaller, OrderWorkStage, Payment
+from models.common import ClosingResult
 from services.customer_contract_service import CustomerContractService
 from services.document_role_service import DocumentRoleService
 from services.product_supply_metrics_service import ProductSupplyMetricsService
@@ -630,6 +631,17 @@ class OrderService:
         if dt is not None and dt.tzinfo is not None:
             return dt.replace(tzinfo=None)
         return dt
+
+    @staticmethod
+    def _normalize_order_stage_status(raw: Any, fallback: OrderStageStatus = OrderStageStatus.PLANNED) -> OrderStageStatus:
+        value = raw if raw is not None else fallback
+        if isinstance(value, OrderStageStatus):
+            return value
+        try:
+            return OrderStageStatus(str(value))
+        except ValueError as exc:
+            allowed = ", ".join(item.value for item in OrderStageStatus)
+            raise ValueError(f"Invalid work stage status: {raw}. Allowed: {allowed}") from exc
 
     @staticmethod
     async def get_calendar_events(
@@ -1582,10 +1594,13 @@ class OrderService:
     @staticmethod
     async def add_order_stage(session: AsyncSession, order_id: int, payload: Any):
         from models import OrderWorkStage
+        order = await session.get(Order, order_id)
+        if not order:
+            raise ValueError("Order not found")
         stage = OrderWorkStage(
             order_id=order_id,
             name=payload.name,
-            status=payload.status or "planned",
+            status=OrderService._normalize_order_stage_status(payload.status),
             start_time=OrderService._normalize_naive_datetime(payload.start_time),
             end_time=OrderService._normalize_naive_datetime(payload.end_time),
             installer_id=payload.installer_id,
@@ -1700,6 +1715,8 @@ class OrderService:
         for key, value in update_data.items():
             if key in ("start_time", "end_time"):
                 value = OrderService._normalize_naive_datetime(value)
+            elif key == "status":
+                value = OrderService._normalize_order_stage_status(value)
             setattr(stage, key, value)
             
         session.add(stage)
@@ -1944,13 +1961,13 @@ class OrderService:
                 selectinload(Order.service_links).selectinload(OrderServiceLink.service),
                 selectinload(Order.installers).selectinload(OrderInstaller.installer),
             )
-            .where(segment_clause)
+            .where(segment_clause, Order.status != OrderStatus.NEW_LEAD)
         )
 
         count_stmt = (
             select(func.count(Order.id))
             .outerjoin(Customer, Order.customer_id == Customer.id)
-            .where(segment_clause)
+            .where(segment_clause, Order.status != OrderStatus.NEW_LEAD)
         )
 
         if status:
@@ -2036,6 +2053,7 @@ class OrderService:
                 selectinload(Order.payments).selectinload(Payment.bank_receipt),
                 selectinload(Order.work_stages).selectinload(OrderWorkStage.installer),
             )
+            .execution_options(populate_existing=True)
         )
         result = await session.execute(stmt)
         order = result.scalars().first()
@@ -2239,6 +2257,30 @@ class OrderService:
         return {"cost": 0}
 
     @staticmethod
+    async def _build_product_line_cost_defaults(session: AsyncSession, product_lines: List[Any]) -> Dict[int, int]:
+        _ = session
+        return {
+            product_id: 0
+            for product_id in {
+                int(line.product_id)
+                for line in product_lines
+                if getattr(line, "cost", None) is None and getattr(line, "product_id", None) is not None
+            }
+        }
+
+    @staticmethod
+    async def _build_service_line_cost_defaults(session: AsyncSession, service_lines: List[Any]) -> Dict[int, int]:
+        service_ids = {
+            int(line.service_id)
+            for line in service_lines
+            if getattr(line, "cost", None) is None and getattr(line, "service_id", None) is not None
+        }
+        if not service_ids:
+            return {}
+        result = await session.execute(select(Service.id, Service.base_price).where(Service.id.in_(service_ids)))
+        return {int(service_id): int(base_price or 0) for service_id, base_price in result.all()}
+
+    @staticmethod
     async def _maybe_add_default_repair_diagnostic(session: AsyncSession, order: Order) -> None:
         await session.refresh(order, attribute_names=["proposals", "service_links", "payments", "product_links", "installers"])
         selected_proposal = await OrderService.ensure_default_proposal(session, order)
@@ -2331,7 +2373,13 @@ class OrderService:
             order.document_role_type = DocumentRoleService.nullable_role_type(payload.document_role_type)
         # New fields
         if "closing_result" in fields_set:
-            order.closing_result = payload.closing_result
+            if payload.closing_result is None:
+                order.closing_result = None
+            else:
+                try:
+                    order.closing_result = ClosingResult(payload.closing_result).value
+                except ValueError as exc:
+                    raise ValueError(f"Invalid closing_result: {payload.closing_result}") from exc
         if "reject_reason" in fields_set:
             order.reject_reason = payload.reject_reason
         if "is_on_hold" in fields_set and payload.is_on_hold is not None:
@@ -2390,11 +2438,6 @@ class OrderService:
         if "status" in fields_set and order.status == OrderStatus.CLOSED and not order.closed_at:
             order.closed_at = datetime.now()
             
-        # Validation for closing
-        if order.status == OrderStatus.CLOSED and order.closing_result == "won":
-            if order.balance_due > 0:
-                raise ValueError(f"Cannot close won order with unpaid balance: {order.balance_due}")
-
         if "installer_id" in fields_set:
             from models import OrderInstaller
             existing_installer_ids_res = await session.execute(
@@ -2417,19 +2460,20 @@ class OrderService:
             if order.customer_id != payload.customer_id:
                 # Link to new existing customer
                 new_customer = await session.get(Customer, payload.customer_id)
-                if new_customer:
-                    order.customer_id = payload.customer_id
-                    customer_id_changed = True
-                    linked_customer_type = (
-                        new_customer.type.value
-                        if hasattr(new_customer.type, "value")
-                        else str(new_customer.type or "")
-                    )
-                    if linked_customer_type in {"individual", "company"}:
-                        order.technical_meta = dict(order.technical_meta or {})
-                        order.technical_meta["lead_customer_type_known"] = True
-                        order.technical_meta["lead_customer_type"] = linked_customer_type
-                        flag_modified(order, "technical_meta")
+                if not new_customer:
+                    raise ValueError("Customer not found")
+                order.customer_id = payload.customer_id
+                customer_id_changed = True
+                linked_customer_type = (
+                    new_customer.type.value
+                    if hasattr(new_customer.type, "value")
+                    else str(new_customer.type or "")
+                )
+                if linked_customer_type in {"individual", "company"}:
+                    order.technical_meta = dict(order.technical_meta or {})
+                    order.technical_meta["lead_customer_type_known"] = True
+                    order.technical_meta["lead_customer_type"] = linked_customer_type
+                    flag_modified(order, "technical_meta")
 
         # If customer was switched and branch wasn't explicitly provided, prevent stale cross-customer linkage.
         if customer_id_changed and "customer_branch_id" not in fields_set and order.customer_branch_id is not None:
@@ -2576,6 +2620,21 @@ class OrderService:
             if not target_proposal:
                 raise ValueError("Proposal not found")
             if "products" in fields_set and payload.products is not None:
+                for product_line in payload.products:
+                    if product_line.quantity <= 0:
+                        raise ValueError("Product quantity must be > 0")
+                    if product_line.price < 0:
+                        raise ValueError("Product price cannot be negative")
+                    if product_line.cost is not None and product_line.cost < 0:
+                        raise ValueError("Product cost cannot be negative")
+                product_ids = {int(line.product_id) for line in payload.products}
+                if product_ids:
+                    result = await session.execute(select(Product.id).where(Product.id.in_(product_ids)))
+                    existing_product_ids = {int(product_id) for product_id in result.scalars().all()}
+                    missing_product_ids = sorted(product_ids - existing_product_ids)
+                    if missing_product_ids:
+                        raise ValueError(f"Product not found: {missing_product_ids[0]}")
+                product_cost_defaults = await OrderService._build_product_line_cost_defaults(session, list(payload.products))
                 await session.execute(
                     delete(OrderProductLink).where(
                         OrderProductLink.order_id == order_id,
@@ -2583,14 +2642,6 @@ class OrderService:
                     )
                 )
                 for product_line in payload.products:
-                    if product_line.quantity <= 0:
-                        raise ValueError("Product quantity must be > 0")
-                    if product_line.price < 0:
-                        raise ValueError("Product price cannot be negative")
-                    defaults = await OrderService.build_manager_order_line_defaults(
-                        session=session,
-                        product_id=product_line.product_id,
-                    )
                     logistics_components = OrderService._serialize_order_logistics_components(
                         product_line.logistics_components
                     )
@@ -2605,12 +2656,33 @@ class OrderService:
                         product_id=product_line.product_id,
                         quantity=product_line.quantity,
                         price=product_line.price,
-                        cost=product_line.cost if product_line.cost is not None else defaults["cost"],
+                        cost=(
+                            product_line.cost
+                            if product_line.cost is not None
+                            else product_cost_defaults.get(int(product_line.product_id), 0)
+                        ),
                         logistics_components=logistics_components,
                     )
                     session.add(new_product_link)
 
             if "services" in fields_set and payload.services is not None:
+                for service_line in payload.services:
+                    if service_line.quantity <= 0:
+                        raise ValueError("Service quantity must be > 0")
+                    if service_line.price < 0:
+                        raise ValueError("Service price cannot be negative")
+                    if service_line.cost is not None and service_line.cost < 0:
+                        raise ValueError("Service cost cannot be negative")
+                    if not service_line.title:
+                        raise ValueError("Service title is required")
+                service_ids = {int(line.service_id) for line in payload.services if line.service_id is not None}
+                if service_ids:
+                    result = await session.execute(select(Service.id).where(Service.id.in_(service_ids)))
+                    existing_service_ids = {int(service_id) for service_id in result.scalars().all()}
+                    missing_service_ids = sorted(service_ids - existing_service_ids)
+                    if missing_service_ids:
+                        raise ValueError(f"Service not found: {missing_service_ids[0]}")
+                service_cost_defaults = await OrderService._build_service_line_cost_defaults(session, list(payload.services))
                 await session.execute(
                     delete(OrderServiceLink).where(
                         OrderServiceLink.order_id == order_id,
@@ -2618,16 +2690,6 @@ class OrderService:
                     )
                 )
                 for service_line in payload.services:
-                    if service_line.quantity <= 0:
-                        raise ValueError("Service quantity must be > 0")
-                    if service_line.price < 0:
-                        raise ValueError("Service price cannot be negative")
-                    if not service_line.title:
-                        raise ValueError("Service title is required")
-                    defaults = await OrderService.build_manager_order_line_defaults(
-                        session=session,
-                        service_id=service_line.service_id,
-                    )
                     new_service_link = OrderServiceLink(
                         order_id=order_id,
                         proposal_id=target_proposal_id,
@@ -2635,7 +2697,13 @@ class OrderService:
                         title=service_line.title,
                         quantity=service_line.quantity,
                         price=service_line.price,
-                        cost=service_line.cost if service_line.cost is not None else defaults["cost"],
+                        cost=(
+                            service_line.cost
+                            if service_line.cost is not None
+                            else service_cost_defaults.get(int(service_line.service_id), 0)
+                            if service_line.service_id is not None
+                            else 0
+                        ),
                     )
                     session.add(new_service_link)
 
@@ -2649,8 +2717,11 @@ class OrderService:
         if transitioned_to_repair and "services" not in fields_set:
             await OrderService._maybe_add_default_repair_diagnostic(session, order)
 
-        session.add(order)
-        await session.commit()
+        if order.status == OrderStatus.CLOSED and order.closing_result == "won":
+            await session.flush()
+            await OrderService._refresh_order_financials(session, order)
+            if order.balance_due > 0:
+                raise ValueError(f"Cannot close won order with unpaid balance: {order.balance_due}")
 
         # Auto-archive customer if this order was just cancelled and they
         # have no other real (non-lead, non-cancelled) orders.
@@ -2675,7 +2746,9 @@ class OrderService:
                 if customer and not customer.is_archived:
                     customer.is_archived = True
                     session.add(customer)
-                    await session.commit()
+
+        session.add(order)
+        await session.commit()
 
         return await OrderService.get_order_detail_for_manager(session, order_id)
 
@@ -2684,9 +2757,7 @@ class OrderService:
         from models import Payment, PaymentType
         order = await session.get(Order, order_id)
         if not order:
-            from core.manager_api_errors import manager_http_error
-            from core.manager_error_codes import ORDER_NOT_FOUND
-            raise manager_http_error(status_code=404, endpoint="add_manager_order_payment", error_code=ORDER_NOT_FOUND)
+            raise ValueError("Order not found")
         
         try:
             ptype = PaymentType(payload.type)
@@ -2719,9 +2790,7 @@ class OrderService:
         from models import Payment
         order = await session.get(Order, order_id)
         if not order:
-            from core.manager_api_errors import manager_http_error
-            from core.manager_error_codes import ORDER_NOT_FOUND
-            raise manager_http_error(status_code=404, endpoint="delete_manager_order_payment", error_code=ORDER_NOT_FOUND)
+            raise ValueError("Order not found")
             
         payment = await session.get(Payment, payment_id)
         if not payment or payment.order_id != order_id:
@@ -2823,7 +2892,7 @@ class OrderService:
                           sorted: new_lead first, then by created_at DESC.
         scope="archive" → canceled only, created_at DESC.
         """
-        from schemas import LeadsInboxItemResponse, LeadsInboxListResponse
+        from schemas import LeadsInboxItemResponse, LeadsInboxListResponse, Meta
         from sqlalchemy import case as sa_case
 
         page = max(1, int(page or 1))
@@ -2879,10 +2948,8 @@ class OrderService:
                     else (str(order.lead_source) if order.lead_source else None)
                 ),
                 comment=order.comment,
-                no_answer_at=(
-                    datetime.fromisoformat(order.technical_meta.get("no_answer_at").replace('Z', '+00:00'))
-                    if order.technical_meta and order.technical_meta.get("no_answer_at")
-                    else None
+                no_answer_at=OrderService._parse_lead_inbox_datetime(
+                    order.technical_meta.get("no_answer_at") if isinstance(order.technical_meta, dict) else None
                 ),
                 source_created_at=OrderService._extract_email_source_created_at(order),
                 created_at=order.created_at,
@@ -2898,7 +2965,12 @@ class OrderService:
             for order in orders
         ]
 
-        return LeadsInboxListResponse(items=items, total=total)
+        pages = (total + limit - 1) // limit if limit > 0 else 0
+        return LeadsInboxListResponse(
+            items=items,
+            total=total,
+            meta=Meta(total=total, page=page, limit=limit, pages=pages),
+        )
 
     @staticmethod
     async def delete_order(session: AsyncSession, order_id: int) -> bool:

@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from sqlalchemy import update
+from sqlalchemy import text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -106,6 +106,12 @@ class CustomerContractService:
     @staticmethod
     async def _get_next_number(session: AsyncSession, contract_date: datetime) -> str:
         year = contract_date.year
+        bind = session.get_bind()
+        if getattr(getattr(bind, "dialect", None), "name", "") == "postgresql":
+            await session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:lock_key)::bigint)"),
+                {"lock_key": f"customer_contract_number:ОД-{year}-"},
+            )
         result = await session.execute(
             select(CustomerContract)
             .where(CustomerContract.number.contains(str(year)))

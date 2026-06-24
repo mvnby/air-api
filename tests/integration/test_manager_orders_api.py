@@ -51,9 +51,9 @@ async def test_manager_orders_list_segment_filter(async_client, db):
     await db.refresh(c1)
     await db.refresh(c2)
 
-    db.add(Order(customer_id=c1.id, status=OrderStatus.NEW_LEAD, total_amount=100))
-    db.add(Order(customer_id=c2.id, status=OrderStatus.NEW_LEAD, total_amount=200))
-    db.add(Order(customer_id=None, status=OrderStatus.NEW_LEAD, total_amount=50))
+    db.add(Order(customer_id=c1.id, status=OrderStatus.NEGOTIATION, total_amount=100))
+    db.add(Order(customer_id=c2.id, status=OrderStatus.NEGOTIATION, total_amount=200))
+    db.add(Order(customer_id=None, status=OrderStatus.NEGOTIATION, total_amount=50))
     await db.commit()
 
     headers = await _auth_headers(async_client)
@@ -72,6 +72,41 @@ async def test_manager_orders_list_segment_filter(async_client, db):
 
 
 @pytest.mark.asyncio
+async def test_manager_orders_list_excludes_leads_before_pagination(async_client, db):
+    customer = Customer(name="Real Order", phone="+375291010101", type=CustomerType.individual)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    now = datetime.now()
+    for idx in range(101):
+        db.add(
+            Order(
+                customer_id=customer.id,
+                status=OrderStatus.NEW_LEAD,
+                created_at=now + timedelta(minutes=idx),
+            )
+        )
+    real_order = Order(
+        customer_id=customer.id,
+        status=OrderStatus.NEGOTIATION,
+        created_at=now - timedelta(days=1),
+        title="Real visible order",
+    )
+    db.add(real_order)
+    await db.commit()
+    await db.refresh(real_order)
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.get("/api/manager/orders?segment=b2c&limit=100", headers=headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["meta"]["total"] == 1
+    assert [item["id"] for item in payload["items"]] == [real_order.id]
+
+
+@pytest.mark.asyncio
 async def test_manager_orders_overdue_filter(async_client, db):
     customer = Customer(name="Overdue", phone="+375293333333", type=CustomerType.individual)
     db.add(customer)
@@ -81,14 +116,14 @@ async def test_manager_orders_overdue_filter(async_client, db):
     db.add(
         Order(
             customer_id=customer.id,
-            status=OrderStatus.NEW_LEAD,
+            status=OrderStatus.NEGOTIATION,
             next_followup_date=datetime.now() - timedelta(days=1),
         )
     )
     db.add(
         Order(
             customer_id=customer.id,
-            status=OrderStatus.NEW_LEAD,
+            status=OrderStatus.NEGOTIATION,
             next_followup_date=datetime.now() + timedelta(days=1),
         )
     )
@@ -174,6 +209,43 @@ async def test_manager_order_patch_scalar_fields(async_client, db):
 
 
 @pytest.mark.asyncio
+async def test_manager_order_patch_recomputes_balance_before_closing_won(async_client, db):
+    customer = Customer(name="Close Guard", phone="+375295555551", type=CustomerType.individual)
+    product = Product(title="Close Guard Product", slug="close-guard-product", price=500, area=20)
+    db.add(customer)
+    db.add(product)
+    await db.commit()
+    await db.refresh(customer)
+    await db.refresh(product)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION, total_amount=0, balance_due=0)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={
+            "status": "closed",
+            "closing_result": "won",
+            "products": [
+                {
+                    "product_id": product.id,
+                    "quantity": 1,
+                    "price": 500,
+                    "cost": 300,
+                }
+            ],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 400
+    assert "unpaid balance" in response.json()["detail"]["message"]
+
+
+@pytest.mark.asyncio
 async def test_manager_order_patch_repair_workflow_adds_diagnostic_and_meta(async_client, db):
     customer = Customer(name="Repair Workflow", phone="+375295555558", type=CustomerType.company)
     tariff = ServiceTariff(
@@ -191,7 +263,7 @@ async def test_manager_order_patch_repair_workflow_adds_diagnostic_and_meta(asyn
     await db.commit()
     await db.refresh(customer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -239,7 +311,7 @@ async def test_manager_order_patch_rejects_invalid_repair_status(async_client, d
     await db.commit()
     await db.refresh(customer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -399,7 +471,7 @@ async def test_manager_order_patch_title_and_labels_search(async_client, db):
     await db.commit()
     await db.refresh(customer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -496,6 +568,52 @@ async def test_manager_order_patch_customer_branch_validation(async_client, db):
     )
     assert bad_resp.status_code == 400
     assert "does not belong" in str(bad_resp.json()["detail"]["message"]).lower()
+
+
+@pytest.mark.asyncio
+async def test_manager_order_patch_rejects_unknown_customer_id(async_client, db):
+    customer = Customer(name="Known Customer", phone="+375295533333", type=CustomerType.individual)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={"customer_id": 999999},
+        headers=headers,
+    )
+
+    assert response.status_code == 400
+    assert "Customer not found" in response.json()["detail"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_manager_order_patch_rejects_invalid_closing_result(async_client, db):
+    customer = Customer(name="Closing Result", phone="+375295544444", type=CustomerType.individual)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={"status": "closed", "closing_result": "maybe"},
+        headers=headers,
+    )
+
+    assert response.status_code == 400
+    assert "Invalid closing_result" in response.json()["detail"]["message"]
 
 
 @pytest.mark.asyncio
@@ -1548,6 +1666,21 @@ async def test_manager_order_patch_validation_errors(async_client, db):
 
 
 @pytest.mark.asyncio
+async def test_manager_order_payment_unknown_order_returns_404(async_client):
+    headers = await _auth_headers(async_client)
+    response = await async_client.post(
+        "/api/manager/orders/999999/payments",
+        headers=headers,
+        json={"amount": 100, "type": "postpayment"},
+    )
+
+    assert response.status_code == 404
+    detail = response.json()["detail"]
+    assert detail["error_code"] == "order_not_found"
+    assert detail["message"] == "Order not found"
+
+
+@pytest.mark.asyncio
 async def test_manager_order_generate_document(async_client, db, monkeypatch):
     customer = Customer(name="Doc", phone="+375297777777", type=CustomerType.individual)
     db.add(customer)
@@ -2280,6 +2413,227 @@ async def test_manager_order_generate_defect_act_placeholders(async_client, db, 
     assert replacements["{{repair_not_viable}}"] == "Да"
     assert replacements["{{repair_not_viable_reason}}"] == "Стоимость ремонта сопоставима с заменой оборудования."
     assert replacements["{{additional_conditions}}"] == "Работы выполнять после согласования с администратором."
+
+
+@pytest.mark.asyncio
+async def test_manager_order_generate_document_applies_draft_conditions_atomically(async_client, db, monkeypatch):
+    customer = Customer(name="ООО Атом", phone="+375291010101", type=CustomerType.company)
+    product = Product(title="Кондиционер Atom", slug="atom-ac", price=1000)
+    order = Order(customer=customer, status=OrderStatus.NEW_LEAD)
+    db.add_all([customer, product, order])
+    await db.commit()
+    await db.refresh(order)
+    await db.refresh(product)
+
+    db.add(OrderProductLink(order_id=order.id, product_id=product.id, quantity=1, price=1000, cost=700))
+    await db.commit()
+
+    captured = {}
+
+    class _FakeGoogleService:
+        def copy_template(self, template_id, title):
+            return {"file_id": "fake-atomic-defect-act", "edit_url": "https://docs.google.com/document/d/fake/edit"}
+
+        def replace_placeholders(self, file_id, replacements):
+            captured["replacements"] = replacements
+
+    from services import document_service
+
+    monkeypatch.setattr(document_service, "get_google_service", lambda: _FakeGoogleService())
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/defect_act",
+        headers=headers,
+        json={"additional_conditions": "  Работы только после допуска.  "},
+    )
+
+    assert response.status_code == 200, response.text
+    assert captured["replacements"]["{{additional_conditions}}"] == "Работы только после допуска."
+    await db.refresh(order)
+    assert order.additional_conditions == "Работы только после допуска."
+
+
+@pytest.mark.asyncio
+async def test_manager_order_generate_document_with_draft_conditions_recreates_existing_singleton(async_client, db, monkeypatch):
+    customer = Customer(name="ООО Повтор", phone="+375291010103", type=CustomerType.company)
+    product = Product(title="Кондиционер Repeat", slug="repeat-ac", price=1000)
+    order = Order(customer=customer, status=OrderStatus.NEW_LEAD, additional_conditions="Старые условия")
+    db.add_all([customer, product, order])
+    await db.commit()
+    await db.refresh(order)
+    await db.refresh(product)
+
+    db.add(OrderProductLink(order_id=order.id, product_id=product.id, quantity=1, price=1000, cost=700))
+    await db.commit()
+
+    existing_doc = OrderDocument(
+        order_id=order.id,
+        doc_type="defect_act",
+        number="ДА-2026-001",
+        google_file_id="old-defect-act",
+        google_edit_url="https://docs.google.com/document/d/old-defect-act/edit",
+    )
+    db.add(existing_doc)
+    await db.commit()
+    await db.refresh(existing_doc)
+
+    captured = {"copies": 0}
+
+    class _FakeGoogleService:
+        def copy_template(self, template_id, title):
+            captured["copies"] += 1
+            return {
+                "file_id": f"fake-repeat-defect-act-{captured['copies']}",
+                "edit_url": f"https://docs.google.com/document/d/fake-repeat-defect-act-{captured['copies']}/edit",
+            }
+
+        def replace_placeholders(self, file_id, replacements):
+            captured["replacements"] = replacements
+
+    from services import document_service
+
+    monkeypatch.setattr(document_service, "get_google_service", lambda: _FakeGoogleService())
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/defect_act",
+        headers=headers,
+        json={"additional_conditions": "Новые условия для нового документа"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["doc_id"] != existing_doc.id
+    assert captured["copies"] == 1
+    assert captured["replacements"]["{{additional_conditions}}"] == "Новые условия для нового документа"
+    await db.refresh(order)
+    assert order.additional_conditions == "Новые условия для нового документа"
+
+
+@pytest.mark.asyncio
+async def test_manager_order_generate_document_rolls_back_draft_conditions_on_failure(db_engine, monkeypatch):
+    from httpx import ASGITransport, AsyncClient
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.orm import sessionmaker
+
+    from core.database import get_session
+    from main import app
+
+    session_factory = sessionmaker(bind=db_engine, class_=AsyncSession, expire_on_commit=False)
+
+    customer = Customer(name="ООО Rollback", phone="+375291010102", type=CustomerType.company)
+    product = Product(title="Кондиционер Rollback", slug="rollback-ac", price=1000)
+    order = Order(customer=customer, status=OrderStatus.NEW_LEAD, additional_conditions="Старые условия")
+    async with session_factory() as setup_session:
+        setup_session.add_all([customer, product, order])
+        await setup_session.commit()
+        await setup_session.refresh(order)
+        await setup_session.refresh(product)
+
+        setup_session.add(OrderProductLink(order_id=order.id, product_id=product.id, quantity=1, price=1000, cost=700))
+        await setup_session.commit()
+        order_id = order.id
+
+    class _FailingGoogleService:
+        def copy_template(self, template_id, title):
+            raise RuntimeError("google unavailable")
+
+    from services import document_service
+
+    monkeypatch.setattr(document_service, "get_google_service", lambda: _FailingGoogleService())
+
+    async def override_get_session():
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_get_session
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            headers = await _auth_headers(client)
+            response = await client.post(
+                f"/api/manager/orders/{order_id}/documents/defect_act",
+                headers=headers,
+                json={"additional_conditions": "Новые условия не должны сохраниться"},
+            )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert response.status_code == 500
+    async with session_factory() as verify_session:
+        fresh_order = await verify_session.get(Order, order_id)
+        assert fresh_order is not None
+        assert fresh_order.additional_conditions == "Старые условия"
+
+
+@pytest.mark.asyncio
+async def test_manager_order_generate_document_cleans_google_file_after_replace_failure(db_engine, monkeypatch):
+    from httpx import ASGITransport, AsyncClient
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.orm import sessionmaker
+
+    from core.database import get_session
+    from main import app
+
+    session_factory = sessionmaker(bind=db_engine, class_=AsyncSession, expire_on_commit=False)
+
+    customer = Customer(name="ООО Cleanup", phone="+375291010104", type=CustomerType.company)
+    product = Product(title="Кондиционер Cleanup", slug="cleanup-ac", price=1000)
+    order = Order(customer=customer, status=OrderStatus.NEW_LEAD, additional_conditions="Старые условия")
+    async with session_factory() as setup_session:
+        setup_session.add_all([customer, product, order])
+        await setup_session.commit()
+        await setup_session.refresh(order)
+        await setup_session.refresh(product)
+
+        setup_session.add(OrderProductLink(order_id=order.id, product_id=product.id, quantity=1, price=1000, cost=700))
+        await setup_session.commit()
+        order_id = order.id
+
+    class _FailingAfterCopyGoogleService:
+        def __init__(self):
+            self.deleted_files = []
+
+        def copy_template(self, template_id, title):
+            return {"file_id": "orphan-candidate", "edit_url": "https://docs.google.com/document/d/orphan-candidate/edit"}
+
+        def replace_placeholders(self, file_id, replacements):
+            raise RuntimeError("replace failed")
+
+        def delete_file(self, file_id):
+            self.deleted_files.append(file_id)
+
+    google_service = _FailingAfterCopyGoogleService()
+
+    from services import document_service
+
+    monkeypatch.setattr(document_service, "get_google_service", lambda: google_service)
+
+    async def override_get_session():
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_get_session
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            headers = await _auth_headers(client)
+            response = await client.post(
+                f"/api/manager/orders/{order_id}/documents/defect_act",
+                headers=headers,
+                json={"additional_conditions": "Новые условия не должны сохраниться"},
+            )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert response.status_code == 500
+    assert google_service.deleted_files == ["orphan-candidate"]
+    async with session_factory() as verify_session:
+        fresh_order = await verify_session.get(Order, order_id)
+        assert fresh_order is not None
+        assert fresh_order.additional_conditions == "Старые условия"
+        docs = (
+            await verify_session.execute(select(OrderDocument).where(OrderDocument.order_id == order_id))
+        ).scalars().all()
+        assert docs == []
 
 
 @pytest.mark.asyncio

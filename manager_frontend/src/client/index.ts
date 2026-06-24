@@ -174,6 +174,7 @@ export type { ManagerMediaUploadLocalImagesResponse } from './models/ManagerMedi
 export type { ManagerNormalizeLegacySpecsResponse } from './models/ManagerNormalizeLegacySpecsResponse';
 export type { ManagerOrderCreatePayload } from './models/ManagerOrderCreatePayload';
 export type { ManagerOrderDetailResponse } from './models/ManagerOrderDetailResponse';
+export type { ManagerOrderDocumentGeneratePayload } from './models/ManagerOrderDocumentGeneratePayload';
 export type { ManagerOrderDocumentItem } from './models/ManagerOrderDocumentItem';
 export type { ManagerOrderDocumentListResponse } from './models/ManagerOrderDocumentListResponse';
 export type { ManagerOrderDocumentResponse } from './models/ManagerOrderDocumentResponse';

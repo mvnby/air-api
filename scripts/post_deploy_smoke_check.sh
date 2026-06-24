@@ -3,6 +3,10 @@ set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:8000}"
 SMOKE_SUMMARY_FILE="${SMOKE_SUMMARY_FILE:-/tmp/smoke_summary.txt}"
+COMPOSE_FILE="${COMPOSE_FILE:-/opt/air-api/docker-compose.prod.yml}"
+COMPOSE_SERVICE_CHECKS="${COMPOSE_SERVICE_CHECKS:-app bot}"
+BOT_RUNTIME_CHECK_SERVICE="${BOT_RUNTIME_CHECK_SERVICE:-bot}"
+BOT_EXPECT_ENABLED="${BOT_EXPECT_ENABLED:-true}"
 MAX_RETRIES=${MAX_RETRIES:-20}
 RETRY_DELAY=${RETRY_DELAY:-2}
 
@@ -24,6 +28,14 @@ if ! command -v curl >/dev/null 2>&1; then
 fi
 if ! command -v python3 >/dev/null 2>&1; then
   log preflight "python3 is not installed"
+  exit 1
+fi
+if ! command -v docker >/dev/null 2>&1; then
+  log preflight "docker is not installed"
+  exit 1
+fi
+if ! docker compose version >/dev/null 2>&1; then
+  log preflight "docker compose is not available"
   exit 1
 fi
 
@@ -103,9 +115,47 @@ print(f"products_count={len(items)}")
 print(f"filters_keys={','.join(sorted(filters_cfg.keys()))}")
 PY
 
+log request "docker compose ps --status running --services"
+running_services="$(docker compose -f "${COMPOSE_FILE}" ps --status running --services 2>/dev/null || true)"
+for service in ${COMPOSE_SERVICE_CHECKS}; do
+  if ! printf '%s\n' "${running_services}" | grep -Fxq "${service}"; then
+    log error "❌ Compose service is not running: ${service}"
+    summary "smoke_status=failed"
+    summary "base_url=${BASE_URL}"
+    summary "failure_reason=compose_service_not_running:${service}"
+    docker compose -f "${COMPOSE_FILE}" ps || true
+    exit 1
+  fi
+done
+log success "✅ Compose services running: ${COMPOSE_SERVICE_CHECKS}"
+
+checks_done="health,products,filters_config,compose_services"
+if [[ "${BOT_EXPECT_ENABLED}" == "true" ]]; then
+  log request "docker compose exec ${BOT_RUNTIME_CHECK_SERVICE} python3 - read bot runtime decision"
+  bot_runtime_payload="$(docker compose -f "${COMPOSE_FILE}" exec -T "${BOT_RUNTIME_CHECK_SERVICE}" python3 - <<'PY'
+from core.config import settings
+
+decision = settings.bot_control_decision
+print(f"enabled={str(decision.enabled).lower()}")
+print(f"reason={decision.reason}")
+PY
+)"
+  log info "bot_runtime_decision=${bot_runtime_payload//$'\n'/; }"
+  if ! printf '%s\n' "${bot_runtime_payload}" | grep -Fxq "enabled=true"; then
+    log error "❌ Bot runtime decision is not enabled"
+    summary "smoke_status=failed"
+    summary "base_url=${BASE_URL}"
+    summary "failure_reason=bot_runtime_disabled"
+    summary "bot_runtime_decision=${bot_runtime_payload//$'\n'/; }"
+    exit 1
+  fi
+  log success "✅ Bot runtime decision is enabled"
+  checks_done="${checks_done},bot_runtime"
+fi
+
 summary "smoke_status=passed"
 summary "base_url=${BASE_URL}"
 summary "health_url_used=${HEALTH_URL_USED}"
-summary "checks=health,products,filters_config"
+summary "checks=${checks_done}"
 log info "health_url_used=${HEALTH_URL_USED}"
 log done "smoke checks passed"

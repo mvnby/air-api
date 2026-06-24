@@ -90,6 +90,8 @@ const { lookupCompany, lookupBank, isEgrLoading, isBankLoading } = useB2BLookup(
 const searchTimeout = ref<number | null>(null);
 const searchStatus = ref<'idle' | 'searching' | 'found' | 'not_found'>('idle');
 const foundCustomerName = ref('');
+let customerSearchRequestId = 0;
+let branchesRequestId = 0;
 const selectedBranch = computed(() => customerBranches.value.find((branch) => branch.id === selectedBranchId.value) || null);
 
 const missingCustomerType = computed(() => !customerType.value);
@@ -117,6 +119,7 @@ const selectCustomerType = (value: Exclude<CustomerTypeChoice, ''>) => {
 };
 
 const resetBranches = () => {
+  branchesRequestId += 1;
   customerBranches.value = [];
   selectedBranchId.value = null;
   newBranchName.value = '';
@@ -124,23 +127,29 @@ const resetBranches = () => {
 };
 
 const loadBranches = async (customerId: number) => {
+  const requestId = ++branchesRequestId;
   branchesLoading.value = true;
   try {
     const response = await api.getManagerCustomerBranches(customerId);
+    if (requestId !== branchesRequestId || existingCustomerId.value !== customerId) return;
     customerBranches.value = response.items || [];
     const hasCurrent = selectedBranchId.value
       ? customerBranches.value.some((branch) => branch.id === selectedBranchId.value)
       : false;
     selectedBranchId.value = hasCurrent ? selectedBranchId.value : null;
   } catch (error) {
+    if (requestId !== branchesRequestId) return;
     console.error('Failed to load customer branches', error);
     resetBranches();
   } finally {
-    branchesLoading.value = false;
+    if (requestId === branchesRequestId) {
+      branchesLoading.value = false;
+    }
   }
 };
 
 const searchCustomer = async () => {
+  const requestId = ++customerSearchRequestId;
   const query = customerType.value === 'company'
     ? companyInn.value
     : (unmaskedPhone.value || customerPhone.value);
@@ -155,6 +164,7 @@ const searchCustomer = async () => {
   try {
     searchStatus.value = 'searching';
     const res = await api.getManagerCustomers(1, 1, query);
+    if (requestId !== customerSearchRequestId) return;
     const match = res.items?.[0];
     if (match) {
       existingCustomerId.value = match.id;
@@ -182,6 +192,7 @@ const searchCustomer = async () => {
     foundCustomerName.value = '';
     resetBranches();
   } catch (e) {
+    if (requestId !== customerSearchRequestId) return;
     console.error('Customer search failed', e);
     searchStatus.value = 'idle';
     existingCustomerId.value = null;

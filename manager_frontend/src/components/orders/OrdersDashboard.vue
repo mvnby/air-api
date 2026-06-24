@@ -310,18 +310,29 @@ const loadOrders = async () => {
   const requestId = ++loadRequestId;
   loading.value = true;
   try {
-    const response = await api.getManagerOrders({
+    const params = {
       segment: segment.value,
       status: statusFilter.value || undefined,
       search: search.value || undefined,
       overdueOnly: overdueOnly.value,
       sort: sort.value,
-      page: 1,
-      limit: 100,
-    });
+    };
+    const pageLimit = 100;
+    const firstPage = await api.getManagerOrders({ ...params, page: 1, limit: pageLimit });
     if (requestId !== loadRequestId) return;
-    // Leads are managed in the dedicated Leads section and should not appear in Orders.
-    orders.value = response.items.filter((item) => item.status !== 'new_lead');
+    const loadedOrders = [...firstPage.items];
+    const totalPages = Math.max(1, firstPage.meta?.pages || 1);
+    const pageBatchSize = 4;
+    const remainingPages = Array.from({ length: Math.max(0, totalPages - 1) }, (_, index) => index + 2);
+    for (let index = 0; index < remainingPages.length; index += pageBatchSize) {
+      const pageBatch = remainingPages.slice(index, index + pageBatchSize);
+      const nextPages = await Promise.all(
+        pageBatch.map((page) => api.getManagerOrders({ ...params, page, limit: pageLimit })),
+      );
+      if (requestId !== loadRequestId) return;
+      nextPages.forEach((page) => loadedOrders.push(...page.items));
+    }
+    orders.value = loadedOrders;
     const loadedIds = new Set(orders.value.map((order) => order.id));
     selectedOrderIds.value = selectedOrderIds.value.filter((orderId) => loadedIds.has(orderId));
     if (pendingOpenOrderId.value && openedByUrlOrderId.value !== pendingOpenOrderId.value) {
@@ -428,6 +439,11 @@ const openOrder = async (orderId: number, updateUrl = true) => {
   }
 };
 
+const reloadOrder = async (orderId: number) => {
+  await openOrder(orderId, false);
+  await loadOrders();
+};
+
 const saveOrder = async (payload: { orderId: number; data: ManagerOrderUpdatePayload }) => {
   if (saving.value) return;
   saving.value = true;
@@ -477,6 +493,14 @@ const handleOrderDeleted = async (orderId: number) => {
   selectedOrder.value = null;
   setToast('Сделка удалена');
   await loadOrders();
+};
+
+const applyOrderUpdate = (order: ManagerOrderDetailResponse) => {
+  selectedOrder.value = order;
+  const index = orders.value.findIndex((item) => item.id === order.id);
+  if (index !== -1) {
+    orders.value.splice(index, 1, order);
+  }
 };
 
 const clearOrderIdFromUrl = () => {
@@ -664,8 +688,9 @@ watch(drawerOpen, (isOpen) => {
       :form-error="orderFormError"
       :saving="saving"
       @save="saveOrder"
+      @updated="applyOrderUpdate"
       @deleted="handleOrderDeleted"
-      @reload="openOrder($event, false)"
+      @reload="reloadOrder"
     />
 
     <div v-if="showLoginModal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">

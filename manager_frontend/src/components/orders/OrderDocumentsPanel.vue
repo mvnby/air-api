@@ -21,6 +21,7 @@ import DocumentSendModal from './DocumentSendModal.vue';
 type ToastType = 'success' | 'error';
 type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
 type LogisticsComponentKind = 'indoor' | 'outdoor' | 'accessory' | 'other';
+type BeforeGenerateResult = boolean | void | { proceed?: boolean; mutated?: boolean };
 
 type ProductLogisticsTemplateComponent = {
   title: string;
@@ -57,7 +58,7 @@ const props = defineProps<{
   order: ManagerOrderDetailResponse;
   activeProposalId?: number | null;
   productLines?: WaybillProductLine[];
-  beforeGenerate?: (type: string) => boolean | void | Promise<boolean | void>;
+  beforeGenerate?: (type: string) => BeforeGenerateResult | Promise<BeforeGenerateResult>;
 }>();
 
 const emit = defineEmits<{
@@ -101,7 +102,6 @@ const selectedContractTemplateId = ref<string>('');
 const selectedBaseDocumentValue = ref<string>('');
 const additionalConditions = ref(props.order.additional_conditions || '');
 const additionalConditionsSaved = ref(props.order.additional_conditions || '');
-const isSavingAdditionalConditions = ref(false);
 const documentDate = ref(new Date().toISOString().slice(0, 10));
 const isGeneratingDoc = ref(false);
 const processingDocId = ref<number | null>(null);
@@ -128,6 +128,10 @@ const actAddressLookupLoading = ref(false);
 const newActBranchName = ref('');
 const newActBranchAddress = ref('');
 const creatingActBranch = ref(false);
+let documentsRequestId = 0;
+let contractTemplatesRequestId = 0;
+let customerContractsRequestId = 0;
+let customerBranchesRequestId = 0;
 
 const notify = (message: string, type: ToastType = 'success') => {
   emit('toast', { message, type });
@@ -496,6 +500,16 @@ const datedDocumentTypes = new Set(['contract', 'retail_receipt', 'service_act',
 const getDocumentDateForType = (type: string) => (
   datedDocumentTypes.has(type) && documentDate.value ? `${documentDate.value}T00:00:00` : undefined
 );
+const normalizeBeforeGenerateResult = (result: BeforeGenerateResult) => {
+  if (result === false) return { proceed: false, mutated: false };
+  if (result && typeof result === 'object') {
+    return {
+      proceed: result.proceed !== false,
+      mutated: result.mutated === true,
+    };
+  }
+  return { proceed: true, mutated: false };
+};
 
 const isDocumentTypeLocked = (type: string) => (
   isClosingDocumentType(type) && !hasClosingBaseDocument.value
@@ -585,8 +599,11 @@ const selectedDocumentRoleBinding = computed({
 const hasAdditionalConditionsChanges = computed(() => additionalConditions.value !== additionalConditionsSaved.value);
 
 const loadDocuments = async () => {
+  const requestId = ++documentsRequestId;
+  const orderId = props.order.id;
   try {
-    const res = await ManagerDocsService.getManagerOrderDocuments(props.order.id);
+    const res = await ManagerDocsService.getManagerOrderDocuments(orderId);
+    if (requestId !== documentsRequestId || props.order.id !== orderId) return;
     documents.value = res.items;
     if (!isCreatePanelOpen.value) selectedDocumentType.value = suggestedDocumentType.value;
     syncBaseDocumentSelection();
@@ -596,8 +613,11 @@ const loadDocuments = async () => {
 };
 
 const loadContractTemplates = async () => {
+  const requestId = ++contractTemplatesRequestId;
+  const orderId = props.order.id;
   try {
-    const res = await ManagerDocsService.getDocTemplates('contract', props.order.id);
+    const res = await ManagerDocsService.getDocTemplates('contract', orderId);
+    if (requestId !== contractTemplatesRequestId || props.order.id !== orderId) return;
     contractTemplates.value = res.items.filter((template) => !template.is_open_contract);
     if (contractTemplates.value.length > 0 && contractTemplates.value[0]) {
       selectedContractTemplateId.value = contractTemplates.value[0].id;
@@ -608,14 +628,17 @@ const loadContractTemplates = async () => {
 };
 
 const loadCustomerContracts = async () => {
-  if (!props.order.customer?.id) {
+  const requestId = ++customerContractsRequestId;
+  const customerId = props.order.customer?.id;
+  if (!customerId) {
     customerContracts.value = [];
     selectedCustomerContractId.value = null;
     syncBaseDocumentSelection();
     return;
   }
   try {
-    const res = await ManagerContractsService.getManagerCustomerContracts(props.order.customer.id);
+    const res = await ManagerContractsService.getManagerCustomerContracts(customerId);
+    if (requestId !== customerContractsRequestId || props.order.customer?.id !== customerId) return;
     customerContracts.value = res.items.filter((contract) => contract.status === 'active');
     selectedCustomerContractId.value = props.order.customer_contract_id || null;
     syncBaseDocumentSelection();
@@ -625,13 +648,16 @@ const loadCustomerContracts = async () => {
 };
 
 const loadCustomerBranches = async () => {
-  if (!props.order.customer?.id) {
+  const requestId = ++customerBranchesRequestId;
+  const customerId = props.order.customer?.id;
+  if (!customerId) {
     customerBranches.value = [];
     syncActScopeDefaults();
     return;
   }
   try {
-    const res = await ManagerService.getManagerCustomerBranches(props.order.customer.id);
+    const res = await ManagerService.getManagerCustomerBranches(customerId);
+    if (requestId !== customerBranchesRequestId || props.order.customer?.id !== customerId) return;
     customerBranches.value = res.items || [];
     if (selectedActBranchId.value && !customerBranches.value.some((branch) => branch.id === selectedActBranchId.value)) {
       selectedActBranchId.value = null;
@@ -678,25 +704,6 @@ watch(() => [
 ], () => {
   resetFromOrder();
 });
-
-const saveAdditionalConditions = async (showSuccessToast = true) => {
-  if (!hasAdditionalConditionsChanges.value) return true;
-  const valueToSave = additionalConditions.value;
-  isSavingAdditionalConditions.value = true;
-  try {
-    await ManagerOrdersService.patchManagerOrder(props.order.id, {
-      additional_conditions: valueToSave,
-    });
-    additionalConditionsSaved.value = valueToSave;
-    if (showSuccessToast) notify('Условия сохранены', 'success');
-    return true;
-  } catch (error) {
-    notify(`Ошибка сохранения условий: ${getApiErrorMessage(error)}`, 'error');
-    return false;
-  } finally {
-    isSavingAdditionalConditions.value = false;
-  }
-};
 
 const useOneTimeContractForClosingDocs = async () => {
   if (!selectedCustomerContractId.value) return;
@@ -927,6 +934,8 @@ const handleDocumentsSent = () => {
 
 const generateDocument = async (type: string) => {
   isGeneratingDoc.value = true;
+  let mutatedOrderBeforeGeneration = false;
+  let generatedDocument = false;
   try {
     syncBaseDocumentSelection();
     if (isClosingDocumentType(type) && !selectedBaseDocumentValue.value) {
@@ -937,15 +946,22 @@ const generateDocument = async (type: string) => {
       if (!waybillProductLines.value.length) syncWaybillProductLines();
       ensureAllWaybillComponents();
     }
-    const beforeResult = await props.beforeGenerate?.(type);
-    if (beforeResult === false) return;
-    if (isWaybillType(type) && !(await saveWaybillProductLines())) return;
+    const beforeState = normalizeBeforeGenerateResult(await props.beforeGenerate?.(type));
+    if (!beforeState.proceed) return;
+    if (beforeState.mutated) mutatedOrderBeforeGeneration = true;
+    if (isWaybillType(type)) {
+      if (!(await saveWaybillProductLines())) return;
+      mutatedOrderBeforeGeneration = true;
+    }
     if (type === 'act' && activeActServiceLines.value.length > 0 && selectedActServiceLineIds.value.length === 0) {
       notify('Выберите хотя бы одну услугу для акта', 'error');
       return;
     }
-    if (!(await saveAdditionalConditions(false))) return;
+    const documentDraftPayload = hasAdditionalConditionsChanges.value
+      ? { additional_conditions: additionalConditions.value }
+      : undefined;
     if (type === 'contract' && isCompanyOrder.value) {
+      if (selectedCustomerContractId.value) mutatedOrderBeforeGeneration = true;
       await useOneTimeContractForClosingDocs();
     }
     const template = (type === 'contract' && selectedContractTemplateId.value)
@@ -981,7 +997,14 @@ const generateDocument = async (type: string) => {
       scopeServiceLineIds,
       scopeServiceLineQuantities,
       undefined,
+      documentDraftPayload,
     );
+    generatedDocument = true;
+    if (documentDraftPayload) {
+      const normalizedConditions = (documentDraftPayload.additional_conditions || '').trim();
+      additionalConditions.value = normalizedConditions;
+      additionalConditionsSaved.value = normalizedConditions;
+    }
     window.open(res.edit_url, '_blank');
     await loadDocuments();
     emit('refresh');
@@ -990,6 +1013,9 @@ const generateDocument = async (type: string) => {
   } catch (error) {
     notify(`Ошибка генерации: ${getApiErrorMessage(error)}`, 'error');
   } finally {
+    if (mutatedOrderBeforeGeneration && !generatedDocument) {
+      emit('refresh');
+    }
     isGeneratingDoc.value = false;
   }
 };
@@ -1669,7 +1695,6 @@ const registerExternalContract = async () => {
             <AdditionalConditionsLibrary
               v-model="additionalConditions"
               :default-mode="additionalConditionsMode"
-              :saving="isSavingAdditionalConditions"
             />
           </div>
 
