@@ -240,8 +240,13 @@ class OrderTransferService:
             on_hold_reason=order.on_hold_reason,
             measurement_required=bool(order.measurement_required),
             measurement_result=order.measurement_result,
+            negotiation_status=OrderService._infer_negotiation_status(order),
+            negotiation_status_changed_at=getattr(order, "negotiation_status_changed_at", None),
             proposal_status=order.proposal_status or "draft",
             proposal_sent_at=order.proposal_sent_at,
+            execution_without_payment=bool(getattr(order, "execution_without_payment", False)),
+            execution_without_payment_reason=getattr(order, "execution_without_payment_reason", None),
+            auto_execution_on_payment=bool(getattr(order, "auto_execution_on_payment", False)),
             equipment_status=OrderTransferService._enum_value(order.equipment_status) or EquipmentStatus.PENDING.value,
             standard_install_kit_issued=bool(order.standard_install_kit_issued),
             target_currency=order.target_currency,
@@ -555,8 +560,13 @@ class OrderTransferService:
                 measurement_date=order_data.measurement_date,
                 measurement_result=order_data.measurement_result,
                 additional_conditions=order_data.additional_conditions,
+                negotiation_status=OrderService._normalize_negotiation_status(order_data.negotiation_status),
+                negotiation_status_changed_at=order_data.negotiation_status_changed_at,
                 proposal_status=order_data.proposal_status or "draft",
                 proposal_sent_at=order_data.proposal_sent_at,
+                execution_without_payment=bool(order_data.execution_without_payment),
+                execution_without_payment_reason=order_data.execution_without_payment_reason,
+                auto_execution_on_payment=bool(order_data.auto_execution_on_payment),
                 equipment_status=OrderTransferService._parse_enum(
                     EquipmentStatus,
                     order_data.equipment_status,
@@ -566,6 +576,7 @@ class OrderTransferService:
                 created_at=order_data.created_at or datetime.now(),
                 installation_date=order_data.installation_date,
                 next_followup_date=order_data.next_followup_date,
+                status_changed_at=order_data.created_at or datetime.now(),
             )
             session.add(order)
             await session.flush()

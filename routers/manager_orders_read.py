@@ -27,7 +27,7 @@ router = APIRouter(prefix="/api/manager/orders", tags=["manager-orders"])
 
 @router.get("", response_model=ManagerOrderListResponse, operation_id=GET_MANAGER_ORDERS)
 async def get_manager_orders(
-    segment: str = Query("b2c", pattern="^(b2c|b2b)$"),
+    segment: str = Query("b2c", pattern="^(all|b2c|b2b)$"),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     status: Optional[str] = Query(None),

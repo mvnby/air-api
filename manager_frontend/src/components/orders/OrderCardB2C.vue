@@ -2,7 +2,8 @@
 import { computed, ref } from 'vue';
 import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-vue-next';
 import type { ManagerOrderListItemResponse } from '../../client';
-import { STATUS_LABELS, formatDate, formatMoney, formatPhone, isOverdue } from './order-utils';
+import { BOARD_CARD_ACCENT_CLASSES, BOARD_COLUMN_TONE_CLASSES, formatDate, formatMoney, formatPhone, formatRelativeAge, getOrderBoardColumn, getOrderBoardLabel, getOrderNegotiationLabel, getOrderNegotiationStatus, isOverdue } from './order-utils';
+import OrderCardActionsMenu from './OrderCardActionsMenu.vue';
 import OrderTitleEditor from './OrderTitleEditor.vue';
 
 const props = defineProps<{
@@ -14,6 +15,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   open: [orderId: number];
   generate: [payload: { orderId: number; docType: string }];
+  cancelOrder: [payload: { orderId: number }];
+  quickStatus: [payload: { orderId: number; status: string }];
+  closeDebt: [payload: { orderId: number }];
   dragStart: [payload: { orderId: number; oldStatus: string }];
   toggleExpanded: [orderId: number];
   renameOrder: [payload: { orderId: number; title: string | null }];
@@ -23,7 +27,7 @@ const isDragging = ref(false);
 
 const onDragStart = () => {
   isDragging.value = true;
-  emit('dragStart', { orderId: props.order.id, oldStatus: props.order.status });
+  emit('dragStart', { orderId: props.order.id, oldStatus: getOrderBoardColumn(props.order) });
 };
 
 const onDragEnd = () => {
@@ -47,6 +51,24 @@ const objectLine = computed(() => {
 });
 const compactLabels = computed(() => props.order.manager_labels?.slice(0, 2) ?? []);
 const hiddenLabelsCount = computed(() => Math.max((props.order.manager_labels?.length ?? 0) - compactLabels.value.length, 0));
+const boardColumn = computed(() => getOrderBoardColumn(props.order));
+const badgeColumn = computed(() => (props.order.status === 'negotiation' ? getOrderNegotiationStatus(props.order) : boardColumn.value));
+const boardLabel = computed(() => (props.order.status === 'negotiation' ? getOrderNegotiationLabel(props.order) : getOrderBoardLabel(props.order)));
+const fallbackBoardTone = {
+  column: 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800',
+  badge: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
+  text: 'text-slate-700 dark:text-slate-200',
+};
+const boardTone = computed(() => BOARD_COLUMN_TONE_CLASSES[badgeColumn.value] ?? fallbackBoardTone);
+const boardBadgeClass = computed(() => boardTone.value.badge);
+const boardTextClass = computed(() => boardTone.value.text);
+const cardAccentClass = computed(() => BOARD_CARD_ACCENT_CLASSES[badgeColumn.value] || BOARD_CARD_ACCENT_CLASSES.negotiation);
+const statusAge = computed(() => {
+  const sourceDate = props.order.status === 'negotiation'
+    ? props.order.negotiation_status_changed_at || props.order.status_changed_at || props.order.updated_at || props.order.created_at
+    : props.order.status_changed_at || props.order.updated_at || props.order.created_at;
+  return formatRelativeAge(sourceDate);
+});
 const dateSummary = computed(() => {
   if (isOverdue(props.order)) return { label: 'Касание', value: 'просрочено', className: 'text-red-600 dark:text-red-300' };
   if (props.order.next_followup_date) return { label: 'Касание', value: formatDate(props.order.next_followup_date), className: 'text-gray-600 dark:text-slate-300' };
@@ -57,8 +79,8 @@ const dateSummary = computed(() => {
 const statusFlags = computed(() => [
   props.order.needs_attention ? { label: 'Внимание', className: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300' } : null,
   props.order.awaiting_measurement ? { label: 'Замер', className: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300' } : null,
-  props.order.client_thinking ? { label: 'Думают', className: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300' } : null,
-  props.order.ready_for_execution ? { label: 'Согласовано', className: 'bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300' } : null,
+  props.order.auto_execution_on_payment ? { label: 'Авто после оплаты', className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' } : null,
+  props.order.execution_without_payment ? { label: 'Без оплаты', className: 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300' } : null,
 ].filter(Boolean) as { label: string; className: string }[]);
 const hasComment = computed(() => Boolean(props.order.comment?.trim()));
 const paymentSummary = computed(() => {
@@ -75,9 +97,9 @@ const paymentSummary = computed(() => {
 
 <template>
   <article
-    class="group cursor-pointer rounded-2xl border bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:bg-slate-800"
+    class="group cursor-pointer rounded-2xl border p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
     :class="[
-      expanded ? 'border-teal-300 ring-2 ring-teal-500/20 dark:border-teal-500' : 'border-gray-200 dark:border-slate-700',
+      expanded ? 'border-teal-300 bg-white ring-2 ring-teal-500/20 dark:border-teal-500 dark:bg-slate-800' : cardAccentClass,
       isOverdue(order) ? 'ring-2 ring-red-500/60' : '',
     ]"
     :draggable="!draggableDisabled"
@@ -96,19 +118,28 @@ const paymentSummary = computed(() => {
             text-class="text-sm"
             @rename="(payload) => emit('renameOrder', payload)"
           />
-          <span class="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700 dark:bg-slate-700 dark:text-slate-300">{{ STATUS_LABELS[order.status] || order.status }}</span>
+          <span class="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold" :class="boardBadgeClass">{{ boardLabel }}</span>
         </div>
         <p v-if="objectLine" class="mt-1 truncate text-xs text-gray-500 dark:text-slate-400">{{ objectLine }}</p>
       </div>
-      <button
-        type="button"
-        class="shrink-0 rounded-full p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-700 dark:hover:text-white"
-        :aria-label="expanded ? 'Свернуть заказ' : 'Раскрыть заказ'"
-        @click.stop="emit('toggleExpanded', order.id)"
-      >
-        <ChevronUp v-if="expanded" class="h-4 w-4" />
-        <ChevronDown v-else class="h-4 w-4" />
-      </button>
+      <div class="relative flex shrink-0 items-center gap-1">
+        <OrderCardActionsMenu
+          :order="order"
+          allow-close-debt
+          @cancel-order="(payload) => emit('cancelOrder', payload)"
+          @quick-status="(payload) => emit('quickStatus', payload)"
+          @close-debt="(payload) => emit('closeDebt', payload)"
+        />
+        <button
+          type="button"
+          class="rounded-full p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-700 dark:hover:text-white"
+          :aria-label="expanded ? 'Свернуть заказ' : 'Раскрыть заказ'"
+          @click.stop="emit('toggleExpanded', order.id)"
+        >
+          <ChevronUp v-if="expanded" class="h-4 w-4" />
+          <ChevronDown v-else class="h-4 w-4" />
+        </button>
+      </div>
     </header>
 
     <div v-if="compactLabels.length || hiddenLabelsCount" class="mt-2 flex flex-wrap gap-1">
@@ -131,6 +162,7 @@ const paymentSummary = computed(() => {
       >
         {{ flag.label }}
       </span>
+      <span class="text-[11px] font-medium" :class="boardTextClass">В статусе: {{ statusAge }}</span>
       <span v-if="dateSummary" class="text-[11px] font-medium" :class="dateSummary.className">{{ dateSummary.label }}: {{ dateSummary.value }}</span>
       <span class="text-[11px] font-semibold" :class="paymentSummary.className">{{ paymentSummary.label }}</span>
     </div>

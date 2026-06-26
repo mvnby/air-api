@@ -28,7 +28,7 @@ import type {
   ManagerEquipmentHistoryFromRepairOrderPayload,
 } from '../../client';
 import { ManagerOrdersService, ManagerSettingsService, ManagerMailService, ManagerRepairComplaintsService, ManagerEquipmentService } from '../../client';
-import { formatMoney } from './order-utils';
+import { NEGOTIATION_STATUS_OPTIONS, formatMoney } from './order-utils';
 import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../../utils/datetime';
 
 import { getApiErrorMessage } from '../../utils/api-errors';
@@ -437,8 +437,21 @@ const measurerId = ref<number | null>(null);
 const measurementResult = ref('');
 const additionalConditions = ref('');
 const proposalStatus = ref<'draft' | 'sent' | 'approved' | 'rejected'>('draft');
+const negotiationStatus = ref('awaiting_offer');
+const executionWithoutPayment = ref(false);
+const executionWithoutPaymentReason = ref('');
+const autoExecutionOnPayment = ref(false);
 const activeProposalId = ref<number | null>(null);
 const proposalActionLoading = ref(false);
+const negotiationStatusLabel = computed(() => (
+  NEGOTIATION_STATUS_OPTIONS.find((option) => option.value === negotiationStatus.value)?.label || 'Ждет предложение'
+));
+
+const setNegotiationStatus = (value: string) => {
+  negotiationStatus.value = value;
+  if (value === 'proposal_sent') proposalStatus.value = 'sent';
+  if (value === 'awaiting_payment') proposalStatus.value = 'approved';
+};
 
 const installersList = ref<ManagerInstallerResponse[]>([]);
 
@@ -1574,6 +1587,10 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   measurementResult.value = order.measurement_result ?? '';
   additionalConditions.value = order.additional_conditions ?? '';
   proposalStatus.value = (order.proposal_status as any) || 'draft';
+  negotiationStatus.value = order.negotiation_status || 'awaiting_offer';
+  executionWithoutPayment.value = Boolean(order.execution_without_payment);
+  executionWithoutPaymentReason.value = order.execution_without_payment_reason || '';
+  autoExecutionOnPayment.value = Boolean(order.auto_execution_on_payment);
   targetCurrency.value = order.target_currency || null;
   targetCurrencyAmount.value = order.target_currency_amount || null;
   targetCurrencyPayments.value = order.target_currency_payments || 0;
@@ -2364,7 +2381,11 @@ const handleSave = () => {
     measurer_id: measurerId.value,
     measurement_result: measurementResult.value,
     additional_conditions: additionalConditions.value,
+    negotiation_status: status.value === 'negotiation' ? negotiationStatus.value : undefined,
     proposal_status: status.value === 'execution' ? 'approved' : proposalStatus.value,
+    execution_without_payment: status.value === 'execution' ? executionWithoutPayment.value : false,
+    execution_without_payment_reason: status.value === 'execution' && executionWithoutPayment.value ? executionWithoutPaymentReason.value : null,
+    auto_execution_on_payment: autoExecutionOnPayment.value,
     target_currency: enableCurrency.value ? (targetCurrency.value || null) : null,
     target_currency_amount: enableCurrency.value && targetCurrencyAmount.value ? Number(String(targetCurrencyAmount.value).replace(',', '.')) : null,
   };
@@ -2859,6 +2880,37 @@ watch(
           <label v-else class="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-medium text-blue-900 ring-1 ring-blue-100">
             <input type="checkbox" v-model="measurementRequired" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
             {{ isRepairWorkflow ? 'Диагностика нужна' : 'Замер нужен' }}
+          </label>
+        </div>
+
+        <div class="mt-3 rounded-xl border border-blue-100 bg-white p-3 shadow-sm">
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-xs font-semibold uppercase tracking-[0.12em] text-blue-900/70">Состояние переговоров</p>
+            <span class="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-800">
+              {{ negotiationStatusLabel }}
+            </span>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button
+              v-for="option in NEGOTIATION_STATUS_OPTIONS"
+              :key="option.value"
+              type="button"
+              class="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition"
+              :class="negotiationStatus === option.value
+                ? 'border-blue-200 bg-blue-100 text-blue-900 shadow-sm'
+                : 'border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800'"
+              @click="setNegotiationStatus(option.value)"
+            >
+              <span class="material-icons-round text-[15px]">{{ option.icon }}</span>
+              {{ option.label }}
+            </button>
+          </div>
+          <label class="mt-3 flex items-start gap-2 rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-xs text-emerald-900">
+            <input v-model="autoExecutionOnPayment" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+            <span>
+              <span class="block font-semibold">Перевести в работу после полной оплаты</span>
+              <span class="mt-0.5 block text-emerald-700/80">Сработает автоматически, когда долг по заказу станет нулевым.</span>
+            </span>
           </label>
         </div>
 
@@ -3720,6 +3772,23 @@ watch(
         />
       </OrderDrawerSection>
 
+
+      <section v-if="status === 'execution'" class="mt-4 rounded-2xl border border-teal-100 bg-teal-50/50 p-3">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 class="text-sm font-semibold text-teal-900">Установка / работы</h3>
+            <p class="mt-0.5 text-xs text-teal-700/75">Фиксируем исключения перед выполнением работ.</p>
+          </div>
+          <label class="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-medium text-teal-900 ring-1 ring-teal-100">
+            <input v-model="executionWithoutPayment" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+            Перенос без оплаты
+          </label>
+        </div>
+        <label v-if="executionWithoutPayment" class="field-label mt-3">
+          Причина переноса без оплаты
+          <textarea v-model="executionWithoutPaymentReason" class="field-input min-h-[60px]" placeholder="Например: постоянный клиент, оплата по факту..." />
+        </label>
+      </section>
 
       <DealExecutionTab
         v-if="status === 'execution' && order"

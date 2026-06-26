@@ -7048,7 +7048,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "pattern": "^(b2c|b2b)$",
+              "pattern": "^(all|b2c|b2b)$",
               "default": "b2c",
               "title": "Segment"
             }
@@ -24127,6 +24127,18 @@
             ],
             "title": "Updated At"
           },
+          "status_changed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Changed At"
+          },
           "next_followup_date": {
             "anyOf": [
               {
@@ -24413,6 +24425,44 @@
               }
             ],
             "title": "Proposal Sent At"
+          },
+          "negotiation_status": {
+            "type": "string",
+            "title": "Negotiation Status",
+            "default": "awaiting_offer"
+          },
+          "negotiation_status_changed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Negotiation Status Changed At"
+          },
+          "execution_without_payment": {
+            "type": "boolean",
+            "title": "Execution Without Payment",
+            "default": false
+          },
+          "execution_without_payment_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Without Payment Reason"
+          },
+          "auto_execution_on_payment": {
+            "type": "boolean",
+            "title": "Auto Execution On Payment",
+            "default": false
           },
           "total_payments": {
             "type": "number",
@@ -25133,6 +25183,18 @@
             ],
             "title": "Updated At"
           },
+          "status_changed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Changed At"
+          },
           "next_followup_date": {
             "anyOf": [
               {
@@ -25419,6 +25481,44 @@
               }
             ],
             "title": "Proposal Sent At"
+          },
+          "negotiation_status": {
+            "type": "string",
+            "title": "Negotiation Status",
+            "default": "awaiting_offer"
+          },
+          "negotiation_status_changed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Negotiation Status Changed At"
+          },
+          "execution_without_payment": {
+            "type": "boolean",
+            "title": "Execution Without Payment",
+            "default": false
+          },
+          "execution_without_payment_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Without Payment Reason"
+          },
+          "auto_execution_on_payment": {
+            "type": "boolean",
+            "title": "Auto Execution On Payment",
+            "default": false
           },
           "total_payments": {
             "type": "number",
@@ -26029,6 +26129,44 @@
             ],
             "title": "Proposal Sent At"
           },
+          "negotiation_status": {
+            "type": "string",
+            "title": "Negotiation Status",
+            "default": "awaiting_offer"
+          },
+          "negotiation_status_changed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Negotiation Status Changed At"
+          },
+          "execution_without_payment": {
+            "type": "boolean",
+            "title": "Execution Without Payment",
+            "default": false
+          },
+          "execution_without_payment_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Without Payment Reason"
+          },
+          "auto_execution_on_payment": {
+            "type": "boolean",
+            "title": "Auto Execution On Payment",
+            "default": false
+          },
           "equipment_status": {
             "type": "string",
             "title": "Equipment Status",
@@ -26325,6 +26463,44 @@
               }
             ],
             "title": "Proposal Sent At"
+          },
+          "negotiation_status": {
+            "type": "string",
+            "title": "Negotiation Status",
+            "default": "awaiting_offer"
+          },
+          "negotiation_status_changed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Negotiation Status Changed At"
+          },
+          "execution_without_payment": {
+            "type": "boolean",
+            "title": "Execution Without Payment",
+            "default": false
+          },
+          "execution_without_payment_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Without Payment Reason"
+          },
+          "auto_execution_on_payment": {
+            "type": "boolean",
+            "title": "Auto Execution On Payment",
+            "default": false
           },
           "equipment_status": {
             "type": "string",
@@ -27101,6 +27277,50 @@
               }
             ],
             "title": "Proposal Sent At"
+          },
+          "negotiation_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Negotiation Status"
+          },
+          "execution_without_payment": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Without Payment"
+          },
+          "execution_without_payment_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Without Payment Reason"
+          },
+          "auto_execution_on_payment": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Execution On Payment"
           },
           "is_paid": {
             "anyOf": [

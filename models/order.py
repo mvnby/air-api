@@ -372,8 +372,13 @@ class Order(SQLModel, table=True):
     measurer_id: Optional[int] = Field(default=None, index=True)
     measurement_result: Optional[str] = Field(default=None)
     additional_conditions: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    negotiation_status: str = Field(default="awaiting_offer", sa_column=Column(String, default="awaiting_offer", index=True))
+    negotiation_status_changed_at: Optional[datetime] = None
     proposal_status: str = Field(default="draft", sa_column=Column(String, default="draft", index=True))
     proposal_sent_at: Optional[datetime] = None
+    execution_without_payment: bool = Field(default=False, index=True)
+    execution_without_payment_reason: Optional[str] = Field(default=None)
+    auto_execution_on_payment: bool = Field(default=False, index=True)
 
     # --- Internal: Execution stage ---
     works_plan: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
@@ -387,6 +392,7 @@ class Order(SQLModel, table=True):
     updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
     installation_date: Optional[datetime] = None
     next_followup_date: Optional[datetime] = Field(default=None, description="Дата следующего касания")
+    status_changed_at: Optional[datetime] = None
     closed_at: Optional[datetime] = None
 
     contract_date: Optional[datetime] = Field(default_factory=datetime.now, description="Дата заключения договора")

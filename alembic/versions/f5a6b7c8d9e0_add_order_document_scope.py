@@ -17,23 +17,43 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _column_names(table_name: str) -> set[str]:
+    inspector = sa.inspect(op.get_bind())
+    return {column["name"] for column in inspector.get_columns(table_name)}
+
+
+def _index_names(table_name: str) -> set[str]:
+    return {index["name"] for index in sa.inspect(op.get_bind()).get_indexes(table_name)}
+
+
+def _foreign_key_names(table_name: str) -> set[str]:
+    return {fk["name"] for fk in sa.inspect(op.get_bind()).get_foreign_keys(table_name) if fk.get("name")}
+
+
 def upgrade() -> None:
-    op.add_column("order_document", sa.Column("scope_customer_branch_id", sa.Integer(), nullable=True))
-    op.add_column("order_document", sa.Column("scope_title", sa.String(), nullable=True))
-    op.add_column("order_document", sa.Column("scope_address", sa.String(), nullable=True))
-    op.add_column("order_document", sa.Column("scope_meta", sa.JSON(), nullable=True))
-    op.create_index(
-        "ix_order_document_scope_customer_branch_id",
-        "order_document",
-        ["scope_customer_branch_id"],
-    )
-    op.create_foreign_key(
-        "fk_order_document_scope_customer_branch_id",
-        "order_document",
-        "customer_branches",
-        ["scope_customer_branch_id"],
-        ["id"],
-    )
+    columns = _column_names("order_document")
+    if "scope_customer_branch_id" not in columns:
+        op.add_column("order_document", sa.Column("scope_customer_branch_id", sa.Integer(), nullable=True))
+    if "scope_title" not in columns:
+        op.add_column("order_document", sa.Column("scope_title", sa.String(), nullable=True))
+    if "scope_address" not in columns:
+        op.add_column("order_document", sa.Column("scope_address", sa.String(), nullable=True))
+    if "scope_meta" not in columns:
+        op.add_column("order_document", sa.Column("scope_meta", sa.JSON(), nullable=True))
+    if "ix_order_document_scope_customer_branch_id" not in _index_names("order_document"):
+        op.create_index(
+            "ix_order_document_scope_customer_branch_id",
+            "order_document",
+            ["scope_customer_branch_id"],
+        )
+    if "fk_order_document_scope_customer_branch_id" not in _foreign_key_names("order_document"):
+        op.create_foreign_key(
+            "fk_order_document_scope_customer_branch_id",
+            "order_document",
+            "customer_branches",
+            ["scope_customer_branch_id"],
+            ["id"],
+        )
 
 
 def downgrade() -> None:

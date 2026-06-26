@@ -472,6 +472,7 @@ class LeadService:
             comment=order_comment,
             title=f"Лид #{lead.id}" if not title_suffix else f"Лид #{lead.id}: {title_suffix[:96]}",
             delivery_address=order_delivery_address,
+            status_changed_at=datetime.now(),
         )
         session.add(order)
         await session.flush()

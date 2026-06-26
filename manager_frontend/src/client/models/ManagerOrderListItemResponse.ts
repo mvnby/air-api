@@ -17,6 +17,7 @@ export type ManagerOrderListItemResponse = {
     manager_labels?: Array<string>;
     created_at: string;
     updated_at?: (string | null);
+    status_changed_at?: (string | null);
     next_followup_date?: (string | null);
     measurement_date?: (string | null);
     installation_date?: (string | null);
@@ -49,6 +50,11 @@ export type ManagerOrderListItemResponse = {
     measurement_result?: (string | null);
     proposal_status?: string;
     proposal_sent_at?: (string | null);
+    negotiation_status?: string;
+    negotiation_status_changed_at?: (string | null);
+    execution_without_payment?: boolean;
+    execution_without_payment_reason?: (string | null);
+    auto_execution_on_payment?: boolean;
     total_payments?: number;
     balance_due?: number;
     readonly needs_attention: boolean;

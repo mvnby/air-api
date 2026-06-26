@@ -22,6 +22,10 @@ export type ManagerOrderUpdatePayload = {
     additional_conditions?: (string | null);
     proposal_status?: (string | null);
     proposal_sent_at?: (string | null);
+    negotiation_status?: (string | null);
+    execution_without_payment?: (boolean | null);
+    execution_without_payment_reason?: (string | null);
+    auto_execution_on_payment?: (boolean | null);
     is_paid?: (boolean | null);
     closing_result?: (string | null);
     reject_reason?: (string | null);
