@@ -12,6 +12,7 @@ from models import (
     CustomerType,
     Installer,
     Order,
+    OrderServiceLink,
     OrderWorkStage,
     OrderProposal,
     OrderStageStatus,
@@ -22,7 +23,7 @@ from models import (
     Service,
     ServiceTariff,
 )
-from schemas import ManagerOrderUpdatePayload, OrderWorkStageCreatePayload, OrderWorkStageUpdatePayload
+from schemas import ManagerOrderUpdatePayload, OrderWorkStageCreatePayload, OrderWorkStageUpdatePayload, PaymentCreatePayload
 from services.order_service import OrderService
 
 
@@ -297,6 +298,9 @@ async def test_service_get_orders_for_manager_segment_and_search(db):
     assert len(b2b["items"]) == 1
     assert b2b["items"][0]["customer"]["name"] == "Acme LLC"
 
+    all_orders = await OrderService.get_orders_for_manager(db, "all", page=1, limit=20)
+    assert {item["customer"]["name"] for item in all_orders["items"]} == {"Alice", "Acme LLC"}
+
 
 @pytest.mark.asyncio
 async def test_service_get_orders_for_manager_title_and_labels(db):
@@ -335,6 +339,42 @@ async def test_service_get_orders_for_manager_b2c_includes_legacy_without_custom
 
     b2b = await OrderService.get_orders_for_manager(db, "b2b", page=1, limit=20)
     assert len(b2b["items"]) == 0
+
+    all_orders = await OrderService.get_orders_for_manager(db, "all", page=1, limit=20)
+    assert len(all_orders["items"]) == 1
+    assert all_orders["items"][0]["customer"] is None
+
+
+@pytest.mark.asyncio
+async def test_service_auto_execution_on_payment_moves_order_to_work(db):
+    customer = Customer(name="Auto Pay", phone="+375291111113", type=CustomerType.individual)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(
+        customer_id=customer.id,
+        status=OrderStatus.NEGOTIATION,
+        negotiation_status="awaiting_payment",
+        auto_execution_on_payment=True,
+    )
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    db.add(OrderServiceLink(order_id=order.id, title="Монтаж", quantity=1, price=500, cost=0))
+    await db.commit()
+
+    await OrderService.add_payment(
+        db,
+        int(order.id),
+        PaymentCreatePayload(amount=500, type="postpayment"),
+    )
+    await db.refresh(order)
+
+    assert order.status == OrderStatus.EXECUTION
+    assert order.is_paid is True
+    assert order.balance_due == 0
 
 
 @pytest.mark.asyncio
@@ -465,6 +505,13 @@ async def test_service_update_order_for_manager_validation(db):
     with pytest.raises(ValueError):
         await OrderService.update_order_for_manager(db, order.id, ManagerOrderUpdatePayload(status="bad_status"))
 
+    with pytest.raises(ValueError, match="Invalid negotiation_status"):
+        await OrderService.update_order_for_manager(
+            db,
+            order.id,
+            ManagerOrderUpdatePayload(negotiation_status="waiting_for_magic"),
+        )
+
     with pytest.raises(ValueError):
         await OrderService.update_order_for_manager(
             db,
@@ -533,6 +580,17 @@ async def test_service_update_order_lost_archives_customer_in_same_flow(db):
     refreshed_customer = await db.get(Customer, customer.id)
     assert refreshed_customer is not None
     assert refreshed_customer.is_archived is True
+
+
+def test_service_explicit_negotiation_status_wins_over_proposal_status():
+    order = Order(
+        status=OrderStatus.NEGOTIATION,
+        negotiation_status="follow_up",
+        proposal_status="approved",
+        is_paid=False,
+    )
+
+    assert OrderService._infer_negotiation_status(order) == "follow_up"
 
 
 @pytest.mark.asyncio

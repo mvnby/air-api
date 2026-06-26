@@ -3,7 +3,7 @@ import { ref } from 'vue';
 import type { Segment } from '../../api';
 import type { OrderRenderItem } from './order-utils';
 import OrderColumn from './OrderColumn.vue';
-import { STATUS_LABELS, STATUS_ORDER } from './order-utils';
+import { BOARD_COLUMNS, BOARD_COLUMN_LABELS, NEGOTIATION_STATUS_OPTIONS } from './order-utils';
 
 defineProps<{
   groupedItems: Record<string, OrderRenderItem[]>;
@@ -15,6 +15,8 @@ const emit = defineEmits<{
   open: [orderId: number];
   generate: [payload: { orderId: number; docType: string }];
   move: [payload: { orderId: number; oldStatus: string; newStatus: string }];
+  cancelOrder: [payload: { orderId: number }];
+  closeDebt: [payload: { orderId: number }];
   renameCustomer: [payload: { customerId: number; alias: string | null }];
   renameOrder: [payload: { orderId: number; title: string | null }];
 }>();
@@ -55,17 +57,23 @@ const onToggleGroup = (groupId: string) => {
 <template>
   <div class="flex gap-4 overflow-x-auto pb-4">
     <OrderColumn
-      v-for="status in STATUS_ORDER"
-      :key="status"
-      :status="status"
-      :label="STATUS_LABELS[status] || status"
-      :items="groupedItems[status] || []"
+      v-for="column in BOARD_COLUMNS"
+      :key="column.value"
+      :status="column.value"
+      :label="BOARD_COLUMN_LABELS[column.value] || column.label"
+      :icon="column.icon"
+      :filter-kind="column.value === 'negotiation' ? 'negotiation' : undefined"
+      :filter-options="column.value === 'negotiation' ? NEGOTIATION_STATUS_OPTIONS : undefined"
+      :items="groupedItems[column.value] || []"
       :segment="segment"
       :moving-order-ids="movingOrderIds"
       :expanded-order-id="expandedOrderId"
       :expanded-group-ids="expandedGroupIds"
       @open="(orderId) => emit('open', orderId)"
       @generate="(payload) => emit('generate', payload)"
+      @cancel-order="(payload) => emit('cancelOrder', payload)"
+      @quick-status="(payload) => emit('move', { orderId: payload.orderId, oldStatus: '', newStatus: payload.status })"
+      @close-debt="(payload) => emit('closeDebt', payload)"
       @drag-start="(payload) => onDragStart(payload)"
       @drop-to="(dropStatus) => onDropTo(dropStatus)"
       @toggle-expanded="onToggleExpanded"

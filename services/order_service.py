@@ -52,6 +52,49 @@ class OrderService:
     }
     LOGISTICS_COMPONENT_KINDS = {"indoor", "outdoor", "accessory", "other"}
     DEFAULT_LOGISTICS_COUNTRY = "Китай"
+    NEGOTIATION_STATUSES = {
+        "awaiting_offer",
+        "awaiting_visit",
+        "proposal_sent",
+        "awaiting_payment",
+        "follow_up",
+    }
+    DEFAULT_NEGOTIATION_STATUS = "awaiting_offer"
+    PAYMENT_COMPLETE_TOLERANCE = 0.01
+
+    @staticmethod
+    def _normalize_negotiation_status(value: Any, fallback: str = DEFAULT_NEGOTIATION_STATUS) -> str:
+        cleaned = str(value or "").strip()
+        if cleaned in OrderService.NEGOTIATION_STATUSES:
+            return cleaned
+        return fallback if fallback in OrderService.NEGOTIATION_STATUSES else OrderService.DEFAULT_NEGOTIATION_STATUS
+
+    @staticmethod
+    def _infer_negotiation_status(order: Order) -> str:
+        raw_status = getattr(order, "negotiation_status", None)
+        if raw_status is not None:
+            current = str(raw_status or "").strip()
+            if current in OrderService.NEGOTIATION_STATUSES:
+                return current
+        if order.status != OrderStatus.NEGOTIATION:
+            return OrderService.DEFAULT_NEGOTIATION_STATUS
+        if order.proposal_status == "sent":
+            return "proposal_sent"
+        if order.proposal_status == "approved" and not order.is_paid:
+            return "awaiting_payment"
+        if order.measurement_required:
+            return "awaiting_visit"
+        return OrderService.DEFAULT_NEGOTIATION_STATUS
+
+    @staticmethod
+    def _set_negotiation_status(order: Order, value: Any, *, changed_at: Optional[datetime] = None) -> None:
+        next_status = str(value or "").strip()
+        if next_status not in OrderService.NEGOTIATION_STATUSES:
+            raise ValueError(f"Invalid negotiation_status: {value}")
+        previous = OrderService._normalize_negotiation_status(getattr(order, "negotiation_status", None))
+        order.negotiation_status = next_status
+        if previous != next_status or not getattr(order, "negotiation_status_changed_at", None):
+            order.negotiation_status_changed_at = changed_at or datetime.now()
 
     @staticmethod
     def _clean_optional_text(value: Any) -> Optional[str]:
@@ -544,6 +587,22 @@ class OrderService:
     async def _refresh_order_financials(session: AsyncSession, order: Order) -> None:
         await session.refresh(order, attribute_names=["payments", "proposals", "product_links", "service_links", "installers"])
         order.calculate_totals()
+        OrderService._apply_payment_state(order)
+
+    @staticmethod
+    def _apply_payment_state(order: Order) -> None:
+        if float(order.total_amount or 0) <= 0:
+            return
+        is_fully_paid = float(order.balance_due or 0) <= OrderService.PAYMENT_COMPLETE_TOLERANCE
+        order.is_paid = is_fully_paid
+        if (
+            is_fully_paid
+            and bool(getattr(order, "auto_execution_on_payment", False))
+            and order.status == OrderStatus.NEGOTIATION
+        ):
+            order.status = OrderStatus.EXECUTION
+            order.status_changed_at = datetime.now()
+            order.proposal_status = "approved"
 
     @staticmethod
     def _clean_proposal_name(raw: Any, fallback: str = "Основное") -> str:
@@ -943,7 +1002,8 @@ class OrderService:
             lead_source=lead_source,
             comment=comment,
             title=default_title,
-            created_at=datetime.now()
+            created_at=datetime.now(),
+            status_changed_at=datetime.now(),
         )
         session.add(order)
         await session.flush()
@@ -1826,6 +1886,7 @@ class OrderService:
             "manager_labels": OrderService._get_manager_labels(order),
             "created_at": order.created_at,
             "updated_at": order.updated_at,
+            "status_changed_at": getattr(order, "status_changed_at", None),
             "next_followup_date": order.next_followup_date,
             "measurement_date": order.measurement_date,
             "installation_date": order.installation_date,
@@ -1850,8 +1911,13 @@ class OrderService:
             "measurement_required": bool(order.measurement_required),
             "measurer_id": order.measurer_id,
             "measurement_result": order.measurement_result,
+            "negotiation_status": OrderService._infer_negotiation_status(order),
+            "negotiation_status_changed_at": getattr(order, "negotiation_status_changed_at", None),
             "proposal_status": order.proposal_status or "draft",
             "proposal_sent_at": order.proposal_sent_at,
+            "execution_without_payment": bool(getattr(order, "execution_without_payment", False)),
+            "execution_without_payment_reason": getattr(order, "execution_without_payment_reason", None),
+            "auto_execution_on_payment": bool(getattr(order, "auto_execution_on_payment", False)),
             "equipment_status": getattr(order.equipment_status, "value", str(order.equipment_status)) if order.equipment_status else "pending",
             "standard_install_kit_issued": bool(order.standard_install_kit_issued),
             "target_currency": order.target_currency,
@@ -1940,14 +2006,18 @@ class OrderService:
         from schemas import Meta
 
         segment = customer_segment.lower()
-        if segment not in {"b2c", "b2b"}:
+        if segment not in {"all", "b2c", "b2b"}:
             raise ValueError(f"Invalid segment: {customer_segment}")
 
         # B2B = explicit company OR customer has non-empty INN.
         # B2C = everything else (including legacy orders without linked customer).
         has_inn = and_(Customer.inn.is_not(None), func.length(func.trim(Customer.inn)) > 0)
         is_b2b = or_(Customer.type == CustomerType.company, has_inn)
-        segment_clause = is_b2b if segment == "b2b" else or_(Customer.id.is_(None), not_(is_b2b))
+        base_filters = [Order.status != OrderStatus.NEW_LEAD]
+        if segment == "b2b":
+            base_filters.append(is_b2b)
+        elif segment == "b2c":
+            base_filters.append(or_(Customer.id.is_(None), not_(is_b2b)))
 
         base_stmt = (
             select(Order)
@@ -1961,13 +2031,13 @@ class OrderService:
                 selectinload(Order.service_links).selectinload(OrderServiceLink.service),
                 selectinload(Order.installers).selectinload(OrderInstaller.installer),
             )
-            .where(segment_clause, Order.status != OrderStatus.NEW_LEAD)
+            .where(*base_filters)
         )
 
         count_stmt = (
             select(func.count(Order.id))
             .outerjoin(Customer, Order.customer_id == Customer.id)
-            .where(segment_clause, Order.status != OrderStatus.NEW_LEAD)
+            .where(*base_filters)
         )
 
         if status:
@@ -2336,12 +2406,24 @@ class OrderService:
             fields_set = getattr(payload, "__fields_set__", set())
 
         previous_workflow_type = OrderService._normalize_workflow_type(getattr(order, "workflow_type", None))
+        previous_status = order.status
+        previous_negotiation_status = OrderService._normalize_negotiation_status(
+            getattr(order, "negotiation_status", None),
+        )
 
         if "status" in fields_set and payload.status is not None:
             try:
                 order.status = OrderStatus(payload.status)
             except ValueError as exc:
                 raise ValueError(f"Invalid status: {payload.status}") from exc
+            if order.status != previous_status or not getattr(order, "status_changed_at", None):
+                order.status_changed_at = datetime.now()
+            if order.status == OrderStatus.CLOSED and not order.closing_result:
+                order.closing_result = ClosingResult.WON.value
+            if order.status != OrderStatus.CLOSED:
+                order.closing_result = None
+                order.reject_reason = None
+                order.closed_at = None
         if "title" in fields_set:
             order.title = OrderService._clean_order_title(payload.title)
         if "workflow_type" in fields_set and payload.workflow_type is not None:
@@ -2397,12 +2479,43 @@ class OrderService:
         if "additional_conditions" in fields_set:
             value = (payload.additional_conditions or "").strip()
             order.additional_conditions = value or None
+        if "negotiation_status" in fields_set and payload.negotiation_status is not None:
+            OrderService._set_negotiation_status(order, payload.negotiation_status)
         if "proposal_status" in fields_set and payload.proposal_status is not None:
             order.proposal_status = payload.proposal_status
+            if payload.proposal_status == "sent" and not order.proposal_sent_at:
+                order.proposal_sent_at = datetime.now()
         if "proposal_sent_at" in fields_set:
             order.proposal_sent_at = OrderService._normalize_naive_datetime(payload.proposal_sent_at)
+        if "execution_without_payment" in fields_set and payload.execution_without_payment is not None:
+            order.execution_without_payment = bool(payload.execution_without_payment)
+        if "execution_without_payment_reason" in fields_set:
+            order.execution_without_payment_reason = OrderService._clean_optional_text(payload.execution_without_payment_reason)
+        if "auto_execution_on_payment" in fields_set and payload.auto_execution_on_payment is not None:
+            order.auto_execution_on_payment = bool(payload.auto_execution_on_payment)
         if order.status == OrderStatus.EXECUTION and order.proposal_status != "approved":
             order.proposal_status = "approved"
+        if order.status == OrderStatus.EXECUTION:
+            if not order.installation_date:
+                order.installation_date = datetime.now()
+        elif order.status != OrderStatus.EXECUTION:
+            order.execution_without_payment = False
+            order.execution_without_payment_reason = None
+
+        if order.status == OrderStatus.NEGOTIATION and "negotiation_status" not in fields_set:
+            if "measurement_required" in fields_set and order.measurement_required:
+                OrderService._set_negotiation_status(order, "awaiting_visit")
+            elif "proposal_status" in fields_set and order.proposal_status == "sent":
+                OrderService._set_negotiation_status(order, "proposal_sent")
+            elif "proposal_status" in fields_set and order.proposal_status == "approved":
+                OrderService._set_negotiation_status(order, "awaiting_payment")
+        if order.status == OrderStatus.NEGOTIATION and not getattr(order, "negotiation_status_changed_at", None):
+            order.negotiation_status_changed_at = datetime.now()
+        if (
+            order.status == OrderStatus.NEGOTIATION
+            and OrderService._normalize_negotiation_status(getattr(order, "negotiation_status", None)) != previous_negotiation_status
+        ):
+            order.negotiation_status_changed_at = datetime.now()
         
         # Equipment & Installation
         if "equipment_status" in fields_set and payload.equipment_status is not None:
@@ -2712,6 +2825,8 @@ class OrderService:
         elif currency_fields_changed:
             await session.flush()
             await OrderService._refresh_order_financials(session, order)
+        else:
+            OrderService._apply_payment_state(order)
 
         transitioned_to_repair = previous_workflow_type != "repair" and current_workflow_type == "repair"
         if transitioned_to_repair and "services" not in fields_set:

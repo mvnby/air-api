@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { ManagerOrderListItemResponse } from '../../client';
 import type { Segment } from '../../api';
-import { STATUS_LABELS, formatDate, formatMoney, formatPhone, getOrderCustomerName, isOverdue } from './order-utils';
+import { STATUS_LABELS, formatDate, formatMoney, formatPhone, getOrderCustomerName, getOrderSegment, isOverdue } from './order-utils';
 import OrderTitleEditor from './OrderTitleEditor.vue';
 
 const props = defineProps<{
@@ -19,7 +20,8 @@ const emit = defineEmits<{
   toggleSelect: [payload: { orderId: number; selected: boolean }];
 }>();
 
-const customerName = (order: ManagerOrderListItemResponse) => getOrderCustomerName(order, props.segment);
+const rowSegment = computed(() => (props.segment === 'all' ? getOrderSegment(props.order) : props.segment));
+const customerName = (order: ManagerOrderListItemResponse) => getOrderCustomerName(order, rowSegment.value);
 </script>
 
 <template>
@@ -60,7 +62,7 @@ const customerName = (order: ManagerOrderListItemResponse) => getOrderCustomerNa
       </div>
     </td>
     <td class="px-3 py-3">
-      <template v-if="segment === 'b2b'">
+      <template v-if="rowSegment === 'b2b'">
         <p>{{ customerName(order) }}</p>
         <p class="text-xs text-gray-500">УНП: {{ order.customer?.inn || '—' }}</p>
       </template>
@@ -90,28 +92,28 @@ const customerName = (order: ManagerOrderListItemResponse) => getOrderCustomerNa
     <td class="px-3 py-3">
       <div class="flex flex-wrap gap-2">
         <button
-          v-if="segment === 'b2b'"
+          v-if="rowSegment === 'b2b'"
           class="btn-mini"
           @click="emit('generate', { orderId: order.id, docType: 'invoice' })"
         >
           Счет
         </button>
         <button
-          v-if="segment === 'b2b'"
+          v-if="rowSegment === 'b2b'"
           class="btn-mini"
           @click="emit('generate', { orderId: order.id, docType: 'contract' })"
         >
           Договор
         </button>
         <button
-          v-if="segment === 'b2c'"
+          v-if="rowSegment === 'b2c'"
           class="btn-mini"
           @click="emit('generate', { orderId: order.id, docType: 'work_order' })"
         >
           Наряд
         </button>
         <button
-          v-if="segment === 'b2c'"
+          v-if="rowSegment === 'b2c'"
           class="btn-mini"
           @click="emit('generate', { orderId: order.id, docType: 'act' })"
         >

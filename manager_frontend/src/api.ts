@@ -101,7 +101,7 @@ import type { LeadsInboxItemResponse } from './client/models/LeadsInboxItemRespo
 
 OpenAPI.WITH_CREDENTIALS = true;
 
-export type Segment = 'b2c' | 'b2b';
+export type Segment = 'all' | 'b2c' | 'b2b';
 export type DashboardView = 'kanban' | 'list';
 export { type Product, type DashboardStatsResponse, type DashboardTouchpoint };
 export type { ProductCreate, ProductDuplicatePayload, ProductUpdate };

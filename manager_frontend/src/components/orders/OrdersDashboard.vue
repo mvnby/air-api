@@ -16,7 +16,14 @@ import OrdersViewToggle from './OrdersViewToggle.vue';
 import OrderKanbanBoard from './OrderKanbanBoard.vue';
 import OrdersListTable from './OrdersListTable.vue';
 import OrderEditDrawer from './OrderEditDrawer.vue';
-import { STATUS_LABELS, STATUS_ORDER, buildCustomerOrderRenderItems } from './order-utils';
+import {
+  BOARD_COLUMNS,
+  STATUS_LABELS,
+  STATUS_ORDER,
+  buildCustomerOrderRenderItems,
+  formatMoney,
+  getOrderBoardColumn,
+} from './order-utils';
 import { getApiErrorMessage, parseApiFieldErrors } from '../../utils/api-errors';
 
 const ORDERS_SEGMENT_STORAGE_KEY = 'manager_orders_segment';
@@ -62,17 +69,18 @@ const importPreview = ref<ManagerOrderImportPreviewResponse | null>(null);
 const importFileName = ref('');
 const importModalOpen = ref(false);
 
-const visibleOrders = computed(() => (
-  hideOnHold.value ? orders.value.filter((order) => !order.is_on_hold) : orders.value
-));
+const visibleOrders = computed(() => orders.value.filter((order) => {
+  if (hideOnHold.value && order.is_on_hold) return false;
+  return true;
+}));
 const normalizedSearch = computed(() => search.value.trim());
 const hasActiveOrderFilters = computed(() => Boolean(normalizedSearch.value || statusFilter.value || overdueOnly.value));
 
 const groupedOrders = computed(() => {
   const groups: Record<string, ManagerOrderListItemResponse[]> = {};
-  for (const statusKey of STATUS_ORDER) groups[statusKey] = [];
+  for (const column of BOARD_COLUMNS) groups[column.value] = [];
   for (const order of visibleOrders.value) {
-    const key = order.status;
+    const key = getOrderBoardColumn(order);
     if (!groups[key]) groups[key] = [];
     groups[key].push(order);
   }
@@ -82,8 +90,8 @@ const groupedOrders = computed(() => {
 const groupedOrderItems = computed(() => {
   const groups = groupedOrders.value;
   const items: Record<string, ReturnType<typeof buildCustomerOrderRenderItems>> = {};
-  for (const statusKey of STATUS_ORDER) {
-    items[statusKey] = buildCustomerOrderRenderItems(groups[statusKey] || [], segment.value, groupByCustomer.value, customerAliases.value);
+  for (const column of BOARD_COLUMNS) {
+    items[column.value] = buildCustomerOrderRenderItems(groups[column.value] || [], segment.value, groupByCustomer.value, customerAliases.value);
   }
   return items;
 });
@@ -236,7 +244,7 @@ const restoreSegmentAndView = () => {
   const resolvedSegment = segmentFromUrl || segmentFromStorage;
   const resolvedView = viewFromUrl || viewFromStorage;
 
-  if (resolvedSegment === 'b2b' || resolvedSegment === 'b2c') {
+  if (resolvedSegment === 'all' || resolvedSegment === 'b2b' || resolvedSegment === 'b2c') {
     segment.value = resolvedSegment;
   }
   if (resolvedView === 'kanban' || resolvedView === 'list') {
@@ -388,23 +396,133 @@ const clearOrderFilters = async () => {
   await loadOrders();
 };
 
-const applyStatusLocally = (orderId: number, status: string) => {
+const buildBoardTransitionPayload = (order: ManagerOrderListItemResponse, column: string): ManagerOrderUpdatePayload | null => {
+  if (column === 'closed_lost') return null;
+  if (column === 'closed_won') {
+    return { status: 'closed', closing_result: 'won', reject_reason: null };
+  }
+  if (column === 'execution') {
+    const balanceDue = Number(order.balance_due || 0);
+    const payload: ManagerOrderUpdatePayload = {
+      status: 'execution',
+      closing_result: null,
+      reject_reason: null,
+    };
+    if (balanceDue > 0 && !order.execution_without_payment) {
+      const approved = window.confirm('По заказу есть долг. Перенести в работу без оплаты?');
+      if (!approved) return null;
+      payload.execution_without_payment = true;
+      payload.execution_without_payment_reason = window.prompt('Причина переноса без оплаты', 'Доверенный клиент') || 'Без предоплаты';
+    }
+    return payload;
+  }
+  if (column === 'negotiation') {
+    return {
+      status: 'negotiation',
+      closing_result: null,
+      reject_reason: null,
+      execution_without_payment: false,
+      execution_without_payment_reason: null,
+    };
+  }
+  return {
+    status: 'negotiation',
+    negotiation_status: column,
+    closing_result: null,
+    reject_reason: null,
+    execution_without_payment: false,
+    execution_without_payment_reason: null,
+    measurement_required: column === 'awaiting_visit' ? true : undefined,
+    proposal_status: column === 'proposal_sent' ? 'sent' : column === 'awaiting_payment' ? 'approved' : undefined,
+  };
+};
+
+const applyStatusLocally = (orderId: number, payload: ManagerOrderUpdatePayload) => {
   const item = orders.value.find((order) => order.id === orderId);
-  if (item) item.status = status;
+  if (!item) return;
+  if (payload.status !== undefined && payload.status !== null) item.status = payload.status;
+  if (payload.negotiation_status !== undefined && payload.negotiation_status !== null) item.negotiation_status = payload.negotiation_status;
+  if (payload.closing_result !== undefined) item.closing_result = payload.closing_result;
+  if (payload.reject_reason !== undefined) item.reject_reason = payload.reject_reason;
+  if (payload.proposal_status !== undefined && payload.proposal_status !== null) item.proposal_status = payload.proposal_status;
+  if (payload.measurement_required !== undefined && payload.measurement_required !== null) item.measurement_required = payload.measurement_required;
+  if (payload.execution_without_payment !== undefined && payload.execution_without_payment !== null) item.execution_without_payment = payload.execution_without_payment;
+  if (payload.execution_without_payment_reason !== undefined) item.execution_without_payment_reason = payload.execution_without_payment_reason;
+  const now = new Date().toISOString();
+  item.status_changed_at = now;
+  if (payload.negotiation_status) item.negotiation_status_changed_at = now;
 };
 
 const onMoveOrder = async (payload: { orderId: number; oldStatus: string; newStatus: string }) => {
   if (movingOrderIds.value.includes(payload.orderId)) return;
+  const item = orders.value.find((order) => order.id === payload.orderId);
+  if (!item) return;
+  const updatePayload = buildBoardTransitionPayload(item, payload.newStatus);
+  if (!updatePayload) return;
   const snapshot = orders.value.map((item) => ({ ...item }));
   movingOrderIds.value.push(payload.orderId);
-  applyStatusLocally(payload.orderId, payload.newStatus);
+  applyStatusLocally(payload.orderId, updatePayload);
   try {
-    await api.moveOrderStatus(payload.orderId, payload.newStatus);
+    await api.patchManagerOrder(payload.orderId, updatePayload);
     setToast('Статус обновлен');
   } catch (error) {
     console.error(error);
     orders.value = snapshot;
-    setToast('Ошибка обновления статуса');
+    setToast(`Ошибка обновления статуса: ${getApiErrorMessage(error)}`);
+  } finally {
+    movingOrderIds.value = movingOrderIds.value.filter((id) => id !== payload.orderId);
+  }
+};
+
+const onCancelOrder = async (payload: { orderId: number }) => {
+  const reason = window.prompt('Причина отказа / неуспешного завершения');
+  if (reason === null) return;
+  const trimmedReason = reason.trim() || 'Без пояснения';
+  const snapshot = orders.value.map((item) => ({ ...item }));
+  const updatePayload: ManagerOrderUpdatePayload = {
+    status: 'closed',
+    closing_result: 'lost',
+    reject_reason: trimmedReason,
+  };
+  movingOrderIds.value.push(payload.orderId);
+  applyStatusLocally(payload.orderId, updatePayload);
+  try {
+    await api.patchManagerOrder(payload.orderId, updatePayload);
+    setToast('Заказ помечен отказом');
+  } catch (error) {
+    console.error(error);
+    orders.value = snapshot;
+    setToast(`Не удалось закрыть отказ: ${getApiErrorMessage(error)}`);
+  } finally {
+    movingOrderIds.value = movingOrderIds.value.filter((id) => id !== payload.orderId);
+  }
+};
+
+const onCloseDebt = async (payload: { orderId: number }) => {
+  if (movingOrderIds.value.includes(payload.orderId)) return;
+  const item = orders.value.find((order) => order.id === payload.orderId);
+  if (!item) return;
+  const amount = Number(item.balance_due || 0);
+  if (amount <= 0) {
+    setToast('Долг уже закрыт');
+    return;
+  }
+  const confirmed = window.confirm(`Добавить оплату ${formatMoney(amount)} и закрыть долг по заказу #${payload.orderId}?`);
+  if (!confirmed) return;
+
+  movingOrderIds.value.push(payload.orderId);
+  try {
+    await ManagerOrdersService.addManagerOrderPayment(payload.orderId, {
+      amount,
+      currency: 'BYN',
+      type: 'postpayment',
+      comment: 'Закрытие долга из канбан-карточки',
+    });
+    setToast('Долг закрыт');
+    await loadOrders();
+  } catch (error) {
+    console.error(error);
+    setToast(`Не удалось закрыть долг: ${getApiErrorMessage(error)}`);
   } finally {
     movingOrderIds.value = movingOrderIds.value.filter((id) => id !== payload.orderId);
   }
@@ -572,7 +690,7 @@ watch(drawerOpen, (isOpen) => {
           <div class="ml-auto flex shrink-0 items-center justify-end gap-1 sm:gap-2">
             <button
               type="button"
-              class="inline-flex h-8 items-center justify-center gap-1 rounded-xl border border-gray-200 bg-gray-50 px-2 text-xs font-semibold text-gray-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 sm:h-9 sm:px-3"
+              class="hidden h-8 items-center justify-center gap-1 rounded-xl border border-gray-200 bg-gray-50 px-2 text-xs font-semibold text-gray-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 sm:inline-flex sm:h-9 sm:px-3"
               :disabled="transferLoading || !selectedOrderIds.length"
               title="Экспорт выбранных заказов"
               @click="exportSelectedOrders"
@@ -583,7 +701,7 @@ watch(drawerOpen, (isOpen) => {
             </button>
             <button
               type="button"
-              class="inline-flex h-8 items-center justify-center gap-1 rounded-xl border border-gray-200 bg-gray-50 px-2 text-xs font-semibold text-gray-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 sm:h-9 sm:px-3"
+              class="hidden h-8 items-center justify-center gap-1 rounded-xl border border-gray-200 bg-gray-50 px-2 text-xs font-semibold text-gray-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 sm:inline-flex sm:h-9 sm:px-3"
               :disabled="transferLoading"
               title="Импорт заказов из JSON"
               @click="openImportPicker"
@@ -662,6 +780,8 @@ watch(drawerOpen, (isOpen) => {
         @open="openOrder"
         @generate="onGenerateDoc"
         @move="onMoveOrder"
+        @cancel-order="onCancelOrder"
+        @close-debt="onCloseDebt"
         @rename-customer="renameCustomerGroup"
         @rename-order="renameOrderTitle"
       />

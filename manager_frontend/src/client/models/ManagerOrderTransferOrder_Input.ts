@@ -32,6 +32,11 @@ export type ManagerOrderTransferOrder_Input = {
     measurement_result?: (string | null);
     proposal_status?: string;
     proposal_sent_at?: (string | null);
+    negotiation_status?: string;
+    negotiation_status_changed_at?: (string | null);
+    execution_without_payment?: boolean;
+    execution_without_payment_reason?: (string | null);
+    auto_execution_on_payment?: boolean;
     equipment_status?: string;
     standard_install_kit_issued?: boolean;
     target_currency?: (PaymentCurrency | null);

@@ -700,6 +700,7 @@ class ManagerOrderListItemResponse(BaseModel):
     manager_labels: List[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: Optional[datetime] = None
+    status_changed_at: Optional[datetime] = None
     next_followup_date: Optional[datetime] = None
     measurement_date: Optional[datetime] = None
     installation_date: Optional[datetime] = None
@@ -736,6 +737,11 @@ class ManagerOrderListItemResponse(BaseModel):
     measurement_result: Optional[str] = None
     proposal_status: str = "draft"
     proposal_sent_at: Optional[datetime] = None
+    negotiation_status: str = "awaiting_offer"
+    negotiation_status_changed_at: Optional[datetime] = None
+    execution_without_payment: bool = False
+    execution_without_payment_reason: Optional[str] = None
+    auto_execution_on_payment: bool = False
 
     @computed_field
     @property
@@ -1046,6 +1052,10 @@ class ManagerOrderUpdatePayload(BaseModel):
     additional_conditions: Optional[str] = None
     proposal_status: Optional[str] = None
     proposal_sent_at: Optional[datetime] = None
+    negotiation_status: Optional[str] = None
+    execution_without_payment: Optional[bool] = None
+    execution_without_payment_reason: Optional[str] = None
+    auto_execution_on_payment: Optional[bool] = None
 
     is_paid: Optional[bool] = None
     # Closing
@@ -1225,6 +1235,11 @@ class ManagerOrderTransferOrder(BaseModel):
     measurement_result: Optional[str] = None
     proposal_status: str = "draft"
     proposal_sent_at: Optional[datetime] = None
+    negotiation_status: str = "awaiting_offer"
+    negotiation_status_changed_at: Optional[datetime] = None
+    execution_without_payment: bool = False
+    execution_without_payment_reason: Optional[str] = None
+    auto_execution_on_payment: bool = False
     equipment_status: str = "pending"
     standard_install_kit_issued: bool = False
     target_currency: Optional[PaymentCurrency] = None

@@ -2,8 +2,9 @@
 import { ref, watch } from 'vue';
 import { Check, ChevronDown, ChevronUp, X } from 'lucide-vue-next';
 import type { Segment } from '../../api';
+import type { ManagerOrderListItemResponse } from '../../client';
 import type { CustomerOrderGroup } from './order-utils';
-import { formatMoney, formatOrderCount } from './order-utils';
+import { formatMoney, formatOrderCount, getOrderSegment } from './order-utils';
 import OrderCardB2B from './OrderCardB2B.vue';
 import OrderCardB2C from './OrderCardB2C.vue';
 
@@ -18,6 +19,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   open: [orderId: number];
   generate: [payload: { orderId: number; docType: string }];
+  cancelOrder: [payload: { orderId: number }];
+  quickStatus: [payload: { orderId: number; status: string }];
+  closeDebt: [payload: { orderId: number }];
   dragStart: [payload: { orderId: number; oldStatus: string }];
   toggleExpanded: [orderId: number];
   toggleGroup: [groupId: string];
@@ -53,6 +57,11 @@ const cancelEditing = () => {
 
 const onGroupClick = () => {
   if (!editing.value) emit('toggleGroup', props.group.id);
+};
+
+const cardComponentForOrder = (order: ManagerOrderListItemResponse) => {
+  const segment = props.segment === 'all' ? getOrderSegment(order) : props.segment;
+  return segment === 'b2b' ? OrderCardB2B : OrderCardB2C;
 };
 </script>
 
@@ -124,7 +133,7 @@ const onGroupClick = () => {
     <Transition name="fade">
       <div v-if="expanded" class="mt-3 space-y-2 border-t border-slate-200 pt-3 dark:border-slate-700">
         <component
-          :is="segment === 'b2b' ? OrderCardB2B : OrderCardB2C"
+          :is="cardComponentForOrder(order)"
           v-for="order in group.orders"
           :key="order.id"
           :order="order"
@@ -132,6 +141,9 @@ const onGroupClick = () => {
           :draggable-disabled="movingOrderIds.includes(order.id)"
           @open="(orderId) => emit('open', orderId)"
           @generate="(payload) => emit('generate', payload)"
+          @cancel-order="(payload) => emit('cancelOrder', payload)"
+          @quick-status="(payload) => emit('quickStatus', payload)"
+          @close-debt="(payload) => emit('closeDebt', payload)"
           @drag-start="(payload) => emit('dragStart', payload)"
           @toggle-expanded="(orderId) => emit('toggleExpanded', orderId)"
           @rename-order="(payload) => emit('renameOrder', payload)"

@@ -70,6 +70,12 @@ async def test_manager_orders_list_segment_filter(async_client, db):
     assert len(b2b_items) == 1
     assert b2b_items[0]["customer"]["inn"] == "123456789"
 
+    r_all = await async_client.get("/api/manager/orders?segment=all", headers=headers)
+    assert r_all.status_code == 200
+    all_items = r_all.json()["items"]
+    assert len(all_items) == 3
+    assert any(item["customer"] is None for item in all_items)
+
 
 @pytest.mark.asyncio
 async def test_manager_orders_list_excludes_leads_before_pagination(async_client, db):
@@ -197,6 +203,7 @@ async def test_manager_order_patch_scalar_fields(async_client, db):
     headers = await _auth_headers(async_client)
     payload = {
         "status": "negotiation",
+        "negotiation_status": "awaiting_visit",
         "comment": "updated from manager",
         "is_paid": True,
     }
@@ -204,8 +211,76 @@ async def test_manager_order_patch_scalar_fields(async_client, db):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "negotiation"
+    assert data["negotiation_status"] == "awaiting_visit"
+    assert data["negotiation_status_changed_at"] is not None
+    assert data["status_changed_at"] is not None
     assert data["comment"] == "updated from manager"
     assert data["is_paid"] is True
+
+
+@pytest.mark.asyncio
+async def test_manager_order_patch_closes_lost_without_deleting_order(async_client, db):
+    customer = Customer(name="Lost Customer", phone="+375295555556", type=CustomerType.individual)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION, total_amount=500, balance_due=500)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={"status": "closed", "closing_result": "lost", "reject_reason": "Не сошлись по цене"},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "closed"
+    assert data["closing_result"] == "lost"
+    assert data["reject_reason"] == "Не сошлись по цене"
+
+    detail_response = await async_client.get(f"/api/manager/orders/{order.id}", headers=headers)
+    assert detail_response.status_code == 200
+    assert detail_response.json()["id"] == order.id
+
+
+@pytest.mark.asyncio
+async def test_manager_order_patch_moves_to_execution_without_payment_flag(async_client, db):
+    customer = Customer(name="Trusted Customer", phone="+375295555557", type=CustomerType.individual)
+    product = Product(title="Trusted AC", slug="trusted-ac", price=1000, area=20)
+    db.add(customer)
+    db.add(product)
+    await db.commit()
+    await db.refresh(customer)
+    await db.refresh(product)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION, total_amount=0, balance_due=0)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={
+            "status": "execution",
+            "execution_without_payment": True,
+            "execution_without_payment_reason": "Постоянный клиент",
+            "products": [{"product_id": product.id, "quantity": 1, "price": 1000, "cost": 700}],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "execution"
+    assert data["proposal_status"] == "approved"
+    assert data["execution_without_payment"] is True
+    assert data["execution_without_payment_reason"] == "Постоянный клиент"
 
 
 @pytest.mark.asyncio
