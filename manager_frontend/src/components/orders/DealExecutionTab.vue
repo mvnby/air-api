@@ -27,6 +27,7 @@ const setToast = (msg: string, type: 'success' | 'error' = 'success') => {
 };
 
 const showAddStage = ref(false);
+const showLegacyPickingList = false;
 const newStageName = ref('');
 const newStageStart = ref('');
 const newStageInstaller = ref<number | null>(null);
@@ -240,7 +241,7 @@ watch(() => props.order.id, () => {
   </div>
 
   <!-- ZONE 1: Timeline -->
-  <section class="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm">
+  <section v-if="showLegacyPickingList" class="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm">
     <div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
         <h3 class="text-lg font-bold text-slate-800 font-['Space_Grotesk']">Хронология выездов</h3>
         <button v-if="!showAddStage" class="btn-mini" @click="showAddStage = true">+ Добавить выезд</button>

@@ -742,6 +742,9 @@ class ManagerOrderListItemResponse(BaseModel):
     execution_without_payment: bool = False
     execution_without_payment_reason: Optional[str] = None
     auto_execution_on_payment: bool = False
+    auto_close_on_payment: bool = False
+    execution_status: str = "needs_schedule"
+    execution_status_changed_at: Optional[datetime] = None
 
     @computed_field
     @property
@@ -1056,6 +1059,8 @@ class ManagerOrderUpdatePayload(BaseModel):
     execution_without_payment: Optional[bool] = None
     execution_without_payment_reason: Optional[str] = None
     auto_execution_on_payment: Optional[bool] = None
+    auto_close_on_payment: Optional[bool] = None
+    execution_status: Optional[str] = None
 
     is_paid: Optional[bool] = None
     # Closing
@@ -1240,6 +1245,9 @@ class ManagerOrderTransferOrder(BaseModel):
     execution_without_payment: bool = False
     execution_without_payment_reason: Optional[str] = None
     auto_execution_on_payment: bool = False
+    auto_close_on_payment: bool = False
+    execution_status: str = "needs_schedule"
+    execution_status_changed_at: Optional[datetime] = None
     equipment_status: str = "pending"
     standard_install_kit_issued: bool = False
     target_currency: Optional[PaymentCurrency] = None

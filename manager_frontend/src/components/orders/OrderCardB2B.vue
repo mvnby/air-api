@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue';
 import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-vue-next';
 import type { ManagerOrderListItemResponse } from '../../client';
-import { BOARD_CARD_ACCENT_CLASSES, BOARD_COLUMN_TONE_CLASSES, formatDate, formatMoney, formatPhone, formatRelativeAge, getOrderBoardColumn, getOrderBoardLabel, getOrderNegotiationLabel, getOrderNegotiationStatus, isOverdue } from './order-utils';
+import { BOARD_CARD_ACCENT_CLASSES, BOARD_COLUMN_TONE_CLASSES, formatDate, formatMoney, formatPhone, formatRelativeAge, getOrderBoardColumn, getOrderBoardLabel, getOrderExecutionLabel, getOrderExecutionStatus, getOrderNegotiationLabel, getOrderNegotiationStatus, isOverdue } from './order-utils';
 import OrderCardActionsMenu from './OrderCardActionsMenu.vue';
 import OrderTitleEditor from './OrderTitleEditor.vue';
 
@@ -52,8 +52,16 @@ const objectLine = computed(() => {
 const compactLabels = computed(() => props.order.manager_labels?.slice(0, 2) ?? []);
 const hiddenLabelsCount = computed(() => Math.max((props.order.manager_labels?.length ?? 0) - compactLabels.value.length, 0));
 const boardColumn = computed(() => getOrderBoardColumn(props.order));
-const badgeColumn = computed(() => (props.order.status === 'negotiation' ? getOrderNegotiationStatus(props.order) : boardColumn.value));
-const boardLabel = computed(() => (props.order.status === 'negotiation' ? getOrderNegotiationLabel(props.order) : getOrderBoardLabel(props.order)));
+const badgeColumn = computed(() => {
+  if (props.order.status === 'negotiation') return getOrderNegotiationStatus(props.order);
+  if (props.order.status === 'execution') return getOrderExecutionStatus(props.order);
+  return boardColumn.value;
+});
+const boardLabel = computed(() => {
+  if (props.order.status === 'negotiation') return getOrderNegotiationLabel(props.order);
+  if (props.order.status === 'execution') return getOrderExecutionLabel(props.order);
+  return getOrderBoardLabel(props.order);
+});
 const fallbackBoardTone = {
   column: 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800',
   badge: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
@@ -66,6 +74,8 @@ const cardAccentClass = computed(() => BOARD_CARD_ACCENT_CLASSES[badgeColumn.val
 const statusAge = computed(() => {
   const sourceDate = props.order.status === 'negotiation'
     ? props.order.negotiation_status_changed_at || props.order.status_changed_at || props.order.updated_at || props.order.created_at
+    : props.order.status === 'execution'
+      ? props.order.execution_status_changed_at || props.order.status_changed_at || props.order.updated_at || props.order.created_at
     : props.order.status_changed_at || props.order.updated_at || props.order.created_at;
   return formatRelativeAge(sourceDate);
 });
@@ -80,6 +90,7 @@ const statusFlags = computed(() => [
   props.order.needs_attention ? { label: 'Внимание', className: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300' } : null,
   props.order.awaiting_measurement ? { label: 'Замер', className: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300' } : null,
   props.order.auto_execution_on_payment ? { label: 'Авто после оплаты', className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' } : null,
+  props.order.auto_close_on_payment ? { label: 'Авто закрытие', className: 'bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300' } : null,
   props.order.execution_without_payment ? { label: 'Без оплаты', className: 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300' } : null,
 ].filter(Boolean) as { label: string; className: string }[]);
 const hasComment = computed(() => Boolean(props.order.comment?.trim()));

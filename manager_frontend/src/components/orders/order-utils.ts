@@ -15,6 +15,16 @@ export const NEGOTIATION_STATUS_OPTIONS = [
     { value: 'follow_up', label: 'Уточнить', icon: 'contact_phone', tone: 'slate' },
 ] as const;
 
+export const EXECUTION_STATUS_OPTIONS = [
+    { value: 'order_equipment', label: 'Заказать товар', icon: 'add_shopping_cart', tone: 'rose' },
+    { value: 'awaiting_equipment', label: 'Ждем оборудование', icon: 'local_shipping', tone: 'amber' },
+    { value: 'needs_schedule', label: 'Назначить монтаж', icon: 'event_available', tone: 'teal' },
+    { value: 'scheduled', label: 'Монтаж назначен', icon: 'event', tone: 'cyan' },
+    { value: 'work_done', label: 'Монтаж выполнен', icon: 'task_alt', tone: 'green' },
+    { value: 'awaiting_documents', label: 'Закрыть документы', icon: 'fact_check', tone: 'indigo' },
+    { value: 'awaiting_payment', label: 'Ждет оплату', icon: 'payments', tone: 'emerald' },
+] as const;
+
 export const BOARD_COLUMNS = [
     { value: 'negotiation', label: 'Переговоры', icon: 'forum', tone: 'sky' },
     { value: 'execution', label: 'Установка / работы', icon: 'construction', tone: 'teal' },
@@ -31,6 +41,10 @@ export const STATUS_LABELS: Record<string, string> = {
 
 export const NEGOTIATION_STATUS_LABELS: Record<string, string> = Object.fromEntries(
     NEGOTIATION_STATUS_OPTIONS.map((item) => [item.value, item.label]),
+);
+
+export const EXECUTION_STATUS_LABELS: Record<string, string> = Object.fromEntries(
+    EXECUTION_STATUS_OPTIONS.map((item) => [item.value, item.label]),
 );
 
 export const BOARD_COLUMN_LABELS: Record<string, string> = Object.fromEntries(
@@ -73,6 +87,36 @@ export const BOARD_COLUMN_TONE_CLASSES: Record<string, { column: string; badge: 
         badge: 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-200',
         text: 'text-teal-800 dark:text-teal-200',
     },
+    order_equipment: {
+        column: 'border-rose-100 bg-rose-50/60 dark:border-rose-500/20 dark:bg-rose-500/10',
+        badge: 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-200',
+        text: 'text-rose-800 dark:text-rose-200',
+    },
+    awaiting_equipment: {
+        column: 'border-amber-100 bg-amber-50/70 dark:border-amber-500/20 dark:bg-amber-500/10',
+        badge: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200',
+        text: 'text-amber-800 dark:text-amber-200',
+    },
+    needs_schedule: {
+        column: 'border-teal-100 bg-teal-50/60 dark:border-teal-500/20 dark:bg-teal-500/10',
+        badge: 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-200',
+        text: 'text-teal-800 dark:text-teal-200',
+    },
+    scheduled: {
+        column: 'border-cyan-100 bg-cyan-50/60 dark:border-cyan-500/20 dark:bg-cyan-500/10',
+        badge: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-200',
+        text: 'text-cyan-800 dark:text-cyan-200',
+    },
+    awaiting_documents: {
+        column: 'border-indigo-100 bg-indigo-50/60 dark:border-indigo-500/20 dark:bg-indigo-500/10',
+        badge: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-200',
+        text: 'text-indigo-800 dark:text-indigo-200',
+    },
+    work_done: {
+        column: 'border-green-100 bg-green-50/60 dark:border-green-500/20 dark:bg-green-500/10',
+        badge: 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-200',
+        text: 'text-green-800 dark:text-green-200',
+    },
     closed_won: {
         column: 'border-green-100 bg-green-50/60 dark:border-green-500/20 dark:bg-green-500/10',
         badge: 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-200',
@@ -93,6 +137,12 @@ export const BOARD_CARD_ACCENT_CLASSES: Record<string, string> = {
     awaiting_payment: 'border-emerald-200 bg-emerald-50/55 shadow-emerald-100/80 hover:shadow-emerald-200/80 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:shadow-none',
     follow_up: 'border-slate-300 bg-slate-50 shadow-slate-100/80 hover:shadow-slate-200/80 dark:border-slate-600 dark:bg-slate-700/40 dark:shadow-none',
     execution: 'border-teal-200 bg-teal-50/55 shadow-teal-100/80 hover:shadow-teal-200/80 dark:border-teal-500/30 dark:bg-teal-500/10 dark:shadow-none',
+    order_equipment: 'border-rose-200 bg-rose-50/55 shadow-rose-100/80 hover:shadow-rose-200/80 dark:border-rose-500/30 dark:bg-rose-500/10 dark:shadow-none',
+    awaiting_equipment: 'border-amber-200 bg-amber-50/60 shadow-amber-100/80 hover:shadow-amber-200/80 dark:border-amber-500/30 dark:bg-amber-500/10 dark:shadow-none',
+    needs_schedule: 'border-teal-200 bg-teal-50/55 shadow-teal-100/80 hover:shadow-teal-200/80 dark:border-teal-500/30 dark:bg-teal-500/10 dark:shadow-none',
+    scheduled: 'border-cyan-200 bg-cyan-50/55 shadow-cyan-100/80 hover:shadow-cyan-200/80 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:shadow-none',
+    awaiting_documents: 'border-indigo-200 bg-indigo-50/55 shadow-indigo-100/80 hover:shadow-indigo-200/80 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:shadow-none',
+    work_done: 'border-green-200 bg-green-50/55 shadow-green-100/80 hover:shadow-green-200/80 dark:border-green-500/30 dark:bg-green-500/10 dark:shadow-none',
     closed_won: 'border-green-200 bg-green-50/55 shadow-green-100/80 hover:shadow-green-200/80 dark:border-green-500/30 dark:bg-green-500/10 dark:shadow-none',
     closed_lost: 'border-rose-200 bg-rose-50/55 shadow-rose-100/80 hover:shadow-rose-200/80 dark:border-rose-500/30 dark:bg-rose-500/10 dark:shadow-none',
 };
@@ -126,6 +176,15 @@ export function getOrderNegotiationStatus(order: ManagerOrderListItemResponse): 
 
 export function getOrderNegotiationLabel(order: ManagerOrderListItemResponse): string {
     return NEGOTIATION_STATUS_LABELS[getOrderNegotiationStatus(order)] || 'Ждет предложение';
+}
+
+export function getOrderExecutionStatus(order: ManagerOrderListItemResponse): string {
+    const value = order.execution_status || '';
+    return EXECUTION_STATUS_LABELS[value] ? value : 'needs_schedule';
+}
+
+export function getOrderExecutionLabel(order: ManagerOrderListItemResponse): string {
+    return EXECUTION_STATUS_LABELS[getOrderExecutionStatus(order)] || 'Назначить монтаж';
 }
 
 export function formatMoney(value: number): string {

@@ -378,6 +378,39 @@ async def test_service_auto_execution_on_payment_moves_order_to_work(db):
 
 
 @pytest.mark.asyncio
+async def test_service_auto_close_on_payment_closes_execution_order(db):
+    customer = Customer(name="Auto Close", phone="+375291111114", type=CustomerType.company)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(
+        customer_id=customer.id,
+        status=OrderStatus.EXECUTION,
+        execution_status="awaiting_payment",
+        auto_close_on_payment=True,
+    )
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    db.add(OrderServiceLink(order_id=order.id, title="Монтаж", quantity=1, price=420, cost=0))
+    await db.commit()
+
+    await OrderService.add_payment(
+        db,
+        int(order.id),
+        PaymentCreatePayload(amount=420, type="postpayment"),
+    )
+    await db.refresh(order)
+
+    assert order.status == OrderStatus.CLOSED
+    assert order.closing_result == "won"
+    assert order.is_paid is True
+    assert order.balance_due == 0
+
+
+@pytest.mark.asyncio
 async def test_service_get_orders_for_manager_overdue_filter(db):
     customer = Customer(name="Over", phone="+375293333333", type=CustomerType.individual)
     db.add(customer)

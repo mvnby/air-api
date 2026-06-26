@@ -60,6 +60,16 @@ class OrderService:
         "follow_up",
     }
     DEFAULT_NEGOTIATION_STATUS = "awaiting_offer"
+    EXECUTION_STATUSES = {
+        "order_equipment",
+        "awaiting_equipment",
+        "needs_schedule",
+        "scheduled",
+        "work_done",
+        "awaiting_documents",
+        "awaiting_payment",
+    }
+    DEFAULT_EXECUTION_STATUS = "needs_schedule"
     PAYMENT_COMPLETE_TOLERANCE = 0.01
 
     @staticmethod
@@ -68,6 +78,36 @@ class OrderService:
         if cleaned in OrderService.NEGOTIATION_STATUSES:
             return cleaned
         return fallback if fallback in OrderService.NEGOTIATION_STATUSES else OrderService.DEFAULT_NEGOTIATION_STATUS
+
+    @staticmethod
+    def _normalize_execution_status(value: Any, fallback: str = DEFAULT_EXECUTION_STATUS) -> str:
+        cleaned = str(value or "").strip()
+        if cleaned in OrderService.EXECUTION_STATUSES:
+            return cleaned
+        return fallback if fallback in OrderService.EXECUTION_STATUSES else OrderService.DEFAULT_EXECUTION_STATUS
+
+    @staticmethod
+    def _infer_execution_status(order: Order) -> str:
+        raw_status = getattr(order, "execution_status", None)
+        if raw_status is not None:
+            current = str(raw_status or "").strip()
+            if current in OrderService.EXECUTION_STATUSES:
+                return current
+        if order.status != OrderStatus.EXECUTION:
+            return OrderService.DEFAULT_EXECUTION_STATUS
+        if order.installation_date:
+            return "scheduled"
+        return OrderService.DEFAULT_EXECUTION_STATUS
+
+    @staticmethod
+    def _set_execution_status(order: Order, value: Any, *, changed_at: Optional[datetime] = None) -> None:
+        next_status = str(value or "").strip()
+        if next_status not in OrderService.EXECUTION_STATUSES:
+            raise ValueError(f"Invalid execution_status: {value}")
+        previous = OrderService._normalize_execution_status(getattr(order, "execution_status", None))
+        order.execution_status = next_status
+        if previous != next_status or not getattr(order, "execution_status_changed_at", None):
+            order.execution_status_changed_at = changed_at or datetime.now()
 
     @staticmethod
     def _infer_negotiation_status(order: Order) -> str:
@@ -603,6 +643,18 @@ class OrderService:
             order.status = OrderStatus.EXECUTION
             order.status_changed_at = datetime.now()
             order.proposal_status = "approved"
+        if (
+            is_fully_paid
+            and bool(getattr(order, "auto_close_on_payment", False))
+            and order.status == OrderStatus.EXECUTION
+        ):
+            order.status = OrderStatus.CLOSED
+            order.closing_result = ClosingResult.WON.value
+            order.reject_reason = None
+            order.closed_at = datetime.now()
+            order.status_changed_at = datetime.now()
+            if getattr(order, "execution_status", None) in OrderService.EXECUTION_STATUSES:
+                OrderService._set_execution_status(order, "awaiting_payment")
 
     @staticmethod
     def _clean_proposal_name(raw: Any, fallback: str = "Основное") -> str:
@@ -1918,6 +1970,9 @@ class OrderService:
             "execution_without_payment": bool(getattr(order, "execution_without_payment", False)),
             "execution_without_payment_reason": getattr(order, "execution_without_payment_reason", None),
             "auto_execution_on_payment": bool(getattr(order, "auto_execution_on_payment", False)),
+            "auto_close_on_payment": bool(getattr(order, "auto_close_on_payment", False)),
+            "execution_status": OrderService._infer_execution_status(order),
+            "execution_status_changed_at": getattr(order, "execution_status_changed_at", None),
             "equipment_status": getattr(order.equipment_status, "value", str(order.equipment_status)) if order.equipment_status else "pending",
             "standard_install_kit_issued": bool(order.standard_install_kit_issued),
             "target_currency": order.target_currency,
@@ -2410,6 +2465,9 @@ class OrderService:
         previous_negotiation_status = OrderService._normalize_negotiation_status(
             getattr(order, "negotiation_status", None),
         )
+        previous_execution_status = OrderService._normalize_execution_status(
+            getattr(order, "execution_status", None),
+        )
 
         if "status" in fields_set and payload.status is not None:
             try:
@@ -2481,6 +2539,8 @@ class OrderService:
             order.additional_conditions = value or None
         if "negotiation_status" in fields_set and payload.negotiation_status is not None:
             OrderService._set_negotiation_status(order, payload.negotiation_status)
+        if "execution_status" in fields_set and payload.execution_status is not None:
+            OrderService._set_execution_status(order, payload.execution_status)
         if "proposal_status" in fields_set and payload.proposal_status is not None:
             order.proposal_status = payload.proposal_status
             if payload.proposal_status == "sent" and not order.proposal_sent_at:
@@ -2493,11 +2553,16 @@ class OrderService:
             order.execution_without_payment_reason = OrderService._clean_optional_text(payload.execution_without_payment_reason)
         if "auto_execution_on_payment" in fields_set and payload.auto_execution_on_payment is not None:
             order.auto_execution_on_payment = bool(payload.auto_execution_on_payment)
+        if "auto_close_on_payment" in fields_set and payload.auto_close_on_payment is not None:
+            order.auto_close_on_payment = bool(payload.auto_close_on_payment)
         if order.status == OrderStatus.EXECUTION and order.proposal_status != "approved":
             order.proposal_status = "approved"
         if order.status == OrderStatus.EXECUTION:
-            if not order.installation_date:
-                order.installation_date = datetime.now()
+            if "execution_status" not in fields_set:
+                if "installation_date" in fields_set and order.installation_date:
+                    OrderService._set_execution_status(order, "scheduled")
+                elif not getattr(order, "execution_status_changed_at", None):
+                    OrderService._set_execution_status(order, OrderService._infer_execution_status(order))
         elif order.status != OrderStatus.EXECUTION:
             order.execution_without_payment = False
             order.execution_without_payment_reason = None
@@ -2516,6 +2581,13 @@ class OrderService:
             and OrderService._normalize_negotiation_status(getattr(order, "negotiation_status", None)) != previous_negotiation_status
         ):
             order.negotiation_status_changed_at = datetime.now()
+        if order.status == OrderStatus.EXECUTION and not getattr(order, "execution_status_changed_at", None):
+            order.execution_status_changed_at = datetime.now()
+        if (
+            order.status == OrderStatus.EXECUTION
+            and OrderService._normalize_execution_status(getattr(order, "execution_status", None)) != previous_execution_status
+        ):
+            order.execution_status_changed_at = datetime.now()
         
         # Equipment & Installation
         if "equipment_status" in fields_set and payload.equipment_status is not None:

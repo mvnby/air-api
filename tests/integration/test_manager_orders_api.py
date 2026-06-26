@@ -268,6 +268,7 @@ async def test_manager_order_patch_moves_to_execution_without_payment_flag(async
         f"/api/manager/orders/{order.id}",
         json={
             "status": "execution",
+            "execution_status": "order_equipment",
             "execution_without_payment": True,
             "execution_without_payment_reason": "Постоянный клиент",
             "products": [{"product_id": product.id, "quantity": 1, "price": 1000, "cost": 700}],
@@ -279,6 +280,8 @@ async def test_manager_order_patch_moves_to_execution_without_payment_flag(async
     data = response.json()
     assert data["status"] == "execution"
     assert data["proposal_status"] == "approved"
+    assert data["execution_status"] == "order_equipment"
+    assert data["execution_status_changed_at"] is not None
     assert data["execution_without_payment"] is True
     assert data["execution_without_payment_reason"] == "Постоянный клиент"
 

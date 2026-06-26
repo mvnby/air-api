@@ -55,6 +55,9 @@ export type ManagerOrderListItemResponse = {
     execution_without_payment?: boolean;
     execution_without_payment_reason?: (string | null);
     auto_execution_on_payment?: boolean;
+    auto_close_on_payment?: boolean;
+    execution_status?: string;
+    execution_status_changed_at?: (string | null);
     total_payments?: number;
     balance_due?: number;
     readonly needs_attention: boolean;

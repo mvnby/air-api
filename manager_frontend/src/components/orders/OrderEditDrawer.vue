@@ -28,7 +28,7 @@ import type {
   ManagerEquipmentHistoryFromRepairOrderPayload,
 } from '../../client';
 import { ManagerOrdersService, ManagerSettingsService, ManagerMailService, ManagerRepairComplaintsService, ManagerEquipmentService } from '../../client';
-import { NEGOTIATION_STATUS_OPTIONS, formatMoney } from './order-utils';
+import { EXECUTION_STATUS_OPTIONS, NEGOTIATION_STATUS_OPTIONS, formatMoney } from './order-utils';
 import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../../utils/datetime';
 
 import { getApiErrorMessage } from '../../utils/api-errors';
@@ -438,19 +438,28 @@ const measurementResult = ref('');
 const additionalConditions = ref('');
 const proposalStatus = ref<'draft' | 'sent' | 'approved' | 'rejected'>('draft');
 const negotiationStatus = ref('awaiting_offer');
+const executionStatus = ref('needs_schedule');
 const executionWithoutPayment = ref(false);
 const executionWithoutPaymentReason = ref('');
 const autoExecutionOnPayment = ref(false);
+const autoCloseOnPayment = ref(false);
 const activeProposalId = ref<number | null>(null);
 const proposalActionLoading = ref(false);
 const negotiationStatusLabel = computed(() => (
   NEGOTIATION_STATUS_OPTIONS.find((option) => option.value === negotiationStatus.value)?.label || 'Ждет предложение'
+));
+const executionStatusLabel = computed(() => (
+  EXECUTION_STATUS_OPTIONS.find((option) => option.value === executionStatus.value)?.label || 'Назначить монтаж'
 ));
 
 const setNegotiationStatus = (value: string) => {
   negotiationStatus.value = value;
   if (value === 'proposal_sent') proposalStatus.value = 'sent';
   if (value === 'awaiting_payment') proposalStatus.value = 'approved';
+};
+
+const setExecutionStatus = (value: string) => {
+  executionStatus.value = value;
 };
 
 const installersList = ref<ManagerInstallerResponse[]>([]);
@@ -1588,9 +1597,11 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   additionalConditions.value = order.additional_conditions ?? '';
   proposalStatus.value = (order.proposal_status as any) || 'draft';
   negotiationStatus.value = order.negotiation_status || 'awaiting_offer';
+  executionStatus.value = order.execution_status || 'needs_schedule';
   executionWithoutPayment.value = Boolean(order.execution_without_payment);
   executionWithoutPaymentReason.value = order.execution_without_payment_reason || '';
   autoExecutionOnPayment.value = Boolean(order.auto_execution_on_payment);
+  autoCloseOnPayment.value = Boolean(order.auto_close_on_payment);
   targetCurrency.value = order.target_currency || null;
   targetCurrencyAmount.value = order.target_currency_amount || null;
   targetCurrencyPayments.value = order.target_currency_payments || 0;
@@ -2383,9 +2394,11 @@ const handleSave = () => {
     additional_conditions: additionalConditions.value,
     negotiation_status: status.value === 'negotiation' ? negotiationStatus.value : undefined,
     proposal_status: status.value === 'execution' ? 'approved' : proposalStatus.value,
+    execution_status: status.value === 'execution' ? executionStatus.value : undefined,
     execution_without_payment: status.value === 'execution' ? executionWithoutPayment.value : false,
     execution_without_payment_reason: status.value === 'execution' && executionWithoutPayment.value ? executionWithoutPaymentReason.value : null,
     auto_execution_on_payment: autoExecutionOnPayment.value,
+    auto_close_on_payment: status.value === 'execution' ? autoCloseOnPayment.value : false,
     target_currency: enableCurrency.value ? (targetCurrency.value || null) : null,
     target_currency_amount: enableCurrency.value && targetCurrencyAmount.value ? Number(String(targetCurrencyAmount.value).replace(',', '.')) : null,
   };
@@ -3777,11 +3790,32 @@ watch(
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h3 class="text-sm font-semibold text-teal-900">Установка / работы</h3>
-            <p class="mt-0.5 text-xs text-teal-700/75">Фиксируем исключения перед выполнением работ.</p>
+            <p class="mt-0.5 text-xs text-teal-700/75">Текущий этап: {{ executionStatusLabel }}</p>
           </div>
+        </div>
+        <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <button
+            v-for="option in EXECUTION_STATUS_OPTIONS"
+            :key="option.value"
+            type="button"
+            class="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-semibold transition"
+            :class="executionStatus === option.value
+              ? 'border-teal-500 bg-white text-teal-800 shadow-sm'
+              : 'border-teal-100 bg-white/70 text-slate-600 hover:border-teal-300 hover:text-teal-800'"
+            @click="setExecutionStatus(option.value)"
+          >
+            <span class="material-icons-round text-[15px]">{{ option.icon }}</span>
+            <span class="truncate">{{ option.label }}</span>
+          </button>
+        </div>
+        <div class="mt-3 grid gap-2 sm:grid-cols-2">
           <label class="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-medium text-teal-900 ring-1 ring-teal-100">
             <input v-model="executionWithoutPayment" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
             Перенос без оплаты
+          </label>
+          <label class="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-medium text-teal-900 ring-1 ring-teal-100">
+            <input v-model="autoCloseOnPayment" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+            Закрыть после оплаты
           </label>
         </div>
         <label v-if="executionWithoutPayment" class="field-label mt-3">
