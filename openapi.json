@@ -24464,6 +24464,28 @@
             "title": "Auto Execution On Payment",
             "default": false
           },
+          "auto_close_on_payment": {
+            "type": "boolean",
+            "title": "Auto Close On Payment",
+            "default": false
+          },
+          "execution_status": {
+            "type": "string",
+            "title": "Execution Status",
+            "default": "needs_schedule"
+          },
+          "execution_status_changed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Status Changed At"
+          },
           "total_payments": {
             "type": "number",
             "title": "Total Payments",
@@ -25520,6 +25542,28 @@
             "title": "Auto Execution On Payment",
             "default": false
           },
+          "auto_close_on_payment": {
+            "type": "boolean",
+            "title": "Auto Close On Payment",
+            "default": false
+          },
+          "execution_status": {
+            "type": "string",
+            "title": "Execution Status",
+            "default": "needs_schedule"
+          },
+          "execution_status_changed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Status Changed At"
+          },
           "total_payments": {
             "type": "number",
             "title": "Total Payments",
@@ -26167,6 +26211,28 @@
             "title": "Auto Execution On Payment",
             "default": false
           },
+          "auto_close_on_payment": {
+            "type": "boolean",
+            "title": "Auto Close On Payment",
+            "default": false
+          },
+          "execution_status": {
+            "type": "string",
+            "title": "Execution Status",
+            "default": "needs_schedule"
+          },
+          "execution_status_changed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Status Changed At"
+          },
           "equipment_status": {
             "type": "string",
             "title": "Equipment Status",
@@ -26501,6 +26567,28 @@
             "type": "boolean",
             "title": "Auto Execution On Payment",
             "default": false
+          },
+          "auto_close_on_payment": {
+            "type": "boolean",
+            "title": "Auto Close On Payment",
+            "default": false
+          },
+          "execution_status": {
+            "type": "string",
+            "title": "Execution Status",
+            "default": "needs_schedule"
+          },
+          "execution_status_changed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Status Changed At"
           },
           "equipment_status": {
             "type": "string",
@@ -27321,6 +27409,28 @@
               }
             ],
             "title": "Auto Execution On Payment"
+          },
+          "auto_close_on_payment": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Close On Payment"
+          },
+          "execution_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Status"
           },
           "is_paid": {
             "anyOf": [

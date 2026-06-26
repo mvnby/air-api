@@ -18,6 +18,7 @@ import OrdersListTable from './OrdersListTable.vue';
 import OrderEditDrawer from './OrderEditDrawer.vue';
 import {
   BOARD_COLUMNS,
+  EXECUTION_STATUS_LABELS,
   STATUS_LABELS,
   STATUS_ORDER,
   buildCustomerOrderRenderItems,
@@ -397,6 +398,24 @@ const clearOrderFilters = async () => {
 };
 
 const buildBoardTransitionPayload = (order: ManagerOrderListItemResponse, column: string): ManagerOrderUpdatePayload | null => {
+  if (column.startsWith('execution:')) {
+    const executionStatus = column.slice('execution:'.length);
+    if (!EXECUTION_STATUS_LABELS[executionStatus]) return null;
+    const balanceDue = Number(order.balance_due || 0);
+    const payload: ManagerOrderUpdatePayload = {
+      status: 'execution',
+      execution_status: executionStatus,
+      closing_result: null,
+      reject_reason: null,
+    };
+    if (balanceDue > 0 && !order.execution_without_payment && executionStatus !== 'awaiting_payment') {
+      const approved = window.confirm('По заказу есть долг. Перенести в работу без оплаты?');
+      if (!approved) return null;
+      payload.execution_without_payment = true;
+      payload.execution_without_payment_reason = window.prompt('Причина переноса без оплаты', 'Доверенный клиент') || 'Без предоплаты';
+    }
+    return payload;
+  }
   if (column === 'closed_lost') return null;
   if (column === 'closed_won') {
     return { status: 'closed', closing_result: 'won', reject_reason: null };
@@ -442,6 +461,7 @@ const applyStatusLocally = (orderId: number, payload: ManagerOrderUpdatePayload)
   if (!item) return;
   if (payload.status !== undefined && payload.status !== null) item.status = payload.status;
   if (payload.negotiation_status !== undefined && payload.negotiation_status !== null) item.negotiation_status = payload.negotiation_status;
+  if (payload.execution_status !== undefined && payload.execution_status !== null) item.execution_status = payload.execution_status;
   if (payload.closing_result !== undefined) item.closing_result = payload.closing_result;
   if (payload.reject_reason !== undefined) item.reject_reason = payload.reject_reason;
   if (payload.proposal_status !== undefined && payload.proposal_status !== null) item.proposal_status = payload.proposal_status;
@@ -451,6 +471,7 @@ const applyStatusLocally = (orderId: number, payload: ManagerOrderUpdatePayload)
   const now = new Date().toISOString();
   item.status_changed_at = now;
   if (payload.negotiation_status) item.negotiation_status_changed_at = now;
+  if (payload.execution_status) item.execution_status_changed_at = now;
 };
 
 const onMoveOrder = async (payload: { orderId: number; oldStatus: string; newStatus: string }) => {

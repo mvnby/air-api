@@ -26,6 +26,8 @@ export type ManagerOrderUpdatePayload = {
     execution_without_payment?: (boolean | null);
     execution_without_payment_reason?: (string | null);
     auto_execution_on_payment?: (boolean | null);
+    auto_close_on_payment?: (boolean | null);
+    execution_status?: (string | null);
     is_paid?: (boolean | null);
     closing_result?: (string | null);
     reject_reason?: (string | null);

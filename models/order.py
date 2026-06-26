@@ -379,8 +379,11 @@ class Order(SQLModel, table=True):
     execution_without_payment: bool = Field(default=False, index=True)
     execution_without_payment_reason: Optional[str] = Field(default=None)
     auto_execution_on_payment: bool = Field(default=False, index=True)
+    auto_close_on_payment: bool = Field(default=False, index=True)
 
     # --- Internal: Execution stage ---
+    execution_status: str = Field(default="needs_schedule", sa_column=Column(String, default="needs_schedule", index=True))
+    execution_status_changed_at: Optional[datetime] = None
     works_plan: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
     # Store equipment state

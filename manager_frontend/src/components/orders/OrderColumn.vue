@@ -7,13 +7,13 @@ import type { OrderRenderItem } from './order-utils';
 import OrderCardB2B from './OrderCardB2B.vue';
 import OrderCardB2C from './OrderCardB2C.vue';
 import OrderCustomerGroupCard from './OrderCustomerGroupCard.vue';
-import { BOARD_COLUMN_TONE_CLASSES, createCustomerOrderGroup, getOrderNegotiationStatus, getOrderSegment } from './order-utils';
+import { BOARD_COLUMN_TONE_CLASSES, createCustomerOrderGroup, getOrderExecutionStatus, getOrderNegotiationStatus, getOrderSegment } from './order-utils';
 
 const props = defineProps<{
   status: string;
   label: string;
   icon?: string;
-  filterKind?: 'negotiation';
+  filterKind?: 'negotiation' | 'execution';
   filterOptions?: ReadonlyArray<{ value: string; label: string; icon?: string }>;
   items: OrderRenderItem[];
   segment: Segment;
@@ -41,6 +41,7 @@ const filterOpen = ref(false);
 
 const getFilterValue = (order: ManagerOrderListItemResponse) => {
   if (props.filterKind === 'negotiation') return getOrderNegotiationStatus(order);
+  if (props.filterKind === 'execution') return getOrderExecutionStatus(order);
   return '';
 };
 

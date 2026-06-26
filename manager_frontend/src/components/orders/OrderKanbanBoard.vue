@@ -3,7 +3,7 @@ import { ref } from 'vue';
 import type { Segment } from '../../api';
 import type { OrderRenderItem } from './order-utils';
 import OrderColumn from './OrderColumn.vue';
-import { BOARD_COLUMNS, BOARD_COLUMN_LABELS, NEGOTIATION_STATUS_OPTIONS } from './order-utils';
+import { BOARD_COLUMNS, BOARD_COLUMN_LABELS, EXECUTION_STATUS_OPTIONS, NEGOTIATION_STATUS_OPTIONS } from './order-utils';
 
 defineProps<{
   groupedItems: Record<string, OrderRenderItem[]>;
@@ -62,8 +62,8 @@ const onToggleGroup = (groupId: string) => {
       :status="column.value"
       :label="BOARD_COLUMN_LABELS[column.value] || column.label"
       :icon="column.icon"
-      :filter-kind="column.value === 'negotiation' ? 'negotiation' : undefined"
-      :filter-options="column.value === 'negotiation' ? NEGOTIATION_STATUS_OPTIONS : undefined"
+      :filter-kind="column.value === 'negotiation' ? 'negotiation' : column.value === 'execution' ? 'execution' : undefined"
+      :filter-options="column.value === 'negotiation' ? NEGOTIATION_STATUS_OPTIONS : column.value === 'execution' ? EXECUTION_STATUS_OPTIONS : undefined"
       :items="groupedItems[column.value] || []"
       :segment="segment"
       :moving-order-ids="movingOrderIds"

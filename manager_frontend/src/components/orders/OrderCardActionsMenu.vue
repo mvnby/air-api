@@ -3,9 +3,11 @@ import { computed, ref } from 'vue';
 import { MoreVertical, XCircle } from 'lucide-vue-next';
 import type { ManagerOrderListItemResponse } from '../../client';
 import {
+  EXECUTION_STATUS_OPTIONS,
   NEGOTIATION_STATUS_OPTIONS,
   formatMoney,
   getOrderBoardColumn,
+  getOrderExecutionStatus,
   getOrderNegotiationStatus,
 } from './order-utils';
 
@@ -24,6 +26,17 @@ const menuOpen = ref(false);
 const balanceDue = computed(() => Number(props.order.balance_due || 0));
 const activeBoardColumn = computed(() => getOrderBoardColumn(props.order));
 const activeNegotiationStatus = computed(() => getOrderNegotiationStatus(props.order));
+const activeExecutionStatus = computed(() => getOrderExecutionStatus(props.order));
+const stageTitle = computed(() => {
+  if (activeBoardColumn.value === 'execution') return 'Работы';
+  if (activeBoardColumn.value === 'negotiation') return 'Переговоры';
+  return '';
+});
+const stageOptions = computed(() => {
+  if (activeBoardColumn.value === 'execution') return EXECUTION_STATUS_OPTIONS;
+  if (activeBoardColumn.value === 'negotiation') return NEGOTIATION_STATUS_OPTIONS;
+  return [];
+});
 
 const boardActions = computed(() => [
   activeBoardColumn.value !== 'negotiation'
@@ -40,6 +53,14 @@ const boardActions = computed(() => [
 const selectStatus = (status: string) => {
   menuOpen.value = false;
   emit('quickStatus', { orderId: props.order.id, status });
+};
+
+const selectStageStatus = (status: string) => {
+  if (activeBoardColumn.value === 'execution') {
+    selectStatus(`execution:${status}`);
+    return;
+  }
+  selectStatus(status);
 };
 
 const cancelOrder = () => {
@@ -81,21 +102,23 @@ const closeDebt = () => {
         {{ action.label }}
       </button>
 
-      <div class="my-1 border-t border-slate-100 dark:border-slate-700" />
-      <div class="px-2 pb-1 pt-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">Переговоры</div>
+      <template v-if="stageOptions.length">
+        <div class="my-1 border-t border-slate-100 dark:border-slate-700" />
+        <div class="px-2 pb-1 pt-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">{{ stageTitle }}</div>
+      </template>
       <button
-        v-for="option in NEGOTIATION_STATUS_OPTIONS"
+        v-for="option in stageOptions"
         :key="option.value"
         type="button"
         class="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left font-semibold text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
-        :class="activeNegotiationStatus === option.value && activeBoardColumn === 'negotiation' ? 'bg-slate-50 dark:bg-slate-700' : ''"
-        @click="selectStatus(option.value)"
+        :class="(activeBoardColumn === 'execution' ? activeExecutionStatus : activeNegotiationStatus) === option.value ? 'bg-slate-50 dark:bg-slate-700' : ''"
+        @click="selectStageStatus(option.value)"
       >
         <span class="inline-flex min-w-0 items-center gap-2">
           <span class="material-icons-round text-[16px]">{{ option.icon }}</span>
           <span class="truncate">{{ option.label }}</span>
         </span>
-        <span v-if="activeNegotiationStatus === option.value && activeBoardColumn === 'negotiation'" class="material-icons-round text-[15px] text-teal-600">check</span>
+        <span v-if="(activeBoardColumn === 'execution' ? activeExecutionStatus : activeNegotiationStatus) === option.value" class="material-icons-round text-[15px] text-teal-600">check</span>
       </button>
 
       <template v-if="allowCloseDebt && balanceDue > 0">
