@@ -90,6 +90,14 @@ const setFilter = (value: string) => {
 
 const onDrop = (event: DragEvent, status: string) => {
   event.preventDefault();
+  if (activeFilter.value && props.filterKind === 'execution') {
+    emit('dropTo', `execution:${activeFilter.value}`);
+    return;
+  }
+  if (activeFilter.value && props.filterKind === 'negotiation') {
+    emit('dropTo', activeFilter.value);
+    return;
+  }
   emit('dropTo', status);
 };
 

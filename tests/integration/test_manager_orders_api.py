@@ -1362,9 +1362,12 @@ async def test_manager_order_export_preview_and_import_creates_new_order(async_c
 
     order = Order(
         customer_id=customer.id,
-        status=OrderStatus.NEGOTIATION,
+        status=OrderStatus.EXECUTION,
         title="Переносимый заказ",
         comment="Собран на локальном сервере",
+        auto_close_on_payment=True,
+        execution_status="work_done",
+        execution_status_changed_at=datetime.now() - timedelta(hours=2),
     )
     db.add(order)
     await db.commit()
@@ -1402,6 +1405,10 @@ async def test_manager_order_export_preview_and_import_creates_new_order(async_c
     package = export_resp.json()
     assert package["orders"][0]["source_id"] == order.id
     assert package["orders"][0]["payments"][0]["amount"] == 500
+    assert package["orders"][0]["status"] == "execution"
+    assert package["orders"][0]["auto_close_on_payment"] is True
+    assert package["orders"][0]["execution_status"] == "work_done"
+    assert package["orders"][0]["execution_status_changed_at"] is not None
 
     preview_resp = await async_client.post(
         "/api/manager/orders/import/preview",
@@ -1434,6 +1441,10 @@ async def test_manager_order_export_preview_and_import_creates_new_order(async_c
     assert detail["service_lines"][0]["service_id"] == service.id
     assert detail["payments"][0]["amount"] == 500
     assert detail["work_stages"][0]["name"] == "Монтаж"
+    assert detail["status"] == "execution"
+    assert detail["auto_close_on_payment"] is True
+    assert detail["execution_status"] == "work_done"
+    assert detail["execution_status_changed_at"] is not None
     assert detail["total_amount"] == 3650
 
 

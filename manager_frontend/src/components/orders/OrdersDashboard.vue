@@ -474,6 +474,11 @@ const applyStatusLocally = (orderId: number, payload: ManagerOrderUpdatePayload)
   if (payload.execution_status) item.execution_status_changed_at = now;
 };
 
+const replaceOrderLocally = (updatedOrder: ManagerOrderListItemResponse) => {
+  const index = orders.value.findIndex((order) => order.id === updatedOrder.id);
+  if (index >= 0) orders.value[index] = updatedOrder;
+};
+
 const onMoveOrder = async (payload: { orderId: number; oldStatus: string; newStatus: string }) => {
   if (movingOrderIds.value.includes(payload.orderId)) return;
   const item = orders.value.find((order) => order.id === payload.orderId);
@@ -484,7 +489,8 @@ const onMoveOrder = async (payload: { orderId: number; oldStatus: string; newSta
   movingOrderIds.value.push(payload.orderId);
   applyStatusLocally(payload.orderId, updatePayload);
   try {
-    await api.patchManagerOrder(payload.orderId, updatePayload);
+    const updatedOrder = await api.patchManagerOrder(payload.orderId, updatePayload);
+    replaceOrderLocally(updatedOrder);
     setToast('Статус обновлен');
   } catch (error) {
     console.error(error);
@@ -508,7 +514,8 @@ const onCancelOrder = async (payload: { orderId: number }) => {
   movingOrderIds.value.push(payload.orderId);
   applyStatusLocally(payload.orderId, updatePayload);
   try {
-    await api.patchManagerOrder(payload.orderId, updatePayload);
+    const updatedOrder = await api.patchManagerOrder(payload.orderId, updatePayload);
+    replaceOrderLocally(updatedOrder);
     setToast('Заказ помечен отказом');
   } catch (error) {
     console.error(error);

@@ -406,6 +406,41 @@ async def test_service_auto_close_on_payment_closes_execution_order(db):
 
     assert order.status == OrderStatus.CLOSED
     assert order.closing_result == "won"
+    assert order.execution_status == "awaiting_payment"
+    assert order.is_paid is True
+    assert order.balance_due == 0
+
+
+@pytest.mark.asyncio
+async def test_service_auto_close_on_payment_waits_for_payment_execution_status(db):
+    customer = Customer(name="Auto Close Later", phone="+375291111115", type=CustomerType.company)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(
+        customer_id=customer.id,
+        status=OrderStatus.EXECUTION,
+        execution_status="scheduled",
+        auto_close_on_payment=True,
+    )
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    db.add(OrderServiceLink(order_id=order.id, title="Монтаж", quantity=1, price=420, cost=0))
+    await db.commit()
+
+    await OrderService.add_payment(
+        db,
+        int(order.id),
+        PaymentCreatePayload(amount=420, type="postpayment"),
+    )
+    await db.refresh(order)
+
+    assert order.status == OrderStatus.EXECUTION
+    assert order.closing_result is None
+    assert order.execution_status == "scheduled"
     assert order.is_paid is True
     assert order.balance_due == 0
 

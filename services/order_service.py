@@ -647,14 +647,13 @@ class OrderService:
             is_fully_paid
             and bool(getattr(order, "auto_close_on_payment", False))
             and order.status == OrderStatus.EXECUTION
+            and OrderService._normalize_execution_status(getattr(order, "execution_status", None)) == "awaiting_payment"
         ):
             order.status = OrderStatus.CLOSED
             order.closing_result = ClosingResult.WON.value
             order.reject_reason = None
             order.closed_at = datetime.now()
             order.status_changed_at = datetime.now()
-            if getattr(order, "execution_status", None) in OrderService.EXECUTION_STATUSES:
-                OrderService._set_execution_status(order, "awaiting_payment")
 
     @staticmethod
     def _clean_proposal_name(raw: Any, fallback: str = "Основное") -> str:
