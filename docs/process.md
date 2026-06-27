@@ -82,15 +82,27 @@ CI enforces this sync and fails if generated artifacts differ from committed fil
    docker compose exec app python3 scripts/analyze_spec_keys.py
    ```
 
-2. **Обновить карту ключей**
+2. **Обновить реестр характеристик**
    
-   Если скрипт нашел важные ключи (например, `Минимальная мощность` или `Страна`), добавьте их в файл:
+   Если скрипт нашел важные ключи (например, `Минимальная мощность` или `Страна`), добавьте их в единый реестр:
    
-   📄 `services/spec_normalizer.py` -> `KEY_MAP`
+   📄 `services/spec_registry.py` -> `SPEC_DEFINITIONS` + `REGISTRY_LEGACY_ALIASES_BY_KEY`
 
 3. **Применить изменения**
    
-   Чтобы "починить" уже загруженные товары, запустите скрипт нормализации. Он пройдет по всей базе и перепишет `specs` с учетом новых правил.
+   Чтобы безопасно добавить только внутренний typed/filter слой к уже загруженным товарам, сначала запустите dry-run:
+
+   ```bash
+   docker compose exec app python3 scripts/backfill_typed_specs.py --limit 500
+   ```
+
+   Если отчет корректный, выполните ограниченную запись:
+
+   ```bash
+   docker compose exec app python3 scripts/backfill_typed_specs.py --execute --limit 500
+   ```
+
+   Полная нормализация переписывает публичные flat-ключи `specs`, а также может обновить теги/brand-series. Используйте ее только когда нужно именно привести старые поля к новой canonical-структуре:
 
    ```bash
    docker compose exec app python3 scripts/normalize_legacy.py

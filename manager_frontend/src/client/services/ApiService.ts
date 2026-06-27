@@ -15,6 +15,7 @@ import type { ProductResponse } from '../models/ProductResponse';
 import type { ProductSeriesNavigationResponse } from '../models/ProductSeriesNavigationResponse';
 import type { PublicBrandResponse } from '../models/PublicBrandResponse';
 import type { ServiceResponse } from '../models/ServiceResponse';
+import type { SpecRegistryResponse } from '../models/SpecRegistryResponse';
 import type { SpecsKeysResponse } from '../models/SpecsKeysResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
@@ -294,6 +295,17 @@ export class ApiService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/specs/keys',
+        });
+    }
+    /**
+     * Get Public Spec Registry
+     * @returns SpecRegistryResponse Successful Response
+     * @throws ApiError
+     */
+    public static getPublicSpecRegistry(): CancelablePromise<SpecRegistryResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/specs/registry',
         });
     }
     /**

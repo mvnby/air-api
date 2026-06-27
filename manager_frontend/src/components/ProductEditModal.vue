@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
 import { api, type Product, type ManagerBrand, type ProductCreate, type ProductDuplicatePayload, type ProductUpdate } from '../api';
-import { X, Save, Plus, Trash2, Edit3, Globe, Hash, Tag } from 'lucide-vue-next';
+import { X, Save, Plus, Trash2, Edit3, Globe, Hash, Tag, CircleHelp } from 'lucide-vue-next';
 import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
 import SpecKeyCombobox from './SpecKeyCombobox.vue';
-import { specsTranslations } from '../utils/specsTranslations';
+import { useSpecRegistry } from '../composables/useSpecRegistry';
 
 interface TagItem {
     id: number;
@@ -73,7 +73,6 @@ const selectedTagIds = ref<Set<number>>(new Set());
 const loading = ref(false);
 const formMessage = ref('');
 const formServerErrors = ref<Record<string, string>>({});
-const knownKeys = ref<string[]>([]);
 const tagGroups = ref<TagGroupItem[]>([]);
 const tagsLoading = ref(false);
 const brandsLoading = ref(false);
@@ -132,11 +131,20 @@ const saveButtonText = computed(() => {
 
 const normalizeText = (value: unknown): string => String(value ?? '').toLowerCase().replace(/ё/g, 'е').trim();
 const normalizeBrandToken = (value: unknown): string => normalizeText(value).replace(/[^a-z0-9а-я]/g, '');
-const getSelectOptions = (key: string, value: unknown): string[] => {
-    const base = [...(specsTranslations[key]?.options || [])];
-    const current = String(value ?? '').trim();
-    if (current && !base.includes(current)) return [current, ...base];
-    return base;
+const {
+    formatSelectOptionLabel,
+    getSelectOptions,
+    getSpecConfig,
+    getSpecHelpText,
+    isHiddenSpecKey,
+    knownSpecKeys,
+    loadSpecRegistry,
+    normalizeValueForEdit,
+    serializeSpecValue,
+} = useSpecRegistry();
+const showSpecHelp = (key: string) => {
+    const text = getSpecHelpText(key);
+    if (text) window.alert(text);
 };
 const INVALID_BRAND_TOKENS = new Set([
     'мультисплитсистема',
@@ -818,14 +826,6 @@ const autoFillCompatibilityByBrand = async () => {
     }
 };
 
-const fetchKeys = async () => {
-    try {
-        const res = await api.getPublicSpecKeys();
-        const combined = new Set([...Object.keys(specsTranslations), ...res.keys]);
-        knownKeys.value = Array.from(combined);
-    } catch (e) { console.error(e); }
-};
-
 const fetchTags = async (force = false) => {
     if (!force && tagGroups.value.length > 0) return;
     tagsLoading.value = true;
@@ -968,6 +968,7 @@ const initializeEditor = async () => {
         old_price: source?.old_price ?? null,
         is_published: source?.is_published ?? true,
     };
+    await loadSpecRegistry();
 
     const s = source?.specs || {};
     compatibilityIndoorSlugs.value = parseSlugList((s as any)[COMPATIBLE_INDOOR_KEY]);
@@ -979,17 +980,8 @@ const initializeEditor = async () => {
         : 'free_match';
     capacityCombosInput.value = parseCapacityCombos((s as any)[MULTI_CAPACITY_COMBOS_KEY]).join(', ');
     specs.value = Object.entries(s)
-        .filter(([key]) => !COMPATIBILITY_KEYS.has(key))
-        .map(([key, value]) => {
-            let sVal = String(value);
-            const config = specsTranslations[key];
-            if (config?.type === 'number' && config.unit) {
-                sVal = sVal.replace(new RegExp(config.unit + '$', 'i'), '').trim();
-                const match = sVal.match(/^-?\d*[.,]?\d*/);
-                sVal = match && match[0] ? match[0].replace(',', '.') : '';
-            }
-            return { key, value: sVal };
-        });
+        .filter(([key]) => !COMPATIBILITY_KEYS.has(key) && !isHiddenSpecKey(key))
+        .map(([key, value]) => ({ key, value: normalizeValueForEdit(key, value) }));
     manuals.value = (((source as any)?.manuals || []) as Array<any>)
         .map((item) => ({
             title: String(item?.title || 'Инструкция').trim() || 'Инструкция',
@@ -1000,7 +992,6 @@ const initializeEditor = async () => {
     const productTags = (source as any)?.tags || [];
     selectedTagIds.value = new Set(productTags.map((t: any) => t.id));
 
-    if (knownKeys.value.length === 0) fetchKeys();
     await Promise.all([fetchTags(), fetchBrands()]);
 
     const explicitBrandId = Number((source as any)?.brand_id || 0);
@@ -1074,14 +1065,7 @@ const save = async () => {
     const validSpecs: Record<string, any> = {};
     for (const row of specs.value) {
         if (row.key.trim()) {
-            let finalValue = row.value;
-            const config = specsTranslations[row.key.trim()];
-            if (config?.type === 'number' && config.unit && finalValue.toString().trim() !== '') {
-                finalValue = `${finalValue} ${config.unit}`.trim();
-            } else if (config?.type === 'boolean') {
-                finalValue = (row.value === 'true') ? 'true' : 'false';
-            }
-            validSpecs[row.key.trim()] = finalValue.toString().trim();
+            validSpecs[row.key.trim()] = serializeSpecValue(row.key.trim(), row.value);
         }
     }
 
@@ -1850,12 +1834,21 @@ const unlinkSupplierOffer = async (offer: any) => {
                                 <div class="relative flex-1">
                                     <SpecKeyCombobox 
                                         v-model="row.key" 
-                                        :known-keys="knownKeys" 
+                                        :known-keys="knownSpecKeys"
                                     />
                                 </div>
+                                <button
+                                    v-if="getSpecHelpText(row.key)"
+                                    type="button"
+                                    class="mt-2 shrink-0 rounded-full p-1 text-slate-400 transition hover:bg-teal-50 hover:text-teal-700 dark:hover:bg-slate-700 dark:hover:text-teal-300"
+                                    :title="getSpecHelpText(row.key)"
+                                    @click="showSpecHelp(row.key)"
+                                >
+                                    <CircleHelp class="h-4 w-4" />
+                                </button>
                                 
                                 <div class="flex-1">
-                                    <template v-if="specsTranslations[row.key]?.type === 'boolean'">
+                                    <template v-if="getSpecConfig(row.key)?.type === 'boolean'">
                                         <div class="flex items-center h-[38px]">
                                             <button 
                                                 type="button"
@@ -1878,23 +1871,19 @@ const unlinkSupplierOffer = async (offer: any) => {
                                         </div>
                                     </template>
                                     
-                                    <template v-else-if="specsTranslations[row.key]?.type === 'select'">
+                                    <template v-else-if="getSpecConfig(row.key)?.type === 'select'">
                                         <select 
                                             v-model="row.value"
                                             class="w-full h-[38px] border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all text-gray-900 dark:text-slate-200 shadow-inner"
                                         >
                                             <option value="" disabled>Выберите значение</option>
                                             <option v-for="opt in getSelectOptions(row.key, row.value)" :key="opt" :value="opt">
-                                                {{
-                                                    row.key === 'wifi_ready'
-                                                        ? (opt === 'true' ? 'Да (встроен)' : (opt === 'ready' ? 'Ready (модуль отдельно)' : 'Нет'))
-                                                        : opt
-                                                }}
+                                                {{ formatSelectOptionLabel(row.key, opt) }}
                                             </option>
                                         </select>
                                     </template>
                                     
-                                    <template v-else-if="specsTranslations[row.key]?.type === 'number'">
+                                    <template v-else-if="getSpecConfig(row.key)?.type === 'number'">
                                         <div class="flex h-[38px] rounded-lg shadow-inner">
                                             <input 
                                                 type="number"
@@ -1902,8 +1891,8 @@ const unlinkSupplierOffer = async (offer: any) => {
                                                 placeholder="Значение" 
                                                 class="flex-1 min-w-0 block w-full border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-gray-900 dark:text-slate-200 rounded-none rounded-l-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                                             />
-                                            <span v-if="specsTranslations[row.key]?.unit" class="inline-flex items-center px-2.5 rounded-r-lg border border-l-0 border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-700 text-gray-500 dark:text-slate-300 text-xs">
-                                                {{ specsTranslations[row.key]?.unit }}
+                                            <span v-if="getSpecConfig(row.key)?.unit" class="inline-flex items-center px-2.5 rounded-r-lg border border-l-0 border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-700 text-gray-500 dark:text-slate-300 text-xs">
+                                                {{ getSpecConfig(row.key)?.unit }}
                                             </span>
                                         </div>
                                     </template>

@@ -11,6 +11,7 @@ from services.product_dict_mapper import map_product_to_dict
 from services.product_filter_service import ProductFilterService
 from services.product_series_service import ProductSeriesService
 from services.product_supply_metrics_service import ProductSupplyMetricsService
+from services.spec_registry import get_specs_registry_payload
 
 
 class ProductReadService(ProductFilterService, ProductSeriesService):
@@ -47,6 +48,10 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
                 stats[key] = stats.get(key, 0) + 1
 
         return {"keys": sorted(stats.keys()), "total_products_using": stats}
+
+    @staticmethod
+    def get_specs_registry() -> Dict[str, Any]:
+        return get_specs_registry_payload()
 
     @staticmethod
     async def get_catalog_page(

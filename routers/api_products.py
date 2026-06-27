@@ -14,6 +14,7 @@ from schemas import (
     ProductSeriesNavigationResponse,
     ProductResponse,
     SpecsKeysResponse,
+    SpecRegistryResponse,
 )
 from services.description_generator import DescriptionGeneratorService
 from services.catalog import CatalogService
@@ -27,6 +28,12 @@ router = APIRouter(tags=["api"])
 async def get_public_spec_keys(session: AsyncSession = Depends(get_session)):
     payload = await ProductService.get_public_spec_keys(session)
     return SpecsKeysResponse(**payload)
+
+
+@router.get("/v1/specs/registry", response_model=SpecRegistryResponse, operation_id="get_public_spec_registry")
+async def get_public_spec_registry():
+    payload = ProductService.get_specs_registry()
+    return SpecRegistryResponse(**payload)
 
 
 @router.get("/v1/filters/config", response_model=FiltersConfigResponse, operation_id="get_filters_config")

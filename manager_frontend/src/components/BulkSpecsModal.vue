@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { api } from '../api';
-import { X, Plus, Trash2, Save, AlertTriangle } from 'lucide-vue-next';
+import { X, Plus, Trash2, Save, AlertTriangle, CircleHelp } from 'lucide-vue-next';
 import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
 import SpecKeyCombobox from './SpecKeyCombobox.vue';
-import { specsTranslations } from '../utils/specsTranslations';
+import { useSpecRegistry } from '../composables/useSpecRegistry';
 
 const props = defineProps<{
     modelValue: boolean; // isOpen
@@ -21,44 +21,26 @@ const operation = ref<'merge' | 'replace' | 'delete_keys'>('merge');
 const loading = ref(false);
 const formMessage = ref('');
 const formServerErrors = ref<Record<string, string>>({});
-const knownKeys = ref<string[]>([]);
-const keysLoading = ref(false);
-const hiddenWifiAliasKeys = new Set([
-    'wifi_module',
-    'wi_fi',
-    'wifi',
-    'wifi-builtin',
-    'wifi-ready',
-    '__filter_wifi',
-    '__filter_wifi_builtin',
-]);
-const getSelectOptions = (key: string, value: unknown): string[] => {
-    const base = [...(specsTranslations[key]?.options || [])];
-    const current = String(value ?? '').trim();
-    if (current && !base.includes(current)) return [current, ...base];
-    return base;
-};
+const {
+    formatSelectOptionLabel,
+    getSelectOptions,
+    getSpecConfig,
+    getSpecHelpText,
+    knownSpecKeys,
+    loadSpecRegistry,
+    serializeSpecValue,
+} = useSpecRegistry();
 
-// Fetch known keys for autocomplete
-const fetchKeys = async () => {
-    keysLoading.value = true;
-    try {
-        const res = await api.getPublicSpecKeys();
-        // Merge API keys with basic keys from translations to ensure they are always present
-        const combined = new Set([...Object.keys(specsTranslations), ...res.keys]);
-        knownKeys.value = Array.from(combined).filter((key) => !hiddenWifiAliasKeys.has(key));
-    } catch (e) {
-        console.error('Failed to fetch spec keys', e);
-    } finally {
-        keysLoading.value = false;
-    }
+const showSpecHelp = (key: string) => {
+    const text = getSpecHelpText(key);
+    if (text) window.alert(text);
 };
 
 watch(() => props.modelValue, (val) => {
     if (val) {
         formMessage.value = '';
         formServerErrors.value = {};
-        if (knownKeys.value.length === 0) fetchKeys();
+        loadSpecRegistry();
         // Reset form
         specs.value = [{ key: '', value: '' }];
         operation.value = 'merge';
@@ -86,16 +68,7 @@ const save = async () => {
     const validSpecs: Record<string, string> = {};
     for (const row of specs.value) {
         if (row.key.trim()) {
-            let finalValue = row.value;
-            const config = specsTranslations[row.key.trim()];
-            if (config?.type === 'number' && config.unit && finalValue.toString().trim() !== '') {
-                finalValue = `${finalValue} ${config.unit}`.trim();
-            } else if (config?.type === 'boolean') {
-                // Keep boolean strings or convert properly based on existing convention (e.g. "true"/"false")
-                // Standardizing to string "true"/"false" as the modal values are tracked as strings initially
-                finalValue = (row.value === 'true') ? 'true' : 'false';
-            }
-            validSpecs[row.key.trim()] = finalValue.toString().trim();
+            validSpecs[row.key.trim()] = serializeSpecValue(row.key.trim(), row.value);
         }
     }
     
@@ -192,13 +165,22 @@ const save = async () => {
                         <div class="relative flex-1">
                             <SpecKeyCombobox 
                                 v-model="row.key" 
-                                :known-keys="knownKeys" 
+                                :known-keys="knownSpecKeys"
                             />
                         </div>
+                        <button
+                            v-if="getSpecHelpText(row.key)"
+                            type="button"
+                            class="mt-2 shrink-0 rounded-full p-1 text-slate-400 transition hover:bg-teal-50 hover:text-teal-700 dark:hover:bg-slate-700 dark:hover:text-teal-300"
+                            :title="getSpecHelpText(row.key)"
+                            @click="showSpecHelp(row.key)"
+                        >
+                            <CircleHelp class="h-4 w-4" />
+                        </button>
                         
                         <!-- Value Input (Disabled if deleting keys) -->
                         <div class="flex-1">
-                            <template v-if="specsTranslations[row.key]?.type === 'boolean'">
+                            <template v-if="getSpecConfig(row.key)?.type === 'boolean'">
                                 <div class="flex items-center h-[38px]">
                                     <button 
                                         type="button"
@@ -222,7 +204,7 @@ const save = async () => {
                                 </div>
                             </template>
                             
-                            <template v-else-if="specsTranslations[row.key]?.type === 'select'">
+                            <template v-else-if="getSpecConfig(row.key)?.type === 'select'">
                                 <select 
                                     v-model="row.value"
                                     :disabled="operation === 'delete_keys'"
@@ -230,16 +212,12 @@ const save = async () => {
                                 >
                                     <option value="" disabled>{{ operation === 'delete_keys' ? 'Пропускается' : 'Выберите значение' }}</option>
                                     <option v-for="opt in getSelectOptions(row.key, row.value)" :key="opt" :value="opt">
-                                        {{
-                                            row.key === 'wifi_ready'
-                                                ? (opt === 'true' ? 'Да (встроен)' : (opt === 'ready' ? 'Ready (модуль отдельно)' : 'Нет'))
-                                                : opt
-                                        }}
+                                        {{ formatSelectOptionLabel(row.key, opt) }}
                                     </option>
                                 </select>
                             </template>
                             
-                            <template v-else-if="specsTranslations[row.key]?.type === 'number'">
+                            <template v-else-if="getSpecConfig(row.key)?.type === 'number'">
                                 <div class="flex h-[38px] rounded shadow-sm">
                                     <input 
                                         type="number"
@@ -248,8 +226,8 @@ const save = async () => {
                                         :placeholder="operation === 'delete_keys' ? 'Пропускается' : 'Значение'" 
                                         class="flex-1 min-w-0 block w-full border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-slate-200 rounded-none rounded-l px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-gray-100 dark:disabled:bg-slate-800 disabled:text-gray-400 dark:disabled:text-slate-500"
                                     />
-                                    <span v-if="specsTranslations[row.key]?.unit" class="inline-flex items-center px-3 rounded-r border border-l-0 border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-700 text-gray-500 dark:text-slate-300 text-sm">
-                                        {{ specsTranslations[row.key]?.unit }}
+                                    <span v-if="getSpecConfig(row.key)?.unit" class="inline-flex items-center px-3 rounded-r border border-l-0 border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-700 text-gray-500 dark:text-slate-300 text-sm">
+                                        {{ getSpecConfig(row.key)?.unit }}
                                     </span>
                                 </div>
                             </template>

@@ -3,6 +3,9 @@ export interface SpecConfig {
     type: 'boolean' | 'select' | 'number' | 'text';
     options?: string[];
     unit?: string;
+    description?: string;
+    managerNote?: string;
+    source?: 'registry' | 'fallback';
 }
 
 export const specsTranslations: Record<string, SpecConfig> = {
@@ -10,6 +13,8 @@ export const specsTranslations: Record<string, SpecConfig> = {
     series: { label: 'Серия (Линейка)', type: 'text' },
     is_inverter: { label: 'Инвертор', type: 'boolean' },
     wifi_module: { label: 'Wi-Fi', type: 'boolean' },
+    wifi_builtin: { label: 'Wi-Fi встроенный', type: 'boolean' },
+    wifi_state: { label: 'Состояние Wi-Fi', type: 'select', options: ['builtin', 'ready', 'none'] },
     compressor_brand: { label: 'Марка компрессора', type: 'select', options: ['GMCC', 'Toshiba', 'Highly', 'Panasonic', 'Gree', 'Mitsubishi'] },
     pipe_liquid: { label: 'Труба жидкостная', type: 'select', options: ['1/4"', '3/8"', '1/2"'] },
     pipe_gas: { label: 'Труба газовая', type: 'select', options: ['3/8"', '1/2"', '5/8"', '3/4"'] },
@@ -64,3 +69,18 @@ export const specsTranslations: Record<string, SpecConfig> = {
     remote_control: { label: 'Пульт ДУ', type: 'boolean' },
     timer: { label: 'Таймер', type: 'boolean' },
 };
+
+export const hiddenSpecKeys = new Set([
+    'wifi_module',
+    'wi_fi',
+    'wifi',
+    'wifi-builtin',
+    'wifi-ready',
+    '__filter_wifi',
+    '__filter_wifi_builtin',
+    '__filter_min_heat',
+    '__filter_noise_min',
+    '__filter_indoor_type',
+    '__typed_specs',
+    'compressor_type_norm',
+]);
