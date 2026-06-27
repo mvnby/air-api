@@ -83,7 +83,7 @@ const dateSummary = computed(() => {
   if (isOverdue(props.order)) return { label: 'Касание', value: 'просрочено', className: 'text-red-600 dark:text-red-300' };
   if (props.order.next_followup_date) return { label: 'Касание', value: formatDate(props.order.next_followup_date), className: 'text-gray-600 dark:text-slate-300' };
   if (props.order.measurement_date) return { label: 'Замер', value: formatDate(props.order.measurement_date), className: 'text-gray-600 dark:text-slate-300' };
-  if (props.order.installation_date) return { label: 'Монтаж', value: formatDate(props.order.installation_date), className: 'text-gray-600 dark:text-slate-300' };
+  if (props.order.installation_date) return { label: 'Работы', value: formatDate(props.order.installation_date), className: 'text-gray-600 dark:text-slate-300' };
   return null;
 });
 const statusFlags = computed(() => [
@@ -188,10 +188,9 @@ const paymentSummary = computed(() => {
         <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
           <p class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Сумма: <span class="font-semibold">{{ formatMoney(order.total_amount) }}</span></p>
           <p class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Маржа: <span class="font-semibold">{{ formatMoney(order.margin) }}</span></p>
-          <p class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Счет: <span :class="order.is_paid ? 'text-emerald-600 dark:text-emerald-300' : 'text-amber-600 dark:text-amber-300'">{{ order.is_paid ? 'Оплачен' : 'Ожидает' }}</span></p>
           <p v-if="order.next_followup_date" class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Касание: <span class="font-semibold">{{ formatDate(order.next_followup_date) }}</span></p>
           <p v-if="order.measurement_date" class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Замер: <span class="font-semibold">{{ formatDate(order.measurement_date) }}</span></p>
-          <p v-if="order.installation_date" class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Монтаж: <span class="font-semibold">{{ formatDate(order.installation_date) }}</span></p>
+          <p v-if="order.installation_date" class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Работы: <span class="font-semibold">{{ formatDate(order.installation_date) }}</span></p>
         </div>
 
         <div v-if="order.manager_labels?.length" class="mt-3 flex flex-wrap gap-1">
@@ -205,8 +204,6 @@ const paymentSummary = computed(() => {
         </div>
 
         <footer class="mt-3 flex flex-wrap gap-2">
-          <button type="button" class="btn-mini" @click.stop="emit('generate', { orderId: order.id, docType: 'invoice' })">Счет</button>
-          <button type="button" class="btn-mini" @click.stop="emit('generate', { orderId: order.id, docType: 'contract' })">Договор</button>
           <button type="button" class="btn-mini-outline inline-flex items-center gap-1" @click.stop="emit('open', order.id)">
             <ExternalLink class="h-3.5 w-3.5" />
             Открыть заказ

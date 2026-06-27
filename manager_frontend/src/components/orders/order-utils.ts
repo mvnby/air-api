@@ -18,16 +18,16 @@ export const NEGOTIATION_STATUS_OPTIONS = [
 export const EXECUTION_STATUS_OPTIONS = [
     { value: 'order_equipment', label: 'Заказать товар', icon: 'add_shopping_cart', tone: 'rose' },
     { value: 'awaiting_equipment', label: 'Ждем оборудование', icon: 'local_shipping', tone: 'amber' },
-    { value: 'needs_schedule', label: 'Назначить монтаж', icon: 'event_available', tone: 'teal' },
-    { value: 'scheduled', label: 'Монтаж назначен', icon: 'event', tone: 'cyan' },
-    { value: 'work_done', label: 'Монтаж выполнен', icon: 'task_alt', tone: 'green' },
+    { value: 'needs_schedule', label: 'Назначить работы', icon: 'event_available', tone: 'teal' },
+    { value: 'scheduled', label: 'Работы назначены', icon: 'event', tone: 'cyan' },
+    { value: 'work_done', label: 'Работы выполнены', icon: 'task_alt', tone: 'green' },
     { value: 'awaiting_documents', label: 'Закрыть документы', icon: 'fact_check', tone: 'indigo' },
     { value: 'awaiting_payment', label: 'Ждет оплату', icon: 'payments', tone: 'emerald' },
 ] as const;
 
 export const BOARD_COLUMNS = [
     { value: 'negotiation', label: 'Переговоры', icon: 'forum', tone: 'sky' },
-    { value: 'execution', label: 'Установка / работы', icon: 'construction', tone: 'teal' },
+    { value: 'execution', label: 'Работы', icon: 'construction', tone: 'teal' },
     { value: 'closed_won', label: 'Завершено', icon: 'check_circle', tone: 'green' },
     { value: 'closed_lost', label: 'Отказники', icon: 'cancel', tone: 'rose' },
 ] as const;
@@ -35,7 +35,7 @@ export const BOARD_COLUMNS = [
 export const STATUS_LABELS: Record<string, string> = {
     new_lead: 'Новый лид',
     negotiation: 'Переговоры',
-    execution: 'Монтаж',
+    execution: 'Работы',
     closed: 'Закрыто',
 };
 
@@ -184,7 +184,7 @@ export function getOrderExecutionStatus(order: ManagerOrderListItemResponse): st
 }
 
 export function getOrderExecutionLabel(order: ManagerOrderListItemResponse): string {
-    return EXECUTION_STATUS_LABELS[getOrderExecutionStatus(order)] || 'Назначить монтаж';
+    return EXECUTION_STATUS_LABELS[getOrderExecutionStatus(order)] || 'Назначить работы';
 }
 
 export function formatMoney(value: number): string {
