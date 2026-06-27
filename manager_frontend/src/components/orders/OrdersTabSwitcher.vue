@@ -17,7 +17,7 @@ const tabs: Array<{ value: Segment; label: string; title: string; icon: typeof L
     <button
       v-for="tab in tabs"
       :key="tab.value"
-      class="inline-flex items-center gap-1.5 rounded-[10px] px-2 py-1.5 text-xs font-semibold transition sm:px-3 sm:text-sm"
+      class="inline-flex items-center gap-1 rounded-[10px] px-1.5 py-1.5 text-xs font-semibold transition sm:gap-1.5 sm:px-3 sm:text-sm"
       :class="modelValue === tab.value ? 'bg-[#007f80] text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'"
       :title="tab.title"
       @click="emit('update:modelValue', tab.value)"
