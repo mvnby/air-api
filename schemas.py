@@ -332,6 +332,23 @@ class SpecsKeysResponse(BaseModel):
     total_products_using: Dict[str, int] # Статистика: ключ -> кол-во товаров
 
 
+class SpecRegistryItemResponse(BaseModel):
+    key: str
+    label: str
+    value_type: str
+    quantity_kind: Optional[str] = None
+    canonical_unit: Optional[str] = None
+    aliases: List[str] = Field(default_factory=list)
+    enum_values: List[str] = Field(default_factory=list)
+    description: Optional[str] = None
+    manager_note: Optional[str] = None
+
+
+class SpecRegistryResponse(BaseModel):
+    items: List[SpecRegistryItemResponse]
+    total: int
+
+
 class FilterRange(BaseModel):
     min: Optional[int] = None
     max: Optional[int] = None

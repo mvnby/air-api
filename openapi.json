@@ -680,6 +680,28 @@
         }
       }
     },
+    "/api/v1/specs/registry": {
+      "get": {
+        "tags": [
+          "api",
+          "api"
+        ],
+        "summary": "Get Public Spec Registry",
+        "operationId": "get_public_spec_registry",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecRegistryResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/filters/config": {
       "get": {
         "tags": [
@@ -33848,6 +33870,108 @@
           "base_price"
         ],
         "title": "ServiceResponse"
+      },
+      "SpecRegistryItemResponse": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "value_type": {
+            "type": "string",
+            "title": "Value Type"
+          },
+          "quantity_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity Kind"
+          },
+          "canonical_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Unit"
+          },
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Aliases"
+          },
+          "enum_values": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Enum Values"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "manager_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manager Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "value_type"
+        ],
+        "title": "SpecRegistryItemResponse"
+      },
+      "SpecRegistryResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SpecRegistryItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "SpecRegistryResponse"
       },
       "SpecsKeysResponse": {
         "properties": {

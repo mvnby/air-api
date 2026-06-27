@@ -306,6 +306,8 @@ export type { ProductSiblingResponse } from './models/ProductSiblingResponse';
 export type { ProductUpdate } from './models/ProductUpdate';
 export type { PublicBrandResponse } from './models/PublicBrandResponse';
 export type { ServiceResponse } from './models/ServiceResponse';
+export type { SpecRegistryItemResponse } from './models/SpecRegistryItemResponse';
+export type { SpecRegistryResponse } from './models/SpecRegistryResponse';
 export type { SpecsKeysResponse } from './models/SpecsKeysResponse';
 export type { SupplierCreatePayload } from './models/SupplierCreatePayload';
 export type { SupplierListResponse } from './models/SupplierListResponse';

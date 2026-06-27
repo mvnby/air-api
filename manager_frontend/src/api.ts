@@ -94,6 +94,7 @@ import {
     type ProductMainImageCleanupDecisionResponse,
     type ProductMainImageCleanupItemListResponse,
     type ProductMainImageCleanupItemResponse,
+    type SpecRegistryResponse,
 } from './client';
 import { ManagerTagsService } from './client/services/ManagerTagsService';
 import { ManagerLeadsInboxService } from './client/services/ManagerLeadsInboxService';
@@ -105,6 +106,7 @@ export type Segment = 'all' | 'b2c' | 'b2b';
 export type DashboardView = 'kanban' | 'list';
 export { type Product, type DashboardStatsResponse, type DashboardTouchpoint };
 export type { ProductCreate, ProductDuplicatePayload, ProductUpdate };
+export type { SpecRegistryResponse };
 export type { LeadsInboxItemResponse };
 export type { ManagerGoogleAuthStatusResponse, ManagerGoogleAuthUrlResponse };
 export type { ManagerStaffCreatePayload, ManagerStaffResponse, ManagerStaffUpdatePayload, TelegramLoginPayload };
@@ -892,6 +894,10 @@ export const api = {
 
     async getPublicSpecKeys() {
         return await ApiService.getPublicSpecKeys();
+    },
+
+    async getPublicSpecRegistry() {
+        return await ApiService.getPublicSpecRegistry();
     },
 
     async bulkUpdateSpecs(productIds: number[], specs: Record<string, unknown>, operation: 'merge' | 'replace' | 'delete_keys' = 'merge') {

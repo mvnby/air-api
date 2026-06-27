@@ -138,6 +138,22 @@ class ProductDAO:
         return func.lower(func.jsonb_extract_path_text(cast(Product.specs, JSONB), key))
 
     @staticmethod
+    def _json_path_int_expr(session: AsyncSession, *path: str):
+        dialect = session.bind.dialect.name if session.bind is not None else ""
+        if dialect == "sqlite":
+            json_path = "$." + ".".join(path)
+            return cast(func.json_extract(Product.specs, json_path), Integer)
+        return cast(func.jsonb_extract_path_text(cast(Product.specs, JSONB), *path), Integer)
+
+    @staticmethod
+    def _json_path_text_expr(session: AsyncSession, *path: str):
+        dialect = session.bind.dialect.name if session.bind is not None else ""
+        if dialect == "sqlite":
+            json_path = "$." + ".".join(path)
+            return func.lower(cast(func.json_extract(Product.specs, json_path), String))
+        return func.lower(func.jsonb_extract_path_text(cast(Product.specs, JSONB), *path))
+
+    @staticmethod
     def _apply_common_filters(
         session: AsyncSession,
         stmt,
@@ -171,10 +187,23 @@ class ProductDAO:
             stmt = stmt.where(Product.is_inverter == is_inverter)
 
         if heating_min is not None:
-            stmt = stmt.where(ProductDAO._json_int_expr(session, "__filter_min_heat") <= heating_min)
+            typed_heat_min_expr = ProductDAO._json_path_int_expr(
+                session,
+                "__typed_specs",
+                "temp_range_heat",
+                "min",
+            )
+            legacy_heat_min_expr = ProductDAO._json_int_expr(session, "__filter_min_heat")
+            stmt = stmt.where(func.coalesce(typed_heat_min_expr, legacy_heat_min_expr) <= heating_min)
 
         if has_wifi is not None:
             wifi_expr = ProductDAO._json_bool_expr(session, "__filter_wifi")
+            wifi_state_expr = ProductDAO._json_path_text_expr(
+                session,
+                "__typed_specs",
+                "wifi_state",
+                "value",
+            )
             legacy_wifi_tag_subq = (
                 select(ProductTagLink.product_id)
                 .join(Tag, ProductTagLink.tag_id == Tag.id)
@@ -184,14 +213,18 @@ class ProductDAO:
                 if has_wifi:
                     stmt = stmt.where(
                         or_(
-                            wifi_expr == 1,
+                            wifi_state_expr.in_(("builtin", "ready")),
+                            and_(wifi_state_expr.is_(None), wifi_expr == 1),
                             Product.id.in_(legacy_wifi_tag_subq),
                         )
                     )
                 else:
                     stmt = stmt.where(
                         and_(
-                            wifi_expr == 0,
+                            or_(
+                                wifi_state_expr == "none",
+                                and_(wifi_state_expr.is_(None), wifi_expr == 0),
+                            ),
                             ~Product.id.in_(legacy_wifi_tag_subq),
                         )
                     )
@@ -199,14 +232,18 @@ class ProductDAO:
                 if has_wifi:
                     stmt = stmt.where(
                         or_(
-                            wifi_expr == True,
+                            wifi_state_expr.in_(("builtin", "ready")),
+                            and_(wifi_state_expr.is_(None), wifi_expr == True),
                             Product.id.in_(legacy_wifi_tag_subq),
                         )
                     )
                 else:
                     stmt = stmt.where(
                         and_(
-                            wifi_expr == False,
+                            or_(
+                                wifi_state_expr == "none",
+                                and_(wifi_state_expr.is_(None), wifi_expr == False),
+                            ),
                             ~Product.id.in_(legacy_wifi_tag_subq),
                         )
                     )
@@ -231,7 +268,14 @@ class ProductDAO:
                 if value and str(value).strip().lower() in ALLOWED_INDOOR_TYPE_FILTERS
             ]
             if normalized_types:
-                stmt = stmt.where(ProductDAO._json_text_expr(session, "__filter_indoor_type").in_(normalized_types))
+                typed_indoor_type_expr = ProductDAO._json_path_text_expr(
+                    session,
+                    "__typed_specs",
+                    "indoor_type",
+                    "value",
+                )
+                legacy_indoor_type_expr = ProductDAO._json_text_expr(session, "__filter_indoor_type")
+                stmt = stmt.where(func.coalesce(typed_indoor_type_expr, legacy_indoor_type_expr).in_(normalized_types))
 
         if tag_slugs:
             normalized_slugs = [slug.strip().lower() for slug in tag_slugs if slug and slug.strip()]

@@ -45,6 +45,8 @@ def test_wifi_module_alias_sets_wifi_filter_flags():
     specs = normalize_specs({"wifi_module": "true"})
 
     assert specs["wifi_ready"] is True
+    assert specs["wifi_builtin"] is True
+    assert specs["wifi_state"] == "builtin"
     assert specs["__filter_wifi"] is True
     assert specs["__filter_wifi_builtin"] is True
 
@@ -60,6 +62,8 @@ def test_dynamic_wifi_key_mapping_from_onliner_specs():
     specs = normalize_specs({"Wi-Fi модуль (опция)": "приобретается отдельно"})
 
     assert specs["wifi_ready"] == "ready"
+    assert specs["wifi_builtin"] is False
+    assert specs["wifi_state"] == "ready"
     assert specs["__filter_wifi"] is True
     assert specs["__filter_wifi_builtin"] is False
 
@@ -68,8 +72,33 @@ def test_wifi_option_value_maps_to_ready():
     specs = normalize_specs({"Wi-Fi": "Опция"})
 
     assert specs["wifi_ready"] == "ready"
+    assert specs["wifi_builtin"] is False
+    assert specs["wifi_state"] == "ready"
     assert specs["__filter_wifi"] is True
     assert specs["__filter_wifi_builtin"] is False
+
+
+def test_explicit_wifi_ready_and_builtin_fields_can_represent_optional_module():
+    specs = normalize_specs({"wifi_ready": True, "wifi_builtin": False})
+
+    assert specs["wifi_ready"] == "ready"
+    assert specs["wifi_builtin"] is False
+    assert specs["wifi_state"] == "ready"
+    assert specs["__filter_wifi"] is True
+    assert specs["__filter_wifi_builtin"] is False
+
+
+def test_wifi_state_can_drive_normalized_wifi_fields():
+    builtin = normalize_specs({"wifi_state": "builtin"})
+    assert builtin["wifi_ready"] is True
+    assert builtin["wifi_builtin"] is True
+    assert builtin["wifi_state"] == "builtin"
+
+    ready = normalize_specs({"wifi_state": "ready"})
+    assert ready["wifi_ready"] == "ready"
+    assert ready["wifi_builtin"] is False
+    assert ready["__filter_wifi"] is True
+    assert ready["__filter_wifi_builtin"] is False
 
 
 def test_severcon_keys_are_normalized_for_catalog_filters():
@@ -213,6 +242,71 @@ def test_severcon_semi_industrial_extra_keys_are_normalized():
     assert specs["installation_orientation"] == "Горизонтальная"
 
 
+def test_registry_aliases_convert_watts_and_refrigerant_units():
+    specs = normalize_specs(
+        {
+            "Охлаждение максимум, Вт": "3400",
+            "Номинальная потребляемая мощность (охлаждение), Вт": "2030",
+            "Заправка хладагента, кг": "0,51",
+            "Заводская заправка хладагента R410a (до 5 м)": "1300 г",
+        }
+    )
+
+    assert specs["capacity_cooling_max_kw"] == "3.4"
+    assert specs["power_cons_cooling_kw"] == "2.03"
+    assert specs["refrigerant_charge_g"] == "1300"
+
+
+def test_registry_keeps_small_mislabeled_watt_values_as_kw():
+    specs = normalize_specs({"Охлаждение максимум, Вт": "3,4"})
+
+    assert specs["capacity_cooling_max_kw"] == "3.4"
+
+
+def test_registry_maps_real_unmapped_catalog_keys():
+    specs = normalize_specs(
+        {
+            "Габаритные размеры без упаковки (Ш/Г/В), мм": "975 × 220 × 320",
+            "Внутренний блок: Расход воздуха (высокая скорость), м 3 /ч": "1000",
+            "Наружный блок: Уровень звукового давления, дБ, А": "50",
+            "Увлажнение воздуха": "нет",
+            "Датчик присутствия": "да",
+            "Компрессор: Инверторный компрессор": "Да",
+        }
+    )
+
+    assert specs["width_indoor"] == "975"
+    assert specs["depth_indoor"] == "220"
+    assert specs["height_indoor"] == "320"
+    assert specs["airflow_max"] == "1000"
+    assert specs["noise_outdoor"] == "50"
+    assert specs["humidification"] is False
+    assert specs["presence_sensor"] is True
+    assert specs["inverter"] is True
+
+
+def test_registry_maps_temperature_and_energy_class_aliases():
+    specs = normalize_specs(
+        {
+            "min_temp_cool": "-15",
+            "min_temp_heat": "-25",
+            "Класс энергоэффективности (охлаждение/нагрев)": "A++ / A+",
+            "Энергоэффективность EER/COP": "3,21 / 3,61",
+            "Максимальное количество подключаемых внутренних блоков": "4",
+            "multi_max_height_diff": "10 м",
+        }
+    )
+
+    assert specs["temp_range_cool"] == "-15"
+    assert specs["temp_range_heat"] == "-25"
+    assert specs["energy_class_cooling"] == "A++"
+    assert specs["energy_class_heating"] == "A+"
+    assert specs["eer"] == "3.21"
+    assert specs["cop"] == "3.61"
+    assert specs["multi_max_indoor_units"] == "4"
+    assert specs["pipe_max_height"] == "10"
+
+
 def test_brand_normalization_and_auto_tag_slug_output():
     auto_slugs = []
     specs = normalize_specs(
@@ -258,6 +352,7 @@ def test_indoor_type_filter_key_for_semi_industrial():
     cassette = normalize_specs({"Тип внутреннего блока": "кассетный"})
     assert cassette["__filter_indoor_type"] == "cassette"
     assert cassette["indoor_type"] == "кассетный"
+    assert cassette["__typed_specs"]["indoor_type"]["value"] == "cassette"
 
     duct = normalize_specs({"indoor_type": "Канальный"})
     assert duct["__filter_indoor_type"] == "duct"
@@ -331,10 +426,62 @@ def test_min_nom_max_values_use_nominal_component():
     )
 
     assert specs["capacity_cooling_kw"] == "2.5"
+    assert specs["capacity_cooling_min_kw"] == "0.89"
+    assert specs["capacity_cooling_max_kw"] == "3.7"
     assert specs["capacity_heating_kw"] == "3.3"
+    assert specs["capacity_heating_min_kw"] == "0.89"
+    assert specs["capacity_heating_max_kw"] == "4.1"
     assert specs["power_cons_cooling_kw"] == "0.656"
+    assert specs["power_cons_cooling_min_kw"] == "0.20"
+    assert specs["power_cons_cooling_max_kw"] == "1.4"
     assert specs["power_cons_heating_kw"] == "0.800"
+    assert specs["power_cons_heating_min_kw"] == "0.195"
+    assert specs["power_cons_heating_max_kw"] == "1.6"
     assert specs["inverter"] is True
+
+    typed = specs["__typed_specs"]
+    assert typed["capacity_cooling_kw"]["value"] == 2.5
+    assert typed["capacity_cooling_kw"]["nominal"] == 2.5
+    assert typed["capacity_cooling_kw"]["min"] == 0.89
+    assert typed["capacity_cooling_kw"]["max"] == 3.7
+    assert typed["capacity_cooling_kw"]["unit"] == "kW"
+
+
+def test_typed_specs_capture_ranges_lists_quantities_and_wifi_state():
+    specs = normalize_specs(
+        {
+            "Рабочая температура при обогреве": "от -20 до +30 °C",
+            "Уровень звукового давления внутреннего блока": "23/26/31/35",
+            "Расход воздуха внутреннего блока": "400",
+            "Заправка хладагента, кг": "0,51",
+            "Wi-Fi": "Опция",
+        }
+    )
+
+    typed = specs["__typed_specs"]
+
+    assert typed["temp_range_heat"]["type"] == "range"
+    assert typed["temp_range_heat"]["unit"] == "C"
+    assert typed["temp_range_heat"]["min"] == -20
+    assert typed["temp_range_heat"]["max"] == 30
+    assert typed["temp_range_heat"]["values"] == [-20, 30]
+
+    assert typed["noise_indoor"]["type"] == "number_list"
+    assert typed["noise_indoor"]["unit"] == "dB"
+    assert typed["noise_indoor"]["values"] == [23, 26, 31, 35]
+    assert typed["noise_indoor"]["min"] == 23
+    assert typed["noise_indoor"]["max"] == 35
+
+    assert typed["airflow_max"]["type"] == "number_list"
+    assert typed["airflow_max"]["unit"] == "m3/h"
+    assert typed["airflow_max"]["values"] == [400]
+
+    assert typed["refrigerant_charge_g"]["value"] == 510
+    assert typed["refrigerant_charge_g"]["unit"] == "g"
+
+    assert typed["wifi_state"]["type"] == "state"
+    assert typed["wifi_state"]["value"] == "ready"
+    assert typed["wifi_builtin"]["value"] is False
 
 
 def test_haier_packaging_weight_and_import_rate_keys_are_normalized():
@@ -361,6 +508,34 @@ def test_haier_packaging_weight_and_import_rate_keys_are_normalized():
     assert "source_fx_rub_byn" not in specs
     assert "Цена источника" not in specs
     assert "Курс RUB/BYN (импорт)" not in specs
+
+
+def test_registry_unit_conversions_for_weight_and_warranty():
+    specs = normalize_specs(
+        {
+            "Вес внутреннего блока, кг": "6500 г",
+            "Вес наружного блока, кг": "32 кг",
+            "Гарантия": "2 года",
+        }
+    )
+
+    assert specs["weight_indoor"] == "6.5"
+    assert specs["weight_outdoor"] == "32"
+    assert specs["warranty_months"] == "24"
+
+    typed = specs["__typed_specs"]
+    assert typed["weight_indoor"]["value"] == 6.5
+    assert typed["weight_indoor"]["unit"] == "kg"
+    assert typed["weight_outdoor"]["value"] == 32
+    assert typed["warranty_months"]["value"] == 24
+    assert typed["warranty_months"]["unit"] == "month"
+
+
+def test_registry_weight_conversion_does_not_reformat_plain_kg_values():
+    specs = normalize_specs({"Вес наружного блока, кг": "20,0"})
+
+    assert specs["weight_outdoor"] == "20.0"
+    assert specs["__typed_specs"]["weight_outdoor"]["value"] == 20
 
 
 def test_dynamic_temp_and_pipe_aliases_are_normalized():

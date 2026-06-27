@@ -1,300 +1,28 @@
 import re
 from typing import Any, Dict, List, Optional, Sequence
 
+from services.spec_registry import (
+    REGISTRY_DIMENSIONS_MAP,
+    REGISTRY_KEY_MAP,
+    REGISTRY_UNORDERED_DIMENSION_KEYS,
+    build_typed_specs,
+    normalize_registered_value,
+)
 from services.tag_logic import extract_brand_name, extract_brand_slug, is_invalid_brand_name
 
-# 1. Маппинг (Русский -> Системный)
-KEY_MAP = {
-    # --- ОСНОВНОЕ ---
-    "Тип": "type",
-    "Тип кондиционера": "type",
-    "Тип системы": "inverter",
-    "Тип внутреннего блока": "indoor_type",
-    "Режим работы": "modes",
-    "Режимы работы": "modes",
-    "Артикул": "sku",
-    "Артикул товара": "sku",
-    "Обслуживаемая площадь": "area_m2",
-    "Обслуживаемая площадь, кв.м": "area_m2",
-    "Площадь охлаждения": "area_m2",
-    "Площадь помещения": "area_m2",
-    "Цвет": "color",
-    "Цвет корпуса": "color",
-    "Страна производства": "country",
-    "Хладагент (фреон)": "freon_type",
-    "Хладагент": "freon_type",
-    "Тип хладагента": "freon_type",
-    "Инверторная технология": "inverter",
-    "Инверторный": "inverter",
-    "Инверторное управление": "inverter",
-    "Инверторное управление мощностью": "inverter",
-    "Инверторный компрессор": "inverter",
-    "Тип управления компрессором": "inverter_type",
-    "Бренд": "brand",
-    "Марка": "brand",
-    "Производитель": "brand",
-    "Наличие": "availability",
-    "Серия": "series",
-    "Линейка": "series",
-    "Модельный ряд": "series",
-    
-    # --- УПРАВЛЕНИЕ ---
-    "Wi-Fi": "wifi_ready",
-    "Wi-Fi модуль": "wifi_ready",
-    "Wi-Fi module": "wifi_ready",
-    "Wi-Fi Ready": "wifi_ready",
-    "Вайфай": "wifi_ready",
-    "Пульт дистанционного управления": "remote_control",
-    "Пульт ДУ": "remote_control",
-    "Пульт": "remote_control",
-    "Пульт управления": "remote_control",
-    "Пульт управления в комплекте": "remote_control",
-    "Внутренний блок: Пульт управления": "remote_control",
-    "Зимний комплект": "winter_kit",
-    "Таймер включения/выключения": "timer",
-    "Таймер": "timer",
-    "Регулировка направления воздушного потока": "airflow_direction",
-    "Регулировка скорости вращения вентилятора": "fan_speed",
-    "Регулятор скорости вращения вентилятора": "fan_speed",
-    "Авторестарт после пропадания питания": "autorestart",
-    "Авторестарт": "autorestart",
-    "Турбо-режим": "turbo_mode",
-    "Турбо режим": "turbo_mode",
-    "Режим «Сон»": "sleep_mode",
-    "Ночной режим": "sleep_mode",
-    "Осушение воздуха": "dehumidification",
-    "Осушение": "dehumidification_l_h",
-    "Режим осушения воздуха": "dehumidification",
-
-    # --- МОЩНОСТЬ ---
-    "Мощность охлаждения": "capacity_cooling_kw",
-    "Мощность охлаждения, кВт": "capacity_cooling_kw",
-    "Мощность охлаждения (Мин/Ном/Макс), кВт": "capacity_cooling_kw",
-    "Мощность в режиме охлаждения": "capacity_cooling_kw",
-    "Мощность в режиме охлаждения, кВт": "capacity_cooling_kw",
-    "Холодопроизводительность": "capacity_cooling_kw",
-    "Охлаждение, кВт": "capacity_cooling_kw",
-    "Охлаждение минимум, кВт": "capacity_cooling_min_kw",
-    "Охлаждение максимум, кВт": "capacity_cooling_max_kw",
-    "Мощность обогрева": "capacity_heating_kw",
-    "Мощность обогрева, кВт": "capacity_heating_kw",
-    "Мощность нагрева (Мин/Ном/Макс), кВт": "capacity_heating_kw",
-    "Мощность в режиме обогрева": "capacity_heating_kw",
-    "Мощность в режиме обогрева, кВт": "capacity_heating_kw",
-    "Теплопроизводительность": "capacity_heating_kw",
-    "Нагрев, кВт": "capacity_heating_kw",
-    "Нагрев минимум, кВт": "capacity_heating_min_kw",
-    "Нагрев максимум, кВт": "capacity_heating_max_kw",
-    "Потребляемая мощность при охлаждении": "power_cons_cooling_kw",
-    "Потребляемая мощность при охлаждении, кВт": "power_cons_cooling_kw",
-    "Потребляемая мощность, охлаждение": "power_cons_cooling_kw",
-    "Потребление электроэнергии в режиме охлаждения (Мин / Ном / Макс), кВт": "power_cons_cooling_kw",
-    "Номинальная потребляемая мощность (охлаждение), кВт": "power_cons_cooling_kw",
-    "Минимальная потребляемая мощность (охлаждение), кВт": "power_cons_cooling_min_kw",
-    "Максимальная потребляемая мощность (охлаждение), кВт": "power_cons_cooling_max_kw",
-    "Потребляемая мощность при обогреве": "power_cons_heating_kw",
-    "Потребляемая мощность при обогреве, кВт": "power_cons_heating_kw",
-    "Потребляемая мощность, обогрев": "power_cons_heating_kw",
-    "Потребление электроэнергии в режиме нагрева (Мин / Ном / Макс), кВт": "power_cons_heating_kw",
-    "Номинальная потребляемая мощность (нагрев), кВт": "power_cons_heating_kw",
-    "Минимальная потребляемая мощность (нагрев), кВт": "power_cons_heating_min_kw",
-    "Максимальная потребляемая мощность (нагрев), кВт": "power_cons_heating_max_kw",
-    
-    # --- ЭФФЕКТИВНОСТЬ ---
-    "Энергоэффективность при охлаждении (EER)": "eer",
-    "EER": "eer",
-    "EER/COP": "eer",
-    "Энергоэффективность при обогреве (COP)": "cop",
-    "COP": "cop",
-    "Класс энергоэффективности": "energy_class",
-    "Класс энергоэффективности при охлаждении": "energy_class_cooling",
-    "Класс энергоэффективности при обогреве": "energy_class_heating",
-    
-    # --- ШУМ ---
-    "Шум внутреннего блока": "noise_indoor",
-    "Шум внутреннего блока, дБ": "noise_indoor",
-    "Уровень шума внутреннего блока": "noise_indoor",
-    "Уровень шума (макс), дБ": "noise_indoor",
-    "Уровень звукового давления [дБ(А)], Выс/Ср/Низ/Сверх": "noise_indoor",
-    "Уровень шума в режиме ОХЛАЖДЕНИЯ (Тих / Низ / Ср /Макс), дБ": "noise_indoor",
-    "Уровень шума в режиме НАГРЕВА (Низ / Ср / Макс), дБ": "noise_indoor",
-    "Шум наружного блока": "noise_outdoor",
-    "Шум наружного блока, дБ": "noise_outdoor",
-    "Шум внешнего блока": "noise_outdoor",
-    "Шум внешнего блока, дБ": "noise_outdoor",
-    "Уровень шума наружного блока": "noise_outdoor",
-    "Уровень шума наружного блока, дБ": "noise_outdoor",
-    "Уровень звукового давления, дБ, А": "noise_outdoor",
-    "Уровень звукового давления (высокая скорость), дБ, А": "noise_outdoor",
-    "Наружный блок: Уровень звукового давления (высокая скорость), дБ, А": "noise_outdoor",
-    "Внутренний блок: Уровень звукового давления [дБ(А)], Выс/Ср/Низ/Сверх": "noise_indoor",
-    "Уровень звукового давления внутреннего блока": "noise_indoor",
-    "Уровень звукового давления наружного блока": "noise_outdoor",
-    
-    # --- ГАБАРИТЫ ВНУТРЕННИЙ ---
-    "Ширина внутреннего блока": "width_indoor",
-    "Высота внутреннего блока": "height_indoor",
-    "Глубина внутреннего блока": "depth_indoor",
-    "Вес внутреннего блока": "weight_indoor",
-    "Вес внутреннего блока, кг": "weight_indoor",
-    "Чистый вес / Вес в упаковке, кг": "weight_indoor",
-    "Внутренний блок: Чистый вес / Вес в упаковке, кг": "weight_indoor",
-    "Внутренний блок без упаковки, кг": "weight_indoor",
-    "Вес внутреннего блока без упаковки": "weight_indoor",
-    
-    # --- ГАБАРИТЫ НАРУЖНЫЙ ---
-    "Ширина наружного блока": "width_outdoor",
-    "Высота наружного блока": "height_outdoor",
-    "Глубина наружного блока": "depth_outdoor",
-    "Вес наружного блока": "weight_outdoor",
-    "Вес наружного блока, кг": "weight_outdoor",
-    "Вес внешнего блока": "weight_outdoor",
-    "Вес внешнего блока, кг": "weight_outdoor",
-    "Чистый вес / вес в упаковке, кг": "weight_outdoor",
-    "Наружный блок: Чистый вес / вес в упаковке, кг": "weight_outdoor",
-    "Наружный блок: Чистый вес / Вес в упаковке, кг": "weight_outdoor",
-    "Наружный блок без упаковки, кг": "weight_outdoor",
-    "Вес наружного блока без упаковки": "weight_outdoor",
-    
-    # --- МОНТАЖ ---
-    "Максимальная длина магистрали": "pipe_max_length",
-    "Максимальная длина коммуникаций": "pipe_max_length",
-    "Максимальная длина коммуникаций, м": "pipe_max_length",
-    "Максимальная длина фреонопровода": "pipe_max_length",
-    "Макс. длина трассы": "pipe_max_length",
-    "Макс. длина трубопроводов без дополнительной заправки, м": "pipe_max_length",
-    "Перепад высот": "pipe_max_height",
-    "Перепад высот, м": "pipe_max_height",
-    "Максимальная длина/перепад высот, м": "pipe_max_length",
-    "Максимальная длина/перепад высот, при использовании только в режиме охлаждения, м": "pipe_max_length",
-    "Максимальный перепад высот": "pipe_max_height",
-    "Максимальное количество внутренних блоков": "multi_max_indoor_units",
-    "Максимальная суммарная длина магистрали": "multi_max_total_pipe_length",
-    "Диаметр жидкостной трубы": "pipe_liquid",
-    "Диаметр жидкостной линии, мм": "pipe_liquid",
-    "Диаметр труб жидкого хладагента, мм": "pipe_liquid",
-    "Диаметр газовой трубы": "pipe_gas",
-    "Диаметр газовой линии, мм": "pipe_gas",
-    "Диаметр труб газообразного хладагента, мм": "pipe_gas",
-    
-    # --- ТЕМПЕРАТУРЫ ---
-    "Рабочая температура при охлаждении": "temp_range_cool",
-    "Рабочий диапазон температур при охлаждении": "temp_range_cool",
-    "Рабочий диапазон температур при охлаждении,°C": "temp_range_cool",
-    "Рабочий диапазон температур при охлаждении, °C": "temp_range_cool",
-    "Гарантированный диапазон рабочих t° наружного воздуха, охлаждение": "temp_range_cool",
-    "Охлаждение, °С": "temp_range_cool",
-    "Рабочая температура при обогреве": "temp_range_heat",
-    "Рабочий диапазон температур при обогреве": "temp_range_heat",
-    "Рабочий диапазон температур при обогреве,°C": "temp_range_heat",
-    "Рабочий диапазон температур при обогреве, °C": "temp_range_heat",
-    "Гарантированный диапазон рабочих t° наружного воздуха, обогрев": "temp_range_heat",
-    "Нагрев, °С": "temp_range_heat",
-    "Минимальная температура наружного воздуха": "temp_range_heat",
-    "Мин. температура (обогрев)": "temp_range_heat",
-    
-    # --- ПЛОЩАДЬ (с единицами) ---
-    "Обслуживаемая площадь до": "area_m2",
-    "Обслуживаемая площадь до, м2": "area_m2",
-    "Рекомендуемая максимальная площадь помещения": "area_m2",
-    "Рекомендованная площадь, м 2": "area_m2",
-    
-    # --- ЭНЕРГОЭФФЕКТИВНОСТЬ (без скобок) ---
-    "Энергоэффективность при охлаждении": "energy_class_cooling",
-    "Энергоэффективность при обогреве": "energy_class_heating",
-    "Класс эффективности": "energy_class",
-    "Класс энергоэффективности (Холод / Тепло)": "energy_class",
-    "Коэффициент энергоэффективности (EER / COP)": "eer",
-    "EER/COP": "eer",
-    "Энергоэффективность SEER/EER": "eer",
-    "Энергоэффективность SCOP/COP": "cop",
-    "SEER (коэффициент/класс)": "seer",
-    "EER (коэффициент / класс)": "eer",
-    "COP (коэффициент / класс)": "cop",
-    
-    "Максимальный расход воздуха внутреннего блока": "airflow_max",
-    "Расход воздуха (высокая скорость), м 3 /ч": "airflow_max",
-    "Расход воздуха внутреннего блока": "airflow_max",
-    "Расход воздуха наружного блока": "airflow_outdoor",
-
-    # --- ФИЛЬТРЫ И ДОП. ФУНКЦИИ ---
-    "Приток свежего воздуха": "fresh_air",
-    'Интеграция в "умный дом"': "smart_home_integration",
-    "Голосовое управление": "voice_control",
-    "Биофильтр": "bio_filter",
-    "Плазменный фильтр": "plasma_filter",
-    "Ионизатор": "ionizer",
-    "Ионизация": "ionizer",
-    "Угольный фильтр": "carbon_filter",
-    "Фотокаталитический фильтр": "photocatalytic_filter",
-    "Электростатический фильтр": "electrostatic_filter",
-    "Обеззараживание ультрафиолетом": "uv_sterilization",
-    "Самоочистка": "self_cleaning",
-    "Автоочистка теплообменника": "self_cleaning",
-    "Wi-Fi управление": "wifi_ready",
-    "Марка используемого хладагента": "freon_type",
-    "Производитель компрессора": "compressor_brand",
-    "Компрессор: Производитель компрессора": "compressor_brand",
-    "Неинверторный компрессор": "inverter",
-    "Компрессор: Неинверторный компрессор": "inverter",
-    "Номинальный уровень рабочего тока (охлаждение), А": "current_cooling_nominal_a",
-    "Номинальный уровень рабочего тока (нагрев), А": "current_heating_nominal_a",
-    "Максимальный рабочий ток, охлаждение": "current_cooling_max_a",
-    "Максимальный рабочий ток, обогрев": "current_heating_max_a",
-    "Дополнительная заправка (г/м)": "refrigerant_additional_g_m",
-    "Дополнительная заправка хладагента": "refrigerant_additional_g_m",
-    "Заводская заправка хладагента": "refrigerant_charge_g",
-    "Вес заправляемого хладагента, г": "refrigerant_charge_g",
-    "Артикулы товара": "sku_list",
-    "Подача питания": "power_supply_location",
-    "Подключение питания": "power_supply_location",
-    "Сторона подключения": "power_supply_location",
-    "Электропитание": "power_supply",
-    "Электропитание, Ф/В/Гц": "power_supply",
-    "Электропитание (Ø / В / Гц)": "power_supply",
-    "Параметры питающей сети": "power_supply_voltage",
-    "Диаметр дренажной трубы: мм (дюйм)": "drain_pipe_diameter",
-    "Модель": "model",
-    "Модель внутреннего блока": "model_indoor",
-    "Модель наружного блока": "model_outdoor",
-    "Гарантия": "warranty_months",
-    "Установка": "installation_orientation",
-    "Внутренний блок: Габаритные размеры в упаковке (Ш/Г/В), мм": "dimensions_indoor_package_mm",
-    "Наружный блок: Габаритные размеры в упаковке (Ш/Г/В), мм": "dimensions_outdoor_package_mm",
-    "Размеры внутреннего блока в упаковке (Ш х В х Г)": "dimensions_indoor_package_mm",
-    "Размеры наружного блока в упаковке (Ш х В х Г)": "dimensions_outdoor_package_mm",
-    "Вес внутреннего блока в упаковке": "weight_indoor_package",
-    "Вес наружного блока в упаковке": "weight_outdoor_package",
-    "Габаритные размеры в упаковке (Ш/Г/В), мм": "dimensions_outdoor_package_mm",
+_TRIPLET_SPEC_KEYS = {
+    "capacity_cooling_kw": ("capacity_cooling_min_kw", "capacity_cooling_max_kw"),
+    "capacity_heating_kw": ("capacity_heating_min_kw", "capacity_heating_max_kw"),
+    "power_cons_cooling_kw": ("power_cons_cooling_min_kw", "power_cons_cooling_max_kw"),
+    "power_cons_heating_kw": ("power_cons_heating_min_kw", "power_cons_heating_max_kw"),
 }
 
-# Composite dimension keys: "940×1250×340" → split into width/height/depth
-# Maps raw key patterns → (width_key, height_key, depth_key)
-_DIMENSIONS_MAP = {
-    "Габариты внутреннего блока (ШхВхГ)": ("width_indoor", "height_indoor", "depth_indoor"),
-    "Габариты внутреннего блока (ШхВхГ), мм": ("width_indoor", "height_indoor", "depth_indoor"),
-    "Габариты наружного блока (ШхВхГ)": ("width_outdoor", "height_outdoor", "depth_outdoor"),
-    "Габариты наружного блока (ШхВхГ), мм": ("width_outdoor", "height_outdoor", "depth_outdoor"),
-    "Габариты внешнего блока (ШхВхГ)": ("width_outdoor", "height_outdoor", "depth_outdoor"),
-    "Габариты внешнего блока (ШхВхГ), мм": ("width_outdoor", "height_outdoor", "depth_outdoor"),
-    "Габариты мм": ("width_indoor", "height_indoor", "depth_indoor"),
-    # Haierproff uses width/depth/height order (Ш/Г/В).
-    "Внутренний блок: Габаритные размеры без упаковки (Ш/Г/В), мм": ("width_indoor", "depth_indoor", "height_indoor"),
-    "Наружный блок: Габаритные размеры без упаковки (Ш/Г/В), мм": ("width_outdoor", "depth_outdoor", "height_outdoor"),
-    "Внутренний блок без упаковки (Ш × В × Г), мм": ("width_indoor", "height_indoor", "depth_indoor"),
-    "Наружный блок без упаковки (Ш × В × Г), мм": ("width_outdoor", "height_outdoor", "depth_outdoor"),
-    "Размеры внутреннего блока без упаковки (Ш х В х Г)": ("width_indoor", "height_indoor", "depth_indoor"),
-    "Размеры наружного блока без упаковки (Ш х В х Г)": ("width_outdoor", "height_outdoor", "depth_outdoor"),
-    "Размеры внутреннего блока без упаковки (Ш x В x Г)": ("width_indoor", "height_indoor", "depth_indoor"),
-    "Размеры наружного блока без упаковки (Ш x В x Г)": ("width_outdoor", "height_outdoor", "depth_outdoor"),
-}
+# Registry-backed alias projection. Keep the public KEY_MAP name for scripts/tests.
+KEY_MAP: Dict[str, str] = dict(REGISTRY_KEY_MAP)
 
-_UNORDERED_WIDTH_HEIGHT_DIMENSION_KEYS = {
-    "Размеры внутреннего блока без упаковки (Ш х В х Г)",
-    "Размеры наружного блока без упаковки (Ш х В х Г)",
-    "Размеры внутреннего блока без упаковки (Ш x В x Г)",
-    "Размеры наружного блока без упаковки (Ш x В x Г)",
-}
+# Composite dimension keys: "940×1250×340" → split into width/height/depth.
+_DIMENSIONS_MAP = dict(REGISTRY_DIMENSIONS_MAP)
+_UNORDERED_WIDTH_HEIGHT_DIMENSION_KEYS = set(REGISTRY_UNORDERED_DIMENSION_KEYS)
 
 _PREFERRED_NUMERIC_KEYS = {
     "capacity_cooling_kw",
@@ -369,11 +97,15 @@ def _split_dimensions(specs: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-def clean_value(key: str, val: Any, keep_units: bool = True) -> Any:
+def clean_value(key: str, val: Any, keep_units: bool = True, source_key: str | None = None) -> Any:
     if not isinstance(val, str):
         return val
         
     val_lower = val.lower().strip()
+
+    registered_value = normalize_registered_value(key, val, source_key=source_key)
+    if registered_value is not None:
+        return registered_value
 
     if key in {"pipe_liquid", "pipe_gas"}:
         # Convert common metric diameters to canonical inch fractions for UI/filter selects.
@@ -429,7 +161,8 @@ def clean_value(key: str, val: Any, keep_units: bool = True) -> Any:
         "smart_home_integration", "voice_control",
         "bio_filter", "plasma_filter", "ionizer", "carbon_filter",
         "photocatalytic_filter", "electrostatic_filter", "uv_sterilization",
-        "fresh_air"
+        "fresh_air", "humidification", "presence_sensor", "self_diagnosis",
+        "includes_indoor_unit", "includes_outdoor_unit",
     ]
     
     if key == "wifi_ready":
@@ -692,6 +425,7 @@ def _classify_wifi_value(value: Any) -> str | None:
         "встро",
         "built-in",
         "built in",
+        "builtin",
         "check",
         "галоч",
         "true",
@@ -737,15 +471,30 @@ def _apply_wifi_state(
     enriched = dict(specs)
     wifi_candidates = (
         enriched.get("wifi_ready"),
+        enriched.get("wifi_builtin"),
+        enriched.get("wifi_state"),
         enriched.get("wifi_module"),
         enriched.get("wi_fi"),
         enriched.get("wifi"),
     )
     wifi_kinds = [_classify_wifi_value(value) for value in wifi_candidates]
     wifi_kinds = [kind for kind in wifi_kinds if kind is not None]
+    explicit_builtin_flag = _parse_bool(enriched.get("wifi_builtin"))
+    explicit_ready_flag = _parse_bool(enriched.get("wifi_ready"))
+    if explicit_builtin_flag is False and explicit_ready_flag is True:
+        wifi_kinds = [kind for kind in wifi_kinds if kind != "builtin"]
+        wifi_kinds.append("ready")
 
     # Drop stale keys and rebuild consistently.
-    for key in ("wifi_ready", "wifi-builtin", "wifi-ready", "__filter_wifi", "__filter_wifi_builtin"):
+    for key in (
+        "wifi_ready",
+        "wifi_builtin",
+        "wifi_state",
+        "wifi-builtin",
+        "wifi-ready",
+        "__filter_wifi",
+        "__filter_wifi_builtin",
+    ):
         if key in enriched:
             del enriched[key]
 
@@ -755,18 +504,24 @@ def _apply_wifi_state(
 
     if has_builtin_tag:
         enriched["wifi_ready"] = True
+        enriched["wifi_builtin"] = True
+        enriched["wifi_state"] = "builtin"
         enriched["__filter_wifi"] = True
         enriched["__filter_wifi_builtin"] = True
         return enriched
 
     if has_ready_tag:
         enriched["wifi_ready"] = "ready"
+        enriched["wifi_builtin"] = False
+        enriched["wifi_state"] = "ready"
         enriched["__filter_wifi"] = True
         enriched["__filter_wifi_builtin"] = False
         return enriched
 
     if strict_wifi_from_tags:
         enriched["wifi_ready"] = False
+        enriched["wifi_builtin"] = False
+        enriched["wifi_state"] = "none"
         enriched["__filter_wifi"] = False
         enriched["__filter_wifi_builtin"] = False
         return enriched
@@ -781,14 +536,20 @@ def _apply_wifi_state(
 
     if wifi_kind == "builtin":
         enriched["wifi_ready"] = True
+        enriched["wifi_builtin"] = True
+        enriched["wifi_state"] = "builtin"
         enriched["__filter_wifi"] = True
         enriched["__filter_wifi_builtin"] = True
     elif wifi_kind == "ready":
         enriched["wifi_ready"] = "ready"
+        enriched["wifi_builtin"] = False
+        enriched["wifi_state"] = "ready"
         enriched["__filter_wifi"] = True
         enriched["__filter_wifi_builtin"] = False
     else:
         enriched["wifi_ready"] = False
+        enriched["wifi_builtin"] = False
+        enriched["wifi_state"] = "none"
         enriched["__filter_wifi"] = False
         enriched["__filter_wifi_builtin"] = False
 
@@ -882,7 +643,7 @@ def normalize_specs(
                     new_specs["eer"] = numbers[0].replace(",", ".")
                     if len(numbers) > 1:
                         new_specs["cop"] = numbers[1].replace(",", ".")
-                if rus_key in new_specs:
+                if rus_key != sys_key and rus_key in new_specs:
                     del new_specs[rus_key]
                 continue
             if "seer/eer" in rus_key_l:
@@ -891,7 +652,7 @@ def normalize_specs(
                     new_specs["seer"] = numbers[0].replace(",", ".")
                     if len(numbers) > 1:
                         new_specs["eer"] = numbers[1].replace(",", ".")
-                if rus_key in new_specs:
+                if rus_key != sys_key and rus_key in new_specs:
                     del new_specs[rus_key]
                 continue
             if "scop/cop" in rus_key_l:
@@ -900,7 +661,7 @@ def normalize_specs(
                     new_specs["scop"] = numbers[0].replace(",", ".")
                     if len(numbers) > 1:
                         new_specs["cop"] = numbers[1].replace(",", ".")
-                if rus_key in new_specs:
+                if rus_key != sys_key and rus_key in new_specs:
                     del new_specs[rus_key]
                 continue
 
@@ -920,7 +681,23 @@ def normalize_specs(
                         new_specs["energy_class_cooling"] = energy_class
                     else:
                         new_specs["energy_class_heating"] = energy_class
-                if rus_key in new_specs:
+                if rus_key != sys_key and rus_key in new_specs:
+                    del new_specs[rus_key]
+                continue
+
+            if sys_key == "energy_class" and "/" in str(raw_val) and (
+                "охлаждение" in rus_key_l or "холод" in rus_key_l
+            ):
+                classes = [
+                    item.strip().replace("А", "A").replace("а", "A")
+                    for item in re.split(r"\s*/\s*", str(raw_val))
+                    if item.strip()
+                ]
+                if classes:
+                    new_specs["energy_class_cooling"] = classes[0]
+                    if len(classes) > 1:
+                        new_specs["energy_class_heating"] = classes[1]
+                if rus_key != sys_key and rus_key in new_specs:
                     del new_specs[rus_key]
                 continue
 
@@ -933,18 +710,34 @@ def normalize_specs(
                     new_specs[sys_key] = True
                 else:
                     new_specs[sys_key] = clean_value(sys_key, raw_val, keep_units=keep_units)
-                if rus_key in new_specs:
+                if rus_key != sys_key and rus_key in new_specs:
                     del new_specs[rus_key]
                 continue
 
             # Чистим / Конвертируем
-            clean_val = clean_value(sys_key, raw_val, keep_units=keep_units)
+            triplet_target = _TRIPLET_SPEC_KEYS.get(sys_key)
+            triplet_numbers = re.findall(r"[-+]?\d+(?:[.,]\d+)?", str(raw_val))
+            if triplet_target and len(triplet_numbers) >= 3 and "/" in str(raw_val):
+                min_key, max_key = triplet_target
+                new_specs[min_key] = clean_value(
+                    min_key,
+                    triplet_numbers[0].replace(",", "."),
+                    keep_units=keep_units,
+                    source_key=rus_key,
+                )
+                new_specs[max_key] = clean_value(
+                    max_key,
+                    triplet_numbers[2].replace(",", "."),
+                    keep_units=keep_units,
+                    source_key=rus_key,
+                )
+            clean_val = clean_value(sys_key, raw_val, keep_units=keep_units, source_key=rus_key)
 
             # Записываем новый ключ
             new_specs[sys_key] = clean_val
 
             # Удаляем старый (чтобы не было дублей)
-            if rus_key in new_specs:
+            if rus_key != sys_key and rus_key in new_specs:
                 del new_specs[rus_key]
                 
     # Also attempt to clean values for keys that are ALREADY system keys
@@ -959,7 +752,7 @@ def normalize_specs(
         sys_key = _resolve_dynamic_system_key(raw_key)
         if not sys_key or sys_key in new_specs:
             continue
-        new_specs[sys_key] = clean_value(sys_key, raw_val, keep_units=keep_units)
+        new_specs[sys_key] = clean_value(sys_key, raw_val, keep_units=keep_units, source_key=raw_key)
 
     # Source price/rate are import internals; never persist in product specs.
     for dropped_key in _DROPPED_SPEC_KEYS:
@@ -984,8 +777,12 @@ def normalize_specs(
     if auto_tag_slugs is not None and brand_slug and brand_slug not in auto_tag_slugs:
         auto_tag_slugs.append(brand_slug)
             
-    return enrich_filter_keys(
+    enriched_specs = enrich_filter_keys(
         new_specs,
         wifi_tag_slugs=wifi_tag_slugs,
         strict_wifi_from_tags=strict_wifi_from_tags,
     )
+    typed_specs = build_typed_specs(enriched_specs)
+    if typed_specs:
+        enriched_specs["__typed_specs"] = typed_specs
+    return enriched_specs

@@ -9,10 +9,18 @@ from sqlalchemy.orm import sessionmaker
 sys.path.append('.')
 from core.config import settings
 from models import Product
-from services.spec_normalizer import KEY_MAP
+from services.spec_normalizer import KEY_MAP, _DIMENSIONS_MAP
 
 # Define system keys (target keys)
-SYSTEM_KEYS = set(KEY_MAP.values())
+SYSTEM_KEYS = set(KEY_MAP.values()) | {key for keys in _DIMENSIONS_MAP.values() for key in keys}
+INTERNAL_SPEC_KEYS = {
+    "compatible_indoor_slugs",
+    "compatible_outdoor_slugs",
+    "compressor_type_norm",
+    "logistics_components",
+    "multi_capacity_combos",
+}
+INTERNAL_SPEC_PREFIXES = ("__filter_", "__smoke_")
 
 async def analyze_keys():
     engine = create_async_engine(settings.DATABASE_URL)
@@ -35,6 +43,10 @@ async def analyze_keys():
             products_with_specs += 1
             
             for key, val in p.specs.items():
+                if str(key).startswith(INTERNAL_SPEC_PREFIXES) or key in INTERNAL_SPEC_KEYS:
+                    continue
+                if key in _DIMENSIONS_MAP:
+                    continue
                 # 1. Check if it's already a known system key
                 if key in SYSTEM_KEYS:
                     continue
