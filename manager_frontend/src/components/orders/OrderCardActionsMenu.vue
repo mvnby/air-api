@@ -38,6 +38,17 @@ const stageOptions = computed(() => {
   if (activeBoardColumn.value === 'negotiation') return NEGOTIATION_STATUS_OPTIONS;
   return [];
 });
+const boardActions = computed(() => [
+  activeBoardColumn.value !== 'negotiation'
+    ? { value: 'negotiation', label: 'Вернуть в переговоры', icon: 'forum' }
+    : null,
+  activeBoardColumn.value !== 'execution'
+    ? { value: 'execution', label: 'Перенести в работы', icon: 'construction' }
+    : null,
+  activeBoardColumn.value !== 'closed_won'
+    ? { value: 'closed_won', label: 'Завершить успешно', icon: 'check_circle' }
+    : null,
+].filter(Boolean) as Array<{ value: string; label: string; icon: string }>);
 
 const selectStatus = (status: string) => {
   menuOpen.value = false;
@@ -100,7 +111,21 @@ onBeforeUnmount(() => {
       class="absolute right-0 top-7 z-30 w-64 rounded-xl border border-gray-200 bg-white p-1.5 text-xs shadow-xl dark:border-slate-700 dark:bg-slate-800"
       @click.stop
     >
+      <template v-if="boardActions.length">
+        <div class="px-2 pb-1 pt-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">Быстрая смена</div>
+        <button
+          v-for="action in boardActions"
+          :key="action.value"
+          type="button"
+          class="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-semibold text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
+          @click="selectStatus(action.value)"
+        >
+          <span class="material-icons-round text-[16px]">{{ action.icon }}</span>
+          {{ action.label }}
+        </button>
+      </template>
       <template v-if="stageOptions.length">
+        <div v-if="boardActions.length" class="my-1 border-t border-slate-100 dark:border-slate-700" />
         <div class="px-2 pb-1 pt-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">{{ stageTitle }}</div>
       </template>
       <button

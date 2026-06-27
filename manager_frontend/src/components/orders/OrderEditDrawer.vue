@@ -449,7 +449,7 @@ const negotiationStatusLabel = computed(() => (
   NEGOTIATION_STATUS_OPTIONS.find((option) => option.value === negotiationStatus.value)?.label || 'Ждет предложение'
 ));
 const executionStatusLabel = computed(() => (
-  EXECUTION_STATUS_OPTIONS.find((option) => option.value === executionStatus.value)?.label || 'Назначить монтаж'
+  EXECUTION_STATUS_OPTIONS.find((option) => option.value === executionStatus.value)?.label || 'Назначить работы'
 ));
 
 const setNegotiationStatus = (value: string) => {
@@ -3789,7 +3789,7 @@ watch(
       <section v-if="status === 'execution'" class="mt-4 rounded-2xl border border-teal-100 bg-teal-50/50 p-3">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h3 class="text-sm font-semibold text-teal-900">Установка / работы</h3>
+            <h3 class="text-sm font-semibold text-teal-900">Работы</h3>
             <p class="mt-0.5 text-xs text-teal-700/75">Текущий этап: {{ executionStatusLabel }}</p>
           </div>
         </div>
