@@ -711,8 +711,8 @@ watch(drawerOpen, (isOpen) => {
     <div class="mx-auto max-w-[1400px] px-4 py-6 md:px-8">
       <header class="mb-4 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
         <div class="flex items-center gap-1 pl-9 sm:gap-2 md:pl-0">
-          <div class="flex min-w-0 shrink items-center gap-1 sm:gap-2">
-            <h1 class="shrink-0 text-lg font-bold dark:text-white md:text-xl">Заказы</h1>
+          <div class="flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
+            <h1 class="hidden shrink-0 text-lg font-bold dark:text-white sm:block md:text-xl">Заказы</h1>
             <OrdersTabSwitcher v-model="segment" />
           </div>
           <div class="ml-auto flex shrink-0 items-center justify-end gap-1 sm:gap-2">
