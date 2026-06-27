@@ -4,6 +4,7 @@ import { api, type Product, type ManagerBrand, type ProductCreate, type ProductD
 import { X, Save, Plus, Trash2, Edit3, Globe, Hash, Tag, CircleHelp } from 'lucide-vue-next';
 import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
 import SpecKeyCombobox from './SpecKeyCombobox.vue';
+import SpecValueInput from './SpecValueInput.vue';
 import { useSpecRegistry } from '../composables/useSpecRegistry';
 
 interface TagItem {
@@ -132,19 +133,31 @@ const saveButtonText = computed(() => {
 const normalizeText = (value: unknown): string => String(value ?? '').toLowerCase().replace(/ё/g, 'е').trim();
 const normalizeBrandToken = (value: unknown): string => normalizeText(value).replace(/[^a-z0-9а-я]/g, '');
 const {
-    formatSelectOptionLabel,
-    getSelectOptions,
     getSpecConfig,
+    getSpecGroup,
+    getSpecGroupLabel,
     getSpecHelpText,
     isHiddenSpecKey,
     knownSpecKeys,
     loadSpecRegistry,
     normalizeValueForEdit,
     serializeSpecValue,
+    specGroupOrder,
 } = useSpecRegistry();
 const showSpecHelp = (key: string) => {
     const text = getSpecHelpText(key);
     if (text) window.alert(text);
+};
+const getSpecLabel = (key: string): string => getSpecConfig(key)?.label || key || 'Новая характеристика';
+const getSpecTypeHint = (key: string): string => {
+    const config = getSpecConfig(key);
+    if (!config) return '';
+    if (config.type === 'range') return 'диапазон';
+    if (config.type === 'number_list') return 'список';
+    if (config.type === 'number') return config.unit ? `число, ${config.unit}` : 'число';
+    if (config.type === 'select') return 'выбор';
+    if (config.type === 'boolean') return 'да / нет';
+    return '';
 };
 const INVALID_BRAND_TOKENS = new Set([
     'мультисплитсистема',
@@ -858,6 +871,34 @@ const filteredTagGroups = computed(() => {
             tags: g.tags.filter(t => t.title.toLowerCase().includes(q)),
         }))
         .filter(g => g.tags.length > 0);
+});
+
+const groupedSpecRows = computed(() => {
+    const groups = new Map<string, {
+        group: string;
+        label: string;
+        entries: Array<{ row: { key: string; value: string }; index: number }>;
+    }>();
+
+    specs.value.forEach((row, index) => {
+        const group = row.key.trim() ? getSpecGroup(row.key) : 'other';
+        if (!groups.has(group)) {
+            groups.set(group, {
+                group,
+                label: getSpecGroupLabel(group),
+                entries: [],
+            });
+        }
+        groups.get(group)?.entries.push({ row, index });
+    });
+
+    return Array.from(groups.values()).sort((a, b) => {
+        const aIndex = specGroupOrder.indexOf(a.group as any);
+        const bIndex = specGroupOrder.indexOf(b.group as any);
+        const safeA = aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex;
+        const safeB = bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex;
+        return safeA - safeB || a.label.localeCompare(b.label, 'ru');
+    });
 });
 
 const isTagSelected = (id: number) => selectedTagIds.value.has(id);
@@ -1829,89 +1870,62 @@ const unlinkSupplierOffer = async (offer: any) => {
                             </button>
                         </div>
 
-                        <div class="space-y-2 bg-slate-100/50 dark:bg-slate-800/50 p-3 rounded-2xl border border-gray-100 dark:border-slate-800 max-h-[400px] overflow-y-auto">
-                            <div v-for="(row, idx) in specs" :key="idx" class="flex gap-1.5 items-start group">
-                                <div class="relative flex-1">
-                                    <SpecKeyCombobox 
-                                        v-model="row.key" 
-                                        :known-keys="knownSpecKeys"
-                                    />
+                        <div class="space-y-4 bg-slate-100/50 dark:bg-slate-800/50 p-3 rounded-2xl border border-gray-100 dark:border-slate-800 max-h-[460px] overflow-y-auto">
+                            <div v-for="group in groupedSpecRows" :key="group.group" class="space-y-2">
+                                <div class="flex items-center gap-2 px-1">
+                                    <p class="text-[11px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                                        {{ group.label }}
+                                    </p>
+                                    <span class="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-400 shadow-sm dark:bg-slate-800 dark:text-slate-500">
+                                        {{ group.entries.length }}
+                                    </span>
                                 </div>
-                                <button
-                                    v-if="getSpecHelpText(row.key)"
-                                    type="button"
-                                    class="mt-2 shrink-0 rounded-full p-1 text-slate-400 transition hover:bg-teal-50 hover:text-teal-700 dark:hover:bg-slate-700 dark:hover:text-teal-300"
-                                    :title="getSpecHelpText(row.key)"
-                                    @click="showSpecHelp(row.key)"
+
+                                <div
+                                    v-for="{ row, index } in group.entries"
+                                    :key="index"
+                                    class="rounded-xl border border-white/80 bg-white/70 p-2 shadow-sm transition-colors hover:border-teal-100 dark:border-slate-700 dark:bg-slate-900/40 dark:hover:border-teal-900"
                                 >
-                                    <CircleHelp class="h-4 w-4" />
-                                </button>
-                                
-                                <div class="flex-1">
-                                    <template v-if="getSpecConfig(row.key)?.type === 'boolean'">
-                                        <div class="flex items-center h-[38px]">
-                                            <button 
-                                                type="button"
-                                                @click="row.value = (row.value === 'true') ? 'false' : 'true'"
-                                                class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
-                                                :class="(row.value === 'true') ? 'bg-teal-600' : 'bg-gray-200 dark:bg-slate-700'"
-                                                role="switch"
-                                                :aria-checked="row.value === 'true'"
-                                            >
-                                                <span class="sr-only">Toggle boolean</span>
-                                                <span 
-                                                    aria-hidden="true" 
-                                                    class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                                                    :class="(row.value === 'true') ? 'translate-x-5' : 'translate-x-0'"
-                                                />
-                                            </button>
-                                            <span class="ml-3 text-sm font-medium text-gray-900 dark:text-slate-200">
-                                                {{ (row.value === 'true') ? 'Да' : 'Нет' }}
-                                            </span>
-                                        </div>
-                                    </template>
-                                    
-                                    <template v-else-if="getSpecConfig(row.key)?.type === 'select'">
-                                        <select 
-                                            v-model="row.value"
-                                            class="w-full h-[38px] border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all text-gray-900 dark:text-slate-200 shadow-inner"
-                                        >
-                                            <option value="" disabled>Выберите значение</option>
-                                            <option v-for="opt in getSelectOptions(row.key, row.value)" :key="opt" :value="opt">
-                                                {{ formatSelectOptionLabel(row.key, opt) }}
-                                            </option>
-                                        </select>
-                                    </template>
-                                    
-                                    <template v-else-if="getSpecConfig(row.key)?.type === 'number'">
-                                        <div class="flex h-[38px] rounded-lg shadow-inner">
-                                            <input 
-                                                type="number"
-                                                v-model="row.value" 
-                                                placeholder="Значение" 
-                                                class="flex-1 min-w-0 block w-full border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-gray-900 dark:text-slate-200 rounded-none rounded-l-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                                    <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)_auto] sm:items-start">
+                                        <div class="min-w-0">
+                                            <SpecKeyCombobox
+                                                v-model="row.key"
+                                                :known-keys="knownSpecKeys"
                                             />
-                                            <span v-if="getSpecConfig(row.key)?.unit" class="inline-flex items-center px-2.5 rounded-r-lg border border-l-0 border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-700 text-gray-500 dark:text-slate-300 text-xs">
-                                                {{ getSpecConfig(row.key)?.unit }}
-                                            </span>
+                                            <div v-if="row.key" class="mt-1 flex min-w-0 items-center gap-1.5">
+                                                <span class="truncate text-[11px] font-semibold text-slate-500 dark:text-slate-400" :title="getSpecLabel(row.key)">
+                                                    {{ getSpecLabel(row.key) }}
+                                                </span>
+                                                <span v-if="getSpecTypeHint(row.key)" class="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                                                    {{ getSpecTypeHint(row.key) }}
+                                                </span>
+                                            </div>
                                         </div>
-                                    </template>
-                                    
-                                    <template v-else>
-                                        <input 
-                                            type="text"
-                                            v-model="row.value" 
-                                            placeholder="Значение" 
-                                            class="w-full h-[38px] border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all text-gray-900 dark:text-slate-200 dark:placeholder-slate-500 shadow-inner"
+
+                                        <SpecValueInput
+                                            v-model="row.value"
+                                            :spec-key="row.key"
+                                            compact
                                         />
-                                    </template>
+
+                                        <div class="flex items-center justify-end gap-1 sm:pt-1">
+                                            <button
+                                                v-if="getSpecHelpText(row.key)"
+                                                type="button"
+                                                class="rounded-full p-1.5 text-slate-400 transition hover:bg-teal-50 hover:text-teal-700 dark:hover:bg-slate-700 dark:hover:text-teal-300"
+                                                :title="getSpecHelpText(row.key)"
+                                                @click="showSpecHelp(row.key)"
+                                            >
+                                                <CircleHelp class="h-4 w-4" />
+                                            </button>
+                                            <button @click="removeRow(index)" class="rounded-lg p-1.5 text-gray-300 transition-all hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30">
+                                                <Trash2 class="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
-                                
-                                <button @click="removeRow(idx)" class="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
-                                    <Trash2 class="w-3.5 h-3.5" />
-                                </button>
                             </div>
-                            
+
                             <div v-if="specs.length === 0" class="text-center py-6 text-gray-400 dark:text-slate-500">
                                  <Hash class="w-6 h-6 mx-auto mb-1.5 opacity-20" />
                                  <p class="text-xs">Нет характеристик</p>
