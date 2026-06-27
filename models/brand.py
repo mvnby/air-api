@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from sqlalchemy import Column, JSON, Text, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
@@ -34,9 +34,18 @@ class ProductSeries(SQLModel, table=True):
     brand_id: Optional[int] = Field(default=None, foreign_key="brand.id", index=True)
     title: str = Field(index=True)
     slug: str = Field(index=True)
+    tagline: Optional[str] = Field(default=None)
+    short_description: Optional[str] = Field(default=None, sa_column=Column(Text))
     description: Optional[str] = Field(default=None, sa_column=Column(Text))
     hero_image: Optional[str] = Field(default=None)
-    features: List[str] = Field(default=[], sa_column=Column(JSON))
+    gallery_images: List[str] = Field(default_factory=list, sa_column=Column(JSON))
+    features: List[str] = Field(default_factory=list, sa_column=Column(JSON))
+    feature_blocks: List[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    content_blocks: List[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    footnotes: List[str] = Field(default_factory=list, sa_column=Column(JSON))
+    seo_title: Optional[str] = Field(default=None)
+    seo_description: Optional[str] = Field(default=None, sa_column=Column(Text))
+    source_url: Optional[str] = Field(default=None)
     is_published: bool = Field(default=True, index=True)
     sort_order: int = Field(default=0)
     created_at: datetime = Field(default_factory=datetime.now)

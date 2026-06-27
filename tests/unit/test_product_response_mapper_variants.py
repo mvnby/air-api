@@ -157,9 +157,18 @@ def test_map_product_to_response_serializes_public_series():
         "id": 7,
         "title": "Elite",
         "slug": "elite",
+        "tagline": None,
+        "short_description": None,
         "description": "Quiet inverter product line",
         "hero_image": "/media/series/elite.webp",
+        "gallery_images": [],
         "features": [],
+        "feature_blocks": [],
+        "content_blocks": [],
+        "footnotes": [],
+        "seo_title": None,
+        "seo_description": None,
+        "source_url": None,
     }
 
 

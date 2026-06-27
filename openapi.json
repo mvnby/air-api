@@ -3754,6 +3754,153 @@
         }
       }
     },
+    "/api/manager/catalog-quality/report": {
+      "get": {
+        "tags": [
+          "manager catalog quality"
+        ],
+        "summary": "Get Manager Catalog Quality Report",
+        "operationId": "get_manager_catalog_quality_report",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 40,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "media",
+                    "identity",
+                    "specs",
+                    "commerce",
+                    "supplier"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "critical",
+                    "warning",
+                    "info"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "name": "issue_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Issue Code"
+            }
+          },
+          {
+            "name": "only_problems",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Only Problems"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerCatalogQualityReportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/main-image-cleanup/batches": {
       "post": {
         "tags": [
@@ -18442,6 +18589,28 @@
             ],
             "title": "Slug"
           },
+          "tagline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tagline"
+          },
+          "short_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Description"
+          },
           "description": {
             "anyOf": [
               {
@@ -18464,12 +18633,73 @@
             ],
             "title": "Hero Image"
           },
+          "gallery_images": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Gallery Images"
+          },
           "features": {
             "items": {
               "type": "string"
             },
             "type": "array",
             "title": "Features"
+          },
+          "feature_blocks": {
+            "items": {
+              "$ref": "#/components/schemas/ProductSeriesFeatureBlockResponse"
+            },
+            "type": "array",
+            "title": "Feature Blocks"
+          },
+          "content_blocks": {
+            "items": {
+              "$ref": "#/components/schemas/ProductSeriesContentBlockResponse"
+            },
+            "type": "array",
+            "title": "Content Blocks"
+          },
+          "footnotes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Footnotes"
+          },
+          "seo_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seo Title"
+          },
+          "seo_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seo Description"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
           },
           "is_published": {
             "type": "boolean",
@@ -18529,6 +18759,28 @@
             "type": "string",
             "title": "Slug"
           },
+          "tagline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tagline"
+          },
+          "short_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Description"
+          },
           "description": {
             "anyOf": [
               {
@@ -18551,12 +18803,73 @@
             ],
             "title": "Hero Image"
           },
+          "gallery_images": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Gallery Images"
+          },
           "features": {
             "items": {
               "type": "string"
             },
             "type": "array",
             "title": "Features"
+          },
+          "feature_blocks": {
+            "items": {
+              "$ref": "#/components/schemas/ProductSeriesFeatureBlockResponse"
+            },
+            "type": "array",
+            "title": "Feature Blocks"
+          },
+          "content_blocks": {
+            "items": {
+              "$ref": "#/components/schemas/ProductSeriesContentBlockResponse"
+            },
+            "type": "array",
+            "title": "Content Blocks"
+          },
+          "footnotes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Footnotes"
+          },
+          "seo_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seo Title"
+          },
+          "seo_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seo Description"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
           },
           "is_published": {
             "type": "boolean",
@@ -18612,6 +18925,28 @@
             ],
             "title": "Slug"
           },
+          "tagline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tagline"
+          },
+          "short_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Description"
+          },
           "description": {
             "anyOf": [
               {
@@ -18634,6 +18969,20 @@
             ],
             "title": "Hero Image"
           },
+          "gallery_images": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gallery Images"
+          },
           "features": {
             "anyOf": [
               {
@@ -18647,6 +18996,81 @@
               }
             ],
             "title": "Features"
+          },
+          "feature_blocks": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ProductSeriesFeatureBlockResponse"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Blocks"
+          },
+          "content_blocks": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ProductSeriesContentBlockResponse"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Blocks"
+          },
+          "footnotes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Footnotes"
+          },
+          "seo_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seo Title"
+          },
+          "seo_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seo Description"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
           },
           "is_published": {
             "anyOf": [
@@ -19431,6 +19855,347 @@
           "group_color"
         ],
         "title": "ManagerCatalogProductTagResponse"
+      },
+      "ManagerCatalogQualityCategoryResponse": {
+        "properties": {
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "critical": {
+            "type": "integer",
+            "title": "Critical",
+            "default": 0
+          },
+          "warning": {
+            "type": "integer",
+            "title": "Warning",
+            "default": 0
+          },
+          "info": {
+            "type": "integer",
+            "title": "Info",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "category",
+          "label",
+          "count"
+        ],
+        "title": "ManagerCatalogQualityCategoryResponse"
+      },
+      "ManagerCatalogQualityIssueResponse": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "warning",
+              "info"
+            ],
+            "title": "Severity"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "label",
+          "category",
+          "severity",
+          "message"
+        ],
+        "title": "ManagerCatalogQualityIssueResponse"
+      },
+      "ManagerCatalogQualityProductResponse": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "brand_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Id"
+          },
+          "brand_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Title"
+          },
+          "series_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          },
+          "series_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Title"
+          },
+          "main_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Image"
+          },
+          "price": {
+            "type": "integer",
+            "title": "Price",
+            "default": 0
+          },
+          "is_published": {
+            "type": "boolean",
+            "title": "Is Published",
+            "default": true
+          },
+          "score": {
+            "type": "integer",
+            "title": "Score"
+          },
+          "issue_count": {
+            "type": "integer",
+            "title": "Issue Count"
+          },
+          "image_count": {
+            "type": "integer",
+            "title": "Image Count",
+            "default": 0
+          },
+          "main_image_width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Image Width"
+          },
+          "main_image_height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Image Height"
+          },
+          "media_status": {
+            "type": "string",
+            "title": "Media Status",
+            "default": "unknown"
+          },
+          "supplier_mapping_count": {
+            "type": "integer",
+            "title": "Supplier Mapping Count",
+            "default": 0
+          },
+          "available_qty": {
+            "type": "integer",
+            "title": "Available Qty",
+            "default": 0
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCatalogQualityIssueResponse"
+            },
+            "type": "array",
+            "title": "Issues",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "title",
+          "score",
+          "issue_count"
+        ],
+        "title": "ManagerCatalogQualityProductResponse"
+      },
+      "ManagerCatalogQualityReportResponse": {
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "total_products": {
+            "type": "integer",
+            "title": "Total Products"
+          },
+          "problem_products": {
+            "type": "integer",
+            "title": "Problem Products"
+          },
+          "critical_products": {
+            "type": "integer",
+            "title": "Critical Products"
+          },
+          "average_score": {
+            "type": "integer",
+            "title": "Average Score"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCatalogQualityProductResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "summary": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCatalogQualitySummaryItemResponse"
+            },
+            "type": "array",
+            "title": "Summary"
+          },
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCatalogQualityCategoryResponse"
+            },
+            "type": "array",
+            "title": "Categories"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "generated_at",
+          "total_products",
+          "problem_products",
+          "critical_products",
+          "average_score",
+          "items",
+          "summary",
+          "categories",
+          "meta"
+        ],
+        "title": "ManagerCatalogQualityReportResponse"
+      },
+      "ManagerCatalogQualitySummaryItemResponse": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "warning",
+              "info"
+            ],
+            "title": "Severity"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "label",
+          "category",
+          "severity",
+          "count"
+        ],
+        "title": "ManagerCatalogQualitySummaryItemResponse"
       },
       "ManagerCrmHealthReportResponse": {
         "properties": {
@@ -33413,6 +34178,122 @@
         ],
         "title": "ProductResponse"
       },
+      "ProductSeriesContentBlockResponse": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text",
+              "image_text",
+              "media"
+            ],
+            "title": "Kind",
+            "default": "text"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "layout": {
+            "type": "string",
+            "enum": [
+              "text_left",
+              "text_right",
+              "full"
+            ],
+            "title": "Layout",
+            "default": "text_left"
+          }
+        },
+        "type": "object",
+        "title": "ProductSeriesContentBlockResponse"
+      },
+      "ProductSeriesFeatureBlockResponse": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "footnote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Footnote"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "ProductSeriesFeatureBlockResponse"
+      },
       "ProductSeriesNavigationItemResponse": {
         "properties": {
           "series": {
@@ -33465,6 +34346,28 @@
             "type": "string",
             "title": "Slug"
           },
+          "tagline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tagline"
+          },
+          "short_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Description"
+          },
           "description": {
             "anyOf": [
               {
@@ -33487,12 +34390,73 @@
             ],
             "title": "Hero Image"
           },
+          "gallery_images": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Gallery Images"
+          },
           "features": {
             "items": {
               "type": "string"
             },
             "type": "array",
             "title": "Features"
+          },
+          "feature_blocks": {
+            "items": {
+              "$ref": "#/components/schemas/ProductSeriesFeatureBlockResponse"
+            },
+            "type": "array",
+            "title": "Feature Blocks"
+          },
+          "content_blocks": {
+            "items": {
+              "$ref": "#/components/schemas/ProductSeriesContentBlockResponse"
+            },
+            "type": "array",
+            "title": "Content Blocks"
+          },
+          "footnotes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Footnotes"
+          },
+          "seo_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seo Title"
+          },
+          "seo_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seo Description"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
           }
         },
         "type": "object",

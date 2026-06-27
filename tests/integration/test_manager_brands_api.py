@@ -104,9 +104,35 @@ async def test_manager_brand_series_crud(async_client):
         headers=headers,
         json={
             "title": "FreshIN",
+            "tagline": "Fresh air without drafts",
+            "short_description": "Line preview text",
             "description": "Fresh air product line",
             "hero_image": "/media/series/freshin.webp",
+            "gallery_images": ["/media/series/freshin-1.webp", "", "/media/series/freshin-1.webp"],
             "features": [" fresh air ", "", "Wi-Fi", "Wi-Fi"],
+            "feature_blocks": [
+                {
+                    "title": "Fresh flow",
+                    "text": "Adds outside air",
+                    "image_url": "/media/series/fresh-flow.webp",
+                    "icon": "air",
+                    "footnote": "Depends on model",
+                },
+                {"title": "", "text": "ignored"},
+            ],
+            "content_blocks": [
+                {
+                    "kind": "image_text",
+                    "title": "How it works",
+                    "text": "A short section",
+                    "image_url": "/media/series/content.webp",
+                    "layout": "text_right",
+                }
+            ],
+            "footnotes": [" Test note ", "", "Test note"],
+            "seo_title": "FreshIN series",
+            "seo_description": "FreshIN SEO description",
+            "source_url": "https://example.com/freshin",
             "sort_order": 10,
         },
     )
@@ -114,7 +140,32 @@ async def test_manager_brand_series_crud(async_client):
     created = create_resp.json()
     assert created["title"] == "FreshIN"
     assert created["slug"] == "freshin"
+    assert created["tagline"] == "Fresh air without drafts"
+    assert created["short_description"] == "Line preview text"
+    assert created["gallery_images"] == ["/media/series/freshin-1.webp"]
     assert created["features"] == ["fresh air", "Wi-Fi"]
+    assert created["feature_blocks"] == [
+        {
+            "title": "Fresh flow",
+            "text": "Adds outside air",
+            "image_url": "/media/series/fresh-flow.webp",
+            "icon": "air",
+            "footnote": "Depends on model",
+        }
+    ]
+    assert created["content_blocks"] == [
+        {
+            "kind": "image_text",
+            "title": "How it works",
+            "text": "A short section",
+            "image_url": "/media/series/content.webp",
+            "layout": "text_right",
+        }
+    ]
+    assert created["footnotes"] == ["Test note"]
+    assert created["seo_title"] == "FreshIN series"
+    assert created["seo_description"] == "FreshIN SEO description"
+    assert created["source_url"] == "https://example.com/freshin"
     assert created["products_count"] == 0
     series_id = created["id"]
 
@@ -123,7 +174,9 @@ async def test_manager_brand_series_crud(async_client):
         headers=headers,
     )
     assert list_resp.status_code == 200
-    assert [item["id"] for item in list_resp.json()["items"]] == [series_id]
+    listed_items = list_resp.json()["items"]
+    assert [item["id"] for item in listed_items] == [series_id]
+    assert listed_items[0]["tagline"] == "Fresh air without drafts"
 
     update_resp = await async_client.put(
         f"/api/manager/brands/{brand_id}/series/{series_id}",
@@ -131,7 +184,13 @@ async def test_manager_brand_series_crud(async_client):
         json={
             "title": "FreshIN Updated",
             "slug": "freshin-updated",
+            "tagline": "Updated tagline",
+            "gallery_images": ["/media/series/updated.webp"],
             "features": ["Fresh air", "Self-cleaning"],
+            "feature_blocks": [{"title": "Self cleaning", "text": "Keeps exchanger clean"}],
+            "content_blocks": [],
+            "footnotes": ["Updated note"],
+            "seo_title": "Updated SEO",
             "is_published": False,
             "sort_order": 3,
         },
@@ -140,7 +199,21 @@ async def test_manager_brand_series_crud(async_client):
     updated = update_resp.json()
     assert updated["title"] == "FreshIN Updated"
     assert updated["slug"] == "freshin-updated"
+    assert updated["tagline"] == "Updated tagline"
+    assert updated["gallery_images"] == ["/media/series/updated.webp"]
     assert updated["features"] == ["Fresh air", "Self-cleaning"]
+    assert updated["feature_blocks"] == [
+        {
+            "title": "Self cleaning",
+            "text": "Keeps exchanger clean",
+            "image_url": None,
+            "icon": None,
+            "footnote": None,
+        }
+    ]
+    assert updated["content_blocks"] == []
+    assert updated["footnotes"] == ["Updated note"]
+    assert updated["seo_title"] == "Updated SEO"
     assert updated["is_published"] is False
     assert updated["sort_order"] == 3
 

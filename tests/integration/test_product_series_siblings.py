@@ -125,9 +125,18 @@ async def test_product_detail_contains_series_and_series_id_siblings(async_clien
         "id": series.id,
         "title": "FreshIN",
         "slug": "freshin",
+        "tagline": None,
+        "short_description": None,
         "description": "Fresh air product line",
         "hero_image": "/media/series/freshin.webp",
+        "gallery_images": [],
         "features": ["Fresh air intake", "Self-cleaning"],
+        "feature_blocks": [],
+        "content_blocks": [],
+        "footnotes": [],
+        "seo_title": None,
+        "seo_description": None,
+        "source_url": None,
     }
 
     sibling_slugs = [item["slug"] for item in data["series_siblings"]]

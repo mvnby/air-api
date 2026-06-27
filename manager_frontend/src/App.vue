@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import type { Component } from 'vue';
-import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Settings, Wallet, ChevronLeft, ChevronRight, ChevronDown, Tags, FileSpreadsheet, Link2, Award, Database, Calculator, ReceiptText, Image as ImageIcon } from 'lucide-vue-next';
+import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Settings, Wallet, ChevronLeft, ChevronRight, ChevronDown, Tags, FileSpreadsheet, Link2, Award, Database, Calculator, ReceiptText, Image as ImageIcon, ShieldCheck } from 'lucide-vue-next';
 import { api } from './api';
 import { getApiErrorMessage } from './utils/api-errors';
 import type { TelegramLoginPayload } from './api';
@@ -24,6 +24,7 @@ const TagsView = defineAsyncComponent(() => import('./views/TagsView.vue'));
 const BrandsView = defineAsyncComponent(() => import('./views/BrandsView.vue'));
 const SupplierFeedsView = defineAsyncComponent(() => import('./views/SupplierFeedsView.vue'));
 const SupplierMappingView = defineAsyncComponent(() => import('./views/SupplierMappingView.vue'));
+const CatalogQualityView = defineAsyncComponent(() => import('./views/CatalogQualityView.vue'));
 
 const isAuthenticated = ref(false);
 const showLoginModal = ref(false);
@@ -82,6 +83,7 @@ const navSections: NavSection[] = [
     label: 'Каталог',
     items: [
       { path: '/manager/products', label: 'Кондиционеры', icon: Package, match: 'prefix' },
+      { path: '/manager/catalog-quality', label: 'Качество каталога', icon: ShieldCheck, match: 'prefix' },
       { path: '/manager/suppliers', label: 'Прайсы поставщиков', icon: FileSpreadsheet, match: 'prefix' },
       { path: '/manager/supplier-mapping', label: 'Маппинг прайсов', icon: Link2, match: 'prefix' },
       { path: '/manager/brands', label: 'Бренды', icon: Award, match: 'prefix' },
@@ -187,6 +189,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/orders')) return 'orders';
   if (path.startsWith('/manager/calendar')) return 'calendar';
   if (path.startsWith('/manager/media')) return 'media-library';
+  if (path.startsWith('/manager/catalog-quality')) return 'catalog-quality';
   if (path.startsWith('/manager/customers/profile')) return 'customer-profile';
   if (path.startsWith('/manager/customers')) return 'customers';
   if (path.startsWith('/manager/staff') || path.startsWith('/manager/users') || path.startsWith('/manager/installers')) return 'installers';
@@ -574,6 +577,7 @@ watch(currentPath, () => {
       <OrdersKanbanView v-else-if="currentView === 'orders'" :key="currentLocation" />
       <CalendarDashboard v-else-if="currentView === 'calendar'" :key="currentLocation" />
       <MediaLibraryView v-else-if="currentView === 'media-library'" :key="currentLocation" />
+      <CatalogQualityView v-else-if="currentView === 'catalog-quality'" :key="currentLocation" />
       <CustomerProfileView v-else-if="currentView === 'customer-profile'" :key="currentLocation" />
       <CustomersView v-else-if="currentView === 'customers'" :key="currentLocation" />
       <InstallersView v-else-if="currentView === 'installers'" :key="currentLocation" />

@@ -47,9 +47,18 @@ interface Product {
         id?: number;
         title?: string | null;
         slug?: string | null;
+        tagline?: string | null;
+        short_description?: string | null;
         description?: string | null;
         hero_image?: string | null;
         features?: string[] | null;
+        feature_blocks?: Array<{
+            title?: string | null;
+            text?: string | null;
+            image_url?: string | null;
+            icon?: string | null;
+            footnote?: string | null;
+        }> | null;
     } | null;
     badges?: Array<{ text: string; class?: string }>;
     tags?: Array<{
@@ -129,6 +138,24 @@ const getProductSeriesTitle = (product: Product) =>
 const normalizeSeriesFeatures = (value: unknown) =>
     Array.isArray(value)
         ? value.map((item) => asText(item)).filter(Boolean)
+        : [];
+const normalizeSeriesFeatureBlocks = (value: unknown) =>
+    Array.isArray(value)
+        ? value
+            .map((item) => {
+                if (!item || typeof item !== "object") return null;
+                const block = item as Record<string, unknown>;
+                const title = asText(block.title);
+                if (!title) return null;
+                return {
+                    title,
+                    text: asText(block.text),
+                    imageUrl: asText(block.image_url),
+                    icon: asText(block.icon),
+                    footnote: asText(block.footnote),
+                };
+            })
+            .filter((item): item is { title: string; text: string; imageUrl: string; icon: string; footnote: string } => Boolean(item))
         : [];
 const getTagSlugs = (product: Product) =>
     (product.tags || []).map((tag) => normalizeText(tag.slug || tag.title));
@@ -309,9 +336,12 @@ const seriesGroupsMap = new Map<
     {
         key: string;
         title: string;
+        tagline: string;
+        shortDescription: string;
         description: string;
         heroImage: string;
         features: string[];
+        featureBlocks: NonNullable<ReturnType<typeof normalizeSeriesFeatureBlocks>>;
         catalogGroupKey: CatalogGroupKey;
         products: Product[];
     }
@@ -332,9 +362,12 @@ for (const product of seriesSourceProducts) {
         seriesGroupsMap.set(key, {
             key,
             title,
+            tagline: asText(product.series?.tagline),
+            shortDescription: asText(product.series?.short_description),
             description: asText(product.series?.description),
             heroImage: asText(product.series?.hero_image),
             features: normalizeSeriesFeatures(product.series?.features),
+            featureBlocks: normalizeSeriesFeatureBlocks(product.series?.feature_blocks),
             catalogGroupKey: getProductCatalogGroupKey(product),
             products: [],
         });
@@ -342,10 +375,15 @@ for (const product of seriesSourceProducts) {
 
     const group = seriesGroupsMap.get(key);
     if (group) {
+        if (!group.tagline) group.tagline = asText(product.series?.tagline);
+        if (!group.shortDescription) group.shortDescription = asText(product.series?.short_description);
         if (!group.description) group.description = asText(product.series?.description);
         if (!group.heroImage) group.heroImage = asText(product.series?.hero_image);
         if (group.features.length === 0) {
             group.features = normalizeSeriesFeatures(product.series?.features);
+        }
+        if (group.featureBlocks.length === 0) {
+            group.featureBlocks = normalizeSeriesFeatureBlocks(product.series?.feature_blocks);
         }
         group.products.push(product);
     }
@@ -486,8 +524,11 @@ const productsWithoutSeriesByCatalog = Object.values(CATALOG_GROUPS)
                                                                 </div>
                                                                 <span>{formatSeriesProductCount(group.products.length)}</span>
                                                             </div>
-                                                            {group.description ? (
-                                                                <p>{group.description}</p>
+                                                            {group.tagline && (
+                                                                <p class="brand-series-tagline">{group.tagline}</p>
+                                                            )}
+                                                            {group.shortDescription || group.description ? (
+                                                                <p>{group.shortDescription || group.description}</p>
                                                             ) : (
                                                                 <p>{formatSeriesProductCount(group.products.length)} в каталоге {brand.title}.</p>
                                                             )}
@@ -497,6 +538,16 @@ const productsWithoutSeriesByCatalog = Object.values(CATALOG_GROUPS)
                                                                         <li>{feature}</li>
                                                                     ))}
                                                                 </ul>
+                                                            )}
+                                                            {group.featureBlocks.length > 0 && (
+                                                                <div class="brand-series-feature-blocks" aria-label={`Преимущества серии ${group.displayTitle}`}>
+                                                                    {group.featureBlocks.slice(0, 3).map((block) => (
+                                                                        <article class="brand-series-feature-block">
+                                                                            <strong>{block.title}</strong>
+                                                                            {block.text && <span>{block.text}</span>}
+                                                                        </article>
+                                                                    ))}
+                                                                </div>
                                                             )}
                                                         </div>
                                                     </div>
@@ -837,6 +888,10 @@ const productsWithoutSeriesByCatalog = Object.values(CATALOG_GROUPS)
         font-size: 0.94rem;
         line-height: 1.6;
     }
+    .brand-series-head .brand-series-tagline {
+        color: var(--text);
+        font-weight: 750;
+    }
     .brand-series-features {
         display: flex;
         flex-wrap: wrap;
@@ -856,6 +911,28 @@ const productsWithoutSeriesByCatalog = Object.values(CATALOG_GROUPS)
         color: var(--text);
         font-size: 0.82rem;
         font-weight: 700;
+    }
+    .brand-series-feature-blocks {
+        display: grid;
+        gap: 0.55rem;
+        margin-top: 0.8rem;
+    }
+    .brand-series-feature-block {
+        display: grid;
+        gap: 0.2rem;
+        padding: 0.65rem 0.75rem;
+        border: 1px solid var(--panel-glass-border);
+        border-radius: 8px;
+        background: var(--panel-chip-bg);
+    }
+    .brand-series-feature-block strong {
+        color: var(--text);
+        font-size: 0.9rem;
+    }
+    .brand-series-feature-block span {
+        color: var(--text-muted);
+        font-size: 0.84rem;
+        line-height: 1.45;
     }
     .catalog-grid {
         display: grid;

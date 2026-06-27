@@ -5,6 +5,7 @@ from routers import manager_backups
 from routers import manager_brands
 from routers import manager_calendar
 from routers import manager_catalog
+from routers import manager_catalog_quality
 from routers import manager_crm
 from routers import manager_contracts
 from routers import manager_dashboard
@@ -31,6 +32,7 @@ router = APIRouter()
 router.include_router(manager_backups.router)
 router.include_router(manager_google_auth.router)
 router.include_router(manager_catalog.router)
+router.include_router(manager_catalog_quality.router)
 router.include_router(manager_media.router)
 router.include_router(manager_specs.router)
 router.include_router(manager_auth.router)

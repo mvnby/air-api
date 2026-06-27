@@ -255,13 +255,38 @@ class ProductBrandResponse(BaseModel):
     logo_url: Optional[str] = None
 
 
+class ProductSeriesFeatureBlockResponse(BaseModel):
+    title: str
+    text: Optional[str] = None
+    image_url: Optional[str] = None
+    icon: Optional[str] = None
+    footnote: Optional[str] = None
+
+
+class ProductSeriesContentBlockResponse(BaseModel):
+    kind: Literal["text", "image_text", "media"] = "text"
+    title: Optional[str] = None
+    text: Optional[str] = None
+    image_url: Optional[str] = None
+    layout: Literal["text_left", "text_right", "full"] = "text_left"
+
+
 class ProductSeriesResponse(BaseModel):
     id: int
     title: str
     slug: str
+    tagline: Optional[str] = None
+    short_description: Optional[str] = None
     description: Optional[str] = None
     hero_image: Optional[str] = None
+    gallery_images: List[str] = Field(default_factory=list)
     features: List[str] = Field(default_factory=list)
+    feature_blocks: List[ProductSeriesFeatureBlockResponse] = Field(default_factory=list)
+    content_blocks: List[ProductSeriesContentBlockResponse] = Field(default_factory=list)
+    footnotes: List[str] = Field(default_factory=list)
+    seo_title: Optional[str] = None
+    seo_description: Optional[str] = None
+    source_url: Optional[str] = None
 
 
 class ProductSeriesNavigationItemResponse(BaseModel):
@@ -1617,6 +1642,66 @@ class ManagerCatalogProductListResponse(BaseModel):
     meta: Meta
 
 
+class ManagerCatalogQualityIssueResponse(BaseModel):
+    code: str
+    label: str
+    category: str
+    severity: Literal["critical", "warning", "info"]
+    message: str
+    detail: Optional[str] = None
+
+
+class ManagerCatalogQualitySummaryItemResponse(BaseModel):
+    code: str
+    label: str
+    category: str
+    severity: Literal["critical", "warning", "info"]
+    count: int
+
+
+class ManagerCatalogQualityCategoryResponse(BaseModel):
+    category: str
+    label: str
+    count: int
+    critical: int = 0
+    warning: int = 0
+    info: int = 0
+
+
+class ManagerCatalogQualityProductResponse(BaseModel):
+    product_id: int
+    title: str
+    slug: Optional[str] = None
+    brand_id: Optional[int] = None
+    brand_title: Optional[str] = None
+    series_id: Optional[int] = None
+    series_title: Optional[str] = None
+    main_image: Optional[str] = None
+    price: int = 0
+    is_published: bool = True
+    score: int
+    issue_count: int
+    image_count: int = 0
+    main_image_width: Optional[int] = None
+    main_image_height: Optional[int] = None
+    media_status: str = "unknown"
+    supplier_mapping_count: int = 0
+    available_qty: int = 0
+    issues: List[ManagerCatalogQualityIssueResponse] = []
+
+
+class ManagerCatalogQualityReportResponse(BaseModel):
+    generated_at: datetime
+    total_products: int
+    problem_products: int
+    critical_products: int
+    average_score: int
+    items: List[ManagerCatalogQualityProductResponse]
+    summary: List[ManagerCatalogQualitySummaryItemResponse]
+    categories: List[ManagerCatalogQualityCategoryResponse]
+    meta: Meta
+
+
 class ManagerCatalogCustomerItemResponse(BaseModel):
     id: int
     name: Optional[str]
@@ -2238,9 +2323,18 @@ class ManagerBrandSeriesResponse(BaseModel):
     brand_id: Optional[int] = None
     title: str
     slug: str
+    tagline: Optional[str] = None
+    short_description: Optional[str] = None
     description: Optional[str] = None
     hero_image: Optional[str] = None
+    gallery_images: List[str] = Field(default_factory=list)
     features: List[str] = Field(default_factory=list)
+    feature_blocks: List[ProductSeriesFeatureBlockResponse] = Field(default_factory=list)
+    content_blocks: List[ProductSeriesContentBlockResponse] = Field(default_factory=list)
+    footnotes: List[str] = Field(default_factory=list)
+    seo_title: Optional[str] = None
+    seo_description: Optional[str] = None
+    source_url: Optional[str] = None
     is_published: bool
     sort_order: int
     created_at: datetime
@@ -2254,9 +2348,18 @@ class ManagerBrandSeriesListResponse(BaseModel):
 class ManagerBrandSeriesCreatePayload(BaseModel):
     title: str
     slug: Optional[str] = None
+    tagline: Optional[str] = None
+    short_description: Optional[str] = None
     description: Optional[str] = None
     hero_image: Optional[str] = None
+    gallery_images: List[str] = Field(default_factory=list)
     features: List[str] = Field(default_factory=list)
+    feature_blocks: List[ProductSeriesFeatureBlockResponse] = Field(default_factory=list)
+    content_blocks: List[ProductSeriesContentBlockResponse] = Field(default_factory=list)
+    footnotes: List[str] = Field(default_factory=list)
+    seo_title: Optional[str] = None
+    seo_description: Optional[str] = None
+    source_url: Optional[str] = None
     is_published: bool = True
     sort_order: int = 0
 
@@ -2264,9 +2367,18 @@ class ManagerBrandSeriesCreatePayload(BaseModel):
 class ManagerBrandSeriesUpdatePayload(BaseModel):
     title: Optional[str] = None
     slug: Optional[str] = None
+    tagline: Optional[str] = None
+    short_description: Optional[str] = None
     description: Optional[str] = None
     hero_image: Optional[str] = None
+    gallery_images: Optional[List[str]] = None
     features: Optional[List[str]] = None
+    feature_blocks: Optional[List[ProductSeriesFeatureBlockResponse]] = None
+    content_blocks: Optional[List[ProductSeriesContentBlockResponse]] = None
+    footnotes: Optional[List[str]] = None
+    seo_title: Optional[str] = None
+    seo_description: Optional[str] = None
+    source_url: Optional[str] = None
     is_published: Optional[bool] = None
     sort_order: Optional[int] = None
 

@@ -13,6 +13,7 @@ import {
     ManagerServiceEstimatesService,
     ManagerBrandsService,
     ManagerMediaService,
+    ManagerCatalogQualityService,
     SystemService,
     ApiService,
     type Body_upload_media_assets,
@@ -70,6 +71,7 @@ import {
     type ManagerBrandSeriesResponse,
     type ManagerBrandSeriesUpdatePayload,
     type ManagerBrandUpdatePayload,
+    type ManagerCatalogQualityReportResponse,
     type ManagerBackgroundRemovalConfigResponse,
     type ManagerMediaAssetCropPayload,
     type ManagerMediaAssetListResponse,
@@ -144,6 +146,7 @@ export type {
     ManagerBrandSeriesUpdatePayload,
     ManagerBrandUpdatePayload,
 };
+export type { ManagerCatalogQualityReportResponse };
 export type {
     Body_upload_media_assets,
     ManagerBackgroundRemovalConfigResponse,
@@ -245,6 +248,26 @@ export const api = {
 
     async getDashboardStats() {
         return await ManagerDashboardService.getDashboardStats();
+    },
+
+    async getCatalogQualityReport(params: {
+        page?: number;
+        limit?: number;
+        q?: string | null;
+        category?: 'media' | 'identity' | 'specs' | 'commerce' | 'supplier' | null;
+        severity?: 'critical' | 'warning' | 'info' | null;
+        issueCode?: string | null;
+        onlyProblems?: boolean;
+    } = {}): Promise<ManagerCatalogQualityReportResponse> {
+        return await ManagerCatalogQualityService.getManagerCatalogQualityReport(
+            params.page ?? 1,
+            params.limit ?? 50,
+            params.q ?? null,
+            params.category ?? null,
+            params.severity ?? null,
+            params.issueCode ?? null,
+            params.onlyProblems ?? true,
+        );
     },
 
     async listMediaAssets(params: {
