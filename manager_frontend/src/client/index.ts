@@ -106,6 +106,11 @@ export type { ManagerCatalogProductItemResponse } from './models/ManagerCatalogP
 export type { ManagerCatalogProductListResponse } from './models/ManagerCatalogProductListResponse';
 export type { ManagerCatalogProductManualResponse } from './models/ManagerCatalogProductManualResponse';
 export type { ManagerCatalogProductTagResponse } from './models/ManagerCatalogProductTagResponse';
+export type { ManagerCatalogQualityCategoryResponse } from './models/ManagerCatalogQualityCategoryResponse';
+export type { ManagerCatalogQualityIssueResponse } from './models/ManagerCatalogQualityIssueResponse';
+export type { ManagerCatalogQualityProductResponse } from './models/ManagerCatalogQualityProductResponse';
+export type { ManagerCatalogQualityReportResponse } from './models/ManagerCatalogQualityReportResponse';
+export type { ManagerCatalogQualitySummaryItemResponse } from './models/ManagerCatalogQualitySummaryItemResponse';
 export type { ManagerCrmHealthReportResponse } from './models/ManagerCrmHealthReportResponse';
 export type { ManagerCustomerBranchCreatePayload } from './models/ManagerCustomerBranchCreatePayload';
 export type { ManagerCustomerBranchItemResponse } from './models/ManagerCustomerBranchItemResponse';
@@ -299,6 +304,8 @@ export type { ProductMainImageCleanupSkipReasonsResponse } from './models/Produc
 export type { ProductManualPayload } from './models/ProductManualPayload';
 export type { ProductManualResponse } from './models/ProductManualResponse';
 export type { ProductResponse } from './models/ProductResponse';
+export type { ProductSeriesContentBlockResponse } from './models/ProductSeriesContentBlockResponse';
+export type { ProductSeriesFeatureBlockResponse } from './models/ProductSeriesFeatureBlockResponse';
 export type { ProductSeriesNavigationItemResponse } from './models/ProductSeriesNavigationItemResponse';
 export type { ProductSeriesNavigationResponse } from './models/ProductSeriesNavigationResponse';
 export type { ProductSeriesResponse } from './models/ProductSeriesResponse';
@@ -344,6 +351,7 @@ export { ManagerService } from './services/ManagerService';
 export { ManagerBackupsService } from './services/ManagerBackupsService';
 export { ManagerBrandsService } from './services/ManagerBrandsService';
 export { ManagerCalendarService } from './services/ManagerCalendarService';
+export { ManagerCatalogQualityService } from './services/ManagerCatalogQualityService';
 export { ManagerContractsService } from './services/ManagerContractsService';
 export { ManagerCrmService } from './services/ManagerCrmService';
 export { ManagerDashboardService } from './services/ManagerDashboardService';

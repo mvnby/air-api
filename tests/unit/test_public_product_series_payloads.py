@@ -44,9 +44,34 @@ async def _seed_series_products(session: AsyncSession) -> dict[str, Product]:
         title="Elite",
         slug="elite",
         brand_id=brand.id,
+        tagline="Quiet comfort",
+        short_description="Short public intro",
         description="Quiet inverter product line",
         hero_image="/media/series/elite.webp",
+        gallery_images=["/media/series/elite-hero.webp"],
         features=["Quiet mode", "Wi-Fi ready"],
+        feature_blocks=[
+            {
+                "title": "Quiet mode",
+                "text": "Low indoor unit noise",
+                "image_url": "/media/series/quiet.webp",
+                "icon": "volume_2",
+                "footnote": "Depends on model",
+            }
+        ],
+        content_blocks=[
+            {
+                "kind": "image_text",
+                "title": "Comfort airflow",
+                "text": "Stable airflow in living rooms",
+                "image_url": "/media/series/airflow.webp",
+                "layout": "text_right",
+            }
+        ],
+        footnotes=["Performance depends on room conditions"],
+        seo_title="MDV Elite series",
+        seo_description="Quiet MDV Elite inverter air conditioners",
+        source_url="https://example.com/mdv-elite",
         is_published=True,
     )
     session.add(series)
@@ -130,9 +155,34 @@ async def test_public_product_queries_eager_load_series_and_siblings(sqlite_sess
         "id": detail.series_id,
         "title": "Elite",
         "slug": "elite",
+        "tagline": "Quiet comfort",
+        "short_description": "Short public intro",
         "description": "Quiet inverter product line",
         "hero_image": "/media/series/elite.webp",
+        "gallery_images": ["/media/series/elite-hero.webp"],
         "features": ["Quiet mode", "Wi-Fi ready"],
+        "feature_blocks": [
+            {
+                "title": "Quiet mode",
+                "text": "Low indoor unit noise",
+                "image_url": "/media/series/quiet.webp",
+                "icon": "volume_2",
+                "footnote": "Depends on model",
+            }
+        ],
+        "content_blocks": [
+            {
+                "kind": "image_text",
+                "title": "Comfort airflow",
+                "text": "Stable airflow in living rooms",
+                "image_url": "/media/series/airflow.webp",
+                "layout": "text_right",
+            }
+        ],
+        "footnotes": ["Performance depends on room conditions"],
+        "seo_title": "MDV Elite series",
+        "seo_description": "Quiet MDV Elite inverter air conditioners",
+        "source_url": "https://example.com/mdv-elite",
     }
 
     catalog_products = await ProductDAO.get_filtered(
@@ -164,6 +214,8 @@ async def test_public_series_navigation_builds_slug_sibling_map(sqlite_session):
     main_item = navigation.products[seeded["main"].slug]
     assert main_item.series is not None
     assert main_item.series.slug == "elite"
+    assert main_item.series.tagline == "Quiet comfort"
+    assert main_item.series.feature_blocks[0].title == "Quiet mode"
     assert [item.slug for item in main_item.series_siblings] == [
         "mdv-elite-25",
         "mdv-elite-50",

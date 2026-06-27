@@ -16,11 +16,36 @@ type BrandForm = {
 type SeriesForm = {
     title: string;
     slug: string;
+    tagline: string;
+    short_description: string;
     description: string;
     hero_image: string;
+    galleryImages: string[];
     featuresText: string;
+    featureBlocks: SeriesFeatureBlockForm[];
+    contentBlocks: SeriesContentBlockForm[];
+    footnotesText: string;
+    seo_title: string;
+    seo_description: string;
+    source_url: string;
     sort_order: number;
     is_published: boolean;
+};
+
+type SeriesFeatureBlockForm = {
+    title: string;
+    text: string;
+    image_url: string;
+    icon: string;
+    footnote: string;
+};
+
+type SeriesContentBlockForm = {
+    kind: 'text' | 'image_text' | 'media';
+    title: string;
+    text: string;
+    image_url: string;
+    layout: 'text_left' | 'text_right' | 'full';
 };
 
 const brands = ref<ManagerBrand[]>([]);
@@ -56,12 +81,22 @@ const form = ref<BrandForm>({
 const seriesForm = ref<SeriesForm>({
     title: '',
     slug: '',
+    tagline: '',
+    short_description: '',
     description: '',
     hero_image: '',
+    galleryImages: [],
     featuresText: '',
+    featureBlocks: [],
+    contentBlocks: [],
+    footnotesText: '',
+    seo_title: '',
+    seo_description: '',
+    source_url: '',
     sort_order: 0,
     is_published: true,
 });
+const pendingGalleryImage = ref('');
 
 const filteredBrands = computed(() => {
     const q = query.value.trim().toLowerCase();
@@ -114,7 +149,20 @@ const moveItemById = <T extends { id: number }>(items: T[], draggedId: number, t
 
 const isSeriesExpanded = (seriesId: number) => expandedSeriesIds.value.has(seriesId);
 
-const hasSeriesDetails = (series: ManagerBrandSeries) => Boolean(series.description || series.features?.length);
+const hasSeriesDetails = (series: ManagerBrandSeries) => Boolean(
+    series.tagline
+    || series.short_description
+    || series.description
+    || series.hero_image
+    || series.gallery_images?.length
+    || series.features?.length
+    || series.feature_blocks?.length
+    || series.content_blocks?.length
+    || series.footnotes?.length
+    || series.seo_title
+    || series.seo_description
+    || series.source_url
+);
 
 const toggleSeriesExpanded = (seriesId: number) => {
     const next = new Set(expandedSeriesIds.value);
@@ -156,12 +204,22 @@ const resetForm = () => {
 };
 
 const resetSeriesForm = () => {
+    pendingGalleryImage.value = '';
     seriesForm.value = {
         title: '',
         slug: '',
+        tagline: '',
+        short_description: '',
         description: '',
         hero_image: '',
+        galleryImages: [],
         featuresText: '',
+        featureBlocks: [],
+        contentBlocks: [],
+        footnotesText: '',
+        seo_title: '',
+        seo_description: '',
+        source_url: '',
         sort_order: getNextSortOrder(seriesItems.value),
         is_published: true,
     };
@@ -256,9 +314,30 @@ const openSeriesEdit = (series: ManagerBrandSeries) => {
     seriesForm.value = {
         title: String(series.title || ''),
         slug: String(series.slug || ''),
+        tagline: String(series.tagline || ''),
+        short_description: String(series.short_description || ''),
         description: String(series.description || ''),
         hero_image: String(series.hero_image || ''),
+        galleryImages: [...(series.gallery_images || [])],
         featuresText: (series.features || []).join('\n'),
+        featureBlocks: (series.feature_blocks || []).map((block) => ({
+            title: String(block.title || ''),
+            text: String(block.text || ''),
+            image_url: String(block.image_url || ''),
+            icon: String(block.icon || ''),
+            footnote: String(block.footnote || ''),
+        })),
+        contentBlocks: (series.content_blocks || []).map((block) => ({
+            kind: block.kind || 'text',
+            title: String(block.title || ''),
+            text: String(block.text || ''),
+            image_url: String(block.image_url || ''),
+            layout: block.layout || 'text_left',
+        })),
+        footnotesText: (series.footnotes || []).join('\n'),
+        seo_title: String(series.seo_title || ''),
+        seo_description: String(series.seo_description || ''),
+        source_url: String(series.source_url || ''),
         sort_order: Number(series.sort_order || 0),
         is_published: Boolean(series.is_published),
     };
@@ -273,6 +352,10 @@ const closeSeriesModal = () => {
 };
 
 const normalizeFeatures = (value: string) => {
+    return normalizeTextList(value);
+};
+
+const normalizeTextList = (value: string) => {
     const seen = new Set<string>();
     return String(value || '')
         .split('\n')
@@ -284,6 +367,85 @@ const normalizeFeatures = (value: string) => {
             seen.add(key);
             return true;
         });
+};
+
+const normalizeUrlList = (value: string[]) => {
+    const seen = new Set<string>();
+    return value
+        .map((item) => String(item || '').trim())
+        .filter((item) => {
+            if (!item) return false;
+            const key = item.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+};
+
+const normalizeFeatureBlocks = (blocks: SeriesFeatureBlockForm[]) => (
+    blocks
+        .map((block) => ({
+            title: String(block.title || '').trim(),
+            text: String(block.text || '').trim() || undefined,
+            image_url: String(block.image_url || '').trim() || undefined,
+            icon: String(block.icon || '').trim() || undefined,
+            footnote: String(block.footnote || '').trim() || undefined,
+        }))
+        .filter((block) => block.title)
+);
+
+const normalizeContentBlocks = (blocks: SeriesContentBlockForm[]) => (
+    blocks
+        .map((block) => ({
+            kind: block.kind || 'text',
+            title: String(block.title || '').trim() || undefined,
+            text: String(block.text || '').trim() || undefined,
+            image_url: String(block.image_url || '').trim() || undefined,
+            layout: block.layout || 'text_left',
+        }))
+        .filter((block) => block.title || block.text || block.image_url)
+);
+
+const addFeatureBlock = () => {
+    seriesForm.value.featureBlocks.push({
+        title: '',
+        text: '',
+        image_url: '',
+        icon: '',
+        footnote: '',
+    });
+};
+
+const removeFeatureBlock = (index: number) => {
+    seriesForm.value.featureBlocks.splice(index, 1);
+};
+
+const addContentBlock = () => {
+    seriesForm.value.contentBlocks.push({
+        kind: 'text',
+        title: '',
+        text: '',
+        image_url: '',
+        layout: 'text_left',
+    });
+};
+
+const removeContentBlock = (index: number) => {
+    seriesForm.value.contentBlocks.splice(index, 1);
+};
+
+const addGalleryImage = (url = pendingGalleryImage.value) => {
+    const normalized = String(url || '').trim();
+    if (!normalized) return;
+    const exists = seriesForm.value.galleryImages.some((item) => item.trim().toLowerCase() === normalized.toLowerCase());
+    if (!exists) {
+        seriesForm.value.galleryImages.push(normalized);
+    }
+    pendingGalleryImage.value = '';
+};
+
+const removeGalleryImage = (index: number) => {
+    seriesForm.value.galleryImages.splice(index, 1);
 };
 
 const saveBrand = async () => {
@@ -398,9 +560,18 @@ const saveSeries = async () => {
         const payload = {
             title,
             slug: String(seriesForm.value.slug || '').trim() || undefined,
+            tagline: String(seriesForm.value.tagline || '').trim() || undefined,
+            short_description: String(seriesForm.value.short_description || '').trim() || undefined,
             description: String(seriesForm.value.description || '').trim() || undefined,
             hero_image: String(seriesForm.value.hero_image || '').trim() || undefined,
+            gallery_images: normalizeUrlList(seriesForm.value.galleryImages),
             features: normalizeFeatures(seriesForm.value.featuresText),
+            feature_blocks: normalizeFeatureBlocks(seriesForm.value.featureBlocks),
+            content_blocks: normalizeContentBlocks(seriesForm.value.contentBlocks),
+            footnotes: normalizeTextList(seriesForm.value.footnotesText),
+            seo_title: String(seriesForm.value.seo_title || '').trim() || undefined,
+            seo_description: String(seriesForm.value.seo_description || '').trim() || undefined,
+            source_url: String(seriesForm.value.source_url || '').trim() || undefined,
             sort_order: wasEditing ? Number(seriesForm.value.sort_order || 0) : getNextSortOrder(seriesItems.value),
             is_published: Boolean(seriesForm.value.is_published),
         };
@@ -752,6 +923,12 @@ onMounted(() => {
                                     <span class="text-xs text-gray-500 dark:text-slate-400">{{ series.products_count }} товаров</span>
                                 </div>
                                 <p class="text-xs font-mono text-gray-500 dark:text-slate-400">{{ series.slug }}</p>
+                                <p v-if="series.tagline" class="mt-0.5 text-sm font-semibold text-gray-700 dark:text-slate-200">
+                                    {{ series.tagline }}
+                                </p>
+                                <p v-else-if="series.short_description" class="mt-0.5 line-clamp-2 text-sm text-gray-500 dark:text-slate-400">
+                                    {{ series.short_description }}
+                                </p>
                             </div>
                         </div>
                         <div v-if="series.features?.length && !isSeriesExpanded(series.id)" class="flex min-w-0 flex-1 flex-wrap gap-1.5 lg:max-w-[34%]">
@@ -800,9 +977,44 @@ onMounted(() => {
                         </div>
                     </div>
                     <div
+                        v-if="!isSeriesExpanded(series.id)"
+                        class="mt-2 flex flex-wrap gap-1.5 text-[11px] font-semibold"
+                    >
+                        <span
+                            v-if="series.gallery_images?.length"
+                            class="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700 dark:bg-blue-950/30 dark:text-blue-200"
+                        >
+                            галерея {{ series.gallery_images.length }}
+                        </span>
+                        <span
+                            v-if="series.feature_blocks?.length"
+                            class="rounded-full bg-purple-50 px-2 py-0.5 text-purple-700 dark:bg-purple-950/30 dark:text-purple-200"
+                        >
+                            преимущества {{ series.feature_blocks.length }}
+                        </span>
+                        <span
+                            v-if="series.content_blocks?.length"
+                            class="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700 dark:bg-amber-950/30 dark:text-amber-200"
+                        >
+                            контент {{ series.content_blocks.length }}
+                        </span>
+                        <span
+                            v-if="series.seo_title || series.seo_description"
+                            class="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-200"
+                        >
+                            SEO
+                        </span>
+                    </div>
+                    <div
                         v-if="isSeriesExpanded(series.id)"
                         class="mt-2 border-t border-gray-200 dark:border-slate-700 pt-2 text-sm text-gray-600 dark:text-slate-300"
                     >
+                        <p v-if="series.tagline" class="font-semibold text-gray-800 dark:text-slate-100">
+                            {{ series.tagline }}
+                        </p>
+                        <p v-if="series.short_description" class="mt-1">
+                            {{ series.short_description }}
+                        </p>
                         <p v-if="series.description">
                             {{ series.description }}
                         </p>
@@ -814,6 +1026,16 @@ onMounted(() => {
                             >
                                 {{ feature }}
                             </span>
+                        </div>
+                        <div v-if="series.feature_blocks?.length" class="mt-2 grid gap-1.5 sm:grid-cols-2">
+                            <div
+                                v-for="block in series.feature_blocks"
+                                :key="`${series.id}-${block.title}`"
+                                class="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+                            >
+                                <span class="font-semibold text-gray-800 dark:text-slate-100">{{ block.title }}</span>
+                                <p v-if="block.text" class="mt-0.5 text-gray-500 dark:text-slate-400">{{ block.text }}</p>
+                            </div>
                         </div>
                     </div>
                 </article>
@@ -878,44 +1100,256 @@ onMounted(() => {
             class="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
             @click.self="closeSeriesModal"
         >
-            <div class="w-full max-w-3xl rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden">
+            <div class="w-full max-w-5xl rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden">
                 <header class="px-5 py-4 border-b border-gray-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60">
                     <h2 class="text-lg font-bold text-gray-900 dark:text-slate-100">
                         {{ editingSeries ? 'Редактирование серии' : 'Новая серия' }}
                     </h2>
                     <p v-if="selectedBrand" class="text-sm text-gray-500 dark:text-slate-400">{{ selectedBrand.title }}</p>
                 </header>
-                <div class="p-5 space-y-3">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <label class="text-sm space-y-1">
-                            <span class="text-gray-600 dark:text-slate-300 font-medium">Название</span>
-                            <input v-model="seriesForm.title" type="text" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
+                <div class="max-h-[72vh] overflow-y-auto p-5 space-y-5">
+                    <section class="space-y-3">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <label class="text-sm space-y-1">
+                                <span class="text-gray-600 dark:text-slate-300 font-medium">Название</span>
+                                <input v-model="seriesForm.title" type="text" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
+                            </label>
+                            <label class="text-sm space-y-1">
+                                <span class="text-gray-600 dark:text-slate-300 font-medium">Slug</span>
+                                <input v-model="seriesForm.slug" type="text" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
+                            </label>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <label class="text-sm space-y-1">
+                                <span class="text-gray-600 dark:text-slate-300 font-medium">Слоган</span>
+                                <input v-model="seriesForm.tagline" type="text" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" placeholder="Охлаждение без прямого потока" />
+                            </label>
+                            <label class="text-sm space-y-1">
+                                <span class="text-gray-600 dark:text-slate-300 font-medium">Источник</span>
+                                <input v-model="seriesForm.source_url" type="url" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" placeholder="https://..." />
+                            </label>
+                        </div>
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                            <label class="text-sm space-y-1 block">
+                                <span class="text-gray-600 dark:text-slate-300 font-medium">Короткое описание</span>
+                                <textarea v-model="seriesForm.short_description" rows="3" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
+                            </label>
+                            <label class="text-sm space-y-1 block">
+                                <span class="text-gray-600 dark:text-slate-300 font-medium">Описание серии</span>
+                                <textarea v-model="seriesForm.description" rows="3" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
+                            </label>
+                        </div>
+                    </section>
+
+                    <section class="space-y-4 border-t border-gray-200 pt-4 dark:border-slate-700">
+                        <div class="max-w-2xl">
+                            <MediaField
+                                v-model="seriesForm.hero_image"
+                                label="Hero image"
+                                kind="brand"
+                                :tags="['series', 'hero']"
+                                accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg"
+                                placeholder="/media/library/original/series.webp"
+                            />
+                        </div>
+                        <div class="space-y-3">
+                            <div>
+                                <h3 class="text-sm font-medium text-gray-600 dark:text-slate-300">Галерея</h3>
+                                <p class="mt-1 text-xs text-gray-500 dark:text-slate-400">Изображения серии для лендингов, карточек и промо-блоков.</p>
+                            </div>
+                            <div v-if="seriesForm.galleryImages.length" class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                <div
+                                    v-for="(_, index) in seriesForm.galleryImages"
+                                    :key="`gallery-${index}`"
+                                    class="rounded-xl border border-gray-200 p-3 dark:border-slate-700"
+                                >
+                                    <div class="mb-2 flex items-center justify-between gap-3">
+                                        <span class="text-xs font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-slate-400">Изображение {{ index + 1 }}</span>
+                                        <button
+                                            type="button"
+                                            class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                            title="Удалить из галереи"
+                                            aria-label="Удалить из галереи"
+                                            @click="removeGalleryImage(index)"
+                                        >
+                                            <span class="material-icons-round text-[18px]">delete</span>
+                                        </button>
+                                    </div>
+                                    <MediaField
+                                        v-model="seriesForm.galleryImages[index]"
+                                        :label="`URL ${index + 1}`"
+                                        kind="brand"
+                                        :tags="['series', 'gallery']"
+                                        accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg"
+                                        placeholder="/media/library/original/series-gallery.webp"
+                                    />
+                                </div>
+                            </div>
+                            <p v-else class="rounded-xl border border-dashed border-gray-300 px-3 py-3 text-sm text-gray-500 dark:border-slate-700 dark:text-slate-400">
+                                Галерея пока пустая.
+                            </p>
+                            <div class="rounded-xl border border-teal-100 bg-teal-50/40 p-3 dark:border-teal-900/60 dark:bg-teal-950/20">
+                                <MediaField
+                                    v-model="pendingGalleryImage"
+                                    label="Добавить изображение"
+                                    kind="brand"
+                                    :tags="['series', 'gallery']"
+                                    accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg"
+                                    placeholder="/media/library/original/series-gallery.webp"
+                                    @picked="addGalleryImage"
+                                />
+                                <button
+                                    v-if="pendingGalleryImage"
+                                    type="button"
+                                    class="mt-3 inline-flex items-center gap-1 rounded-lg bg-teal-600 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-700"
+                                    @click="addGalleryImage()"
+                                >
+                                    <span class="material-icons-round text-[16px]">add</span>
+                                    Добавить в галерею
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="space-y-3 border-t border-gray-200 pt-4 dark:border-slate-700">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <h3 class="text-sm font-bold uppercase tracking-[0.16em] text-gray-500 dark:text-slate-400">Преимущества</h3>
+                                <p class="text-xs text-gray-500 dark:text-slate-400">Короткие фичи идут чипсами, блоки можно раскрыть на сайте подробнее.</p>
+                            </div>
+                            <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-teal-200 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50 dark:border-teal-900/60 dark:text-teal-200 dark:hover:bg-teal-950/30" @click="addFeatureBlock">
+                                <span class="material-icons-round text-[16px]">add</span>
+                                Блок
+                            </button>
+                        </div>
+                        <label class="text-sm space-y-1 block">
+                            <span class="text-gray-600 dark:text-slate-300 font-medium">Фичи серии</span>
+                            <textarea v-model="seriesForm.featuresText" rows="3" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" placeholder="Одна фича на строку" />
                         </label>
-                        <label class="text-sm space-y-1">
-                            <span class="text-gray-600 dark:text-slate-300 font-medium">Slug</span>
-                            <input v-model="seriesForm.slug" type="text" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
+                        <div v-if="seriesForm.featureBlocks.length" class="space-y-3">
+                            <div
+                                v-for="(block, index) in seriesForm.featureBlocks"
+                                :key="`feature-${index}`"
+                                class="rounded-xl border border-gray-200 p-3 dark:border-slate-700"
+                            >
+                                <div class="mb-3 flex items-center justify-between gap-3">
+                                    <span class="text-xs font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-slate-400">Преимущество {{ index + 1 }}</span>
+                                    <button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30" @click="removeFeatureBlock(index)">
+                                        <span class="material-icons-round text-[18px]">delete</span>
+                                    </button>
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <label class="text-sm space-y-1">
+                                        <span class="text-gray-600 dark:text-slate-300 font-medium">Заголовок</span>
+                                        <input v-model="block.title" type="text" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
+                                    </label>
+                                    <label class="text-sm space-y-1">
+                                        <span class="text-gray-600 dark:text-slate-300 font-medium">Иконка</span>
+                                        <input v-model="block.icon" type="text" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" placeholder="air / bolt / self_cleaning" />
+                                    </label>
+                                    <MediaField
+                                        v-model="block.image_url"
+                                        label="Изображение"
+                                        kind="brand"
+                                        :tags="['series', 'feature']"
+                                        accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg"
+                                        placeholder="/media/library/original/feature.webp"
+                                    />
+                                    <label class="text-sm space-y-1">
+                                        <span class="text-gray-600 dark:text-slate-300 font-medium">Сноска</span>
+                                        <input v-model="block.footnote" type="text" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
+                                    </label>
+                                </div>
+                                <label class="mt-3 block text-sm space-y-1">
+                                    <span class="text-gray-600 dark:text-slate-300 font-medium">Описание</span>
+                                    <textarea v-model="block.text" rows="3" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
+                                </label>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="space-y-3 border-t border-gray-200 pt-4 dark:border-slate-700">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <h3 class="text-sm font-bold uppercase tracking-[0.16em] text-gray-500 dark:text-slate-400">Контентные блоки</h3>
+                                <p class="text-xs text-gray-500 dark:text-slate-400">Основа для будущих секций серии как на фирменных страницах.</p>
+                            </div>
+                            <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-teal-200 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50 dark:border-teal-900/60 dark:text-teal-200 dark:hover:bg-teal-950/30" @click="addContentBlock">
+                                <span class="material-icons-round text-[16px]">add</span>
+                                Секция
+                            </button>
+                        </div>
+                        <div v-if="seriesForm.contentBlocks.length" class="space-y-3">
+                            <div
+                                v-for="(block, index) in seriesForm.contentBlocks"
+                                :key="`content-${index}`"
+                                class="rounded-xl border border-gray-200 p-3 dark:border-slate-700"
+                            >
+                                <div class="mb-3 flex items-center justify-between gap-3">
+                                    <span class="text-xs font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-slate-400">Секция {{ index + 1 }}</span>
+                                    <button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30" @click="removeContentBlock(index)">
+                                        <span class="material-icons-round text-[18px]">delete</span>
+                                    </button>
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <label class="text-sm space-y-1">
+                                        <span class="text-gray-600 dark:text-slate-300 font-medium">Тип</span>
+                                        <select v-model="block.kind" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900">
+                                            <option value="text">Текст</option>
+                                            <option value="image_text">Текст + изображение</option>
+                                            <option value="media">Медиа</option>
+                                        </select>
+                                    </label>
+                                    <label class="text-sm space-y-1">
+                                        <span class="text-gray-600 dark:text-slate-300 font-medium">Макет</span>
+                                        <select v-model="block.layout" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900">
+                                            <option value="text_left">Текст слева</option>
+                                            <option value="text_right">Текст справа</option>
+                                            <option value="full">На всю ширину</option>
+                                        </select>
+                                    </label>
+                                    <label class="text-sm space-y-1">
+                                        <span class="text-gray-600 dark:text-slate-300 font-medium">Заголовок</span>
+                                        <input v-model="block.title" type="text" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
+                                    </label>
+                                    <MediaField
+                                        v-model="block.image_url"
+                                        label="Изображение"
+                                        kind="brand"
+                                        :tags="['series', 'content']"
+                                        accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg"
+                                        placeholder="/media/library/original/series-content.webp"
+                                    />
+                                </div>
+                                <label class="mt-3 block text-sm space-y-1">
+                                    <span class="text-gray-600 dark:text-slate-300 font-medium">Текст</span>
+                                    <textarea v-model="block.text" rows="4" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
+                                </label>
+                            </div>
+                        </div>
+                        <p v-else class="rounded-xl border border-dashed border-gray-300 px-3 py-3 text-sm text-gray-500 dark:border-slate-700 dark:text-slate-400">
+                            Контентных секций пока нет.
+                        </p>
+                    </section>
+
+                    <section class="grid grid-cols-1 lg:grid-cols-2 gap-4 border-t border-gray-200 pt-4 dark:border-slate-700">
+                        <label class="text-sm space-y-1 block">
+                            <span class="text-gray-600 dark:text-slate-300 font-medium">Сноски</span>
+                            <textarea v-model="seriesForm.footnotesText" rows="4" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" placeholder="Одна сноска на строку" />
                         </label>
-                    </div>
-                    <MediaField
-                        v-model="seriesForm.hero_image"
-                        label="Hero image"
-                        kind="brand"
-                        :tags="['series', 'hero']"
-                        accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg"
-                        placeholder="/media/library/original/series.webp"
-                    />
-                    <label class="text-sm space-y-1 block">
-                        <span class="text-gray-600 dark:text-slate-300 font-medium">Описание серии</span>
-                        <textarea v-model="seriesForm.description" rows="5" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
-                        <span class="block text-xs text-gray-500 dark:text-slate-400">
-                            Короткий текст для страницы бренда и карточки товара.
-                        </span>
-                    </label>
-                    <label class="text-sm space-y-1 block">
-                        <span class="text-gray-600 dark:text-slate-300 font-medium">Фичи серии</span>
-                        <textarea v-model="seriesForm.featuresText" rows="5" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" placeholder="Одна фича на строку" />
-                    </label>
-                    <label class="text-sm flex items-center gap-2">
+                        <div class="space-y-3">
+                            <label class="text-sm space-y-1 block">
+                                <span class="text-gray-600 dark:text-slate-300 font-medium">SEO title</span>
+                                <input v-model="seriesForm.seo_title" type="text" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
+                            </label>
+                            <label class="text-sm space-y-1 block">
+                                <span class="text-gray-600 dark:text-slate-300 font-medium">SEO description</span>
+                                <textarea v-model="seriesForm.seo_description" rows="3" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
+                            </label>
+                        </div>
+                    </section>
+
+                    <label class="text-sm flex items-center gap-2 border-t border-gray-200 pt-4 dark:border-slate-700">
                         <input v-model="seriesForm.is_published" type="checkbox" class="rounded border-gray-300 dark:border-slate-700" />
                         <span class="text-gray-600 dark:text-slate-300 font-medium">Публиковать серию</span>
                     </label>

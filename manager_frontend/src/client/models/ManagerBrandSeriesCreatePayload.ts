@@ -2,12 +2,23 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ProductSeriesContentBlockResponse } from './ProductSeriesContentBlockResponse';
+import type { ProductSeriesFeatureBlockResponse } from './ProductSeriesFeatureBlockResponse';
 export type ManagerBrandSeriesCreatePayload = {
     title: string;
     slug?: (string | null);
+    tagline?: (string | null);
+    short_description?: (string | null);
     description?: (string | null);
     hero_image?: (string | null);
+    gallery_images?: Array<string>;
     features?: Array<string>;
+    feature_blocks?: Array<ProductSeriesFeatureBlockResponse>;
+    content_blocks?: Array<ProductSeriesContentBlockResponse>;
+    footnotes?: Array<string>;
+    seo_title?: (string | null);
+    seo_description?: (string | null);
+    source_url?: (string | null);
     is_published?: boolean;
     sort_order?: number;
 };

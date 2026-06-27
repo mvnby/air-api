@@ -75,9 +75,18 @@ class ProductSeriesService:
             id=series.id,
             title=series.title,
             slug=series.slug,
+            tagline=series.tagline,
+            short_description=series.short_description,
             description=series.description,
             hero_image=series.hero_image,
+            gallery_images=series.gallery_images or [],
             features=series.features or [],
+            feature_blocks=series.feature_blocks or [],
+            content_blocks=series.content_blocks or [],
+            footnotes=series.footnotes or [],
+            seo_title=series.seo_title,
+            seo_description=series.seo_description,
+            source_url=series.source_url,
         )
 
     @staticmethod

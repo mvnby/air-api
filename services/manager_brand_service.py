@@ -292,9 +292,18 @@ class ManagerBrandService:
             brand_id=brand_id,
             title=title,
             slug=series_slug,
+            tagline=ManagerBrandService._clean_optional_text(payload.get("tagline")),
+            short_description=ManagerBrandService._clean_optional_text(payload.get("short_description")),
             description=ManagerBrandService._clean_optional_text(payload.get("description")),
             hero_image=ManagerBrandService._clean_optional_text(payload.get("hero_image")),
+            gallery_images=ManagerBrandService._normalize_string_list(payload.get("gallery_images")),
             features=ManagerBrandService._normalize_features(payload.get("features")),
+            feature_blocks=ManagerBrandService._normalize_feature_blocks(payload.get("feature_blocks")),
+            content_blocks=ManagerBrandService._normalize_content_blocks(payload.get("content_blocks")),
+            footnotes=ManagerBrandService._normalize_string_list(payload.get("footnotes")),
+            seo_title=ManagerBrandService._clean_optional_text(payload.get("seo_title")),
+            seo_description=ManagerBrandService._clean_optional_text(payload.get("seo_description")),
+            source_url=ManagerBrandService._clean_optional_text(payload.get("source_url")),
             is_published=bool(payload.get("is_published", True)),
             sort_order=int(payload.get("sort_order") or 0),
         )
@@ -339,12 +348,30 @@ class ManagerBrandService:
                 )
                 series.slug = new_slug
 
+        if "tagline" in payload:
+            series.tagline = ManagerBrandService._clean_optional_text(payload["tagline"])
+        if "short_description" in payload:
+            series.short_description = ManagerBrandService._clean_optional_text(payload["short_description"])
         if "description" in payload:
             series.description = ManagerBrandService._clean_optional_text(payload["description"])
         if "hero_image" in payload:
             series.hero_image = ManagerBrandService._clean_optional_text(payload["hero_image"])
+        if "gallery_images" in payload and payload["gallery_images"] is not None:
+            series.gallery_images = ManagerBrandService._normalize_string_list(payload["gallery_images"])
         if "features" in payload and payload["features"] is not None:
             series.features = ManagerBrandService._normalize_features(payload["features"])
+        if "feature_blocks" in payload and payload["feature_blocks"] is not None:
+            series.feature_blocks = ManagerBrandService._normalize_feature_blocks(payload["feature_blocks"])
+        if "content_blocks" in payload and payload["content_blocks"] is not None:
+            series.content_blocks = ManagerBrandService._normalize_content_blocks(payload["content_blocks"])
+        if "footnotes" in payload and payload["footnotes"] is not None:
+            series.footnotes = ManagerBrandService._normalize_string_list(payload["footnotes"])
+        if "seo_title" in payload:
+            series.seo_title = ManagerBrandService._clean_optional_text(payload["seo_title"])
+        if "seo_description" in payload:
+            series.seo_description = ManagerBrandService._clean_optional_text(payload["seo_description"])
+        if "source_url" in payload:
+            series.source_url = ManagerBrandService._clean_optional_text(payload["source_url"])
         if "is_published" in payload and payload["is_published"] is not None:
             series.is_published = bool(payload["is_published"])
         if "sort_order" in payload and payload["sort_order"] is not None:
@@ -417,9 +444,18 @@ class ManagerBrandService:
             "brand_id": series.brand_id,
             "title": series.title,
             "slug": series.slug,
+            "tagline": series.tagline,
+            "short_description": series.short_description,
             "description": series.description,
             "hero_image": series.hero_image,
+            "gallery_images": ManagerBrandService._normalize_string_list(series.gallery_images),
             "features": ManagerBrandService._normalize_features(series.features),
+            "feature_blocks": ManagerBrandService._normalize_feature_blocks(series.feature_blocks),
+            "content_blocks": ManagerBrandService._normalize_content_blocks(series.content_blocks),
+            "footnotes": ManagerBrandService._normalize_string_list(series.footnotes),
+            "seo_title": series.seo_title,
+            "seo_description": series.seo_description,
+            "source_url": series.source_url,
             "is_published": series.is_published,
             "sort_order": series.sort_order,
             "created_at": series.created_at,
@@ -482,10 +518,14 @@ class ManagerBrandService:
 
     @staticmethod
     def _normalize_features(value: Any) -> List[str]:
+        return ManagerBrandService._normalize_string_list(value)
+
+    @staticmethod
+    def _normalize_string_list(value: Any) -> List[str]:
         if not isinstance(value, list):
             return []
 
-        features: List[str] = []
+        items: List[str] = []
         seen: set[str] = set()
         for item in value:
             text = str(item or "").strip()
@@ -495,8 +535,60 @@ class ManagerBrandService:
             if dedupe_key in seen:
                 continue
             seen.add(dedupe_key)
-            features.append(text)
-        return features
+            items.append(text)
+        return items
+
+    @staticmethod
+    def _normalize_feature_blocks(value: Any) -> List[Dict[str, Optional[str]]]:
+        if not isinstance(value, list):
+            return []
+
+        blocks: List[Dict[str, Optional[str]]] = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            title = ManagerBrandService._clean_optional_text(item.get("title"))
+            if not title:
+                continue
+            blocks.append(
+                {
+                    "title": title,
+                    "text": ManagerBrandService._clean_optional_text(item.get("text")),
+                    "image_url": ManagerBrandService._clean_optional_text(item.get("image_url")),
+                    "icon": ManagerBrandService._clean_optional_text(item.get("icon")),
+                    "footnote": ManagerBrandService._clean_optional_text(item.get("footnote")),
+                }
+            )
+        return blocks
+
+    @staticmethod
+    def _normalize_content_blocks(value: Any) -> List[Dict[str, Optional[str]]]:
+        if not isinstance(value, list):
+            return []
+
+        allowed_kinds = {"text", "image_text", "media"}
+        allowed_layouts = {"text_left", "text_right", "full"}
+        blocks: List[Dict[str, Optional[str]]] = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            title = ManagerBrandService._clean_optional_text(item.get("title"))
+            text = ManagerBrandService._clean_optional_text(item.get("text"))
+            image_url = ManagerBrandService._clean_optional_text(item.get("image_url"))
+            if not any((title, text, image_url)):
+                continue
+            kind = str(item.get("kind") or "text").strip()
+            layout = str(item.get("layout") or "text_left").strip()
+            blocks.append(
+                {
+                    "kind": kind if kind in allowed_kinds else "text",
+                    "title": title,
+                    "text": text,
+                    "image_url": image_url,
+                    "layout": layout if layout in allowed_layouts else "text_left",
+                }
+            )
+        return blocks
 
     @staticmethod
     async def _ensure_brand_group(session: AsyncSession) -> TagGroup:
