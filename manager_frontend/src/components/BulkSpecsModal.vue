@@ -4,6 +4,7 @@ import { api } from '../api';
 import { X, Plus, Trash2, Save, AlertTriangle, CircleHelp } from 'lucide-vue-next';
 import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
 import SpecKeyCombobox from './SpecKeyCombobox.vue';
+import SpecValueInput from './SpecValueInput.vue';
 import { useSpecRegistry } from '../composables/useSpecRegistry';
 
 const props = defineProps<{
@@ -22,9 +23,6 @@ const loading = ref(false);
 const formMessage = ref('');
 const formServerErrors = ref<Record<string, string>>({});
 const {
-    formatSelectOptionLabel,
-    getSelectOptions,
-    getSpecConfig,
     getSpecHelpText,
     knownSpecKeys,
     loadSpecRegistry,
@@ -180,67 +178,12 @@ const save = async () => {
                         
                         <!-- Value Input (Disabled if deleting keys) -->
                         <div class="flex-1">
-                            <template v-if="getSpecConfig(row.key)?.type === 'boolean'">
-                                <div class="flex items-center h-[38px]">
-                                    <button 
-                                        type="button"
-                                        @click="row.value = (row.value === 'true') ? 'false' : 'true'"
-                                        :disabled="operation === 'delete_keys'"
-                                        class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                        :class="(row.value === 'true') ? 'bg-teal-600' : 'bg-gray-200 dark:bg-slate-700'"
-                                        role="switch"
-                                        :aria-checked="row.value === 'true'"
-                                    >
-                                        <span class="sr-only">Toggle boolean</span>
-                                        <span 
-                                            aria-hidden="true" 
-                                            class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                                            :class="(row.value === 'true') ? 'translate-x-5' : 'translate-x-0'"
-                                        />
-                                    </button>
-                                    <span class="ml-3 text-sm font-medium text-gray-900 dark:text-slate-200">
-                                        {{ (row.value === 'true') ? 'Да' : 'Нет' }}
-                                    </span>
-                                </div>
-                            </template>
-                            
-                            <template v-else-if="getSpecConfig(row.key)?.type === 'select'">
-                                <select 
-                                    v-model="row.value"
-                                    :disabled="operation === 'delete_keys'"
-                                    class="w-full h-[38px] border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-gray-100 dark:disabled:bg-slate-800 disabled:text-gray-400 dark:disabled:text-slate-500"
-                                >
-                                    <option value="" disabled>{{ operation === 'delete_keys' ? 'Пропускается' : 'Выберите значение' }}</option>
-                                    <option v-for="opt in getSelectOptions(row.key, row.value)" :key="opt" :value="opt">
-                                        {{ formatSelectOptionLabel(row.key, opt) }}
-                                    </option>
-                                </select>
-                            </template>
-                            
-                            <template v-else-if="getSpecConfig(row.key)?.type === 'number'">
-                                <div class="flex h-[38px] rounded shadow-sm">
-                                    <input 
-                                        type="number"
-                                        v-model="row.value" 
-                                        :disabled="operation === 'delete_keys'"
-                                        :placeholder="operation === 'delete_keys' ? 'Пропускается' : 'Значение'" 
-                                        class="flex-1 min-w-0 block w-full border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-slate-200 rounded-none rounded-l px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-gray-100 dark:disabled:bg-slate-800 disabled:text-gray-400 dark:disabled:text-slate-500"
-                                    />
-                                    <span v-if="getSpecConfig(row.key)?.unit" class="inline-flex items-center px-3 rounded-r border border-l-0 border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-700 text-gray-500 dark:text-slate-300 text-sm">
-                                        {{ getSpecConfig(row.key)?.unit }}
-                                    </span>
-                                </div>
-                            </template>
-                            
-                            <template v-else>
-                                <input 
-                                    type="text"
-                                    v-model="row.value" 
-                                    :disabled="operation === 'delete_keys'"
-                                    :placeholder="operation === 'delete_keys' ? 'Пропускается' : 'Значение (например: Белый)'" 
-                                    class="w-full h-[38px] border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-gray-100 dark:disabled:bg-slate-800 disabled:text-gray-400 dark:disabled:text-slate-500"
-                                />
-                            </template>
+                            <SpecValueInput
+                                v-model="row.value"
+                                :spec-key="row.key"
+                                :disabled="operation === 'delete_keys'"
+                                :placeholder="operation === 'delete_keys' ? 'Пропускается' : 'Значение'"
+                            />
                         </div>
                         
                         <button @click="removeRow(idx)" class="p-2 text-gray-400 hover:text-red-500 transition-colors">

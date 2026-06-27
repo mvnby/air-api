@@ -1,8 +1,12 @@
 export interface SpecConfig {
     label: string;
-    type: 'boolean' | 'select' | 'number' | 'text';
+    type: 'boolean' | 'select' | 'number' | 'text' | 'range' | 'number_list' | 'dimensions';
     options?: string[];
     unit?: string;
+    canonicalUnit?: string;
+    quantityKind?: string;
+    valueType?: string;
+    group?: string;
     description?: string;
     managerNote?: string;
     source?: 'registry' | 'fallback';
