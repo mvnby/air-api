@@ -15,7 +15,7 @@ from .common import (
 )
 from .customer import Customer, CustomerBranch, CustomerContract, CustomerRequisitesRecognition, Lead
 from .equipment import CustomerEquipment, EquipmentComponent, EquipmentServiceHistory
-from .brand import Brand, ProductSeries
+from .brand import Brand, BrandFeature, ProductSeries, ProductSeriesFeatureLink
 from .bot_fsm import BotFsmState
 from .cart import Cart, CartItem
 from .catalog_import import CatalogImportJob
@@ -74,6 +74,7 @@ __all__ = [
     "Cart",
     "CartItem",
     "Brand",
+    "BrandFeature",
     "BotFsmState",
     "CatalogImportJob",
     "Customer",
@@ -125,6 +126,7 @@ __all__ = [
     "ProductMainImageCleanupItem",
     "ProductImageVariant",
     "ProductSeries",
+    "ProductSeriesFeatureLink",
     "ProductTagLink",
     "Service",
     "StaffUser",

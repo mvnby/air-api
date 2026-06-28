@@ -225,6 +225,11 @@ class SupplierMappingService:
                     "supplier_name": supplier.name if supplier else None,
                     "external_id": offer.external_id,
                     "title_raw": offer.title_raw,
+                    "title_normalized": offer.title_normalized,
+                    "model_tokens": offer.model_tokens or [],
+                    "indoor_model_tokens": offer.indoor_model_tokens or [],
+                    "outdoor_model_tokens": offer.outdoor_model_tokens or [],
+                    "match_normalizer_version": offer.match_normalizer_version,
                     "qty": int(offer.qty or 0),
                     "qty_raw": offer.qty_raw,
                     "wholesale_raw": offer.wholesale_raw,
@@ -326,9 +331,15 @@ class SupplierMappingService:
     ) -> dict:
         out = []
         for item in items:
+            supplier_id = item.get("supplier_id")
+            external_id = item.get("external_id")
+            offer = None
+            if supplier_id is not None and external_id is not None:
+                offer = await SupplierOfferDAO.get_by_key(session, int(supplier_id), str(external_id))
             result = await suggest_products_for_offer(
                 session=session,
                 title_raw=item.get("title_raw"),
+                offer=offer,
                 limit=limit_per_offer,
             )
             out.append(
@@ -376,6 +387,11 @@ class SupplierMappingService:
                     "supplier_name": supplier.name if supplier else None,
                     "external_id": offer.external_id,
                     "title_raw": offer.title_raw,
+                    "title_normalized": offer.title_normalized,
+                    "model_tokens": offer.model_tokens or [],
+                    "indoor_model_tokens": offer.indoor_model_tokens or [],
+                    "outdoor_model_tokens": offer.outdoor_model_tokens or [],
+                    "match_normalizer_version": offer.match_normalizer_version,
                     "qty": int(offer.qty or 0),
                     "qty_raw": offer.qty_raw,
                     "wholesale_raw": offer.wholesale_raw,

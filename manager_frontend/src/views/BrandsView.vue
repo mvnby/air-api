@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { api, type ManagerBrand, type ManagerBrandSeries } from '../api';
+import { api, type ManagerBrand, type ManagerBrandFeature, type ManagerBrandSeries } from '../api';
+import IconPicker from '../components/IconPicker.vue';
 import MediaField from '../components/MediaField.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
 
@@ -22,6 +23,7 @@ type SeriesForm = {
     hero_image: string;
     galleryImages: string[];
     featuresText: string;
+    brandFeatureIds: number[];
     featureBlocks: SeriesFeatureBlockForm[];
     contentBlocks: SeriesContentBlockForm[];
     footnotesText: string;
@@ -48,6 +50,15 @@ type SeriesContentBlockForm = {
     layout: 'text_left' | 'text_right' | 'full';
 };
 
+type BrandFeatureDraft = {
+    title: string;
+    text: string;
+    image_url: string;
+    icon: string;
+    source_url: string;
+    aliasesText: string;
+};
+
 const brands = ref<ManagerBrand[]>([]);
 const loading = ref(true);
 const saving = ref(false);
@@ -58,8 +69,12 @@ const modalOpen = ref(false);
 const editingBrand = ref<ManagerBrand | null>(null);
 const selectedBrandId = ref<number | null>(null);
 const seriesItems = ref<ManagerBrandSeries[]>([]);
+const brandFeatures = ref<ManagerBrandFeature[]>([]);
 const seriesLoading = ref(false);
+const brandFeaturesLoading = ref(false);
 const seriesSaving = ref(false);
+const featureSaving = ref(false);
+const editingBrandFeatureId = ref<number | null>(null);
 const seriesError = ref('');
 const seriesModalOpen = ref(false);
 const editingSeries = ref<ManagerBrandSeries | null>(null);
@@ -87,6 +102,7 @@ const seriesForm = ref<SeriesForm>({
     hero_image: '',
     galleryImages: [],
     featuresText: '',
+    brandFeatureIds: [],
     featureBlocks: [],
     contentBlocks: [],
     footnotesText: '',
@@ -97,6 +113,15 @@ const seriesForm = ref<SeriesForm>({
     is_published: true,
 });
 const pendingGalleryImage = ref('');
+const seoPromptPreview = ref('');
+const featureDraft = ref<BrandFeatureDraft>({
+    title: '',
+    text: '',
+    image_url: '',
+    icon: '',
+    source_url: '',
+    aliasesText: '',
+});
 
 const filteredBrands = computed(() => {
     const q = query.value.trim().toLowerCase();
@@ -127,13 +152,64 @@ const isSeriesReorderDisabled = computed(() => (
     || seriesSaving.value
     || reorderingSeries.value
 ));
+const selectedBrandFeatureCount = computed(() => seriesForm.value.brandFeatureIds.length);
+const isEditingBrandFeature = computed(() => editingBrandFeatureId.value !== null);
 
 const SORT_ORDER_STEP = 10;
+const featureIconOptions = [
+    { value: '', icon: 'hide_image', label: 'Без' },
+    { value: 'air', icon: 'air', label: 'Воздух' },
+    { value: 'ac_unit', icon: 'ac_unit', label: 'Холод' },
+    { value: 'thermostat', icon: 'thermostat', label: 'Климат' },
+    { value: 'eco', icon: 'eco', label: 'ECO' },
+    { value: 'energy_savings_leaf', icon: 'energy_savings_leaf', label: 'Энергия' },
+    { value: 'bolt', icon: 'bolt', label: 'Мощность' },
+    { value: 'wifi', icon: 'wifi', label: 'Wi-Fi' },
+    { value: 'self_cleaning', icon: 'self_cleaning', label: 'Самооч.' },
+    { value: 'cleaning_services', icon: 'cleaning_services', label: 'Очистка' },
+    { value: 'filter_alt', icon: 'filter_alt', label: 'Фильтр' },
+    { value: 'water_drop', icon: 'water_drop', label: 'Осуш.' },
+    { value: 'waves', icon: 'waves', label: 'Поток' },
+    { value: 'volume_down', icon: 'volume_down', label: 'Тишина' },
+    { value: 'shield', icon: 'shield', label: 'Защита' },
+    { value: 'auto_awesome', icon: 'auto_awesome', label: 'AI' },
+    { value: 'settings_suggest', icon: 'settings_suggest', label: 'Авто' },
+];
 
 const getNextSortOrder = <T extends { sort_order?: number | null }>(items: T[]) => {
     const maxOrder = items.reduce((max, item) => Math.max(max, Number(item.sort_order || 0)), 0);
     return maxOrder + SORT_ORDER_STEP;
 };
+
+const sortBrandFeatures = (items: ManagerBrandFeature[]) => (
+    [...items].sort((a, b) => (
+        Number(a.sort_order || 0) - Number(b.sort_order || 0)
+        || String(a.title || '').localeCompare(String(b.title || ''))
+    ))
+);
+
+const compactText = (value: string, maxLength = 160) => {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (text.length <= maxLength) return text;
+    return `${text.slice(0, maxLength - 1).trim()}…`;
+};
+
+const getSelectedBrandFeatureTitles = () => {
+    const selectedIds = new Set(seriesForm.value.brandFeatureIds);
+    return brandFeatures.value
+        .filter((feature) => selectedIds.has(feature.id))
+        .map((feature) => String(feature.title || '').trim())
+        .filter(Boolean);
+};
+
+const suggestedSeriesFeatureTitles = computed(() => {
+    const titles = [
+        ...getSelectedBrandFeatureTitles(),
+        ...seriesForm.value.featureBlocks.map((block) => String(block.title || '').trim()),
+        ...seriesForm.value.contentBlocks.map((block) => String(block.title || '').trim()),
+    ];
+    return normalizeTextList(titles.join('\n'));
+});
 
 const moveItemById = <T extends { id: number }>(items: T[], draggedId: number, targetId: number) => {
     const sourceIndex = items.findIndex((item) => item.id === draggedId);
@@ -156,6 +232,7 @@ const hasSeriesDetails = (series: ManagerBrandSeries) => Boolean(
     || series.hero_image
     || series.gallery_images?.length
     || series.features?.length
+    || series.brand_features?.length
     || series.feature_blocks?.length
     || series.content_blocks?.length
     || series.footnotes?.length
@@ -205,6 +282,7 @@ const resetForm = () => {
 
 const resetSeriesForm = () => {
     pendingGalleryImage.value = '';
+    seoPromptPreview.value = '';
     seriesForm.value = {
         title: '',
         slug: '',
@@ -214,6 +292,7 @@ const resetSeriesForm = () => {
         hero_image: '',
         galleryImages: [],
         featuresText: '',
+        brandFeatureIds: [],
         featureBlocks: [],
         contentBlocks: [],
         footnotesText: '',
@@ -271,7 +350,30 @@ const fetchSeries = async () => {
     }
 };
 
+const fetchBrandFeatures = async () => {
+    if (!selectedBrandId.value) {
+        brandFeatures.value = [];
+        return;
+    }
+
+    brandFeaturesLoading.value = true;
+    seriesError.value = '';
+    try {
+        const res = await api.listManagerBrandFeatures(selectedBrandId.value);
+        brandFeatures.value = sortBrandFeatures(res.items || []);
+    } catch (err) {
+        seriesError.value = getApiErrorMessage(err);
+    } finally {
+        brandFeaturesLoading.value = false;
+    }
+};
+
 const selectBrand = (brand: ManagerBrand) => {
+    if (selectedBrandId.value === brand.id) {
+        selectedBrandId.value = null;
+        seriesError.value = '';
+        return;
+    }
     selectedBrandId.value = brand.id;
 };
 
@@ -311,6 +413,7 @@ const openSeriesCreate = () => {
 
 const openSeriesEdit = (series: ManagerBrandSeries) => {
     editingSeries.value = series;
+    seoPromptPreview.value = '';
     seriesForm.value = {
         title: String(series.title || ''),
         slug: String(series.slug || ''),
@@ -320,6 +423,7 @@ const openSeriesEdit = (series: ManagerBrandSeries) => {
         hero_image: String(series.hero_image || ''),
         galleryImages: [...(series.gallery_images || [])],
         featuresText: (series.features || []).join('\n'),
+        brandFeatureIds: [...(series.brand_feature_ids || (series.brand_features || []).map((feature) => feature.id))],
         featureBlocks: (series.feature_blocks || []).map((block) => ({
             title: String(block.title || ''),
             text: String(block.text || ''),
@@ -380,6 +484,99 @@ const normalizeUrlList = (value: string[]) => {
             seen.add(key);
             return true;
         });
+};
+
+const syncSeriesFeaturesFromStructuredBlocks = () => {
+    const suggestions = suggestedSeriesFeatureTitles.value;
+    if (suggestions.length === 0) {
+        seriesError.value = 'Сначала добавьте фичи бренда, блоки преимуществ или контентные секции.';
+        return;
+    }
+    const existing = normalizeTextList(seriesForm.value.featuresText);
+    seriesForm.value.featuresText = normalizeTextList([...existing, ...suggestions].join('\n')).join('\n');
+    setToast('Фичи серии собраны из блоков');
+};
+
+const buildSeriesSeoDescriptionSource = () => {
+    const selectedFeatureDescriptions = brandFeatures.value
+        .filter((feature) => seriesForm.value.brandFeatureIds.includes(feature.id))
+        .map((feature) => [feature.title, feature.text].filter(Boolean).join(': '));
+    return normalizeTextList([
+        seriesForm.value.tagline,
+        seriesForm.value.short_description,
+        seriesForm.value.description,
+        ...selectedFeatureDescriptions,
+        ...seriesForm.value.featureBlocks.map((block) => [block.title, block.text].filter(Boolean).join(': ')),
+        ...seriesForm.value.contentBlocks.map((block) => [block.title, block.text].filter(Boolean).join(': ')),
+    ].join('\n'));
+};
+
+const generateSeriesSeoDraft = () => {
+    const brandTitle = selectedBrand.value?.title || '';
+    const seriesTitle = String(seriesForm.value.title || '').trim();
+    if (!seriesTitle && !brandTitle) {
+        seriesError.value = 'Заполните название серии или бренд, чтобы собрать SEO.';
+        return;
+    }
+
+    const titleBase = [brandTitle, seriesTitle].filter(Boolean).join(' ');
+    const titleTail = String(seriesForm.value.tagline || seriesForm.value.short_description || '').trim();
+    seriesForm.value.seo_title = compactText([titleBase, titleTail].filter(Boolean).join(' — '), 68);
+
+    const descriptionParts = buildSeriesSeoDescriptionSource();
+    const fallbackFeatures = suggestedSeriesFeatureTitles.value.slice(0, 4).join(', ');
+    const description = descriptionParts.length
+        ? descriptionParts.join(' ')
+        : [titleBase, fallbackFeatures].filter(Boolean).join(': ');
+    seriesForm.value.seo_description = compactText(description, 158);
+    setToast('SEO-черновик собран из описаний');
+};
+
+const buildSeriesSeoPrompt = () => {
+    const payload = {
+        brand: selectedBrand.value?.title || '',
+        series: seriesForm.value.title,
+        tagline: seriesForm.value.tagline,
+        short_description: seriesForm.value.short_description,
+        description: seriesForm.value.description,
+        reusable_features: brandFeatures.value
+            .filter((feature) => seriesForm.value.brandFeatureIds.includes(feature.id))
+            .map((feature) => ({ title: feature.title, text: feature.text || '' })),
+        feature_blocks: seriesForm.value.featureBlocks.map((block) => ({
+            title: block.title,
+            text: block.text,
+        })),
+        content_blocks: seriesForm.value.contentBlocks.map((block) => ({
+            title: block.title,
+            text: block.text,
+        })),
+        current_seo_title: seriesForm.value.seo_title,
+        current_seo_description: seriesForm.value.seo_description,
+    };
+    return [
+        'Ты SEO-редактор интернет-магазина климатической техники.',
+        'Составь SEO title и SEO description для страницы серии кондиционеров на русском языке.',
+        'Правила:',
+        '- Верни только JSON без markdown: {"seo_title":"...","seo_description":"..."}',
+        '- seo_title: до 68 символов, без кликбейта, бренд и серия должны быть в начале.',
+        '- seo_description: до 158 символов, живая польза серии, без выдуманных характеристик.',
+        '- Используй только факты из входных данных.',
+        '- Не перечисляй все фичи, выбери 2-3 самые сильные.',
+        '',
+        'Входные данные:',
+        JSON.stringify(payload, null, 2),
+    ].join('\n');
+};
+
+const prepareSeriesSeoPrompt = async () => {
+    const prompt = buildSeriesSeoPrompt();
+    seoPromptPreview.value = prompt;
+    try {
+        await navigator.clipboard.writeText(prompt);
+        setToast('Промпт для AI скопирован');
+    } catch {
+        setToast('Промпт подготовлен ниже');
+    }
 };
 
 const normalizeFeatureBlocks = (blocks: SeriesFeatureBlockForm[]) => (
@@ -446,6 +643,116 @@ const addGalleryImage = (url = pendingGalleryImage.value) => {
 
 const removeGalleryImage = (index: number) => {
     seriesForm.value.galleryImages.splice(index, 1);
+};
+
+const isBrandFeatureSelected = (featureId: number) => seriesForm.value.brandFeatureIds.includes(featureId);
+
+const toggleBrandFeature = (featureId: number) => {
+    const current = new Set(seriesForm.value.brandFeatureIds);
+    if (current.has(featureId)) {
+        current.delete(featureId);
+    } else {
+        current.add(featureId);
+    }
+    seriesForm.value.brandFeatureIds = [...current];
+};
+
+const resetFeatureDraft = () => {
+    editingBrandFeatureId.value = null;
+    featureDraft.value = {
+        title: '',
+        text: '',
+        image_url: '',
+        icon: '',
+        source_url: '',
+        aliasesText: '',
+    };
+};
+
+const startEditBrandFeature = (feature: ManagerBrandFeature) => {
+    editingBrandFeatureId.value = feature.id;
+    featureDraft.value = {
+        title: String(feature.title || ''),
+        text: String(feature.text || ''),
+        image_url: String(feature.image_url || ''),
+        icon: String(feature.icon || ''),
+        source_url: String(feature.source_url || ''),
+        aliasesText: (feature.aliases || []).join('\n'),
+    };
+};
+
+const saveBrandFeatureFromDraft = async () => {
+    if (!selectedBrandId.value) return;
+    const title = String(featureDraft.value.title || '').trim();
+    if (!title) {
+        seriesError.value = 'Название фичи обязательно.';
+        return;
+    }
+
+    featureSaving.value = true;
+    seriesError.value = '';
+    try {
+        const existingFeature = brandFeatures.value.find((feature) => feature.id === editingBrandFeatureId.value);
+        const payload = {
+            title,
+            text: String(featureDraft.value.text || '').trim() || undefined,
+            image_url: String(featureDraft.value.image_url || '').trim() || undefined,
+            icon: String(featureDraft.value.icon || '').trim() || undefined,
+            source_url: String(featureDraft.value.source_url || '').trim() || undefined,
+            aliases: normalizeTextList(featureDraft.value.aliasesText),
+            is_published: true,
+            sort_order: existingFeature ? Number(existingFeature.sort_order || 0) : getNextSortOrder(brandFeatures.value),
+        };
+
+        if (editingBrandFeatureId.value) {
+            const updated = await api.updateManagerBrandFeature(
+                selectedBrandId.value,
+                editingBrandFeatureId.value,
+                payload,
+            );
+            brandFeatures.value = sortBrandFeatures(
+                brandFeatures.value.map((feature) => (feature.id === updated.id ? updated : feature)),
+            );
+            setToast('Фича обновлена');
+        } else {
+            const created = await api.createManagerBrandFeature(selectedBrandId.value, payload);
+            brandFeatures.value = sortBrandFeatures([...brandFeatures.value, created]);
+            if (created.id && !seriesForm.value.brandFeatureIds.includes(created.id)) {
+                seriesForm.value.brandFeatureIds.push(created.id);
+            }
+            setToast('Фича добавлена в библиотеку');
+        }
+        resetFeatureDraft();
+    } catch (err) {
+        seriesError.value = getApiErrorMessage(err);
+    } finally {
+        featureSaving.value = false;
+    }
+};
+
+const deleteBrandFeature = async (feature: ManagerBrandFeature) => {
+    if (!selectedBrandId.value) return;
+    if (Number(feature.series_count || 0) > 0) {
+        seriesError.value = `Фича "${feature.title}" используется в сериях. Сначала отвяжите ее от серий, затем удалите.`;
+        return;
+    }
+    if (!confirm(`Удалить фичу "${feature.title}" из библиотеки бренда?`)) return;
+
+    featureSaving.value = true;
+    seriesError.value = '';
+    try {
+        await api.deleteManagerBrandFeature(selectedBrandId.value, feature.id);
+        brandFeatures.value = brandFeatures.value.filter((item) => item.id !== feature.id);
+        seriesForm.value.brandFeatureIds = seriesForm.value.brandFeatureIds.filter((id) => id !== feature.id);
+        if (editingBrandFeatureId.value === feature.id) {
+            resetFeatureDraft();
+        }
+        setToast('Фича удалена');
+    } catch (err) {
+        seriesError.value = getApiErrorMessage(err);
+    } finally {
+        featureSaving.value = false;
+    }
 };
 
 const saveBrand = async () => {
@@ -566,6 +873,7 @@ const saveSeries = async () => {
             hero_image: String(seriesForm.value.hero_image || '').trim() || undefined,
             gallery_images: normalizeUrlList(seriesForm.value.galleryImages),
             features: normalizeFeatures(seriesForm.value.featuresText),
+            brand_feature_ids: [...seriesForm.value.brandFeatureIds],
             feature_blocks: normalizeFeatureBlocks(seriesForm.value.featureBlocks),
             content_blocks: normalizeContentBlocks(seriesForm.value.contentBlocks),
             footnotes: normalizeTextList(seriesForm.value.footnotesText),
@@ -581,6 +889,7 @@ const saveSeries = async () => {
             await api.createManagerBrandSeries(selectedBrandId.value, payload);
         }
         await fetchSeries();
+        await fetchBrandFeatures();
         closeSeriesModal();
         setToast(wasEditing ? 'Серия обновлена' : 'Серия создана');
     } catch (err) {
@@ -659,6 +968,7 @@ const deleteSeries = async (series: ManagerBrandSeries) => {
 
 watch(selectedBrandId, () => {
     fetchSeries();
+    fetchBrandFeatures();
 });
 
 onMounted(() => {
@@ -780,265 +1090,280 @@ onMounted(() => {
                                 </span>
                             </td>
                             <td class="py-2 text-right">
-                                <div class="inline-flex items-center gap-1">
+                                <div class="inline-flex items-center justify-end gap-1">
                                     <button
                                         type="button"
-                                        class="px-2.5 py-1 rounded border border-gray-200 dark:border-slate-700 text-xs font-semibold hover:bg-gray-50 dark:hover:bg-slate-700"
-                                        @click.stop="selectBrand(brand)"
-                                    >
-                                        Серии
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="px-2.5 py-1 rounded border border-gray-200 dark:border-slate-700 text-xs font-semibold hover:bg-gray-50 dark:hover:bg-slate-700"
+                                        class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50 hover:text-teal-700 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-teal-200"
+                                        title="Изменить бренд"
+                                        aria-label="Изменить бренд"
                                         @click.stop="openEdit(brand)"
                                     >
-                                        Изменить
+                                        <span class="material-icons-round text-[18px]">edit</span>
                                     </button>
                                     <button
                                         type="button"
-                                        class="px-2.5 py-1 rounded border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 disabled:opacity-50"
+                                        class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 text-red-500 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-950/30"
                                         :disabled="(brand.products_count ?? 0) > 0"
+                                        :title="(brand.products_count ?? 0) > 0 ? 'Нельзя удалить бренд с товарами' : 'Удалить бренд'"
+                                        aria-label="Удалить бренд"
                                         @click.stop="deleteBrand(brand)"
                                     >
-                                        Удалить
+                                        <span class="material-icons-round text-[18px]">delete</span>
                                     </button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr v-if="selectedBrandId === brand.id" class="border-b border-teal-100 bg-teal-50/50 dark:border-teal-900/40 dark:bg-teal-950/10">
+                            <td colspan="6" class="p-0">
+                                <div class="mx-3 my-3 rounded-2xl border border-teal-100 bg-white p-4 shadow-sm dark:border-teal-900/60 dark:bg-slate-900">
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                        <div class="min-w-0">
+                                            <p class="text-xs uppercase tracking-[0.18em] font-bold text-teal-600 dark:text-teal-300">Серии бренда</p>
+                                            <h2 class="text-lg font-bold text-gray-900 dark:text-white">{{ brand.title }}</h2>
+                                            <p v-if="brand.description" class="mt-1 max-w-4xl text-sm text-gray-500 dark:text-slate-400">
+                                                {{ brand.description }}
+                                            </p>
+                                            <p class="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                                                Описания и фичи попадут на брендовые страницы и в блок связанных моделей. Порядок меняется перетаскиванием карточек.
+                                            </p>
+                                        </div>
+                                        <div class="flex shrink-0 flex-wrap items-center gap-2">
+                                            <div v-if="reorderingSeries" class="text-xs font-semibold text-teal-600 dark:text-teal-300">
+                                                Сохраняем порядок...
+                                            </div>
+                                            <button
+                                                type="button"
+                                                class="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-teal-500"
+                                                @click.stop="openSeriesCreate"
+                                            >
+                                                <span class="material-icons-round text-[18px]">add</span>
+                                                Новая серия
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div v-if="seriesError" class="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
+                                        {{ seriesError }}
+                                    </div>
+
+                                    <div v-if="seriesLoading" class="py-6 text-sm text-gray-500 dark:text-slate-400">
+                                        Загрузка серий...
+                                    </div>
+                                    <div v-else-if="seriesItems.length === 0" class="mt-3 rounded-xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500 dark:border-slate-700 dark:text-slate-400">
+                                        У бренда пока нет серий. Можно добавить первую вручную.
+                                    </div>
+                                    <div v-else class="mt-3 space-y-2">
+                                        <article
+                                            v-for="series in seriesItems"
+                                            :key="series.id"
+                                            class="relative rounded-xl border border-gray-200 bg-slate-50 px-3 py-2.5 pr-20 transition-shadow dark:border-slate-700 dark:bg-slate-900/50 lg:pr-3"
+                                            :class="[
+                                                draggedSeriesId === series.id ? 'opacity-50' : '',
+                                                hasSeriesDetails(series) ? 'cursor-pointer lg:cursor-default' : '',
+                                            ]"
+                                            :draggable="!isSeriesReorderDisabled"
+                                            @click="toggleSeriesExpandedFromCard(series)"
+                                            @dragstart="onSeriesDragStart($event, series)"
+                                            @dragover="onSeriesDragOver($event, series)"
+                                            @dragleave="seriesDropTargetId = seriesDropTargetId === series.id ? null : seriesDropTargetId"
+                                            @drop.prevent="onSeriesDrop(series)"
+                                            @dragend="resetSeriesDragState"
+                                        >
+                                            <span
+                                                v-if="seriesDropTargetId === series.id"
+                                                aria-hidden="true"
+                                                class="pointer-events-none absolute -top-2 left-3 right-3 h-1 rounded-full bg-teal-400 shadow-[0_0_18px_rgba(20,184,166,0.75)] dark:bg-teal-300"
+                                            />
+                                            <div class="absolute right-2 top-2 z-10 inline-flex items-center gap-1 lg:hidden" @click.stop>
+                                                <button
+                                                    type="button"
+                                                    class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white/85 text-gray-600 shadow-sm backdrop-blur hover:text-teal-700 dark:border-slate-700 dark:bg-slate-900/85 dark:text-slate-300 dark:hover:text-teal-200"
+                                                    title="Изменить серию"
+                                                    aria-label="Изменить серию"
+                                                    @click.stop="openSeriesEdit(series)"
+                                                >
+                                                    <span class="material-icons-round text-[18px]">edit</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-white/85 text-red-500 shadow-sm backdrop-blur hover:bg-red-50 disabled:opacity-40 dark:border-red-900/60 dark:bg-slate-900/85 dark:hover:bg-red-950/30"
+                                                    :disabled="(series.products_count ?? 0) > 0"
+                                                    title="Удалить серию"
+                                                    aria-label="Удалить серию"
+                                                    @click.stop="deleteSeries(series)"
+                                                >
+                                                    <span class="material-icons-round text-[18px]">delete</span>
+                                                </button>
+                                            </div>
+                                            <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
+                                                <div class="flex min-w-0 flex-1 items-start gap-2">
+                                                    <button
+                                                        type="button"
+                                                        class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 text-gray-400 transition-colors dark:border-slate-700 dark:text-slate-500"
+                                                        :class="isSeriesReorderDisabled ? 'cursor-not-allowed opacity-40' : 'cursor-grab hover:bg-white hover:text-teal-600 active:cursor-grabbing dark:hover:bg-slate-800 dark:hover:text-teal-300'"
+                                                        :disabled="isSeriesReorderDisabled"
+                                                        title="Перетащите серию выше или ниже"
+                                                        @click.stop
+                                                    >
+                                                        <span class="material-icons-round text-[22px]">drag_indicator</span>
+                                                    </button>
+                                                    <img
+                                                        v-if="series.hero_image"
+                                                        :src="series.hero_image"
+                                                        :alt="series.title"
+                                                        class="h-10 w-10 shrink-0 rounded-lg border border-gray-200 bg-white object-cover dark:border-slate-700"
+                                                    />
+                                                    <div class="min-w-0 flex-1">
+                                                        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                                            <h3 class="min-w-0 break-words font-bold leading-tight text-gray-900 dark:text-slate-100">{{ series.title }}</h3>
+                                                            <span
+                                                                class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
+                                                                :class="series.is_published ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-300'"
+                                                            >
+                                                                {{ series.is_published ? 'Публичная' : 'Скрыта' }}
+                                                            </span>
+                                                            <span class="text-xs text-gray-500 dark:text-slate-400">{{ series.products_count }} товаров</span>
+                                                        </div>
+                                                        <p class="text-xs font-mono text-gray-500 dark:text-slate-400">{{ series.slug }}</p>
+                                                        <p v-if="series.tagline" class="mt-0.5 text-sm font-semibold text-gray-700 dark:text-slate-200">
+                                                            {{ series.tagline }}
+                                                        </p>
+                                                        <p v-else-if="series.short_description" class="mt-0.5 line-clamp-2 text-sm text-gray-500 dark:text-slate-400">
+                                                            {{ series.short_description }}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div v-if="series.features?.length && !isSeriesExpanded(series.id)" class="flex min-w-0 flex-1 flex-wrap gap-1.5 lg:max-w-[34%]">
+                                                    <span
+                                                        v-for="feature in series.features.slice(0, 3)"
+                                                        :key="feature"
+                                                        class="rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700 dark:border-teal-900/60 dark:bg-teal-950/30 dark:text-teal-200"
+                                                    >
+                                                        {{ feature }}
+                                                    </span>
+                                                    <span
+                                                        v-if="series.features.length > 3"
+                                                        class="rounded-full border border-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-500 dark:border-slate-700 dark:text-slate-400"
+                                                    >
+                                                        +{{ series.features.length - 3 }}
+                                                    </span>
+                                                </div>
+                                                <div class="hidden shrink-0 items-center gap-1 lg:inline-flex">
+                                                    <button
+                                                        v-if="hasSeriesDetails(series)"
+                                                        type="button"
+                                                        class="inline-flex items-center gap-1 rounded border border-gray-200 px-2.5 py-1 text-xs font-semibold hover:bg-white dark:border-slate-700 dark:hover:bg-slate-800"
+                                                        :aria-expanded="isSeriesExpanded(series.id)"
+                                                        @click.stop="toggleSeriesExpanded(series.id)"
+                                                    >
+                                                        <span class="material-icons-round text-[16px]">
+                                                            {{ isSeriesExpanded(series.id) ? 'expand_less' : 'expand_more' }}
+                                                        </span>
+                                                        Детали
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        class="rounded border border-gray-200 px-2.5 py-1 text-xs font-semibold hover:bg-white dark:border-slate-700 dark:hover:bg-slate-800"
+                                                        @click.stop="openSeriesEdit(series)"
+                                                    >
+                                                        Изменить
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        class="rounded border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                                        :disabled="(series.products_count ?? 0) > 0"
+                                                        @click.stop="deleteSeries(series)"
+                                                    >
+                                                        Удалить
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div
+                                                v-if="!isSeriesExpanded(series.id)"
+                                                class="mt-2 flex flex-wrap gap-1.5 text-[11px] font-semibold"
+                                            >
+                                                <span
+                                                    v-if="series.gallery_images?.length"
+                                                    class="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700 dark:bg-blue-950/30 dark:text-blue-200"
+                                                >
+                                                    галерея {{ series.gallery_images.length }}
+                                                </span>
+                                                <span
+                                                    v-if="series.brand_features?.length"
+                                                    class="rounded-full bg-indigo-50 px-2 py-0.5 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-200"
+                                                >
+                                                    из библиотеки {{ series.brand_features.length }}
+                                                </span>
+                                                <span
+                                                    v-if="series.feature_blocks?.length"
+                                                    class="rounded-full bg-purple-50 px-2 py-0.5 text-purple-700 dark:bg-purple-950/30 dark:text-purple-200"
+                                                >
+                                                    преимущества {{ series.feature_blocks.length }}
+                                                </span>
+                                                <span
+                                                    v-if="series.content_blocks?.length"
+                                                    class="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700 dark:bg-amber-950/30 dark:text-amber-200"
+                                                >
+                                                    контент {{ series.content_blocks.length }}
+                                                </span>
+                                                <span
+                                                    v-if="series.seo_title || series.seo_description"
+                                                    class="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-200"
+                                                >
+                                                    SEO
+                                                </span>
+                                            </div>
+                                            <div
+                                                v-if="isSeriesExpanded(series.id)"
+                                                class="mt-2 border-t border-gray-200 pt-2 text-sm text-gray-600 dark:border-slate-700 dark:text-slate-300"
+                                            >
+                                                <p v-if="series.tagline" class="font-semibold text-gray-800 dark:text-slate-100">
+                                                    {{ series.tagline }}
+                                                </p>
+                                                <p v-if="series.short_description" class="mt-1">
+                                                    {{ series.short_description }}
+                                                </p>
+                                                <p v-if="series.description">
+                                                    {{ series.description }}
+                                                </p>
+                                                <div v-if="series.features?.length" class="mt-2 flex flex-wrap gap-1.5">
+                                                    <span
+                                                        v-for="feature in series.features"
+                                                        :key="feature"
+                                                        class="rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700 dark:border-teal-900/60 dark:bg-teal-950/30 dark:text-teal-200"
+                                                    >
+                                                        {{ feature }}
+                                                    </span>
+                                                </div>
+                                                <div v-if="series.brand_features?.length" class="mt-2 grid gap-1.5 sm:grid-cols-2">
+                                                    <div
+                                                        v-for="feature in series.brand_features"
+                                                        :key="`${series.id}-brand-feature-${feature.id}`"
+                                                        class="rounded-lg border border-indigo-100 bg-indigo-50/60 px-2 py-1.5 text-xs dark:border-indigo-900/60 dark:bg-indigo-950/20"
+                                                    >
+                                                        <span class="font-semibold text-indigo-800 dark:text-indigo-100">{{ feature.title }}</span>
+                                                        <p v-if="feature.text" class="mt-0.5 line-clamp-2 text-indigo-700/70 dark:text-indigo-200/70">{{ feature.text }}</p>
+                                                    </div>
+                                                </div>
+                                                <div v-if="series.feature_blocks?.length" class="mt-2 grid gap-1.5 sm:grid-cols-2">
+                                                    <div
+                                                        v-for="block in series.feature_blocks"
+                                                        :key="`${series.id}-${block.title}`"
+                                                        class="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+                                                    >
+                                                        <span class="font-semibold text-gray-800 dark:text-slate-100">{{ block.title }}</span>
+                                                        <p v-if="block.text" class="mt-0.5 text-gray-500 dark:text-slate-400">{{ block.text }}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </article>
+                                    </div>
                                 </div>
                             </td>
                         </tr>
                         </template>
                     </tbody>
                 </table>
-            </div>
-        </div>
-
-        <div class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800/70 p-4 space-y-4">
-            <div class="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-                <div>
-                    <p class="text-xs uppercase tracking-[0.18em] font-bold text-teal-600 dark:text-teal-300">Серии бренда</p>
-                    <h2 class="text-lg font-bold text-gray-900 dark:text-white">
-                        {{ selectedBrand ? selectedBrand.title : 'Выберите бренд' }}
-                    </h2>
-                    <p class="text-sm text-gray-500 dark:text-slate-400">
-                        Описания и фичи попадут на брендовые страницы и в блок связанных моделей. Порядок меняется перетаскиванием карточек.
-                    </p>
-                </div>
-                <div v-if="reorderingSeries" class="text-xs font-semibold text-teal-600 dark:text-teal-300">
-                    Сохраняем порядок серий...
-                </div>
-                <button
-                    type="button"
-                    class="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-500 transition-all disabled:opacity-50"
-                    :disabled="!selectedBrand"
-                    @click="openSeriesCreate"
-                >
-                    <span class="material-icons-round text-[18px]">add</span>
-                    Новая серия
-                </button>
-            </div>
-
-            <div v-if="seriesError" class="rounded-lg border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-700 dark:text-red-300">
-                {{ seriesError }}
-            </div>
-
-            <div v-if="!selectedBrand" class="py-6 text-sm text-gray-500 dark:text-slate-400">
-                Выберите бренд в таблице выше.
-            </div>
-            <div v-else-if="seriesLoading" class="py-6 text-sm text-gray-500 dark:text-slate-400">
-                Загрузка серий...
-            </div>
-            <div v-else-if="seriesItems.length === 0" class="rounded-xl border border-dashed border-gray-300 dark:border-slate-700 px-4 py-8 text-sm text-gray-500 dark:text-slate-400">
-                У бренда пока нет серий. Можно добавить первую вручную.
-            </div>
-            <div v-else class="space-y-2">
-                <article
-                    v-for="series in seriesItems"
-                    :key="series.id"
-                    class="relative rounded-xl border border-gray-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 px-3 py-2.5 pr-20 transition-shadow lg:pr-3"
-                    :class="[
-                        draggedSeriesId === series.id ? 'opacity-50' : '',
-                        hasSeriesDetails(series) ? 'cursor-pointer lg:cursor-default' : '',
-                    ]"
-                    :draggable="!isSeriesReorderDisabled"
-                    @click="toggleSeriesExpandedFromCard(series)"
-                    @dragstart="onSeriesDragStart($event, series)"
-                    @dragover="onSeriesDragOver($event, series)"
-                    @dragleave="seriesDropTargetId = seriesDropTargetId === series.id ? null : seriesDropTargetId"
-                    @drop.prevent="onSeriesDrop(series)"
-                    @dragend="resetSeriesDragState"
-                >
-                    <span
-                        v-if="seriesDropTargetId === series.id"
-                        aria-hidden="true"
-                        class="pointer-events-none absolute -top-2 left-3 right-3 h-1 rounded-full bg-teal-400 shadow-[0_0_18px_rgba(20,184,166,0.75)] dark:bg-teal-300"
-                    />
-                    <div class="absolute right-2 top-2 z-10 inline-flex items-center gap-1 lg:hidden" @click.stop>
-                        <button
-                            type="button"
-                            class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white/85 text-gray-600 shadow-sm backdrop-blur hover:text-teal-700 dark:border-slate-700 dark:bg-slate-900/85 dark:text-slate-300 dark:hover:text-teal-200"
-                            title="Изменить серию"
-                            aria-label="Изменить серию"
-                            @click.stop="openSeriesEdit(series)"
-                        >
-                            <span class="material-icons-round text-[18px]">edit</span>
-                        </button>
-                        <button
-                            type="button"
-                            class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-white/85 text-red-500 shadow-sm backdrop-blur hover:bg-red-50 disabled:opacity-40 dark:border-red-900/60 dark:bg-slate-900/85 dark:hover:bg-red-950/30"
-                            :disabled="(series.products_count ?? 0) > 0"
-                            title="Удалить серию"
-                            aria-label="Удалить серию"
-                            @click.stop="deleteSeries(series)"
-                        >
-                            <span class="material-icons-round text-[18px]">delete</span>
-                        </button>
-                    </div>
-                    <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
-                        <div class="flex min-w-0 flex-1 items-start gap-2">
-                            <button
-                                type="button"
-                                class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 dark:border-slate-700 text-gray-400 dark:text-slate-500 transition-colors"
-                                :class="isSeriesReorderDisabled ? 'cursor-not-allowed opacity-40' : 'cursor-grab hover:bg-white hover:text-teal-600 dark:hover:bg-slate-800 dark:hover:text-teal-300 active:cursor-grabbing'"
-                                :disabled="isSeriesReorderDisabled"
-                                title="Перетащите серию выше или ниже"
-                                @click.stop
-                            >
-                                <span class="material-icons-round text-[22px]">drag_indicator</span>
-                            </button>
-                            <img
-                                v-if="series.hero_image"
-                                :src="series.hero_image"
-                                :alt="series.title"
-                                class="h-10 w-10 shrink-0 rounded-lg object-cover border border-gray-200 dark:border-slate-700 bg-white"
-                            />
-                            <div class="min-w-0 flex-1">
-                                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                    <h3 class="min-w-0 break-words font-bold leading-tight text-gray-900 dark:text-slate-100">{{ series.title }}</h3>
-                                    <span
-                                        class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
-                                        :class="series.is_published ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-300'"
-                                    >
-                                        {{ series.is_published ? 'Публичная' : 'Скрыта' }}
-                                    </span>
-                                    <span class="text-xs text-gray-500 dark:text-slate-400">{{ series.products_count }} товаров</span>
-                                </div>
-                                <p class="text-xs font-mono text-gray-500 dark:text-slate-400">{{ series.slug }}</p>
-                                <p v-if="series.tagline" class="mt-0.5 text-sm font-semibold text-gray-700 dark:text-slate-200">
-                                    {{ series.tagline }}
-                                </p>
-                                <p v-else-if="series.short_description" class="mt-0.5 line-clamp-2 text-sm text-gray-500 dark:text-slate-400">
-                                    {{ series.short_description }}
-                                </p>
-                            </div>
-                        </div>
-                        <div v-if="series.features?.length && !isSeriesExpanded(series.id)" class="flex min-w-0 flex-1 flex-wrap gap-1.5 lg:max-w-[34%]">
-                            <span
-                                v-for="feature in series.features.slice(0, 3)"
-                                :key="feature"
-                                class="rounded-full border border-teal-200 dark:border-teal-900/60 bg-teal-50 dark:bg-teal-950/30 px-2 py-0.5 text-xs font-semibold text-teal-700 dark:text-teal-200"
-                            >
-                                {{ feature }}
-                            </span>
-                            <span
-                                v-if="series.features.length > 3"
-                                class="rounded-full border border-gray-200 dark:border-slate-700 px-2 py-0.5 text-xs font-semibold text-gray-500 dark:text-slate-400"
-                            >
-                                +{{ series.features.length - 3 }}
-                            </span>
-                        </div>
-                        <div class="hidden shrink-0 items-center gap-1 lg:inline-flex">
-                            <button
-                                v-if="hasSeriesDetails(series)"
-                                type="button"
-                                class="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-gray-200 dark:border-slate-700 text-xs font-semibold hover:bg-white dark:hover:bg-slate-800"
-                                :aria-expanded="isSeriesExpanded(series.id)"
-                                @click.stop="toggleSeriesExpanded(series.id)"
-                            >
-                                <span class="material-icons-round text-[16px]">
-                                    {{ isSeriesExpanded(series.id) ? 'expand_less' : 'expand_more' }}
-                                </span>
-                                Детали
-                            </button>
-                            <button
-                                type="button"
-                                class="px-2.5 py-1 rounded border border-gray-200 dark:border-slate-700 text-xs font-semibold hover:bg-white dark:hover:bg-slate-800"
-                                @click.stop="openSeriesEdit(series)"
-                            >
-                                Изменить
-                            </button>
-                            <button
-                                type="button"
-                                class="px-2.5 py-1 rounded border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 disabled:opacity-50"
-                                :disabled="(series.products_count ?? 0) > 0"
-                                @click.stop="deleteSeries(series)"
-                            >
-                                Удалить
-                            </button>
-                        </div>
-                    </div>
-                    <div
-                        v-if="!isSeriesExpanded(series.id)"
-                        class="mt-2 flex flex-wrap gap-1.5 text-[11px] font-semibold"
-                    >
-                        <span
-                            v-if="series.gallery_images?.length"
-                            class="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700 dark:bg-blue-950/30 dark:text-blue-200"
-                        >
-                            галерея {{ series.gallery_images.length }}
-                        </span>
-                        <span
-                            v-if="series.feature_blocks?.length"
-                            class="rounded-full bg-purple-50 px-2 py-0.5 text-purple-700 dark:bg-purple-950/30 dark:text-purple-200"
-                        >
-                            преимущества {{ series.feature_blocks.length }}
-                        </span>
-                        <span
-                            v-if="series.content_blocks?.length"
-                            class="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700 dark:bg-amber-950/30 dark:text-amber-200"
-                        >
-                            контент {{ series.content_blocks.length }}
-                        </span>
-                        <span
-                            v-if="series.seo_title || series.seo_description"
-                            class="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-200"
-                        >
-                            SEO
-                        </span>
-                    </div>
-                    <div
-                        v-if="isSeriesExpanded(series.id)"
-                        class="mt-2 border-t border-gray-200 dark:border-slate-700 pt-2 text-sm text-gray-600 dark:text-slate-300"
-                    >
-                        <p v-if="series.tagline" class="font-semibold text-gray-800 dark:text-slate-100">
-                            {{ series.tagline }}
-                        </p>
-                        <p v-if="series.short_description" class="mt-1">
-                            {{ series.short_description }}
-                        </p>
-                        <p v-if="series.description">
-                            {{ series.description }}
-                        </p>
-                        <div v-if="series.features?.length" class="mt-2 flex flex-wrap gap-1.5">
-                            <span
-                                v-for="feature in series.features"
-                                :key="feature"
-                                class="rounded-full border border-teal-200 dark:border-teal-900/60 bg-teal-50 dark:bg-teal-950/30 px-2 py-0.5 text-xs font-semibold text-teal-700 dark:text-teal-200"
-                            >
-                                {{ feature }}
-                            </span>
-                        </div>
-                        <div v-if="series.feature_blocks?.length" class="mt-2 grid gap-1.5 sm:grid-cols-2">
-                            <div
-                                v-for="block in series.feature_blocks"
-                                :key="`${series.id}-${block.title}`"
-                                class="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
-                            >
-                                <span class="font-semibold text-gray-800 dark:text-slate-100">{{ block.title }}</span>
-                                <p v-if="block.text" class="mt-0.5 text-gray-500 dark:text-slate-400">{{ block.text }}</p>
-                            </div>
-                        </div>
-                    </div>
-                </article>
             </div>
         </div>
 
@@ -1222,9 +1547,186 @@ onMounted(() => {
                                 Блок
                             </button>
                         </div>
+                        <div class="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-3 dark:border-indigo-900/60 dark:bg-indigo-950/20">
+                            <div class="mb-3 flex flex-wrap items-start justify-between gap-2">
+                                <div>
+                                    <h4 class="text-sm font-semibold text-gray-800 dark:text-slate-100">Библиотека фич бренда</h4>
+                                    <p class="text-xs text-gray-500 dark:text-slate-400">
+                                        Переиспользуемые блоки для нескольких серий. Выбрано: {{ selectedBrandFeatureCount }}.
+                                    </p>
+                                </div>
+                                <span v-if="brandFeaturesLoading" class="text-xs font-semibold text-indigo-700 dark:text-indigo-200">Загрузка...</span>
+                            </div>
+                            <div v-if="brandFeatures.length" class="grid gap-2 md:grid-cols-2">
+                                <article
+                                    v-for="feature in brandFeatures"
+                                    :key="feature.id"
+                                    class="min-h-[88px] rounded-xl border px-3 py-2 transition"
+                                    :class="isBrandFeatureSelected(feature.id)
+                                        ? 'border-indigo-300 bg-white shadow-sm dark:border-indigo-700 dark:bg-slate-900'
+                                        : 'border-white/70 bg-white/70 hover:border-indigo-200 dark:border-slate-800 dark:bg-slate-900/50 dark:hover:border-indigo-800'"
+                                >
+                                    <div class="flex items-start gap-2">
+                                        <button
+                                            type="button"
+                                            class="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border text-[14px]"
+                                            :class="isBrandFeatureSelected(feature.id)
+                                                ? 'border-indigo-500 bg-indigo-600 text-white'
+                                                : 'border-gray-300 text-transparent hover:border-indigo-300 dark:border-slate-600'"
+                                            :aria-pressed="isBrandFeatureSelected(feature.id)"
+                                            @click="toggleBrandFeature(feature.id)"
+                                        >
+                                            <span class="material-icons-round text-[15px]">check</span>
+                                        </button>
+                                        <span
+                                            v-if="feature.icon"
+                                            class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200"
+                                            :title="feature.icon"
+                                        >
+                                            <span class="material-icons-round text-[18px]">{{ feature.icon }}</span>
+                                        </span>
+                                        <button type="button" class="min-w-0 flex-1 text-left" @click="toggleBrandFeature(feature.id)">
+                                            <span class="block truncate text-sm font-semibold text-gray-900 dark:text-slate-100">{{ feature.title }}</span>
+                                            <span v-if="feature.text" class="mt-0.5 line-clamp-2 text-xs text-gray-500 dark:text-slate-400">{{ feature.text }}</span>
+                                            <span v-if="feature.aliases?.length" class="mt-1 block truncate text-[11px] text-indigo-700/70 dark:text-indigo-200/70">
+                                                {{ feature.aliases.join(', ') }}
+                                            </span>
+                                            <span v-if="Number(feature.series_count || 0) > 0" class="mt-1 block text-[11px] font-semibold text-gray-500 dark:text-slate-400">
+                                                Используется в сериях: {{ feature.series_count }}
+                                            </span>
+                                        </button>
+                                        <div class="flex shrink-0 items-center gap-1">
+                                            <button
+                                                type="button"
+                                                class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-indigo-50 hover:text-indigo-700 dark:text-slate-400 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-200"
+                                                title="Редактировать фичу"
+                                                @click.stop="startEditBrandFeature(feature)"
+                                            >
+                                                <span class="material-icons-round text-[17px]">edit</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-400 dark:hover:bg-red-950/30 dark:hover:text-red-300"
+                                                :disabled="featureSaving || Number(feature.series_count || 0) > 0"
+                                                :title="Number(feature.series_count || 0) > 0 ? 'Сначала отвяжите фичу от серий' : 'Удалить фичу'"
+                                                @click.stop="deleteBrandFeature(feature)"
+                                            >
+                                                <span class="material-icons-round text-[17px]">delete</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </article>
+                            </div>
+                            <p v-else class="rounded-xl border border-dashed border-indigo-200 px-3 py-3 text-sm text-gray-500 dark:border-indigo-900/60 dark:text-slate-400">
+                                У бренда пока нет reusable-фич.
+                            </p>
+                            <div class="mt-3 border-t border-indigo-100 pt-3 dark:border-indigo-900/60">
+                                <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                    <div>
+                                        <h5 class="text-xs font-bold uppercase tracking-[0.14em] text-indigo-800 dark:text-indigo-200">
+                                            {{ isEditingBrandFeature ? 'Редактирование фичи' : 'Новая фича бренда' }}
+                                        </h5>
+                                        <p class="text-[11px] text-gray-500 dark:text-slate-400">
+                                            Иконка выбирается из Material Icons, это не ссылка и не файл.
+                                        </p>
+                                    </div>
+                                    <button
+                                        v-if="isEditingBrandFeature"
+                                        type="button"
+                                        class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-white dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900"
+                                        :disabled="featureSaving"
+                                        @click="resetFeatureDraft"
+                                    >
+                                        <span class="material-icons-round text-[16px]">close</span>
+                                        Отменить
+                                    </button>
+                                </div>
+                                <div class="grid gap-2 lg:grid-cols-[1fr_1fr_auto]">
+                                <input
+                                    v-model="featureDraft.title"
+                                    type="text"
+                                    class="rounded-lg border border-indigo-100 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+                                    placeholder="Фича: Gentle Breeze"
+                                />
+                                <input
+                                    v-model="featureDraft.text"
+                                    type="text"
+                                    class="rounded-lg border border-indigo-100 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+                                    placeholder="Короткое описание"
+                                />
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center justify-center gap-1 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                                    :disabled="featureSaving"
+                                    @click="saveBrandFeatureFromDraft"
+                                >
+                                    <span class="material-icons-round text-[16px]">{{ isEditingBrandFeature ? 'save' : 'library_add' }}</span>
+                                    {{ featureSaving ? 'Сохраняем...' : (isEditingBrandFeature ? 'Сохранить' : 'Создать') }}
+                                </button>
+                                <MediaField
+                                    v-model="featureDraft.image_url"
+                                    label="Изображение фичи"
+                                    kind="brand"
+                                    :tags="['brand-feature']"
+                                    accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg"
+                                    placeholder="/media/library/original/brand-feature.webp"
+                                />
+                                <IconPicker
+                                    v-model="featureDraft.icon"
+                                    class="lg:col-span-3"
+                                    :options="featureIconOptions"
+                                    label="Иконка"
+                                    tone="indigo"
+                                />
+                                <label class="lg:col-span-3 rounded-lg border border-indigo-100 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900">
+                                    <span class="mb-1 block text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-slate-500">Источник</span>
+                                    <input
+                                        v-model="featureDraft.source_url"
+                                        type="url"
+                                        class="w-full bg-transparent text-sm outline-none"
+                                        placeholder="URL страницы производителя или материала"
+                                    />
+                                    <span class="mt-1 block text-[11px] text-gray-500 dark:text-slate-400">
+                                        Служебная ссылка на первоисточник фичи: откуда взяли описание, цифры или картинку. На сайте не выводится.
+                                    </span>
+                                </label>
+                                <textarea
+                                    v-model="featureDraft.aliasesText"
+                                    rows="2"
+                                    class="lg:col-span-3 rounded-lg border border-indigo-100 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+                                    placeholder="Синонимы, по одному на строку"
+                                />
+                                </div>
+                            </div>
+                        </div>
                         <label class="text-sm space-y-1 block">
-                            <span class="text-gray-600 dark:text-slate-300 font-medium">Фичи серии</span>
+                            <span class="flex flex-wrap items-center justify-between gap-2">
+                                <span>
+                                    <span class="block text-gray-600 dark:text-slate-300 font-medium">Фичи серии</span>
+                                    <span class="block text-xs text-gray-500 dark:text-slate-400">
+                                        Короткие legacy-чипсы для карточек. Можно собрать из выбранных фич бренда, преимуществ и контентных секций.
+                                    </span>
+                                </span>
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-40 dark:border-indigo-900/60 dark:text-indigo-200 dark:hover:bg-indigo-950/30"
+                                    :disabled="suggestedSeriesFeatureTitles.length === 0"
+                                    @click="syncSeriesFeaturesFromStructuredBlocks"
+                                >
+                                    <span class="material-icons-round text-[15px]">auto_fix_high</span>
+                                    Собрать из блоков
+                                </button>
+                            </span>
                             <textarea v-model="seriesForm.featuresText" rows="3" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" placeholder="Одна фича на строку" />
+                            <span v-if="suggestedSeriesFeatureTitles.length" class="flex flex-wrap gap-1.5">
+                                <span
+                                    v-for="title in suggestedSeriesFeatureTitles"
+                                    :key="`suggested-feature-${title}`"
+                                    class="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-200"
+                                >
+                                    {{ title }}
+                                </span>
+                            </span>
                         </label>
                         <div v-if="seriesForm.featureBlocks.length" class="space-y-3">
                             <div
@@ -1243,10 +1745,15 @@ onMounted(() => {
                                         <span class="text-gray-600 dark:text-slate-300 font-medium">Заголовок</span>
                                         <input v-model="block.title" type="text" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
                                     </label>
-                                    <label class="text-sm space-y-1">
+                                    <div class="text-sm space-y-1 md:col-span-2">
                                         <span class="text-gray-600 dark:text-slate-300 font-medium">Иконка</span>
-                                        <input v-model="block.icon" type="text" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" placeholder="air / bolt / self_cleaning" />
-                                    </label>
+                                        <IconPicker
+                                            v-model="block.icon"
+                                            :options="featureIconOptions"
+                                            label="Иконка блока"
+                                            tone="teal"
+                                        />
+                                    </div>
                                     <MediaField
                                         v-model="block.image_url"
                                         label="Изображение"
@@ -1335,9 +1842,36 @@ onMounted(() => {
                     <section class="grid grid-cols-1 lg:grid-cols-2 gap-4 border-t border-gray-200 pt-4 dark:border-slate-700">
                         <label class="text-sm space-y-1 block">
                             <span class="text-gray-600 dark:text-slate-300 font-medium">Сноски</span>
+                            <span class="block text-xs text-gray-500 dark:text-slate-400">
+                                Мелкие примечания внизу страницы серии: условия сравнения, ограничения функций, ссылки на испытания. Одна сноска на строку.
+                            </span>
                             <textarea v-model="seriesForm.footnotesText" rows="4" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" placeholder="Одна сноска на строку" />
                         </label>
                         <div class="space-y-3">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <h3 class="text-sm font-semibold text-gray-700 dark:text-slate-200">SEO</h3>
+                                    <p class="text-xs text-gray-500 dark:text-slate-400">Черновик можно собрать из описания и фич, а промпт отдать DeepSeek.</p>
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-1 rounded-lg border border-teal-200 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50 dark:border-teal-900/60 dark:text-teal-200 dark:hover:bg-teal-950/30"
+                                        @click="generateSeriesSeoDraft"
+                                    >
+                                        <span class="material-icons-round text-[15px]">auto_awesome</span>
+                                        SEO из контента
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 dark:border-indigo-900/60 dark:text-indigo-200 dark:hover:bg-indigo-950/30"
+                                        @click="prepareSeriesSeoPrompt"
+                                    >
+                                        <span class="material-icons-round text-[15px]">content_copy</span>
+                                        Промпт для AI
+                                    </button>
+                                </div>
+                            </div>
                             <label class="text-sm space-y-1 block">
                                 <span class="text-gray-600 dark:text-slate-300 font-medium">SEO title</span>
                                 <input v-model="seriesForm.seo_title" type="text" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
@@ -1345,6 +1879,15 @@ onMounted(() => {
                             <label class="text-sm space-y-1 block">
                                 <span class="text-gray-600 dark:text-slate-300 font-medium">SEO description</span>
                                 <textarea v-model="seriesForm.seo_description" rows="3" class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900" />
+                            </label>
+                            <label v-if="seoPromptPreview" class="text-sm space-y-1 block">
+                                <span class="text-gray-600 dark:text-slate-300 font-medium">Промпт для DeepSeek</span>
+                                <textarea
+                                    v-model="seoPromptPreview"
+                                    rows="5"
+                                    class="w-full px-3 py-2 rounded-lg border border-indigo-100 dark:border-indigo-900/60 bg-indigo-50/40 dark:bg-indigo-950/20 text-xs"
+                                    readonly
+                                />
                             </label>
                         </div>
                     </section>

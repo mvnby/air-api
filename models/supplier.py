@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, ForeignKeyConstraint, Numeric, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKeyConstraint, JSON, Numeric, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -71,6 +71,11 @@ class SupplierOffer(SQLModel, table=True):
     external_id: str = Field(index=True)
 
     title_raw: Optional[str] = None
+    title_normalized: Optional[str] = Field(default=None, index=True)
+    model_tokens: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    indoor_model_tokens: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    outdoor_model_tokens: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    match_normalizer_version: Optional[str] = Field(default=None, index=True)
     qty_raw: Optional[str] = None
     wholesale_raw: Optional[str] = None
     rrc_raw: Optional[str] = None

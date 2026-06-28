@@ -28,7 +28,7 @@ async def test_manager_supplier_sync_and_mapping_flow(async_client, db, monkeypa
         def read_sheet_values(self, spreadsheet_id: str, **kwargs):
             return [
                 ["sku", "title", "wholesale", "currency", "rrc", "qty"],
-                ["SKU-1", "Split AC", "479", "USD", "2670", "5"],
+                ["SKU-1", "Split AC MDSAG-09HRFN8", "479", "USD", "2670", "5"],
             ]
 
     from services import supplier_mapping_service, supplier_sync_service
@@ -85,8 +85,11 @@ async def test_manager_supplier_sync_and_mapping_flow(async_client, db, monkeypa
     )
     assert unmapped_by_source.status_code == 200
     assert len(unmapped_by_source.json()["items"]) >= 1
+    offer_item = unmapped_by_source.json()["items"][0]
+    assert offer_item["title_normalized"] == "split ac mdsag-09hrfn8"
+    assert "MDSAG-09HRFN8" in offer_item["model_tokens"]
 
-    product = Product(title="Split AC", slug="mapped-ac", price=3000, area=25)
+    product = Product(title="Split AC MDSAG-09HRFN8", slug="mapped-ac", price=3000, area=25)
     db.add(product)
     await db.commit()
     await db.refresh(product)
@@ -96,12 +99,13 @@ async def test_manager_supplier_sync_and_mapping_flow(async_client, db, monkeypa
         "/api/manager/supplier-offers/suggestions",
         headers=headers,
         json={
-            "items": [{"supplier_id": supplier_id, "external_id": "SKU-1", "title_raw": "Split AC"}],
+            "items": [{"supplier_id": supplier_id, "external_id": "SKU-1", "title_raw": "Split AC MDSAG-09HRFN8"}],
             "limit_per_offer": 5,
         },
     )
     assert suggestions.status_code == 200
     assert suggestions.json()["items"][0]["auto_eligible"] is True
+    assert suggestions.json()["items"][0]["offer_tokens"] == ["MDSAG-09HRFN8"]
 
     create_mapping = await async_client.post(
         "/api/manager/supplier-mappings",

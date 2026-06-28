@@ -21,6 +21,18 @@ const inlineSearchQuery = ref<Record<string, string>>({});
 const inlineCandidates = ref<Record<string, any[]>>({});
 
 const keyOf = (offer: any) => `${offer.supplier_id}:${offer.external_id}`;
+const readyToApplyCount = computed(() => Object.keys(bulkSelection.value).filter((k) => bulkSelection.value[k] && selectedProductMap.value[k]).length);
+
+const normalizeCandidate = (candidate: any) => ({
+  ...candidate,
+  id: candidate?.id ?? candidate?.product_id,
+});
+
+const confidenceClass = (confidence: number) => {
+  if (confidence >= 75) return 'bg-green-50 text-green-700 border-green-200';
+  if (confidence >= 45) return 'bg-amber-50 text-amber-700 border-amber-200';
+  return 'bg-gray-50 text-gray-600 border-gray-200';
+};
 
 const setToast = (message: string) => {
   toast.value = message;
@@ -71,7 +83,7 @@ const runSuggestions = async (offers: any[]) => {
       const key = `${row.supplier_id}:${row.external_id}`;
       suggestionMap.value[key] = row;
       inlineSearchQuery.value[key] = row.normalized_query || '';
-      inlineCandidates.value[key] = row.candidates || [];
+      inlineCandidates.value[key] = (row.candidates || []).map(normalizeCandidate);
       if (row.auto_eligible && row.candidates?.length === 1) {
         const candidate = row.candidates?.[0];
         selectedProductMap.value[key] = candidate ? candidate.product_id : null;
@@ -102,7 +114,7 @@ const searchInline = async (offer: any) => {
   const q = (inlineSearchQuery.value[key] || '').trim();
   if (!q) return;
   try {
-    inlineCandidates.value[key] = await api.smartSearchProducts(q, 20);
+    inlineCandidates.value[key] = (await api.smartSearchProducts(q, 20)).map(normalizeCandidate);
     suggestionMap.value[key] = {
       ...(suggestionMap.value[key] || {}),
       auto_eligible: inlineCandidates.value[key].length === 1,
@@ -217,7 +229,7 @@ onMounted(async () => {
         </button>
         <span class="text-sm text-gray-600">
           Готово к подтверждению:
-          {{ Object.keys(bulkSelection).filter((k) => bulkSelection[k] && selectedProductMap[k]).length }}
+          {{ readyToApplyCount }}
         </span>
         <button
           class="px-3 py-2 rounded bg-teal-600 text-white disabled:opacity-50"
@@ -259,11 +271,23 @@ onMounted(async () => {
               <td class="p-3">{{ offer.qty }}</td>
               <td class="p-3">{{ offer.wholesale_value || '—' }} <span v-if="offer.wholesale_currency">{{ offer.wholesale_currency }}</span></td>
               <td class="p-3">
+                <div v-if="offer.model_tokens?.length" class="mb-1 flex flex-wrap gap-1">
+                  <span v-for="token in offer.model_tokens.slice(0, 4)" :key="`${keyOf(offer)}-${token}`" class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-600">
+                    {{ token }}
+                  </span>
+                </div>
                 <span
                   v-if="suggestionMap[keyOf(offer)]?.auto_eligible"
                   class="inline-flex rounded px-2 py-1 text-xs bg-green-50 text-green-700 border border-green-200"
                 >
-                  1:1
+                  {{ suggestionMap[keyOf(offer)]?.candidates?.[0]?.confidence ?? 100 }}%
+                </span>
+                <span
+                  v-else-if="suggestionMap[keyOf(offer)]"
+                  class="inline-flex rounded px-2 py-1 text-xs border"
+                  :class="confidenceClass(suggestionMap[keyOf(offer)]?.candidates?.[0]?.confidence || 0)"
+                >
+                  {{ suggestionMap[keyOf(offer)]?.reason || 'проверить' }}
                 </span>
                 <span
                   v-else
@@ -290,9 +314,17 @@ onMounted(async () => {
                     <button @click="searchInline(offer)" class="px-3 py-2 rounded bg-slate-900 text-white">Найти</button>
                   </div>
                   <div class="grid md:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
-                    <label v-for="p in inlineCandidates[keyOf(offer)] || []" :key="p.id" class="flex items-center gap-2 border rounded px-3 py-2 bg-white">
+                    <label v-for="p in inlineCandidates[keyOf(offer)] || []" :key="p.id" class="flex items-start gap-2 border rounded px-3 py-2 bg-white">
                       <input v-model.number="selectedProductMap[keyOf(offer)]" type="radio" :value="p.id" />
-                      <span>{{ p.title }} ({{ p.price }} BYN)</span>
+                      <span class="min-w-0">
+                        <span class="block font-medium">{{ p.title }} ({{ p.price }} BYN)</span>
+                        <span v-if="p.confidence !== undefined" class="mt-1 inline-flex rounded border px-1.5 py-0.5 text-[11px]" :class="confidenceClass(p.confidence)">
+                          {{ p.confidence }}% · score {{ p.score }}
+                        </span>
+                        <span v-if="p.explanations?.length" class="mt-1 block text-xs text-gray-500">
+                          {{ p.explanations.join(' · ') }}
+                        </span>
+                      </span>
                     </label>
                   </div>
                   <div class="flex justify-end gap-2">

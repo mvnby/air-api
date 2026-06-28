@@ -131,6 +131,7 @@ async def test_product_detail_contains_series_and_series_id_siblings(async_clien
         "hero_image": "/media/series/freshin.webp",
         "gallery_images": [],
         "features": ["Fresh air intake", "Self-cleaning"],
+        "brand_features": [],
         "feature_blocks": [],
         "content_blocks": [],
         "footnotes": [],

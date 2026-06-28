@@ -1,0 +1,78 @@
+"""Shared serializers for public product series payloads."""
+
+from typing import Any, List
+
+from models import ProductSeries
+from schemas import ProductSeriesBrandFeatureResponse, ProductSeriesResponse
+
+
+def serialize_series_brand_features(series: ProductSeries) -> List[ProductSeriesBrandFeatureResponse]:
+    # Relationships must be eager-loaded by callers. Reading __dict__ avoids
+    # accidental async lazy loads from synchronous serializers.
+    links = list(getattr(series, "__dict__", {}).get("feature_links") or [])
+    if not links:
+        return []
+
+    payload: list[ProductSeriesBrandFeatureResponse] = []
+    for link in links:
+        feature = getattr(link, "__dict__", {}).get("feature")
+        if not feature or not getattr(feature, "is_published", False):
+            continue
+        payload.append(
+            ProductSeriesBrandFeatureResponse(
+                id=feature.id,
+                title=getattr(link, "title_override", None) or feature.title,
+                slug=feature.slug,
+                text=(
+                    getattr(link, "text_override", None)
+                    if getattr(link, "text_override", None) is not None
+                    else feature.text
+                ),
+                image_url=getattr(link, "image_url_override", None) or feature.image_url,
+                icon=getattr(link, "icon_override", None) or feature.icon,
+                footnote=getattr(link, "footnote_override", None) or feature.footnote,
+                source_url=feature.source_url,
+                aliases=_normalize_string_list(feature.aliases),
+                is_published=feature.is_published,
+                sort_order=int(
+                    getattr(link, "sort_order", None)
+                    if getattr(link, "sort_order", None) is not None
+                    else feature.sort_order or 0
+                ),
+            )
+        )
+    return sorted(payload, key=lambda item: (item.sort_order, item.title.casefold(), item.id))
+
+
+def build_product_series_response(series: ProductSeries | None) -> ProductSeriesResponse | None:
+    if not series or not series.is_published:
+        return None
+    return ProductSeriesResponse(
+        id=series.id,
+        title=series.title,
+        slug=series.slug,
+        tagline=series.tagline,
+        short_description=series.short_description,
+        description=series.description,
+        hero_image=series.hero_image,
+        gallery_images=series.gallery_images or [],
+        features=series.features or [],
+        brand_features=serialize_series_brand_features(series),
+        feature_blocks=series.feature_blocks or [],
+        content_blocks=series.content_blocks or [],
+        footnotes=series.footnotes or [],
+        seo_title=series.seo_title,
+        seo_description=series.seo_description,
+        source_url=series.source_url,
+    )
+
+
+def _normalize_string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    for item in value:
+        text = str(item or "").strip()
+        if text and text not in out:
+            out.append(text)
+    return out

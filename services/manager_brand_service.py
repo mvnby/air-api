@@ -5,7 +5,7 @@ from slugify import slugify
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import Brand, Product, ProductSeries, ProductTagLink, Tag, TagGroup
+from models import Brand, BrandFeature, Product, ProductSeries, ProductSeriesFeatureLink, ProductTagLink, Tag, TagGroup
 from services.brand_series_service import extract_series_name, sync_product_brand_series
 from services.catalog_revision_service import CatalogRevisionService
 
@@ -26,6 +26,147 @@ class ManagerBrandService:
             ManagerBrandService._serialize_brand(brand, products_count=int(products_count or 0))
             for brand, products_count in rows
         ]
+
+    @staticmethod
+    async def list_brand_features(
+        session: AsyncSession,
+        brand_id: int,
+    ) -> List[Dict[str, Any]]:
+        brand = await session.get(Brand, brand_id)
+        if brand is None:
+            raise HTTPException(status_code=404, detail="Бренд не найден.")
+
+        rows = (
+            await session.execute(
+                select(BrandFeature, func.count(ProductSeriesFeatureLink.id).label("series_count"))
+                .outerjoin(ProductSeriesFeatureLink, ProductSeriesFeatureLink.feature_id == BrandFeature.id)
+                .where(BrandFeature.brand_id == brand_id)
+                .group_by(BrandFeature.id)
+                .order_by(BrandFeature.sort_order.asc(), BrandFeature.title.asc())
+            )
+        ).all()
+        return [
+            ManagerBrandService._serialize_brand_feature(feature, series_count=int(series_count or 0))
+            for feature, series_count in rows
+        ]
+
+    @staticmethod
+    async def create_brand_feature(
+        session: AsyncSession,
+        brand_id: int,
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        brand = await session.get(Brand, brand_id)
+        if brand is None:
+            raise HTTPException(status_code=404, detail="Бренд не найден.")
+
+        title = str(payload.get("title") or "").strip()
+        if not title:
+            raise HTTPException(status_code=400, detail="Название фичи не может быть пустым.")
+
+        slug = ManagerBrandService._build_feature_slug(payload.get("slug"), title)
+        await ManagerBrandService._ensure_brand_feature_slug_available(session, brand_id=brand_id, slug=slug)
+
+        feature = BrandFeature(
+            brand_id=brand_id,
+            title=title,
+            slug=slug,
+            text=ManagerBrandService._clean_optional_text(payload.get("text")),
+            image_url=ManagerBrandService._clean_optional_text(payload.get("image_url")),
+            icon=ManagerBrandService._clean_optional_text(payload.get("icon")),
+            footnote=ManagerBrandService._clean_optional_text(payload.get("footnote")),
+            source_url=ManagerBrandService._clean_optional_text(payload.get("source_url")),
+            aliases=ManagerBrandService._normalize_string_list(payload.get("aliases")),
+            is_published=bool(payload.get("is_published", True)),
+            sort_order=int(payload.get("sort_order") or 0),
+        )
+        session.add(feature)
+        await CatalogRevisionService.bump_commit_and_purge(
+            session,
+            scope="brand_feature_create",
+            brand_slugs=[brand.slug],
+        )
+        await session.refresh(feature)
+        return ManagerBrandService._serialize_brand_feature(feature, series_count=0)
+
+    @staticmethod
+    async def update_brand_feature(
+        session: AsyncSession,
+        brand_id: int,
+        feature_id: int,
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        brand = await session.get(Brand, brand_id)
+        if brand is None:
+            raise HTTPException(status_code=404, detail="Бренд не найден.")
+
+        feature = await ManagerBrandService._get_brand_feature(session, brand_id, feature_id)
+        if "title" in payload and payload["title"] is not None:
+            title = str(payload["title"]).strip()
+            if not title:
+                raise HTTPException(status_code=400, detail="Название фичи не может быть пустым.")
+            feature.title = title
+        if "slug" in payload and payload["slug"] is not None:
+            slug = ManagerBrandService._build_feature_slug(payload["slug"], feature.title)
+            if slug != feature.slug:
+                await ManagerBrandService._ensure_brand_feature_slug_available(
+                    session,
+                    brand_id=brand_id,
+                    slug=slug,
+                    exclude_feature_id=feature_id,
+                )
+                feature.slug = slug
+        if "text" in payload:
+            feature.text = ManagerBrandService._clean_optional_text(payload["text"])
+        if "image_url" in payload:
+            feature.image_url = ManagerBrandService._clean_optional_text(payload["image_url"])
+        if "icon" in payload:
+            feature.icon = ManagerBrandService._clean_optional_text(payload["icon"])
+        if "footnote" in payload:
+            feature.footnote = ManagerBrandService._clean_optional_text(payload["footnote"])
+        if "source_url" in payload:
+            feature.source_url = ManagerBrandService._clean_optional_text(payload["source_url"])
+        if "aliases" in payload and payload["aliases"] is not None:
+            feature.aliases = ManagerBrandService._normalize_string_list(payload["aliases"])
+        if "is_published" in payload and payload["is_published"] is not None:
+            feature.is_published = bool(payload["is_published"])
+        if "sort_order" in payload and payload["sort_order"] is not None:
+            feature.sort_order = int(payload["sort_order"])
+
+        session.add(feature)
+        await CatalogRevisionService.bump_commit_and_purge(
+            session,
+            scope="brand_feature_update",
+            brand_slugs=[brand.slug],
+        )
+        await session.refresh(feature)
+        series_count = await ManagerBrandService._brand_feature_series_count(session, feature_id)
+        return ManagerBrandService._serialize_brand_feature(feature, series_count=series_count)
+
+    @staticmethod
+    async def delete_brand_feature(
+        session: AsyncSession,
+        brand_id: int,
+        feature_id: int,
+    ) -> None:
+        brand = await session.get(Brand, brand_id)
+        if brand is None:
+            raise HTTPException(status_code=404, detail="Бренд не найден.")
+
+        feature = await ManagerBrandService._get_brand_feature(session, brand_id, feature_id)
+        series_count = await ManagerBrandService._brand_feature_series_count(session, feature_id)
+        if series_count > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Нельзя удалить фичу: она используется в сериях. Сначала уберите ее из серий.",
+            )
+
+        await session.delete(feature)
+        await CatalogRevisionService.bump_commit_and_purge(
+            session,
+            scope="brand_feature_delete",
+            brand_slugs=[brand.slug],
+        )
 
     @staticmethod
     async def create_brand(
@@ -220,8 +361,16 @@ class ManagerBrandService:
                 .order_by(ProductSeries.sort_order.asc(), ProductSeries.title.asc())
             )
         ).all()
+        feature_map = await ManagerBrandService._load_series_brand_features(
+            session,
+            [series.id for series, _ in rows if series.id is not None],
+        )
         return [
-            ManagerBrandService._serialize_series(series, products_count=int(products_count or 0))
+            ManagerBrandService._serialize_series(
+                series,
+                products_count=int(products_count or 0),
+                brand_features=feature_map.get(int(series.id or 0), []),
+            )
             for series, products_count in rows
         ]
 
@@ -309,6 +458,13 @@ class ManagerBrandService:
         )
         session.add(series)
         await session.flush()
+        if "brand_feature_ids" in payload and payload["brand_feature_ids"] is not None:
+            await ManagerBrandService._sync_series_brand_features(
+                session,
+                series=series,
+                brand_id=brand_id,
+                feature_ids=payload.get("brand_feature_ids"),
+            )
 
         await CatalogRevisionService.bump_commit_and_purge(
             session,
@@ -316,7 +472,12 @@ class ManagerBrandService:
             brand_slugs=[brand.slug],
         )
         await session.refresh(series)
-        return ManagerBrandService._serialize_series(series, products_count=0)
+        feature_map = await ManagerBrandService._load_series_brand_features(session, [int(series.id or 0)])
+        return ManagerBrandService._serialize_series(
+            series,
+            products_count=0,
+            brand_features=feature_map.get(int(series.id or 0), []),
+        )
 
     @staticmethod
     async def update_brand_series(
@@ -379,6 +540,13 @@ class ManagerBrandService:
 
         session.add(series)
         await session.flush()
+        if "brand_feature_ids" in payload and payload["brand_feature_ids"] is not None:
+            await ManagerBrandService._sync_series_brand_features(
+                session,
+                series=series,
+                brand_id=brand_id,
+                feature_ids=payload.get("brand_feature_ids"),
+            )
 
         await CatalogRevisionService.bump_commit_and_purge(
             session,
@@ -392,7 +560,12 @@ class ManagerBrandService:
                 select(func.count(Product.id)).where(Product.series_id == series.id)
             )
         ).scalar_one()
-        return ManagerBrandService._serialize_series(series, products_count=int(products_count or 0))
+        feature_map = await ManagerBrandService._load_series_brand_features(session, [int(series.id or 0)])
+        return ManagerBrandService._serialize_series(
+            series,
+            products_count=int(products_count or 0),
+            brand_features=feature_map.get(int(series.id or 0), []),
+        )
 
     @staticmethod
     async def delete_brand_series(
@@ -416,6 +589,13 @@ class ManagerBrandService:
                 detail="Нельзя удалить серию: к ней привязаны товары. Скройте серию вместо удаления.",
             )
 
+        link_rows = (
+            await session.execute(
+                select(ProductSeriesFeatureLink).where(ProductSeriesFeatureLink.series_id == series.id)
+            )
+        ).scalars().all()
+        for link in link_rows:
+            await session.delete(link)
         await session.delete(series)
         await CatalogRevisionService.bump_commit_and_purge(
             session,
@@ -438,7 +618,13 @@ class ManagerBrandService:
         }
 
     @staticmethod
-    def _serialize_series(series: ProductSeries, *, products_count: int = 0) -> Dict[str, Any]:
+    def _serialize_series(
+        series: ProductSeries,
+        *,
+        products_count: int = 0,
+        brand_features: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        selected_features = brand_features or []
         return {
             "id": series.id,
             "brand_id": series.brand_id,
@@ -450,6 +636,8 @@ class ManagerBrandService:
             "hero_image": series.hero_image,
             "gallery_images": ManagerBrandService._normalize_string_list(series.gallery_images),
             "features": ManagerBrandService._normalize_features(series.features),
+            "brand_features": selected_features,
+            "brand_feature_ids": [int(item["id"]) for item in selected_features if item.get("id") is not None],
             "feature_blocks": ManagerBrandService._normalize_feature_blocks(series.feature_blocks),
             "content_blocks": ManagerBrandService._normalize_content_blocks(series.content_blocks),
             "footnotes": ManagerBrandService._normalize_string_list(series.footnotes),
@@ -461,6 +649,163 @@ class ManagerBrandService:
             "created_at": series.created_at,
             "products_count": int(products_count or 0),
         }
+
+    @staticmethod
+    def _serialize_brand_feature(feature: BrandFeature, *, series_count: int = 0) -> Dict[str, Any]:
+        return {
+            "id": feature.id,
+            "brand_id": feature.brand_id,
+            "title": feature.title,
+            "slug": feature.slug,
+            "text": feature.text,
+            "image_url": feature.image_url,
+            "icon": feature.icon,
+            "footnote": feature.footnote,
+            "source_url": feature.source_url,
+            "aliases": ManagerBrandService._normalize_string_list(feature.aliases),
+            "is_published": feature.is_published,
+            "sort_order": int(feature.sort_order or 0),
+            "created_at": feature.created_at,
+            "updated_at": feature.updated_at,
+            "series_count": int(series_count or 0),
+        }
+
+    @staticmethod
+    def _serialize_series_feature_link(
+        link: ProductSeriesFeatureLink,
+        feature: BrandFeature,
+    ) -> Dict[str, Any]:
+        return {
+            "id": feature.id,
+            "title": link.title_override or feature.title,
+            "slug": feature.slug,
+            "text": link.text_override if link.text_override is not None else feature.text,
+            "image_url": link.image_url_override or feature.image_url,
+            "icon": link.icon_override or feature.icon,
+            "footnote": link.footnote_override or feature.footnote,
+            "source_url": feature.source_url,
+            "aliases": ManagerBrandService._normalize_string_list(feature.aliases),
+            "is_published": feature.is_published,
+            "sort_order": int(link.sort_order if link.sort_order is not None else feature.sort_order or 0),
+        }
+
+    @staticmethod
+    async def _load_series_brand_features(
+        session: AsyncSession,
+        series_ids: List[int],
+    ) -> Dict[int, List[Dict[str, Any]]]:
+        normalized_ids = [int(value) for value in dict.fromkeys(series_ids) if value]
+        if not normalized_ids:
+            return {}
+
+        rows = (
+            await session.execute(
+                select(ProductSeriesFeatureLink, BrandFeature)
+                .join(BrandFeature, BrandFeature.id == ProductSeriesFeatureLink.feature_id)
+                .where(ProductSeriesFeatureLink.series_id.in_(normalized_ids))
+                .order_by(
+                    ProductSeriesFeatureLink.series_id.asc(),
+                    ProductSeriesFeatureLink.sort_order.asc(),
+                    BrandFeature.sort_order.asc(),
+                    BrandFeature.title.asc(),
+                )
+            )
+        ).all()
+        out: Dict[int, List[Dict[str, Any]]] = {series_id: [] for series_id in normalized_ids}
+        for link, feature in rows:
+            out.setdefault(int(link.series_id), []).append(
+                ManagerBrandService._serialize_series_feature_link(link, feature)
+            )
+        return out
+
+    @staticmethod
+    async def _sync_series_brand_features(
+        session: AsyncSession,
+        *,
+        series: ProductSeries,
+        brand_id: int,
+        feature_ids: Any,
+    ) -> None:
+        if not series.id:
+            return
+
+        normalized_ids: List[int] = []
+        for value in feature_ids or []:
+            try:
+                feature_id = int(value)
+            except (TypeError, ValueError):
+                continue
+            if feature_id > 0 and feature_id not in normalized_ids:
+                normalized_ids.append(feature_id)
+
+        if normalized_ids:
+            found_ids = set(
+                (
+                    await session.execute(
+                        select(BrandFeature.id).where(
+                            BrandFeature.brand_id == brand_id,
+                            BrandFeature.id.in_(normalized_ids),
+                        )
+                    )
+                ).scalars().all()
+            )
+            missing_ids = [feature_id for feature_id in normalized_ids if feature_id not in found_ids]
+            if missing_ids:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Фичи не найдены у этого бренда: {', '.join(map(str, missing_ids))}",
+                )
+
+        existing_links = (
+            await session.execute(
+                select(ProductSeriesFeatureLink).where(ProductSeriesFeatureLink.series_id == series.id)
+            )
+        ).scalars().all()
+        existing_by_feature_id = {int(link.feature_id): link for link in existing_links}
+        keep_ids = set(normalized_ids)
+
+        for link in existing_links:
+            if int(link.feature_id) not in keep_ids:
+                await session.delete(link)
+
+        for index, feature_id in enumerate(normalized_ids):
+            link = existing_by_feature_id.get(feature_id)
+            if link is None:
+                link = ProductSeriesFeatureLink(
+                    series_id=int(series.id),
+                    feature_id=feature_id,
+                )
+            link.sort_order = (index + 1) * 10
+            session.add(link)
+
+    @staticmethod
+    async def _brand_feature_series_count(session: AsyncSession, feature_id: int) -> int:
+        count = (
+            await session.execute(
+                select(func.count(ProductSeriesFeatureLink.id)).where(
+                    ProductSeriesFeatureLink.feature_id == feature_id
+                )
+            )
+        ).scalar_one()
+        return int(count or 0)
+
+    @staticmethod
+    async def _get_brand_feature(
+        session: AsyncSession,
+        brand_id: int,
+        feature_id: int,
+    ) -> BrandFeature:
+        feature = (
+            await session.execute(
+                select(BrandFeature).where(
+                    BrandFeature.id == feature_id,
+                    BrandFeature.brand_id == brand_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if feature is None:
+            raise HTTPException(status_code=404, detail="Фича не найдена.")
+        return feature
 
     @staticmethod
     async def _get_brand_series(
@@ -502,12 +847,41 @@ class ManagerBrandService:
             )
 
     @staticmethod
+    async def _ensure_brand_feature_slug_available(
+        session: AsyncSession,
+        *,
+        brand_id: int,
+        slug: str,
+        exclude_feature_id: Optional[int] = None,
+    ) -> None:
+        query = select(BrandFeature).where(
+            BrandFeature.brand_id == brand_id,
+            BrandFeature.slug == slug,
+        )
+        if exclude_feature_id is not None:
+            query = query.where(BrandFeature.id != exclude_feature_id)
+        existing = (await session.execute(query)).scalar_one_or_none()
+        if existing is not None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Фича со slug '{slug}' уже существует у этого бренда.",
+            )
+
+    @staticmethod
     def _build_series_slug(value: Any, fallback_title: str) -> str:
         requested_slug = str(value or "").strip()
         series_slug = requested_slug or slugify(fallback_title, lowercase=True)
         if not series_slug:
             raise HTTPException(status_code=400, detail="Не удалось сформировать slug серии.")
         return series_slug
+
+    @staticmethod
+    def _build_feature_slug(value: Any, fallback_title: str) -> str:
+        requested_slug = str(value or "").strip()
+        feature_slug = requested_slug or slugify(fallback_title, lowercase=True)
+        if not feature_slug:
+            raise HTTPException(status_code=400, detail="Не удалось сформировать slug фичи.")
+        return feature_slug
 
     @staticmethod
     def _clean_optional_text(value: Any) -> Optional[str]:

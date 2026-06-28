@@ -2,7 +2,7 @@ import pytest
 
 from models.supplier import Supplier
 from services.supplier_mapping_service import SupplierCatalogService
-from services.supplier_match_service import normalize_offer_title_for_search
+from services.supplier_match_service import build_offer_match_profile, normalize_offer_title_for_search
 
 
 def test_normalize_offer_title_for_search_strips_parasites():
@@ -11,6 +11,40 @@ def test_normalize_offer_title_for_search_strips_parasites():
     assert "сплит" not in normalized
     assert "внутренний блок" not in normalized
     assert "mdsa-12hrfn8" in normalized
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected_tokens", "expected_indoor", "expected_outdoor"),
+    [
+        (
+            "MDV Integra Pro внутренний MDSAG-09HRFN8 / наружный MDOAG-09HFN8",
+            ["MDSAG-09HRFN8", "MDOAG-09HFN8"],
+            ["MDSAG-09HRFN8"],
+            ["MDOAG-09HFN8"],
+        ),
+        (
+            "TCL TAC-09CHSD/XA71IN BreezeIN",
+            ["TAC-09CHSD/XA71IN", "TAC-09CHSD", "XA71IN"],
+            [],
+            [],
+        ),
+        (
+            "Haier Flexis внутренний AS25S2SF3FA-W наружный 1U25S2SM3FA",
+            ["AS25S2SF3FA-W", "1U25S2SM3FA"],
+            ["AS25S2SF3FA-W"],
+            ["1U25S2SM3FA"],
+        ),
+    ],
+)
+def test_build_offer_match_profile_extracts_model_tokens(raw, expected_tokens, expected_indoor, expected_outdoor):
+    profile = build_offer_match_profile(raw)
+
+    for token in expected_tokens:
+        assert token in profile.model_tokens
+    for token in expected_indoor:
+        assert token in profile.indoor_model_tokens
+    for token in expected_outdoor:
+        assert token in profile.outdoor_model_tokens
 
 
 @pytest.mark.asyncio

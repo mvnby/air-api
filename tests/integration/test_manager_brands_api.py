@@ -99,6 +99,22 @@ async def test_manager_brand_series_crud(async_client):
     assert brand_resp.status_code == 200
     brand_id = brand_resp.json()["id"]
 
+    feature_resp = await async_client.post(
+        f"/api/manager/brands/{brand_id}/features",
+        headers=headers,
+        json={
+            "title": "Gentle Breeze",
+            "text": "Soft airflow pattern",
+            "image_url": "/media/series/gentle-breeze.webp",
+            "aliases": ["breeze", "soft airflow"],
+            "sort_order": 2,
+        },
+    )
+    assert feature_resp.status_code == 200, feature_resp.text
+    feature = feature_resp.json()
+    assert feature["slug"] == "gentle-breeze"
+    assert feature["series_count"] == 0
+
     create_resp = await async_client.post(
         f"/api/manager/brands/{brand_id}/series",
         headers=headers,
@@ -134,6 +150,7 @@ async def test_manager_brand_series_crud(async_client):
             "seo_description": "FreshIN SEO description",
             "source_url": "https://example.com/freshin",
             "sort_order": 10,
+            "brand_feature_ids": [feature["id"]],
         },
     )
     assert create_resp.status_code == 200, create_resp.text
@@ -167,6 +184,8 @@ async def test_manager_brand_series_crud(async_client):
     assert created["seo_description"] == "FreshIN SEO description"
     assert created["source_url"] == "https://example.com/freshin"
     assert created["products_count"] == 0
+    assert created["brand_feature_ids"] == [feature["id"]]
+    assert created["brand_features"][0]["title"] == "Gentle Breeze"
     series_id = created["id"]
 
     list_resp = await async_client.get(
@@ -177,6 +196,20 @@ async def test_manager_brand_series_crud(async_client):
     listed_items = list_resp.json()["items"]
     assert [item["id"] for item in listed_items] == [series_id]
     assert listed_items[0]["tagline"] == "Fresh air without drafts"
+    assert listed_items[0]["brand_features"][0]["id"] == feature["id"]
+
+    features_list_resp = await async_client.get(
+        f"/api/manager/brands/{brand_id}/features",
+        headers=headers,
+    )
+    assert features_list_resp.status_code == 200
+    assert features_list_resp.json()["items"][0]["series_count"] == 1
+
+    blocked_feature_delete = await async_client.delete(
+        f"/api/manager/brands/{brand_id}/features/{feature['id']}",
+        headers=headers,
+    )
+    assert blocked_feature_delete.status_code == 400
 
     update_resp = await async_client.put(
         f"/api/manager/brands/{brand_id}/series/{series_id}",
@@ -193,6 +226,7 @@ async def test_manager_brand_series_crud(async_client):
             "seo_title": "Updated SEO",
             "is_published": False,
             "sort_order": 3,
+            "brand_feature_ids": [],
         },
     )
     assert update_resp.status_code == 200, update_resp.text
@@ -216,12 +250,19 @@ async def test_manager_brand_series_crud(async_client):
     assert updated["seo_title"] == "Updated SEO"
     assert updated["is_published"] is False
     assert updated["sort_order"] == 3
+    assert updated["brand_features"] == []
 
     delete_resp = await async_client.delete(
         f"/api/manager/brands/{brand_id}/series/{series_id}",
         headers=headers,
     )
     assert delete_resp.status_code == 200
+
+    delete_feature_resp = await async_client.delete(
+        f"/api/manager/brands/{brand_id}/features/{feature['id']}",
+        headers=headers,
+    )
+    assert delete_feature_resp.status_code == 200
 
 
 @pytest.mark.asyncio

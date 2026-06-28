@@ -87,6 +87,10 @@ export type { ManagerBackupListResponse } from './models/ManagerBackupListRespon
 export type { ManagerBackupRunStartResponse } from './models/ManagerBackupRunStartResponse';
 export type { ManagerBackupRunStatusResponse } from './models/ManagerBackupRunStatusResponse';
 export type { ManagerBrandCreatePayload } from './models/ManagerBrandCreatePayload';
+export type { ManagerBrandFeatureCreatePayload } from './models/ManagerBrandFeatureCreatePayload';
+export type { ManagerBrandFeatureListResponse } from './models/ManagerBrandFeatureListResponse';
+export type { ManagerBrandFeatureResponse } from './models/ManagerBrandFeatureResponse';
+export type { ManagerBrandFeatureUpdatePayload } from './models/ManagerBrandFeatureUpdatePayload';
 export type { ManagerBrandListResponse } from './models/ManagerBrandListResponse';
 export type { ManagerBrandResponse } from './models/ManagerBrandResponse';
 export type { ManagerBrandSeriesCreatePayload } from './models/ManagerBrandSeriesCreatePayload';
@@ -304,6 +308,7 @@ export type { ProductMainImageCleanupSkipReasonsResponse } from './models/Produc
 export type { ProductManualPayload } from './models/ProductManualPayload';
 export type { ProductManualResponse } from './models/ProductManualResponse';
 export type { ProductResponse } from './models/ProductResponse';
+export type { ProductSeriesBrandFeatureResponse } from './models/ProductSeriesBrandFeatureResponse';
 export type { ProductSeriesContentBlockResponse } from './models/ProductSeriesContentBlockResponse';
 export type { ProductSeriesFeatureBlockResponse } from './models/ProductSeriesFeatureBlockResponse';
 export type { ProductSeriesNavigationItemResponse } from './models/ProductSeriesNavigationItemResponse';

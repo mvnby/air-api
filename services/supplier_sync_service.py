@@ -11,6 +11,7 @@ from crud.supplier import SupplierDAO, SupplierOfferDAO, SupplierSourceDAO, Supp
 from models.supplier import SupplierOffer, SupplierPriceSource
 from services.supplier_availability import parse_qty_with_text_fallback
 from services.google_service import get_google_service
+from services.supplier_match_service import supplier_offer_match_payload
 
 
 def _col_to_idx(col: str) -> int:
@@ -178,6 +179,7 @@ class SupplierSyncService:
                     "source_id": source.id,
                     "external_id": ext_id,
                     "title_raw": title_raw or None,
+                    **supplier_offer_match_payload(title_raw),
                     "qty_raw": qty_raw or None,
                     "wholesale_raw": wholesale_raw or None,
                     "rrc_raw": rrc_raw or None,

@@ -13,6 +13,7 @@ export type ManagerBrandSeriesUpdatePayload = {
     hero_image?: (string | null);
     gallery_images?: (Array<string> | null);
     features?: (Array<string> | null);
+    brand_feature_ids?: (Array<number> | null);
     feature_blocks?: (Array<ProductSeriesFeatureBlockResponse> | null);
     content_blocks?: (Array<ProductSeriesContentBlockResponse> | null);
     footnotes?: (Array<string> | null);
