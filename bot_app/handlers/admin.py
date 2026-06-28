@@ -1,9 +1,11 @@
 from io import BytesIO
 from html import escape
 import os
+import re
 import secrets
 
 from aiogram import Router, types, F
+from aiogram.filters import StateFilter
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
 from core.database import async_session_maker
@@ -98,6 +100,31 @@ def _preview_keyboard(data: dict) -> InlineKeyboardMarkup:
             buttons.append([InlineKeyboardButton(text="Обновить существующего", callback_data=f"ocr_update_{recognition_id}")])
     buttons.append([InlineKeyboardButton(text="Отменить", callback_data=f"ocr_cancel_{recognition_id}")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def _looks_like_requisites_text(text: str | None) -> bool:
+    normalized = str(text or "").strip()
+    if len(normalized) < 40:
+        return False
+    lowered = normalized.casefold()
+    markers = (
+        "унп",
+        "р/с",
+        "расчетный счет",
+        "расчётный счет",
+        "iban",
+        "bic",
+        "банк",
+        "банковские реквизиты",
+        "юридический адрес",
+        "почтовый адрес",
+        "свидетельство",
+    )
+    marker_count = sum(1 for marker in markers if marker in lowered)
+    has_unp = bool(re.search(r"\bунп\s*\d{9}\b", lowered))
+    has_iban = bool(re.search(r"\bBY[0-9A-ZА-ЯЁ ]{20,40}\b", normalized, flags=re.IGNORECASE))
+    has_bic = bool(re.search(r"\bBIC\s+[A-Z0-9]{8,11}\b", normalized, flags=re.IGNORECASE))
+    return marker_count >= 2 or has_iban or (has_unp and marker_count >= 1) or (has_unp and has_bic)
 
 
 def _requisites_file_intent_keyboard(
@@ -531,6 +558,31 @@ async def _run_requisites_recognition(
     await progress_message.edit_text(_preview_text(data), reply_markup=_preview_keyboard(data), parse_mode="HTML")
 
 
+async def _run_requisites_text_recognition(
+    progress_message: types.Message,
+    *,
+    text: str,
+    telegram_user_id: int | None,
+    telegram_chat_id: int | None,
+    telegram_message_id: int | None,
+):
+    try:
+        async with async_session_maker() as session:
+            data = await CustomerRequisitesRecognitionService.recognize_text(
+                session,
+                text=text,
+                source="telegram_text",
+                telegram_user_id=telegram_user_id,
+                telegram_chat_id=telegram_chat_id,
+                telegram_message_id=telegram_message_id,
+            )
+    except Exception as exc:
+        await progress_message.edit_text(f"❌ Не удалось распознать реквизиты: {escape(str(exc))}")
+        return
+
+    await progress_message.edit_text(_preview_text(data), reply_markup=_preview_keyboard(data), parse_mode="HTML")
+
+
 async def _handle_requisites_file(
     message: types.Message,
     *,
@@ -631,6 +683,25 @@ async def recognize_requisites_document(message: types.Message, state: FSMContex
         filename=document.file_name or f"telegram-document-{message.message_id}",
         mime_type=mime_type,
         file_size=getattr(document, "file_size", None),
+    )
+
+
+@router.message(StateFilter(None), F.text)
+async def recognize_requisites_text(message: types.Message):
+    text = message.text or ""
+    if not _looks_like_requisites_text(text):
+        return
+    user_id = message.from_user.id if message.from_user else None
+    if not await _is_admin_user(user_id):
+        return
+
+    progress = await message.answer("Распознаю реквизиты из текста…")
+    await _run_requisites_text_recognition(
+        progress,
+        text=text,
+        telegram_user_id=user_id,
+        telegram_chat_id=message.chat.id if message.chat else None,
+        telegram_message_id=message.message_id,
     )
 
 
