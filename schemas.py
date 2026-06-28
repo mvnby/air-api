@@ -263,6 +263,20 @@ class ProductSeriesFeatureBlockResponse(BaseModel):
     footnote: Optional[str] = None
 
 
+class ProductSeriesBrandFeatureResponse(BaseModel):
+    id: int
+    title: str
+    slug: str
+    text: Optional[str] = None
+    image_url: Optional[str] = None
+    icon: Optional[str] = None
+    footnote: Optional[str] = None
+    source_url: Optional[str] = None
+    aliases: List[str] = Field(default_factory=list)
+    is_published: bool = True
+    sort_order: int = 0
+
+
 class ProductSeriesContentBlockResponse(BaseModel):
     kind: Literal["text", "image_text", "media"] = "text"
     title: Optional[str] = None
@@ -281,6 +295,7 @@ class ProductSeriesResponse(BaseModel):
     hero_image: Optional[str] = None
     gallery_images: List[str] = Field(default_factory=list)
     features: List[str] = Field(default_factory=list)
+    brand_features: List[ProductSeriesBrandFeatureResponse] = Field(default_factory=list)
     feature_blocks: List[ProductSeriesFeatureBlockResponse] = Field(default_factory=list)
     content_blocks: List[ProductSeriesContentBlockResponse] = Field(default_factory=list)
     footnotes: List[str] = Field(default_factory=list)
@@ -2329,6 +2344,8 @@ class ManagerBrandSeriesResponse(BaseModel):
     hero_image: Optional[str] = None
     gallery_images: List[str] = Field(default_factory=list)
     features: List[str] = Field(default_factory=list)
+    brand_features: List[ProductSeriesBrandFeatureResponse] = Field(default_factory=list)
+    brand_feature_ids: List[int] = Field(default_factory=list)
     feature_blocks: List[ProductSeriesFeatureBlockResponse] = Field(default_factory=list)
     content_blocks: List[ProductSeriesContentBlockResponse] = Field(default_factory=list)
     footnotes: List[str] = Field(default_factory=list)
@@ -2354,6 +2371,7 @@ class ManagerBrandSeriesCreatePayload(BaseModel):
     hero_image: Optional[str] = None
     gallery_images: List[str] = Field(default_factory=list)
     features: List[str] = Field(default_factory=list)
+    brand_feature_ids: List[int] = Field(default_factory=list)
     feature_blocks: List[ProductSeriesFeatureBlockResponse] = Field(default_factory=list)
     content_blocks: List[ProductSeriesContentBlockResponse] = Field(default_factory=list)
     footnotes: List[str] = Field(default_factory=list)
@@ -2373,12 +2391,50 @@ class ManagerBrandSeriesUpdatePayload(BaseModel):
     hero_image: Optional[str] = None
     gallery_images: Optional[List[str]] = None
     features: Optional[List[str]] = None
+    brand_feature_ids: Optional[List[int]] = None
     feature_blocks: Optional[List[ProductSeriesFeatureBlockResponse]] = None
     content_blocks: Optional[List[ProductSeriesContentBlockResponse]] = None
     footnotes: Optional[List[str]] = None
     seo_title: Optional[str] = None
     seo_description: Optional[str] = None
     source_url: Optional[str] = None
+    is_published: Optional[bool] = None
+    sort_order: Optional[int] = None
+
+
+class ManagerBrandFeatureResponse(ProductSeriesBrandFeatureResponse):
+    brand_id: int
+    created_at: datetime
+    updated_at: datetime
+    series_count: int = 0
+
+
+class ManagerBrandFeatureListResponse(BaseModel):
+    items: List[ManagerBrandFeatureResponse]
+
+
+class ManagerBrandFeatureCreatePayload(BaseModel):
+    title: str
+    slug: Optional[str] = None
+    text: Optional[str] = None
+    image_url: Optional[str] = None
+    icon: Optional[str] = None
+    footnote: Optional[str] = None
+    source_url: Optional[str] = None
+    aliases: List[str] = Field(default_factory=list)
+    is_published: bool = True
+    sort_order: int = 0
+
+
+class ManagerBrandFeatureUpdatePayload(BaseModel):
+    title: Optional[str] = None
+    slug: Optional[str] = None
+    text: Optional[str] = None
+    image_url: Optional[str] = None
+    icon: Optional[str] = None
+    footnote: Optional[str] = None
+    source_url: Optional[str] = None
+    aliases: Optional[List[str]] = None
     is_published: Optional[bool] = None
     sort_order: Optional[int] = None
 
@@ -2814,6 +2870,11 @@ class SupplierOfferResponse(BaseModel):
     supplier_name: Optional[str] = None
     external_id: str
     title_raw: Optional[str] = None
+    title_normalized: Optional[str] = None
+    model_tokens: List[str] = Field(default_factory=list)
+    indoor_model_tokens: List[str] = Field(default_factory=list)
+    outdoor_model_tokens: List[str] = Field(default_factory=list)
+    match_normalizer_version: Optional[str] = None
     qty: int
     qty_raw: Optional[str] = None
     wholesale_raw: Optional[str] = None
@@ -2872,12 +2933,21 @@ class SupplierOfferSuggestionCandidate(BaseModel):
     product_id: int
     title: str
     price: int
+    score: int = 0
+    confidence: int = 0
+    matched_tokens: List[str] = Field(default_factory=list)
+    missing_tokens: List[str] = Field(default_factory=list)
+    explanations: List[str] = Field(default_factory=list)
+    score_breakdown: Dict[str, int] = Field(default_factory=dict)
 
 
 class SupplierOfferSuggestionItem(BaseModel):
     supplier_id: int
     external_id: str
     normalized_query: str
+    offer_tokens: List[str] = Field(default_factory=list)
+    indoor_model_tokens: List[str] = Field(default_factory=list)
+    outdoor_model_tokens: List[str] = Field(default_factory=list)
     candidates: List[SupplierOfferSuggestionCandidate]
     auto_eligible: bool
     reason: str

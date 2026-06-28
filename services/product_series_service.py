@@ -6,13 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from models import Product, ProductTagLink, Tag
+from models import Product, ProductSeries, ProductSeriesFeatureLink, ProductTagLink, Tag
 from schemas import (
     ProductSeriesNavigationItemResponse,
     ProductSeriesNavigationResponse,
     ProductSeriesResponse,
     ProductSiblingResponse,
 )
+from services.product_series_payloads import build_product_series_response
 
 
 class ProductSeriesService:
@@ -69,25 +70,7 @@ class ProductSeriesService:
     @staticmethod
     def _series_payload(product: Product) -> ProductSeriesResponse | None:
         series = product.series if product.series_id else None
-        if not series or not series.is_published:
-            return None
-        return ProductSeriesResponse(
-            id=series.id,
-            title=series.title,
-            slug=series.slug,
-            tagline=series.tagline,
-            short_description=series.short_description,
-            description=series.description,
-            hero_image=series.hero_image,
-            gallery_images=series.gallery_images or [],
-            features=series.features or [],
-            feature_blocks=series.feature_blocks or [],
-            content_blocks=series.content_blocks or [],
-            footnotes=series.footnotes or [],
-            seo_title=series.seo_title,
-            seo_description=series.seo_description,
-            source_url=series.source_url,
-        )
+        return build_product_series_response(series)
 
     @staticmethod
     def _series_group_keys(product: Product) -> List[str]:
@@ -149,7 +132,9 @@ class ProductSeriesService:
             select(Product)
             .where(Product.is_published == True)
             .options(
-                selectinload(Product.series),
+                selectinload(Product.series)
+                .selectinload(ProductSeries.feature_links)
+                .selectinload(ProductSeriesFeatureLink.feature),
                 selectinload(Product.tags).selectinload(Tag.group),
             )
         )

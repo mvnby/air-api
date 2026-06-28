@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from models import Brand, Product, ProductImage, Tag, TagGroup, ProductTagLink
+from models import Brand, Product, ProductImage, ProductSeries, ProductSeriesFeatureLink, Tag, TagGroup, ProductTagLink
 from models.product_constants import BTU_MAPPING
 from models.supplier import ProductLocalStock, ProductSupplierMapping, SupplierOffer
 
@@ -41,6 +41,14 @@ class ProductDAO:
         return option
 
     @staticmethod
+    def _series_option():
+        return (
+            selectinload(Product.series)
+            .selectinload(ProductSeries.feature_links)
+            .selectinload(ProductSeriesFeatureLink.feature)
+        )
+
+    @staticmethod
     async def get_by_id(
         session: AsyncSession,
         product_id: int,
@@ -53,7 +61,7 @@ class ProductDAO:
             stmt = stmt.where(Product.is_published == is_published)
         stmt = stmt.options(
             selectinload(Product.brand),
-            selectinload(Product.series),
+            ProductDAO._series_option(),
             selectinload(Product.tags).selectinload(Tag.group),
             ProductDAO._gallery_images_option(load_image_variants=load_image_variants),
             selectinload(Product.attachments),
@@ -74,7 +82,7 @@ class ProductDAO:
             stmt = stmt.where(Product.is_published == is_published)
         stmt = stmt.options(
             selectinload(Product.brand),
-            selectinload(Product.series),
+            ProductDAO._series_option(),
             selectinload(Product.tags).selectinload(Tag.group),
             ProductDAO._gallery_images_option(load_image_variants=load_image_variants),
             selectinload(Product.attachments),
@@ -90,7 +98,7 @@ class ProductDAO:
     ) -> List[Product]:
         stmt = select(Product).where(Product.is_published == True).options(
             selectinload(Product.brand),
-            selectinload(Product.series),
+            ProductDAO._series_option(),
             selectinload(Product.tags).selectinload(Tag.group),
             ProductDAO._gallery_images_option(load_image_variants=load_image_variants),
             selectinload(Product.attachments),
@@ -109,7 +117,7 @@ class ProductDAO:
             return []
         stmt = select(Product).where(Product.id.in_(product_ids)).options(
             selectinload(Product.brand),
-            selectinload(Product.series),
+            ProductDAO._series_option(),
             ProductDAO._gallery_images_option(load_image_variants=load_image_variants),
             selectinload(Product.attachments),
         )
@@ -508,7 +516,7 @@ class ProductDAO:
     ) -> List[Product]:
         stmt = select(Product).options(
             selectinload(Product.brand),
-            selectinload(Product.series),
+            ProductDAO._series_option(),
             selectinload(Product.tags).selectinload(Tag.group),
             ProductDAO._gallery_images_option(load_image_variants=load_image_variants),
             selectinload(Product.attachments),

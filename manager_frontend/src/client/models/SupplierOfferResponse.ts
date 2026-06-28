@@ -9,6 +9,11 @@ export type SupplierOfferResponse = {
     supplier_name?: (string | null);
     external_id: string;
     title_raw?: (string | null);
+    title_normalized?: (string | null);
+    model_tokens?: Array<string>;
+    indoor_model_tokens?: Array<string>;
+    outdoor_model_tokens?: Array<string>;
+    match_normalizer_version?: (string | null);
     qty: number;
     qty_raw?: (string | null);
     wholesale_raw?: (string | null);

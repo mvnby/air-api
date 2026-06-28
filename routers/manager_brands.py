@@ -5,17 +5,25 @@ from core.database import get_session
 from core.security import get_current_username
 from routers.manager_operation_ids import (
     CREATE_MANAGER_BRAND_SERIES,
+    CREATE_MANAGER_BRAND_FEATURE,
     CREATE_MANAGER_BRAND,
+    DELETE_MANAGER_BRAND_FEATURE,
     DELETE_MANAGER_BRAND_SERIES,
     DELETE_MANAGER_BRAND,
+    LIST_MANAGER_BRAND_FEATURES,
     LIST_MANAGER_BRAND_SERIES,
     LIST_MANAGER_BRANDS,
+    UPDATE_MANAGER_BRAND_FEATURE,
     UPDATE_MANAGER_BRAND_SERIES,
     UPDATE_MANAGER_BRAND,
 )
 from schemas import (
     ManagerActionMessageResponse,
     ManagerBrandCreatePayload,
+    ManagerBrandFeatureCreatePayload,
+    ManagerBrandFeatureListResponse,
+    ManagerBrandFeatureResponse,
+    ManagerBrandFeatureUpdatePayload,
     ManagerBrandListResponse,
     ManagerBrandResponse,
     ManagerBrandSeriesCreatePayload,
@@ -68,6 +76,75 @@ async def update_manager_brand(
         payload=payload.model_dump(exclude_unset=True),
     )
     return ManagerBrandResponse(**updated)
+
+
+@router.get(
+    "/{brand_id}/features",
+    response_model=ManagerBrandFeatureListResponse,
+    operation_id=LIST_MANAGER_BRAND_FEATURES,
+)
+async def list_manager_brand_features(
+    brand_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    items = await ManagerBrandService.list_brand_features(session=session, brand_id=brand_id)
+    return ManagerBrandFeatureListResponse(items=items)
+
+
+@router.post(
+    "/{brand_id}/features",
+    response_model=ManagerBrandFeatureResponse,
+    operation_id=CREATE_MANAGER_BRAND_FEATURE,
+)
+async def create_manager_brand_feature(
+    brand_id: int,
+    payload: ManagerBrandFeatureCreatePayload,
+    session: AsyncSession = Depends(get_session),
+):
+    created = await ManagerBrandService.create_brand_feature(
+        session=session,
+        brand_id=brand_id,
+        payload=payload.model_dump(exclude_unset=True),
+    )
+    return ManagerBrandFeatureResponse(**created)
+
+
+@router.put(
+    "/{brand_id}/features/{feature_id}",
+    response_model=ManagerBrandFeatureResponse,
+    operation_id=UPDATE_MANAGER_BRAND_FEATURE,
+)
+async def update_manager_brand_feature(
+    brand_id: int,
+    feature_id: int,
+    payload: ManagerBrandFeatureUpdatePayload,
+    session: AsyncSession = Depends(get_session),
+):
+    updated = await ManagerBrandService.update_brand_feature(
+        session=session,
+        brand_id=brand_id,
+        feature_id=feature_id,
+        payload=payload.model_dump(exclude_unset=True),
+    )
+    return ManagerBrandFeatureResponse(**updated)
+
+
+@router.delete(
+    "/{brand_id}/features/{feature_id}",
+    response_model=ManagerActionMessageResponse,
+    operation_id=DELETE_MANAGER_BRAND_FEATURE,
+)
+async def delete_manager_brand_feature(
+    brand_id: int,
+    feature_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    await ManagerBrandService.delete_brand_feature(
+        session=session,
+        brand_id=brand_id,
+        feature_id=feature_id,
+    )
+    return ManagerActionMessageResponse(message="Фича успешно удалена")
 
 
 @router.get(

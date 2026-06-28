@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ProductSeriesBrandFeatureResponse } from './ProductSeriesBrandFeatureResponse';
 import type { ProductSeriesContentBlockResponse } from './ProductSeriesContentBlockResponse';
 import type { ProductSeriesFeatureBlockResponse } from './ProductSeriesFeatureBlockResponse';
 export type ProductSeriesResponse = {
@@ -14,6 +15,7 @@ export type ProductSeriesResponse = {
     hero_image?: (string | null);
     gallery_images?: Array<string>;
     features?: Array<string>;
+    brand_features?: Array<ProductSeriesBrandFeatureResponse>;
     feature_blocks?: Array<ProductSeriesFeatureBlockResponse>;
     content_blocks?: Array<ProductSeriesContentBlockResponse>;
     footnotes?: Array<string>;

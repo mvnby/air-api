@@ -9,9 +9,11 @@ from sqlmodel import SQLModel
 from crud.product import ProductDAO
 from models import (
     Brand,
+    BrandFeature,
     Product,
     ProductLocalStock,
     ProductSeries,
+    ProductSeriesFeatureLink,
     ProductTagLink,
     Tag,
     TagGroup,
@@ -75,6 +77,29 @@ async def _seed_series_products(session: AsyncSession) -> dict[str, Product]:
         is_published=True,
     )
     session.add(series)
+    await session.flush()
+
+    brand_feature = BrandFeature(
+        brand_id=brand.id,
+        title="Gentle Breeze",
+        slug="gentle-breeze",
+        text="Soft airflow without direct draft",
+        image_url="/media/series/gentle-breeze.webp",
+        icon="wind",
+        footnote="Available on selected models",
+        aliases=["soft airflow"],
+        is_published=True,
+        sort_order=5,
+    )
+    session.add(brand_feature)
+    await session.flush()
+    session.add(
+        ProductSeriesFeatureLink(
+            series_id=series.id,
+            feature_id=brand_feature.id,
+            sort_order=10,
+        )
+    )
     await session.flush()
 
     main = Product(
@@ -149,6 +174,7 @@ async def test_public_product_queries_eager_load_series_and_siblings(sqlite_sess
 
     assert detail is not None
     assert "series" not in inspect(detail).unloaded
+    assert "feature_links" not in inspect(detail.series).unloaded
     detail_payload = map_product_to_response(detail)
     assert detail_payload.series is not None
     assert detail_payload.series.model_dump() == {
@@ -161,6 +187,21 @@ async def test_public_product_queries_eager_load_series_and_siblings(sqlite_sess
         "hero_image": "/media/series/elite.webp",
         "gallery_images": ["/media/series/elite-hero.webp"],
         "features": ["Quiet mode", "Wi-Fi ready"],
+        "brand_features": [
+            {
+                "id": detail_payload.series.brand_features[0].id,
+                "title": "Gentle Breeze",
+                "slug": "gentle-breeze",
+                "text": "Soft airflow without direct draft",
+                "image_url": "/media/series/gentle-breeze.webp",
+                "icon": "wind",
+                "footnote": "Available on selected models",
+                "source_url": None,
+                "aliases": ["soft airflow"],
+                "is_published": True,
+                "sort_order": 10,
+            }
+        ],
         "feature_blocks": [
             {
                 "title": "Quiet mode",
@@ -194,12 +235,16 @@ async def test_public_product_queries_eager_load_series_and_siblings(sqlite_sess
     )
     catalog_main = next(item for item in catalog_products if item.slug == seeded["main"].slug)
     assert "series" not in inspect(catalog_main).unloaded
+    assert "feature_links" not in inspect(catalog_main.series).unloaded
     assert map_product_to_response(catalog_main).series.slug == "elite"
+    assert map_product_to_response(catalog_main).series.brand_features[0].slug == "gentle-breeze"
 
     featured = await CatalogService.get_vitebsk_featured_products(sqlite_session, limit=3)
     featured_main = next(item for item in featured if item.slug == seeded["main"].slug)
     assert "series" not in inspect(featured_main).unloaded
+    assert "feature_links" not in inspect(featured_main.series).unloaded
     assert map_product_to_response(featured_main).series.slug == "elite"
+    assert map_product_to_response(featured_main).series.brand_features[0].slug == "gentle-breeze"
 
     siblings = await ProductSeriesService.get_series_siblings(sqlite_session, detail, limit=8)
     assert [item.slug for item in siblings] == ["mdv-elite-25", "mdv-elite-50"]
@@ -215,6 +260,7 @@ async def test_public_series_navigation_builds_slug_sibling_map(sqlite_session):
     assert main_item.series is not None
     assert main_item.series.slug == "elite"
     assert main_item.series.tagline == "Quiet comfort"
+    assert main_item.series.brand_features[0].slug == "gentle-breeze"
     assert main_item.series.feature_blocks[0].title == "Quiet mode"
     assert [item.slug for item in main_item.series_siblings] == [
         "mdv-elite-25",

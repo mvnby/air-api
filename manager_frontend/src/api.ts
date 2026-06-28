@@ -67,6 +67,9 @@ import {
     type CatalogImportJobStatusResponse,
     type ManagerBrandResponse,
     type ManagerBrandCreatePayload,
+    type ManagerBrandFeatureCreatePayload,
+    type ManagerBrandFeatureResponse,
+    type ManagerBrandFeatureUpdatePayload,
     type ManagerBrandSeriesCreatePayload,
     type ManagerBrandSeriesResponse,
     type ManagerBrandSeriesUpdatePayload,
@@ -136,11 +139,15 @@ export type {
 };
 
 type ManagerBrand = ManagerBrandResponse;
+type ManagerBrandFeature = ManagerBrandFeatureResponse;
 type ManagerBrandSeries = ManagerBrandSeriesResponse;
 
 export type {
     ManagerBrand,
     ManagerBrandCreatePayload,
+    ManagerBrandFeature,
+    ManagerBrandFeatureCreatePayload,
+    ManagerBrandFeatureUpdatePayload,
     ManagerBrandSeries,
     ManagerBrandSeriesCreatePayload,
     ManagerBrandSeriesUpdatePayload,
@@ -1026,12 +1033,55 @@ export const api = {
         return await ManagerBrandsService.deleteManagerBrand(brandId);
     },
 
+    async listManagerBrandFeatures(brandId: number): Promise<{ items: ManagerBrandFeature[] }> {
+        const response = await ManagerBrandsService.listManagerBrandFeatures(brandId);
+        return {
+            ...response,
+            items: (response.items || []).map((feature) => ({
+                ...feature,
+                aliases: feature.aliases || [],
+                series_count: feature.series_count ?? 0,
+            })),
+        };
+    },
+
+    async createManagerBrandFeature(
+        brandId: number,
+        payload: ManagerBrandFeatureCreatePayload,
+    ): Promise<ManagerBrandFeature> {
+        const feature = await ManagerBrandsService.createManagerBrandFeature(brandId, payload);
+        return {
+            ...feature,
+            aliases: feature.aliases || [],
+            series_count: feature.series_count ?? 0,
+        };
+    },
+
+    async updateManagerBrandFeature(
+        brandId: number,
+        featureId: number,
+        payload: ManagerBrandFeatureUpdatePayload,
+    ): Promise<ManagerBrandFeature> {
+        const feature = await ManagerBrandsService.updateManagerBrandFeature(brandId, featureId, payload);
+        return {
+            ...feature,
+            aliases: feature.aliases || [],
+            series_count: feature.series_count ?? 0,
+        };
+    },
+
+    async deleteManagerBrandFeature(brandId: number, featureId: number): Promise<{ message: string }> {
+        return await ManagerBrandsService.deleteManagerBrandFeature(brandId, featureId);
+    },
+
     async listManagerBrandSeries(brandId: number): Promise<{ items: ManagerBrandSeries[] }> {
         const response = await ManagerBrandsService.listManagerBrandSeries(brandId);
         return {
             ...response,
             items: (response.items || []).map((series) => ({
                 ...series,
+                brand_features: series.brand_features || [],
+                brand_feature_ids: series.brand_feature_ids || [],
                 features: series.features || [],
                 products_count: series.products_count ?? 0,
             })),
@@ -1045,6 +1095,8 @@ export const api = {
         const series = await ManagerBrandsService.createManagerBrandSeries(brandId, payload);
         return {
             ...series,
+            brand_features: series.brand_features || [],
+            brand_feature_ids: series.brand_feature_ids || [],
             features: series.features || [],
             products_count: series.products_count ?? 0,
         };
@@ -1058,6 +1110,8 @@ export const api = {
         const series = await ManagerBrandsService.updateManagerBrandSeries(brandId, seriesId, payload);
         return {
             ...series,
+            brand_features: series.brand_features || [],
+            brand_feature_ids: series.brand_feature_ids || [],
             features: series.features || [],
             products_count: series.products_count ?? 0,
         };

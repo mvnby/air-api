@@ -8,7 +8,6 @@ from schemas import (
     ProductManualResponse,
     ProductBrandResponse,
     ProductResponse,
-    ProductSeriesResponse,
     ProductSiblingResponse,
     TagGroupResponse,
     TagResponse,
@@ -18,6 +17,7 @@ from services.product_image_processing_contract import (
     ProductImageProcessingStatus,
     ProductImageVariantType,
 )
+from services.product_series_payloads import build_product_series_response
 from services.product_serialization import parse_legacy_images, sanitize_specs
 
 
@@ -124,27 +124,7 @@ def map_product_to_response(
     ]
 
     series = product.series if product.series_id else None
-    series_payload = (
-        ProductSeriesResponse(
-            id=series.id,
-            title=series.title,
-            slug=series.slug,
-            tagline=series.tagline,
-            short_description=series.short_description,
-            description=series.description,
-            hero_image=series.hero_image,
-            gallery_images=series.gallery_images or [],
-            features=series.features or [],
-            feature_blocks=series.feature_blocks or [],
-            content_blocks=series.content_blocks or [],
-            footnotes=series.footnotes or [],
-            seo_title=series.seo_title,
-            seo_description=series.seo_description,
-            source_url=series.source_url,
-        )
-        if series and series.is_published
-        else None
-    )
+    series_payload = build_product_series_response(series)
 
     manuals_payload = [
         ProductManualResponse(

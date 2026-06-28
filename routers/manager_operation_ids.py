@@ -206,6 +206,10 @@ LIST_MANAGER_BRANDS = "list_manager_brands"
 CREATE_MANAGER_BRAND = "create_manager_brand"
 UPDATE_MANAGER_BRAND = "update_manager_brand"
 DELETE_MANAGER_BRAND = "delete_manager_brand"
+LIST_MANAGER_BRAND_FEATURES = "list_manager_brand_features"
+CREATE_MANAGER_BRAND_FEATURE = "create_manager_brand_feature"
+UPDATE_MANAGER_BRAND_FEATURE = "update_manager_brand_feature"
+DELETE_MANAGER_BRAND_FEATURE = "delete_manager_brand_feature"
 LIST_MANAGER_BRAND_SERIES = "list_manager_brand_series"
 CREATE_MANAGER_BRAND_SERIES = "create_manager_brand_series"
 UPDATE_MANAGER_BRAND_SERIES = "update_manager_brand_series"
@@ -420,6 +424,10 @@ ALL_MANAGER_OPERATION_IDS = (
     CREATE_MANAGER_BRAND,
     UPDATE_MANAGER_BRAND,
     DELETE_MANAGER_BRAND,
+    LIST_MANAGER_BRAND_FEATURES,
+    CREATE_MANAGER_BRAND_FEATURE,
+    UPDATE_MANAGER_BRAND_FEATURE,
+    DELETE_MANAGER_BRAND_FEATURE,
     LIST_MANAGER_BRAND_SERIES,
     CREATE_MANAGER_BRAND_SERIES,
     UPDATE_MANAGER_BRAND_SERIES,
