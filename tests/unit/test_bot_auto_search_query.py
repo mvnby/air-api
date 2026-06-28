@@ -1,3 +1,10 @@
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
+from aiogram.dispatcher.event.bases import SkipHandler
+
+from bot_app.handlers import catalog as catalog_handler
 from bot_app.handlers.catalog import _choose_search_products, _is_inline_search_query
 from bot_app.utils import _availability_badge
 
@@ -42,3 +49,15 @@ def test_availability_badge():
     assert _availability_badge({"availability_status": "out_of_stock"}) == "⛔ <b>Нет в наличии</b>\n"
     assert _availability_badge({"vitebsk_qty": 1}) == "✅ <b>В наличии</b>\n"
     assert _availability_badge({"title": "No supply fields"}) == ""
+
+
+@pytest.mark.asyncio
+async def test_auto_search_skips_non_search_text(monkeypatch):
+    staff_check = AsyncMock(return_value=True)
+    monkeypatch.setattr(catalog_handler, "_is_staff_user", staff_check)
+    message = SimpleNamespace(text="УНП 392053942\nР/с BY83 BPSB 3012 3542 9501 1933 0000", from_user=SimpleNamespace(id=5))
+
+    with pytest.raises(SkipHandler):
+        await catalog_handler.auto_search_process(message)
+
+    staff_check.assert_not_called()

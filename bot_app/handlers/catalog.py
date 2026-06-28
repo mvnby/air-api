@@ -3,6 +3,7 @@ import logging
 import re
 
 from aiogram import Router, types, F
+from aiogram.dispatcher.event.bases import SkipHandler
 from aiogram.filters import Command, StateFilter
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
@@ -293,7 +294,7 @@ async def auto_search_process(message: types.Message):
     query = (message.text or "").strip()
     user_id = message.from_user.id if message.from_user else None
     if not _is_inline_search_query(query):
-        return
+        raise SkipHandler()
     if not await _is_staff_user(user_id):
         return
 

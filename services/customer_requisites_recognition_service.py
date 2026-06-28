@@ -413,6 +413,47 @@ class CustomerRequisitesRecognitionService:
         return cls._recognition_response(recognition, duplicate)
 
     @classmethod
+    async def recognize_text(
+        cls,
+        session: AsyncSession,
+        *,
+        text: str,
+        source: str,
+        telegram_user_id: Optional[int] = None,
+        telegram_chat_id: Optional[int] = None,
+        telegram_message_id: Optional[int] = None,
+    ) -> dict[str, Any]:
+        raw_text = cls._clean_text(text, max_length=12000)
+        if not raw_text:
+            raise ValueError("Текст пустой")
+        if len(raw_text) < 20:
+            raise ValueError("Слишком мало текста для распознавания реквизитов")
+
+        extracted_raw = await cls.extract_requisites(raw_text)
+        extracted, validation_flags = cls._normalize_extracted(extracted_raw, raw_text)
+        duplicate = await cls._find_duplicate(session, extracted.get("inn"))
+
+        recognition = CustomerRequisitesRecognition(
+            source=source,
+            status=cls.STATUS_RECOGNIZED,
+            telegram_user_id=telegram_user_id,
+            telegram_chat_id=telegram_chat_id,
+            telegram_message_id=telegram_message_id,
+            original_filename=None,
+            mime_type="text/plain",
+            local_file_path=None,
+            local_file_url=None,
+            raw_text=raw_text,
+            extracted_json=extracted,
+            validation_flags=validation_flags,
+            duplicate_customer_id=duplicate.id if duplicate else None,
+        )
+        session.add(recognition)
+        await session.commit()
+        await session.refresh(recognition)
+        return cls._recognition_response(recognition, duplicate)
+
+    @classmethod
     def _customer_payload(cls, extracted: dict[str, Any]) -> dict[str, Any]:
         return {
             "name": extracted.get("name") or extracted.get("full_legal_name") or "Новый клиент",

@@ -254,6 +254,68 @@ async def test_requisites_file_sends_preview_for_admin(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_requisites_text_sends_preview_for_admin(monkeypatch):
+    progress = _DummyProgress()
+    message = _DummyMessage(
+        text=(
+            "Частное унитарное предприятие «МегаЕвроКлимат»\n"
+            "УНП 392053942\n"
+            "Р/с BY83 BPSB 3012 3542 9501 1933 0000\n"
+            "ОАО «Сбербанк» BIC BPSBBY2X"
+        ),
+        user_id=5,
+    )
+    message.answer = AsyncMock(return_value=progress)
+
+    monkeypatch.setattr(admin_handler, "_is_admin_user", AsyncMock(return_value=True))
+
+    async def fake_recognize(session, **kwargs):
+        assert "МегаЕвроКлимат" in kwargs["text"]
+        assert kwargs["source"] == "telegram_text"
+        assert kwargs["telegram_user_id"] == 5
+        assert kwargs["telegram_chat_id"] == 100
+        assert kwargs["telegram_message_id"] == 55
+        return {
+            "id": 12,
+            "status": "recognized",
+            "source": "telegram_text",
+            "raw_text": kwargs["text"],
+            "extracted": {
+                "name": "ЧУП «МегаЕвроКлимат»",
+                "inn": "392053942",
+                "iban": "BY83BPSB30123542950119330000",
+                "bic": "BPSBBY2X",
+            },
+            "validation_flags": {"field_errors": {}, "warnings": {}, "is_valid": True},
+            "duplicate_customer": None,
+        }
+
+    monkeypatch.setattr(admin_handler.CustomerRequisitesRecognitionService, "recognize_text", fake_recognize)
+    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
+
+    await admin_handler.recognize_requisites_text(message)
+
+    message.answer.assert_awaited_once_with("Распознаю реквизиты из текста…")
+    progress.edit_text.assert_awaited_once()
+    args, kwargs = progress.edit_text.await_args
+    assert "МегаЕвроКлимат" in args[0]
+    assert "392053942" in args[0]
+    assert kwargs["parse_mode"] == "HTML"
+
+
+@pytest.mark.asyncio
+async def test_requisites_text_ignores_non_requisites(monkeypatch):
+    message = _DummyMessage(text="просто заметка без реквизитов", user_id=5)
+    admin_check = AsyncMock(return_value=True)
+    monkeypatch.setattr(admin_handler, "_is_admin_user", admin_check)
+
+    await admin_handler.recognize_requisites_text(message)
+
+    admin_check.assert_not_called()
+    message.answer.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_requisites_photo_prompts_for_action_without_recognition(monkeypatch):
     message = _DummyMessage(text="", user_id=5)
     message.photo = [
