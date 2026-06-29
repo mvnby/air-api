@@ -269,9 +269,10 @@ class ManagerMediaService:
                 lambda: list(DDGS().images(query, max_results=max_results))
             )
         except Exception as exc:
-            logger.error(f"Error searching images (DDG): {exc}")
             if "Ratelimit" in str(exc) or "403" in str(exc):
                 logger.warning(f"DDG Ratelimit hit for query: {query}")
+            else:
+                logger.warning(f"Image search provider error (DDG): {exc}")
             return []
 
         images = []
@@ -303,7 +304,7 @@ class ManagerMediaService:
                 response.raise_for_status()
                 image_content = response.content
         except Exception as exc:
-            logger.error(f"Failed to download image: {exc}")
+            logger.warning(f"Failed to download external image: {exc}")
             raise ValueError(f"Failed to download image: {exc}") from exc
 
         return await ManagerMediaService.save_image_from_bytes(
@@ -586,6 +587,17 @@ class ManagerMediaService:
             if exclude_installation:
                 stmt = stmt.where(ProductImage.is_installation_photo == False)  # noqa: E712
             rows = (await session.execute(stmt)).scalars().all()
+            row_ids = [row.id for row in rows if row.id is not None]
+            if row_ids:
+                variant_rows = (
+                    await session.execute(
+                        select(ProductImageVariant).where(
+                            ProductImageVariant.product_image_id.in_(row_ids)
+                        )
+                    )
+                ).scalars().all()
+                for variant in variant_rows:
+                    await session.delete(variant)
             for row in rows:
                 await session.delete(row)
                 deleted_links += 1

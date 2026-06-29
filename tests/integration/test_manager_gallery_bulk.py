@@ -5,7 +5,7 @@ from httpx import AsyncClient
 from sqlmodel import select
 
 from core.config import settings
-from models import Product, ProductImage
+from models import Product, ProductImage, ProductImageVariant
 
 
 def _make_product(idx: int) -> Product:
@@ -102,6 +102,75 @@ async def test_bulk_delete_common_removes_only_selected_products(async_client: A
     ).scalars().all()
     assert len(left) == 1
     assert left[0].product_id == p3_id
+
+
+@pytest.mark.asyncio
+async def test_bulk_delete_common_removes_variants_only_for_deleted_links(async_client: AsyncClient, db):
+    p1 = _make_product(31)
+    p2 = _make_product(32)
+    p3 = _make_product(33)
+    db.add_all([p1, p2, p3])
+    await db.commit()
+    for p in [p1, p2, p3]:
+        await db.refresh(p)
+
+    common_url = "/media/products/shared/with-variants.webp"
+    img1 = ProductImage(product_id=p1.id, url=common_url, is_installation_photo=False)
+    img2 = ProductImage(product_id=p2.id, url=common_url, is_installation_photo=False)
+    img3 = ProductImage(product_id=p3.id, url=common_url, is_installation_photo=False)
+    db.add_all([img1, img2, img3])
+    await db.commit()
+    for img in [img1, img2, img3]:
+        await db.refresh(img)
+    p3_id = p3.id
+    img3_id = img3.id
+
+    db.add_all([
+        ProductImageVariant(
+            product_image_id=img1.id,
+            variant_type="card",
+            url="/media/products/shared/with-variants-p1-card.webp",
+            processing_status="ready",
+        ),
+        ProductImageVariant(
+            product_image_id=img2.id,
+            variant_type="card",
+            url="/media/products/shared/with-variants-p2-card.webp",
+            processing_status="ready",
+        ),
+        ProductImageVariant(
+            product_image_id=img3.id,
+            variant_type="card",
+            url="/media/products/shared/with-variants-p3-card.webp",
+            processing_status="ready",
+        ),
+    ])
+    await db.commit()
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.post(
+        "/api/manager/gallery/bulk-delete-common",
+        json={
+            "product_ids": [p1.id, p2.id],
+            "urls": [common_url],
+            "exclude_installation": True,
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    db.expire_all()
+
+    remaining_images = (
+        await db.execute(select(ProductImage).where(ProductImage.url == common_url))
+    ).scalars().all()
+    assert [image.product_id for image in remaining_images] == [p3_id]
+
+    remaining_variants = (
+        await db.execute(select(ProductImageVariant).order_by(ProductImageVariant.id))
+    ).scalars().all()
+    assert len(remaining_variants) == 1
+    assert remaining_variants[0].product_image_id == img3_id
 
 
 @pytest.mark.asyncio

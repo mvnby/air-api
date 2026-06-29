@@ -15,6 +15,10 @@ from services.document_role_service import DocumentRoleService
 from services.document_template_service import DocumentTemplateService
 
 
+class DocumentHasDependentsError(ValueError):
+    """Raised when a document is used as a basis for other documents."""
+
+
 class DocumentService:
     """Сервис для работы с документами заказов через Google Drive"""
 
@@ -329,15 +333,25 @@ class DocumentService:
             return None
 
         order_id = document.order_id
+        google_file_id = document.google_file_id
 
-        if document.google_file_id:
-            try:
-                get_google_service().delete_file(document.google_file_id)
-            except Exception as exc:
-                print(f"Error deleting file from Drive: {exc}")
+        dependent_query = select(OrderDocument.id).where(
+            OrderDocument.base_document_id == document.id
+        ).limit(1)
+        dependent_result = await session.execute(dependent_query)
+        if dependent_result.scalar_one_or_none() is not None:
+            raise DocumentHasDependentsError(
+                "Нельзя удалить документ-основание: сначала удалите связанные акты или накладные"
+            )
 
         await session.delete(document)
         await session.commit()
+
+        if google_file_id:
+            try:
+                get_google_service().delete_file(google_file_id)
+            except Exception as exc:
+                print(f"Error deleting file from Drive: {exc}")
 
         return order_id
 

@@ -8,6 +8,7 @@ EQUIPMENT_NOT_FOUND = "equipment_not_found"
 PRODUCT_NOT_FOUND = "product_not_found"
 DOCUMENT_GENERATION_FAILED = "document_generation_failed"
 DOCUMENT_NOT_FOUND = "document_not_found"
+DOCUMENT_HAS_DEPENDENTS = "document_has_dependents"
 
 
 # Shared message map for manager API responses and frontend fallback mapping.
@@ -22,6 +23,7 @@ DEFAULT_MANAGER_ERROR_MESSAGES = {
     PRODUCT_NOT_FOUND: "Товар не найден",
     DOCUMENT_GENERATION_FAILED: "Не удалось сформировать документ",
     DOCUMENT_NOT_FOUND: "Документ не найден",
+    DOCUMENT_HAS_DEPENDENTS: "Нельзя удалить документ-основание: сначала удалите связанные акты или накладные",
 
 }
 

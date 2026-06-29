@@ -2913,6 +2913,65 @@ async def test_manager_doc_delete_success(async_client, db, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_manager_doc_delete_blocks_base_document_with_dependents(async_client, db, monkeypatch):
+    customer = Customer(name="DocBaseGuard", phone="+375290000001", type=CustomerType.individual)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    from models import OrderDocument
+    base_doc = OrderDocument(
+        order_id=order.id,
+        doc_type="invoice",
+        number="I-BASE",
+        google_file_id="fid_base",
+        google_edit_url="http://edit_base",
+    )
+    db.add(base_doc)
+    await db.flush()
+    dependent_doc = OrderDocument(
+        order_id=order.id,
+        doc_type="act",
+        number="A-DEP",
+        base_document_id=base_doc.id,
+        google_file_id="fid_dep",
+        google_edit_url="http://edit_dep",
+    )
+    db.add(dependent_doc)
+    await db.commit()
+    await db.refresh(base_doc)
+    await db.refresh(dependent_doc)
+
+    from services.google_service import get_google_service
+    deleted_ids = []
+
+    def _fake_delete_file(file_id):
+        deleted_ids.append(file_id)
+
+    monkeypatch.setattr(get_google_service(), "delete_file", _fake_delete_file)
+
+    headers = await _auth_headers(async_client)
+    resp = await async_client.delete(f"/api/manager/docs/{base_doc.id}", headers=headers)
+
+    assert resp.status_code == 409
+    assert resp.json()["detail"]["error_code"] == "document_has_dependents"
+    assert deleted_ids == []
+
+    from sqlmodel import select
+
+    base_res = await db.execute(select(OrderDocument).where(OrderDocument.id == base_doc.id))
+    dep_res = await db.execute(select(OrderDocument).where(OrderDocument.id == dependent_doc.id))
+
+    assert base_res.scalar_one_or_none() is not None
+    assert dep_res.scalar_one_or_none() is not None
+
+
+@pytest.mark.asyncio
 async def test_manager_order_delete_cascades_related_entities(async_client, db, monkeypatch):
     customer = Customer(name="Delete Order", phone="+375290001234", type=CustomerType.individual)
     product = Product(title="Delete Product", slug="delete-product", price=4000, area=35)
