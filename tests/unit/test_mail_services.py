@@ -503,6 +503,83 @@ async def test_bank_receipt_multi_act_payment_requires_review(sqlite_session):
 
 
 @pytest.mark.asyncio
+async def test_bank_receipt_suggests_and_attaches_exact_group_subset(sqlite_session):
+    customer = Customer(name='ТД "Витебск Агропродукт"', phone="+375291111116", type="company", inn="300123456")
+    sqlite_session.add(customer)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(customer)
+
+    orders = [
+        Order(customer_id=customer.id, status="execution", title="Акт 1"),
+        Order(customer_id=customer.id, status="execution", title="Акт 2"),
+        Order(customer_id=customer.id, status="execution", title="Акт 3"),
+    ]
+    sqlite_session.add_all(orders)
+    await sqlite_session.commit()
+    for order in orders:
+        await sqlite_session.refresh(order)
+
+    sqlite_session.add_all(
+        [
+            OrderServiceLink(order_id=orders[0].id, title="Монтаж", quantity=1, price=2600, cost=0),
+            OrderServiceLink(order_id=orders[1].id, title="ТО", quantity=1, price=2300, cost=0),
+            OrderServiceLink(order_id=orders[2].id, title="Доп. работы", quantity=1, price=500, cost=0),
+        ]
+    )
+    receipt = BankReceipt(
+        status="new",
+        operation_type="incoming_funds",
+        sender_email="bank-statement@local",
+        subject="Bank statement CSV import",
+        fingerprint="group-subset-receipt-fingerprint",
+        received_at=datetime(2026, 6, 29, 11, 30),
+        amount=4900,
+        currency=PaymentCurrency.BYN,
+        payer_name='ТД "Витебск Агропродукт"',
+        payer_unp="300123456",
+        payment_purpose="Оплата по актам за июнь",
+        raw_body="statement row",
+    )
+    sqlite_session.add(receipt)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(receipt)
+
+    matched = await BankReceiptService.match_receipt(sqlite_session, receipt)
+    await sqlite_session.commit()
+
+    assert matched.status == "requires_review"
+    assert matched.match_meta["reason"] == "group_balance_due_exact"
+    assert matched.match_meta["group_match"]["selection_mode"] == "exact_subset"
+    assert matched.match_meta["group_match"]["total_balance_due"] == 4900
+    assert matched.match_meta["group_match"]["open_balance_due"] == 5400
+    assert set(matched.match_meta["group_match"]["order_ids"]) == {orders[0].id, orders[1].id}
+    assert set(matched.match_meta["group_match"]["open_order_ids"]) == {order.id for order in orders}
+
+    attached = await BankReceiptService.attach_receipt_to_order_group(
+        sqlite_session,
+        receipt_id=receipt.id,
+        payment_type="postpayment",
+    )
+
+    assert attached.status == "matched"
+    assert set(attached.match_meta["group_order_ids"]) == {orders[0].id, orders[1].id}
+    payments = (
+        await sqlite_session.execute(select(Payment).where(Payment.bank_receipt_id == receipt.id).order_by(Payment.amount))
+    ).scalars().all()
+    assert [payment.amount for payment in payments] == [2300, 2600]
+    assert {payment.order_id for payment in payments} == {orders[0].id, orders[1].id}
+
+    rolled_back = await BankReceiptService.update_receipt_status(
+        sqlite_session,
+        receipt_id=receipt.id,
+        status="requires_review",
+        reason="rollback",
+    )
+    assert rolled_back.status == "requires_review"
+    assert (await sqlite_session.execute(select(Payment).where(Payment.bank_receipt_id == receipt.id))).scalars().all() == []
+
+
+@pytest.mark.asyncio
 async def test_bank_receipt_can_be_manually_attached_to_order(sqlite_session):
     customer = Customer(name="УКС Витебск", phone="+375291111111", type="company", inn="300200572")
     sqlite_session.add(customer)

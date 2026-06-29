@@ -10416,6 +10416,63 @@
         }
       }
     },
+    "/api/manager/mail/bank-receipts/{receipt_id}/attach-group": {
+      "post": {
+        "tags": [
+          "manager/mail"
+        ],
+        "summary": "Attach Manager Bank Receipt Group",
+        "operationId": "attach_manager_bank_receipt_group",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "receipt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Receipt Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BankReceiptGroupAttachPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankReceiptResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/mail/bank-receipts/{receipt_id}/status": {
       "patch": {
         "tags": [
@@ -14607,6 +14664,24 @@
           "order_id"
         ],
         "title": "BankReceiptAttachPayload"
+      },
+      "BankReceiptGroupAttachPayload": {
+        "properties": {
+          "order_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Order Ids"
+          },
+          "payment_type": {
+            "type": "string",
+            "title": "Payment Type",
+            "default": "postpayment"
+          }
+        },
+        "type": "object",
+        "title": "BankReceiptGroupAttachPayload"
       },
       "BankReceiptImportResponse": {
         "properties": {

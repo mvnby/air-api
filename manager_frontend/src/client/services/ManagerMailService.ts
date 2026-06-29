@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { BankReceiptAttachPayload } from '../models/BankReceiptAttachPayload';
+import type { BankReceiptGroupAttachPayload } from '../models/BankReceiptGroupAttachPayload';
 import type { BankReceiptImportResponse } from '../models/BankReceiptImportResponse';
 import type { BankReceiptListResponse } from '../models/BankReceiptListResponse';
 import type { BankReceiptResponse } from '../models/BankReceiptResponse';
@@ -136,6 +137,30 @@ export class ManagerMailService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/mail/bank-receipts/{receipt_id}/attach',
+            path: {
+                'receipt_id': receiptId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Attach Manager Bank Receipt Group
+     * @param receiptId
+     * @param requestBody
+     * @returns BankReceiptResponse Successful Response
+     * @throws ApiError
+     */
+    public static attachManagerBankReceiptGroup(
+        receiptId: number,
+        requestBody: BankReceiptGroupAttachPayload,
+    ): CancelablePromise<BankReceiptResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/mail/bank-receipts/{receipt_id}/attach-group',
             path: {
                 'receipt_id': receiptId,
             },

@@ -7,6 +7,7 @@ from core.manager_error_codes import BAD_REQUEST
 from core.security import get_current_username
 from routers.manager_operation_ids import (
     ATTACH_MANAGER_BANK_RECEIPT,
+    ATTACH_MANAGER_BANK_RECEIPT_GROUP,
     DELETE_MANAGER_BANK_RECEIPT,
     IMPORT_MANAGER_BANK_RECEIPTS,
     IMPORT_MANAGER_BANK_STATEMENT,
@@ -19,6 +20,7 @@ from routers.manager_operation_ids import (
 )
 from schemas import (
     BankReceiptAttachPayload,
+    BankReceiptGroupAttachPayload,
     BankReceiptImportResponse,
     BankReceiptListResponse,
     BankReceiptResponse,
@@ -194,6 +196,32 @@ async def attach_manager_bank_receipt(
         raise manager_http_error(
             status_code=400,
             endpoint=ATTACH_MANAGER_BANK_RECEIPT,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/bank-receipts/{receipt_id}/attach-group",
+    response_model=BankReceiptResponse,
+    operation_id=ATTACH_MANAGER_BANK_RECEIPT_GROUP,
+)
+async def attach_manager_bank_receipt_group(
+    receipt_id: int,
+    payload: BankReceiptGroupAttachPayload,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await BankReceiptService.attach_receipt_to_order_group(
+            session,
+            receipt_id=receipt_id,
+            order_ids=payload.order_ids,
+            payment_type=payload.payment_type,
+        )
+    except Exception as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=ATTACH_MANAGER_BANK_RECEIPT_GROUP,
             error_code=BAD_REQUEST,
             message=str(exc),
         ) from exc
