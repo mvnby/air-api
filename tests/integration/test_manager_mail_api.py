@@ -3,8 +3,22 @@ from datetime import datetime
 import pytest
 
 from core.config import settings
-from models import BankReceipt, OutgoingEmail, PaymentCurrency
+from sqlmodel import select
+
+from models import (
+    BankReceipt,
+    Customer,
+    CustomerType,
+    Order,
+    OrderProposal,
+    OrderServiceLink,
+    OrderStatus,
+    OutgoingEmail,
+    Payment,
+    PaymentCurrency,
+)
 from services.bank_receipt_service import BankReceiptImportResult
+from services.bank_receipt_service import BankReceiptService
 from services.email_lead_import_job_service import EmailLeadImportJobSnapshot
 from services.email_lead_intake_service import EmailLeadImportResult
 
@@ -44,6 +58,92 @@ async def test_manager_mail_lists_bank_receipts(async_client, db):
     assert payload["total"] == 1
     assert payload["items"][0]["amount"] == 1015
     assert payload["items"][0]["status"] == "requires_review"
+
+
+@pytest.mark.asyncio
+async def test_manager_mail_attaches_exact_group_bank_receipt(async_client, db):
+    customer = Customer(
+        name='ТД "Витебск Агропродукт"',
+        phone="+375291234567",
+        type=CustomerType.company,
+        inn="300123456",
+    )
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order_a = Order(customer_id=customer.id, status=OrderStatus.EXECUTION, title="Акт 1")
+    order_b = Order(customer_id=customer.id, status=OrderStatus.EXECUTION, title="Акт 2")
+    db.add_all([order_a, order_b])
+    await db.commit()
+    await db.refresh(order_a)
+    await db.refresh(order_b)
+
+    proposal_a = OrderProposal(order_id=order_a.id, name="Основное", is_selected=True)
+    proposal_b = OrderProposal(order_id=order_b.id, name="Основное", is_selected=True)
+    db.add_all([proposal_a, proposal_b])
+    await db.commit()
+    await db.refresh(proposal_a)
+    await db.refresh(proposal_b)
+
+    db.add_all(
+        [
+            OrderServiceLink(order_id=order_a.id, proposal_id=proposal_a.id, title="Монтаж", quantity=1, price=2600, cost=0),
+            OrderServiceLink(order_id=order_b.id, proposal_id=proposal_b.id, title="ТО", quantity=1, price=2300, cost=0),
+        ]
+    )
+    receipt = BankReceipt(
+        status="new",
+        operation_type="incoming_funds",
+        sender_email="noreply@service.belapb.by",
+        subject="Поступление средств на счет",
+        fingerprint="group-receipt-test",
+        received_at=datetime(2026, 6, 29, 11, 30),
+        amount=4900,
+        currency=PaymentCurrency.BYN,
+        payer_name='ТД "Витебск Агропродукт"',
+        payer_unp="300123456",
+        payment_purpose="Оплата по актам за июнь",
+        raw_body="raw",
+    )
+    db.add(receipt)
+    await db.commit()
+    await db.refresh(receipt)
+
+    await BankReceiptService.match_receipt(db, receipt)
+    await db.commit()
+    await db.refresh(receipt)
+
+    assert receipt.status == "requires_review"
+    assert receipt.match_meta["reason"] == "group_balance_due_exact"
+    assert receipt.match_meta["group_match"]["is_exact"] is True
+    assert receipt.match_meta["group_match"]["total_balance_due"] == 4900
+    assert set(receipt.match_meta["group_match"]["order_ids"]) == {order_a.id, order_b.id}
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.post(
+        f"/api/manager/mail/bank-receipts/{receipt.id}/attach-group",
+        headers=headers,
+        json={},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "matched"
+    assert set(payload["match_meta"]["group_order_ids"]) == {order_a.id, order_b.id}
+    assert len(payload["match_meta"]["group_payment_ids"]) == 2
+
+    payments = (
+        await db.execute(select(Payment).where(Payment.bank_receipt_id == receipt.id).order_by(Payment.amount))
+    ).scalars().all()
+    assert [payment.amount for payment in payments] == [2300, 2600]
+
+    await db.refresh(order_a)
+    await db.refresh(order_b)
+    await BankReceiptService.update_receipt_status(db, receipt_id=receipt.id, status="requires_review", reason="rollback")
+    await db.refresh(order_a)
+    await db.refresh(order_b)
+    assert (await db.execute(select(Payment).where(Payment.bank_receipt_id == receipt.id))).scalars().all() == []
 
 
 @pytest.mark.asyncio

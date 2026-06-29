@@ -11,6 +11,7 @@ export type { AddressSuggestionItem } from './models/AddressSuggestionItem';
 export type { AddressSuggestResponse } from './models/AddressSuggestResponse';
 export type { ArticleResponse } from './models/ArticleResponse';
 export type { BankReceiptAttachPayload } from './models/BankReceiptAttachPayload';
+export type { BankReceiptGroupAttachPayload } from './models/BankReceiptGroupAttachPayload';
 export type { BankReceiptImportResponse } from './models/BankReceiptImportResponse';
 export type { BankReceiptListResponse } from './models/BankReceiptListResponse';
 export type { BankReceiptResponse } from './models/BankReceiptResponse';

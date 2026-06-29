@@ -27,6 +27,18 @@ class BankReceiptService:
     RESOLVED_UNMATCHED_STATUSES = {"closed_orders", "non_order_income"}
 
     @staticmethod
+    def _money(value: Any) -> float:
+        return round(float(value or 0), 2)
+
+    @staticmethod
+    def _money_cents(value: Any) -> int:
+        return int(round(BankReceiptService._money(value) * 100))
+
+    @staticmethod
+    def _normalize_unp(value: Any) -> str:
+        return re.sub(r"\D+", "", str(value or ""))
+
+    @staticmethod
     async def list_receipts(
         session: AsyncSession,
         *,
@@ -44,7 +56,11 @@ class BankReceiptService:
         if payer_unp:
             conditions.append(BankReceipt.payer_unp == payer_unp)
         if order_id:
-            conditions.append(BankReceipt.matched_order_id == order_id)
+            receipt_ids_for_order = select(Payment.bank_receipt_id).where(
+                Payment.order_id == order_id,
+                Payment.bank_receipt_id.is_not(None),
+            )
+            conditions.append(or_(BankReceipt.matched_order_id == order_id, BankReceipt.id.in_(receipt_ids_for_order)))
 
         count_stmt = select(func.count(BankReceipt.id))
         stmt = select(BankReceipt)
@@ -212,6 +228,122 @@ class BankReceiptService:
         return candidates
 
     @staticmethod
+    async def _load_receipt_candidate_orders(
+        session: AsyncSession,
+        receipt: BankReceipt,
+        *,
+        order_ids: Optional[List[int]] = None,
+    ) -> list[Order]:
+        unique_order_ids = sorted({int(order_id) for order_id in (order_ids or []) if order_id})
+        if not unique_order_ids and not receipt.payer_unp:
+            return []
+
+        conditions = [Order.status != OrderStatus.CLOSED]
+        if unique_order_ids:
+            conditions.append(Order.id.in_(unique_order_ids))
+        else:
+            conditions.append(Customer.inn == receipt.payer_unp)
+
+        stmt = (
+            select(Order)
+            .join(Customer, Customer.id == Order.customer_id)
+            .where(*conditions)
+            .options(
+                selectinload(Order.customer),
+                selectinload(Order.payments),
+                selectinload(Order.proposals),
+                selectinload(Order.product_links),
+                selectinload(Order.service_links),
+                selectinload(Order.installers),
+            )
+            .order_by(Order.created_at.asc(), Order.id.asc())
+        )
+        result = await session.execute(stmt)
+        orders = list(result.scalars().all())
+        if unique_order_ids and len({int(order.id or 0) for order in orders}) != len(unique_order_ids):
+            raise ValueError("Some group orders were not found or are already closed")
+
+        for order in orders:
+            await session.refresh(order, attribute_names=["payments", "proposals", "product_links", "service_links", "installers"])
+            order.calculate_totals()
+        return orders
+
+    @staticmethod
+    def _order_to_group_item(order: Order) -> dict[str, Any]:
+        return {
+            "order_id": int(order.id or 0),
+            "title": order.title,
+            "customer_name": order.customer.name if order.customer else None,
+            "status": order.status.value if hasattr(order.status, "value") else str(order.status),
+            "total_amount": BankReceiptService._money(order.total_amount),
+            "total_payments": BankReceiptService._money(order.total_payments),
+            "balance_due": BankReceiptService._money(order.balance_due),
+        }
+
+    @staticmethod
+    def _find_exact_group_subset(items: list[dict[str, Any]], target_amount: float) -> list[dict[str, Any]]:
+        target_cents = BankReceiptService._money_cents(target_amount)
+        if target_cents <= 0:
+            return []
+
+        # Keep the state bounded: a single payer can have many old open orders,
+        # and we only need one exact, reviewable subset for manager confirmation.
+        reachable: dict[int, tuple[int, ...]] = {0: ()}
+        max_states = 50000
+        for index, item in enumerate(items):
+            amount_cents = BankReceiptService._money_cents(item.get("balance_due"))
+            if amount_cents <= 0 or amount_cents > target_cents:
+                continue
+            additions: dict[int, tuple[int, ...]] = {}
+            for total, indexes in list(reachable.items()):
+                next_total = total + amount_cents
+                if next_total > target_cents or next_total in reachable or next_total in additions:
+                    continue
+                next_indexes = (*indexes, index)
+                if next_total == target_cents and len(next_indexes) > 1:
+                    return [items[item_index] for item_index in next_indexes]
+                additions[next_total] = next_indexes
+            reachable.update(additions)
+            if len(reachable) > max_states:
+                break
+        return []
+
+    @staticmethod
+    def _build_group_match_meta(receipt: BankReceipt, orders: list[Order]) -> dict[str, Any]:
+        debt_orders = [order for order in orders if float(order.balance_due or 0) > BankReceiptService.EXACT_AMOUNT_TOLERANCE]
+        open_items = [BankReceiptService._order_to_group_item(order) for order in debt_orders if order.id]
+        open_balance_due = BankReceiptService._money(sum(item["balance_due"] for item in open_items))
+        receipt_amount = BankReceiptService._money(receipt.amount)
+        selection_mode = "all_open"
+        selected_items = open_items
+        is_exact = (
+            len(open_items) > 1
+            and abs(open_balance_due - receipt_amount) <= BankReceiptService.EXACT_AMOUNT_TOLERANCE
+        )
+        if not is_exact:
+            exact_subset = BankReceiptService._find_exact_group_subset(open_items, receipt_amount)
+            if exact_subset:
+                selected_items = exact_subset
+                selection_mode = "exact_subset"
+                is_exact = True
+            else:
+                selection_mode = "all_open_not_exact"
+
+        selected_balance_due = BankReceiptService._money(sum(item["balance_due"] for item in selected_items))
+        return {
+            "available": len(selected_items) > 1,
+            "is_exact": is_exact,
+            "selection_mode": selection_mode,
+            "total_balance_due": selected_balance_due,
+            "open_balance_due": open_balance_due,
+            "receipt_amount": receipt_amount,
+            "order_ids": [item["order_id"] for item in selected_items],
+            "orders": selected_items,
+            "open_order_ids": [item["order_id"] for item in open_items],
+            "open_orders": open_items,
+        }
+
+    @staticmethod
     async def match_receipt(session: AsyncSession, receipt: BankReceipt) -> BankReceipt:
         if receipt.id and receipt.matched_payment_id:
             return receipt
@@ -235,29 +367,10 @@ class BankReceiptService:
             await session.flush()
             return receipt
 
-        stmt = (
-            select(Order)
-            .join(Customer, Customer.id == Order.customer_id)
-            .where(
-                Customer.inn == receipt.payer_unp,
-                Order.status != OrderStatus.CLOSED,
-            )
-            .options(
-                selectinload(Order.customer),
-                selectinload(Order.payments),
-                selectinload(Order.proposals),
-                selectinload(Order.product_links),
-                selectinload(Order.service_links),
-                selectinload(Order.installers),
-            )
-        )
-        result = await session.execute(stmt)
-        orders = list(result.scalars().all())
+        orders = await BankReceiptService._load_receipt_candidate_orders(session, receipt)
         document_candidates = await BankReceiptService.find_document_reference_candidates(session, receipt)
         exact_orders: List[Order] = []
         for order in orders:
-            await session.refresh(order, attribute_names=["payments", "proposals", "product_links", "service_links", "installers"])
-            order.calculate_totals()
             if order.balance_due > 0 and abs(float(order.balance_due) - float(receipt.amount)) <= BankReceiptService.EXACT_AMOUNT_TOLERANCE:
                 exact_orders.append(order)
 
@@ -267,6 +380,7 @@ class BankReceiptService:
             if candidate_order_id and candidate_order_id not in candidate_ids:
                 candidate_ids.append(candidate_order_id)
         exact_ids = [int(order.id) for order in exact_orders if order.id is not None]
+        group_match = BankReceiptService._build_group_match_meta(receipt, orders)
         if len(exact_orders) == 1 and not BankReceiptService._looks_like_multi_document_payment(receipt.payment_purpose):
             order = exact_orders[0]
             existing_payment = None
@@ -297,16 +411,23 @@ class BankReceiptService:
                 "reason": "exact_unp_and_balance_due",
                 "candidate_order_ids": candidate_ids,
                 "exact_order_ids": exact_ids,
+                "group_match": group_match,
                 "document_candidates": document_candidates,
             }
         else:
-            reason = "multi_document_payment" if BankReceiptService._looks_like_multi_document_payment(receipt.payment_purpose) else "not_exactly_one_candidate"
+            if group_match["is_exact"]:
+                reason = "group_balance_due_exact"
+            elif BankReceiptService._looks_like_multi_document_payment(receipt.payment_purpose):
+                reason = "multi_document_payment"
+            else:
+                reason = "not_exactly_one_candidate"
             receipt.status = "requires_review"
             receipt.match_meta = {
                 **base_meta,
                 "reason": reason,
                 "candidate_order_ids": candidate_ids,
                 "exact_order_ids": exact_ids,
+                "group_match": group_match,
                 "document_candidates": document_candidates,
             }
 
@@ -367,6 +488,111 @@ class BankReceiptService:
         return receipt
 
     @staticmethod
+    async def attach_receipt_to_order_group(
+        session: AsyncSession,
+        *,
+        receipt_id: int,
+        order_ids: Optional[List[int]] = None,
+        payment_type: str = "postpayment",
+    ) -> BankReceipt:
+        receipt = await session.get(BankReceipt, receipt_id)
+        if not receipt:
+            raise ValueError("Bank receipt not found")
+        if receipt.amount <= 0:
+            raise ValueError("Bank receipt amount is not valid")
+
+        existing_payment_result = await session.execute(select(Payment).where(Payment.bank_receipt_id == receipt.id).limit(1))
+        if receipt.status == "matched" or receipt.matched_payment_id or existing_payment_result.scalar_one_or_none():
+            raise ValueError("Bank receipt is already attached")
+
+        try:
+            ptype = PaymentType(payment_type)
+        except ValueError as exc:
+            raise ValueError(f"Invalid payment type: {payment_type}") from exc
+
+        requested_order_ids = [int(order_id) for order_id in (order_ids or []) if order_id]
+        if not requested_order_ids:
+            requested_order_ids = list((receipt.match_meta or {}).get("group_match", {}).get("order_ids") or [])
+        if len(set(requested_order_ids)) < 2:
+            raise ValueError("Select at least two unpaid orders for group payment")
+
+        orders = await BankReceiptService._load_receipt_candidate_orders(session, receipt, order_ids=requested_order_ids)
+        expected_unp = BankReceiptService._normalize_unp(receipt.payer_unp)
+        if not expected_unp:
+            raise ValueError("Bank receipt payer UNP is required for group payment")
+        foreign_orders = [
+            int(order.id or 0)
+            for order in orders
+            if BankReceiptService._normalize_unp(order.customer.inn if order.customer else "") != expected_unp
+        ]
+        if foreign_orders:
+            raise ValueError("Selected orders do not belong to the bank receipt payer UNP")
+
+        debt_orders = [order for order in orders if float(order.balance_due or 0) > BankReceiptService.EXACT_AMOUNT_TOLERANCE]
+        if len(debt_orders) < 2:
+            raise ValueError("Group payment requires at least two orders with unpaid balance")
+
+        total_balance_due = BankReceiptService._money(sum(float(order.balance_due or 0) for order in debt_orders))
+        receipt_amount = BankReceiptService._money(receipt.amount)
+        if abs(total_balance_due - receipt_amount) > BankReceiptService.EXACT_AMOUNT_TOLERANCE:
+            raise ValueError(f"Receipt amount {receipt_amount} does not match group debt {total_balance_due}")
+
+        payments: list[Payment] = []
+        allocated = 0.0
+        for index, order in enumerate(debt_orders):
+            if index == len(debt_orders) - 1:
+                amount = BankReceiptService._money(receipt_amount - allocated)
+            else:
+                amount = BankReceiptService._money(order.balance_due)
+                allocated = BankReceiptService._money(allocated + amount)
+            if amount <= BankReceiptService.EXACT_AMOUNT_TOLERANCE:
+                continue
+            payment = Payment(
+                order_id=int(order.id),
+                bank_receipt_id=receipt.id,
+                amount=amount,
+                currency=receipt.currency,
+                date=receipt.received_at,
+                type=ptype,
+                comment=f"Разнесено по группе заказов из банковского поступления #{receipt.id}",
+            )
+            session.add(payment)
+            payments.append(payment)
+
+        await session.flush()
+
+        for order in debt_orders:
+            await OrderService._refresh_order_financials(session, order)
+            session.add(order)
+
+        payment_items = [
+            {
+                "payment_id": int(payment.id or 0),
+                "order_id": int(payment.order_id),
+                "amount": BankReceiptService._money(payment.amount),
+            }
+            for payment in payments
+        ]
+        meta = dict(receipt.match_meta or {})
+        meta.update(
+            {
+                "manual_group_attached": True,
+                "group_order_ids": [item["order_id"] for item in payment_items],
+                "group_payment_ids": [item["payment_id"] for item in payment_items],
+                "group_payments": payment_items,
+                "group_total": receipt_amount,
+            }
+        )
+        receipt.status = "matched"
+        receipt.matched_order_id = payment_items[0]["order_id"]
+        receipt.matched_payment_id = payment_items[0]["payment_id"]
+        receipt.match_meta = meta
+        session.add(receipt)
+        await session.commit()
+        await session.refresh(receipt)
+        return receipt
+
+    @staticmethod
     async def update_receipt_status(
         session: AsyncSession,
         *,
@@ -386,17 +612,26 @@ class BankReceiptService:
 
         old_payment_id = receipt.matched_payment_id
         old_order_id = receipt.matched_order_id
-        if normalized_status in {"void", *BankReceiptService.RESOLVED_UNMATCHED_STATUSES} and old_payment_id:
-            payment = await session.get(Payment, old_payment_id)
-            if payment and payment.bank_receipt_id == receipt.id:
+        deleted_payment_ids: list[int] = []
+        if normalized_status in {"void", "requires_review", *BankReceiptService.RESOLVED_UNMATCHED_STATUSES}:
+            payments_result = await session.execute(select(Payment).where(Payment.bank_receipt_id == receipt.id))
+            payments = list(payments_result.scalars().all())
+            if not payments and old_payment_id:
+                payment = await session.get(Payment, old_payment_id)
+                payments = [payment] if payment and payment.bank_receipt_id == receipt.id else []
+            affected_order_ids = {int(payment.order_id) for payment in payments if payment and payment.order_id}
+            for payment in payments:
+                if not payment:
+                    continue
+                deleted_payment_ids.append(int(payment.id or 0))
                 await session.delete(payment)
-                await session.flush()
-                if payment.order_id:
-                    order = await session.get(Order, payment.order_id)
-                    if order:
-                        await OrderService._refresh_order_financials(session, order)
-                        order.is_paid = order.balance_due <= BankReceiptService.EXACT_AMOUNT_TOLERANCE
-                        session.add(order)
+            await session.flush()
+            for order_id in affected_order_ids:
+                order = await session.get(Order, order_id)
+                if order:
+                    await OrderService._refresh_order_financials(session, order)
+                    order.is_paid = order.balance_due <= BankReceiptService.EXACT_AMOUNT_TOLERANCE
+                    session.add(order)
 
         meta = dict(receipt.match_meta or {})
         meta.update(
@@ -406,6 +641,7 @@ class BankReceiptService:
                 "previous_status": receipt.status,
                 "previous_matched_order_id": old_order_id,
                 "previous_matched_payment_id": old_payment_id,
+                "previous_matched_payment_ids": deleted_payment_ids or None,
             }
         )
         receipt.status = normalized_status

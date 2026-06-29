@@ -3658,6 +3658,11 @@ class BankReceiptAttachPayload(BaseModel):
     payment_type: str = "postpayment"
 
 
+class BankReceiptGroupAttachPayload(BaseModel):
+    order_ids: List[int] = Field(default_factory=list)
+    payment_type: str = "postpayment"
+
+
 class BankReceiptStatusPayload(BaseModel):
     status: str
     reason: Optional[str] = None

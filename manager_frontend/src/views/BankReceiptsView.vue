@@ -5,6 +5,29 @@ import { ManagerMailService } from '../client';
 import type { BankReceiptResponse } from '../client';
 import { getApiErrorMessage } from '../utils/api-errors';
 
+type GroupOrderCandidate = {
+  order_id?: number;
+  title?: string | null;
+  customer_name?: string | null;
+  status?: string | null;
+  total_amount?: number;
+  total_payments?: number;
+  balance_due?: number;
+};
+
+type GroupMatchMeta = {
+  available?: boolean;
+  is_exact?: boolean;
+  selection_mode?: string | null;
+  total_balance_due?: number;
+  open_balance_due?: number;
+  receipt_amount?: number;
+  order_ids?: number[];
+  orders?: GroupOrderCandidate[];
+  open_order_ids?: number[];
+  open_orders?: GroupOrderCandidate[];
+};
+
 const receipts = ref<BankReceiptResponse[]>([]);
 const loading = ref(false);
 const importing = ref(false);
@@ -82,13 +105,52 @@ const formatDate = (value?: string | null) => {
   }).format(new Date(value));
 };
 
+const formatMoneyValue = (amount?: number | null, currency = 'BYN') => {
+  return `${new Intl.NumberFormat('ru-BY', { maximumFractionDigits: 2 }).format(Number(amount || 0))} ${currency}`;
+};
+
 const formatAmount = (receipt: BankReceiptResponse) => {
-  return `${new Intl.NumberFormat('ru-BY', { maximumFractionDigits: 2 }).format(receipt.amount)} ${receipt.currency}`;
+  return formatMoneyValue(receipt.amount, receipt.currency);
 };
 
 const candidateOrders = (receipt: BankReceiptResponse) => {
   const ids = receipt.match_meta?.candidate_order_ids;
   return Array.isArray(ids) ? ids.filter(Boolean) : [];
+};
+
+const groupMatch = (receipt: BankReceiptResponse): GroupMatchMeta | null => {
+  const raw = receipt.match_meta?.group_match;
+  return raw && typeof raw === 'object' ? raw as GroupMatchMeta : null;
+};
+
+const groupOrders = (receipt: BankReceiptResponse) => {
+  const items = groupMatch(receipt)?.orders;
+  return Array.isArray(items) ? items.filter((item) => item?.order_id) : [];
+};
+
+const groupOrderIds = (receipt: BankReceiptResponse) => {
+  const ids = groupMatch(receipt)?.order_ids;
+  if (Array.isArray(ids) && ids.length) return ids.map(Number).filter(Boolean);
+  return groupOrders(receipt).map((item) => Number(item.order_id)).filter(Boolean);
+};
+
+const groupMatchLabel = (receipt: BankReceiptResponse) => {
+  const match = groupMatch(receipt);
+  if (!match) return '';
+  if (match.selection_mode === 'exact_subset') return 'Подобрана часть открытых актов';
+  if (match.is_exact) return 'Открытая задолженность совпадает';
+  return 'Открытая задолженность по УНП';
+};
+
+const canAttachGroup = (receipt: BankReceiptResponse) => {
+  const match = groupMatch(receipt);
+  return Boolean(
+    match?.available
+    && match?.is_exact
+    && groupOrderIds(receipt).length > 1
+    && receipt.status !== 'matched'
+    && !receipt.matched_payment_id,
+  );
 };
 
 const loadReceipts = async () => {
@@ -153,6 +215,44 @@ const importStatement = async () => {
     error.value = getApiErrorMessage(err);
   } finally {
     importingStatement.value = false;
+  }
+};
+
+const attachGroup = async (receipt: BankReceiptResponse) => {
+  const orders = groupOrders(receipt);
+  const orderLines = orders.map((item) => {
+    const title = item.title ? ` · ${item.title}` : '';
+    return `#${item.order_id}${title}: ${formatMoneyValue(item.balance_due, receipt.currency)}`;
+  });
+  const confirmed = window.confirm(
+    [
+      `Разнести поступление #${receipt.id} на ${orders.length} заказа(ов)?`,
+      groupMatchLabel(receipt),
+      '',
+      ...orderLines,
+      '',
+      `Итого: ${formatMoneyValue(groupMatch(receipt)?.total_balance_due, receipt.currency)}`,
+      groupMatch(receipt)?.selection_mode === 'exact_subset'
+        ? `Всего открыто по УНП: ${formatMoneyValue(groupMatch(receipt)?.open_balance_due, receipt.currency)}`
+        : '',
+    ].join('\n'),
+  );
+  if (!confirmed) return;
+
+  actionId.value = receipt.id;
+  error.value = '';
+  notice.value = '';
+  try {
+    await ManagerMailService.attachManagerBankReceiptGroup(receipt.id, {
+      order_ids: groupOrderIds(receipt),
+      payment_type: 'postpayment',
+    });
+    notice.value = `Поступление #${receipt.id} разнесено по группе заказов.`;
+    await loadReceipts();
+  } catch (err) {
+    error.value = getApiErrorMessage(err);
+  } finally {
+    actionId.value = null;
   }
 };
 
@@ -373,6 +473,35 @@ onMounted(loadReceipts);
                       </button>
                     </div>
                     <span v-else class="text-gray-400">—</span>
+                    <div
+                      v-if="groupMatch(receipt)?.available"
+                      class="mt-2 rounded-lg border px-2 py-1.5 text-xs"
+                      :class="groupMatch(receipt)?.is_exact ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200' : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200'"
+                    >
+                      <div class="font-semibold">
+                        {{ groupMatchLabel(receipt) }}:
+                        {{ formatMoneyValue(groupMatch(receipt)?.total_balance_due, receipt.currency) }}
+                      </div>
+                      <div
+                        v-if="groupMatch(receipt)?.selection_mode === 'exact_subset'"
+                        class="mt-0.5 opacity-80"
+                      >
+                        Всего открыто по УНП: {{ formatMoneyValue(groupMatch(receipt)?.open_balance_due, receipt.currency) }}
+                      </div>
+                      <div class="mt-1 flex flex-wrap gap-1">
+                        <button
+                          v-for="item in groupOrders(receipt)"
+                          :key="item.order_id"
+                          class="rounded-md bg-white/70 px-1.5 py-0.5 font-semibold transition hover:bg-white dark:bg-slate-950/40 dark:hover:bg-slate-950/70"
+                          @click="goToOrder(Number(item.order_id))"
+                        >
+                          #{{ item.order_id }} · {{ formatMoneyValue(item.balance_due, receipt.currency) }}
+                        </button>
+                      </div>
+                      <div v-if="groupMatch(receipt)?.is_exact" class="mt-1 font-semibold">
+                        Сумма поступления совпадает.
+                      </div>
+                    </div>
                   </td>
                   <td class="px-4 py-3">
                     <button class="max-w-[360px] text-left text-gray-700 hover:text-gray-950 dark:text-slate-300 dark:hover:text-white" @click="expandedId = expandedId === receipt.id ? null : receipt.id">
@@ -381,6 +510,15 @@ onMounted(loadReceipts);
                   </td>
                   <td class="px-4 py-3 text-right">
                     <div class="flex justify-end gap-2">
+                      <button
+                        v-if="canAttachGroup(receipt)"
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:border-emerald-500/30 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
+                        title="Разнести по группе заказов"
+                        :disabled="actionId === receipt.id"
+                        @click="attachGroup(receipt)"
+                      >
+                        <CheckCircle2 class="h-4 w-4" />
+                      </button>
                       <button
                         class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-sky-200 text-sky-700 hover:bg-sky-50 disabled:opacity-40 dark:border-sky-500/30 dark:text-sky-300 dark:hover:bg-sky-500/10"
                         title="Оплата закрытых заказов"
