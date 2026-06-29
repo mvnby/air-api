@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.manager_api_errors import manager_http_error
-from core.manager_error_codes import DOCUMENT_NOT_FOUND, BAD_REQUEST
+from core.manager_error_codes import BAD_REQUEST, DOCUMENT_HAS_DEPENDENTS, DOCUMENT_NOT_FOUND
 from core.security import get_current_username
 from routers.manager_operation_ids import (
     GET_MANAGER_ORDER_DOCUMENTS,
@@ -34,7 +34,7 @@ from schemas import (
     DocumentTemplatePayload,
     DocumentTemplateUpdatePayload,
 )
-from services.document_service import DocumentService
+from services.document_service import DocumentHasDependentsError, DocumentService
 from services.document_template_service import DocumentTemplateService
 from services.google_service import get_google_service
 
@@ -241,7 +241,15 @@ async def delete_manager_doc(
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
 ):
-    order_id = await DocumentService.delete_document(session, doc_id)
+    try:
+        order_id = await DocumentService.delete_document(session, doc_id)
+    except DocumentHasDependentsError as exc:
+        raise manager_http_error(
+            status_code=409,
+            endpoint=DELETE_MANAGER_DOC,
+            error_code=DOCUMENT_HAS_DEPENDENTS,
+            message=str(exc),
+        ) from exc
     
     if not order_id:
         raise manager_http_error(

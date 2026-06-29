@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from typing import Any, Dict, List
 from sqlmodel import select
 from core.config import settings
@@ -100,8 +99,8 @@ class SchedulerService:
 
                 # Sleep to avoid rate limiting
                 await asyncio.sleep(2)
-            except Exception as e:
-                logger.error(f"Error updating price for {product['title']}: {e}")
+            except Exception:
+                logger.exception("Error updating price for %s", product["title"])
 
         if updates:
             updated_count = 0
@@ -162,8 +161,8 @@ class SchedulerService:
         while True:
             try:
                 await self.update_all_prices()
-            except Exception as e:
-                logger.error(f"Critical error in price sync loop: {e}")
+            except Exception:
+                logger.exception("Critical error in price sync loop")
             await asyncio.sleep(interval_hours * 3600)
 
     async def _stalled_deal_loop(self):
@@ -175,37 +174,48 @@ class SchedulerService:
                     await self.check_stalled_deals(session)
                 logger.info("✅ Stalled Deal Check Done. Sleeping 24 hours.")
                 await asyncio.sleep(24 * 3600)
-            except Exception as e:
-                logger.error(f"❌ Stalled Deal Check Error: {e}")
+            except Exception:
+                logger.exception("❌ Stalled Deal Check Error")
                 await asyncio.sleep(3600)  # Retry in 1 hour
 
     async def check_stalled_deals(self, session):
         """
-        Moves deals from NEGOTIATION to DEFERRED if updated_at > 14 days ago.
+        Marks stale negotiation orders for follow-up instead of moving them to
+        a legacy deferred status.
         """
         from models import Order, OrderStatus
         from datetime import datetime, timedelta
-        
+
         cutoff_date = datetime.now() - timedelta(days=14)
         
         # Select orders in Negotiation older than 14 days
         stmt = select(Order).where(
             Order.status == OrderStatus.NEGOTIATION,
-            Order.updated_at < cutoff_date
+            Order.updated_at < cutoff_date,
+            Order.negotiation_status != "follow_up",
         )
         res = await session.execute(stmt)
         stalled_orders = res.scalars().all()
         
         for order in stalled_orders:
-            logger.warning(f"⚠️ Deferring Stalled Order #{order.id} (Last update: {order.updated_at})")
-            order.status = OrderStatus.DEFERRED
-            order.technical_meta = {**(order.technical_meta or {}), "deferred_reason": "Auto-deferred: >14 days in Negotiation"}
+            logger.warning(
+                "⚠️ Marking stalled negotiation order #%s for follow-up (Last update: %s)",
+                order.id,
+                order.updated_at,
+            )
+            order.status = OrderStatus.NEGOTIATION
+            order.negotiation_status = "follow_up"
+            order.negotiation_status_changed_at = datetime.now()
+            order.technical_meta = {
+                **(order.technical_meta or {}),
+                "stalled_follow_up_reason": "Auto follow-up: >14 days in Negotiation",
+            }
             order.next_followup_date = datetime.now() + timedelta(days=7)
             session.add(order)
             
         if stalled_orders:
             await session.commit()
-            logger.info(f"🔄 Auto-deferred {len(stalled_orders)} stalled orders.")
+            logger.info("🔄 Marked %s stalled orders for follow-up.", len(stalled_orders))
 
     async def _backup_loop(self):
         """Runs database backup every day at 3:00 AM."""
@@ -228,8 +238,8 @@ class SchedulerService:
                 await asyncio.to_thread(backup_service.perform_backup, cleanup=True)
                 logger.info("✅ Daily Backup Completed.")
                 
-            except Exception as e:
-                logger.error(f"❌ Backup Loop Error: {e}")
+            except Exception:
+                logger.exception("❌ Backup Loop Error")
                 # Retry in 1 hour if it crashed to avoid loop spam
                 await asyncio.sleep(3600)
 
@@ -243,8 +253,8 @@ class SchedulerService:
                     archived_count = await LeadService.archive_expired_lost_leads(session=session, older_than_days=90)
                 logger.info(f"✅ Lead archive job done. Archived: {archived_count}")
                 await asyncio.sleep(24 * 3600)
-            except Exception as e:
-                logger.error(f"❌ Lead archive loop error: {e}")
+            except Exception:
+                logger.exception("❌ Lead archive loop error")
                 await asyncio.sleep(3600)
 
     async def _supplier_sync_loop(self):
@@ -266,8 +276,8 @@ class SchedulerService:
                     await asyncio.sleep(interval_minutes * 60)
                 else:
                     await asyncio.sleep(300)
-            except Exception as e:
-                logger.error(f"❌ Supplier sync loop error: {e}")
+            except Exception:
+                logger.exception("❌ Supplier sync loop error")
                 await asyncio.sleep(300)
 
     async def _bank_mail_import_loop(self):
@@ -300,8 +310,8 @@ class SchedulerService:
                     result.failed,
                     notified_admins,
                 )
-            except Exception as e:
-                logger.error(f"❌ Bank mail import loop error: {e}")
+            except Exception:
+                logger.exception("❌ Bank mail import loop error")
             await asyncio.sleep(interval_minutes * 60)
 
     async def _email_lead_import_loop(self):
@@ -352,8 +362,8 @@ class SchedulerService:
                     result.failed,
                     snapshot.notified_admins,
                 )
-            except Exception as e:
-                logger.error(f"❌ Email lead import loop error: {e}")
+            except Exception:
+                logger.exception("❌ Email lead import loop error")
             await asyncio.sleep(interval_minutes * 60)
 
 scheduler_service = SchedulerService()
