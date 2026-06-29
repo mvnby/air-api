@@ -2973,7 +2973,7 @@ class OrderService:
 
     @staticmethod
     async def delete_payment(session: AsyncSession, order_id: int, payment_id: int):
-        from models import Payment
+        from models import BankReceipt, Payment
         order = await session.get(Order, order_id)
         if not order:
             raise ValueError("Order not found")
@@ -2981,15 +2981,59 @@ class OrderService:
         payment = await session.get(Payment, payment_id)
         if not payment or payment.order_id != order_id:
             raise ValueError("Payment not found on this order")
-            
-        await session.delete(payment)
+
+        bank_receipt_id = int(payment.bank_receipt_id) if payment.bank_receipt_id else None
+        affected_order_ids = {int(order_id)}
+
+        if bank_receipt_id:
+            linked_payments_result = await session.execute(
+                select(Payment).where(Payment.bank_receipt_id == bank_receipt_id)
+            )
+            linked_payments = list(linked_payments_result.scalars().all())
+            deleted_payment_ids = [int(item.id or 0) for item in linked_payments if item.id]
+            for linked_payment in linked_payments:
+                if linked_payment.order_id:
+                    affected_order_ids.add(int(linked_payment.order_id))
+                await session.delete(linked_payment)
+
+            receipt = await session.get(BankReceipt, bank_receipt_id)
+            if receipt:
+                meta = dict(receipt.match_meta or {})
+                meta.update(
+                    {
+                        "manual_status": "requires_review",
+                        "manual_reason": "payment_deleted_from_order",
+                        "previous_status": receipt.status,
+                        "previous_matched_order_id": receipt.matched_order_id,
+                        "previous_matched_payment_id": receipt.matched_payment_id,
+                        "previous_matched_payment_ids": deleted_payment_ids or None,
+                    }
+                )
+                receipt.status = "requires_review"
+                receipt.matched_order_id = None
+                receipt.matched_payment_id = None
+                receipt.match_meta = meta
+                session.add(receipt)
+        else:
+            await session.delete(payment)
         await session.flush()
-        
-        await OrderService._refresh_order_financials(session, order)
-        session.add(order)
+
+        for affected_order_id in affected_order_ids:
+            affected_order = await session.get(Order, affected_order_id)
+            if not affected_order:
+                continue
+            await OrderService._refresh_order_financials(session, affected_order)
+            affected_order.is_paid = affected_order.balance_due <= 0.01
+            session.add(affected_order)
         await session.commit()
-        
-        return [OrderService._map_payment(p) for p in sorted(order.payments, key=lambda d: d.date, reverse=True)]
+
+        current_payments_result = await session.execute(
+            select(Payment)
+            .where(Payment.order_id == order_id)
+            .options(selectinload(Payment.bank_receipt))
+            .order_by(Payment.date.desc())
+        )
+        return [OrderService._map_payment(p) for p in current_payments_result.scalars().all()]
 
     # -----------------------------------------------------------------
     # Leads Inbox (Order-based triage)

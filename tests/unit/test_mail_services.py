@@ -580,6 +580,75 @@ async def test_bank_receipt_suggests_and_attaches_exact_group_subset(sqlite_sess
 
 
 @pytest.mark.asyncio
+async def test_delete_order_payment_detaches_group_bank_receipt(sqlite_session):
+    customer = Customer(name='ТД "Витебск Агропродукт"', phone="+375291111117", type="company", inn="300123457")
+    sqlite_session.add(customer)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(customer)
+
+    orders = [
+        Order(customer_id=customer.id, status="execution", title="Акт 1"),
+        Order(customer_id=customer.id, status="execution", title="Акт 2"),
+    ]
+    sqlite_session.add_all(orders)
+    await sqlite_session.commit()
+    for order in orders:
+        await sqlite_session.refresh(order)
+
+    sqlite_session.add_all(
+        [
+            OrderServiceLink(order_id=orders[0].id, title="Монтаж", quantity=1, price=2700, cost=0),
+            OrderServiceLink(order_id=orders[1].id, title="ТО", quantity=1, price=2200, cost=0),
+        ]
+    )
+    receipt = BankReceipt(
+        status="new",
+        operation_type="incoming_funds",
+        sender_email="bank-statement@local",
+        subject="Bank statement CSV import",
+        fingerprint="group-delete-payment-receipt-fingerprint",
+        received_at=datetime(2026, 6, 29, 11, 30),
+        amount=4900,
+        currency=PaymentCurrency.BYN,
+        payer_name='ТД "Витебск Агропродукт"',
+        payer_unp="300123457",
+        payment_purpose="Оплата по актам за июнь",
+        raw_body="statement row",
+    )
+    sqlite_session.add(receipt)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(receipt)
+
+    await BankReceiptService.match_receipt(sqlite_session, receipt)
+    attached = await BankReceiptService.attach_receipt_to_order_group(sqlite_session, receipt_id=receipt.id)
+    assert attached.status == "matched"
+
+    payments = (
+        await sqlite_session.execute(select(Payment).where(Payment.bank_receipt_id == receipt.id).order_by(Payment.amount))
+    ).scalars().all()
+    assert len(payments) == 2
+
+    await OrderService.delete_payment(sqlite_session, payments[0].order_id, payments[0].id)
+
+    refreshed_receipt = await sqlite_session.get(BankReceipt, receipt.id)
+    assert refreshed_receipt.status == "requires_review"
+    assert refreshed_receipt.matched_order_id is None
+    assert refreshed_receipt.matched_payment_id is None
+    assert refreshed_receipt.match_meta["manual_reason"] == "payment_deleted_from_order"
+    assert set(refreshed_receipt.match_meta["previous_matched_payment_ids"]) == {payment.id for payment in payments}
+
+    remaining_payments = (
+        await sqlite_session.execute(select(Payment).where(Payment.bank_receipt_id == receipt.id))
+    ).scalars().all()
+    assert remaining_payments == []
+
+    await sqlite_session.refresh(orders[0])
+    await sqlite_session.refresh(orders[1])
+    assert orders[0].balance_due == 2700
+    assert orders[1].balance_due == 2200
+
+
+@pytest.mark.asyncio
 async def test_bank_receipt_can_be_manually_attached_to_order(sqlite_session):
     customer = Customer(name="УКС Витебск", phone="+375291111111", type="company", inn="300200572")
     sqlite_session.add(customer)
