@@ -501,6 +501,15 @@ onMounted(loadReceipts);
                       <div v-if="groupMatch(receipt)?.is_exact" class="mt-1 font-semibold">
                         Сумма поступления совпадает.
                       </div>
+                      <button
+                        v-if="canAttachGroup(receipt)"
+                        class="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+                        :disabled="actionId === receipt.id"
+                        @click.stop="attachGroup(receipt)"
+                      >
+                        <CheckCircle2 class="h-4 w-4" />
+                        {{ actionId === receipt.id ? 'Разносим...' : 'Разнести по этим заказам' }}
+                      </button>
                     </div>
                   </td>
                   <td class="px-4 py-3">
