@@ -153,6 +153,7 @@ class Settings(BaseSettings):
     # Mail integration (Yandex Mail by default)
     MAIL_IMAP_HOST: str = "imap.yandex.ru"
     MAIL_IMAP_PORT: int = 993
+    MAIL_IMAP_TIMEOUT_SECONDS: int = 12
     MAIL_IMAP_USE_SSL: bool = True
     MAIL_IMAP_USERNAME: str = ""
     MAIL_IMAP_PASSWORD: str = ""

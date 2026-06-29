@@ -1,3 +1,4 @@
+import asyncio
 import email
 import imaplib
 import re
@@ -246,12 +247,36 @@ class MailImapService:
     def _connect() -> imaplib.IMAP4:
         if not settings.MAIL_IMAP_USERNAME or not settings.MAIL_IMAP_PASSWORD:
             raise RuntimeError("IMAP credentials are not configured")
+        timeout = max(3, int(settings.MAIL_IMAP_TIMEOUT_SECONDS or 12))
         if settings.MAIL_IMAP_USE_SSL:
-            client: imaplib.IMAP4 = imaplib.IMAP4_SSL(settings.MAIL_IMAP_HOST, settings.MAIL_IMAP_PORT)
+            client: imaplib.IMAP4 = imaplib.IMAP4_SSL(
+                settings.MAIL_IMAP_HOST,
+                settings.MAIL_IMAP_PORT,
+                timeout=timeout,
+            )
         else:
-            client = imaplib.IMAP4(settings.MAIL_IMAP_HOST, settings.MAIL_IMAP_PORT)
+            client = imaplib.IMAP4(settings.MAIL_IMAP_HOST, settings.MAIL_IMAP_PORT, timeout=timeout)
         client.login(settings.MAIL_IMAP_USERNAME, settings.MAIL_IMAP_PASSWORD)
         return client
+
+    @staticmethod
+    async def _connect_async() -> imaplib.IMAP4:
+        return await asyncio.to_thread(MailImapService._connect)
+
+    @staticmethod
+    async def _imap_call(method, *args, **kwargs):
+        return await asyncio.to_thread(method, *args, **kwargs)
+
+    @staticmethod
+    async def _close_async(client: imaplib.IMAP4) -> None:
+        try:
+            await MailImapService._imap_call(client.close)
+        except Exception:
+            pass
+        try:
+            await MailImapService._imap_call(client.logout)
+        except Exception:
+            pass
 
     @staticmethod
     def _normalize_datetime(value: datetime) -> datetime:
@@ -314,17 +339,26 @@ class MailImapService:
     @staticmethod
     async def import_bank_receipts(session: AsyncSession, *, limit: int = 50) -> BankReceiptImportResult:
         result = BankReceiptImportResult()
-        client = MailImapService._connect()
+        client = await MailImapService._connect_async()
         try:
-            client.select(settings.MAIL_IMAP_BANK_FOLDER or "INBOX", readonly=not bool(settings.MAIL_IMAP_PROCESSED_FOLDER))
-            status, payload = client.search(None, "FROM", f'"{BankEmailParserService.BANK_SENDER}"')
+            await MailImapService._imap_call(
+                client.select,
+                settings.MAIL_IMAP_BANK_FOLDER or "INBOX",
+                readonly=not bool(settings.MAIL_IMAP_PROCESSED_FOLDER),
+            )
+            status, payload = await MailImapService._imap_call(
+                client.search,
+                None,
+                "FROM",
+                f'"{BankEmailParserService.BANK_SENDER}"',
+            )
             if status != "OK":
                 raise RuntimeError("IMAP search failed")
 
             message_ids = list(reversed((payload[0] or b"").split()))[: max(1, int(limit or 50))]
             for imap_id in reversed(message_ids):
                 result.processed += 1
-                status, message_data = client.fetch(imap_id, "(RFC822)")
+                status, message_data = await MailImapService._imap_call(client.fetch, imap_id, "(RFC822)")
                 if status != "OK" or not message_data:
                     result.failed += 1
                     continue
@@ -357,18 +391,14 @@ class MailImapService:
                     if created:
                         result.created_receipt_ids.append(int(receipt.id))
                 if created and settings.MAIL_IMAP_PROCESSED_FOLDER:
-                    client.copy(imap_id, settings.MAIL_IMAP_PROCESSED_FOLDER)
-                    client.store(imap_id, "+FLAGS", "\\Deleted")
+                    await MailImapService._imap_call(client.copy, imap_id, settings.MAIL_IMAP_PROCESSED_FOLDER)
+                    await MailImapService._imap_call(client.store, imap_id, "+FLAGS", "\\Deleted")
 
             if settings.MAIL_IMAP_PROCESSED_FOLDER:
-                client.expunge()
+                await MailImapService._imap_call(client.expunge)
             return result
         finally:
-            try:
-                client.close()
-            except Exception:
-                pass
-            client.logout()
+            await MailImapService._close_async(client)
 
     @staticmethod
     async def import_email_leads(
@@ -384,17 +414,26 @@ class MailImapService:
         else:
             scan_since = await MailImapService._email_lead_scan_since(session)
         result.scanned_since = scan_since.isoformat(timespec="seconds")
-        client = MailImapService._connect()
+        client = await MailImapService._connect_async()
         try:
             processed_folder = settings.MAIL_IMAP_LEAD_PROCESSED_FOLDER or ""
-            client.select(settings.MAIL_IMAP_LEAD_FOLDER or "INBOX", readonly=not bool(processed_folder))
-            status, payload = client.search(None, "SINCE", MailImapService._imap_since_date(scan_since))
+            await MailImapService._imap_call(
+                client.select,
+                settings.MAIL_IMAP_LEAD_FOLDER or "INBOX",
+                readonly=not bool(processed_folder),
+            )
+            status, payload = await MailImapService._imap_call(
+                client.search,
+                None,
+                "SINCE",
+                MailImapService._imap_since_date(scan_since),
+            )
             if status != "OK":
                 raise RuntimeError("IMAP search failed")
 
             message_ids = list(reversed((payload[0] or b"").split()))
             for imap_id in reversed(message_ids):
-                status, message_data = client.fetch(imap_id, "(RFC822)")
+                status, message_data = await MailImapService._imap_call(client.fetch, imap_id, "(RFC822)")
                 if status != "OK" or not message_data:
                     result.failed += 1
                     continue
@@ -412,8 +451,8 @@ class MailImapService:
                 subject = MailImapService._decode_header_value(msg.get("Subject"))
                 sender_name, sender_email = parseaddr(MailImapService._decode_header_value(msg.get("From")))
                 sender_email = sender_email.lower()
-                raw_body = MailImapService._extract_body(msg)
-                attachment_texts = MailImapService._extract_attachment_texts(msg)
+                raw_body = await asyncio.to_thread(MailImapService._extract_body, msg)
+                attachment_texts = await asyncio.to_thread(MailImapService._extract_attachment_texts, msg)
                 if attachment_texts:
                     raw_body = f"{raw_body}\n\nТекст вложений:\n" + "\n\n".join(attachment_texts)
                 attachment_diagnostics = [item for item in attachment_texts if "legacy .doc не распознан" in item]
@@ -471,8 +510,8 @@ class MailImapService:
                         result.lead_ids.append(outcome.lead_id)
                         result.created_lead_ids.append(outcome.lead_id)
                     if processed_folder:
-                        client.copy(imap_id, processed_folder)
-                        client.store(imap_id, "+FLAGS", "\\Deleted")
+                        await MailImapService._imap_call(client.copy, imap_id, processed_folder)
+                        await MailImapService._imap_call(client.store, imap_id, "+FLAGS", "\\Deleted")
                 elif outcome.status == "duplicate":
                     result.duplicates += 1
                     if outcome.order_id is not None:
@@ -483,7 +522,7 @@ class MailImapService:
                     result.rejected += 1
 
             if processed_folder:
-                client.expunge()
+                await MailImapService._imap_call(client.expunge)
             if not dry_run:
                 last_import_at = scan_started_at.isoformat(timespec="seconds")
                 await MailImapService._set_global_config_value(
@@ -495,8 +534,4 @@ class MailImapService:
                 result.last_import_at = last_import_at
             return result
         finally:
-            try:
-                client.close()
-            except Exception:
-                pass
-            client.logout()
+            await MailImapService._close_async(client)
