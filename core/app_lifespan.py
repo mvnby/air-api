@@ -15,10 +15,16 @@ async def _seed_installation_defaults() -> None:
         await InstallationService.seed_defaults(session)
 
 
-async def _resume_catalog_import_jobs() -> None:
+async def _resume_catalog_import_jobs() -> bool:
+    decision = settings.scheduler_control_decision
+    if not decision.enabled:
+        logger.warning("Catalog import job resume skipped: %s.", decision.reason)
+        return False
+
     from services.catalog_import_runtime_service import catalog_import_runtime_service
 
     await catalog_import_runtime_service.resume_pending_jobs()
+    return True
 
 
 def _start_scheduler_loop() -> bool:
