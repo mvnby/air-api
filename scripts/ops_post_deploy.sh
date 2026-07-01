@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-COMPOSE="docker compose -f docker-compose.prod.yml"
-PROJECT_DIR="/opt/air-api"
+PROJECT_DIR="${API_PROJECT_DIR:-/opt/air-api}"
+COMPOSE_FILE="${API_COMPOSE_FILE:-docker-compose.prod.yml}"
 OPS_SUMMARY_FILE="${OPS_SUMMARY_FILE:-/tmp/ops_summary.txt}"
 
 OPS_MODE="${OPS_MODE:-report_only}" # report_only | normalize_report | full
@@ -70,13 +70,14 @@ if [[ ! -d "${PROJECT_DIR}" ]]; then
 fi
 
 cd "${PROJECT_DIR}"
-if [[ ! -f "docker-compose.prod.yml" ]]; then
-  log preflight "docker-compose.prod.yml not found in ${PROJECT_DIR}"
+if [[ ! -f "${COMPOSE_FILE}" ]]; then
+  log preflight "${COMPOSE_FILE} not found in ${PROJECT_DIR}"
   exit 1
 fi
+COMPOSE=(docker compose -f "${COMPOSE_FILE}")
 
 run_in_app() {
-  ${COMPOSE} exec -T app sh -lc "$1"
+  "${COMPOSE[@]}" exec -T app sh -lc "$1"
 }
 
 script_exists() {
@@ -120,7 +121,7 @@ if [[ "${RUN_REPORT_LEGACY_LINKS}" == "false" ]]; then
 fi
 
 log preflight "Ensuring app is running..."
-${COMPOSE} up -d app >/dev/null
+"${COMPOSE[@]}" up -d app >/dev/null
 
 ops_actions=()
 ops_skipped=()

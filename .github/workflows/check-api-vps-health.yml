@@ -61,6 +61,10 @@ jobs:
           CHECK_BACKUPS: ${{ inputs.check_backups }}
           API_SSH_HOST: ${{ secrets.SSH_HOST_API }}
           API_SSH_USER: ${{ secrets.SSH_USER_API }}
+          API_PROJECT_DIR: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}
+          API_COMPOSE_FILE: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}
+          API_COMPOSE_SERVICE_CHECKS: ${{ vars.API_COMPOSE_SERVICE_CHECKS || vars.API_SMOKE_COMPOSE_SERVICE_CHECKS || 'app bot db' }}
+          API_LOCAL_HEALTH_URL: ${{ vars.API_LOCAL_HEALTH_URL || 'http://127.0.0.1:8000/api/health' }}
         run: |
           set -euo pipefail
 
@@ -77,6 +81,10 @@ jobs:
             echo "## API VPS Health Check"
             echo "- mode: ${{ inputs.mode }}"
             echo "- base_url: https://api.mvn.by"
+            echo "- api_project_dir: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}"
+            echo "- api_compose_file: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}"
+            echo "- api_compose_service_checks: ${{ vars.API_COMPOSE_SERVICE_CHECKS || vars.API_SMOKE_COMPOSE_SERVICE_CHECKS || 'app bot db' }}"
+            echo "- api_local_health_url: ${{ vars.API_LOCAL_HEALTH_URL || 'http://127.0.0.1:8000/api/health' }}"
             echo "- backup_max_age_hours: ${{ inputs.backup_max_age_hours }}"
             echo "- check_backups: ${{ inputs.check_backups }}"
             echo "- log_artifact: api-vps-health-log-${{ github.run_id }}"

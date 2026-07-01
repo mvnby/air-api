@@ -13,6 +13,8 @@ API_SSH_STRICT_HOST_KEY_CHECKING="${API_SSH_STRICT_HOST_KEY_CHECKING:-accept-new
 API_SSH_CONNECT_TIMEOUT="${API_SSH_CONNECT_TIMEOUT:-10}"
 API_PROJECT_DIR="${API_PROJECT_DIR:-/opt/air-api}"
 API_COMPOSE_FILE="${API_COMPOSE_FILE:-docker-compose.prod.yml}"
+API_COMPOSE_SERVICE_CHECKS="${API_COMPOSE_SERVICE_CHECKS:-app bot db}"
+API_LOCAL_HEALTH_URL="${API_LOCAL_HEALTH_URL:-http://127.0.0.1:8000/api/health}"
 API_TLS_HOST="${API_TLS_HOST:-api.mvn.by}"
 
 DISK_WARN_PCT="${DISK_WARN_PCT:-80}"
@@ -50,6 +52,10 @@ Common env:
   API_SSH_HOST=mvn-api
   API_SSH_USER=root
   API_SSH_KEY_PATH=~/.ssh/id_ed25519
+  API_PROJECT_DIR=/opt/air-api
+  API_COMPOSE_FILE=docker-compose.prod.yml
+  API_COMPOSE_SERVICE_CHECKS="app bot db"
+  API_LOCAL_HEALTH_URL=http://127.0.0.1:8000/api/health
   BACKUP_MAX_AGE_HOURS=36
   CHECK_BACKUPS=true
 
@@ -260,6 +266,8 @@ PY
 }
 
 run_ssh_checks() {
+  local api_compose_service_checks_arg
+  api_compose_service_checks_arg="${API_COMPOSE_SERVICE_CHECKS// /,}"
   local ssh_cmd=(
     ssh
     -p "${API_SSH_PORT}"
@@ -287,7 +295,9 @@ run_ssh_checks() {
     "${TLS_CRITICAL_DAYS}" \
     "${BACKUP_MAX_AGE_HOURS}" \
     "${CHECK_BACKUPS}" \
-    "${API_TLS_HOST}" <<'REMOTE'
+    "${API_TLS_HOST}" \
+    "${api_compose_service_checks_arg}" \
+    "${API_LOCAL_HEALTH_URL}" <<'REMOTE'
 set -euo pipefail
 
 PROJECT_DIR="$1"
@@ -301,6 +311,8 @@ TLS_CRITICAL_DAYS="$8"
 BACKUP_MAX_AGE_HOURS="$9"
 CHECK_BACKUPS="${10}"
 API_TLS_HOST="${11}"
+API_COMPOSE_SERVICE_CHECKS="${12//,/ }"
+API_LOCAL_HEALTH_URL="${13}"
 
 remote_failures=0
 remote_warnings=0
@@ -397,7 +409,7 @@ elif [[ -d "${PROJECT_DIR}" && -f "${PROJECT_DIR}/${COMPOSE_FILE}" ]]; then
   fi
 
   running_services="$("${COMPOSE[@]}" ps --services --filter status=running 2>/dev/null || true)"
-  for service in app bot db; do
+  for service in ${API_COMPOSE_SERVICE_CHECKS}; do
     if printf '%s\n' "${running_services}" | grep -Fxq "${service}"; then
       remote_ok "container running: ${service}"
     else
@@ -412,7 +424,7 @@ elif [[ -d "${PROJECT_DIR}" && -f "${PROJECT_DIR}/${COMPOSE_FILE}" ]]; then
   fi
 
   if command -v curl >/dev/null 2>&1; then
-    if local_health_payload="$(curl -fsS --connect-timeout 3 --max-time 10 http://127.0.0.1:8000/api/health 2>/dev/null)"; then
+    if local_health_payload="$(curl -fsS --connect-timeout 3 --max-time 10 "${API_LOCAL_HEALTH_URL}" 2>/dev/null)"; then
       if command -v python3 >/dev/null 2>&1; then
         if HEALTH_PAYLOAD="${local_health_payload}" python3 - <<'PY' >/dev/null 2>&1
 import json
@@ -431,7 +443,7 @@ PY
         remote_ok "localhost app health responded; python3 unavailable on host so payload shape was not validated"
       fi
     else
-      remote_fail "localhost app health failed at http://127.0.0.1:8000/api/health"
+      remote_fail "localhost app health failed at ${API_LOCAL_HEALTH_URL}"
     fi
   else
     remote_warn "curl is not installed on host; localhost app health skipped"
