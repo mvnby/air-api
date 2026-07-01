@@ -33,6 +33,11 @@ env:
   # API_SMOKE_COMPOSE_SERVICE_CHECKS (app bot by default)
   # API_BOT_EXPECT_ENABLED (true by default)
   # API_TUNNEL_REMOTE_PORT (8000 by default)
+  # API_STANDBY_HOST (optional warm standby API host)
+  # API_STANDBY_USER (root by default)
+  # API_STANDBY_PROJECT_DIR (/opt/air-api by default)
+  # API_STANDBY_COMPOSE_FILE (docker-compose.prod.yml by default)
+  # API_STANDBY_HEALTH_URL (http://localhost:8000/api/health by default)
 
 jobs:
   # ======================================================
@@ -381,7 +386,69 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ======================================================
-  # 2. FRONTEND DEPLOYMENT (Static -> mvn-web)
+  # 2. WARM STANDBY API DEPLOYMENT (image only, no migrations)
+  # ======================================================
+  deploy-api-standby:
+    if: ${{ vars.API_STANDBY_HOST != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs:
+      - deploy-backend
+    permissions:
+      contents: read
+      packages: read
+    env:
+      API_STANDBY_HOST: ${{ vars.API_STANDBY_HOST }}
+      API_STANDBY_USER: ${{ vars.API_STANDBY_USER || 'root' }}
+      API_STANDBY_PROJECT_DIR: ${{ vars.API_STANDBY_PROJECT_DIR || '/opt/air-api' }}
+      API_STANDBY_COMPOSE_FILE: ${{ vars.API_STANDBY_COMPOSE_FILE || 'docker-compose.prod.yml' }}
+      API_STANDBY_HEALTH_URL: ${{ vars.API_STANDBY_HEALTH_URL || 'http://localhost:8000/api/health' }}
+
+    steps:
+      - name: Setup SSH Key
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -T 10 -H "${API_STANDBY_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Deploy standby API app image
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+
+          ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "\
+            set -euo pipefail && \
+            cd '${API_STANDBY_PROJECT_DIR}' && \
+            echo '${{ secrets.GHCR_PAT }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin >/dev/null && \
+            docker compose -f '${API_STANDBY_COMPOSE_FILE}' pull app && \
+            docker compose -f '${API_STANDBY_COMPOSE_FILE}' up -d --force-recreate app && \
+            (docker compose -f '${API_STANDBY_COMPOSE_FILE}' stop bot >/dev/null 2>&1 || true) && \
+            for i in \$(seq 1 30); do \
+              if curl -fsS '${API_STANDBY_HEALTH_URL}' >/tmp/mvn-standby-health.out; then \
+                cat /tmp/mvn-standby-health.out; \
+                exit 0; \
+              fi; \
+              sleep 2; \
+            done; \
+            docker compose -f '${API_STANDBY_COMPOSE_FILE}' logs --tail=120 app; \
+            exit 1"
+
+      - name: Standby Deploy Summary
+        if: always()
+        run: |
+          {
+            echo "## Standby API Deploy Summary"
+            echo "- standby_host: ${API_STANDBY_HOST}"
+            echo "- standby_project_dir: ${API_STANDBY_PROJECT_DIR}"
+            echo "- standby_compose_file: ${API_STANDBY_COMPOSE_FILE}"
+            echo "- health_url: ${API_STANDBY_HEALTH_URL}"
+            echo "- status: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ======================================================
+  # 3. FRONTEND DEPLOYMENT (Static -> mvn-web)
   # ======================================================
   deploy-frontend:
     if: ${{ needs.detect-frontend-changes.outputs.web_changed == 'true' }}
