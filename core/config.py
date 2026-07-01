@@ -110,11 +110,18 @@ class Settings(BaseSettings):
     BOT_ENABLED: bool | None = None
     BOT_DROP_PENDING_UPDATES: bool = False
     API_READY_ENABLED: bool | None = None
+    DB_BOOTSTRAP_ENABLED: bool | None = None
     READINESS_REQUIRE_WRITABLE_DB: bool = True
     RUNTIME_DB_LOCKS_ENABLED: bool = True
     RUNTIME_LOCK_RETRY_SECONDS: int = 15
 
-    @field_validator("SCHEDULER_ENABLED", "BOT_ENABLED", "API_READY_ENABLED", mode="before")
+    @field_validator(
+        "SCHEDULER_ENABLED",
+        "BOT_ENABLED",
+        "API_READY_ENABLED",
+        "DB_BOOTSTRAP_ENABLED",
+        mode="before",
+    )
     @classmethod
     def _blank_runtime_switch_is_unset(cls, value: object) -> object | None:
         if isinstance(value, str) and not value.strip():
@@ -146,6 +153,15 @@ class Settings(BaseSettings):
             explicit_enabled=self.API_READY_ENABLED,
             env_var_name="API_READY_ENABLED",
             process_label="public API traffic",
+        )
+
+    @property
+    def db_bootstrap_control_decision(self) -> RuntimeControlDecision:
+        return resolve_single_active_control(
+            app_role=self.APP_ROLE,
+            explicit_enabled=self.DB_BOOTSTRAP_ENABLED,
+            env_var_name="DB_BOOTSTRAP_ENABLED",
+            process_label="database bootstrap",
         )
 
     # Monitoring

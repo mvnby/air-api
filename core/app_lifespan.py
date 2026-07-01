@@ -16,6 +16,18 @@ async def _seed_installation_defaults() -> None:
         await InstallationService.seed_defaults(session)
 
 
+async def _bootstrap_database() -> bool:
+    decision = settings.db_bootstrap_control_decision
+    if not decision.enabled:
+        logger.warning("Database bootstrap skipped: %s.", decision.reason)
+        return False
+
+    logger.info("Database bootstrap enabled: %s.", decision.reason)
+    await init_db()
+    await _seed_installation_defaults()
+    return True
+
+
 async def _resume_catalog_import_jobs() -> bool:
     from services.catalog_import_runtime_service import catalog_import_runtime_service
 
@@ -61,8 +73,7 @@ def _start_scheduler_loop(app: FastAPI) -> bool:
 async def app_lifespan(app: FastAPI):
     logger.info("Starting Application...")
 
-    await init_db()
-    await _seed_installation_defaults()
+    await _bootstrap_database()
     scheduler_lock = await _acquire_scheduler_runtime_lock()
     if scheduler_lock:
         app.state.scheduler_runtime_lock = scheduler_lock

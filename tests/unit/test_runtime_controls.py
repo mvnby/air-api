@@ -83,15 +83,69 @@ def test_empty_runtime_switch_env_values_are_unset(monkeypatch):
         SCHEDULER_ENABLED="",
         BOT_ENABLED="",
         API_READY_ENABLED="",
+        DB_BOOTSTRAP_ENABLED="",
         _env_file=None,
     )
 
     assert settings.SCHEDULER_ENABLED is None
     assert settings.BOT_ENABLED is None
     assert settings.API_READY_ENABLED is None
+    assert settings.DB_BOOTSTRAP_ENABLED is None
     assert settings.scheduler_control_decision.enabled is True
     assert settings.bot_control_decision.enabled is True
     assert settings.api_ready_control_decision.enabled is True
+    assert settings.db_bootstrap_control_decision.enabled is True
+
+
+@pytest.mark.asyncio
+async def test_database_bootstrap_skips_for_standby(monkeypatch):
+    _set_required_env(monkeypatch)
+    app_lifespan = importlib.import_module("core.app_lifespan")
+
+    monkeypatch.setattr(app_lifespan.settings, "APP_ROLE", "standby", raising=False)
+    monkeypatch.setattr(app_lifespan.settings, "DB_BOOTSTRAP_ENABLED", None, raising=False)
+    init_db = AsyncMock()
+    seed_defaults = AsyncMock()
+    monkeypatch.setattr(app_lifespan, "init_db", init_db)
+    monkeypatch.setattr(app_lifespan, "_seed_installation_defaults", seed_defaults)
+
+    assert await app_lifespan._bootstrap_database() is False
+    init_db.assert_not_awaited()
+    seed_defaults.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_database_bootstrap_runs_for_primary(monkeypatch):
+    _set_required_env(monkeypatch)
+    app_lifespan = importlib.import_module("core.app_lifespan")
+
+    monkeypatch.setattr(app_lifespan.settings, "APP_ROLE", "primary", raising=False)
+    monkeypatch.setattr(app_lifespan.settings, "DB_BOOTSTRAP_ENABLED", None, raising=False)
+    init_db = AsyncMock()
+    seed_defaults = AsyncMock()
+    monkeypatch.setattr(app_lifespan, "init_db", init_db)
+    monkeypatch.setattr(app_lifespan, "_seed_installation_defaults", seed_defaults)
+
+    assert await app_lifespan._bootstrap_database() is True
+    init_db.assert_awaited_once_with()
+    seed_defaults.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_database_bootstrap_explicit_switch_overrides_standby(monkeypatch):
+    _set_required_env(monkeypatch)
+    app_lifespan = importlib.import_module("core.app_lifespan")
+
+    monkeypatch.setattr(app_lifespan.settings, "APP_ROLE", "standby", raising=False)
+    monkeypatch.setattr(app_lifespan.settings, "DB_BOOTSTRAP_ENABLED", True, raising=False)
+    init_db = AsyncMock()
+    seed_defaults = AsyncMock()
+    monkeypatch.setattr(app_lifespan, "init_db", init_db)
+    monkeypatch.setattr(app_lifespan, "_seed_installation_defaults", seed_defaults)
+
+    assert await app_lifespan._bootstrap_database() is True
+    init_db.assert_awaited_once_with()
+    seed_defaults.assert_awaited_once_with()
 
 
 @pytest.mark.asyncio
