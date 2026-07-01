@@ -29,6 +29,7 @@ env:
   # API_COPY_COMPOSE (true by default; set false for emergency host-local compose)
   # API_DEPLOY_SERVICES (app bot by default; set app for app-only reserve compose)
   # API_BASE_URL (http://localhost:8000 by default)
+  # API_READY_URL (optional full readiness URL checked by backend smoke)
   # API_SMOKE_COMPOSE_SERVICE_CHECKS (app bot by default)
   # API_BOT_EXPECT_ENABLED (true by default)
   # API_TUNNEL_REMOTE_PORT (8000 by default)
@@ -132,6 +133,7 @@ jobs:
       API_RUN_MIGRATIONS: ${{ vars.API_RUN_MIGRATIONS || 'true' }}
       API_RUN_DEFAULTS: ${{ vars.API_RUN_DEFAULTS || 'true' }}
       API_BASE_URL: ${{ vars.API_BASE_URL || 'http://localhost:8000' }}
+      API_READY_URL: ${{ vars.API_READY_URL || '' }}
       API_SMOKE_COMPOSE_SERVICE_CHECKS: ${{ vars.API_SMOKE_COMPOSE_SERVICE_CHECKS || 'app bot' }}
       API_BOT_EXPECT_ENABLED: ${{ vars.API_BOT_EXPECT_ENABLED || 'true' }}
 
@@ -329,6 +331,7 @@ jobs:
           ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
             chmod +x /tmp/post_deploy_smoke_check.sh && \
             BASE_URL='${API_BASE_URL}' \
+            READY_URL='${API_READY_URL}' \
             COMPOSE_FILE='${API_PROJECT_DIR}/${API_COMPOSE_FILE}' \
             COMPOSE_SERVICE_CHECKS='${API_SMOKE_COMPOSE_SERVICE_CHECKS}' \
             BOT_EXPECT_ENABLED='${API_BOT_EXPECT_ENABLED}' \

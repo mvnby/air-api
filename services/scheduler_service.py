@@ -124,16 +124,18 @@ class SchedulerService:
         Запускает фоновые задачи: синхронизация цен и автоматизация CRM.
         """
         logger.info(f"Scheduler started. Price Interval: {interval_hours}h.")
-        
+
+        tasks = []
+
         # Run price sync loop
-        asyncio.create_task(self._price_sync_loop(interval_hours))
-        
+        tasks.append(asyncio.create_task(self._price_sync_loop(interval_hours)))
+
         # Run stalled deal loop (once a day)
-        asyncio.create_task(self._stalled_deal_loop())
+        tasks.append(asyncio.create_task(self._stalled_deal_loop()))
 
         # Run backup loop (once a day)
         if settings.is_production:
-            asyncio.create_task(self._backup_loop())
+            tasks.append(asyncio.create_task(self._backup_loop()))
         else:
             logger.warning(
                 "Daily backup loop is disabled for ENVIRONMENT=%s. "
@@ -142,20 +144,26 @@ class SchedulerService:
             )
 
         # Run lead archive loop (once a day)
-        asyncio.create_task(self._lead_archive_loop())
+        tasks.append(asyncio.create_task(self._lead_archive_loop()))
 
         # Run supplier sheets sync loop
-        asyncio.create_task(self._supplier_sync_loop())
+        tasks.append(asyncio.create_task(self._supplier_sync_loop()))
 
         # Run bank receipt IMAP import loop
-        asyncio.create_task(self._bank_mail_import_loop())
+        tasks.append(asyncio.create_task(self._bank_mail_import_loop()))
 
         # Run email lead IMAP import loop. Disabled by default to avoid unplanned AI usage.
-        asyncio.create_task(self._email_lead_import_loop())
+        tasks.append(asyncio.create_task(self._email_lead_import_loop()))
 
-        # Keep the main loop alive 
-        while True:
-            await asyncio.sleep(3600)
+        try:
+            # Keep the main loop alive.
+            while True:
+                await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
 
     async def _price_sync_loop(self, interval_hours: int):
         while True:

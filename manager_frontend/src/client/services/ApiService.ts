@@ -112,6 +112,18 @@ export class ApiService {
         });
     }
     /**
+     * Readiness Check
+     * Check whether this API node should receive public traffic.
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static readinessCheckApiReadyGet(): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/ready',
+        });
+    }
+    /**
      * Get Catalog Revision
      * @returns CatalogRevisionResponse Successful Response
      * @throws ApiError

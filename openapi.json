@@ -291,6 +291,27 @@
         }
       }
     },
+    "/api/ready": {
+      "get": {
+        "tags": [
+          "api",
+          "api"
+        ],
+        "summary": "Readiness Check",
+        "description": "Check whether this API node should receive public traffic.",
+        "operationId": "readiness_check_api_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/catalog/revision": {
       "get": {
         "tags": [

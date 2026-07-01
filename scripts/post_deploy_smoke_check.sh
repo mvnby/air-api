@@ -7,6 +7,7 @@ COMPOSE_FILE="${COMPOSE_FILE:-/opt/air-api/docker-compose.prod.yml}"
 COMPOSE_SERVICE_CHECKS="${COMPOSE_SERVICE_CHECKS:-app bot}"
 BOT_RUNTIME_CHECK_SERVICE="${BOT_RUNTIME_CHECK_SERVICE:-bot}"
 BOT_EXPECT_ENABLED="${BOT_EXPECT_ENABLED:-true}"
+READY_URL="${READY_URL:-}"
 MAX_RETRIES=${MAX_RETRIES:-20}
 RETRY_DELAY=${RETRY_DELAY:-2}
 
@@ -115,6 +116,25 @@ print(f"products_count={len(items)}")
 print(f"filters_keys={','.join(sorted(filters_cfg.keys()))}")
 PY
 
+checks_done="health,products,filters_config"
+if [[ -n "${READY_URL}" ]]; then
+  log request "GET ${READY_URL}"
+  ready_payload="$(curl -fsS "${READY_URL}")"
+  READY_PAYLOAD="${ready_payload}" python3 - <<'PY'
+import json
+import os
+
+ready = json.loads(os.environ["READY_PAYLOAD"])
+if ready.get("status") != "ok" or ready.get("api") != "ready":
+    raise SystemExit("readiness payload is not ready")
+
+print(f"ready_status={ready.get('status')}")
+print(f"ready_traffic={ready.get('traffic')}")
+print(f"ready_database={ready.get('database')}")
+PY
+  checks_done="${checks_done},readiness"
+fi
+
 log request "docker compose ps --status running --services"
 running_services="$(docker compose -f "${COMPOSE_FILE}" ps --status running --services 2>/dev/null || true)"
 for service in ${COMPOSE_SERVICE_CHECKS}; do
@@ -129,7 +149,7 @@ for service in ${COMPOSE_SERVICE_CHECKS}; do
 done
 log success "✅ Compose services running: ${COMPOSE_SERVICE_CHECKS}"
 
-checks_done="health,products,filters_config,compose_services"
+checks_done="${checks_done},compose_services"
 if [[ "${BOT_EXPECT_ENABLED}" == "true" ]]; then
   log request "docker compose exec ${BOT_RUNTIME_CHECK_SERVICE} python3 - read bot runtime decision"
   bot_runtime_payload="$(docker compose -f "${COMPOSE_FILE}" exec -T "${BOT_RUNTIME_CHECK_SERVICE}" python3 - <<'PY'

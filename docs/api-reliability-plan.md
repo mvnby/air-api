@@ -2,9 +2,12 @@
 
 Related issue: #429
 
-This plan is a decision document for the API VPS after the public raw Postgres
-and FastAPI ports were closed and after single-active runtime controls were
-added for the scheduler and Telegram bot. It does not make production changes.
+This plan is a decision document for the earlier single-VPS/passive-reserve API
+stage after the public raw Postgres and FastAPI ports were closed and after
+single-active runtime controls were added for the scheduler and Telegram bot.
+The current multi-origin HA target lives in
+[`api-ha-runbook.md`](api-ha-runbook.md). This document remains useful as
+background and for single-VPS migration context.
 
 Related repo artifacts:
 

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -7,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
 from models import Customer, Order, OrderStatus
+import services.scheduler_service as scheduler_module
 from services.scheduler_service import SchedulerService
 
 
@@ -74,3 +76,41 @@ async def test_check_stalled_deals_marks_old_negotiations_for_follow_up(sqlite_s
     await sqlite_session.refresh(old_order)
 
     assert old_order.next_followup_date == first_followup
+
+
+@pytest.mark.asyncio
+async def test_start_loop_cancels_child_tasks(monkeypatch):
+    service = SchedulerService()
+    monkeypatch.setattr(scheduler_module.settings, "ENVIRONMENT", "development", raising=False)
+    started = 0
+    cancelled = 0
+
+    async def child_loop():
+        nonlocal started, cancelled
+        started += 1
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled += 1
+            raise
+
+    for method_name in (
+        "_price_sync_loop",
+        "_stalled_deal_loop",
+        "_lead_archive_loop",
+        "_supplier_sync_loop",
+        "_bank_mail_import_loop",
+        "_email_lead_import_loop",
+    ):
+        monkeypatch.setattr(service, method_name, lambda *args: child_loop())
+
+    task = asyncio.create_task(service.start_loop(interval_hours=1))
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert started == 6
+    assert cancelled == 6

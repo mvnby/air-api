@@ -73,6 +73,11 @@ manual web rebuild workflow.
 - **GitHub secret:** `SSH_HOST_API` must point to the current API primary.
 - **Public entrypoint:** reverse proxy on `80/443`, proxying `api.mvn.by` to the current API app port.
 - **Health endpoint:** `/api/health`
+- **Load balancer readiness endpoint:** `/api/ready`
+
+The multi-origin API HA target and Cloudflare/DB/media runbook is documented in
+[`api-ha-runbook.md`](api-ha-runbook.md). Use `/api/health` for basic smoke
+checks and `/api/ready` for Cloudflare Load Balancer origin health.
 
 The backend deploy workflow is primary-host configurable. Keep sensitive values
 in GitHub secrets and non-secret routing values in GitHub variables.
@@ -95,6 +100,7 @@ Optional API variables:
 | `API_COPY_COMPOSE` | `true` | Copy repo `docker-compose.prod.yml` to the host before deploy. Set `false` for host-local emergency compose. |
 | `API_DEPLOY_SERVICES` | `app bot` | Compose services to recreate after pulling images. |
 | `API_BASE_URL` | `http://localhost:8000` | Local base URL used by post-deploy smoke. |
+| `API_READY_URL` | unset | Optional full readiness URL used by post-deploy smoke, for example `http://localhost:18000/api/ready`. |
 | `API_SMOKE_COMPOSE_SERVICE_CHECKS` | `app bot` | Services expected to be running during smoke. |
 | `API_BOT_EXPECT_ENABLED` | `true` | Whether smoke requires bot runtime controls to be enabled. |
 | `API_TUNNEL_REMOTE_PORT` | `8000` | Remote localhost API port used by frontend build SSH tunnel. |
@@ -111,6 +117,7 @@ API_COMPOSE_FILE=docker-compose.reserve.yml
 API_COPY_COMPOSE=false
 API_DEPLOY_SERVICES=app
 API_BASE_URL=http://localhost:18000
+API_READY_URL=http://localhost:18000/api/ready
 API_SMOKE_COMPOSE_SERVICE_CHECKS=app db
 API_BOT_EXPECT_ENABLED=false
 API_TUNNEL_REMOTE_PORT=18000
@@ -153,6 +160,11 @@ as the active primary default.
 `SCHEDULER_ENABLED` and `BOT_ENABLED` are explicit overrides. If either is set
 to `false`, that process stays disabled even when `APP_ROLE=primary`; remove the
 override or set it to `true` before promoting a standby host.
+
+`API_READY_ENABLED` controls whether `/api/ready` may return HTTP 200 for public
+traffic. It follows `APP_ROLE` by default. Set `API_READY_ENABLED=true` only on
+the origin that Cloudflare may route to. Set it to `false`, or leave it unset
+with `APP_ROLE=standby`, on reserve origins.
 
 These controls do not enable Cloudflare load balancing, automatic failover, or
 public standby cutover. Do not route public write traffic to a standby host.
