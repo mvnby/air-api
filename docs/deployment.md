@@ -64,14 +64,62 @@ to `178.159.240.174`, restore the legacy web deploy secrets if needed, and run t
 manual web rebuild workflow.
 
 ### API Server
-- **Host alias:** `mvn-api`
+- **Host alias:** `mvn-api` for the original API VPS; `zakup` for the emergency API primary.
 - **User:** `root`
-- **IP:** `185.250.45.54`
+- **Original API IP:** `185.250.45.54`
+- **Emergency `zakup` IP:** `193.47.42.213`
 - **SSH Key:** `~/.ssh/id_ed25519`
-- **DNS:** `api.mvn.by` A-record must point to `185.250.45.54`
-- **GitHub secret:** `SSH_HOST_API` must be `185.250.45.54`
-- **Public entrypoint:** nginx on `80/443`, proxying `api.mvn.by` to `127.0.0.1:8000`
+- **DNS:** `api.mvn.by` A-record must point to the current API primary.
+- **GitHub secret:** `SSH_HOST_API` must point to the current API primary.
+- **Public entrypoint:** reverse proxy on `80/443`, proxying `api.mvn.by` to the current API app port.
 - **Health endpoint:** `/api/health`
+
+The backend deploy workflow is primary-host configurable. Keep sensitive values
+in GitHub secrets and non-secret routing values in GitHub variables.
+
+Required API secrets:
+
+| Name | Purpose |
+| --- | --- |
+| `SSH_HOST_API` | Current API primary host/IP. |
+| `SSH_USER_API` | SSH user for the API host. |
+| `SSH_KEY` | Private deploy key. |
+| `GHCR_PAT` | Token used by the VPS to pull backend images from GHCR. |
+
+Optional API variables:
+
+| Name | Default | Purpose |
+| --- | --- | --- |
+| `API_PROJECT_DIR` | `/opt/air-api` | Directory containing `.env`, compose file, media, and runtime files. |
+| `API_COMPOSE_FILE` | `docker-compose.prod.yml` | Compose file name inside `API_PROJECT_DIR`. |
+| `API_COPY_COMPOSE` | `true` | Copy repo `docker-compose.prod.yml` to the host before deploy. Set `false` for host-local emergency compose. |
+| `API_DEPLOY_SERVICES` | `app bot` | Compose services to recreate after pulling images. |
+| `API_BASE_URL` | `http://localhost:8000` | Local base URL used by post-deploy smoke. |
+| `API_SMOKE_COMPOSE_SERVICE_CHECKS` | `app bot` | Services expected to be running during smoke. |
+| `API_BOT_EXPECT_ENABLED` | `true` | Whether smoke requires bot runtime controls to be enabled. |
+| `API_TUNNEL_REMOTE_PORT` | `8000` | Remote localhost API port used by frontend build SSH tunnel. |
+| `API_COMPOSE_SERVICE_CHECKS` | `app bot db` | Services expected by the manual API VPS health workflow. |
+| `API_LOCAL_HEALTH_URL` | `http://127.0.0.1:8000/api/health` | Host-local health URL for the manual API VPS health workflow. |
+
+Current emergency `zakup` values:
+
+```text
+SSH_HOST_API=193.47.42.213
+SSH_USER_API=root
+API_PROJECT_DIR=/opt/mvn-reserve
+API_COMPOSE_FILE=docker-compose.reserve.yml
+API_COPY_COMPOSE=false
+API_DEPLOY_SERVICES=app
+API_BASE_URL=http://localhost:18000
+API_SMOKE_COMPOSE_SERVICE_CHECKS=app db
+API_BOT_EXPECT_ENABLED=false
+API_TUNNEL_REMOTE_PORT=18000
+API_COMPOSE_SERVICE_CHECKS=app db
+API_LOCAL_HEALTH_URL=http://127.0.0.1:18000/api/health
+```
+
+This keeps the emergency Caddy/network compose on `zakup` intact while still
+allowing backend image deploys from `main`.
 
 Production compose binds backend-only ports to localhost:
 

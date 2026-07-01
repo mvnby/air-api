@@ -18,11 +18,20 @@ env:
   IMAGE_NAME: ${{ github.repository }}
   # Secrets needed:
   # SSH_KEY (Private Key for root@api and user@web)
-  # SSH_HOST_API (185.250.45.54)
+  # SSH_HOST_API (current API primary host)
   # SSH_HOST_WEB (153.80.244.78)
   # SSH_USER_API (root)
   # SSH_USER_WEB (deploy)
   # SSH_WEB_TARGET (/var/www/mvn.by/current/)
+  # Optional repo/environment variables:
+  # API_PROJECT_DIR (/opt/air-api by default)
+  # API_COMPOSE_FILE (docker-compose.prod.yml by default)
+  # API_COPY_COMPOSE (true by default; set false for emergency host-local compose)
+  # API_DEPLOY_SERVICES (app bot by default; set app for app-only reserve compose)
+  # API_BASE_URL (http://localhost:8000 by default)
+  # API_SMOKE_COMPOSE_SERVICE_CHECKS (app bot by default)
+  # API_BOT_EXPECT_ENABLED (true by default)
+  # API_TUNNEL_REMOTE_PORT (8000 by default)
 
 jobs:
   # ======================================================
@@ -114,6 +123,17 @@ jobs:
     permissions:
       contents: read
       packages: write
+    env:
+      API_PROJECT_DIR: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}
+      API_COMPOSE_FILE: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}
+      API_COPY_COMPOSE: ${{ vars.API_COPY_COMPOSE || 'true' }}
+      API_DEPLOY_SERVICES: ${{ vars.API_DEPLOY_SERVICES || 'app bot' }}
+      API_MIGRATION_SERVICE: ${{ vars.API_MIGRATION_SERVICE || 'app' }}
+      API_RUN_MIGRATIONS: ${{ vars.API_RUN_MIGRATIONS || 'true' }}
+      API_RUN_DEFAULTS: ${{ vars.API_RUN_DEFAULTS || 'true' }}
+      API_BASE_URL: ${{ vars.API_BASE_URL || 'http://localhost:8000' }}
+      API_SMOKE_COMPOSE_SERVICE_CHECKS: ${{ vars.API_SMOKE_COMPOSE_SERVICE_CHECKS || 'app bot' }}
+      API_BOT_EXPECT_ENABLED: ${{ vars.API_BOT_EXPECT_ENABLED || 'true' }}
 
     steps:
       - name: Checkout
@@ -183,6 +203,8 @@ jobs:
           echo "🔍 Testing connection to API server..."
           echo "Host: ${{ secrets.SSH_HOST_API }}"
           echo "User: ${{ secrets.SSH_USER_API }}"
+          echo "Project dir: ${API_PROJECT_DIR}"
+          echo "Compose file: ${API_COMPOSE_FILE}"
           
           # Test if host is reachable (allow failure for diagnosis)
           ping -c 3 ${{ secrets.SSH_HOST_API }} || echo "⚠️ Ping failed, but SSH might still work"
@@ -214,17 +236,24 @@ jobs:
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -T 10 -H ${{ secrets.SSH_HOST_API }} >> ~/.ssh/known_hosts
-          
-          # Copy compose files to project dir (requires write access)
-          scp \
-            -i ~/.ssh/deploy_key \
-            -o BatchMode=yes \
-            -o StrictHostKeyChecking=yes \
-            -o ConnectTimeout=20 \
-            -o ServerAliveInterval=15 \
-            -o ServerAliveCountMax=3 \
-            -v docker-compose.prod.yml \
-            ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}:/opt/air-api/
+
+          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v"
+          ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "mkdir -p '${API_PROJECT_DIR}'"
+
+          if [ "${API_COPY_COMPOSE}" = "true" ]; then
+            echo "📄 Copying docker-compose.prod.yml to ${API_PROJECT_DIR}/${API_COMPOSE_FILE}"
+            scp \
+              -i ~/.ssh/deploy_key \
+              -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes \
+              -o ConnectTimeout=20 \
+              -o ServerAliveInterval=15 \
+              -o ServerAliveCountMax=3 \
+              -v docker-compose.prod.yml \
+              "${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}:${API_PROJECT_DIR}/${API_COMPOSE_FILE}"
+          else
+            echo "⏭️ API_COPY_COMPOSE=${API_COPY_COMPOSE}; keeping remote compose unchanged"
+          fi
           
       - name: Execute Deployment Script
         id: deploy_backend
@@ -236,7 +265,17 @@ jobs:
           cat scripts/deploy.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/deploy.sh"
           
           # Execute script
-          ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "chmod +x /tmp/deploy.sh && GHCR_PAT='${{ secrets.GHCR_PAT }}' GITHUB_ACTOR='${{ github.actor }}' bash /tmp/deploy.sh"
+          ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
+            chmod +x /tmp/deploy.sh && \
+            GHCR_PAT='${{ secrets.GHCR_PAT }}' \
+            GITHUB_ACTOR='${{ github.actor }}' \
+            API_PROJECT_DIR='${API_PROJECT_DIR}' \
+            API_COMPOSE_FILE='${API_COMPOSE_FILE}' \
+            API_DEPLOY_SERVICES='${API_DEPLOY_SERVICES}' \
+            API_MIGRATION_SERVICE='${API_MIGRATION_SERVICE}' \
+            API_RUN_MIGRATIONS='${API_RUN_MIGRATIONS}' \
+            API_RUN_DEFAULTS='${API_RUN_DEFAULTS}' \
+            bash /tmp/deploy.sh"
 
       - name: Optional Post-Deploy Backend Ops
         id: post_deploy_ops
@@ -276,6 +315,8 @@ jobs:
             RUN_REPORT_LEGACY_LINKS='${RUN_REPORT_LEGACY_LINKS}' \
             RUN_CLEANUP_LEGACY_LINKS='${RUN_CLEANUP_LEGACY_LINKS}' \
             DRY_RUN='${DRY_RUN}' \
+            API_PROJECT_DIR='${API_PROJECT_DIR}' \
+            API_COMPOSE_FILE='${API_COMPOSE_FILE}' \
             OPS_SUMMARY_FILE='/tmp/ops_summary.txt' \
             bash /tmp/ops_post_deploy.sh && cat /tmp/ops_summary.txt" | tee backend_ops.log
 
@@ -287,7 +328,10 @@ jobs:
           cat scripts/post_deploy_smoke_check.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/post_deploy_smoke_check.sh"
           ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
             chmod +x /tmp/post_deploy_smoke_check.sh && \
-            BASE_URL='http://localhost:8000' \
+            BASE_URL='${API_BASE_URL}' \
+            COMPOSE_FILE='${API_PROJECT_DIR}/${API_COMPOSE_FILE}' \
+            COMPOSE_SERVICE_CHECKS='${API_SMOKE_COMPOSE_SERVICE_CHECKS}' \
+            BOT_EXPECT_ENABLED='${API_BOT_EXPECT_ENABLED}' \
             SMOKE_SUMMARY_FILE='/tmp/smoke_summary.txt' \
             bash /tmp/post_deploy_smoke_check.sh && cat /tmp/smoke_summary.txt" | tee backend_smoke.log
 
@@ -319,6 +363,9 @@ jobs:
             echo "- image: ghcr.io/${{ steps.prep.outputs.repo }}/backend"
             echo "- digest: ${digest}"
             echo "- commit_sha: ${{ github.sha }}"
+            echo "- api_project_dir: ${API_PROJECT_DIR}"
+            echo "- api_compose_file: ${API_COMPOSE_FILE}"
+            echo "- api_deploy_services: ${API_DEPLOY_SERVICES}"
             echo "- deploy_status: ${{ steps.deploy_backend.outcome }}"
             echo "- ops_status: ${{ steps.post_deploy_ops.outcome }}"
             echo "- smoke_status: ${{ steps.post_deploy_smoke.outcome }}"
@@ -360,7 +407,9 @@ jobs:
         working-directory: ./web
         env:
            # SSR Build: bypass public CDN/WAF checks via SSH tunnel to the API host.
-           INTERNAL_API_URL: http://127.0.0.1:18000/api/v1
+           API_TUNNEL_LOCAL_PORT: ${{ vars.API_TUNNEL_LOCAL_PORT || '18000' }}
+           API_TUNNEL_REMOTE_PORT: ${{ vars.API_TUNNEL_REMOTE_PORT || '8000' }}
+           INTERNAL_API_URL: http://127.0.0.1:${{ vars.API_TUNNEL_LOCAL_PORT || '18000' }}/api/v1
            # Client-side: Use production API  
            # CRITICAL: API Router prefix is /api, full path: https://api.mvn.by/api/v1
            PUBLIC_API_URL: https://api.mvn.by/api/v1
@@ -373,14 +422,14 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -T 10 -H ${{ secrets.SSH_HOST_API }} >> ~/.ssh/known_hosts
           ssh -f -N \
-            -L 18000:127.0.0.1:8000 \
+            -L "${API_TUNNEL_LOCAL_PORT}:127.0.0.1:${API_TUNNEL_REMOTE_PORT}" \
             -i ~/.ssh/deploy_key \
             -o BatchMode=yes \
             -o StrictHostKeyChecking=yes \
             -o ExitOnForwardFailure=yes \
             -o ConnectTimeout=20 \
             ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}
-          curl -fsS --retry 10 --retry-delay 3 http://127.0.0.1:18000/api/v1/config >/dev/null
+          curl -fsS --retry 10 --retry-delay 3 "http://127.0.0.1:${API_TUNNEL_LOCAL_PORT}/api/v1/config" >/dev/null
           npm run build
 
       - name: Setup SSH Key for Web Server
