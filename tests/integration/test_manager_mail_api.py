@@ -61,7 +61,7 @@ async def test_manager_mail_lists_bank_receipts(async_client, db):
 
 
 @pytest.mark.asyncio
-async def test_manager_mail_attaches_exact_group_bank_receipt(async_client, db):
+async def test_manager_mail_auto_attaches_exact_group_bank_receipt(async_client, db):
     customer = Customer(
         name='ТД "Витебск Агропродукт"',
         phone="+375291234567",
@@ -114,24 +114,14 @@ async def test_manager_mail_attaches_exact_group_bank_receipt(async_client, db):
     await db.commit()
     await db.refresh(receipt)
 
-    assert receipt.status == "requires_review"
+    assert receipt.status == "matched"
     assert receipt.match_meta["reason"] == "group_balance_due_exact"
+    assert receipt.match_meta["auto_group_attached"] is True
     assert receipt.match_meta["group_match"]["is_exact"] is True
     assert receipt.match_meta["group_match"]["total_balance_due"] == 4900
     assert set(receipt.match_meta["group_match"]["order_ids"]) == {order_a.id, order_b.id}
-
-    headers = await _auth_headers(async_client)
-    response = await async_client.post(
-        f"/api/manager/mail/bank-receipts/{receipt.id}/attach-group",
-        headers=headers,
-        json={},
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["status"] == "matched"
-    assert set(payload["match_meta"]["group_order_ids"]) == {order_a.id, order_b.id}
-    assert len(payload["match_meta"]["group_payment_ids"]) == 2
+    assert set(receipt.match_meta["group_order_ids"]) == {order_a.id, order_b.id}
+    assert len(receipt.match_meta["group_payment_ids"]) == 2
 
     payments = (
         await db.execute(select(Payment).where(Payment.bank_receipt_id == receipt.id).order_by(Payment.amount))
@@ -144,6 +134,68 @@ async def test_manager_mail_attaches_exact_group_bank_receipt(async_client, db):
     await db.refresh(order_a)
     await db.refresh(order_b)
     assert (await db.execute(select(Payment).where(Payment.bank_receipt_id == receipt.id))).scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_manager_mail_manually_attaches_review_group_bank_receipt(async_client, db):
+    customer = Customer(
+        name='ТД "Витебск Агропродукт"',
+        phone="+375291234568",
+        type=CustomerType.company,
+        inn="300123457",
+    )
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order_a = Order(customer_id=customer.id, status=OrderStatus.EXECUTION, title="Акт 1")
+    order_b = Order(customer_id=customer.id, status=OrderStatus.EXECUTION, title="Акт 2")
+    db.add_all([order_a, order_b])
+    await db.commit()
+    await db.refresh(order_a)
+    await db.refresh(order_b)
+
+    db.add_all(
+        [
+            OrderServiceLink(order_id=order_a.id, title="Монтаж", quantity=1, price=2700, cost=0),
+            OrderServiceLink(order_id=order_b.id, title="ТО", quantity=1, price=2200, cost=0),
+        ]
+    )
+    receipt = BankReceipt(
+        status="requires_review",
+        operation_type="incoming_funds",
+        sender_email="bank-statement@local",
+        subject="Bank statement CSV import",
+        fingerprint="manual-group-receipt-test",
+        received_at=datetime(2026, 6, 29, 11, 30),
+        amount=4900,
+        currency=PaymentCurrency.BYN,
+        payer_name='ТД "Витебск Агропродукт"',
+        payer_unp="300123457",
+        payment_purpose="Оплата по актам за июнь",
+        raw_body="raw",
+        match_meta={"group_match": {"order_ids": [order_a.id, order_b.id]}},
+    )
+    db.add(receipt)
+    await db.commit()
+    await db.refresh(receipt)
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.post(
+        f"/api/manager/mail/bank-receipts/{receipt.id}/attach-group",
+        headers=headers,
+        json={},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "matched"
+    assert payload["match_meta"]["manual_group_attached"] is True
+    assert set(payload["match_meta"]["group_order_ids"]) == {order_a.id, order_b.id}
+    payments = (
+        await db.execute(select(Payment).where(Payment.bank_receipt_id == receipt.id).order_by(Payment.amount))
+    ).scalars().all()
+    assert [payment.amount for payment in payments] == [2200, 2700]
 
 
 @pytest.mark.asyncio

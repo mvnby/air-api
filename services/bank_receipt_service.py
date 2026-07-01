@@ -344,6 +344,86 @@ class BankReceiptService:
         }
 
     @staticmethod
+    async def _apply_group_receipt_payment(
+        session: AsyncSession,
+        receipt: BankReceipt,
+        orders: list[Order],
+        *,
+        payment_type: PaymentType = PaymentType.POSTPAYMENT,
+        manual: bool = False,
+        base_meta: Optional[dict[str, Any]] = None,
+    ) -> BankReceipt:
+        debt_orders = [order for order in orders if float(order.balance_due or 0) > BankReceiptService.EXACT_AMOUNT_TOLERANCE]
+        if len(debt_orders) < 2:
+            raise ValueError("Group payment requires at least two orders with unpaid balance")
+
+        total_balance_due = BankReceiptService._money(sum(float(order.balance_due or 0) for order in debt_orders))
+        receipt_amount = BankReceiptService._money(receipt.amount)
+        if abs(total_balance_due - receipt_amount) > BankReceiptService.EXACT_AMOUNT_TOLERANCE:
+            raise ValueError(f"Receipt amount {receipt_amount} does not match group debt {total_balance_due}")
+
+        payments: list[Payment] = []
+        allocated = 0.0
+        for index, order in enumerate(debt_orders):
+            if index == len(debt_orders) - 1:
+                amount = BankReceiptService._money(receipt_amount - allocated)
+            else:
+                amount = BankReceiptService._money(order.balance_due)
+                allocated = BankReceiptService._money(allocated + amount)
+            if amount <= BankReceiptService.EXACT_AMOUNT_TOLERANCE:
+                continue
+            payment = Payment(
+                order_id=int(order.id),
+                bank_receipt_id=receipt.id,
+                amount=amount,
+                currency=receipt.currency,
+                date=receipt.received_at,
+                type=payment_type,
+                comment=(
+                    f"{'Разнесено вручную' if manual else 'Автоматически разнесено'} "
+                    f"по группе заказов из банковского поступления #{receipt.id}"
+                ),
+            )
+            session.add(payment)
+            payments.append(payment)
+
+        await session.flush()
+
+        for order in debt_orders:
+            await OrderService._refresh_order_financials(session, order)
+            session.add(order)
+
+        payment_items = [
+            {
+                "payment_id": int(payment.id or 0),
+                "order_id": int(payment.order_id),
+                "amount": BankReceiptService._money(payment.amount),
+            }
+            for payment in payments
+        ]
+        meta = dict(base_meta or receipt.match_meta or {})
+        meta.update(
+            {
+                "group_order_ids": [item["order_id"] for item in payment_items],
+                "group_payment_ids": [item["payment_id"] for item in payment_items],
+                "group_payments": payment_items,
+                "group_total": receipt_amount,
+            }
+        )
+        if manual:
+            meta["manual_group_attached"] = True
+        else:
+            meta["auto_group_attached"] = True
+
+        receipt.status = "matched"
+        receipt.matched_order_id = payment_items[0]["order_id"]
+        receipt.matched_payment_id = payment_items[0]["payment_id"]
+        receipt.match_meta = meta
+        session.add(receipt)
+        await session.flush()
+        return receipt
+
+    @staticmethod
     async def match_receipt(session: AsyncSession, receipt: BankReceipt) -> BankReceipt:
         if receipt.id and receipt.matched_payment_id:
             return receipt
@@ -414,10 +494,27 @@ class BankReceiptService:
                 "group_match": group_match,
                 "document_candidates": document_candidates,
             }
+        elif group_match["is_exact"] and len(group_match.get("order_ids") or []) > 1:
+            selected_order_ids = {int(order_id) for order_id in group_match["order_ids"]}
+            selected_orders = [order for order in orders if int(order.id or 0) in selected_order_ids]
+            receipt.match_meta = {
+                **base_meta,
+                "reason": "group_balance_due_exact",
+                "candidate_order_ids": candidate_ids,
+                "exact_order_ids": exact_ids,
+                "group_match": group_match,
+                "document_candidates": document_candidates,
+            }
+            receipt = await BankReceiptService._apply_group_receipt_payment(
+                session,
+                receipt,
+                selected_orders,
+                payment_type=PaymentType.POSTPAYMENT,
+                manual=False,
+                base_meta=receipt.match_meta,
+            )
         else:
-            if group_match["is_exact"]:
-                reason = "group_balance_due_exact"
-            elif BankReceiptService._looks_like_multi_document_payment(receipt.payment_purpose):
+            if BankReceiptService._looks_like_multi_document_payment(receipt.payment_purpose):
                 reason = "multi_document_payment"
             else:
                 reason = "not_exactly_one_candidate"
@@ -528,66 +625,13 @@ class BankReceiptService:
         if foreign_orders:
             raise ValueError("Selected orders do not belong to the bank receipt payer UNP")
 
-        debt_orders = [order for order in orders if float(order.balance_due or 0) > BankReceiptService.EXACT_AMOUNT_TOLERANCE]
-        if len(debt_orders) < 2:
-            raise ValueError("Group payment requires at least two orders with unpaid balance")
-
-        total_balance_due = BankReceiptService._money(sum(float(order.balance_due or 0) for order in debt_orders))
-        receipt_amount = BankReceiptService._money(receipt.amount)
-        if abs(total_balance_due - receipt_amount) > BankReceiptService.EXACT_AMOUNT_TOLERANCE:
-            raise ValueError(f"Receipt amount {receipt_amount} does not match group debt {total_balance_due}")
-
-        payments: list[Payment] = []
-        allocated = 0.0
-        for index, order in enumerate(debt_orders):
-            if index == len(debt_orders) - 1:
-                amount = BankReceiptService._money(receipt_amount - allocated)
-            else:
-                amount = BankReceiptService._money(order.balance_due)
-                allocated = BankReceiptService._money(allocated + amount)
-            if amount <= BankReceiptService.EXACT_AMOUNT_TOLERANCE:
-                continue
-            payment = Payment(
-                order_id=int(order.id),
-                bank_receipt_id=receipt.id,
-                amount=amount,
-                currency=receipt.currency,
-                date=receipt.received_at,
-                type=ptype,
-                comment=f"Разнесено по группе заказов из банковского поступления #{receipt.id}",
-            )
-            session.add(payment)
-            payments.append(payment)
-
-        await session.flush()
-
-        for order in debt_orders:
-            await OrderService._refresh_order_financials(session, order)
-            session.add(order)
-
-        payment_items = [
-            {
-                "payment_id": int(payment.id or 0),
-                "order_id": int(payment.order_id),
-                "amount": BankReceiptService._money(payment.amount),
-            }
-            for payment in payments
-        ]
-        meta = dict(receipt.match_meta or {})
-        meta.update(
-            {
-                "manual_group_attached": True,
-                "group_order_ids": [item["order_id"] for item in payment_items],
-                "group_payment_ids": [item["payment_id"] for item in payment_items],
-                "group_payments": payment_items,
-                "group_total": receipt_amount,
-            }
+        await BankReceiptService._apply_group_receipt_payment(
+            session,
+            receipt,
+            orders,
+            payment_type=ptype,
+            manual=True,
         )
-        receipt.status = "matched"
-        receipt.matched_order_id = payment_items[0]["order_id"]
-        receipt.matched_payment_id = payment_items[0]["payment_id"]
-        receipt.match_meta = meta
-        session.add(receipt)
         await session.commit()
         await session.refresh(receipt)
         return receipt
