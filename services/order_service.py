@@ -87,6 +87,12 @@ class OrderService:
         return fallback if fallback in OrderService.EXECUTION_STATUSES else OrderService.DEFAULT_EXECUTION_STATUS
 
     @staticmethod
+    def _status_value(value: Any) -> str:
+        if hasattr(value, "value"):
+            return str(value.value)
+        return str(value or "").strip()
+
+    @staticmethod
     def _infer_execution_status(order: Order) -> str:
         raw_status = getattr(order, "execution_status", None)
         if raw_status is not None:
@@ -635,18 +641,20 @@ class OrderService:
             return
         is_fully_paid = float(order.balance_due or 0) <= OrderService.PAYMENT_COMPLETE_TOLERANCE
         order.is_paid = is_fully_paid
+        status = OrderService._status_value(order.status)
         if (
             is_fully_paid
             and bool(getattr(order, "auto_execution_on_payment", False))
-            and order.status == OrderStatus.NEGOTIATION
+            and status == OrderStatus.NEGOTIATION.value
         ):
             order.status = OrderStatus.EXECUTION
+            status = OrderStatus.EXECUTION.value
             order.status_changed_at = datetime.now()
             order.proposal_status = "approved"
         if (
             is_fully_paid
             and bool(getattr(order, "auto_close_on_payment", False))
-            and order.status == OrderStatus.EXECUTION
+            and status == OrderStatus.EXECUTION.value
             and OrderService._normalize_execution_status(getattr(order, "execution_status", None)) == "awaiting_payment"
         ):
             order.status = OrderStatus.CLOSED

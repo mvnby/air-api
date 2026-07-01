@@ -474,6 +474,42 @@ async def test_bank_receipt_dedupes_and_creates_exact_order_payment(sqlite_sessi
 
 
 @pytest.mark.asyncio
+async def test_bank_receipt_payment_applies_order_payment_automation(sqlite_session):
+    customer = Customer(name="УКС Витебск", phone="+375291111111", type="company", inn="300200572")
+    sqlite_session.add(customer)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(customer)
+
+    order = Order(
+        customer_id=customer.id,
+        status="negotiation",
+        negotiation_status="awaiting_payment",
+        auto_execution_on_payment=True,
+    )
+    sqlite_session.add(order)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+    sqlite_session.add(OrderServiceLink(order_id=order.id, title="Ремонт", quantity=1, price=1015, cost=0))
+    await sqlite_session.commit()
+
+    receipt, created = await BankReceiptService.process_email(
+        sqlite_session,
+        sender_email="noreply@service.belapb.by",
+        subject="Поступление средств на счет Индивидуальный предприниматель Янулевич Дмитрий Викторович 08.05.26 14:57",
+        raw_body=SAMPLE_BANK_EMAIL,
+        message_id="<bank-auto-execution@example.test>",
+    )
+
+    await sqlite_session.refresh(order)
+    assert created is True
+    assert receipt.status == "matched"
+    assert order.status == OrderStatus.EXECUTION
+    assert order.proposal_status == "approved"
+    assert order.is_paid is True
+    assert order.balance_due == 0
+
+
+@pytest.mark.asyncio
 async def test_bank_receipt_multi_act_payment_requires_review(sqlite_session):
     customer = Customer(name="УКС Витебск", phone="+375291111111", type="company", inn="300200572")
     sqlite_session.add(customer)
@@ -503,7 +539,7 @@ async def test_bank_receipt_multi_act_payment_requires_review(sqlite_session):
 
 
 @pytest.mark.asyncio
-async def test_bank_receipt_suggests_and_attaches_exact_group_subset(sqlite_session):
+async def test_bank_receipt_auto_attaches_exact_group_subset(sqlite_session):
     customer = Customer(name='ТД "Витебск Агропродукт"', phone="+375291111116", type="company", inn="300123456")
     sqlite_session.add(customer)
     await sqlite_session.commit()
@@ -547,22 +583,15 @@ async def test_bank_receipt_suggests_and_attaches_exact_group_subset(sqlite_sess
     matched = await BankReceiptService.match_receipt(sqlite_session, receipt)
     await sqlite_session.commit()
 
-    assert matched.status == "requires_review"
+    assert matched.status == "matched"
     assert matched.match_meta["reason"] == "group_balance_due_exact"
+    assert matched.match_meta["auto_group_attached"] is True
     assert matched.match_meta["group_match"]["selection_mode"] == "exact_subset"
     assert matched.match_meta["group_match"]["total_balance_due"] == 4900
     assert matched.match_meta["group_match"]["open_balance_due"] == 5400
     assert set(matched.match_meta["group_match"]["order_ids"]) == {orders[0].id, orders[1].id}
     assert set(matched.match_meta["group_match"]["open_order_ids"]) == {order.id for order in orders}
-
-    attached = await BankReceiptService.attach_receipt_to_order_group(
-        sqlite_session,
-        receipt_id=receipt.id,
-        payment_type="postpayment",
-    )
-
-    assert attached.status == "matched"
-    assert set(attached.match_meta["group_order_ids"]) == {orders[0].id, orders[1].id}
+    assert set(matched.match_meta["group_order_ids"]) == {orders[0].id, orders[1].id}
     payments = (
         await sqlite_session.execute(select(Payment).where(Payment.bank_receipt_id == receipt.id).order_by(Payment.amount))
     ).scalars().all()
@@ -619,8 +648,7 @@ async def test_delete_order_payment_detaches_group_bank_receipt(sqlite_session):
     await sqlite_session.commit()
     await sqlite_session.refresh(receipt)
 
-    await BankReceiptService.match_receipt(sqlite_session, receipt)
-    attached = await BankReceiptService.attach_receipt_to_order_group(sqlite_session, receipt_id=receipt.id)
+    attached = await BankReceiptService.match_receipt(sqlite_session, receipt)
     assert attached.status == "matched"
 
     payments = (
