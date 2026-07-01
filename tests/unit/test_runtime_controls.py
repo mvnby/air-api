@@ -8,6 +8,14 @@ import pytest
 from core.runtime_controls import resolve_single_active_control
 
 
+class FakeRuntimeLock:
+    acquired = True
+    reason = "test lock"
+
+    async def release(self):
+        return None
+
+
 def _set_required_env(monkeypatch):
     monkeypatch.setenv("BOT_TOKEN", "123:test")
     monkeypatch.setenv("SECRET_KEY", "test-secret")
@@ -74,46 +82,50 @@ def test_empty_runtime_switch_env_values_are_unset(monkeypatch):
         ADMIN_PASSWORD="admin",
         SCHEDULER_ENABLED="",
         BOT_ENABLED="",
+        API_READY_ENABLED="",
         _env_file=None,
     )
 
     assert settings.SCHEDULER_ENABLED is None
     assert settings.BOT_ENABLED is None
+    assert settings.API_READY_ENABLED is None
     assert settings.scheduler_control_decision.enabled is True
     assert settings.bot_control_decision.enabled is True
-
-
-def test_start_scheduler_loop_skips_for_standby(monkeypatch):
-    _set_required_env(monkeypatch)
-    app_lifespan = importlib.import_module("core.app_lifespan")
-
-    monkeypatch.setattr(app_lifespan.settings, "APP_ROLE", "standby", raising=False)
-    monkeypatch.setattr(app_lifespan.settings, "SCHEDULER_ENABLED", None, raising=False)
-    create_task = Mock()
-    monkeypatch.setattr(app_lifespan.asyncio, "create_task", create_task)
-
-    assert app_lifespan._start_scheduler_loop() is False
-    create_task.assert_not_called()
+    assert settings.api_ready_control_decision.enabled is True
 
 
 @pytest.mark.asyncio
-async def test_catalog_import_resume_skips_for_standby(monkeypatch):
+async def test_scheduler_runtime_lock_skips_for_standby(monkeypatch):
     _set_required_env(monkeypatch)
     app_lifespan = importlib.import_module("core.app_lifespan")
 
     monkeypatch.setattr(app_lifespan.settings, "APP_ROLE", "standby", raising=False)
     monkeypatch.setattr(app_lifespan.settings, "SCHEDULER_ENABLED", None, raising=False)
 
-    assert await app_lifespan._resume_catalog_import_jobs() is False
+    assert await app_lifespan._acquire_scheduler_runtime_lock() is None
 
 
 @pytest.mark.asyncio
-async def test_catalog_import_resume_runs_for_primary(monkeypatch):
+async def test_scheduler_runtime_lock_requires_free_lock(monkeypatch):
     _set_required_env(monkeypatch)
     app_lifespan = importlib.import_module("core.app_lifespan")
 
     monkeypatch.setattr(app_lifespan.settings, "APP_ROLE", "primary", raising=False)
     monkeypatch.setattr(app_lifespan.settings, "SCHEDULER_ENABLED", None, raising=False)
+    monkeypatch.setattr(
+        app_lifespan.RuntimeLockService,
+        "try_acquire",
+        AsyncMock(return_value=SimpleNamespace(acquired=False, reason="held elsewhere")),
+    )
+
+    assert await app_lifespan._acquire_scheduler_runtime_lock() is None
+
+
+@pytest.mark.asyncio
+async def test_catalog_import_resume_runs_inside_scheduler_lock(monkeypatch):
+    _set_required_env(monkeypatch)
+    app_lifespan = importlib.import_module("core.app_lifespan")
+
     resume_pending_jobs = AsyncMock()
     monkeypatch.setitem(
         sys.modules,
@@ -127,6 +139,19 @@ async def test_catalog_import_resume_runs_for_primary(monkeypatch):
 
     assert await app_lifespan._resume_catalog_import_jobs() is True
     resume_pending_jobs.assert_awaited_once_with()
+
+
+def test_start_scheduler_loop_skips_for_standby(monkeypatch):
+    _set_required_env(monkeypatch)
+    app_lifespan = importlib.import_module("core.app_lifespan")
+
+    monkeypatch.setattr(app_lifespan.settings, "APP_ROLE", "standby", raising=False)
+    monkeypatch.setattr(app_lifespan.settings, "SCHEDULER_ENABLED", None, raising=False)
+    create_task = Mock()
+    monkeypatch.setattr(app_lifespan.asyncio, "create_task", create_task)
+
+    assert app_lifespan._start_scheduler_loop(SimpleNamespace(state=SimpleNamespace())) is False
+    create_task.assert_not_called()
 
 
 def test_bot_main_registers_staff_commands(monkeypatch):
@@ -207,6 +232,11 @@ async def test_bot_main_preserves_pending_updates_by_default(monkeypatch):
     monkeypatch.setattr(bot_main, "_setup_bot_commands", setup_commands)
     monkeypatch.setattr(bot_main.bot, "delete_webhook", delete_webhook)
     monkeypatch.setattr(bot_main.dp, "start_polling", start_polling)
+    monkeypatch.setattr(
+        bot_main.RuntimeLockService,
+        "try_acquire",
+        AsyncMock(return_value=FakeRuntimeLock()),
+    )
 
     await bot_main.main(wait_when_disabled=False)
 

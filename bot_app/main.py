@@ -4,7 +4,9 @@ from aiogram.types import BotCommand
 from .config import bot, dp
 from .handlers import admin, base, catalog, work
 from core.config import settings
+from core.database import async_session_maker
 from core.logger import setup_logging
+from services.runtime_lock_service import RuntimeLockService
 
 # Setup logging with session-specific bot.log (cleared on restart)
 logger = setup_logging(session_log_file="logs/bot.log", clear_session_log=True)
@@ -43,6 +45,20 @@ async def main(*, wait_when_disabled: bool = True):
             await _idle_when_disabled()
         return
 
+    if wait_when_disabled:
+        runtime_lock = await RuntimeLockService.wait_until_acquired(
+            async_session_maker,
+            "mvn:telegram_bot",
+        )
+    else:
+        runtime_lock = await RuntimeLockService.try_acquire(
+            async_session_maker,
+            "mvn:telegram_bot",
+        )
+    if not runtime_lock.acquired:
+        logger.warning("Telegram bot polling disabled: %s.", runtime_lock.reason)
+        return
+
     logger.info("Starting bot polling: %s.", decision.reason)
     # Register routers in specific order
     dp.include_router(base.router)
@@ -50,9 +66,12 @@ async def main(*, wait_when_disabled: bool = True):
     dp.include_router(catalog.router)
     dp.include_router(admin.router)
     
-    await _setup_bot_commands()
-    await bot.delete_webhook(drop_pending_updates=settings.BOT_DROP_PENDING_UPDATES)
-    await dp.start_polling(bot)
+    try:
+        await _setup_bot_commands()
+        await bot.delete_webhook(drop_pending_updates=settings.BOT_DROP_PENDING_UPDATES)
+        await dp.start_polling(bot)
+    finally:
+        await runtime_lock.release()
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -109,8 +109,12 @@ class Settings(BaseSettings):
     SCHEDULER_ENABLED: bool | None = None
     BOT_ENABLED: bool | None = None
     BOT_DROP_PENDING_UPDATES: bool = False
+    API_READY_ENABLED: bool | None = None
+    READINESS_REQUIRE_WRITABLE_DB: bool = True
+    RUNTIME_DB_LOCKS_ENABLED: bool = True
+    RUNTIME_LOCK_RETRY_SECONDS: int = 15
 
-    @field_validator("SCHEDULER_ENABLED", "BOT_ENABLED", mode="before")
+    @field_validator("SCHEDULER_ENABLED", "BOT_ENABLED", "API_READY_ENABLED", mode="before")
     @classmethod
     def _blank_runtime_switch_is_unset(cls, value: object) -> object | None:
         if isinstance(value, str) and not value.strip():
@@ -133,6 +137,15 @@ class Settings(BaseSettings):
             explicit_enabled=self.BOT_ENABLED,
             env_var_name="BOT_ENABLED",
             process_label="Telegram bot polling",
+        )
+
+    @property
+    def api_ready_control_decision(self) -> RuntimeControlDecision:
+        return resolve_single_active_control(
+            app_role=self.APP_ROLE,
+            explicit_enabled=self.API_READY_ENABLED,
+            env_var_name="API_READY_ENABLED",
+            process_label="public API traffic",
         )
 
     # Monitoring
