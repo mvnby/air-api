@@ -61,6 +61,7 @@ jobs:
           BASE_URL: https://api.mvn.by
           BACKUP_MAX_AGE_HOURS: ${{ github.event_name == 'workflow_dispatch' && inputs.backup_max_age_hours || '36' }}
           CHECK_BACKUPS: ${{ github.event_name != 'workflow_dispatch' || inputs.check_backups }}
+          SKIP_PUBLIC_CHECKS: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'ssh' }}
           API_SSH_HOST: ${{ secrets.SSH_HOST_API }}
           API_SSH_USER: ${{ secrets.SSH_USER_API }}
           API_PROJECT_DIR: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}
@@ -91,6 +92,7 @@ jobs:
             echo "- api_local_health_url: ${{ vars.API_LOCAL_HEALTH_URL || 'http://127.0.0.1:8000/api/health' }}"
             echo "- backup_max_age_hours: ${{ github.event_name == 'workflow_dispatch' && inputs.backup_max_age_hours || '36' }}"
             echo "- check_backups: ${{ github.event_name != 'workflow_dispatch' || inputs.check_backups }}"
+            echo "- skip_public_checks: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'ssh' }}"
             echo "- log_artifact: api-vps-health-log-${{ github.run_id }}"
           } >> "$GITHUB_STEP_SUMMARY"
 

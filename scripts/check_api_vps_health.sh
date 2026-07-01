@@ -25,6 +25,7 @@ TLS_WARN_DAYS="${TLS_WARN_DAYS:-14}"
 TLS_CRITICAL_DAYS="${TLS_CRITICAL_DAYS:-3}"
 BACKUP_MAX_AGE_HOURS="${BACKUP_MAX_AGE_HOURS:-36}"
 CHECK_BACKUPS="${CHECK_BACKUPS:-true}"
+SKIP_PUBLIC_CHECKS="${SKIP_PUBLIC_CHECKS:-false}"
 
 PUBLIC_ONLY=false
 critical_failures=0
@@ -39,7 +40,7 @@ Usage:
 Checks the current API VPS without printing secret values.
 
 Default behavior:
-  1. Always checks public API endpoints from BASE_URL.
+  1. Checks public API endpoints from BASE_URL unless SKIP_PUBLIC_CHECKS=true.
   2. Runs SSH host checks only when API_SSH_HOST and API_SSH_USER are set.
   3. Works as public-only automatically when SSH env is absent.
 
@@ -58,6 +59,7 @@ Common env:
   API_LOCAL_HEALTH_URL=http://127.0.0.1:8000/api/health
   BACKUP_MAX_AGE_HOURS=36
   CHECK_BACKUPS=true
+  SKIP_PUBLIC_CHECKS=false
 
 Exit code:
   0 when critical checks pass.
@@ -157,6 +159,9 @@ if ! is_unsigned_number "${BACKUP_MAX_AGE_HOURS}"; then
 fi
 if ! CHECK_BACKUPS="$(normalize_bool "${CHECK_BACKUPS}")"; then
   fail "CHECK_BACKUPS must be true or false"
+fi
+if ! SKIP_PUBLIC_CHECKS="$(normalize_bool "${SKIP_PUBLIC_CHECKS}")"; then
+  fail "SKIP_PUBLIC_CHECKS must be true or false"
 fi
 
 if (( critical_failures > 0 )); then
@@ -565,7 +570,11 @@ REMOTE
   fi
 }
 
-run_public_checks
+if [[ "${SKIP_PUBLIC_CHECKS}" == "true" ]]; then
+  log public "skipped (SKIP_PUBLIC_CHECKS=true)"
+else
+  run_public_checks
+fi
 
 if [[ "${PUBLIC_ONLY}" == "true" ]]; then
   log ssh "skipped (--public-only)"
