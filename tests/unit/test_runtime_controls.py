@@ -1,4 +1,6 @@
 import importlib
+import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -92,6 +94,39 @@ def test_start_scheduler_loop_skips_for_standby(monkeypatch):
 
     assert app_lifespan._start_scheduler_loop() is False
     create_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_catalog_import_resume_skips_for_standby(monkeypatch):
+    _set_required_env(monkeypatch)
+    app_lifespan = importlib.import_module("core.app_lifespan")
+
+    monkeypatch.setattr(app_lifespan.settings, "APP_ROLE", "standby", raising=False)
+    monkeypatch.setattr(app_lifespan.settings, "SCHEDULER_ENABLED", None, raising=False)
+
+    assert await app_lifespan._resume_catalog_import_jobs() is False
+
+
+@pytest.mark.asyncio
+async def test_catalog_import_resume_runs_for_primary(monkeypatch):
+    _set_required_env(monkeypatch)
+    app_lifespan = importlib.import_module("core.app_lifespan")
+
+    monkeypatch.setattr(app_lifespan.settings, "APP_ROLE", "primary", raising=False)
+    monkeypatch.setattr(app_lifespan.settings, "SCHEDULER_ENABLED", None, raising=False)
+    resume_pending_jobs = AsyncMock()
+    monkeypatch.setitem(
+        sys.modules,
+        "services.catalog_import_runtime_service",
+        SimpleNamespace(
+            catalog_import_runtime_service=SimpleNamespace(
+                resume_pending_jobs=resume_pending_jobs,
+            ),
+        ),
+    )
+
+    assert await app_lifespan._resume_catalog_import_jobs() is True
+    resume_pending_jobs.assert_awaited_once_with()
 
 
 def test_bot_main_registers_staff_commands(monkeypatch):
