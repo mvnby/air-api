@@ -119,6 +119,131 @@ class LocalProductOriginalSourceStorage:
         return stored
 
 
+class S3CompatibleProductOriginalSourceStorage:
+    """S3-compatible storage for product original source images."""
+
+    def __init__(
+        self,
+        *,
+        bucket: str,
+        endpoint_url: str,
+        public_base_url: str,
+        access_key_id: str = "",
+        secret_access_key: str = "",
+        region_name: str = "auto",
+        key_prefix: str = "products/shared",
+        cache_control: str = "public, max-age=31536000, immutable",
+        provider_name: str = "s3_compatible",
+        client: Any | None = None,
+    ) -> None:
+        self.provider_name = provider_name
+        self.bucket = bucket.strip()
+        self.endpoint_url = endpoint_url.strip()
+        self.public_base_url = public_base_url.strip().rstrip("/")
+        self.access_key_id = access_key_id.strip()
+        self.secret_access_key = secret_access_key.strip()
+        self.region_name = region_name.strip() or "auto"
+        self.key_prefix = _normalize_key_prefix(key_prefix)
+        self.cache_control = cache_control.strip() or "public, max-age=31536000, immutable"
+        self._client_override = client
+        self._client: Any | None = None
+
+        missing = [
+            name
+            for name, value in (
+                ("bucket", self.bucket),
+                ("endpoint_url", self.endpoint_url),
+                ("public_base_url", self.public_base_url),
+            )
+            if not value
+        ]
+        if missing:
+            raise ValueError(
+                "S3/R2 original media storage requires "
+                + ", ".join(missing)
+                + " configuration"
+            )
+
+    def build_product_original_object(
+        self,
+        *,
+        content_hash: str,
+        extension: str = "webp",
+    ) -> StoredMediaObject:
+        safe_extension = _normalize_extension(extension)
+        safe_hash = _normalize_content_hash(content_hash)
+        filename = f"{safe_hash}.{safe_extension}"
+        key_parts = [part for part in (self.key_prefix, filename) if part]
+        key = "/".join(key_parts)
+        encoded_key = "/".join(quote(part, safe="") for part in key.split("/"))
+        return StoredMediaObject(
+            url=f"{self.public_base_url}/{encoded_key}",
+            content_hash=safe_hash,
+            storage_provider=self.provider_name,
+            path=key,
+        )
+
+    async def save_product_original(
+        self,
+        *,
+        content: bytes,
+        extension: str = "webp",
+    ) -> StoredMediaObject:
+        if not content:
+            raise ValueError("Cannot store empty media content")
+
+        stored = self.build_product_original_object(
+            content_hash=hashlib.sha256(content).hexdigest(),
+            extension=extension,
+        )
+        client = self._get_client()
+        await asyncio.to_thread(
+            client.put_object,
+            Bucket=self.bucket,
+            Key=stored.path,
+            Body=content,
+            ContentType=_content_type_for_extension(extension),
+            CacheControl=self.cache_control,
+            Metadata={
+                "sha256": stored.content_hash,
+                "variant_type": "original",
+            },
+        )
+        return stored
+
+    def _get_client(self) -> Any:
+        if self._client_override is not None:
+            return self._client_override
+        if self._client is not None:
+            return self._client
+
+        if not self.access_key_id or not self.secret_access_key:
+            raise ValueError(
+                "S3/R2 original media storage requires access key credentials for writes"
+            )
+
+        try:
+            import boto3
+            from botocore.config import Config
+        except ImportError as exc:
+            raise RuntimeError(
+                "boto3 is required for S3/R2 original media storage. Install requirements first."
+            ) from exc
+
+        self._client = boto3.client(
+            "s3",
+            endpoint_url=self.endpoint_url,
+            region_name=self.region_name,
+            aws_access_key_id=self.access_key_id,
+            aws_secret_access_key=self.secret_access_key,
+            config=Config(
+                signature_version="s3v4",
+                s3={"addressing_style": "path"},
+            ),
+        )
+        return self._client
+
+
 class LocalProductMediaStorage:
     provider_name = "local"
 
@@ -383,12 +508,7 @@ def get_product_media_storage(
 def get_product_original_source_storage(
     provider: str | None = None,
 ) -> ProductOriginalSourceStorage:
-    """Build storage for local product original source files.
-
-    During the R2 transition, source-of-truth product URLs remain local
-    `/media/...` URLs. Remote copies of originals are represented as
-    `ProductImageVariant(type=original)` through `get_product_media_storage`.
-    """
+    """Build storage for product original source files."""
     load_dotenv()
     selected_provider = (
         provider or _env("PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER", "local")
@@ -402,9 +522,25 @@ def get_product_original_source_storage(
             ),
         )
 
+    if selected_provider in {"r2", "s3", "s3_compatible"}:
+        return S3CompatibleProductOriginalSourceStorage(
+            provider_name=selected_provider,
+            bucket=_env("PRODUCT_MEDIA_S3_BUCKET"),
+            endpoint_url=_env("PRODUCT_MEDIA_S3_ENDPOINT_URL"),
+            public_base_url=_env("PRODUCT_MEDIA_S3_PUBLIC_BASE_URL"),
+            access_key_id=_env("PRODUCT_MEDIA_S3_ACCESS_KEY_ID"),
+            secret_access_key=_env("PRODUCT_MEDIA_S3_SECRET_ACCESS_KEY"),
+            region_name=_env("PRODUCT_MEDIA_S3_REGION", "auto"),
+            key_prefix=_env("PRODUCT_MEDIA_ORIGINAL_S3_KEY_PREFIX", "products/shared"),
+            cache_control=_env(
+                "PRODUCT_MEDIA_S3_CACHE_CONTROL",
+                "public, max-age=31536000, immutable",
+            ),
+        )
+
     raise ValueError(
         "Unsupported PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER="
-        f"{selected_provider!r}. Allowed: local"
+        f"{selected_provider!r}. Allowed: local, r2, s3, s3_compatible"
     )
 
 

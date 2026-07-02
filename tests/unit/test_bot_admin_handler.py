@@ -625,6 +625,7 @@ async def test_requisites_file_attach_chosen_order_saves_and_clears_pending(monk
         assert kwargs["telegram_user_id"] == 5
         assert kwargs["telegram_chat_id"] == 200
         assert kwargs["telegram_message_id"] == 77
+        assert kwargs["content"] == b"image-content"
         return {"id": 42, "already_attached": False}
 
     monkeypatch.setattr(
@@ -635,6 +636,7 @@ async def test_requisites_file_attach_chosen_order_saves_and_clears_pending(monk
     monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
     monkeypatch.setattr(admin_handler.BotOrderAttachmentService, "can_attach_to_order", AsyncMock(return_value=True))
     monkeypatch.setattr(admin_handler.BotOrderAttachmentService, "attach_to_order", fake_attach)
+    monkeypatch.setattr(admin_handler, "_download_telegram_file", AsyncMock(return_value=b"image-content"))
 
     await admin_handler.attach_pending_file_to_chosen_order(callback, state)
 
@@ -813,6 +815,7 @@ async def test_repair_nameplate_confirm_applies_and_clears_pending(monkeypatch):
         assert kwargs["file_id"] == "photo-file"
         assert kwargs["telegram_user_id"] == 5
         assert kwargs["can_attach_any"] is True
+        assert kwargs["file_content"] == b"nameplate-content"
         return {"id": 42, "applied": {"equipment_model": "ALASKA"}, "conflicts": {}}
 
     monkeypatch.setattr(
@@ -822,6 +825,7 @@ async def test_repair_nameplate_confirm_applies_and_clears_pending(monkeypatch):
     )
     monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
     monkeypatch.setattr(admin_handler.BotRepairNameplateService, "apply_to_order", fake_apply)
+    monkeypatch.setattr(admin_handler, "_download_telegram_file", AsyncMock(return_value=b"nameplate-content"))
 
     await admin_handler.confirm_repair_nameplate(callback, state)
 

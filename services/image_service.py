@@ -3,9 +3,12 @@ Universal Image Service
 Handles saving images to the filesystem with organized folder structure.
 """
 import logging
-import uuid
 from pathlib import Path
+from urllib.parse import urlparse
+
 import anyio
+
+from services.general_media_storage_service import get_general_media_storage
 
 logger = logging.getLogger(__name__)
 
@@ -35,24 +38,15 @@ class ImageService:
         Returns:
             Relative path for database storage (e.g., 'media/products/gree-09/uuid.jpg')
         """
-        # Extract extension from original filename
         ext = filename.rsplit(".", 1)[-1] if "." in filename else "jpg"
-        
-        # Generate secure unique filename using uuid4
-        unique_filename = f"{uuid.uuid4()}.{ext}"
-        
-        # Create directory structure: media/{entity_type}/{slug}/
-        entity_dir = anyio.Path(cls.BASE_DIR) / entity_type / slug
-        await entity_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Full file path
-        file_path = entity_dir / unique_filename
-        
-        # Write file asynchronously
-        await file_path.write_bytes(file_bytes)
-        
-        # Return relative path for DB (using forward slashes for web compatibility)
-        return str(file_path).replace("\\", "/")
+        storage = get_general_media_storage()
+        stored = await storage.save_media(
+            content=file_bytes,
+            namespace=f"{entity_type}/{slug}",
+            variant_type="original",
+            extension=ext,
+        )
+        return stored.url
     
     @classmethod
     def get_web_path(cls, db_path: str) -> str:
@@ -67,6 +61,10 @@ class ImageService:
         """
         if not db_path:
             return ""
+
+        parsed = urlparse(db_path)
+        if parsed.scheme in {"http", "https"}:
+            return db_path
         
         # Ensure path starts with /
         if not db_path.startswith("/"):
@@ -141,5 +139,3 @@ class ImageService:
         except Exception as e:
             logger.error(f"Error downloading image {url}: {e}")
             return None
-
-

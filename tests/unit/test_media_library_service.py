@@ -9,6 +9,7 @@ from sqlmodel import SQLModel
 
 import models  # noqa: F401
 from models import MediaAsset, MediaProcessingJob, Product, ProductAttachment, ProductImage, Service
+from services.general_media_storage_service import StoredGeneralMediaObject
 from services import media_library_service
 from services.media_library_service import MediaLibraryService
 from services.media_processing_job_service import MediaProcessingJobService
@@ -43,6 +44,23 @@ class FakeBackgroundProcessor:
             height = 32
 
         return Result()
+
+
+class FakeGeneralMediaStorage:
+    provider_name = "r2"
+
+    def __init__(self):
+        self.calls = []
+
+    async def save_media(self, **kwargs):
+        self.calls.append(kwargs)
+        return StoredGeneralMediaObject(
+            url="https://cdn.mvn.by/media/library/original/hash.webp",
+            content_hash="c" * 64,
+            storage_provider="r2",
+            path="library/original/hash.webp",
+            size_bytes=len(kwargs["content"]),
+        )
 
 
 @pytest.fixture
@@ -85,6 +103,28 @@ async def test_upload_and_list_media_assets(sqlite_session):
     )
     assert listing["meta"]["total"] == 1
     assert listing["items"][0]["id"] == item["id"]
+
+
+@pytest.mark.asyncio
+async def test_upload_media_asset_uses_general_storage_when_r2_enabled(sqlite_session, monkeypatch):
+    fake_storage = FakeGeneralMediaStorage()
+    monkeypatch.setenv("MEDIA_STORAGE_PROVIDER", "r2")
+    monkeypatch.setattr(media_library_service, "get_general_media_storage", lambda: fake_storage)
+
+    response = await MediaLibraryService.upload_assets(
+        session=sqlite_session,
+        files=[("install-photo.png", image_bytes())],
+        kind="installation",
+        tags=["монтаж"],
+        created_by="admin",
+    )
+
+    item = response["items"][0]
+    assert item["url"] == "https://cdn.mvn.by/media/library/original/hash.webp"
+    assert item["storage_provider"] == "r2"
+    assert fake_storage.calls[0]["namespace"] == "library"
+    assert fake_storage.calls[0]["variant_type"] == "original"
+    assert fake_storage.calls[0]["content_type"] == "image/webp"
 
 
 @pytest.mark.asyncio
@@ -180,6 +220,52 @@ async def test_crop_media_asset_creates_variant(sqlite_session):
     assert cropped["width"] == 60
     assert cropped["height"] == 40
     assert cropped["tags"] == ["обложка"]
+
+
+@pytest.mark.asyncio
+async def test_crop_media_asset_can_read_remote_source(sqlite_session, monkeypatch):
+    async def fake_download(_url: str):
+        return image_bytes(size=(200, 100)), "remote-source.webp"
+
+    monkeypatch.setattr(
+        MediaLibraryService,
+        "_download_remote_image",
+        staticmethod(fake_download),
+    )
+    asset = MediaAsset(
+        title="Remote",
+        kind="article",
+        tags=["обложка"],
+        variant_type="original",
+        url="https://cdn.mvn.by/media/library/original/source.webp",
+        original_url="https://cdn.mvn.by/media/library/original/source.webp",
+        source_filename="source.webp",
+        mime_type="image/webp",
+        storage_provider="r2",
+        processing_status="ready",
+        width=200,
+        height=100,
+        size_bytes=100,
+    )
+    sqlite_session.add(asset)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(asset)
+
+    cropped = await MediaLibraryService.crop_asset(
+        session=sqlite_session,
+        asset_id=asset.id,
+        x=20,
+        y=10,
+        width=60,
+        height=40,
+        title="remote crop",
+        created_by="admin",
+    )
+
+    assert cropped["parent_asset_id"] == asset.id
+    assert cropped["variant_type"] == "crop"
+    assert cropped["width"] == 60
+    assert cropped["height"] == 40
 
 
 @pytest.mark.asyncio

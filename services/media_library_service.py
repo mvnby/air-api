@@ -33,6 +33,7 @@ from models import (
     ProductSeries,
     Service,
 )
+from services.general_media_storage_service import get_general_media_storage
 from services.product_image_processing_contract import ProductImageVariantType
 from services.product_image_processing_provider import (
     ProductImageProcessingContext,
@@ -365,12 +366,10 @@ class MediaLibraryService:
         source = await MediaLibraryService._get_asset_or_raise(session, asset_id)
         if source.mime_type == SVG_MIME_TYPE:
             raise ValueError("SVG assets cannot be cropped")
-        source_path = MediaLibraryService._local_path_for_url(source.url)
-        if source_path is None or not source_path.exists():
-            raise ValueError("Source file is not available in local media storage")
+        source_content = await MediaLibraryService._asset_content_for_processing(source)
 
         def crop() -> bytes:
-            image = MediaLibraryService._open_image(source_path.read_bytes())
+            image = MediaLibraryService._open_image(source_content)
             left = max(0, min(x, image.width - 1))
             top = max(0, min(y, image.height - 1))
             right = max(left + 1, min(left + width, image.width))
@@ -402,13 +401,11 @@ class MediaLibraryService:
         source = await MediaLibraryService._get_asset_or_raise(session, asset_id)
         if source.mime_type == SVG_MIME_TYPE:
             raise ValueError("SVG assets cannot be processed by background removal")
-        source_path = MediaLibraryService._local_path_for_url(source.url)
-        if source_path is None or not source_path.exists():
-            raise ValueError("Source file is not available in local media storage")
+        source_content = await MediaLibraryService._asset_content_for_processing(source)
 
         processor = get_product_image_processor(provider, rembg_model=rembg_model)
         processed = await processor.process(
-            source_content=source_path.read_bytes(),
+            source_content=source_content,
             context=ProductImageProcessingContext(
                 product_image_id=0,
                 source_url=source.url,
@@ -606,6 +603,23 @@ class MediaLibraryService:
         return filename or "remote-image"
 
     @staticmethod
+    async def _asset_content_for_processing(asset: MediaAsset) -> bytes:
+        source_path = MediaLibraryService._local_path_for_url(asset.url)
+        if source_path is not None and source_path.exists():
+            return source_path.read_bytes()
+
+        parsed = urlparse(str(asset.url or ""))
+        if parsed.scheme in {"http", "https"}:
+            content, _ = await MediaLibraryService._download_remote_image(asset.url)
+            return content
+
+        raise ValueError("Source file is not available in media storage")
+
+    @staticmethod
+    def _general_media_provider() -> str:
+        return (os.getenv("MEDIA_STORAGE_PROVIDER", "local") or "local").strip().lower()
+
+    @staticmethod
     async def _store_processed_webp(content: bytes, *, variant_type: str) -> StoredLibraryImage:
         if not content:
             raise ValueError("Cannot store empty media content")
@@ -613,6 +627,24 @@ class MediaLibraryService:
         width, height = await asyncio.to_thread(MediaLibraryService._image_size, content)
         content_hash = hashlib.sha256(content).hexdigest()
         safe_variant = MediaLibraryService._safe_path_segment(variant_type)
+        if MediaLibraryService._general_media_provider() != "local":
+            stored = await get_general_media_storage().save_media(
+                content=content,
+                namespace="library",
+                variant_type=safe_variant,
+                extension="webp",
+                content_type="image/webp",
+            )
+            return StoredLibraryImage(
+                url=stored.url,
+                path=stored.path,
+                content_hash=stored.content_hash,
+                width=width,
+                height=height,
+                size_bytes=stored.size_bytes,
+                storage_provider=stored.storage_provider,
+            )
+
         target_dir = MEDIA_LIBRARY_BASE_DIR / safe_variant
         target_dir.mkdir(parents=True, exist_ok=True)
         target_path = target_dir / f"{content_hash}.webp"
@@ -634,6 +666,25 @@ class MediaLibraryService:
         sanitized, width, height = await asyncio.to_thread(MediaLibraryService._sanitize_svg, content)
         content_hash = hashlib.sha256(sanitized).hexdigest()
         safe_variant = MediaLibraryService._safe_path_segment(variant_type)
+        if MediaLibraryService._general_media_provider() != "local":
+            stored = await get_general_media_storage().save_media(
+                content=sanitized,
+                namespace="library",
+                variant_type=safe_variant,
+                extension="svg",
+                content_type=SVG_MIME_TYPE,
+            )
+            return StoredLibraryImage(
+                url=stored.url,
+                path=stored.path,
+                content_hash=stored.content_hash,
+                width=width,
+                height=height,
+                size_bytes=stored.size_bytes,
+                mime_type=SVG_MIME_TYPE,
+                storage_provider=stored.storage_provider,
+            )
+
         target_dir = MEDIA_LIBRARY_BASE_DIR / safe_variant
         target_dir.mkdir(parents=True, exist_ok=True)
         target_path = target_dir / f"{content_hash}.svg"

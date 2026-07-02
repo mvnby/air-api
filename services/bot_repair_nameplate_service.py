@@ -822,6 +822,7 @@ class BotRepairNameplateService:
         telegram_chat_id: int | None,
         telegram_message_id: int | None,
         can_attach_any: bool = False,
+        file_content: bytes | None = None,
     ) -> dict[str, Any] | None:
         allowed = await cls.can_use_order(
             session,
@@ -850,6 +851,21 @@ class BotRepairNameplateService:
         raw_nameplate_history = repair_meta.get(cls.HISTORY_META_KEY)
         attachments = list(raw_nameplate_history) if isinstance(raw_nameplate_history, list) else []
         attached_at = datetime.now()
+        storage_meta: dict[str, Any] = {}
+        if file_content:
+            stored = await BotOrderAttachmentService.store_attachment_content(
+                order_id=order_id,
+                content=file_content,
+                filename=filename,
+                mime_type=mime_type,
+            )
+            storage_meta = {
+                "url": stored.url,
+                "storage_provider": stored.storage_provider,
+                "storage_path": stored.path,
+                "content_hash": stored.content_hash,
+                "size_bytes": stored.size_bytes,
+            }
         entry = BotOrderAttachmentService._build_entry(
             file_id=file_id,
             filename=filename,
@@ -858,6 +874,7 @@ class BotRepairNameplateService:
             telegram_chat_id=telegram_chat_id,
             telegram_message_id=telegram_message_id,
             attached_at=attached_at,
+            **storage_meta,
         )
         entry["purpose"] = "repair_nameplate"
         entry["extracted"] = {field: extracted.get(field) for field in cls.REPAIR_FIELDS if extracted.get(field)}
@@ -906,6 +923,11 @@ class BotRepairNameplateService:
                         "telegram_message_id",
                         "attached_at",
                         "purpose",
+                        "url",
+                        "storage_provider",
+                        "storage_path",
+                        "content_hash",
+                        "size_bytes",
                     }
                 }
             )

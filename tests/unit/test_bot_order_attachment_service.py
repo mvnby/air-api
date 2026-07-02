@@ -7,6 +7,24 @@ from sqlmodel import SQLModel
 
 from models import Customer, Order, OrderInstaller, OrderStatus, OrderWorkStage, StaffUser
 from services.bot_order_attachment_service import BotOrderAttachmentService
+from services.general_media_storage_service import StoredGeneralMediaObject
+
+
+class FakeGeneralMediaStorage:
+    provider_name = "r2"
+
+    def __init__(self):
+        self.calls = []
+
+    async def save_media(self, **kwargs):
+        self.calls.append(kwargs)
+        return StoredGeneralMediaObject(
+            url="https://cdn.mvn.by/media/orders/121/telegram/photo/hash.jpg",
+            content_hash="a" * 64,
+            storage_provider="r2",
+            path="orders/121/telegram/photo/hash.jpg",
+            size_bytes=len(kwargs["content"]),
+        )
 
 
 @pytest.fixture
@@ -62,6 +80,45 @@ async def test_stores_file_id_in_order_meta_and_comment(sqlite_order_attachment_
     ]
     assert "Исходный комментарий" in order.comment
     assert "file_id=AgACAgIAAxkBAAIB_photo" in order.comment
+
+
+@pytest.mark.asyncio
+async def test_stores_attachment_content_url_in_order_meta_and_comment(
+    sqlite_order_attachment_session,
+    monkeypatch,
+):
+    fake_storage = FakeGeneralMediaStorage()
+    monkeypatch.setattr(
+        "services.bot_order_attachment_service.get_general_media_storage",
+        lambda: fake_storage,
+    )
+    order = Order(id=121, title="Монтаж")
+    sqlite_order_attachment_session.add(order)
+    await sqlite_order_attachment_session.commit()
+
+    result = await BotOrderAttachmentService.attach_to_order(
+        sqlite_order_attachment_session,
+        int(order.id),
+        file_id="telegram-photo",
+        filename="объект.jpeg",
+        mime_type="image/jpeg",
+        telegram_user_id=777,
+        telegram_chat_id=100,
+        telegram_message_id=55,
+        content=b"image-content",
+    )
+
+    assert result is not None
+    assert result["attachment"]["url"] == "https://cdn.mvn.by/media/orders/121/telegram/photo/hash.jpg"
+    assert fake_storage.calls[0]["namespace"] == "orders/121/telegram"
+    assert fake_storage.calls[0]["variant_type"] == "photo"
+    assert fake_storage.calls[0]["extension"] == "jpg"
+    await sqlite_order_attachment_session.refresh(order)
+    attachment = order.technical_meta[BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY][0]
+    assert attachment["storage_provider"] == "r2"
+    assert attachment["content_hash"] == "a" * 64
+    assert attachment["size_bytes"] == len(b"image-content")
+    assert "url=https://cdn.mvn.by/media/orders/121/telegram/photo/hash.jpg" in order.comment
 
 
 @pytest.mark.asyncio

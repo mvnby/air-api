@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import httpx
+from dotenv import load_dotenv
 from PIL import Image
 from sqlalchemy import exists, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +31,10 @@ from services.product_image_processing_provider import (
     ProductImageProcessor,
     get_product_image_processor,
 )
+
+
+MAX_SOURCE_IMAGE_BYTES = 20 * 1024 * 1024
+SOURCE_IMAGE_TIMEOUT_SECONDS = 12.0
 
 
 class ProductImageVariantService:
@@ -288,8 +295,19 @@ class ProductImageVariantService:
                 await session.commit()
             return ProductImageVariantService.serialize_variant(variant)
 
-        source_path = ProductImageVariantService._local_media_path_for_url(image.url)
-        if source_path is None or not source_path.exists():
+        try:
+            source_content = await ProductImageVariantService._source_content_for_url(image.url)
+        except Exception as exc:
+            variant.processing_status = ProductImageProcessingStatus.FAILED.value
+            variant.processing_stage = ProductImageProcessingStage.ORIGINAL_INGEST.value
+            variant.processing_error = str(exc)
+            variant.updated_at = datetime.now()
+            session.add(variant)
+            if commit:
+                await session.commit()
+            return ProductImageVariantService.serialize_variant(variant)
+
+        if source_content is None:
             variant.processing_status = ProductImageProcessingStatus.FAILED.value
             variant.processing_stage = ProductImageProcessingStage.ORIGINAL_INGEST.value
             variant.processing_error = "Source image is not available in local media storage"
@@ -301,7 +319,6 @@ class ProductImageVariantService:
 
         active_storage = storage or get_product_media_storage()
         try:
-            source_content = source_path.read_bytes()
             processed = await active_processor.process(
                 source_content=source_content,
                 context=ProductImageProcessingContext(
@@ -421,6 +438,49 @@ class ProductImageVariantService:
         if url.startswith("media/"):
             return Path(url)
         return None
+
+    @staticmethod
+    async def _source_content_for_url(url: str) -> bytes | None:
+        source_path = ProductImageVariantService._local_media_path_for_url(url)
+        if source_path and source_path.exists():
+            return source_path.read_bytes()
+        if ProductImageVariantService._is_configured_remote_media_url(url):
+            return await ProductImageVariantService._download_remote_media_content(url)
+        return None
+
+    @staticmethod
+    def _is_configured_remote_media_url(url: str) -> bool:
+        normalized = str(url or "").strip()
+        if not normalized.startswith(("http://", "https://")):
+            return False
+        load_dotenv()
+        prefixes = [
+            os.getenv("PRODUCT_MEDIA_S3_PUBLIC_BASE_URL", ""),
+            os.getenv("MEDIA_S3_PUBLIC_BASE_URL", ""),
+        ]
+        for prefix in prefixes:
+            clean_prefix = str(prefix or "").strip().rstrip("/")
+            if clean_prefix and normalized.startswith(f"{clean_prefix}/"):
+                return True
+        return False
+
+    @staticmethod
+    async def _download_remote_media_content(url: str) -> bytes:
+        async with httpx.AsyncClient(timeout=SOURCE_IMAGE_TIMEOUT_SECONDS, follow_redirects=True) as client:
+            response = await client.get(url, headers={"Accept": "image/*"})
+            response.raise_for_status()
+            content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+            if content_type and not content_type.startswith("image/"):
+                raise ValueError("Remote source is not an image")
+            content_length = response.headers.get("content-length")
+            if content_length and int(content_length) > MAX_SOURCE_IMAGE_BYTES:
+                raise ValueError("Remote source image is too large")
+            content = response.content
+            if not content:
+                raise ValueError("Remote source image is empty")
+            if len(content) > MAX_SOURCE_IMAGE_BYTES:
+                raise ValueError("Remote source image is too large")
+            return content
 
     @staticmethod
     def _image_size(content: bytes) -> tuple[int | None, int | None]:

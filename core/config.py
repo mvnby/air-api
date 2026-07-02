@@ -98,6 +98,26 @@ class Settings(BaseSettings):
     PRODUCT_MEDIA_S3_PUBLIC_BASE_URL: str = ""
     PRODUCT_MEDIA_S3_KEY_PREFIX: str = "products/variants"
     PRODUCT_MEDIA_S3_CACHE_CONTROL: str = "public, max-age=31536000, immutable"
+
+    # Generic media storage for articles, media library, order attachments and
+    # other non-product files. S3/R2 settings fall back to PRODUCT_MEDIA_S3_*
+    # inside the storage adapter when these values are left empty.
+    MEDIA_STORAGE_PROVIDER: str = "local"
+    MEDIA_LOCAL_DIR: str = "media"
+    MEDIA_LOCAL_PUBLIC_PREFIX: str = "/media"
+    MEDIA_S3_BUCKET: str = ""
+    MEDIA_S3_ENDPOINT_URL: str = ""
+    MEDIA_S3_REGION: str = "auto"
+    MEDIA_S3_ACCESS_KEY_ID: str = ""
+    MEDIA_S3_SECRET_ACCESS_KEY: str = ""
+    MEDIA_S3_PUBLIC_BASE_URL: str = ""
+    MEDIA_S3_KEY_PREFIX: str = ""
+    MEDIA_S3_CACHE_CONTROL: str = "public, max-age=31536000, immutable"
+
+    PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER: str = "local"
+    PRODUCT_MEDIA_LOCAL_ORIGINAL_DIR: str = "media/products/shared"
+    PRODUCT_MEDIA_LOCAL_ORIGINAL_PUBLIC_PREFIX: str = "/media/products/shared"
+    PRODUCT_MEDIA_ORIGINAL_S3_KEY_PREFIX: str = "products/shared"
     MEDIA_WORKER_TOKEN: str = ""
     
     # Logging

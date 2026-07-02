@@ -1,4 +1,6 @@
 from datetime import datetime
+import mimetypes
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm.attributes import flag_modified
@@ -7,6 +9,10 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from models import Order, OrderInstaller, OrderStatus, OrderWorkStage, StaffUser
+from services.general_media_storage_service import (
+    StoredGeneralMediaObject,
+    get_general_media_storage,
+)
 from services.staff_user_service import StaffUserService
 
 
@@ -30,6 +36,17 @@ class BotOrderAttachmentService:
             return "pdf"
         return "document"
 
+    @staticmethod
+    def _extension_from_filename_or_mime(filename: str, mime_type: str | None) -> str:
+        suffix = Path(str(filename or "")).suffix.lower().lstrip(".")
+        if suffix and "/" not in suffix and "\\" not in suffix:
+            return "jpg" if suffix == "jpeg" else suffix
+        guessed = mimetypes.guess_extension(str(mime_type or "").split(";", 1)[0].strip())
+        if guessed:
+            normalized = guessed.lower().lstrip(".")
+            return "jpg" if normalized in {"jpeg", "jpe"} else normalized
+        return "bin"
+
     @classmethod
     def _build_entry(
         cls,
@@ -41,8 +58,13 @@ class BotOrderAttachmentService:
         telegram_chat_id: int | None,
         telegram_message_id: int | None,
         attached_at: datetime,
+        url: str | None = None,
+        storage_provider: str | None = None,
+        storage_path: str | None = None,
+        content_hash: str | None = None,
+        size_bytes: int | None = None,
     ) -> dict[str, Any]:
-        return {
+        entry = {
             "source": "telegram_bot",
             "file_id": file_id,
             "filename": cls._clean_filename(filename),
@@ -53,15 +75,29 @@ class BotOrderAttachmentService:
             "telegram_message_id": telegram_message_id,
             "attached_at": attached_at.isoformat(timespec="seconds"),
         }
+        if url:
+            entry["url"] = url
+        if storage_provider:
+            entry["storage_provider"] = storage_provider
+        if storage_path:
+            entry["storage_path"] = storage_path
+        if content_hash:
+            entry["content_hash"] = content_hash
+        if size_bytes is not None:
+            entry["size_bytes"] = size_bytes
+        return entry
 
     @staticmethod
     def _comment_line(entry: dict[str, Any], attached_at: datetime) -> str:
         filename = BotOrderAttachmentService._clean_filename(entry.get("filename"))
         kind = "Фото" if entry.get("kind") == "photo" else "PDF" if entry.get("kind") == "pdf" else "Документ"
-        return (
+        line = (
             f"[Telegram attachment {attached_at.strftime('%d.%m.%Y %H:%M')}] "
             f"{kind}: {filename}; file_id={entry.get('file_id')}"
         )
+        if entry.get("url"):
+            line = f"{line}; url={entry.get('url')}"
+        return line
 
     @staticmethod
     def _append_comment(existing: str | None, line: str) -> str:
@@ -155,6 +191,7 @@ class BotOrderAttachmentService:
         telegram_user_id: int | None,
         telegram_chat_id: int | None,
         telegram_message_id: int | None,
+        content: bytes | None = None,
     ) -> dict[str, Any] | None:
         stmt = select(Order).where(Order.id == order_id).options(selectinload(Order.customer))
         result = await session.execute(stmt)
@@ -163,7 +200,35 @@ class BotOrderAttachmentService:
             return None
 
         attached_at = datetime.now()
-        entry = cls._build_entry(
+        meta = dict(order.technical_meta or {}) if isinstance(order.technical_meta, dict) else {}
+        raw_attachments = meta.get(cls.TELEGRAM_ATTACHMENTS_META_KEY)
+        attachments = list(raw_attachments) if isinstance(raw_attachments, list) else []
+        existing_entry = next(
+            (
+                item
+                for item in attachments
+                if isinstance(item, dict) and item.get("file_id") == file_id
+            ),
+            None,
+        )
+        already_attached = existing_entry is not None
+        storage_meta: dict[str, Any] = {}
+        if content and not already_attached:
+            stored = await cls.store_attachment_content(
+                order_id=order_id,
+                content=content,
+                filename=filename,
+                mime_type=mime_type,
+            )
+            storage_meta = {
+                "url": stored.url,
+                "storage_provider": stored.storage_provider,
+                "storage_path": stored.path,
+                "content_hash": stored.content_hash,
+                "size_bytes": stored.size_bytes,
+            }
+
+        entry = existing_entry or cls._build_entry(
             file_id=file_id,
             filename=filename,
             mime_type=mime_type,
@@ -171,12 +236,8 @@ class BotOrderAttachmentService:
             telegram_chat_id=telegram_chat_id,
             telegram_message_id=telegram_message_id,
             attached_at=attached_at,
+            **storage_meta,
         )
-
-        meta = dict(order.technical_meta or {}) if isinstance(order.technical_meta, dict) else {}
-        raw_attachments = meta.get(cls.TELEGRAM_ATTACHMENTS_META_KEY)
-        attachments = list(raw_attachments) if isinstance(raw_attachments, list) else []
-        already_attached = any(isinstance(item, dict) and item.get("file_id") == file_id for item in attachments)
         if not already_attached:
             attachments.append(entry)
             meta[cls.TELEGRAM_ATTACHMENTS_META_KEY] = attachments
@@ -191,3 +252,21 @@ class BotOrderAttachmentService:
         data["attachment"] = entry
         data["already_attached"] = already_attached
         return data
+
+    @classmethod
+    async def store_attachment_content(
+        cls,
+        *,
+        order_id: int,
+        content: bytes,
+        filename: str,
+        mime_type: str | None,
+    ) -> StoredGeneralMediaObject:
+        storage = get_general_media_storage()
+        return await storage.save_media(
+            content=content,
+            namespace=f"orders/{order_id}/telegram",
+            variant_type=cls._file_kind(mime_type),
+            extension=cls._extension_from_filename_or_mime(filename, mime_type),
+            content_type=mime_type or "application/octet-stream",
+        )

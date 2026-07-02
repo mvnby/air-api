@@ -804,6 +804,13 @@ async def _attach_pending_file_to_order(
         )
         if not allowed:
             return {"forbidden": True}
+        try:
+            content = await _download_telegram_file(
+                str(pending.get("file_id")),
+                expected_size=_normalize_file_size(pending.get("file_size")),
+            )
+        except Exception as exc:
+            return {"error": str(exc)}
         return await BotOrderAttachmentService.attach_to_order(
             session,
             order_id,
@@ -813,6 +820,7 @@ async def _attach_pending_file_to_order(
             telegram_user_id=telegram_user_id,
             telegram_chat_id=pending.get("telegram_chat_id"),
             telegram_message_id=pending.get("telegram_message_id"),
+            content=content,
         )
 
 
@@ -839,6 +847,9 @@ async def attach_pending_file_to_chosen_order(callback: CallbackQuery, state: FS
         return
     if result.get("forbidden"):
         await callback.answer("Этот заказ вам не назначен.", show_alert=True)
+        return
+    if result.get("error"):
+        await callback.answer(f"Не удалось сохранить файл: {result['error']}", show_alert=True)
         return
 
     await state.update_data(pending_requisites_file=None)
@@ -871,6 +882,9 @@ async def attach_pending_file_to_typed_order(message: types.Message, state: FSMC
         return
     if result.get("forbidden"):
         await message.answer("Этот заказ вам не назначен. Проверьте номер заказа или попросите менеджера прикрепить файл.")
+        return
+    if result.get("error"):
+        await message.answer(f"❌ Не удалось сохранить файл: {result['error']}")
         return
 
     await state.update_data(pending_requisites_file=None)
@@ -1061,21 +1075,30 @@ async def confirm_repair_nameplate(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Фото не найдено. Отправьте его еще раз.", show_alert=True)
         return
 
-    async with async_session_maker() as session:
-        result = await BotRepairNameplateService.apply_to_order(
-            session,
-            int(draft["order_id"]),
-            extracted=draft.get("extracted") or {},
-            raw_text=str(draft.get("raw_text") or ""),
-            validation_flags=draft.get("validation_flags") or {},
-            file_id=str(pending_file.get("file_id")),
-            filename=str(pending_file.get("filename") or "telegram-nameplate.jpg"),
-            mime_type=str(pending_file.get("mime_type") or "image/jpeg"),
-            telegram_user_id=callback.from_user.id,
-            telegram_chat_id=pending_file.get("telegram_chat_id"),
-            telegram_message_id=pending_file.get("telegram_message_id"),
-            can_attach_any=context.is_manager,
+    try:
+        file_content = await _download_telegram_file(
+            str(pending_file.get("file_id")),
+            expected_size=_normalize_file_size(pending_file.get("file_size")),
         )
+        async with async_session_maker() as session:
+            result = await BotRepairNameplateService.apply_to_order(
+                session,
+                int(draft["order_id"]),
+                extracted=draft.get("extracted") or {},
+                raw_text=str(draft.get("raw_text") or ""),
+                validation_flags=draft.get("validation_flags") or {},
+                file_id=str(pending_file.get("file_id")),
+                filename=str(pending_file.get("filename") or "telegram-nameplate.jpg"),
+                mime_type=str(pending_file.get("mime_type") or "image/jpeg"),
+                telegram_user_id=callback.from_user.id,
+                telegram_chat_id=pending_file.get("telegram_chat_id"),
+                telegram_message_id=pending_file.get("telegram_message_id"),
+                can_attach_any=context.is_manager,
+                file_content=file_content,
+            )
+    except Exception as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
 
     if not result:
         await callback.answer("Заказ не найден или недоступен.", show_alert=True)
@@ -1326,6 +1349,10 @@ async def confirm_warranty_nameplate(callback: CallbackQuery, state: FSMContext)
         return
 
     try:
+        file_content = await _download_telegram_file(
+            str(pending_file.get("file_id")),
+            expected_size=_normalize_file_size(pending_file.get("file_size")),
+        )
         async with async_session_maker() as session:
             result = await BotWarrantyNameplateService.apply_to_order(
                 session,
@@ -1341,6 +1368,7 @@ async def confirm_warranty_nameplate(callback: CallbackQuery, state: FSMContext)
                 telegram_chat_id=pending_file.get("telegram_chat_id"),
                 telegram_message_id=pending_file.get("telegram_message_id"),
                 can_attach_any=context.is_manager,
+                file_content=file_content,
             )
     except Exception as exc:
         await callback.answer(str(exc), show_alert=True)

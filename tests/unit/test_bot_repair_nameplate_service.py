@@ -23,6 +23,20 @@ from services.bot_repair_nameplate_service import BotRepairNameplateService
 from services.bot_warranty_nameplate_service import BotWarrantyNameplateService
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
 from services.defect_act_ai_service import DefectActAIService
+from services.general_media_storage_service import StoredGeneralMediaObject
+
+
+class FakeGeneralMediaStorage:
+    provider_name = "r2"
+
+    async def save_media(self, **kwargs):
+        return StoredGeneralMediaObject(
+            url="https://cdn.mvn.by/media/orders/42/telegram/photo/hash.jpg",
+            content_hash="b" * 64,
+            storage_provider="r2",
+            path="orders/42/telegram/photo/hash.jpg",
+            size_bytes=len(kwargs["content"]),
+        )
 
 
 @pytest.fixture
@@ -246,6 +260,44 @@ async def test_apply_to_order_merges_without_overwriting_existing_repair_meta(sq
     assert repair_meta["repair_status"] == "scheduled"
     assert repair_meta["nameplate_recognitions"][0]["purpose"] == "repair_nameplate"
     assert order.technical_meta[BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY][0]["purpose"] == "repair_nameplate"
+
+
+@pytest.mark.asyncio
+async def test_apply_to_order_stores_repair_nameplate_content(
+    sqlite_repair_nameplate_session,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "services.bot_order_attachment_service.get_general_media_storage",
+        lambda: FakeGeneralMediaStorage(),
+    )
+    order = Order(id=42, title="Ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
+    sqlite_repair_nameplate_session.add(order)
+    await sqlite_repair_nameplate_session.commit()
+
+    result = await BotRepairNameplateService.apply_to_order(
+        sqlite_repair_nameplate_session,
+        int(order.id),
+        extracted={"equipment_serial_number": "SN-001"},
+        raw_text="SERIAL SN-001",
+        validation_flags={"warnings": {}, "is_valid": True},
+        file_id="photo-file",
+        filename="nameplate.jpeg",
+        mime_type="image/jpeg",
+        telegram_user_id=777,
+        telegram_chat_id=100,
+        telegram_message_id=55,
+        can_attach_any=True,
+        file_content=b"nameplate-content",
+    )
+
+    assert result is not None
+    await sqlite_repair_nameplate_session.refresh(order)
+    attachment = order.technical_meta[BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY][0]
+    assert attachment["url"] == "https://cdn.mvn.by/media/orders/42/telegram/photo/hash.jpg"
+    assert attachment["storage_provider"] == "r2"
+    assert attachment["content_hash"] == "b" * 64
+    assert attachment["size_bytes"] == len(b"nameplate-content")
 
 
 @pytest.mark.asyncio
