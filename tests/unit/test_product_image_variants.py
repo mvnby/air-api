@@ -491,6 +491,42 @@ async def test_reprocess_local_image_creates_card_variant_without_mutating_curre
 
 
 @pytest.mark.asyncio
+async def test_reprocess_configured_remote_original_creates_card_variant(
+    sqlite_session,
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PRODUCT_MEDIA_S3_PUBLIC_BASE_URL", "https://cdn.mvn.by/media")
+
+    async def fake_download(_url: str):
+        return _image_bytes(fmt="WEBP")
+
+    monkeypatch.setattr(
+        ProductImageVariantService,
+        "_download_remote_media_content",
+        staticmethod(fake_download),
+    )
+    product = await _make_product(sqlite_session)
+    source_url = "https://cdn.mvn.by/media/products/shared/source.webp"
+    product.main_image = source_url
+    image = ProductImage(product_id=product.id, url=source_url)
+    sqlite_session.add(image)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(image)
+
+    result = await ProductImageVariantService.reprocess_variant(
+        sqlite_session,
+        product_image_id=image.id,
+        variant_type=ProductImageVariantType.CARD.value,
+    )
+
+    assert result["processing_status"] == ProductImageProcessingStatus.READY.value
+    assert result["url"].startswith("/media/products/variants/card/")
+    assert Path(result["url"].lstrip("/")).exists()
+
+
+@pytest.mark.asyncio
 async def test_reprocess_failed_source_records_error_without_mutating_originals(
     sqlite_session,
 ):

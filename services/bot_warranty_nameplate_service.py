@@ -383,6 +383,7 @@ class BotWarrantyNameplateService:
         telegram_chat_id: int | None,
         telegram_message_id: int | None,
         can_attach_any: bool = False,
+        file_content: bytes | None = None,
     ) -> dict[str, Any] | None:
         if unit_type not in cls.UNIT_TYPES:
             raise ValueError("Неизвестный тип блока")
@@ -453,6 +454,21 @@ class BotWarrantyNameplateService:
         meta = dict(order.technical_meta or {}) if isinstance(order.technical_meta, dict) else {}
         history = list(meta.get(cls.HISTORY_META_KEY)) if isinstance(meta.get(cls.HISTORY_META_KEY), list) else []
         attached_at = datetime.now()
+        storage_meta: dict[str, Any] = {}
+        if file_content:
+            stored = await BotOrderAttachmentService.store_attachment_content(
+                order_id=order_id,
+                content=file_content,
+                filename=filename,
+                mime_type=mime_type,
+            )
+            storage_meta = {
+                "url": stored.url,
+                "storage_provider": stored.storage_provider,
+                "storage_path": stored.path,
+                "content_hash": stored.content_hash,
+                "size_bytes": stored.size_bytes,
+            }
         entry = BotOrderAttachmentService._build_entry(
             file_id=file_id,
             filename=filename,
@@ -461,6 +477,7 @@ class BotWarrantyNameplateService:
             telegram_chat_id=telegram_chat_id,
             telegram_message_id=telegram_message_id,
             attached_at=attached_at,
+            **storage_meta,
         )
         entry.update(
             {
@@ -479,6 +496,40 @@ class BotWarrantyNameplateService:
         )
         history.append(entry)
         meta[cls.HISTORY_META_KEY] = history[-20:]
+        raw_attachments = meta.get(BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY)
+        telegram_attachments = list(raw_attachments) if isinstance(raw_attachments, list) else []
+        already_attached = any(
+            isinstance(item, dict)
+            and item.get("file_id") == file_id
+            and item.get("purpose") == "warranty_nameplate"
+            for item in telegram_attachments
+        )
+        if not already_attached:
+            telegram_attachments.append(
+                {
+                    key: value
+                    for key, value in entry.items()
+                    if key
+                    in {
+                        "source",
+                        "file_id",
+                        "filename",
+                        "mime_type",
+                        "kind",
+                        "telegram_user_id",
+                        "telegram_chat_id",
+                        "telegram_message_id",
+                        "attached_at",
+                        "purpose",
+                        "url",
+                        "storage_provider",
+                        "storage_path",
+                        "content_hash",
+                        "size_bytes",
+                    }
+                }
+            )
+            meta[BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY] = telegram_attachments
         order.technical_meta = meta
         flag_modified(order, "technical_meta")
         session.add(order)

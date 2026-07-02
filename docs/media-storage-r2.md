@@ -78,17 +78,30 @@ PRODUCT_MEDIA_S3_SECRET_ACCESS_KEY=<secret>
 PRODUCT_MEDIA_S3_PUBLIC_BASE_URL=https://cdn.mvn.by/media
 PRODUCT_MEDIA_S3_KEY_PREFIX=products/variants
 PRODUCT_MEDIA_S3_CACHE_CONTROL=public, max-age=31536000, immutable
+
+# Shared non-product media: articles, media library, order/bot attachments.
+# Empty MEDIA_S3_* values reuse PRODUCT_MEDIA_S3_* values.
+MEDIA_STORAGE_PROVIDER=r2
+MEDIA_S3_KEY_PREFIX=
 ```
 
 Dry-run migration requires bucket, endpoint, public base URL, and key prefix so
 it can print target keys. Secret access keys are only required for writes.
 
-The original source provider is local-only for this transition. The optional
-local path overrides are:
+Product original source files can remain local during a cautious rollout, or
+move to R2 once CDN reads are verified:
 
 ```dotenv
+PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER=local
 PRODUCT_MEDIA_LOCAL_ORIGINAL_DIR=media/products/shared
 PRODUCT_MEDIA_LOCAL_ORIGINAL_PUBLIC_PREFIX=/media/products/shared
+```
+
+Optional full switch for product originals:
+
+```dotenv
+PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER=r2
+PRODUCT_MEDIA_ORIGINAL_S3_KEY_PREFIX=products/shared
 ```
 
 ## Migration Command
@@ -158,6 +171,8 @@ This is a write-provider decision only:
 - Keep `PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER=local`.
 - Existing importer main-image fields remain local `/media/...` URLs.
 - R2 rows created during smoke or rollout live in `ProductImageVariant`.
+- Set `MEDIA_STORAGE_PROVIDER=r2` only when order/bot attachments and media
+  library uploads should start writing to R2.
 
 ### Production Env Diff
 
@@ -179,6 +194,8 @@ the effective owner-approved diff is only the provider line.
 +PRODUCT_MEDIA_S3_PUBLIC_BASE_URL=https://cdn.mvn.by/media
 +PRODUCT_MEDIA_S3_KEY_PREFIX=products/variants
 +PRODUCT_MEDIA_S3_CACHE_CONTROL=public, max-age=31536000, immutable
++MEDIA_STORAGE_PROVIDER=r2
++MEDIA_S3_KEY_PREFIX=
 ```
 
 Never commit or paste real access keys into an issue, PR, log, or chat.
@@ -322,10 +339,15 @@ catalog merchandising.
 After the bounded smoke passes and the owner approves the full switch:
 
 1. Keep `PRODUCT_MEDIA_STORAGE_PROVIDER=r2`.
-2. Monitor backend logs for `S3/R2 media storage` errors and Pillow processing
+2. Set `MEDIA_STORAGE_PROVIDER=r2` to write articles, media library uploads,
+   order attachments, and bot attachments to R2.
+3. Optionally set `PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER=r2` after confirming
+   product variant regeneration can read original images from
+   `PRODUCT_MEDIA_S3_PUBLIC_BASE_URL`.
+4. Monitor backend logs for `S3/R2 media storage` errors and Pillow processing
    failures during normal manager uploads/search attaches and variant
    generation.
-3. Spot-check new manager media rows daily during the first rollout window:
+5. Spot-check new manager media rows daily during the first rollout window:
 
    ```sql
    select variant_type, storage_provider, processing_status, count(*)
