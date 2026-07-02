@@ -55,6 +55,11 @@ echo "pitr_timers:"
 systemctl is-active mvn-postgres-wal-upload.timer || true
 systemctl is-active mvn-postgres-basebackup.timer || true
 systemctl list-timers --all | grep mvn-postgres || true
+if command -v mvn-postgres-pitr-status >/dev/null 2>&1; then
+  echo
+  echo "pitr_status:"
+  PITR_REQUIRED="${PITR_REQUIRED:-false}" mvn-postgres-pitr-status || true
+fi
 
 echo
 echo "backups:"
