@@ -355,6 +355,16 @@ jobs:
             SMOKE_SUMMARY_FILE='/tmp/smoke_summary.txt' \
             bash /tmp/post_deploy_smoke_check.sh && cat /tmp/smoke_summary.txt" | tee backend_smoke.log
 
+      - name: Prune Unused Backend Docker Images
+        id: prune_backend_images
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v"
+          cat scripts/prune_unused_docker_images.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/prune_unused_docker_images.sh"
+          ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
+            chmod +x /tmp/prune_unused_docker_images.sh && \
+            bash /tmp/prune_unused_docker_images.sh" | tee backend_docker_prune.log
+
       - name: Upload Backend Ops Logs
         if: always()
         uses: actions/upload-artifact@v7
@@ -363,6 +373,7 @@ jobs:
           path: |
             backend_ops.log
             backend_smoke.log
+            backend_docker_prune.log
           if-no-files-found: warn
 
       - name: Backend Deploy Summary
@@ -390,11 +401,15 @@ jobs:
             echo "- deploy_status: ${{ steps.deploy_backend.outcome }}"
             echo "- ops_status: ${{ steps.post_deploy_ops.outcome }}"
             echo "- smoke_status: ${{ steps.post_deploy_smoke.outcome }}"
+            echo "- docker_prune_status: ${{ steps.prune_backend_images.outcome }}"
             if [ -f backend_ops.log ]; then
               echo "- ops_log: collected"
             fi
             if [ -f backend_smoke.log ]; then
               echo "- smoke_log: collected"
+            fi
+            if [ -f backend_docker_prune.log ]; then
+              echo "- docker_prune_log: collected"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -476,6 +491,25 @@ jobs:
             docker compose -f '${API_STANDBY_COMPOSE_FILE}' logs --tail=120 app; \
             exit 1"
 
+      - name: Prune Unused Standby Docker Images
+        id: prune_standby_images
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+          cat scripts/prune_unused_docker_images.sh | ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "cat > /tmp/prune_unused_docker_images.sh"
+          ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "\
+            chmod +x /tmp/prune_unused_docker_images.sh && \
+            bash /tmp/prune_unused_docker_images.sh" | tee standby_docker_prune.log
+
+      - name: Upload Standby Deploy Logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: standby-deploy-logs-${{ github.run_id }}
+          path: |
+            standby_docker_prune.log
+          if-no-files-found: warn
+
       - name: Standby Deploy Summary
         if: always()
         run: |
@@ -488,6 +522,10 @@ jobs:
             echo "- standby_compose_source_file: ${API_STANDBY_COMPOSE_SOURCE_FILE}"
             echo "- backend_image: ghcr.io/${GITHUB_REPOSITORY,,}/backend:${GITHUB_SHA}"
             echo "- health_url: ${API_STANDBY_HEALTH_URL}"
+            echo "- docker_prune_status: ${{ steps.prune_standby_images.outcome }}"
+            if [ -f standby_docker_prune.log ]; then
+              echo "- docker_prune_log: collected"
+            fi
             echo "- status: ${{ job.status }}"
           } >> "$GITHUB_STEP_SUMMARY"
 

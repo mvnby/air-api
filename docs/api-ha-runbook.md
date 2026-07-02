@@ -302,7 +302,23 @@ Expected deploy behavior:
 
 - primary `mvn-api`: recreate `app` and `bot`;
 - standby `zakup`: recreate only `app`, then stop `bot`;
+- both API hosts: prune unused Docker images after successful deploy; this does
+  not remove volumes or images used by running containers;
 - frontend deploy is skipped unless explicitly requested.
+
+Manual disk pressure check:
+
+```bash
+ssh mvn-api 'df -h / && docker system df'
+ssh zakup 'df -h / && docker system df'
+```
+
+Manual emergency image cleanup, safe for databases and media volumes:
+
+```bash
+ssh mvn-api 'docker image prune -af && df -h /'
+ssh zakup 'docker image prune -af && df -h /'
+```
 
 ## Cloudflare Load Balancer
 
