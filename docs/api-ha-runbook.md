@@ -1,219 +1,233 @@
 # API HA Runbook
 
-This runbook describes the target high-availability shape for `api.mvn.by`
-after the emergency move to `zakup`.
+This runbook describes the current active-passive API setup for `api.mvn.by`.
+The system intentionally has one writable PostgreSQL primary and one warm
+standby. Do not make both origins public-writable.
+
+Last verified state: 2026-07-02.
 
 ## Current Hosts
 
-| Host | SSH alias | Role today | Recommended HA role |
-| --- | --- | --- | --- |
-| `zakup` | `zakup` | Current active API origin. Also runs `belzakupki`. | API origin A and initial DB source of truth. |
-| Original API VPS | `mvn-api` | Recovered reserve origin. | API origin B and PostgreSQL replica/promote target. |
-| Web VPS | `mvn-web` | Storefront/web reserve resources. | Witness only, not a PostgreSQL data node, unless the host is rebuilt into a normal service host. |
+| Host | SSH alias | Current role | API path | API port |
+| --- | --- | --- | --- | --- |
+| Original API VPS | `mvn-api` | Active primary | `/opt/air-api` | `127.0.0.1:8000` |
+| Belarus reserve VPS | `zakup` | Warm standby | `/opt/mvn-reserve` | `127.0.0.1:18000` |
+| Web VPS | `mvn` | Storefront only | n/a | n/a |
 
-Do not run two independent writable PostgreSQL databases. The last incident
-already showed why: one host had fresher orders and another host had fresher
-payment reconciliation. Cloudflare must not route write traffic to two separate
-databases.
+Current data direction:
 
-## Target Architecture
+```text
+mvn-api PostgreSQL primary 10.77.0.2:5432
+  -> zakup PostgreSQL physical standby 10.77.0.1:5432, slot zakup_standby
 
-```mermaid
-flowchart LR
-  U["Clients"] --> CF["Cloudflare Load Balancer"]
-  CF --> ZA["zakup API origin"]
-  CF --> API["mvn-api API origin"]
-  ZA --> DBP["PostgreSQL leader"]
-  API --> DBP
-  DBP --> DBR["Streaming replica"]
-  DBP --> WAL["R2 WAL/backups"]
-  ZA --> R2["Cloudflare R2 media"]
-  API --> R2
-  DCS["Patroni DCS / witness"] --> DBP
-  DCS --> DBR
+mvn-api /opt/air-api/media
+  -> zakup /opt/mvn-reserve/media via mvn-media-sync.timer every 5 minutes
 ```
 
-Rules:
+Runtime split:
 
-- Exactly one PostgreSQL leader accepts writes.
-- API origins are allowed to receive public traffic only when `/api/ready`
-  returns HTTP 200.
-- `/api/ready` is stricter than `/api/health`: it checks runtime traffic
-  controls, DB connectivity, and PostgreSQL writability.
-- Scheduler loops and Telegram polling are single-active runtime processes.
-  They use PostgreSQL advisory locks when enabled on more than one app origin.
-- Product media must not depend on the local disk of one API server. R2 becomes
-  the shared media target; local media stays as rollback/fallback until the
-  full media migration is complete.
+| Runtime | `mvn-api` primary | `zakup` standby |
+| --- | --- | --- |
+| Public readiness | `/api/ready` returns 200 | `/api/ready` returns 503 |
+| FastAPI app | running | running for health only |
+| PostgreSQL | writable primary | read-only physical replica |
+| Scheduler | enabled in `app` | disabled |
+| Telegram bot | enabled only in `bot` | stopped/disabled |
+| Google Drive backups | enabled on primary scheduler | disabled |
 
-## Recommended Phases
+## Daily Status Checks
 
-### Phase 1: Code And Load Balancer Readiness
+Primary:
 
-Deploy the backend with:
+```bash
+ssh mvn-api /usr/local/sbin/mvn-primary-status
+```
 
-- `GET /api/ready` for Cloudflare origin health.
-- PostgreSQL advisory locks for scheduler startup and Telegram polling.
-- Optional deploy smoke variable `API_READY_URL`.
+Standby:
 
-Cloudflare Load Balancer monitor:
+```bash
+ssh zakup /usr/local/sbin/mvn-standby-status
+```
+
+Public and direct readiness:
+
+```bash
+curl -fsS https://api.mvn.by/api/ready
+curl -k --resolve api.mvn.by:443:185.250.45.54 https://api.mvn.by/api/ready
+curl -k --resolve api.mvn.by:443:193.47.42.213 https://api.mvn.by/api/ready
+```
+
+Expected:
+
+- public readiness: 200 from `mvn-api`;
+- direct `mvn-api`: 200;
+- direct `zakup`: 503.
+
+GitHub health check:
+
+```bash
+gh workflow run check-api-vps-health.yml --repo mvnby/air-api --ref main -f mode=ssh
+```
+
+## GitHub Actions Routing
+
+Current production variables must match the active primary:
+
+```text
+SSH_HOST_API=185.250.45.54
+API_PROJECT_DIR=/opt/air-api
+API_COMPOSE_FILE=docker-compose.prod.yml
+API_COPY_COMPOSE=false
+API_BASE_URL=http://localhost:8000
+API_READY_URL=http://localhost:8000/api/ready
+API_LOCAL_HEALTH_URL=http://127.0.0.1:8000/api/health
+API_TUNNEL_REMOTE_PORT=8000
+API_DEPLOY_SERVICES=app bot
+API_SMOKE_COMPOSE_SERVICE_CHECKS=app bot db
+API_COMPOSE_SERVICE_CHECKS=app bot db
+API_BOT_EXPECT_ENABLED=true
+API_STANDBY_HOST=193.47.42.213
+API_STANDBY_PROJECT_DIR=/opt/mvn-reserve
+API_STANDBY_COMPOSE_FILE=docker-compose.reserve.yml
+API_STANDBY_HEALTH_URL=http://localhost:18000/api/health
+```
+
+`API_COPY_COMPOSE=false` is intentional while the primary uses a host-local
+compose file with HA-specific PostgreSQL binding and role split. Do not switch
+it back to `true` until the repo has a reviewed HA compose overlay.
+
+Manual deploy verification:
+
+```bash
+gh workflow run deploy.yml --repo mvnby/air-api --ref main -f deploy_frontend=false
+```
+
+Expected deploy behavior:
+
+- primary `mvn-api`: recreate `app` and `bot`;
+- standby `zakup`: recreate only `app`, then stop `bot`;
+- frontend deploy is skipped unless explicitly requested.
+
+## Cloudflare Load Balancer
+
+The monitor must use:
 
 ```text
 Type: HTTPS
 Path: /api/ready
 Expected status: 200
 Method: GET
-Interval: 60s
-Retries: 2
-Timeout: 5s
 ```
 
-Initial origin settings:
+Current desired pool order:
 
-| Origin | Public traffic env | Background env |
-| --- | --- | --- |
-| Active origin | `APP_ROLE=primary`, `API_READY_ENABLED=true` | `SCHEDULER_ENABLED=true`, `BOT_ENABLED=true` |
-| Reserve origin | `APP_ROLE=standby`, `API_READY_ENABLED=false` or unset | `SCHEDULER_ENABLED=false`, `BOT_ENABLED=false` |
+1. `mvn-api` origin, address `185.250.45.54`, host header `api.mvn.by`;
+2. `zakup` origin, address `193.47.42.213`, host header `api.mvn.by`.
 
-During the current transition, if `zakup` must keep serving traffic while bot
-and scheduler are intentionally off, set only:
+Fallback pool must be the current primary pool, not the standby pool. Cloudflare
+fallback ignores health, so a fallback to standby can route users to an
+unpromoted read-only API.
 
-```dotenv
-API_READY_ENABLED=true
-```
+If Cloudflare still has old names such as `mvn-primary-zakup` and
+`mvn-standby-api`, either rename them or verify by IP address. Names are less
+important than order and fallback.
 
-Do not enable `SCHEDULER_ENABLED=true` or `BOT_ENABLED=true` on two origins
-while they still use separate local databases.
+## Emergency Failover: `mvn-api` -> `zakup`
 
-GitHub deploy variables for an origin that should also verify readiness:
+Use this only when `mvn-api` is actually unavailable or must be taken out.
 
-```text
-API_READY_URL=http://localhost:18000/api/ready
-```
-
-Use `http://localhost:8000/api/ready` on the original API VPS if it is the
-active deploy target.
-
-### Phase 2: Media Shared State
-
-Short-term safe state:
-
-- Keep `/opt/.../media` mounted and backed up on each API host.
-- Use one-way active-to-standby media refresh only for drills and planned
-  promotion.
-- Never use bidirectional rsync for product media.
-
-Target state:
-
-- Store new product media variants/original rows in Cloudflare R2.
-- Serve public image URLs from `https://cdn.mvn.by/media/...`.
-- Keep local media as fallback until all product-facing original fields and
-  importer paths have an owner-approved migration path.
-
-R2 is the right shared storage layer because it removes media from API-host
-failover. A third VPS with another local copy only moves the same failure mode
-around.
-
-### Phase 3: PostgreSQL HA
-
-Recommended implementation for the existing VPS budget:
-
-- PostgreSQL streaming replication from the current source-of-truth DB.
-- WAL archiving and base backups to R2 using `pgBackRest` or `WAL-G`.
-- Patroni for leader election and promotion.
-- A small third witness/DCS node. Use `mvn-web` only if we can safely run and
-  monitor the witness service there; otherwise buy a tiny dedicated VPS.
-
-Replication mode:
-
-- Start with asynchronous streaming replication across providers/regions.
-  Expected RPO is normally seconds, but not mathematically zero.
-- Do not use strict synchronous cross-region replication unless the business
-  accepts that writes can block when the standby or network link is unhealthy.
-- If true zero data loss is required, prefer a managed HA PostgreSQL provider
-  with an SLA over self-managed cross-provider sync.
-
-Initial source of truth:
-
-1. Freeze writes.
-2. Confirm `zakup` has the intended current DB state.
-3. Take a verified dump and base backup from `zakup`.
-4. Rebuild the original API host as replica from that backup.
-5. Keep the old independent database stopped or isolated after replica creation.
-
-Failover rule:
-
-- Promote a replica only through Patroni or a documented manual promotion
-  command.
-- After promotion, make only the promoted origin return 200 from `/api/ready`.
-- Do not point Cloudflare at a host whose database is still in recovery or
-  read-only.
-
-### Phase 4: Cloudflare Cutover
-
-Use Cloudflare Load Balancing as active-passive first:
-
-- Pool A: current active API origin.
-- Pool B: reserve API origin.
-- Monitor path: `/api/ready`.
-- Session affinity: off unless a future stateful API feature requires it.
-
-Manual failover checklist:
-
-1. Confirm backups/WAL are current.
-2. Stop bot/scheduler on the old active origin or set:
-
-   ```dotenv
-   SCHEDULER_ENABLED=false
-   BOT_ENABLED=false
-   API_READY_ENABLED=false
-   ```
-
-3. Promote PostgreSQL on the reserve side.
-4. Set the promoted API origin:
-
-   ```dotenv
-   APP_ROLE=primary
-   API_READY_ENABLED=true
-   SCHEDULER_ENABLED=true
-   BOT_ENABLED=true
-   ```
-
-5. Recreate `app` and `bot`.
-6. Verify locally:
+1. Fence the old primary first if reachable:
 
    ```bash
-   curl -fsS http://127.0.0.1:8000/api/ready
-   curl -fsS http://127.0.0.1:8000/api/health
-   curl -fsS 'http://127.0.0.1:8000/api/v1/products?limit=5'
+   ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.prod.yml stop app bot'
    ```
 
-7. Confirm Cloudflare marks the origin healthy.
-8. Confirm public:
+2. Confirm standby is caught up:
 
    ```bash
-   curl -fsS https://api.mvn.by/api/ready
-   curl -fsS https://api.mvn.by/api/health
-   curl -fsS 'https://api.mvn.by/api/v1/products?limit=5'
+   ssh zakup /usr/local/sbin/mvn-standby-status
    ```
 
-## What Not To Do
+3. Promote `zakup`:
 
-- Do not use Cloudflare LB health on `/api/health` for failover. It can be
-  healthy while the origin must not receive writes.
-- Do not run two local writable databases and try to reconcile them later.
-- Do not make `mvn-web` a full Postgres data node just because it has spare CPU
-  and disk. It is a web/cPanel-style host today; using it as a witness is much
-  safer than storing primary data there.
-- Do not delete local media after enabling R2 until product originals and
-  importer paths are covered.
+   ```bash
+   ssh zakup 'cd /opt/mvn-reserve && docker compose -f docker-compose.reserve.yml exec -T db sh -lc '\''pg_ctl promote -D "$PGDATA"'\'''
+   ```
 
-## Cloudflare Access Needed For Automation
+4. Change `zakup` compose/runtime from standby to primary:
 
-Manual dashboard changes are enough. If Codex/GitHub should manage Cloudflare
-directly, create a scoped token for the `mvn.by` zone with:
+   - `APP_ROLE=primary`
+   - `API_READY_ENABLED=true`
+   - `SCHEDULER_ENABLED=true` in `app`
+   - `BOT_ENABLED=false` in `app`
+   - `BOT_ENABLED=true` and `SCHEDULER_ENABLED=false` in `bot`
 
-- DNS edit/read.
-- Load Balancing edit/read.
+5. Start primary services on `zakup`:
 
-Do not grant account-wide admin unless a specific operation requires it.
+   ```bash
+   ssh zakup 'cd /opt/mvn-reserve && docker compose -f docker-compose.reserve.yml up -d app bot'
+   ```
+
+6. Disable media pull on the promoted primary:
+
+   ```bash
+   ssh zakup 'systemctl disable --now mvn-media-sync.timer mvn-media-sync.service'
+   ```
+
+7. Verify:
+
+   ```bash
+   curl -k --resolve api.mvn.by:443:193.47.42.213 https://api.mvn.by/api/ready
+   ```
+
+8. Update GitHub Actions variables and Cloudflare pool order/fallback to make
+   `zakup` the current primary.
+
+9. Do not restart `mvn-api` as primary. Rebuild it as standby from the promoted
+   database.
+
+## Rebuild A Former Primary As Standby
+
+Use this after every manual promotion. A former primary is considered divergent
+until rebuilt from the new primary.
+
+Required steps:
+
+1. Stop old app, bot, and DB containers.
+2. Save a tar archive of the old PostgreSQL volume for forensic comparison.
+3. On the new primary:
+   - expose PostgreSQL only on localhost and WireGuard;
+   - create/update replication role `mvn_replicator`;
+   - add a `pg_hba.conf` rule for the standby WireGuard IP;
+   - create a physical replication slot for the standby.
+4. On the standby:
+   - remove the old PostgreSQL volume;
+   - run `pg_basebackup -R -S <slot>`;
+   - ensure `standby.signal` exists;
+   - run DB with `max_connections >= primary max_connections`.
+5. Start standby `db + app`.
+6. Keep standby `bot` and scheduler disabled.
+7. Set media sync to pull from the new primary to the standby.
+8. Verify `/api/ready=503` on standby and replication slot active on primary.
+
+## Hard Rules
+
+- Never let both origins return `/api/ready=200`.
+- Never run two writable PostgreSQL primaries.
+- Never run Telegram polling on two hosts with the same token.
+- Never run scheduler/import/payment jobs on standby.
+- Never use bidirectional media sync.
+- Never fail back by simply starting the old primary. Rebuild it as standby
+  first, then promote intentionally if needed.
+- `/api/health` is not a load-balancer health endpoint. Use `/api/ready`.
+
+## Next Improvements
+
+- Move HA-specific compose overlays into the repo and stop relying on
+  host-local compose edits.
+- Add a single audited promote script that performs fencing, promotion,
+  role-switching, media-sync direction, and verification.
+- Add Cloudflare API automation for pool order/fallback changes.
+- Add owner-visible alerts from GitHub Actions or Cloudflare to Telegram/email.
+- Keep Google Drive backups, but add a scheduled restore drill to a disposable
+  volume/host.
