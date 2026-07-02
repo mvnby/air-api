@@ -454,6 +454,14 @@ PY
     remote_warn "curl is not installed on host; localhost app health skipped"
   fi
 
+  if media_storage_output="$("${COMPOSE[@]}" exec -T app python3 scripts/check_media_storage_config.py --require-object-storage --expected-public-base-url https://cdn.mvn.by 2>&1)"; then
+    print_prefixed media "${media_storage_output}"
+    remote_ok "media storage config uses object storage for all runtime media classes"
+  else
+    print_prefixed media "${media_storage_output}"
+    remote_fail "media storage config check failed"
+  fi
+
   if command -v openssl >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1; then
     cert_end="$(
       {

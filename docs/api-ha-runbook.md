@@ -20,7 +20,10 @@ Current data direction:
 mvn-api PostgreSQL primary 10.77.0.2:5432
   -> zakup PostgreSQL physical standby 10.77.0.1:5432, slot zakup_standby
 
-mvn-api /opt/air-api/media
+new runtime media writes
+  -> Cloudflare R2/CDN at https://cdn.mvn.by/...
+
+legacy local /media fallback
   -> zakup /opt/mvn-reserve/media via mvn-media-sync.timer every 5 minutes
 ```
 
@@ -34,6 +37,8 @@ Runtime split:
 | Scheduler | enabled in `app` | disabled |
 | Telegram bot | enabled only in `bot` | stopped/disabled |
 | Google Drive backups | enabled on primary scheduler | disabled |
+| New media writes | R2/CDN | disabled while standby |
+| Legacy local media | source of sync | pulled from primary |
 
 ## Repo-Tracked HA Files
 
@@ -90,6 +95,12 @@ Repo check:
 bash scripts/ha/check_active_passive.sh
 ```
 
+Media storage config check:
+
+```bash
+ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.prod.yml exec -T app python3 scripts/check_media_storage_config.py --require-object-storage --expected-public-base-url https://cdn.mvn.by'
+```
+
 GitHub health check:
 
 ```bash
@@ -100,7 +111,7 @@ Scheduled monitors:
 
 | Workflow | Schedule | Purpose |
 | --- | --- | --- |
-| `check-api-vps-health.yml` | every 6 hours | primary host, containers, DB, backups |
+| `check-api-vps-health.yml` | every 6 hours | primary host, containers, DB, backups, media storage config |
 | `check-api-ha-invariants.yml` | every 30 minutes | public/primary ready and standby fenced |
 | `api-restore-drill.yml` | daily after the 03:00 UTC backup | disposable DB restore drill |
 | `check-postgres-pitr.yml` | every 6 hours | PITR archive/timer/backlog and remote R2 freshness |
