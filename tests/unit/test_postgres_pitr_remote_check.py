@@ -31,6 +31,26 @@ class FakeClient:
         return FakePaginator(self.pages)
 
 
+def test_load_python_module_from_path_supports_extensionless_helper(tmp_path):
+    helper = tmp_path / "mvn-postgres-pitr-upload"
+    helper.write_text(
+        "def build_client(config):\n"
+        "    return ('client', config)\n"
+        "def load_config():\n"
+        "    return 'config'\n",
+        encoding="utf-8",
+    )
+
+    module = pitr_remote._load_python_module_from_path(
+        "test_extensionless_pitr_remote_upload_helper",
+        helper,
+    )
+
+    assert module is not None
+    assert module.load_config() == "config"
+    assert module.build_client("cfg") == ("client", "cfg")
+
+
 def test_latest_object_picks_newest_matching_key():
     older = datetime(2026, 7, 1, 10, 0, tzinfo=timezone.utc)
     newer = datetime(2026, 7, 1, 11, 0, tzinfo=timezone.utc)
