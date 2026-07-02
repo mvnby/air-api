@@ -1,0 +1,49 @@
+name: API HA Invariant Check
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+    inputs:
+      primary_origin:
+        description: "Current primary origin IP"
+        type: string
+        required: false
+        default: ""
+      standby_origin:
+        description: "Current standby origin IP"
+        type: string
+        required: false
+        default: ""
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run active-passive invariant check
+        env:
+          API_HOST: api.mvn.by
+          PUBLIC_BASE_URL: https://api.mvn.by
+          PRIMARY_ORIGIN: ${{ github.event.inputs.primary_origin || vars.API_PRIMARY_ORIGIN || '185.250.45.54' }}
+          STANDBY_ORIGIN: ${{ github.event.inputs.standby_origin || vars.API_STANDBY_ORIGIN || '193.47.42.213' }}
+          PRIMARY_ROLE: primary
+          STANDBY_ROLE: standby
+        run: bash scripts/ha/check_active_passive.sh | tee api-ha-invariant.log
+
+      - name: Upload HA invariant log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: api-ha-invariant-log-${{ github.run_id }}
+          path: api-ha-invariant.log
+          if-no-files-found: warn

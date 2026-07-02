@@ -92,6 +92,14 @@ GitHub health check:
 gh workflow run check-api-vps-health.yml --repo mvnby/air-api --ref main -f mode=ssh
 ```
 
+Scheduled monitors:
+
+| Workflow | Schedule | Purpose |
+| --- | --- | --- |
+| `check-api-vps-health.yml` | every 6 hours | primary host, containers, DB, backups |
+| `check-api-ha-invariants.yml` | every 30 minutes | public/primary ready and standby fenced |
+| `api-restore-drill.yml` | daily after the 03:00 UTC backup | disposable DB restore drill |
+
 ## GitHub Actions Routing
 
 Current production variables must match the active primary:
@@ -285,6 +293,12 @@ disposable PostgreSQL container on the same Docker network, restores the dump
 there, checks that public tables exist, and then removes the disposable
 container. It does not touch the production or standby database.
 
+GitHub also runs this daily:
+
+```bash
+gh workflow run api-restore-drill.yml --repo mvnby/air-api --ref main
+```
+
 ## Hard Rules
 
 - Never let both origins return `/api/ready=200`.
@@ -299,6 +313,5 @@ container. It does not touch the production or standby database.
 ## Next Improvements
 
 - Add Cloudflare API automation for pool order/fallback changes.
-- Add owner-visible alerts from GitHub Actions or Cloudflare to Telegram/email.
-- Add a scheduled restore drill to a disposable volume/host after the first
-  manual restore drill passes.
+- Add owner-visible alerts from GitHub Actions or Cloudflare to Telegram/email
+  beyond the default GitHub failed-workflow notification path.
