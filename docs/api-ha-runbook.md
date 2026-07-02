@@ -127,11 +127,11 @@ Important rules:
   a public media bucket exposed through `cdn.mvn.by`.
 - `archive_timeout=300s` bounds low-traffic WAL upload lag to about five
   minutes. The streaming standby still normally has lower failover lag.
-- Only the current primary compose enables `archive_mode=on`. Standby compose
-  keeps archiving disabled until it is promoted and restarted with a primary
-  compose file.
+- Only primary compose files can enable archiving, and only when
+  `POSTGRES_PITR_ARCHIVE_MODE=on` is set. Standby compose keeps archiving
+  disabled until it is promoted and restarted with a primary compose file.
 
-Required `.env` values on the current primary:
+Required `.env` values on the current primary before the first upload test:
 
 ```text
 POSTGRES_PITR_CLUSTER=mvn-api
@@ -146,6 +146,11 @@ POSTGRES_PITR_S3_KEY_PREFIX=postgres/pitr
 If `zakup` is promoted, change `POSTGRES_PITR_CLUSTER=zakup` on that host before
 enabling its PITR timers. The prefix can stay the same; cluster name separates
 the timelines.
+
+`POSTGRES_PITR_ARCHIVE_MODE` intentionally defaults to `off` in compose. Set it
+to `on` only after the private bucket/token are configured and the upload helper
+has passed a dry run. This prevents WAL files from accumulating locally before
+remote archive upload is ready.
 
 Enable on the current primary after the private bucket/token exist:
 
@@ -167,14 +172,21 @@ tar -czf - \
 # Copy deploy/ha/mvn-api/docker-compose.primary.yml through CI.
 gh workflow run deploy.yml --repo mvnby/air-api --ref main -f deploy_frontend=false
 
-# In a short maintenance window, recreate only db so archive_mode=on and the
-# /postgres-wal-archive mount become active. Normal app/bot deploys do not
-# recreate db.
+# Prove private bucket upload with a physical basebackup first. This is a real
+# upload; it does not require archive_mode yet.
+ssh mvn-api 'PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml /usr/local/sbin/mvn-postgres-pitr-basebackup'
+
+# Then add these two values to /opt/air-api/.env:
+# POSTGRES_PITR_ARCHIVE_MODE=on
+# POSTGRES_PITR_ARCHIVE_TIMEOUT=300s
+
+# In a short maintenance window, recreate db so archive_mode=on and the
+# /postgres-wal-archive mount become active.
 ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.prod.yml up -d --force-recreate db'
 
-# Prove WAL upload before enabling timers permanently.
-ssh mvn-api 'PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml DRY_RUN_UPLOAD=true /usr/local/sbin/mvn-postgres-pitr-upload-wal'
-ssh mvn-api 'PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml /usr/local/sbin/mvn-postgres-pitr-basebackup'
+# Force one WAL switch and prove WAL upload before enabling timers permanently.
+ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.prod.yml exec -T db sh -lc '\''psql -U "$POSTGRES_USER" -d "${POSTGRES_DB:-air_conditioners}" -c "select pg_switch_wal();"'\'''
+ssh mvn-api 'PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml /usr/local/sbin/mvn-postgres-pitr-upload-wal'
 
 # Then enable recurring PITR.
 ssh mvn-api 'systemctl enable --now mvn-postgres-wal-upload.timer mvn-postgres-basebackup.timer'
