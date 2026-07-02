@@ -55,7 +55,7 @@ unreviewed host-local compose edits:
 | Local standby promotion helper | `scripts/ha/promote_local_standby.sh` |
 | Disposable DB restore drill | `scripts/ha/restore_drill_latest_db.sh` |
 | PostgreSQL PITR WAL/basebackup upload | `scripts/ha/upload_postgres_pitr_to_s3.py`, `scripts/ha/upload_postgres_pitr_wal.sh`, `scripts/ha/create_postgres_pitr_basebackup.sh` |
-| PostgreSQL PITR restore drill helper | `scripts/ha/restore_postgres_pitr_from_s3.py` |
+| PostgreSQL PITR restore helpers | `scripts/ha/restore_postgres_pitr_from_s3.py`, `scripts/ha/restore_postgres_pitr_drill.sh`, `.github/workflows/postgres-pitr-restore-drill.yml` |
 | PostgreSQL PITR env configuration | `scripts/ha/configure_postgres_pitr_env.py` |
 | PostgreSQL PITR monitoring | `scripts/ha/check_postgres_pitr_status.sh`, `scripts/ha/check_postgres_pitr_remote.py`, `.github/workflows/check-postgres-pitr.yml` |
 | PostgreSQL PITR systemd units | `deploy/ha/systemd/mvn-postgres-wal-upload.*`, `deploy/ha/systemd/mvn-postgres-basebackup.*` |
@@ -116,6 +116,7 @@ Scheduled monitors:
 | `check-api-ha-invariants.yml` | every 30 minutes | public/primary ready and standby fenced |
 | `api-restore-drill.yml` | daily after the 03:00 UTC backup | disposable DB restore drill |
 | `check-postgres-pitr.yml` | every 6 hours | PITR archive/timer/backlog and remote R2 freshness |
+| `postgres-pitr-restore-drill.yml` | daily when `POSTGRES_PITR_REQUIRED=true` | disposable physical restore from PITR basebackup + WAL |
 
 ## PostgreSQL PITR
 
@@ -179,6 +180,7 @@ tar -czf - \
   scripts/ha/create_postgres_pitr_basebackup.sh \
   scripts/ha/configure_postgres_pitr_env.py \
   scripts/ha/restore_postgres_pitr_from_s3.py \
+  scripts/ha/restore_postgres_pitr_drill.sh \
   scripts/ha/check_postgres_pitr_status.sh \
   scripts/ha/check_postgres_pitr_remote.py \
   scripts/ha/install_postgres_pitr_units.sh \
@@ -252,36 +254,42 @@ Manual GitHub monitor run:
 gh workflow run check-postgres-pitr.yml --repo mvnby/air-api --ref main -f required=true
 ```
 
-Point-in-time restore drill after the first private basebackup and WAL upload:
+Physical PITR restore drill after the first private basebackup and WAL upload:
 
 ```bash
-# List available private PITR basebackups. This prints no secret values.
-ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.prod.yml run -T --rm app python scripts/ha/restore_postgres_pitr_from_s3.py list-basebackups'
-
-# Prepare an isolated restore directory on the host. The target dir must be
-# empty. This downloads the selected basebackup, verifies checksums, extracts it
-# under data/, downloads archived WAL under wal/, writes recovery.signal, and
-# configures restore_command to copy WAL from that local drill directory.
-ssh mvn-api 'rm -rf /root/mvn-pitr-restore && mkdir -p /root/mvn-pitr-restore'
-ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.prod.yml run -T --rm -v /root/mvn-pitr-restore:/pitr-restore app python scripts/ha/restore_postgres_pitr_from_s3.py prepare --target-dir /pitr-restore --target-time <target-time-utc>'
-
-# Start a disposable PostgreSQL container against the prepared data directory.
-# Use this only for validation, never as a production replacement.
-ssh mvn-api 'docker run -d --rm --name mvn-pitr-restore-check --env-file /opt/air-api/.env -v /root/mvn-pitr-restore/data:/var/lib/postgresql/data -v /root/mvn-pitr-restore/wal:/pitr-restore/wal:ro postgres:15-alpine postgres'
-ssh mvn-api 'docker logs --tail=120 mvn-pitr-restore-check'
-ssh mvn-api 'docker exec mvn-pitr-restore-check sh -lc '\''PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d "${POSTGRES_DB:-air_conditioners}" -c "select pg_is_in_recovery(), pg_is_wal_replay_paused();"'\'''
-ssh mvn-api 'docker stop mvn-pitr-restore-check'
+ssh mvn-api 'PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml /usr/local/sbin/mvn-postgres-pitr-restore-drill'
 ```
 
-Expected result:
+The drill:
 
-- PostgreSQL starts in recovery against the isolated `/root/mvn-pitr-restore`
-  data directory.
-- Missing WAL segments are copied from `/pitr-restore/wal`.
-- Recovery pauses at `recovery_target_time` because the helper writes
-  `recovery_target_action = 'pause'`.
-- Validate the restored DB with read-only SQL before replacing any production
-  role.
+- selects the latest private PITR basebackup unless `BACKUP_ID` is provided;
+- downloads and verifies basebackup files and archived WAL into a temporary
+  host directory;
+- starts a disposable PostgreSQL container against that restored data
+  directory;
+- checks that public tables and critical MVN tables are queryable;
+- removes the temporary container and files by default;
+- never mounts or modifies the production or standby PostgreSQL volumes.
+
+Optional point-in-time target:
+
+```bash
+ssh mvn-api 'PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml TARGET_TIME=2026-07-02T18:30:00Z /usr/local/sbin/mvn-postgres-pitr-restore-drill'
+```
+
+With `TARGET_TIME`, the drill expects PostgreSQL recovery to pause at the target
+time. Use this for periodic manual PITR proof after the scheduled latest-backup
+drill is green.
+
+Manual GitHub restore-drill run:
+
+```bash
+gh workflow run postgres-pitr-restore-drill.yml --repo mvnby/air-api --ref main -f required=true
+```
+
+The scheduled workflow skips itself while `POSTGRES_PITR_REQUIRED=false`.
+After PITR is enabled and the strict PITR freshness check is green, leave
+`POSTGRES_PITR_REQUIRED=true` so the daily physical restore drill runs.
 
 ## GitHub Actions Routing
 

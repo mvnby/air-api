@@ -21,6 +21,7 @@ install -m 0755 scripts/ha/upload_postgres_pitr_wal.sh /usr/local/sbin/mvn-postg
 install -m 0755 scripts/ha/create_postgres_pitr_basebackup.sh /usr/local/sbin/mvn-postgres-pitr-basebackup
 install -m 0755 scripts/ha/configure_postgres_pitr_env.py /usr/local/sbin/mvn-postgres-pitr-configure-env
 install -m 0755 scripts/ha/restore_postgres_pitr_from_s3.py /usr/local/sbin/mvn-postgres-pitr-restore
+install -m 0755 scripts/ha/restore_postgres_pitr_drill.sh /usr/local/sbin/mvn-postgres-pitr-restore-drill
 install -m 0755 scripts/ha/check_postgres_pitr_status.sh /usr/local/sbin/mvn-postgres-pitr-status
 install -m 0755 scripts/ha/check_postgres_pitr_remote.py /usr/local/sbin/mvn-postgres-pitr-remote-status
 install -m 0644 deploy/ha/systemd/mvn-postgres-wal-upload.service /etc/systemd/system/mvn-postgres-wal-upload.service
