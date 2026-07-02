@@ -222,7 +222,7 @@ def _format_order_attachment_choices(orders: list[dict]) -> str:
 
 def _format_repair_nameplate_order_choices(orders: list[dict]) -> str:
     if not orders:
-        return "Быстрых ремонтных заказов в исполнении не нашел. Введите номер/id заказа сообщением."
+        return "Быстрых активных ремонтных заказов не нашел. Введите номер/id заказа сообщением."
 
     lines = ["К какому ремонтному заказу добавить данные со шильдика?"]
     for order in orders[:5]:
@@ -912,7 +912,7 @@ async def choose_order_for_repair_nameplate(callback: CallbackQuery, state: FSMC
     else:
         await state.set_state(ShopState.waiting_for_repair_nameplate_order_id)
         await callback.message.edit_text(
-            "Быстрых ремонтных заказов в исполнении не нашел. Введите номер/id заказа сообщением."
+            "Быстрых активных ремонтных заказов не нашел. Введите номер/id заказа сообщением."
         )
     await callback.answer()
 
@@ -958,7 +958,7 @@ async def _run_repair_nameplate_recognition_for_order(
         )
     if not allowed:
         await progress_message.edit_text(
-            "Этот заказ не найден среди ремонтных заказов в исполнении или не назначен вам."
+            "Этот заказ не найден среди активных ремонтных заказов или не назначен вам."
         )
         return
 

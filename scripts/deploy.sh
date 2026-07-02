@@ -10,6 +10,14 @@ DEPLOY_SERVICES="${API_DEPLOY_SERVICES:-app bot}"
 MIGRATION_SERVICE="${API_MIGRATION_SERVICE:-app}"
 RUN_MIGRATIONS="${API_RUN_MIGRATIONS:-true}"
 RUN_DEFAULTS="${API_RUN_DEFAULTS:-true}"
+BACKEND_IMAGE="${BACKEND_IMAGE:-}"
+
+if [[ -n "${BACKEND_IMAGE}" ]]; then
+    export BACKEND_IMAGE
+    echo "📌 Using immutable backend image: ${BACKEND_IMAGE}"
+else
+    echo "⚠️ BACKEND_IMAGE is not set; compose will use its fallback image tag"
+fi
 
 if [[ ! -d "${PROJECT_DIR}" ]]; then
     echo "❌ Project dir not found: ${PROJECT_DIR}"
@@ -32,7 +40,7 @@ echo "🔑 Logging into GHCR..."
 echo "$GHCR_PAT" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
 # 2. Pull images
-echo "📥 Pulling latest Docker images..."
+echo "📥 Pulling Docker images..."
 "${COMPOSE[@]}" pull
 
 # 3. Migrations

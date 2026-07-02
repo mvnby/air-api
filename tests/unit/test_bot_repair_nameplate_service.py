@@ -131,12 +131,16 @@ async def test_nameplate_recognize_rejects_too_large_file_before_ocr(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_lists_only_execution_repair_orders_for_manager(sqlite_repair_nameplate_session):
+async def test_lists_active_repair_orders_for_manager(sqlite_repair_nameplate_session):
+    repair_new = Order(title="Новый ремонт", status=OrderStatus.NEW_LEAD, workflow_type="repair")
     repair_execution = Order(title="Ремонт в работе", status=OrderStatus.EXECUTION, workflow_type="repair")
     repair_negotiation = Order(title="Ремонт в переговорах", status=OrderStatus.NEGOTIATION, workflow_type="repair")
+    repair_closed = Order(title="Закрытый ремонт", status=OrderStatus.CLOSED, workflow_type="repair")
     install_execution = Order(title="Монтаж", status=OrderStatus.EXECUTION, workflow_type="sales_installation")
+    sqlite_repair_nameplate_session.add(repair_new)
     sqlite_repair_nameplate_session.add(repair_execution)
     sqlite_repair_nameplate_session.add(repair_negotiation)
+    sqlite_repair_nameplate_session.add(repair_closed)
     sqlite_repair_nameplate_session.add(install_execution)
     await sqlite_repair_nameplate_session.commit()
 
@@ -146,7 +150,11 @@ async def test_lists_only_execution_repair_orders_for_manager(sqlite_repair_name
         can_attach_any=True,
     )
 
-    assert [item["id"] for item in orders] == [repair_execution.id]
+    assert {item["id"] for item in orders} == {
+        repair_new.id,
+        repair_execution.id,
+        repair_negotiation.id,
+    }
 
 
 @pytest.mark.asyncio
@@ -238,6 +246,32 @@ async def test_apply_to_order_merges_without_overwriting_existing_repair_meta(sq
     assert repair_meta["repair_status"] == "scheduled"
     assert repair_meta["nameplate_recognitions"][0]["purpose"] == "repair_nameplate"
     assert order.technical_meta[BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY][0]["purpose"] == "repair_nameplate"
+
+
+@pytest.mark.asyncio
+async def test_apply_to_order_accepts_negotiation_repair_order(sqlite_repair_nameplate_session):
+    order = Order(title="Ремонт", status=OrderStatus.NEGOTIATION, workflow_type="repair")
+    sqlite_repair_nameplate_session.add(order)
+    await sqlite_repair_nameplate_session.commit()
+
+    result = await BotRepairNameplateService.apply_to_order(
+        sqlite_repair_nameplate_session,
+        int(order.id),
+        extracted={"equipment_serial_number": "SN-121"},
+        raw_text="SN-121",
+        validation_flags={},
+        file_id="photo-file",
+        filename="nameplate.jpg",
+        mime_type="image/jpeg",
+        telegram_user_id=777,
+        telegram_chat_id=100,
+        telegram_message_id=55,
+        can_attach_any=True,
+    )
+
+    assert result is not None
+    await sqlite_repair_nameplate_session.refresh(order)
+    assert order.technical_meta["repair"]["equipment_serial_number"] == "SN-121"
 
 
 @pytest.mark.asyncio
