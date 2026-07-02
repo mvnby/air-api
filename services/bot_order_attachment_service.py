@@ -18,6 +18,23 @@ from services.staff_user_service import StaffUserService
 
 class BotOrderAttachmentService:
     TELEGRAM_ATTACHMENTS_META_KEY = "telegram_attachments"
+    PERSISTED_ENTRY_KEYS = {
+        "source",
+        "file_id",
+        "filename",
+        "mime_type",
+        "kind",
+        "telegram_user_id",
+        "telegram_chat_id",
+        "telegram_message_id",
+        "attached_at",
+        "purpose",
+        "url",
+        "storage_provider",
+        "storage_path",
+        "content_hash",
+        "size_bytes",
+    }
     ACTIVE_STATUSES = {
         OrderStatus.NEW_LEAD,
         OrderStatus.NEGOTIATION,
@@ -86,6 +103,44 @@ class BotOrderAttachmentService:
         if size_bytes is not None:
             entry["size_bytes"] = size_bytes
         return entry
+
+    @classmethod
+    def persisted_entry(cls, entry: dict[str, Any]) -> dict[str, Any]:
+        return {key: value for key, value in entry.items() if key in cls.PERSISTED_ENTRY_KEYS}
+
+    @classmethod
+    def upsert_telegram_attachment(
+        cls,
+        meta: dict[str, Any],
+        entry: dict[str, Any],
+    ) -> tuple[list[dict[str, Any]], bool]:
+        persisted = cls.persisted_entry(entry)
+        raw_attachments = meta.get(cls.TELEGRAM_ATTACHMENTS_META_KEY)
+        attachments = list(raw_attachments) if isinstance(raw_attachments, list) else []
+        file_id = persisted.get("file_id")
+        purpose = persisted.get("purpose")
+        existing_index = next(
+            (
+                index
+                for index, item in enumerate(attachments)
+                if isinstance(item, dict)
+                and item.get("file_id") == file_id
+                and item.get("purpose") == purpose
+            ),
+            None,
+        )
+
+        if existing_index is None:
+            attachments.append(persisted)
+            already_attached = False
+        else:
+            current = dict(attachments[existing_index])
+            current.update(persisted)
+            attachments[existing_index] = current
+            already_attached = True
+
+        meta[cls.TELEGRAM_ATTACHMENTS_META_KEY] = attachments
+        return attachments, already_attached
 
     @staticmethod
     def _comment_line(entry: dict[str, Any], attached_at: datetime) -> str:
@@ -203,17 +258,18 @@ class BotOrderAttachmentService:
         meta = dict(order.technical_meta or {}) if isinstance(order.technical_meta, dict) else {}
         raw_attachments = meta.get(cls.TELEGRAM_ATTACHMENTS_META_KEY)
         attachments = list(raw_attachments) if isinstance(raw_attachments, list) else []
-        existing_entry = next(
+        existing_index = next(
             (
-                item
-                for item in attachments
+                index
+                for index, item in enumerate(attachments)
                 if isinstance(item, dict) and item.get("file_id") == file_id
             ),
             None,
         )
-        already_attached = existing_entry is not None
+        existing_entry = attachments[existing_index] if existing_index is not None else None
+        already_attached = isinstance(existing_entry, dict)
         storage_meta: dict[str, Any] = {}
-        if content and not already_attached:
+        if content and (not already_attached or not existing_entry.get("url")):
             stored = await cls.store_attachment_content(
                 order_id=order_id,
                 content=content,
@@ -228,21 +284,27 @@ class BotOrderAttachmentService:
                 "size_bytes": stored.size_bytes,
             }
 
-        entry = existing_entry or cls._build_entry(
-            file_id=file_id,
-            filename=filename,
-            mime_type=mime_type,
-            telegram_user_id=telegram_user_id,
-            telegram_chat_id=telegram_chat_id,
-            telegram_message_id=telegram_message_id,
-            attached_at=attached_at,
-            **storage_meta,
-        )
-        if not already_attached:
-            attachments.append(entry)
+        if already_attached:
+            entry = dict(existing_entry)
+            entry.update(storage_meta)
+        else:
+            entry = cls._build_entry(
+                file_id=file_id,
+                filename=filename,
+                mime_type=mime_type,
+                telegram_user_id=telegram_user_id,
+                telegram_chat_id=telegram_chat_id,
+                telegram_message_id=telegram_message_id,
+                attached_at=attached_at,
+                **storage_meta,
+            )
+
+        if not already_attached or storage_meta:
+            attachments, _ = cls.upsert_telegram_attachment(meta, entry)
             meta[cls.TELEGRAM_ATTACHMENTS_META_KEY] = attachments
             order.technical_meta = meta
-            order.comment = cls._append_comment(order.comment, cls._comment_line(entry, attached_at))
+            if not already_attached:
+                order.comment = cls._append_comment(order.comment, cls._comment_line(entry, attached_at))
             flag_modified(order, "technical_meta")
             session.add(order)
             await session.commit()

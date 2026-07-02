@@ -898,40 +898,7 @@ class BotRepairNameplateService:
         repair_meta[cls.HISTORY_META_KEY] = attachments[-10:]
 
         meta = dict(order.technical_meta or {}) if isinstance(order.technical_meta, dict) else {}
-        raw_attachments = meta.get(BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY)
-        telegram_attachments = list(raw_attachments) if isinstance(raw_attachments, list) else []
-        already_attached = any(
-            isinstance(item, dict)
-            and item.get("file_id") == file_id
-            and item.get("purpose") == "repair_nameplate"
-            for item in telegram_attachments
-        )
-        if not already_attached:
-            telegram_attachments.append(
-                {
-                    key: value
-                    for key, value in entry.items()
-                    if key
-                    in {
-                        "source",
-                        "file_id",
-                        "filename",
-                        "mime_type",
-                        "kind",
-                        "telegram_user_id",
-                        "telegram_chat_id",
-                        "telegram_message_id",
-                        "attached_at",
-                        "purpose",
-                        "url",
-                        "storage_provider",
-                        "storage_path",
-                        "content_hash",
-                        "size_bytes",
-                    }
-                }
-            )
-            meta[BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY] = telegram_attachments
+        telegram_attachments, _ = BotOrderAttachmentService.upsert_telegram_attachment(meta, entry)
 
         OrderService._set_repair_meta(
             order,
@@ -939,8 +906,7 @@ class BotRepairNameplateService:
             default_status=OrderService.REPAIR_DEFAULT_STATUS,
         )
         updated_meta = dict(order.technical_meta or {}) if isinstance(order.technical_meta, dict) else {}
-        if not already_attached:
-            updated_meta[BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY] = telegram_attachments
+        updated_meta[BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY] = telegram_attachments
         order.technical_meta = updated_meta
         flag_modified(order, "technical_meta")
         session.add(order)
