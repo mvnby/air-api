@@ -1,0 +1,11 @@
+[Unit]
+Description=Run MVN PostgreSQL PITR physical basebackup daily
+
+[Timer]
+OnCalendar=*-*-* 04:20:00 UTC
+Persistent=true
+AccuracySec=5min
+Unit=mvn-postgres-basebackup.service
+
+[Install]
+WantedBy=timers.target

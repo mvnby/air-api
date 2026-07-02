@@ -1,0 +1,11 @@
+[Unit]
+Description=Run MVN PostgreSQL PITR WAL upload every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=15s
+Unit=mvn-postgres-wal-upload.service
+
+[Install]
+WantedBy=timers.target

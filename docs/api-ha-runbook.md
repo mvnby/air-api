@@ -49,6 +49,8 @@ unreviewed host-local compose edits:
 | Active-passive invariant check | `scripts/ha/check_active_passive.sh` |
 | Local standby promotion helper | `scripts/ha/promote_local_standby.sh` |
 | Disposable DB restore drill | `scripts/ha/restore_drill_latest_db.sh` |
+| PostgreSQL PITR WAL/basebackup upload | `scripts/ha/upload_postgres_pitr_to_s3.py`, `scripts/ha/upload_postgres_pitr_wal.sh`, `scripts/ha/create_postgres_pitr_basebackup.sh` |
+| PostgreSQL PITR systemd units | `deploy/ha/systemd/mvn-postgres-wal-upload.*`, `deploy/ha/systemd/mvn-postgres-basebackup.*` |
 | Status helpers | `scripts/ha/mvn-primary-status.sh`, `scripts/ha/mvn-standby-status.sh` |
 | Media sync helper/timer | `scripts/ha/media_sync_pull.sh`, `deploy/ha/systemd/mvn-media-sync.*` |
 
@@ -99,6 +101,109 @@ Scheduled monitors:
 | `check-api-vps-health.yml` | every 6 hours | primary host, containers, DB, backups |
 | `check-api-ha-invariants.yml` | every 30 minutes | public/primary ready and standby fenced |
 | `api-restore-drill.yml` | daily after the 03:00 UTC backup | disposable DB restore drill |
+
+## PostgreSQL PITR
+
+Streaming replication protects us from a dead primary host. PITR protects us
+from operator mistakes, corrupted writes, or needing to restore to a timestamp
+before bad data was committed.
+
+The current PITR design uses native PostgreSQL archiving:
+
+```text
+primary PostgreSQL archive_command
+  -> /opt/air-api/postgres-wal-archive
+  -> mvn-postgres-wal-upload.timer
+  -> private Cloudflare R2/S3 bucket
+
+mvn-postgres-basebackup.timer
+  -> pg_basebackup -Ft -z -X stream
+  -> same private Cloudflare R2/S3 bucket
+```
+
+Important rules:
+
+- Use a **private** bucket or private prefix for database backups. Do not reuse
+  a public media bucket exposed through `cdn.mvn.by`.
+- `archive_timeout=300s` bounds low-traffic WAL upload lag to about five
+  minutes. The streaming standby still normally has lower failover lag.
+- Only the current primary compose enables `archive_mode=on`. Standby compose
+  keeps archiving disabled until it is promoted and restarted with a primary
+  compose file.
+
+Required `.env` values on the current primary:
+
+```text
+POSTGRES_PITR_CLUSTER=mvn-api
+POSTGRES_PITR_S3_BUCKET=<private-r2-bucket>
+POSTGRES_PITR_S3_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
+POSTGRES_PITR_S3_REGION=auto
+POSTGRES_PITR_S3_ACCESS_KEY_ID=<private-r2-token-access-key>
+POSTGRES_PITR_S3_SECRET_ACCESS_KEY=<private-r2-token-secret>
+POSTGRES_PITR_S3_KEY_PREFIX=postgres/pitr
+```
+
+If `zakup` is promoted, change `POSTGRES_PITR_CLUSTER=zakup` on that host before
+enabling its PITR timers. The prefix can stay the same; cluster name separates
+the timelines.
+
+Enable on the current primary after the private bucket/token exist:
+
+```bash
+# From local repo checkout, copy/install repo-tracked PITR helpers as root on
+# the primary. The installer also creates postgres-wal-archive and chowns it to
+# the postgres container UID. No git checkout is required on production.
+tar -czf - \
+  scripts/ha/upload_postgres_pitr_to_s3.py \
+  scripts/ha/upload_postgres_pitr_wal.sh \
+  scripts/ha/create_postgres_pitr_basebackup.sh \
+  scripts/ha/install_postgres_pitr_units.sh \
+  deploy/ha/systemd/mvn-postgres-wal-upload.service \
+  deploy/ha/systemd/mvn-postgres-wal-upload.timer \
+  deploy/ha/systemd/mvn-postgres-basebackup.service \
+  deploy/ha/systemd/mvn-postgres-basebackup.timer \
+| ssh mvn-api 'tmp="$(mktemp -d)" && tar -xzf - -C "$tmp" && cd "$tmp" && PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml bash scripts/ha/install_postgres_pitr_units.sh && rm -rf "$tmp"'
+
+# Copy deploy/ha/mvn-api/docker-compose.primary.yml through CI.
+gh workflow run deploy.yml --repo mvnby/air-api --ref main -f deploy_frontend=false
+
+# In a short maintenance window, recreate only db so archive_mode=on and the
+# /postgres-wal-archive mount become active. Normal app/bot deploys do not
+# recreate db.
+ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.prod.yml up -d --force-recreate db'
+
+# Prove WAL upload before enabling timers permanently.
+ssh mvn-api 'PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml DRY_RUN_UPLOAD=true /usr/local/sbin/mvn-postgres-pitr-upload-wal'
+ssh mvn-api 'PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml /usr/local/sbin/mvn-postgres-pitr-basebackup'
+
+# Then enable recurring PITR.
+ssh mvn-api 'systemctl enable --now mvn-postgres-wal-upload.timer mvn-postgres-basebackup.timer'
+```
+
+Quick PITR status:
+
+```bash
+ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.prod.yml exec -T db sh -lc '\''psql -U "$POSTGRES_USER" -d "${POSTGRES_DB:-air_conditioners}" -c "select archived_count,last_archived_wal,last_archived_time,failed_count,last_failed_wal,last_failed_time from pg_stat_archiver;"'\'''
+ssh mvn-api 'systemctl list-timers --all | grep mvn-postgres'
+```
+
+Point-in-time restore outline:
+
+1. Pick the latest basebackup before the target timestamp from
+   `postgres/pitr/<cluster>/basebackups/*/manifest.json`.
+2. Restore `base.tar.gz` and `pg_wal.tar.gz` into a clean PostgreSQL data
+   directory.
+3. Provide a `restore_command` that fetches archived WAL from
+   `postgres/pitr/<cluster>/wal/<timeline>/%f`.
+4. Set `recovery_target_time` to the target timestamp and start PostgreSQL with
+   `recovery.signal`.
+5. Validate the restored DB in an isolated container before replacing any
+   production role.
+
+The repo currently contains upload and basebackup automation. A full
+one-command PITR restore helper is intentionally a separate step because restore
+must be rehearsed against real private bucket credentials without touching
+production.
 
 ## GitHub Actions Routing
 

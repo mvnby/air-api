@@ -2,6 +2,16 @@ services:
   db:
     image: postgres:15-alpine
     restart: always
+    command:
+      - postgres
+      - -c
+      - wal_keep_size=512MB
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_timeout=300s
+      - -c
+      - "archive_command=test ! -f /postgres-wal-archive/%f && cp %p /postgres-wal-archive/%f || test -f /postgres-wal-archive/%f"
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -11,6 +21,7 @@ services:
       - "10.77.0.2:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./postgres-wal-archive:/postgres-wal-archive
 
   app:
     image: ${BACKEND_IMAGE:-ghcr.io/mvnby/air-api/backend:latest}
@@ -30,6 +41,7 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./media:/app/media
+      - ./postgres-wal-archive:/postgres-wal-archive
       - ./model-cache/u2net:/root/.u2net
       - ./token.json:/app/token.json
       - ./client_secret.json:/app/client_secret.json
