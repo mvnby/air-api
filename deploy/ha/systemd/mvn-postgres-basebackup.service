@@ -1,0 +1,11 @@
+[Unit]
+Description=MVN PostgreSQL PITR physical basebackup upload
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+Environment=PROJECT_DIR=/opt/air-api
+Environment=COMPOSE_FILE=docker-compose.prod.yml
+EnvironmentFile=-/etc/mvn-postgres-pitr.env
+ExecStart=/usr/local/sbin/mvn-postgres-pitr-basebackup

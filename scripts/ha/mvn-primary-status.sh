@@ -45,8 +45,16 @@ echo "postgres_primary_and_replication:"
 SELECT pg_is_in_recovery() AS in_recovery, pg_current_wal_lsn() AS current_lsn;
 SELECT slot_name, active, active_pid, restart_lsn FROM pg_replication_slots;
 SELECT application_name, client_addr, state, sync_state, replay_lsn FROM pg_stat_replication;
+SELECT name, setting FROM pg_settings WHERE name IN ('archive_mode', 'archive_timeout', 'archive_command') ORDER BY name;
+SELECT archived_count, last_archived_wal, last_archived_time, failed_count, last_failed_wal, last_failed_time FROM pg_stat_archiver;
 SELECT locktype, granted, objid::bigint, pid, mode FROM pg_locks WHERE locktype = 'advisory' ORDER BY pid;
 SQL
+
+echo
+echo "pitr_timers:"
+systemctl is-active mvn-postgres-wal-upload.timer || true
+systemctl is-active mvn-postgres-basebackup.timer || true
+systemctl list-timers --all | grep mvn-postgres || true
 
 echo
 echo "backups:"

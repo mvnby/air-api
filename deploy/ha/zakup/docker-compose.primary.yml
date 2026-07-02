@@ -11,6 +11,14 @@ services:
       - shared_buffers=64MB
       - -c
       - max_connections=100
+      - -c
+      - wal_keep_size=512MB
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_timeout=300s
+      - -c
+      - "archive_command=test ! -f /postgres-wal-archive/%f && cp %p /postgres-wal-archive/%f || test -f /postgres-wal-archive/%f"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -24,6 +32,7 @@ services:
       - "10.77.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./postgres-wal-archive:/postgres-wal-archive
     mem_limit: ${MVN_RESERVE_DB_MEMORY:-220m}
     networks:
       - reserve
@@ -54,6 +63,7 @@ services:
       - "127.0.0.1:${MVN_RESERVE_APP_PORT:-18000}:8000"
     volumes:
       - ./media:/app/media
+      - ./postgres-wal-archive:/postgres-wal-archive
       - ./model-cache/u2net:/root/.u2net
       - ./secrets/token.json:/app/token.json
       - ./secrets/client_secret.json:/app/client_secret.json:ro
