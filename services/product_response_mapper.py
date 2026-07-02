@@ -73,8 +73,16 @@ def _public_legacy_image_urls(product: Product, image_urls: List[str]) -> List[s
         if not isinstance(url, str):
             public_urls.append(url)
             continue
-        public_urls.append(url_map.get(url) or url_map.get(url.strip("/")) or url)
+        public_url = url_map.get(url) or url_map.get(url.strip("/"))
+        if public_url:
+            public_urls.append(public_url)
+        elif not _is_legacy_product_media_url(url):
+            public_urls.append(url)
     return public_urls
+
+
+def _is_legacy_product_media_url(url: str) -> bool:
+    return url.strip().lstrip("/").startswith("media/products/")
 
 
 def _main_image_variant_or_fallback(

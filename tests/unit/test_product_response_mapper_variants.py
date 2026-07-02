@@ -136,7 +136,6 @@ def test_map_product_to_response_rewrites_legacy_images_to_public_original_varia
     assert payload.images == [
         "https://cdn.mvn.by/products/variants/original/source.webp",
         "https://cdn.mvn.by/products/variants/original/extra.webp",
-        "/media/products/missing.webp",
         "https://example.com/vendor.jpg",
     ]
 
