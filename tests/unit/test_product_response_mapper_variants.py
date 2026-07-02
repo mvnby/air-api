@@ -95,6 +95,52 @@ def test_map_product_to_response_uses_ready_original_variant_as_public_cdn_fallb
     assert payload.gallery_images[0].card_variant_url is None
 
 
+def test_map_product_to_response_rewrites_legacy_images_to_public_original_variants():
+    product = _product_with_variant()
+    product.images = [
+        "/media/products/source.webp",
+        "media/products/extra.webp",
+        "/media/products/missing.webp",
+        "https://example.com/vendor.jpg",
+    ]
+    product.gallery_images[0].variants.append(
+        ProductImageVariant(
+            id=102,
+            product_image_id=product.gallery_images[0].id,
+            variant_type=ProductImageVariantType.ORIGINAL.value,
+            url="https://cdn.mvn.by/products/variants/original/source.webp",
+            processing_status=ProductImageProcessingStatus.READY.value,
+            manual_quality_status=ProductImageManualQualityStatus.UNREVIEWED.value,
+        )
+    )
+    extra_image = ProductImage(
+        id=11,
+        product_id=product.id,
+        url="/media/products/extra.webp",
+        is_installation_photo=False,
+    )
+    extra_image.variants = [
+        ProductImageVariant(
+            id=103,
+            product_image_id=extra_image.id,
+            variant_type=ProductImageVariantType.ORIGINAL.value,
+            url="https://cdn.mvn.by/products/variants/original/extra.webp",
+            processing_status=ProductImageProcessingStatus.READY.value,
+            manual_quality_status=ProductImageManualQualityStatus.UNREVIEWED.value,
+        )
+    ]
+    product.gallery_images.append(extra_image)
+
+    payload = map_product_to_response(product)
+
+    assert payload.images == [
+        "https://cdn.mvn.by/products/variants/original/source.webp",
+        "https://cdn.mvn.by/products/variants/original/extra.webp",
+        "/media/products/missing.webp",
+        "https://example.com/vendor.jpg",
+    ]
+
+
 @pytest.mark.parametrize(
     ("processing_status", "manual_quality_status", "variant_url"),
     [

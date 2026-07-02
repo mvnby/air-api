@@ -54,6 +54,29 @@ def _public_image_url(image: Any) -> Optional[str]:
     return _ready_original_variant_url(image) or image.url
 
 
+def _public_image_url_map(product: Product) -> Dict[str, str]:
+    url_map = {}
+    for image in product.gallery_images or []:
+        public_url = _public_image_url(image)
+        source_url = getattr(image, "url", None)
+        if not source_url or not public_url:
+            continue
+        url_map[source_url] = public_url
+        url_map[source_url.strip("/")] = public_url
+    return url_map
+
+
+def _public_legacy_image_urls(product: Product, image_urls: List[str]) -> List[str]:
+    url_map = _public_image_url_map(product)
+    public_urls = []
+    for url in image_urls:
+        if not isinstance(url, str):
+            public_urls.append(url)
+            continue
+        public_urls.append(url_map.get(url) or url_map.get(url.strip("/")) or url)
+    return public_urls
+
+
 def _main_image_variant_or_fallback(
     product: Product,
     variant_type: ProductImageVariantType,
@@ -205,7 +228,7 @@ def map_product_to_response(
         series=series_payload,
         tags=tags_payload,
         specs=specs or {},
-        images=images or [],
+        images=_public_legacy_image_urls(product, images or []),
         gallery_images=gallery,
         manuals=manuals_payload,
         series_siblings=siblings_payload,
