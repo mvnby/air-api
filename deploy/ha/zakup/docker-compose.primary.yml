@@ -14,9 +14,9 @@ services:
       - -c
       - wal_keep_size=512MB
       - -c
-      - archive_mode=on
+      - "archive_mode=${POSTGRES_PITR_ARCHIVE_MODE:-off}"
       - -c
-      - archive_timeout=300s
+      - "archive_timeout=${POSTGRES_PITR_ARCHIVE_TIMEOUT:-0}"
       - -c
       - "archive_command=test ! -f /postgres-wal-archive/%f && cp %p /postgres-wal-archive/%f || test -f /postgres-wal-archive/%f"
     environment:
