@@ -10,6 +10,7 @@ private PITR bucket.
 from __future__ import annotations
 
 import argparse
+import importlib.machinery
 import importlib.util
 import io
 import json
@@ -29,6 +30,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 WAL_NAME_RE = re.compile(
     r"^(?:[0-9A-F]{24}|[0-9A-F]{24}\.[0-9A-F]{8}\.backup|[0-9A-F]{8}\.history)$"
 )
+
+
+def _load_python_module_from_path(module_name: str, path: Path) -> Any | None:
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        loader = importlib.machinery.SourceFileLoader(module_name, str(path))
+        spec = importlib.util.spec_from_loader(module_name, loader)
+    if spec is None or spec.loader is None:
+        return None
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _load_upload_helpers() -> tuple[Any, Any, Any]:
@@ -55,12 +70,10 @@ def _load_upload_helpers() -> tuple[Any, Any, Any]:
         helper_path = Path(candidate)
         if not helper_path.is_file():
             continue
-        spec = importlib.util.spec_from_file_location("mvn_postgres_pitr_upload_helper", helper_path)
-        if spec is None or spec.loader is None:
+        module_name = "mvn_postgres_pitr_upload_helper"
+        module = _load_python_module_from_path(module_name, helper_path)
+        if module is None:
             continue
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
         return module.build_client, module.load_config, module.sha256_file
 
     raise SystemExit(

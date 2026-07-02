@@ -97,6 +97,29 @@ def _file_entry(backup_id: str, name: str, content: bytes) -> dict:
     }
 
 
+def test_load_python_module_from_path_supports_extensionless_helper(tmp_path):
+    helper = tmp_path / "mvn-postgres-pitr-upload"
+    helper.write_text(
+        "def build_client(config):\n"
+        "    return ('client', config)\n"
+        "def load_config():\n"
+        "    return 'config'\n"
+        "def sha256_file(path):\n"
+        "    return 'sha256'\n",
+        encoding="utf-8",
+    )
+
+    module = pitr_restore._load_python_module_from_path(
+        "test_extensionless_pitr_upload_helper",
+        helper,
+    )
+
+    assert module is not None
+    assert module.load_config() == "config"
+    assert module.build_client("cfg") == ("client", "cfg")
+    assert module.sha256_file("/tmp/file") == "sha256"
+
+
 def test_select_manifest_uses_latest_basebackup_before_target_time():
     manifests = [
         pitr_restore.BasebackupManifest(
