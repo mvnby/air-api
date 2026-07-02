@@ -1,25 +1,26 @@
 # Product Media Storage: R2/S3 Migration
 
-This project keeps local product image URLs working while moving product media
-variant copies to public S3-compatible object storage such as Cloudflare R2.
+This project keeps legacy local product image URLs working while moving new
+runtime media writes to public S3-compatible object storage such as Cloudflare
+R2.
 
 ## URL Strategy
 
-- `ProductImage.url`, `Product.main_image`, and legacy `Product.images` remain
-  local `/media/...` URLs during the transition.
-- Manager uploads and search/download attaches write the local source original
-  to `/media/products/shared/{sha256}.webp`, then write/update
+- Existing `ProductImage.url`, `Product.main_image`, and legacy
+  `Product.images` values may remain local `/media/...` URLs until migrated or
+  intentionally retained.
+- Manager uploads and search/download attaches write source originals through
+  `PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER`, then write/update
   `ProductImageVariant(variant_type=original)` through
   `PRODUCT_MEDIA_STORAGE_PROVIDER`.
-- Import media downloads also write the local source original through the
-  source storage adapter. Product importer main-image fields remain local URLs;
-  importer main images are not converted into remote `ProductImageVariant`
-  records during this transition.
+- Import media downloads also use the original source storage adapter. In
+  production this should be `r2`, so new importer/cache URLs are CDN URLs
+  instead of new local `/media/products/shared/...` files.
 - Generated rows in `ProductImageVariant`, plus new manager-uploaded
   `original` variant rows, can use `storage_provider=r2` (or
   `s3`/`s3_compatible`) and public CDN URLs.
-- The public API already falls back to the original local URL when an approved
-  ready variant is absent, so local media remains the rollback path.
+- The public API still falls back to the original URL when an approved ready
+  variant is absent, so legacy local media remains a rollback path.
 - The first rollout uses stable public URLs from `PRODUCT_MEDIA_S3_PUBLIC_BASE_URL`.
   Signed URLs and API proxying are intentionally out of scope for product
   catalog images because storefront rendering needs cacheable public assets.
@@ -64,12 +65,14 @@ Local fallback is the default:
 ```dotenv
 PRODUCT_MEDIA_STORAGE_PROVIDER=local
 PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER=local
+MEDIA_STORAGE_PROVIDER=local
 ```
 
 Cloudflare R2 example:
 
 ```dotenv
 PRODUCT_MEDIA_STORAGE_PROVIDER=r2
+PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER=r2
 PRODUCT_MEDIA_S3_BUCKET=mvn-product-media
 PRODUCT_MEDIA_S3_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
 PRODUCT_MEDIA_S3_REGION=auto
@@ -77,6 +80,7 @@ PRODUCT_MEDIA_S3_ACCESS_KEY_ID=<secret>
 PRODUCT_MEDIA_S3_SECRET_ACCESS_KEY=<secret>
 PRODUCT_MEDIA_S3_PUBLIC_BASE_URL=https://cdn.mvn.by/media
 PRODUCT_MEDIA_S3_KEY_PREFIX=products/variants
+PRODUCT_MEDIA_ORIGINAL_S3_KEY_PREFIX=products/shared
 PRODUCT_MEDIA_S3_CACHE_CONTROL=public, max-age=31536000, immutable
 
 # Shared non-product media: articles, media library, order/bot attachments.
@@ -88,8 +92,8 @@ MEDIA_S3_KEY_PREFIX=
 Dry-run migration requires bucket, endpoint, public base URL, and key prefix so
 it can print target keys. Secret access keys are only required for writes.
 
-Product original source files can remain local during a cautious rollout, or
-move to R2 once CDN reads are verified:
+Product original source files may remain local during a cautious rollout, but
+production should switch them to R2 once CDN reads are verified:
 
 ```dotenv
 PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER=local
@@ -97,7 +101,7 @@ PRODUCT_MEDIA_LOCAL_ORIGINAL_DIR=media/products/shared
 PRODUCT_MEDIA_LOCAL_ORIGINAL_PUBLIC_PREFIX=/media/products/shared
 ```
 
-Optional full switch for product originals:
+Production switch for product originals:
 
 ```dotenv
 PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER=r2
@@ -158,11 +162,11 @@ canonical `ProductImage(url=image_url)` row and stores an `original` variant in
 R2, so public API mappers can expose CDN URLs while keeping local media as the
 rollback source.
 
-Manual and legacy writers that write under `media/products` remain local/manual
-tools unless a future issue explicitly migrates them: examples include
-`services/image_service.py` via older product/article/order paths,
-`scripts/dedupe_product_media.py`, `scripts/refetch_images.py`,
-`scripts/search_images_ddg.py`, and `scripts/import_mdv.py`.
+Manual and legacy rows that already point at `media/products` remain
+local/manual fallback data until migrated or intentionally retained. New
+runtime writes should go through `ImageService`,
+`ProductOriginalMediaService`, `ProductImageVariantService`, or
+`GeneralMediaStorage` so production can route them to R2/CDN.
 
 ## Rollback
 
@@ -170,10 +174,9 @@ tools unless a future issue explicitly migrates them: examples include
    containers. Newly generated variants will return to local storage.
 2. Existing local product image URLs continue to work because local `/media` is
    still mounted and product original fields were not rewritten.
-3. New local original source files written during an R2 provider test remain on
-   disk and are not deleted automatically. Manager-created `original` variant
-   rows may point at CDN URLs, but product-facing original fields still point at
-   local `/media/products/shared/...` URLs.
+3. Local original source files written before the R2 switch remain on disk and
+   are not deleted automatically. New production originals should point at CDN
+   URLs while `PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER=r2`.
 4. If CDN variant URLs must be removed from responses, restore the pre-migration
    database backup or mark affected variants non-approved/non-ready and re-run
    variant processing with local provider.
@@ -194,8 +197,9 @@ This is a write-provider decision only:
 - Do not delete local media.
 - Do not rewrite `ProductImage.url`, `Product.main_image`, or legacy
   `Product.images`.
-- Keep `PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER=local`.
-- Existing importer main-image fields remain local `/media/...` URLs.
+- Keep `PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER=r2` after the full media switch.
+- Existing importer main-image fields may remain local `/media/...` URLs until
+  they are naturally rewritten or backfilled.
 - R2 rows created during smoke or rollout live in `ProductImageVariant`.
 - Set `MEDIA_STORAGE_PROVIDER=r2` only when order/bot attachments and media
   library uploads should start writing to R2.
@@ -209,9 +213,9 @@ the effective owner-approved diff is only the provider line.
 ```diff
 -PRODUCT_MEDIA_STORAGE_PROVIDER=local
 +PRODUCT_MEDIA_STORAGE_PROVIDER=r2
- PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER=local
- PRODUCT_MEDIA_LOCAL_ORIGINAL_DIR=media/products/shared
- PRODUCT_MEDIA_LOCAL_ORIGINAL_PUBLIC_PREFIX=/media/products/shared
+PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER=r2
+PRODUCT_MEDIA_LOCAL_ORIGINAL_DIR=media/products/shared
+PRODUCT_MEDIA_LOCAL_ORIGINAL_PUBLIC_PREFIX=/media/products/shared
 +PRODUCT_MEDIA_S3_BUCKET=<existing-r2-bucket>
 +PRODUCT_MEDIA_S3_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
 +PRODUCT_MEDIA_S3_REGION=auto
@@ -219,6 +223,7 @@ the effective owner-approved diff is only the provider line.
 +PRODUCT_MEDIA_S3_SECRET_ACCESS_KEY=<existing-r2-secret-access-key>
 +PRODUCT_MEDIA_S3_PUBLIC_BASE_URL=https://cdn.mvn.by/media
 +PRODUCT_MEDIA_S3_KEY_PREFIX=products/variants
++PRODUCT_MEDIA_ORIGINAL_S3_KEY_PREFIX=products/shared
 +PRODUCT_MEDIA_S3_CACHE_CONTROL=public, max-age=31536000, immutable
 +MEDIA_STORAGE_PROVIDER=r2
 +MEDIA_S3_KEY_PREFIX=
@@ -269,10 +274,16 @@ write credentials:
 ssh <prod-host> 'cd /opt/air-api && docker compose -f docker-compose.prod.yml exec -T app python3 scripts/migrate_product_media_storage.py --provider r2 --limit 5'
 ```
 
+Confirm all runtime media classes target object storage:
+
+```bash
+ssh <prod-host> 'cd /opt/air-api && docker compose -f docker-compose.prod.yml exec -T app python3 scripts/check_media_storage_config.py --require-object-storage --expected-public-base-url https://cdn.mvn.by'
+```
+
 Expected preflight result:
 
 - `PRODUCT_MEDIA_STORAGE_PROVIDER` may still be `local`.
-- `PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER` is `local` or unset/default local.
+- `PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER` is `r2` for the full media switch.
 - R2 bucket, endpoint, region, access key id, secret access key, public base
   URL, key prefix, and cache control are present.
 - Dry-run output builds `https://cdn.mvn.by/media/products/variants/...` target
@@ -285,8 +296,9 @@ or clearly marked test product so public response checks do not affect real
 catalog merchandising.
 
 1. Take a DB backup or confirm the latest backup is fresh enough for rollback.
-2. Change only `PRODUCT_MEDIA_STORAGE_PROVIDER` to `r2` in production env and
-   recreate the backend containers.
+2. Change `PRODUCT_MEDIA_STORAGE_PROVIDER`,
+   `PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER`, and `MEDIA_STORAGE_PROVIDER` to
+   `r2` in production env and recreate the backend containers.
 3. Run public smoke checks:
 
    ```bash
@@ -303,7 +315,7 @@ catalog merchandising.
    Both paths converge in `ManagerMediaService.save_image_from_bytes(...)`.
 
 5. Verify the attached `ProductImage.url`, `Product.main_image` if set, and
-   legacy `Product.images` remain `/media/products/shared/...` local URLs.
+   importer/cache URLs use `https://cdn.mvn.by/...` for newly written media.
 6. Verify the `original` variant row for that image is ready on R2:
 
    ```sql
@@ -347,18 +359,18 @@ catalog merchandising.
    ```
 
    Expected product response:
-   - `main_image` and `gallery_images[].url` stay local `/media/...`.
+   - newly written original URLs use `https://cdn.mvn.by/...`;
    - `card_image`, `full_image`, `gallery_images[].card_variant_url`, and
-     `gallery_images[].full_variant_url` use `https://cdn.mvn.by/media/...`
-     for the approved generated variants.
+     `gallery_images[].full_variant_url` use `https://cdn.mvn.by/...` for the
+     approved generated variants.
+   - pre-existing legacy rows may still show local `/media/...` until migrated.
    - If approval is removed or a variant is not ready, `card_image` and
      `full_image` fall back to the local original URL.
 
-10. Confirm importer behavior remains local by running or observing a small
-    importer path only if the owner wants this in the same window. Expected:
-    `ImportMediaService` writes `/media/products/shared/...` local URLs into
-    importer product fields/cache; it does not create remote importer original
-    variant rows in this transition.
+10. Confirm importer behavior by running or observing a small importer path only
+    if the owner wants this in the same window. Expected:
+    `ImportMediaService` writes CDN URLs into importer product fields/cache when
+    `PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER=r2`.
 
 ### Full Switch
 
@@ -367,8 +379,8 @@ After the bounded smoke passes and the owner approves the full switch:
 1. Keep `PRODUCT_MEDIA_STORAGE_PROVIDER=r2`.
 2. Set `MEDIA_STORAGE_PROVIDER=r2` to write articles, media library uploads,
    order attachments, and bot attachments to R2.
-3. Optionally set `PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER=r2` after confirming
-   product variant regeneration can read original images from
+3. Keep `PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER=r2` after confirming product
+   variant regeneration can read original images from
    `PRODUCT_MEDIA_S3_PUBLIC_BASE_URL`.
 4. Monitor backend logs for `S3/R2 media storage` errors and Pillow processing
    failures during normal manager uploads/search attaches and variant
@@ -383,7 +395,7 @@ After the bounded smoke passes and the owner approves the full switch:
    order by variant_type, storage_provider, processing_status;
    ```
 
-4. Keep local `/media` mounted and backed up.
+6. Keep local `/media` mounted and backed up.
 
 ### Rollback From Smoke Or Switch
 
@@ -392,8 +404,8 @@ After the bounded smoke passes and the owner approves the full switch:
 2. Confirm `/api/health`, `/api/v1/products?limit=5`, and
    `/api/v1/filters/config` still pass.
 3. New product media writes and generated variants return to local storage.
-4. Local product originals remain available because they were never deleted and
-   product original fields were never rewritten.
+4. Local product originals that existed before the switch remain available
+   because they were never deleted.
 5. R2 `ProductImageVariant` rows created during the test remain in the database
    and may still be returned if they are `ready` and approved. For the smoke
    product, either leave them as historical variant rows, mark them
@@ -406,16 +418,16 @@ After the bounded smoke passes and the owner approves the full switch:
 
 ### Residual Risks And Follow-Ups
 
-- Importer main images and import-media cache remain local original URLs.
-  Moving importer original variants to R2 is a separate follow-up.
-- Manual and legacy writers under `media/products` remain local/manual unless a
+- Existing importer main images and import-media cache rows may remain local
+  original URLs until they are backfilled or naturally rewritten.
+- Manual and legacy rows under `media/products` remain local/manual unless a
   future issue migrates them.
 - Cleanup and dedupe scripts need an owner-approved policy before deleting local
   files or R2 objects.
 - Generated CDN variants are public only after manual quality approval; a
   manager approval endpoint/UI is a useful future workflow but not required for
   the provider switch.
-- A later full original-media cutover would need a separate plan for rewriting
+- A later full legacy-media cutover would need a separate plan for rewriting old
   product original fields, backup/restore semantics, and local-media retention.
 
 ### Owner Decisions
