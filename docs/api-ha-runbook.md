@@ -50,6 +50,7 @@ unreviewed host-local compose edits:
 | Local standby promotion helper | `scripts/ha/promote_local_standby.sh` |
 | Disposable DB restore drill | `scripts/ha/restore_drill_latest_db.sh` |
 | PostgreSQL PITR WAL/basebackup upload | `scripts/ha/upload_postgres_pitr_to_s3.py`, `scripts/ha/upload_postgres_pitr_wal.sh`, `scripts/ha/create_postgres_pitr_basebackup.sh` |
+| PostgreSQL PITR env configuration | `scripts/ha/configure_postgres_pitr_env.py` |
 | PostgreSQL PITR monitoring | `scripts/ha/check_postgres_pitr_status.sh`, `scripts/ha/check_postgres_pitr_remote.py`, `.github/workflows/check-postgres-pitr.yml` |
 | PostgreSQL PITR systemd units | `deploy/ha/systemd/mvn-postgres-wal-upload.*`, `deploy/ha/systemd/mvn-postgres-basebackup.*` |
 | Status helpers | `scripts/ha/mvn-primary-status.sh`, `scripts/ha/mvn-standby-status.sh` |
@@ -164,6 +165,7 @@ tar -czf - \
   scripts/ha/upload_postgres_pitr_to_s3.py \
   scripts/ha/upload_postgres_pitr_wal.sh \
   scripts/ha/create_postgres_pitr_basebackup.sh \
+  scripts/ha/configure_postgres_pitr_env.py \
   scripts/ha/check_postgres_pitr_status.sh \
   scripts/ha/check_postgres_pitr_remote.py \
   scripts/ha/install_postgres_pitr_units.sh \
@@ -176,13 +178,30 @@ tar -czf - \
 # Copy deploy/ha/mvn-api/docker-compose.primary.yml through CI.
 gh workflow run deploy.yml --repo mvnby/air-api --ref main -f deploy_frontend=false
 
+# Put the private R2 credentials in a temporary root-only file on the primary.
+# Do not paste these values in tickets, PRs, or chat.
+ssh mvn-api 'umask 077; cat > /root/mvn-postgres-pitr.env' <<'EOF'
+POSTGRES_PITR_CLUSTER=mvn-api
+POSTGRES_PITR_S3_BUCKET=<private-r2-bucket>
+POSTGRES_PITR_S3_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
+POSTGRES_PITR_S3_REGION=auto
+POSTGRES_PITR_S3_ACCESS_KEY_ID=<private-r2-token-access-key>
+POSTGRES_PITR_S3_SECRET_ACCESS_KEY=<private-r2-token-secret>
+POSTGRES_PITR_S3_KEY_PREFIX=postgres/pitr
+EOF
+
+# Write PITR credentials into /opt/air-api/.env with a backup. This keeps
+# POSTGRES_PITR_ARCHIVE_MODE=off until upload is proven.
+ssh mvn-api '/usr/local/sbin/mvn-postgres-pitr-configure-env --project-dir /opt/air-api --input-env-file /root/mvn-postgres-pitr.env'
+ssh mvn-api 'rm -f /root/mvn-postgres-pitr.env'
+
 # Prove private bucket upload with a physical basebackup first. This is a real
 # upload; it does not require archive_mode yet.
 ssh mvn-api 'PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml /usr/local/sbin/mvn-postgres-pitr-basebackup'
 
-# Then add these two values to /opt/air-api/.env:
-# POSTGRES_PITR_ARCHIVE_MODE=on
-# POSTGRES_PITR_ARCHIVE_TIMEOUT=300s
+# Then explicitly enable archive settings in /opt/air-api/.env with another
+# backup. This does not take effect until the db container is recreated.
+ssh mvn-api '/usr/local/sbin/mvn-postgres-pitr-configure-env --project-dir /opt/air-api --enable-archive'
 
 # In a short maintenance window, recreate db so archive_mode=on and the
 # /postgres-wal-archive mount become active.
