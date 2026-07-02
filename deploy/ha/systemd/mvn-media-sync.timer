@@ -1,0 +1,11 @@
+[Unit]
+Description=Run MVN media sync pull every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=mvn-media-sync.service
+
+[Install]
+WantedBy=timers.target

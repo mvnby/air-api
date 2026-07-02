@@ -47,6 +47,38 @@ DB_HOST = os.environ.get('POSTGRES_SERVER', 'db')
 DB_PORT = os.environ.get('POSTGRES_PORT', '5432')
 DB_NAME = os.environ.get('POSTGRES_DB', 'air_conditioners')
 
+PLAIN_SQL_DUMP_SETTINGS_TO_STRIP = {
+    'transaction_timeout',
+}
+
+
+def sanitize_plain_sql_dump(dump_path):
+    """Remove pg_dump client-version SET commands unsupported by older servers."""
+    if not dump_path.endswith('.sql') or not os.path.exists(dump_path):
+        return False
+
+    changed = False
+    temp_path = f"{dump_path}.sanitized"
+    with open(dump_path, 'r', encoding='utf-8', errors='replace') as source, open(
+        temp_path,
+        'w',
+        encoding='utf-8',
+    ) as dest:
+        for line in source:
+            stripped = line.strip()
+            if stripped.startswith('SET ') and stripped.endswith(';'):
+                setting_name = stripped[4:].split('=', 1)[0].strip()
+                if setting_name in PLAIN_SQL_DUMP_SETTINGS_TO_STRIP:
+                    changed = True
+                    continue
+            dest.write(line)
+
+    if changed:
+        os.replace(temp_path, dump_path)
+    else:
+        os.remove(temp_path)
+    return changed
+
 
 def get_credentials():
     """Load Google API credentials from token.json."""
@@ -103,6 +135,9 @@ def download_file(creds, file_id, dest_path):
 
 def restore_sql(dump_path):
     """Restore a SQL dump into the local PostgreSQL database."""
+    if sanitize_plain_sql_dump(dump_path):
+        logger.info("🧹 Removed client-version-only SET commands from SQL dump.")
+
     env = os.environ.copy()
     env['PGPASSWORD'] = DB_PASS
 

@@ -35,6 +35,23 @@ Runtime split:
 | Telegram bot | enabled only in `bot` | stopped/disabled |
 | Google Drive backups | enabled on primary scheduler | disabled |
 
+## Repo-Tracked HA Files
+
+The active-passive setup is tracked in the repo so deploys do not depend on
+unreviewed host-local compose edits:
+
+| Purpose | File |
+| --- | --- |
+| `mvn-api` as primary | `deploy/ha/mvn-api/docker-compose.primary.yml` |
+| `mvn-api` as rebuilt standby | `deploy/ha/mvn-api/docker-compose.standby.yml` |
+| `zakup` as primary after promotion | `deploy/ha/zakup/docker-compose.primary.yml` |
+| `zakup` as standby | `deploy/ha/zakup/docker-compose.standby.yml` |
+| Active-passive invariant check | `scripts/ha/check_active_passive.sh` |
+| Local standby promotion helper | `scripts/ha/promote_local_standby.sh` |
+| Disposable DB restore drill | `scripts/ha/restore_drill_latest_db.sh` |
+| Status helpers | `scripts/ha/mvn-primary-status.sh`, `scripts/ha/mvn-standby-status.sh` |
+| Media sync helper/timer | `scripts/ha/media_sync_pull.sh`, `deploy/ha/systemd/mvn-media-sync.*` |
+
 ## Daily Status Checks
 
 Primary:
@@ -63,6 +80,12 @@ Expected:
 - direct `mvn-api`: 200;
 - direct `zakup`: 503.
 
+Repo check:
+
+```bash
+bash scripts/ha/check_active_passive.sh
+```
+
 GitHub health check:
 
 ```bash
@@ -77,7 +100,8 @@ Current production variables must match the active primary:
 SSH_HOST_API=185.250.45.54
 API_PROJECT_DIR=/opt/air-api
 API_COMPOSE_FILE=docker-compose.prod.yml
-API_COPY_COMPOSE=false
+API_COMPOSE_SOURCE_FILE=deploy/ha/mvn-api/docker-compose.primary.yml
+API_COPY_COMPOSE=true
 API_BASE_URL=http://localhost:8000
 API_READY_URL=http://localhost:8000/api/ready
 API_LOCAL_HEALTH_URL=http://127.0.0.1:8000/api/health
@@ -89,12 +113,14 @@ API_BOT_EXPECT_ENABLED=true
 API_STANDBY_HOST=193.47.42.213
 API_STANDBY_PROJECT_DIR=/opt/mvn-reserve
 API_STANDBY_COMPOSE_FILE=docker-compose.reserve.yml
+API_STANDBY_COPY_COMPOSE=true
+API_STANDBY_COMPOSE_SOURCE_FILE=deploy/ha/zakup/docker-compose.standby.yml
 API_STANDBY_HEALTH_URL=http://localhost:18000/api/health
 ```
 
-`API_COPY_COMPOSE=false` is intentional while the primary uses a host-local
-compose file with HA-specific PostgreSQL binding and role split. Do not switch
-it back to `true` until the repo has a reviewed HA compose overlay.
+If an emergency requires manual host-local compose edits, set
+`API_COPY_COMPOSE=false` and/or `API_STANDBY_COPY_COMPOSE=false` temporarily.
+Switch back to the repo-tracked files after the emergency is resolved.
 
 Manual deploy verification:
 
@@ -136,6 +162,16 @@ important than order and fallback.
 
 Use this only when `mvn-api` is actually unavailable or must be taken out.
 
+Preferred helper path, run on `zakup` after copying
+`deploy/ha/zakup/docker-compose.primary.yml` to
+`/opt/mvn-reserve/docker-compose.primary.yml`:
+
+```bash
+ssh zakup 'OLD_PRIMARY_SSH=root@10.77.0.2 CONFIRM_PROMOTE=true /usr/local/sbin/mvn-promote-local-standby'
+```
+
+The manual steps below are the same procedure expanded for review.
+
 1. Fence the old primary first if reachable:
 
    ```bash
@@ -162,6 +198,8 @@ Use this only when `mvn-api` is actually unavailable or must be taken out.
    - `BOT_ENABLED=false` in `app`
    - `BOT_ENABLED=true` and `SCHEDULER_ENABLED=false` in `bot`
 
+   Use `deploy/ha/zakup/docker-compose.primary.yml` as the source of truth.
+
 5. Start primary services on `zakup`:
 
    ```bash
@@ -185,6 +223,27 @@ Use this only when `mvn-api` is actually unavailable or must be taken out.
 
 9. Do not restart `mvn-api` as primary. Rebuild it as standby from the promoted
    database.
+
+GitHub Actions variables after `zakup` promotion:
+
+```text
+SSH_HOST_API=193.47.42.213
+API_PROJECT_DIR=/opt/mvn-reserve
+API_COMPOSE_FILE=docker-compose.reserve.yml
+API_COMPOSE_SOURCE_FILE=deploy/ha/zakup/docker-compose.primary.yml
+API_COPY_COMPOSE=true
+API_BASE_URL=http://localhost:18000
+API_READY_URL=http://localhost:18000/api/ready
+API_LOCAL_HEALTH_URL=http://127.0.0.1:18000/api/health
+API_TUNNEL_REMOTE_PORT=18000
+API_DEPLOY_SERVICES=app bot
+API_STANDBY_HOST=185.250.45.54
+API_STANDBY_PROJECT_DIR=/opt/air-api
+API_STANDBY_COMPOSE_FILE=docker-compose.prod.yml
+API_STANDBY_COPY_COMPOSE=true
+API_STANDBY_COMPOSE_SOURCE_FILE=deploy/ha/mvn-api/docker-compose.standby.yml
+API_STANDBY_HEALTH_URL=http://localhost:8000/api/health
+```
 
 ## Rebuild A Former Primary As Standby
 
@@ -210,6 +269,22 @@ Required steps:
 7. Set media sync to pull from the new primary to the standby.
 8. Verify `/api/ready=503` on standby and replication slot active on primary.
 
+## Restore Drill
+
+Backups are stored in Google Drive. Freshness alone is not enough; periodically
+prove that the latest DB dump restores.
+
+Run on the current primary:
+
+```bash
+ssh mvn-api /usr/local/sbin/mvn-restore-drill-latest-db
+```
+
+The drill downloads the latest DB backup through the app container, starts a
+disposable PostgreSQL container on the same Docker network, restores the dump
+there, checks that public tables exist, and then removes the disposable
+container. It does not touch the production or standby database.
+
 ## Hard Rules
 
 - Never let both origins return `/api/ready=200`.
@@ -223,11 +298,7 @@ Required steps:
 
 ## Next Improvements
 
-- Move HA-specific compose overlays into the repo and stop relying on
-  host-local compose edits.
-- Add a single audited promote script that performs fencing, promotion,
-  role-switching, media-sync direction, and verification.
 - Add Cloudflare API automation for pool order/fallback changes.
 - Add owner-visible alerts from GitHub Actions or Cloudflare to Telegram/email.
-- Keep Google Drive backups, but add a scheduled restore drill to a disposable
-  volume/host.
+- Add a scheduled restore drill to a disposable volume/host after the first
+  manual restore drill passes.

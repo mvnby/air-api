@@ -1,0 +1,98 @@
+name: mvn_reserve
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    shm_size: 128mb
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - max_connections=100
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-air_conditioners}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-air_conditioners}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "10.77.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    mem_limit: ${MVN_RESERVE_DB_MEMORY:-220m}
+    networks:
+      - reserve
+
+  app:
+    image: ${BACKEND_IMAGE:-ghcr.io/mvnby/air-api/backend:latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ${MVN_RESERVE_ENV_FILE:-.env}
+    environment:
+      ENVIRONMENT: production
+      APP_ROLE: standby
+      SCHEDULER_ENABLED: "false"
+      BOT_ENABLED: "false"
+      API_READY_ENABLED: "false"
+      DB_BOOTSTRAP_ENABLED: "false"
+      MAIL_IMAP_AUTO_IMPORT_ENABLED: "false"
+      MAIL_IMAP_LEAD_AUTO_IMPORT_ENABLED: "false"
+      CLOUDFLARE_PURGE_ENABLED: "false"
+      CLOUDFLARE_PURGE_DRY_RUN: "true"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB:-air_conditioners}
+      BACKGROUND_REMOVAL_PROVIDER: noop
+      BACKGROUND_REMOVAL_REMBG_PRELOAD_MODELS: ""
+      BACKGROUND_REMOVAL_PROCESS_MAX_MEMORY_MB: "384"
+      BACKGROUND_REMOVAL_PROCESS_MAX_CPU_SECONDS: "45"
+    ports:
+      - "127.0.0.1:${MVN_RESERVE_APP_PORT:-18000}:8000"
+    volumes:
+      - ./media:/app/media
+      - ./model-cache/u2net:/root/.u2net
+      - ./secrets/token.json:/app/token.json
+      - ./secrets/client_secret.json:/app/client_secret.json:ro
+      - ./secrets/credentials.json:/app/credentials.json:ro
+      - ./secrets/g-vision-ocr.json:/app/g-vision-ocr.json:ro
+    mem_limit: ${MVN_RESERVE_APP_MEMORY:-520m}
+    networks:
+      - reserve
+
+  bot:
+    image: ${BACKEND_IMAGE:-ghcr.io/mvnby/air-api/backend:latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ${MVN_RESERVE_ENV_FILE:-.env}
+    environment:
+      ENVIRONMENT: production
+      APP_ROLE: standby
+      SCHEDULER_ENABLED: "false"
+      BOT_ENABLED: "false"
+      API_READY_ENABLED: "false"
+      DB_BOOTSTRAP_ENABLED: "false"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB:-air_conditioners}
+      BACKGROUND_REMOVAL_PROVIDER: noop
+    command: python -m bot_app.main
+    volumes:
+      - ./media:/app/media
+      - ./secrets/g-vision-ocr.json:/app/g-vision-ocr.json:ro
+    mem_limit: ${MVN_RESERVE_BOT_MEMORY:-360m}
+    networks:
+      - reserve
+
+volumes:
+  postgres_data:
+
+networks:
+  reserve:
+    driver: bridge

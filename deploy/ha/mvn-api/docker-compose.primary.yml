@@ -1,0 +1,58 @@
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "127.0.0.1:5432:5432"
+      - "10.77.0.2:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  app:
+    image: ghcr.io/mvnby/air-api/backend:latest
+    restart: always
+    depends_on:
+      - db
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
+      APP_ROLE: primary
+      SCHEDULER_ENABLED: "true"
+      BOT_ENABLED: "false"
+      API_READY_ENABLED: "true"
+      DB_BOOTSTRAP_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./media:/app/media
+      - ./model-cache/u2net:/root/.u2net
+      - ./token.json:/app/token.json
+      - ./client_secret.json:/app/client_secret.json
+      - ./credentials.json:/app/credentials.json
+      - ./g-vision-ocr.json:/app/g-vision-ocr.json:ro
+
+  bot:
+    image: ghcr.io/mvnby/air-api/backend:latest
+    restart: always
+    depends_on:
+      - db
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
+      APP_ROLE: primary
+      SCHEDULER_ENABLED: "false"
+      BOT_ENABLED: "true"
+      DB_BOOTSTRAP_ENABLED: "false"
+    volumes:
+      - ./media:/app/media
+      - ./g-vision-ocr.json:/app/g-vision-ocr.json:ro
+    command: python -m bot_app.main
+
+volumes:
+  postgres_data:
