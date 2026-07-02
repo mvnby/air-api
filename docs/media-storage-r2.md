@@ -132,6 +132,19 @@ The command updates `ProductImageVariant` rows only. It does not rewrite
 `ProductImage.url`, `Product.main_image`, or `Product.images`, and it does not
 delete local media files.
 
+For legacy `Product.main_image` values that point at local files but do not have
+a matching `ProductImage` row yet, use the main-image backfill helper:
+
+```bash
+python3 scripts/backfill_product_main_images_storage.py --provider r2 --limit 50
+python3 scripts/backfill_product_main_images_storage.py --provider r2 --limit 50 --execute
+```
+
+This helper also preserves `Product.main_image`. When needed, it creates the
+missing canonical `ProductImage(url=main_image)` row and stores an `original`
+variant in R2, so public API mappers can expose the CDN URL through an exact
+main-image match instead of guessing from gallery order.
+
 Manual and legacy writers that write under `media/products` remain local/manual
 tools unless a future issue explicitly migrates them: examples include
 `services/image_service.py` via older product/article/order paths,
