@@ -39,6 +39,21 @@ def _approved_ready_variant_url(image: Any, variant_type: ProductImageVariantTyp
     return None
 
 
+def _ready_original_variant_url(image: Any) -> Optional[str]:
+    for variant in getattr(image, "variants", None) or []:
+        if (
+            variant.variant_type == ProductImageVariantType.ORIGINAL.value
+            and variant.processing_status == ProductImageProcessingStatus.READY.value
+            and variant.url
+        ):
+            return variant.url
+    return None
+
+
+def _public_image_url(image: Any) -> Optional[str]:
+    return _ready_original_variant_url(image) or image.url
+
+
 def _main_image_variant_or_fallback(
     product: Product,
     variant_type: ProductImageVariantType,
@@ -57,7 +72,29 @@ def _main_image_variant_or_fallback(
     if not source_image:
         return product.main_image
 
-    return _approved_ready_variant_url(source_image, variant_type) or product.main_image
+    return (
+        _approved_ready_variant_url(source_image, variant_type)
+        or _ready_original_variant_url(source_image)
+        or product.main_image
+    )
+
+
+def _main_image_public_url(product: Product) -> Optional[str]:
+    if not product.main_image:
+        return None
+
+    source_image = next(
+        (
+            image
+            for image in (product.gallery_images or [])
+            if _is_same_image_url(image.url, product.main_image)
+        ),
+        None,
+    )
+    if not source_image:
+        return product.main_image
+
+    return _ready_original_variant_url(source_image) or product.main_image
 
 
 def map_product_to_response(
@@ -96,7 +133,7 @@ def map_product_to_response(
             gallery.append(
                 ProductImageResponse(
                     id=img.id,
-                    url=img.url,
+                    url=_public_image_url(img),
                     is_installation_photo=img.is_installation_photo,
                     card_variant_url=_approved_ready_variant_url(
                         img,
@@ -147,7 +184,7 @@ def map_product_to_response(
         area=product.area,
         is_inverter=product.is_inverter,
         power_cooling=product.power_cooling,
-        main_image=product.main_image,
+        main_image=_main_image_public_url(product),
         card_image=_main_image_variant_or_fallback(product, ProductImageVariantType.CARD),
         full_image=_main_image_variant_or_fallback(product, ProductImageVariantType.FULL),
         is_published=product.is_published,

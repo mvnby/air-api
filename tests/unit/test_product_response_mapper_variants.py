@@ -69,6 +69,32 @@ def test_map_product_to_response_selects_only_approved_ready_card_and_full_varia
     assert payload.gallery_images[0].full_variant_url == "/media/products/variants/full/source.webp"
 
 
+def test_map_product_to_response_uses_ready_original_variant_as_public_cdn_fallback():
+    product = _product_with_variant(
+        processing_status=ProductImageProcessingStatus.READY.value,
+        manual_quality_status=ProductImageManualQualityStatus.UNREVIEWED.value,
+        variant_url="/media/products/variants/card/unapproved.webp",
+    )
+    product.gallery_images[0].variants.append(
+        ProductImageVariant(
+            id=102,
+            product_image_id=product.gallery_images[0].id,
+            variant_type=ProductImageVariantType.ORIGINAL.value,
+            url="https://cdn.mvn.by/products/variants/original/source.webp",
+            processing_status=ProductImageProcessingStatus.READY.value,
+            manual_quality_status=ProductImageManualQualityStatus.UNREVIEWED.value,
+        )
+    )
+
+    payload = map_product_to_response(product)
+
+    assert payload.main_image == "https://cdn.mvn.by/products/variants/original/source.webp"
+    assert payload.card_image == "https://cdn.mvn.by/products/variants/original/source.webp"
+    assert payload.full_image == "https://cdn.mvn.by/products/variants/original/source.webp"
+    assert payload.gallery_images[0].url == "https://cdn.mvn.by/products/variants/original/source.webp"
+    assert payload.gallery_images[0].card_variant_url is None
+
+
 @pytest.mark.parametrize(
     ("processing_status", "manual_quality_status", "variant_url"),
     [
