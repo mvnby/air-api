@@ -114,6 +114,7 @@ Scheduled monitors:
 | --- | --- | --- |
 | `check-api-vps-health.yml` | every 6 hours | primary host, containers, DB, backups, media storage config |
 | `check-api-ha-invariants.yml` | every 30 minutes | public/primary ready and standby fenced |
+| `check-cloudflare-lb-config.yml` | every 6 hours | Cloudflare LB pool order, fallback, host header, and monitor config |
 | `api-restore-drill.yml` | daily after the 03:00 UTC backup | disposable DB restore drill |
 | `check-postgres-pitr.yml` | every 6 hours | PITR archive/timer/backlog and remote R2 freshness |
 | `postgres-pitr-restore-drill.yml` | daily when `POSTGRES_PITR_REQUIRED=true` | disposable physical restore from PITR basebackup + WAL |
@@ -377,6 +378,42 @@ unpromoted read-only API.
 If Cloudflare still has old names such as `mvn-primary-zakup` and
 `mvn-standby-api`, either rename them or verify by IP address. Names are less
 important than order and fallback.
+
+Repo-tracked Cloudflare config audit:
+
+```bash
+python3 scripts/ha/check_cloudflare_lb_config.py
+```
+
+Required environment:
+
+```text
+CLOUDFLARE_API_TOKEN=<read-only token>
+CLOUDFLARE_ZONE_ID=<mvn.by zone id>
+CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
+```
+
+The token needs read-only Cloudflare Load Balancing permissions:
+
+- Zone-level `Load Balancers Read`, used for
+  `GET /zones/{zone_id}/load_balancers`;
+- Account-level `Load Balancing: Monitors and Pools Read`, used for
+  `GET /accounts/{account_id}/load_balancers/pools` and
+  `GET /accounts/{account_id}/load_balancers/monitors`.
+
+GitHub scheduled audit:
+
+```bash
+gh secret set CLOUDFLARE_LB_READ_TOKEN --repo mvnby/air-api
+gh variable set CLOUDFLARE_ZONE_ID --repo mvnby/air-api --body <zone-id>
+gh variable set CLOUDFLARE_ACCOUNT_ID --repo mvnby/air-api --body <account-id>
+gh workflow run check-cloudflare-lb-config.yml --repo mvnby/air-api --ref main
+```
+
+Until those values exist, the scheduled workflow exits as skipped and does not
+fail. After the read-only token is configured, the workflow fails on config
+drift such as reversed pool order, fallback pointing to standby, missing Host
+header, or monitor path changing away from `/api/ready`.
 
 ## Emergency Failover: `mvn-api` -> `zakup`
 
