@@ -359,6 +359,66 @@ async def test_apply_to_order_preserves_new_attachment_when_order_already_has_te
 
 
 @pytest.mark.asyncio
+async def test_apply_to_order_updates_existing_repair_nameplate_attachment_url(
+    sqlite_repair_nameplate_session,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "services.bot_order_attachment_service.get_general_media_storage",
+        lambda: FakeGeneralMediaStorage(),
+    )
+    order = Order(
+        id=42,
+        title="Ремонт",
+        status=OrderStatus.EXECUTION,
+        workflow_type="repair",
+        technical_meta={
+            BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY: [
+                {
+                    "source": "telegram_bot",
+                    "file_id": "photo-file",
+                    "filename": "nameplate.jpg",
+                    "mime_type": "image/jpeg",
+                    "kind": "photo",
+                    "purpose": "repair_nameplate",
+                    "attached_at": "2026-07-02T13:39:43",
+                }
+            ],
+            "repair": {"repair_status": "scheduled"},
+        },
+    )
+    sqlite_repair_nameplate_session.add(order)
+    await sqlite_repair_nameplate_session.commit()
+
+    result = await BotRepairNameplateService.apply_to_order(
+        sqlite_repair_nameplate_session,
+        int(order.id),
+        extracted={"equipment_serial_number": "SN-003"},
+        raw_text="SERIAL SN-003",
+        validation_flags={"warnings": {}, "is_valid": True},
+        file_id="photo-file",
+        filename="nameplate.jpeg",
+        mime_type="image/jpeg",
+        telegram_user_id=777,
+        telegram_chat_id=100,
+        telegram_message_id=56,
+        can_attach_any=True,
+        file_content=b"updated-nameplate-content",
+    )
+
+    assert result is not None
+    await sqlite_repair_nameplate_session.refresh(order)
+    attachments = order.technical_meta[BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY]
+    assert len(attachments) == 1
+    assert attachments[0]["file_id"] == "photo-file"
+    assert attachments[0]["url"] == "https://cdn.mvn.by/media/orders/42/telegram/photo/hash.jpg"
+    assert attachments[0]["storage_provider"] == "r2"
+    assert attachments[0]["content_hash"] == "b" * 64
+    repair_attachment = order.technical_meta["repair"]["nameplate_recognitions"][0]
+    assert repair_attachment["url"] == "https://cdn.mvn.by/media/orders/42/telegram/photo/hash.jpg"
+
+
+@pytest.mark.asyncio
 async def test_apply_to_order_accepts_negotiation_repair_order(sqlite_repair_nameplate_session):
     order = Order(title="Ремонт", status=OrderStatus.NEGOTIATION, workflow_type="repair")
     sqlite_repair_nameplate_session.add(order)

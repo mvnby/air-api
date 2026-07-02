@@ -147,6 +147,61 @@ async def test_does_not_duplicate_same_file(sqlite_order_attachment_session):
 
 
 @pytest.mark.asyncio
+async def test_updates_existing_attachment_with_stored_content(
+    sqlite_order_attachment_session,
+    monkeypatch,
+):
+    fake_storage = FakeGeneralMediaStorage()
+    monkeypatch.setattr(
+        "services.bot_order_attachment_service.get_general_media_storage",
+        lambda: fake_storage,
+    )
+    order = Order(
+        id=121,
+        title="Монтаж",
+        technical_meta={
+            BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY: [
+                {
+                    "source": "telegram_bot",
+                    "file_id": "same-file",
+                    "filename": "объект.jpg",
+                    "mime_type": "image/jpeg",
+                    "kind": "photo",
+                    "telegram_user_id": 777,
+                    "telegram_chat_id": 100,
+                    "telegram_message_id": 55,
+                    "attached_at": "2026-07-02T13:39:43",
+                }
+            ]
+        },
+    )
+    sqlite_order_attachment_session.add(order)
+    await sqlite_order_attachment_session.commit()
+
+    result = await BotOrderAttachmentService.attach_to_order(
+        sqlite_order_attachment_session,
+        int(order.id),
+        file_id="same-file",
+        filename="объект.jpg",
+        mime_type="image/jpeg",
+        telegram_user_id=777,
+        telegram_chat_id=100,
+        telegram_message_id=55,
+        content=b"image-content",
+    )
+
+    assert result is not None
+    assert result["already_attached"] is True
+    assert result["attachment"]["url"] == "https://cdn.mvn.by/media/orders/121/telegram/photo/hash.jpg"
+    await sqlite_order_attachment_session.refresh(order)
+    attachments = order.technical_meta[BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY]
+    assert len(attachments) == 1
+    assert attachments[0]["url"] == "https://cdn.mvn.by/media/orders/121/telegram/photo/hash.jpg"
+    assert attachments[0]["storage_provider"] == "r2"
+    assert attachments[0]["content_hash"] == "a" * 64
+
+
+@pytest.mark.asyncio
 async def test_lists_recent_active_orders(sqlite_order_attachment_session):
     active = Order(title="Активный", status=OrderStatus.NEGOTIATION)
     closed = Order(title="Закрытый", status=OrderStatus.CLOSED)
