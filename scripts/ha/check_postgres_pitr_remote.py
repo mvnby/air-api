@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.machinery
 import importlib.util
 import os
 import sys
@@ -12,6 +13,20 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+
+def _load_python_module_from_path(module_name: str, path: Path) -> Any | None:
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        loader = importlib.machinery.SourceFileLoader(module_name, str(path))
+        spec = importlib.util.spec_from_loader(module_name, loader)
+    if spec is None or spec.loader is None:
+        return None
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _load_upload_helpers() -> tuple[Any, Any]:
@@ -34,12 +49,9 @@ def _load_upload_helpers() -> tuple[Any, Any]:
         helper_path = Path(candidate)
         if not helper_path.is_file():
             continue
-        spec = importlib.util.spec_from_file_location("mvn_postgres_pitr_upload_helper", helper_path)
-        if spec is None or spec.loader is None:
+        module = _load_python_module_from_path("mvn_postgres_pitr_upload_helper", helper_path)
+        if module is None:
             continue
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
         return module.build_client, module.load_config
 
     raise SystemExit(
