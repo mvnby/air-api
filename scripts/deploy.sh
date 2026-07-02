@@ -31,6 +31,17 @@ if [[ ! -f "${COMPOSE_FILE}" ]]; then
     exit 1
 fi
 
+if [[ -n "${BACKEND_IMAGE}" ]]; then
+    ENV_FILE="${PROJECT_DIR}/.env"
+    touch "${ENV_FILE}"
+    if grep -q '^BACKEND_IMAGE=' "${ENV_FILE}"; then
+        sed -i "s|^BACKEND_IMAGE=.*|BACKEND_IMAGE=${BACKEND_IMAGE}|" "${ENV_FILE}"
+    else
+        printf '\nBACKEND_IMAGE=%s\n' "${BACKEND_IMAGE}" >> "${ENV_FILE}"
+    fi
+    echo "💾 Persisted immutable backend image in ${ENV_FILE}"
+fi
+
 COMPOSE=(docker compose -f "${COMPOSE_FILE}")
 
 mkdir -p media model-cache/u2net

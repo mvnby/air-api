@@ -456,6 +456,12 @@ jobs:
             set -euo pipefail && \
             cd '${API_STANDBY_PROJECT_DIR}' && \
             export BACKEND_IMAGE='${BACKEND_IMAGE}' && \
+            tmp=\$(mktemp) && \
+            touch .env && \
+            { grep -v '^BACKEND_IMAGE=' .env > \"\${tmp}\" || true; } && \
+            printf 'BACKEND_IMAGE=%s\n' \"\${BACKEND_IMAGE}\" >> \"\${tmp}\" && \
+            mv \"\${tmp}\" .env && \
+            echo '💾 Persisted immutable standby backend image in .env' && \
             echo '${{ secrets.GHCR_PAT }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin >/dev/null && \
             docker compose -f '${API_STANDBY_COMPOSE_FILE}' pull app && \
             docker compose -f '${API_STANDBY_COMPOSE_FILE}' up -d --force-recreate app && \
