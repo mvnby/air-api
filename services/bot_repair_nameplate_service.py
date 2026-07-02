@@ -32,7 +32,11 @@ class BotRepairNameplateService:
         "S": "SKD-компоненты",
         "Z": "собранный блок",
     }
-    REPAIR_STATUS = OrderStatus.EXECUTION
+    ACTIVE_REPAIR_STATUSES = (
+        OrderStatus.NEW_LEAD,
+        OrderStatus.NEGOTIATION,
+        OrderStatus.EXECUTION,
+    )
     REPAIR_FIELDS = (
         "equipment_name",
         "equipment_brand",
@@ -357,11 +361,11 @@ class BotRepairNameplateService:
         return None
 
     @classmethod
-    def _is_repair_execution_order(cls, order: Order | None) -> bool:
+    def _is_active_repair_order(cls, order: Order | None) -> bool:
         if not order:
             return False
         workflow_type = OrderService._normalize_workflow_type(getattr(order, "workflow_type", None))
-        return workflow_type == "repair" and order.status == cls.REPAIR_STATUS
+        return workflow_type == "repair" and order.status in cls.ACTIVE_REPAIR_STATUSES
 
     @staticmethod
     def _map_order(order: Order) -> dict[str, Any]:
@@ -409,7 +413,7 @@ class BotRepairNameplateService:
     ) -> list[dict[str, Any]]:
         stmt = (
             select(Order)
-            .where(Order.status == cls.REPAIR_STATUS)
+            .where(Order.status.in_(list(cls.ACTIVE_REPAIR_STATUSES)))
             .where(Order.workflow_type == "repair")
             .options(selectinload(Order.customer))
             .order_by(Order.updated_at.desc(), Order.created_at.desc(), Order.id.desc())
@@ -448,7 +452,7 @@ class BotRepairNameplateService:
     ) -> bool:
         result = await session.execute(select(Order).where(Order.id == order_id).limit(1))
         order = result.scalars().first()
-        if not cls._is_repair_execution_order(order):
+        if not cls._is_active_repair_order(order):
             return False
         if can_attach_any:
             return True

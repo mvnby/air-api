@@ -136,6 +136,11 @@ Manual deploy verification:
 gh workflow run deploy.yml --repo mvnby/air-api --ref main -f deploy_frontend=false
 ```
 
+The workflow builds and pushes both `backend:latest` and
+`backend:<commit_sha>`, but production deploys must run the immutable
+`backend:<commit_sha>` tag through `BACKEND_IMAGE`. This keeps primary and
+standby on the same image for the same deployment.
+
 Expected deploy behavior:
 
 - primary `mvn-api`: recreate `app` and `bot`;

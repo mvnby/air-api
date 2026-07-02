@@ -13,7 +13,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   app:
-    image: ghcr.io/mvnby/air-api/backend:latest
+    image: ${BACKEND_IMAGE:-ghcr.io/mvnby/air-api/backend:latest}
     restart: always
     depends_on:
       - db
@@ -37,7 +37,7 @@ services:
       - ./g-vision-ocr.json:/app/g-vision-ocr.json:ro
 
   bot:
-    image: ghcr.io/mvnby/air-api/backend:latest
+    image: ${BACKEND_IMAGE:-ghcr.io/mvnby/air-api/backend:latest}
     restart: always
     depends_on:
       - db

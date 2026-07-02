@@ -291,6 +291,7 @@ jobs:
             API_MIGRATION_SERVICE='${API_MIGRATION_SERVICE}' \
             API_RUN_MIGRATIONS='${API_RUN_MIGRATIONS}' \
             API_RUN_DEFAULTS='${API_RUN_DEFAULTS}' \
+            BACKEND_IMAGE='ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ github.sha }}' \
             bash /tmp/deploy.sh"
 
       - name: Optional Post-Deploy Backend Ops
@@ -333,6 +334,7 @@ jobs:
             DRY_RUN='${DRY_RUN}' \
             API_PROJECT_DIR='${API_PROJECT_DIR}' \
             API_COMPOSE_FILE='${API_COMPOSE_FILE}' \
+            BACKEND_IMAGE='ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ github.sha }}' \
             OPS_SUMMARY_FILE='/tmp/ops_summary.txt' \
             bash /tmp/ops_post_deploy.sh && cat /tmp/ops_summary.txt" | tee backend_ops.log
 
@@ -349,6 +351,7 @@ jobs:
             COMPOSE_FILE='${API_PROJECT_DIR}/${API_COMPOSE_FILE}' \
             COMPOSE_SERVICE_CHECKS='${API_SMOKE_COMPOSE_SERVICE_CHECKS}' \
             BOT_EXPECT_ENABLED='${API_BOT_EXPECT_ENABLED}' \
+            BACKEND_IMAGE='ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ github.sha }}' \
             SMOKE_SUMMARY_FILE='/tmp/smoke_summary.txt' \
             bash /tmp/post_deploy_smoke_check.sh && cat /tmp/smoke_summary.txt" | tee backend_smoke.log
 
@@ -378,6 +381,7 @@ jobs:
           {
             echo "## Backend Deploy Summary"
             echo "- image: ghcr.io/${{ steps.prep.outputs.repo }}/backend"
+            echo "- backend_image: ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ github.sha }}"
             echo "- digest: ${digest}"
             echo "- commit_sha: ${{ github.sha }}"
             echo "- api_project_dir: ${API_PROJECT_DIR}"
@@ -432,6 +436,9 @@ jobs:
           set -euo pipefail
           SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
           SCP_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+          repo="${GITHUB_REPOSITORY,,}"
+          BACKEND_IMAGE="ghcr.io/${repo}/backend:${GITHUB_SHA}"
+          echo "📌 Deploying standby backend image: ${BACKEND_IMAGE}"
 
           if [ "${API_STANDBY_COPY_COMPOSE}" = "true" ]; then
             if [ ! -f "${API_STANDBY_COMPOSE_SOURCE_FILE}" ]; then
@@ -448,6 +455,7 @@ jobs:
           ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "\
             set -euo pipefail && \
             cd '${API_STANDBY_PROJECT_DIR}' && \
+            export BACKEND_IMAGE='${BACKEND_IMAGE}' && \
             echo '${{ secrets.GHCR_PAT }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin >/dev/null && \
             docker compose -f '${API_STANDBY_COMPOSE_FILE}' pull app && \
             docker compose -f '${API_STANDBY_COMPOSE_FILE}' up -d --force-recreate app && \
@@ -472,6 +480,7 @@ jobs:
             echo "- standby_compose_file: ${API_STANDBY_COMPOSE_FILE}"
             echo "- standby_copy_compose: ${API_STANDBY_COPY_COMPOSE}"
             echo "- standby_compose_source_file: ${API_STANDBY_COMPOSE_SOURCE_FILE}"
+            echo "- backend_image: ghcr.io/${GITHUB_REPOSITORY,,}/backend:${GITHUB_SHA}"
             echo "- health_url: ${API_STANDBY_HEALTH_URL}"
             echo "- status: ${{ job.status }}"
           } >> "$GITHUB_STEP_SUMMARY"

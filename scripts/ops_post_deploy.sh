@@ -20,6 +20,10 @@ RUN_WARMUP_REMBG_MODELS="${RUN_WARMUP_REMBG_MODELS:-false}"
 REMBG_WARMUP_MODELS="${REMBG_WARMUP_MODELS:-}"
 DRY_RUN="${DRY_RUN:-true}"
 RUN_POST_DEPLOY_OPS="${RUN_POST_DEPLOY_OPS:-false}"
+BACKEND_IMAGE="${BACKEND_IMAGE:-}"
+if [[ -n "${BACKEND_IMAGE}" ]]; then
+  export BACKEND_IMAGE
+fi
 
 log() {
   local stage="$1"
@@ -48,6 +52,7 @@ log init "MEDIA_LIBRARY_BACKFILL_INCLUDE_REMOTE=${MEDIA_LIBRARY_BACKFILL_INCLUDE
 log init "RUN_WARMUP_REMBG_MODELS=${RUN_WARMUP_REMBG_MODELS}"
 log init "REMBG_WARMUP_MODELS=${REMBG_WARMUP_MODELS:-<default>}"
 log init "DRY_RUN=${DRY_RUN}"
+log init "BACKEND_IMAGE=${BACKEND_IMAGE:-<compose fallback>}"
 
 if [[ "${RUN_POST_DEPLOY_OPS}" != "true" ]]; then
   log init "RUN_POST_DEPLOY_OPS is not true, skipping."
