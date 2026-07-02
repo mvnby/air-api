@@ -938,8 +938,10 @@ class BotRepairNameplateService:
             repair_meta,
             default_status=OrderService.REPAIR_DEFAULT_STATUS,
         )
-        meta.update(order.technical_meta if isinstance(order.technical_meta, dict) else {})
-        order.technical_meta = meta
+        updated_meta = dict(order.technical_meta or {}) if isinstance(order.technical_meta, dict) else {}
+        if not already_attached:
+            updated_meta[BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY] = telegram_attachments
+        order.technical_meta = updated_meta
         flag_modified(order, "technical_meta")
         session.add(order)
         await session.commit()
