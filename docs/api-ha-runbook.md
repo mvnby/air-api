@@ -56,7 +56,7 @@ unreviewed host-local compose edits:
 | Disposable DB restore drill | `scripts/ha/restore_drill_latest_db.sh` |
 | PostgreSQL PITR WAL/basebackup upload | `scripts/ha/upload_postgres_pitr_to_s3.py`, `scripts/ha/upload_postgres_pitr_wal.sh`, `scripts/ha/create_postgres_pitr_basebackup.sh` |
 | PostgreSQL PITR restore helpers | `scripts/ha/restore_postgres_pitr_from_s3.py`, `scripts/ha/restore_postgres_pitr_drill.sh`, `.github/workflows/postgres-pitr-restore-drill.yml` |
-| PostgreSQL PITR env configuration | `scripts/ha/configure_postgres_pitr_env.py` |
+| PostgreSQL PITR env/bootstrap | `scripts/ha/configure_postgres_pitr_env.py`, `scripts/ha/bootstrap_postgres_pitr.sh` |
 | PostgreSQL PITR monitoring | `scripts/ha/check_postgres_pitr_status.sh`, `scripts/ha/check_postgres_pitr_remote.py`, `.github/workflows/check-postgres-pitr.yml` |
 | PostgreSQL PITR systemd units | `deploy/ha/systemd/mvn-postgres-wal-upload.*`, `deploy/ha/systemd/mvn-postgres-basebackup.*` |
 | Status helpers | `scripts/ha/mvn-primary-status.sh`, `scripts/ha/mvn-standby-status.sh` |
@@ -180,6 +180,7 @@ tar -czf - \
   scripts/ha/upload_postgres_pitr_wal.sh \
   scripts/ha/create_postgres_pitr_basebackup.sh \
   scripts/ha/configure_postgres_pitr_env.py \
+  scripts/ha/bootstrap_postgres_pitr.sh \
   scripts/ha/restore_postgres_pitr_from_s3.py \
   scripts/ha/restore_postgres_pitr_drill.sh \
   scripts/ha/check_postgres_pitr_status.sh \
@@ -206,36 +207,19 @@ POSTGRES_PITR_S3_SECRET_ACCESS_KEY=<private-r2-token-secret>
 POSTGRES_PITR_S3_KEY_PREFIX=postgres/pitr
 EOF
 
-# Write PITR credentials into /opt/air-api/.env with a backup. This keeps
-# POSTGRES_PITR_ARCHIVE_MODE=off until upload is proven.
-ssh mvn-api '/usr/local/sbin/mvn-postgres-pitr-configure-env --project-dir /opt/air-api --input-env-file /root/mvn-postgres-pitr.env'
+# Validate credentials, write PITR env with archive mode still off, upload a
+# physical basebackup, and stage archive_mode=on for the next DB recreate.
+ssh mvn-api 'ENV_INPUT_FILE=/root/mvn-postgres-pitr.env /usr/local/sbin/mvn-postgres-pitr-bootstrap bootstrap-before-maintenance'
 ssh mvn-api 'rm -f /root/mvn-postgres-pitr.env'
 
-# Prove private bucket upload with a physical basebackup first. This is a real
-# upload; it does not require archive_mode yet.
-ssh mvn-api 'PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml /usr/local/sbin/mvn-postgres-pitr-basebackup'
-
-# Then explicitly enable archive settings in /opt/air-api/.env with another
-# backup. This does not take effect until the db container is recreated.
-ssh mvn-api '/usr/local/sbin/mvn-postgres-pitr-configure-env --project-dir /opt/air-api --enable-archive'
-
 # In a short maintenance window, recreate db so archive_mode=on and the
-# /postgres-wal-archive mount become active.
-ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.prod.yml up -d --force-recreate db'
-
-# Clear historical archiver counters after the planned recreate so strict
-# monitoring starts from the current PITR setup, not from earlier dry-run
-# mistakes that have already been investigated.
-ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.prod.yml exec -T db sh -lc '\''psql -U "$POSTGRES_USER" -d "${POSTGRES_DB:-air_conditioners}"'\''' <<'SQL'
-select pg_stat_reset_shared('archiver');
-SQL
-
-# Force one WAL switch and prove WAL upload before enabling timers permanently.
-ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.prod.yml exec -T db sh -lc '\''psql -U "$POSTGRES_USER" -d "${POSTGRES_DB:-air_conditioners}" -c "select pg_switch_wal();"'\'''
-ssh mvn-api 'PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml /usr/local/sbin/mvn-postgres-pitr-upload-wal'
+# /postgres-wal-archive mount become active. The helper also resets historical
+# archiver counters, forces one WAL switch, and proves one WAL upload before
+# timers are enabled.
+ssh mvn-api 'CONFIRM_RECREATE_DB=true /usr/local/sbin/mvn-postgres-pitr-bootstrap activate-archive'
 
 # Then enable recurring PITR.
-ssh mvn-api 'systemctl enable --now mvn-postgres-wal-upload.timer mvn-postgres-basebackup.timer'
+ssh mvn-api '/usr/local/sbin/mvn-postgres-pitr-bootstrap enable-timers'
 
 # Finally make the scheduled GitHub PITR check strict.
 gh variable set POSTGRES_PITR_REQUIRED --repo mvnby/air-api --body true
@@ -245,6 +229,7 @@ Quick PITR status:
 
 ```bash
 ssh mvn-api 'PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml PITR_REQUIRED=true /usr/local/sbin/mvn-postgres-pitr-status'
+ssh mvn-api '/usr/local/sbin/mvn-postgres-pitr-bootstrap verify'
 ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.prod.yml exec -T db sh -lc '\''psql -U "$POSTGRES_USER" -d "${POSTGRES_DB:-air_conditioners}" -c "select archived_count,last_archived_wal,last_archived_time,failed_count,last_failed_wal,last_failed_time from pg_stat_archiver;"'\'''
 ssh mvn-api 'systemctl list-timers --all | grep mvn-postgres'
 ```
