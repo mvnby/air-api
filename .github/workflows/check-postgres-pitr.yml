@@ -1,0 +1,100 @@
+name: PostgreSQL PITR Check
+
+on:
+  schedule:
+    - cron: "27 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      required:
+        description: "Fail if PITR is not fully enabled"
+        type: boolean
+        required: false
+        default: false
+      max_wal_age_minutes:
+        description: "Max remote WAL object age once PITR is required"
+        type: string
+        required: false
+        default: "180"
+      max_basebackup_age_hours:
+        description: "Max remote physical basebackup age once PITR is required"
+        type: string
+        required: false
+        default: "30"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup API SSH Key
+        env:
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
+          SSH_USER_API: ${{ secrets.SSH_USER_API }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_HOST_API}" ] || [ -z "${SSH_USER_API}" ] || [ -z "${SSH_KEY}" ]; then
+            echo "::error::Missing one of required secrets: SSH_HOST_API, SSH_USER_API, SSH_KEY"
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "${SSH_KEY}" > ~/.ssh/postgres_pitr_key
+          chmod 600 ~/.ssh/postgres_pitr_key
+          ssh-keyscan -T 10 -H "${SSH_HOST_API}" >> ~/.ssh/known_hosts
+
+      - name: Run PostgreSQL PITR Check
+        env:
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
+          SSH_USER_API: ${{ secrets.SSH_USER_API }}
+          API_PROJECT_DIR: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}
+          API_COMPOSE_FILE: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}
+          PITR_REQUIRED: ${{ github.event_name == 'workflow_dispatch' && inputs.required || vars.POSTGRES_PITR_REQUIRED || 'false' }}
+          PITR_MAX_WAL_AGE_MINUTES: ${{ github.event_name == 'workflow_dispatch' && inputs.max_wal_age_minutes || vars.POSTGRES_PITR_MAX_WAL_AGE_MINUTES || '180' }}
+          PITR_MAX_BASEBACKUP_AGE_HOURS: ${{ github.event_name == 'workflow_dispatch' && inputs.max_basebackup_age_hours || vars.POSTGRES_PITR_MAX_BASEBACKUP_AGE_HOURS || '30' }}
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-i ~/.ssh/postgres_pitr_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+          remote_script="/tmp/mvn-postgres-pitr-check-${GITHUB_RUN_ID}.sh"
+          ssh ${SSH_OPTS} "${SSH_USER_API}@${SSH_HOST_API}" "cat > '${remote_script}' && chmod +x '${remote_script}'" \
+            < scripts/ha/check_postgres_pitr_status.sh | tee postgres-pitr-check.log
+          ssh ${SSH_OPTS} "${SSH_USER_API}@${SSH_HOST_API}" "\
+            PROJECT_DIR='${API_PROJECT_DIR}' \
+            COMPOSE_FILE='${API_COMPOSE_FILE}' \
+            PITR_REQUIRED='${PITR_REQUIRED}' \
+            PITR_MAX_WAL_AGE_MINUTES='${PITR_MAX_WAL_AGE_MINUTES}' \
+            PITR_MAX_BASEBACKUP_AGE_HOURS='${PITR_MAX_BASEBACKUP_AGE_HOURS}' \
+            bash '${remote_script}'; \
+            status=\$?; \
+            rm -f '${remote_script}'; \
+            exit \${status}" | tee -a postgres-pitr-check.log
+
+      - name: Write Summary
+        if: always()
+        run: |
+          {
+            echo "## PostgreSQL PITR Check"
+            echo "- pitr_required: ${{ github.event_name == 'workflow_dispatch' && inputs.required || vars.POSTGRES_PITR_REQUIRED || 'false' }}"
+            echo "- api_project_dir: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}"
+            echo "- api_compose_file: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}"
+            echo "- max_wal_age_minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.max_wal_age_minutes || vars.POSTGRES_PITR_MAX_WAL_AGE_MINUTES || '180' }}"
+            echo "- max_basebackup_age_hours: ${{ github.event_name == 'workflow_dispatch' && inputs.max_basebackup_age_hours || vars.POSTGRES_PITR_MAX_BASEBACKUP_AGE_HOURS || '30' }}"
+            echo "- log_artifact: postgres-pitr-check-log-${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload PITR Check Log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: postgres-pitr-check-log-${{ github.run_id }}
+          path: postgres-pitr-check.log
+          if-no-files-found: warn

@@ -50,6 +50,7 @@ unreviewed host-local compose edits:
 | Local standby promotion helper | `scripts/ha/promote_local_standby.sh` |
 | Disposable DB restore drill | `scripts/ha/restore_drill_latest_db.sh` |
 | PostgreSQL PITR WAL/basebackup upload | `scripts/ha/upload_postgres_pitr_to_s3.py`, `scripts/ha/upload_postgres_pitr_wal.sh`, `scripts/ha/create_postgres_pitr_basebackup.sh` |
+| PostgreSQL PITR monitoring | `scripts/ha/check_postgres_pitr_status.sh`, `scripts/ha/check_postgres_pitr_remote.py`, `.github/workflows/check-postgres-pitr.yml` |
 | PostgreSQL PITR systemd units | `deploy/ha/systemd/mvn-postgres-wal-upload.*`, `deploy/ha/systemd/mvn-postgres-basebackup.*` |
 | Status helpers | `scripts/ha/mvn-primary-status.sh`, `scripts/ha/mvn-standby-status.sh` |
 | Media sync helper/timer | `scripts/ha/media_sync_pull.sh`, `deploy/ha/systemd/mvn-media-sync.*` |
@@ -101,6 +102,7 @@ Scheduled monitors:
 | `check-api-vps-health.yml` | every 6 hours | primary host, containers, DB, backups |
 | `check-api-ha-invariants.yml` | every 30 minutes | public/primary ready and standby fenced |
 | `api-restore-drill.yml` | daily after the 03:00 UTC backup | disposable DB restore drill |
+| `check-postgres-pitr.yml` | every 6 hours | PITR archive/timer/backlog and remote R2 freshness |
 
 ## PostgreSQL PITR
 
@@ -162,6 +164,8 @@ tar -czf - \
   scripts/ha/upload_postgres_pitr_to_s3.py \
   scripts/ha/upload_postgres_pitr_wal.sh \
   scripts/ha/create_postgres_pitr_basebackup.sh \
+  scripts/ha/check_postgres_pitr_status.sh \
+  scripts/ha/check_postgres_pitr_remote.py \
   scripts/ha/install_postgres_pitr_units.sh \
   deploy/ha/systemd/mvn-postgres-wal-upload.service \
   deploy/ha/systemd/mvn-postgres-wal-upload.timer \
@@ -184,19 +188,36 @@ ssh mvn-api 'PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml /usr/
 # /postgres-wal-archive mount become active.
 ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.prod.yml up -d --force-recreate db'
 
+# Clear historical archiver counters after the planned recreate so strict
+# monitoring starts from the current PITR setup, not from earlier dry-run
+# mistakes that have already been investigated.
+ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.prod.yml exec -T db sh -lc '\''psql -U "$POSTGRES_USER" -d "${POSTGRES_DB:-air_conditioners}"'\''' <<'SQL'
+select pg_stat_reset_shared('archiver');
+SQL
+
 # Force one WAL switch and prove WAL upload before enabling timers permanently.
 ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.prod.yml exec -T db sh -lc '\''psql -U "$POSTGRES_USER" -d "${POSTGRES_DB:-air_conditioners}" -c "select pg_switch_wal();"'\'''
 ssh mvn-api 'PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml /usr/local/sbin/mvn-postgres-pitr-upload-wal'
 
 # Then enable recurring PITR.
 ssh mvn-api 'systemctl enable --now mvn-postgres-wal-upload.timer mvn-postgres-basebackup.timer'
+
+# Finally make the scheduled GitHub PITR check strict.
+gh variable set POSTGRES_PITR_REQUIRED --repo mvnby/air-api --body true
 ```
 
 Quick PITR status:
 
 ```bash
+ssh mvn-api 'PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml PITR_REQUIRED=true /usr/local/sbin/mvn-postgres-pitr-status'
 ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.prod.yml exec -T db sh -lc '\''psql -U "$POSTGRES_USER" -d "${POSTGRES_DB:-air_conditioners}" -c "select archived_count,last_archived_wal,last_archived_time,failed_count,last_failed_wal,last_failed_time from pg_stat_archiver;"'\'''
 ssh mvn-api 'systemctl list-timers --all | grep mvn-postgres'
+```
+
+Manual GitHub monitor run:
+
+```bash
+gh workflow run check-postgres-pitr.yml --repo mvnby/air-api --ref main -f required=true
 ```
 
 Point-in-time restore outline:
