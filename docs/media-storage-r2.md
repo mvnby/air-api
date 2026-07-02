@@ -145,6 +145,19 @@ missing canonical `ProductImage(url=main_image)` row and stores an `original`
 variant in R2, so public API mappers can expose the CDN URL through an exact
 main-image match instead of guessing from gallery order.
 
+For legacy `Product.images` array entries that point at local files but do not
+have a matching `ProductImage` row yet, use the legacy-images backfill helper:
+
+```bash
+python3 scripts/backfill_product_legacy_images_storage.py --provider r2 --limit 50
+python3 scripts/backfill_product_legacy_images_storage.py --provider r2 --limit 50 --execute
+```
+
+This helper preserves `Product.images`. When needed, it creates the missing
+canonical `ProductImage(url=image_url)` row and stores an `original` variant in
+R2, so public API mappers can expose CDN URLs while keeping local media as the
+rollback source.
+
 Manual and legacy writers that write under `media/products` remain local/manual
 tools unless a future issue explicitly migrates them: examples include
 `services/image_service.py` via older product/article/order paths,
