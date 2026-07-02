@@ -52,6 +52,7 @@ jobs:
             *)
               echo "run=false" >> "$GITHUB_OUTPUT"
               echo "PITR restore drill skipped because POSTGRES_PITR_REQUIRED is not true."
+              printf '%s\n' "PITR restore drill skipped because POSTGRES_PITR_REQUIRED is not true." > postgres-pitr-restore-drill.log
               ;;
           esac
 
