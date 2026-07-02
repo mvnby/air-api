@@ -51,6 +51,29 @@ def test_list_backups_classifies_and_sorts(monkeypatch):
     assert items[0]["created_at"] > items[1]["created_at"]
 
 
+def test_sanitize_plain_sql_dump_removes_client_only_settings(tmp_path: Path):
+    dump_path = tmp_path / "backup.sql"
+    dump_path.write_text(
+        "\n".join(
+            [
+                "SET statement_timeout = 0;",
+                "SET transaction_timeout = 0;",
+                "CREATE TABLE product (id integer);",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    changed = BackupService.sanitize_plain_sql_dump(str(dump_path))
+
+    assert changed is True
+    sanitized = dump_path.read_text(encoding="utf-8")
+    assert "SET statement_timeout = 0;" in sanitized
+    assert "SET transaction_timeout = 0;" not in sanitized
+    assert "CREATE TABLE product" in sanitized
+
+
 @pytest.mark.asyncio
 async def test_restore_from_file_async_uses_psql(monkeypatch):
     service = BackupService()

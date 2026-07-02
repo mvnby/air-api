@@ -26,6 +26,7 @@ env:
   # Optional repo/environment variables:
   # API_PROJECT_DIR (/opt/air-api by default)
   # API_COMPOSE_FILE (docker-compose.prod.yml by default)
+  # API_COMPOSE_SOURCE_FILE (docker-compose.prod.yml by default; copied to API_COMPOSE_FILE)
   # API_COPY_COMPOSE (true by default; set false for emergency host-local compose)
   # API_DEPLOY_SERVICES (app bot by default; set app for app-only reserve compose)
   # API_BASE_URL (http://localhost:8000 by default)
@@ -37,6 +38,8 @@ env:
   # API_STANDBY_USER (root by default)
   # API_STANDBY_PROJECT_DIR (/opt/air-api by default)
   # API_STANDBY_COMPOSE_FILE (docker-compose.prod.yml by default)
+  # API_STANDBY_COPY_COMPOSE (false by default)
+  # API_STANDBY_COMPOSE_SOURCE_FILE (API_STANDBY_COMPOSE_FILE by default)
   # API_STANDBY_HEALTH_URL (http://localhost:8000/api/health by default)
 
 jobs:
@@ -132,6 +135,7 @@ jobs:
     env:
       API_PROJECT_DIR: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}
       API_COMPOSE_FILE: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}
+      API_COMPOSE_SOURCE_FILE: ${{ vars.API_COMPOSE_SOURCE_FILE || 'docker-compose.prod.yml' }}
       API_COPY_COMPOSE: ${{ vars.API_COPY_COMPOSE || 'true' }}
       API_DEPLOY_SERVICES: ${{ vars.API_DEPLOY_SERVICES || 'app bot' }}
       API_MIGRATION_SERVICE: ${{ vars.API_MIGRATION_SERVICE || 'app' }}
@@ -212,6 +216,7 @@ jobs:
           echo "User: ${{ secrets.SSH_USER_API }}"
           echo "Project dir: ${API_PROJECT_DIR}"
           echo "Compose file: ${API_COMPOSE_FILE}"
+          echo "Compose source file: ${API_COMPOSE_SOURCE_FILE}"
           
           # Test if host is reachable (allow failure for diagnosis)
           ping -c 3 ${{ secrets.SSH_HOST_API }} || echo "⚠️ Ping failed, but SSH might still work"
@@ -248,7 +253,11 @@ jobs:
           ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "mkdir -p '${API_PROJECT_DIR}'"
 
           if [ "${API_COPY_COMPOSE}" = "true" ]; then
-            echo "📄 Copying docker-compose.prod.yml to ${API_PROJECT_DIR}/${API_COMPOSE_FILE}"
+            if [ ! -f "${API_COMPOSE_SOURCE_FILE}" ]; then
+              echo "::error::API_COMPOSE_SOURCE_FILE not found: ${API_COMPOSE_SOURCE_FILE}"
+              exit 1
+            fi
+            echo "📄 Copying ${API_COMPOSE_SOURCE_FILE} to ${API_PROJECT_DIR}/${API_COMPOSE_FILE}"
             scp \
               -i ~/.ssh/deploy_key \
               -o BatchMode=yes \
@@ -256,7 +265,7 @@ jobs:
               -o ConnectTimeout=20 \
               -o ServerAliveInterval=15 \
               -o ServerAliveCountMax=3 \
-              -v docker-compose.prod.yml \
+              -v "${API_COMPOSE_SOURCE_FILE}" \
               "${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}:${API_PROJECT_DIR}/${API_COMPOSE_FILE}"
           else
             echo "⏭️ API_COPY_COMPOSE=${API_COPY_COMPOSE}; keeping remote compose unchanged"
@@ -402,9 +411,14 @@ jobs:
       API_STANDBY_USER: ${{ vars.API_STANDBY_USER || 'root' }}
       API_STANDBY_PROJECT_DIR: ${{ vars.API_STANDBY_PROJECT_DIR || '/opt/air-api' }}
       API_STANDBY_COMPOSE_FILE: ${{ vars.API_STANDBY_COMPOSE_FILE || 'docker-compose.prod.yml' }}
+      API_STANDBY_COPY_COMPOSE: ${{ vars.API_STANDBY_COPY_COMPOSE || 'false' }}
+      API_STANDBY_COMPOSE_SOURCE_FILE: ${{ vars.API_STANDBY_COMPOSE_SOURCE_FILE || vars.API_STANDBY_COMPOSE_FILE || 'docker-compose.prod.yml' }}
       API_STANDBY_HEALTH_URL: ${{ vars.API_STANDBY_HEALTH_URL || 'http://localhost:8000/api/health' }}
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
       - name: Setup SSH Key
         run: |
           set -euo pipefail
@@ -417,6 +431,19 @@ jobs:
         run: |
           set -euo pipefail
           SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+          SCP_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+
+          if [ "${API_STANDBY_COPY_COMPOSE}" = "true" ]; then
+            if [ ! -f "${API_STANDBY_COMPOSE_SOURCE_FILE}" ]; then
+              echo "::error::API_STANDBY_COMPOSE_SOURCE_FILE not found: ${API_STANDBY_COMPOSE_SOURCE_FILE}"
+              exit 1
+            fi
+            ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "mkdir -p '${API_STANDBY_PROJECT_DIR}'"
+            scp ${SCP_OPTS} "${API_STANDBY_COMPOSE_SOURCE_FILE}" \
+              "${API_STANDBY_USER}@${API_STANDBY_HOST}:${API_STANDBY_PROJECT_DIR}/${API_STANDBY_COMPOSE_FILE}"
+          else
+            echo "⏭️ API_STANDBY_COPY_COMPOSE=${API_STANDBY_COPY_COMPOSE}; keeping remote standby compose unchanged"
+          fi
 
           ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "\
             set -euo pipefail && \
@@ -443,6 +470,8 @@ jobs:
             echo "- standby_host: ${API_STANDBY_HOST}"
             echo "- standby_project_dir: ${API_STANDBY_PROJECT_DIR}"
             echo "- standby_compose_file: ${API_STANDBY_COMPOSE_FILE}"
+            echo "- standby_copy_compose: ${API_STANDBY_COPY_COMPOSE}"
+            echo "- standby_compose_source_file: ${API_STANDBY_COMPOSE_SOURCE_FILE}"
             echo "- health_url: ${API_STANDBY_HEALTH_URL}"
             echo "- status: ${{ job.status }}"
           } >> "$GITHUB_STEP_SUMMARY"

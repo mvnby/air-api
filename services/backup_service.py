@@ -16,6 +16,13 @@ BACKUP_DIR = "backups"
 
 
 class BackupService:
+    # pg_dump from a newer client can emit SET commands unsupported by our
+    # current postgres:15 server. Keep plain SQL dumps restorable on the server
+    # version we actually run in production.
+    _PLAIN_SQL_DUMP_SETTINGS_TO_STRIP = {
+        "transaction_timeout",
+    }
+
     def __init__(self):
         self.db_user = os.getenv("POSTGRES_USER", "mvnadmin")
         self.db_password = os.getenv("POSTGRES_PASSWORD", "securepass")
@@ -132,11 +139,46 @@ class BackupService:
         logger.info("Starting backup for %s...", self.db_name)
         try:
             subprocess.run(command, env=env, check=True)
+            self.sanitize_plain_sql_dump(filepath)
             logger.info("Backup created successfully: %s", filepath)
             return filepath
         except subprocess.CalledProcessError as exc:
             logger.error("Backup failed: %s", exc)
             raise Exception("Backup creation failed")
+
+    @classmethod
+    def sanitize_plain_sql_dump(cls, filepath: str) -> bool:
+        """
+        Removes known client-version-only SET commands from plain SQL dumps.
+
+        This is intentionally conservative: it only edits `.sql` files and only
+        removes exact `SET <name> = ...;` lines for settings that are safe to
+        omit during restore.
+        """
+        if not filepath.endswith(".sql") or not os.path.exists(filepath):
+            return False
+
+        changed = False
+        temp_path = f"{filepath}.sanitized"
+        with open(filepath, "r", encoding="utf-8", errors="replace") as source, open(
+            temp_path,
+            "w",
+            encoding="utf-8",
+        ) as dest:
+            for line in source:
+                stripped = line.strip()
+                if stripped.startswith("SET ") and stripped.endswith(";"):
+                    setting_name = stripped[4:].split("=", 1)[0].strip()
+                    if setting_name in cls._PLAIN_SQL_DUMP_SETTINGS_TO_STRIP:
+                        changed = True
+                        continue
+                dest.write(line)
+
+        if changed:
+            os.replace(temp_path, filepath)
+        else:
+            os.remove(temp_path)
+        return changed
 
     def create_media_archive(self) -> Optional[str]:
         """
@@ -318,6 +360,7 @@ class BackupService:
         """
         Restores DB from local SQL file using non-blocking subprocess.
         """
+        self.sanitize_plain_sql_dump(filepath)
         env = os.environ.copy()
         env["PGPASSWORD"] = self.db_password
         command = [
@@ -370,6 +413,7 @@ class BackupService:
         """
         Legacy synchronous restore (used by scripts).
         """
+        self.sanitize_plain_sql_dump(filepath)
         env = os.environ.copy()
         env["PGPASSWORD"] = self.db_password
         command = [

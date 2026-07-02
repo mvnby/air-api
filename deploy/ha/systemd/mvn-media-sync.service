@@ -1,0 +1,8 @@
+[Unit]
+Description=MVN media sync pull from current API primary over WireGuard
+Wants=network-online.target wg-quick@wg-mvn.service
+After=network-online.target wg-quick@wg-mvn.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/mvn-media-sync-pull
