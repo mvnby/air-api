@@ -255,6 +255,19 @@ Manual GitHub monitor run:
 gh workflow run check-postgres-pitr.yml --repo mvnby/air-api --ref main -f required=true
 ```
 
+Streaming replication monitor:
+
+```bash
+bash scripts/ha/check_postgres_replication.sh
+gh workflow run check-postgres-replication.yml --repo mvnby/air-api --ref main
+```
+
+The replication check is read-only. It verifies that the primary is writable,
+the physical slot is active, `pg_stat_replication` reports a streaming standby
+under the replay-lag threshold, and the standby database is in recovery with an
+active WAL receiver. It intentionally does not print `primary_conninfo` or any
+replication password.
+
 Physical PITR restore drill after the first private basebackup and WAL upload:
 
 ```bash
