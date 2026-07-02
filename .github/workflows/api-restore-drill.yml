@@ -1,0 +1,56 @@
+name: API Restore Drill
+
+on:
+  schedule:
+    - cron: "42 4 * * *"
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  restore-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Setup API SSH Key
+        env:
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
+          SSH_USER_API: ${{ secrets.SSH_USER_API }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_HOST_API}" ] || [ -z "${SSH_USER_API}" ] || [ -z "${SSH_KEY}" ]; then
+            echo "::error::Missing one of required secrets: SSH_HOST_API, SSH_USER_API, SSH_KEY"
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "${SSH_KEY}" > ~/.ssh/api_restore_drill_key
+          chmod 600 ~/.ssh/api_restore_drill_key
+          ssh-keyscan -T 10 -H "${SSH_HOST_API}" >> ~/.ssh/known_hosts
+
+      - name: Run restore drill on current API primary
+        env:
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
+          SSH_USER_API: ${{ secrets.SSH_USER_API }}
+          API_PROJECT_DIR: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}
+          API_COMPOSE_FILE: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-i ~/.ssh/api_restore_drill_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+          ssh ${SSH_OPTS} "${SSH_USER_API}@${SSH_HOST_API}" "\
+            PROJECT_DIR='${API_PROJECT_DIR}' \
+            COMPOSE_FILE='${API_COMPOSE_FILE}' \
+            /usr/local/sbin/mvn-restore-drill-latest-db" | tee api-restore-drill.log
+
+      - name: Upload restore drill log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: api-restore-drill-log-${{ github.run_id }}
+          path: api-restore-drill.log
+          if-no-files-found: warn
