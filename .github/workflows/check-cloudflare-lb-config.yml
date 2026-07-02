@@ -1,0 +1,63 @@
+name: Cloudflare LB Config Check
+
+on:
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      hostname:
+        description: "Load balancer hostname"
+        type: string
+        required: false
+        default: "api.mvn.by"
+      primary_origin:
+        description: "Expected current primary origin IP"
+        type: string
+        required: false
+        default: ""
+      standby_origin:
+        description: "Expected current standby origin IP"
+        type: string
+        required: false
+        default: ""
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run Cloudflare Load Balancer config audit
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_LB_READ_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CF_LB_HOSTNAME: ${{ github.event.inputs.hostname || vars.CF_LB_HOSTNAME || 'api.mvn.by' }}
+          CF_LB_PRIMARY_ORIGIN: ${{ github.event.inputs.primary_origin || vars.API_PRIMARY_ORIGIN || '185.250.45.54' }}
+          CF_LB_STANDBY_ORIGIN: ${{ github.event.inputs.standby_origin || vars.API_STANDBY_ORIGIN || '193.47.42.213' }}
+          CF_LB_HOST_HEADER: api.mvn.by
+          CF_LB_MONITOR_PATH: /api/ready
+          CF_LB_MONITOR_METHOD: GET
+          CF_LB_MONITOR_EXPECTED_CODE: "200"
+          CF_LB_REQUIRE_ADAPTIVE_FAILOVER: "true"
+          CF_LB_REQUIRE_SESSION_AFFINITY_OFF: "true"
+          CF_LB_SKIP_IF_MISSING_CREDENTIALS: "true"
+        run: |
+          set -euo pipefail
+          python3 scripts/ha/check_cloudflare_lb_config.py | tee cloudflare-lb-config.log
+
+      - name: Upload Cloudflare LB config log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cloudflare-lb-config-log-${{ github.run_id }}
+          path: cloudflare-lb-config.log
+          if-no-files-found: warn
