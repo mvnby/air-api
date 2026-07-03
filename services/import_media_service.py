@@ -97,10 +97,13 @@ class ImportMediaService:
             return existing.local_url
 
         try:
+            parts = urlsplit(normalized_url)
+            verify_tls = not parts.netloc.endswith("mdv-aircond.ru")
             async with httpx.AsyncClient(
                 follow_redirects=True,
                 timeout=15.0,
                 headers={"User-Agent": "Mozilla/5.0 (Codex Importer)"},
+                verify=verify_tls,
             ) as client:
                 response = await client.get(normalized_url)
         except Exception as exc:

@@ -3173,6 +3173,73 @@ class CatalogImportJobStatusResponse(BaseModel):
     errors: List[str] = Field(default_factory=list)
 
 
+class MdvCatalogPreviewPayload(BaseModel):
+    catalogs: List[str] = Field(default_factory=lambda: ["household", "semi", "multi"])
+    sample_limit: int = Field(default=30, ge=1, le=100)
+    replace_legacy_catalogs: List[str] = Field(default_factory=list)
+
+
+class MdvCatalogImportPayload(BaseModel):
+    catalogs: List[str] = Field(default_factory=lambda: ["household", "semi", "multi"])
+    update_existing: bool = True
+    replace_legacy_catalogs: List[str] = Field(default_factory=list)
+
+
+class MdvCatalogPreviewItemResponse(BaseModel):
+    catalog: str
+    action: str
+    title: str
+    source_url: str
+    existing_product_id: Optional[int] = None
+    price_rub: int = 0
+    series: str = ""
+    type: str = ""
+    model_indoor: str = ""
+    model_outdoor: str = ""
+
+
+class MdvCatalogSpecKeyStatResponse(BaseModel):
+    key: str
+    count: int
+
+
+class MdvLegacyReplaceSampleResponse(BaseModel):
+    product_id: Optional[int] = None
+    title: str
+    slug: str
+    catalog: str
+    action: str
+    is_published: bool = True
+    source_url: str = ""
+
+
+class MdvLegacyReplacePreviewResponse(BaseModel):
+    enabled: bool = False
+    catalogs: List[str] = Field(default_factory=list)
+    total: int = 0
+    by_catalog: Dict[str, int] = Field(default_factory=dict)
+    deletable_count: int = 0
+    keep_for_update_count: int = 0
+    deleted_count: int = 0
+    archived_count: int = 0
+    samples: List[MdvLegacyReplaceSampleResponse] = Field(default_factory=list)
+
+
+class MdvCatalogPreviewResponse(BaseModel):
+    catalogs: List[str]
+    total: int
+    by_catalog: Dict[str, int] = Field(default_factory=dict)
+    actions: Dict[str, int] = Field(default_factory=dict)
+    unmatched_source_urls: int = 0
+    raw_spec_key_count: int = 0
+    top_raw_spec_keys: List[MdvCatalogSpecKeyStatResponse] = Field(default_factory=list)
+    top_unpromoted_spec_keys: List[MdvCatalogSpecKeyStatResponse] = Field(default_factory=list)
+    samples: List[MdvCatalogPreviewItemResponse] = Field(default_factory=list)
+    legacy_replace: MdvLegacyReplacePreviewResponse = Field(default_factory=MdvLegacyReplacePreviewResponse)
+    source_urls: Dict[str, str] = Field(default_factory=dict)
+    next_step: str = ""
+
+
 # Backward-compatible aliases for the legacy import-onliner endpoint
 OnlinerImportPayload = CatalogImportPayload
 OnlinerImportResultResponse = CatalogImportResultResponse

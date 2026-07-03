@@ -11,6 +11,7 @@ from parsers.aircond import AircondParser
 from parsers.haierproff import HaierProffParser
 from parsers.hobot import HobotParser
 from parsers.lg24 import Lg24Parser
+from parsers.mdv_catalog import MdvCatalogParser
 from parsers.onliner import OnlinerParser
 from parsers.severcon import SeverconEnergoluxParser
 from parsers.tvoy_klimat import TvoyKlimatParser
@@ -20,6 +21,7 @@ from services.fx_rate_service import FxRateService
 from services.import_media_service import ImportMediaService
 from services.product_attachment_service import replace_manuals
 from services.product_image_variant_service import ProductImageVariantService
+from services.product_import_match_service import find_existing_product_for_import
 from services.spec_normalizer import normalize_specs
 from services.tag_logic import (
     CATEGORY_TAG_TITLES,
@@ -155,6 +157,7 @@ class ImporterService:
             HobotParser(),
             TvoyKlimatParser(),
             OnlinerParser(),
+            MdvCatalogParser(),
             SeverconEnergoluxParser(),
         ]
 
@@ -218,7 +221,8 @@ class ImporterService:
                 raise ValueError("No parser found for this URL")
 
             data = await parser.parse(url)
-            await _normalize_import_price_to_byn(session, data=data, source_url=url)
+            canonical_source_url = str(data.get("source_url") or url).strip() or url
+            await _normalize_import_price_to_byn(session, data=data, source_url=canonical_source_url)
             
             # Determine publishing status
             is_published = True 
@@ -247,6 +251,14 @@ class ImporterService:
             for slug in auto_tag_slugs_from_normalizer:
                 if slug not in auto_slugs:
                     auto_slugs.append(slug)
+
+            if not existing:
+                existing = await find_existing_product_for_import(
+                    session,
+                    source_url=canonical_source_url,
+                    normalized_specs=normalized_specs,
+                    update_existing=update_existing,
+                )
 
             # Ensure core filter tags exist for brand/category.
             category_slug = detect_category_slug(metrics=metrics, specs=normalized_specs, title=title)
@@ -346,7 +358,9 @@ class ImporterService:
                 existing.is_inverter = metrics.get('is_inverter', existing.is_inverter)
                 existing.power_cooling = metrics.get('power_cooling', existing.power_cooling)
                 existing.specs = normalized_specs
-                existing.source_url = url
+                existing.source_url = canonical_source_url
+                if data.get("publish_on_update"):
+                    existing.is_published = True
                 if local_main_image and not existing.main_image:
                     existing.main_image = local_main_image
 
@@ -377,7 +391,7 @@ class ImporterService:
                     tags=tag_objects,
                     specs=normalized_specs,
                     is_published=is_published,
-                    source_url=url
+                    source_url=canonical_source_url
                 )
                 session.add(product)
 

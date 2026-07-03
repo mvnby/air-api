@@ -605,6 +605,7 @@ export function formatAllSpecs(specs: Record<string, any>) {
         if (processedKeys.has(key)) continue;
 
         // Фильтр служебных полей
+        if (key.startsWith('__')) continue;
         if (['inverter', 'model_indoor', 'model_outdoor', 'id', 'slug'].includes(key)) continue;
 
         if (value !== undefined && value !== null && value !== "") {
