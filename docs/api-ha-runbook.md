@@ -108,11 +108,24 @@ GitHub health check:
 gh workflow run check-api-vps-health.yml --repo mvnby/air-api --ref main -f mode=ssh
 ```
 
+Whole-system HA readiness audit:
+
+```bash
+gh workflow run check-api-ha-readiness.yml --repo mvnby/air-api --ref main
+```
+
+The audit fails on core readiness, replication, and media CDN problems. Until
+Cloudflare read-only credentials and PostgreSQL PITR are fully enabled, it
+reports those two items as soft blockers. Run with `strict=true` only after
+`CLOUDFLARE_LB_CONFIG_REQUIRED=true` and `POSTGRES_PITR_REQUIRED=true` are
+intended to be enforced.
+
 Scheduled monitors:
 
 | Workflow | Schedule | Purpose |
 | --- | --- | --- |
 | `check-api-vps-health.yml` | every 6 hours | primary host, containers, DB, backups, media storage config |
+| `check-api-ha-readiness.yml` | every 6 hours | whole-system HA readiness rollup; core checks fail, Cloudflare/PITR are soft blockers until strict |
 | `check-api-ha-invariants.yml` | every 30 minutes | public/primary ready and standby fenced |
 | `check-cloudflare-lb-config.yml` | every 6 hours | Cloudflare LB pool order, fallback, host header, and monitor config |
 | `api-restore-drill.yml` | daily after the 03:00 UTC backup | disposable DB restore drill |
