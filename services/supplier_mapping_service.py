@@ -19,6 +19,7 @@ from models.product import Product
 from models.supplier import ProductSupplierMapping, Supplier
 from services.google_service import get_google_service
 from services.supplier_match_service import suggest_products_for_offer
+from services.supplier_source_analysis_service import analyze_supplier_source_rows
 
 
 class SupplierCatalogService:
@@ -125,6 +126,21 @@ class SupplierCatalogService:
         return get_google_service().list_sheet_tabs(supplier.spreadsheet_id)
 
     @staticmethod
+    async def analyze_source(session: AsyncSession, source_id: int, limit: int = 50) -> dict:
+        source = await SupplierSourceDAO.get_source(session, source_id)
+        if not source:
+            raise ValueError("Supplier source not found")
+        supplier = await SupplierDAO.get_supplier(session, source.supplier_id)
+        if not supplier or not supplier.spreadsheet_id:
+            raise ValueError("Supplier spreadsheet is not configured")
+        values = get_google_service().read_sheet_values(
+            spreadsheet_id=supplier.spreadsheet_id,
+            sheet_name=source.sheet_name,
+            range_a1=source.range_a1,
+        )
+        return analyze_supplier_source_rows(source, values, limit=limit)
+
+    @staticmethod
     async def _validate_sheet_name(session: AsyncSession, supplier_id: int, sheet_name: str | None) -> None:
         if not sheet_name:
             raise ValueError("sheet_name is required")
@@ -226,6 +242,7 @@ class SupplierMappingService:
                     "external_id": offer.external_id,
                     "title_raw": offer.title_raw,
                     "title_normalized": offer.title_normalized,
+                    "source_url": offer.source_url,
                     "model_tokens": offer.model_tokens or [],
                     "indoor_model_tokens": offer.indoor_model_tokens or [],
                     "outdoor_model_tokens": offer.outdoor_model_tokens or [],
@@ -388,6 +405,7 @@ class SupplierMappingService:
                     "external_id": offer.external_id,
                     "title_raw": offer.title_raw,
                     "title_normalized": offer.title_normalized,
+                    "source_url": offer.source_url,
                     "model_tokens": offer.model_tokens or [],
                     "indoor_model_tokens": offer.indoor_model_tokens or [],
                     "outdoor_model_tokens": offer.outdoor_model_tokens or [],

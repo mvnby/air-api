@@ -82,6 +82,7 @@ import type { SupplierPriceSourceResponse } from '../models/SupplierPriceSourceR
 import type { SupplierPriceSourceUpdatePayload } from '../models/SupplierPriceSourceUpdatePayload';
 import type { SupplierResponse } from '../models/SupplierResponse';
 import type { SupplierSheetTabListResponse } from '../models/SupplierSheetTabListResponse';
+import type { SupplierSourceAnalysisResponse } from '../models/SupplierSourceAnalysisResponse';
 import type { SupplierSyncRunResponse } from '../models/SupplierSyncRunResponse';
 import type { SupplierUpdatePayload } from '../models/SupplierUpdatePayload';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -1612,6 +1613,31 @@ export class ManagerService {
             url: '/api/manager/supplier-sources/{source_id}',
             path: {
                 'source_id': sourceId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Analyze Supplier Source
+     * @param sourceId
+     * @param limit
+     * @returns SupplierSourceAnalysisResponse Successful Response
+     * @throws ApiError
+     */
+    public static analyzeSupplierSource(
+        sourceId: number,
+        limit: number = 50,
+    ): CancelablePromise<SupplierSourceAnalysisResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/supplier-sources/{source_id}/analysis',
+            path: {
+                'source_id': sourceId,
+            },
+            query: {
+                'limit': limit,
             },
             errors: {
                 422: `Validation Error`,

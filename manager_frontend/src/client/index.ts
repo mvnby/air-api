@@ -344,6 +344,8 @@ export type { SupplierPriceSourceUpdatePayload } from './models/SupplierPriceSou
 export type { SupplierResponse } from './models/SupplierResponse';
 export type { SupplierSheetTabListResponse } from './models/SupplierSheetTabListResponse';
 export type { SupplierSheetTabResponse } from './models/SupplierSheetTabResponse';
+export type { SupplierSourceAnalysisResponse } from './models/SupplierSourceAnalysisResponse';
+export type { SupplierSourceAnalysisRow } from './models/SupplierSourceAnalysisRow';
 export type { SupplierSyncRunResponse } from './models/SupplierSyncRunResponse';
 export type { SupplierUpdatePayload } from './models/SupplierUpdatePayload';
 export type { TagGroupResponse } from './models/TagGroupResponse';

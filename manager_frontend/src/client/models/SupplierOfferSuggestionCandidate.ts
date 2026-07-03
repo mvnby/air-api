@@ -6,6 +6,7 @@ export type SupplierOfferSuggestionCandidate = {
     product_id: number;
     title: string;
     price: number;
+    source_url?: (string | null);
     score?: number;
     confidence?: number;
     matched_tokens?: Array<string>;

@@ -223,6 +223,7 @@ LIST_SUPPLIER_SOURCES = "list_supplier_sources"
 CREATE_SUPPLIER_SOURCE = "create_supplier_source"
 PATCH_SUPPLIER_SOURCE = "patch_supplier_source"
 DELETE_SUPPLIER_SOURCE = "delete_supplier_source"
+ANALYZE_SUPPLIER_SOURCE = "analyze_supplier_source"
 SYNC_SUPPLIER_SOURCE = "sync_supplier_source"
 LIST_UNMAPPED_SUPPLIER_OFFERS = "list_unmapped_supplier_offers"
 CREATE_SUPPLIER_MAPPING = "create_supplier_mapping"
@@ -442,6 +443,7 @@ ALL_MANAGER_OPERATION_IDS = (
     CREATE_SUPPLIER_SOURCE,
     PATCH_SUPPLIER_SOURCE,
     DELETE_SUPPLIER_SOURCE,
+    ANALYZE_SUPPLIER_SOURCE,
     SYNC_SUPPLIER_SOURCE,
     LIST_UNMAPPED_SUPPLIER_OFFERS,
     CREATE_SUPPLIER_MAPPING,

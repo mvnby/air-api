@@ -17,6 +17,7 @@ export type SupplierPriceSourceResponse = {
     col_wholesale_currency: string;
     col_rrc_byn: string;
     col_qty: string;
+    col_source_url?: (string | null);
     is_active: boolean;
     last_sync_at?: (string | null);
     last_sync_status?: (string | null);

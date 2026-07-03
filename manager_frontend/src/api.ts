@@ -878,6 +878,10 @@ export const api = {
         return await ManagerService.deleteSupplierSource(sourceId);
     },
 
+    async analyzeSupplierSource(sourceId: number, limit = 50) {
+        return await ManagerService.analyzeSupplierSource(sourceId, limit);
+    },
+
     async syncSupplierSource(sourceId: number) {
         return await ManagerService.syncSupplierSource(sourceId);
     },

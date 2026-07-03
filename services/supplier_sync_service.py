@@ -12,6 +12,7 @@ from models.supplier import SupplierOffer, SupplierPriceSource
 from services.supplier_availability import parse_qty_with_text_fallback
 from services.google_service import get_google_service
 from services.supplier_match_service import supplier_offer_match_payload
+from services.supplier_source_url import extract_first_source_url, normalize_source_url
 
 
 def _col_to_idx(col: str) -> int:
@@ -146,6 +147,9 @@ class SupplierSyncService:
                 wholesale_raw = _get_cell(row, source.col_wholesale, range_start_col_idx)
                 rrc_raw = _get_cell(row, source.col_rrc_byn, range_start_col_idx)
                 ext_id = _get_cell(row, source.col_external_id, range_start_col_idx)
+                source_url = normalize_source_url(
+                    _get_cell(row, source.col_source_url or "", range_start_col_idx)
+                ) or extract_first_source_url(row)
                 wholesale_value = _parse_decimal(wholesale_raw)
                 rrc_value = _parse_decimal(rrc_raw)
 
@@ -180,6 +184,7 @@ class SupplierSyncService:
                     "external_id": ext_id,
                     "title_raw": title_raw or None,
                     **supplier_offer_match_payload(title_raw),
+                    "source_url": source_url,
                     "qty_raw": qty_raw or None,
                     "wholesale_raw": wholesale_raw or None,
                     "rrc_raw": rrc_raw or None,

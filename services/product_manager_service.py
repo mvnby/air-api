@@ -110,6 +110,7 @@ class ProductManagerService:
                 "main_image": p.main_image,
                 "is_published": p.is_published,
                 "created_at": p.created_at.isoformat() if p.created_at else None,
+                "source_url": p.source_url,
                 "specs": sanitize_specs(p.specs),
                 "gallery_images": [
                     {

@@ -2808,6 +2808,7 @@ class SupplierPriceSourceResponse(BaseModel):
     col_wholesale_currency: str
     col_rrc_byn: str
     col_qty: str
+    col_source_url: Optional[str] = None
     is_active: bool
     last_sync_at: Optional[datetime] = None
     last_sync_status: Optional[str] = None
@@ -2829,6 +2830,7 @@ class SupplierPriceSourceCreatePayload(BaseModel):
     col_wholesale_currency: str = "D"
     col_rrc_byn: str = "E"
     col_qty: str = "F"
+    col_source_url: Optional[str] = None
     is_active: bool = True
 
 
@@ -2845,11 +2847,36 @@ class SupplierPriceSourceUpdatePayload(BaseModel):
     col_wholesale_currency: Optional[str] = None
     col_rrc_byn: Optional[str] = None
     col_qty: Optional[str] = None
+    col_source_url: Optional[str] = None
     is_active: Optional[bool] = None
 
 
 class SupplierPriceSourceListResponse(BaseModel):
     items: List[SupplierPriceSourceResponse]
+
+
+class SupplierSourceAnalysisRow(BaseModel):
+    row_number: int
+    row_kind: str
+    external_id: Optional[str] = None
+    title_raw: Optional[str] = None
+    source_url: Optional[str] = None
+    model_tokens: List[str] = Field(default_factory=list)
+    wholesale_raw: Optional[str] = None
+    rrc_raw: Optional[str] = None
+    qty_raw: Optional[str] = None
+    notes: List[str] = Field(default_factory=list)
+
+
+class SupplierSourceAnalysisResponse(BaseModel):
+    source_id: int
+    rows_total: int
+    product_rows: int
+    section_rows: int
+    url_rows: int
+    skipped_rows: int
+    sample_rows: List[SupplierSourceAnalysisRow] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
 
 
 class SupplierSyncRunResponse(BaseModel):
@@ -2871,6 +2898,7 @@ class SupplierOfferResponse(BaseModel):
     external_id: str
     title_raw: Optional[str] = None
     title_normalized: Optional[str] = None
+    source_url: Optional[str] = None
     model_tokens: List[str] = Field(default_factory=list)
     indoor_model_tokens: List[str] = Field(default_factory=list)
     outdoor_model_tokens: List[str] = Field(default_factory=list)
@@ -2933,6 +2961,7 @@ class SupplierOfferSuggestionCandidate(BaseModel):
     product_id: int
     title: str
     price: int
+    source_url: Optional[str] = None
     score: int = 0
     confidence: int = 0
     matched_tokens: List[str] = Field(default_factory=list)

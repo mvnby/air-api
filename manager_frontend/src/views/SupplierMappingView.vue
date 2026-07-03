@@ -267,7 +267,18 @@ onMounted(async () => {
               </td>
               <td class="p-3">{{ offer.supplier_name || offer.supplier_id }}</td>
               <td class="p-3 font-mono">{{ offer.external_id }}</td>
-              <td class="p-3">{{ offer.title_raw || '—' }}</td>
+              <td class="p-3">
+                <span class="block">{{ offer.title_raw || '—' }}</span>
+                <a
+                  v-if="offer.source_url"
+                  :href="offer.source_url"
+                  target="_blank"
+                  rel="noreferrer"
+                  class="mt-1 inline-flex rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-700"
+                >
+                  source URL
+                </a>
+              </td>
               <td class="p-3">{{ offer.qty }}</td>
               <td class="p-3">{{ offer.wholesale_value || '—' }} <span v-if="offer.wholesale_currency">{{ offer.wholesale_currency }}</span></td>
               <td class="p-3">
@@ -324,6 +335,15 @@ onMounted(async () => {
                         <span v-if="p.explanations?.length" class="mt-1 block text-xs text-gray-500">
                           {{ p.explanations.join(' · ') }}
                         </span>
+                        <a
+                          v-if="p.source_url"
+                          :href="p.source_url"
+                          target="_blank"
+                          rel="noreferrer"
+                          class="mt-1 inline-flex text-xs text-blue-700 underline"
+                        >
+                          Открыть источник
+                        </a>
                       </span>
                     </label>
                   </div>

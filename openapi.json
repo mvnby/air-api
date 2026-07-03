@@ -14044,6 +14044,65 @@
         }
       }
     },
+    "/api/manager/supplier-sources/{source_id}/analysis": {
+      "get": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Analyze Supplier Source",
+        "operationId": "analyze_supplier_source",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Source Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierSourceAnalysisResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/supplier-sources/{source_id}/sync": {
       "post": {
         "tags": [
@@ -36088,6 +36147,17 @@
             ],
             "title": "Title Normalized"
           },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
           "model_tokens": {
             "items": {
               "type": "string"
@@ -36256,6 +36326,17 @@
           "price": {
             "type": "integer",
             "title": "Price"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
           },
           "score": {
             "type": "integer",
@@ -36505,6 +36586,17 @@
             "title": "Col Qty",
             "default": "F"
           },
+          "col_source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Col Source Url"
+          },
           "is_active": {
             "type": "boolean",
             "title": "Is Active",
@@ -36611,6 +36703,17 @@
           "col_qty": {
             "type": "string",
             "title": "Col Qty"
+          },
+          "col_source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Col Source Url"
           },
           "is_active": {
             "type": "boolean",
@@ -36814,6 +36917,17 @@
             ],
             "title": "Col Qty"
           },
+          "col_source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Col Source Url"
+          },
           "is_active": {
             "anyOf": [
               {
@@ -36958,6 +37072,156 @@
           "title"
         ],
         "title": "SupplierSheetTabResponse"
+      },
+      "SupplierSourceAnalysisResponse": {
+        "properties": {
+          "source_id": {
+            "type": "integer",
+            "title": "Source Id"
+          },
+          "rows_total": {
+            "type": "integer",
+            "title": "Rows Total"
+          },
+          "product_rows": {
+            "type": "integer",
+            "title": "Product Rows"
+          },
+          "section_rows": {
+            "type": "integer",
+            "title": "Section Rows"
+          },
+          "url_rows": {
+            "type": "integer",
+            "title": "Url Rows"
+          },
+          "skipped_rows": {
+            "type": "integer",
+            "title": "Skipped Rows"
+          },
+          "sample_rows": {
+            "items": {
+              "$ref": "#/components/schemas/SupplierSourceAnalysisRow"
+            },
+            "type": "array",
+            "title": "Sample Rows"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id",
+          "rows_total",
+          "product_rows",
+          "section_rows",
+          "url_rows",
+          "skipped_rows"
+        ],
+        "title": "SupplierSourceAnalysisResponse"
+      },
+      "SupplierSourceAnalysisRow": {
+        "properties": {
+          "row_number": {
+            "type": "integer",
+            "title": "Row Number"
+          },
+          "row_kind": {
+            "type": "string",
+            "title": "Row Kind"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Id"
+          },
+          "title_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Raw"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "model_tokens": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Model Tokens"
+          },
+          "wholesale_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wholesale Raw"
+          },
+          "rrc_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrc Raw"
+          },
+          "qty_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qty Raw"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "row_number",
+          "row_kind"
+        ],
+        "title": "SupplierSourceAnalysisRow"
       },
       "SupplierSyncRunResponse": {
         "properties": {

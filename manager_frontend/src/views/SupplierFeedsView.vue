@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { api } from '../api';
 import { getApiErrorMessage } from '../utils/api-errors';
-import { CheckCircle2, CircleAlert, Pencil, RefreshCw, Trash2 } from 'lucide-vue-next';
+import { CheckCircle2, CircleAlert, FileSearch, Pencil, RefreshCw, Trash2 } from 'lucide-vue-next';
 
 const loading = ref(false);
 const error = ref('');
@@ -12,6 +12,8 @@ const sources = ref<any[]>([]);
 const supplierSheets = ref<any[]>([]);
 const syncingSourceId = ref<number | null>(null);
 const syncingAll = ref(false);
+const analyzingSourceId = ref<number | null>(null);
+const sourceAnalysis = ref<any | null>(null);
 const savingSource = ref(false);
 const savingSupplier = ref(false);
 const deletingSourceId = ref<number | null>(null);
@@ -40,6 +42,7 @@ const sourceForm = ref({
   col_wholesale_currency: 'USD',
   col_rrc_byn: 'E',
   col_qty: 'F',
+  col_source_url: '',
   is_active: true,
 });
 const currencyMode = ref<'BYN' | 'USD' | 'EUR' | 'COLUMN'>('USD');
@@ -81,6 +84,7 @@ const resetSourceForm = () => {
     col_wholesale_currency: 'USD',
     col_rrc_byn: 'E',
     col_qty: 'F',
+    col_source_url: '',
     is_active: true,
   };
   currencyMode.value = 'USD';
@@ -188,6 +192,7 @@ const saveSource = async () => {
       col_wholesale_currency: normalizedCurrency,
       col_rrc_byn: (sourceForm.value.col_rrc_byn || '').trim().toUpperCase(),
       col_qty: (sourceForm.value.col_qty || '').trim().toUpperCase(),
+      col_source_url: (sourceForm.value.col_source_url || '').trim().toUpperCase() || null,
     };
 
     if (editingSourceId.value) {
@@ -224,6 +229,7 @@ const startEditSource = async (src: any) => {
     col_wholesale_currency: src.col_wholesale_currency || 'USD',
     col_rrc_byn: src.col_rrc_byn || 'E',
     col_qty: src.col_qty || 'F',
+    col_source_url: src.col_source_url || '',
     is_active: src.is_active ?? true,
   };
   await loadSupplierSheets(src.supplier_id);
@@ -241,6 +247,18 @@ const deleteSource = async (sourceId: number) => {
     error.value = getApiErrorMessage(e);
   } finally {
     deletingSourceId.value = null;
+  }
+};
+
+const analyzeSource = async (sourceId: number) => {
+  analyzingSourceId.value = sourceId;
+  error.value = '';
+  try {
+    sourceAnalysis.value = await api.analyzeSupplierSource(sourceId, 80);
+  } catch (e) {
+    error.value = getApiErrorMessage(e);
+  } finally {
+    analyzingSourceId.value = null;
   }
 };
 
@@ -384,7 +402,7 @@ onMounted(async () => {
           <option value="vitebsk">vitebsk</option>
         </select>
       </div>
-      <div class="grid md:grid-cols-6 gap-2 mt-2">
+      <div class="grid md:grid-cols-4 lg:grid-cols-7 gap-2 mt-2">
         <input v-model="sourceForm.col_external_id" title="SKU/ID (опционально)" class="px-3 py-2 rounded border" placeholder="SKU/ID колонка (опц.)" />
         <input v-model="sourceForm.col_title" title="Колонка названия" class="px-3 py-2 rounded border" placeholder="Название: колонка" />
         <input v-model="sourceForm.col_wholesale" title="Колонка оптовой цены" class="px-3 py-2 rounded border" placeholder="Опт цена: колонка" />
@@ -404,6 +422,7 @@ onMounted(async () => {
         <input v-else class="px-3 py-2 rounded border bg-gray-50 text-gray-500" :value="currencyMode" disabled />
         <input v-model="sourceForm.col_rrc_byn" title="Колонка РРЦ BYN" class="px-3 py-2 rounded border" placeholder="РРЦ BYN: колонка" />
         <input v-model="sourceForm.col_qty" title="Колонка наличия" class="px-3 py-2 rounded border" placeholder="Наличие: колонка" />
+        <input v-model="sourceForm.col_source_url" title="Колонка URL источника или Onliner" class="px-3 py-2 rounded border" placeholder="URL/Onliner: колонка" />
       </div>
       <div class="flex gap-2 mt-3">
         <button @click="saveSource" :disabled="savingSource" class="px-3 py-2 rounded bg-teal-600 text-white disabled:opacity-50">
@@ -466,6 +485,14 @@ onMounted(async () => {
                     <Trash2 class="w-4 h-4" />
                   </button>
                   <button
+                    class="p-2 rounded border border-blue-300 text-blue-700 disabled:opacity-50"
+                    title="Анализ строк"
+                    :disabled="analyzingSourceId === src.id"
+                    @click="analyzeSource(src.id)"
+                  >
+                    <FileSearch class="w-4 h-4" />
+                  </button>
+                  <button
                     class="p-2 rounded border border-slate-700 text-slate-700 disabled:opacity-50"
                     title="Синхронизировать"
                     :disabled="syncingSourceId === src.id"
@@ -478,6 +505,50 @@ onMounted(async () => {
             </tr>
           </tbody>
         </table>
+      </div>
+      <div v-if="sourceAnalysis" class="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+        <div class="flex flex-wrap items-center gap-2">
+          <h3 class="font-semibold text-slate-900">Анализ источника #{{ sourceAnalysis.source_id }}</h3>
+          <span class="rounded-full bg-white px-3 py-1 text-xs text-slate-700">Строк: {{ sourceAnalysis.rows_total }}</span>
+          <span class="rounded-full bg-green-100 px-3 py-1 text-xs text-green-800">Товаров: {{ sourceAnalysis.product_rows }}</span>
+          <span class="rounded-full bg-cyan-100 px-3 py-1 text-xs text-cyan-800">URL: {{ sourceAnalysis.url_rows }}</span>
+          <span class="rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-800">Пропущено: {{ sourceAnalysis.skipped_rows }}</span>
+        </div>
+        <div v-if="sourceAnalysis.warnings?.length" class="mt-3 space-y-1">
+          <p v-for="warning in sourceAnalysis.warnings" :key="warning" class="text-sm text-amber-800">
+            {{ warning }}
+          </p>
+        </div>
+        <div class="mt-3 overflow-x-auto rounded-lg border border-blue-100 bg-white">
+          <table class="w-full min-w-[960px] text-xs">
+            <thead class="bg-slate-50 text-left text-slate-500">
+              <tr>
+                <th class="px-3 py-2">Строка</th>
+                <th class="px-3 py-2">Тип</th>
+                <th class="px-3 py-2">Название</th>
+                <th class="px-3 py-2">Модели</th>
+                <th class="px-3 py-2">URL</th>
+                <th class="px-3 py-2">Заметки</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in sourceAnalysis.sample_rows || []" :key="row.row_number" class="border-t border-slate-100 align-top">
+                <td class="px-3 py-2 font-mono">{{ row.row_number }}</td>
+                <td class="px-3 py-2">{{ row.row_kind }}</td>
+                <td class="px-3 py-2">{{ row.title_raw || '—' }}</td>
+                <td class="px-3 py-2">
+                  <span v-if="row.model_tokens?.length" class="font-mono">{{ row.model_tokens.join(', ') }}</span>
+                  <span v-else>—</span>
+                </td>
+                <td class="px-3 py-2">
+                  <a v-if="row.source_url" :href="row.source_url" target="_blank" rel="noreferrer" class="text-blue-700 underline">Открыть</a>
+                  <span v-else>—</span>
+                </td>
+                <td class="px-3 py-2">{{ row.notes?.join(' · ') || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   </div>

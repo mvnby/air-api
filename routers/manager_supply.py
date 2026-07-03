@@ -8,6 +8,7 @@ from core.manager_api_errors import manager_http_error
 from core.manager_error_codes import BAD_REQUEST, PRODUCT_NOT_FOUND
 from core.security import get_current_username
 from routers.manager_operation_ids import (
+    ANALYZE_SUPPLIER_SOURCE,
     BULK_CREATE_SUPPLIER_MAPPINGS,
     CREATE_SUPPLIER,
     CREATE_SUPPLIER_MAPPING,
@@ -40,6 +41,7 @@ from schemas import (
     SupplierOfferListResponse,
     SupplierOfferSuggestionsPayload,
     SupplierOfferSuggestionsResponse,
+    SupplierSourceAnalysisResponse,
     SupplierPriceSourceCreatePayload,
     SupplierPriceSourceListResponse,
     SupplierPriceSourceResponse,
@@ -231,6 +233,35 @@ async def delete_supplier_source(
             message="Source not found",
         )
     return {"message": "Источник удалён"}
+
+
+@router.get(
+    "/supplier-sources/{source_id}/analysis",
+    response_model=SupplierSourceAnalysisResponse,
+    operation_id=ANALYZE_SUPPLIER_SOURCE,
+)
+async def analyze_supplier_source(
+    source_id: int,
+    limit: int = Query(50, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        return await SupplierCatalogService.analyze_source(session, source_id, limit=limit)
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=ANALYZE_SUPPLIER_SOURCE,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=ANALYZE_SUPPLIER_SOURCE,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
 
 
 @router.post(
