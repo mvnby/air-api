@@ -588,6 +588,11 @@ python3 scripts/ha/switch_cloudflare_lb_primary.py \
 unset CLOUDFLARE_API_TOKEN
 ```
 
+After the switch is applied and the required Cloudflare LB audit passes, revoke
+or delete the short-lived write token. Do not store a token with `Load Balancers
+Write` in `CLOUDFLARE_LB_READ_TOKEN`; the scheduled audit token must stay
+read-only.
+
 After a `zakup` promotion, reverse the origins:
 
 ```bash
@@ -732,6 +737,9 @@ The manual steps below are the same procedure expanded for review.
      --confirm
    unset CLOUDFLARE_API_TOKEN
    ```
+
+   After the switch is verified, revoke/delete that write token. Keep
+   `CLOUDFLARE_LB_READ_TOKEN` read-only for scheduled audits.
 
 9. Do not restart `mvn-api` as primary. Rebuild it as standby from the promoted
    database.
