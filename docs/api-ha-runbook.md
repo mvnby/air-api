@@ -59,6 +59,7 @@ unreviewed host-local compose edits:
 | PostgreSQL PITR env/bootstrap | `scripts/ha/configure_postgres_pitr_env.py`, `scripts/ha/bootstrap_postgres_pitr.sh` |
 | PostgreSQL PITR monitoring | `scripts/ha/check_postgres_pitr_status.sh`, `scripts/ha/check_postgres_pitr_remote.py`, `.github/workflows/check-postgres-pitr.yml` |
 | PostgreSQL PITR systemd units | `deploy/ha/systemd/mvn-postgres-wal-upload.*`, `deploy/ha/systemd/mvn-postgres-basebackup.*` |
+| External strict-mode prerequisite check | `scripts/ha/check_ha_external_prerequisites.py` |
 | Status helpers | `scripts/ha/mvn-primary-status.sh`, `scripts/ha/mvn-standby-status.sh` |
 | Media sync helper/timer | `scripts/ha/media_sync_pull.sh`, `deploy/ha/systemd/mvn-media-sync.*` |
 
@@ -119,6 +120,18 @@ Cloudflare read-only credentials and PostgreSQL PITR are fully enabled, it
 reports those two items as soft blockers. Run with `strict=true` only after
 `CLOUDFLARE_LB_CONFIG_REQUIRED=true` and `POSTGRES_PITR_REQUIRED=true` are
 intended to be enforced.
+
+External strict-mode prerequisite check:
+
+```bash
+python3 scripts/ha/check_ha_external_prerequisites.py --repo mvnby/air-api
+python3 scripts/ha/check_ha_external_prerequisites.py --repo mvnby/air-api --require-strict
+```
+
+This check uses `gh` metadata only. It lists missing GitHub variables/secrets
+without printing secret values. It cannot read host-local private PITR R2
+credentials; after those are installed, verify them on the primary with
+`ssh mvn-api '/usr/local/sbin/mvn-postgres-pitr-bootstrap verify'`.
 
 Scheduled monitors:
 
