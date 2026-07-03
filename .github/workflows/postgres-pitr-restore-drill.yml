@@ -129,3 +129,13 @@ jobs:
           name: postgres-pitr-restore-drill-log-${{ github.run_id }}
           path: postgres-pitr-restore-drill.log
           if-no-files-found: warn
+
+      - name: Notify HA failure
+        if: failure()
+        uses: ./.github/actions/notify-ha-failure
+        with:
+          bot-token: ${{ secrets.HA_ALERT_TELEGRAM_BOT_TOKEN }}
+          chat-id: ${{ secrets.HA_ALERT_TELEGRAM_CHAT_ID }}
+          thread-id: ${{ secrets.HA_ALERT_TELEGRAM_THREAD_ID }}
+          title: "MVN PostgreSQL PITR restore drill failed"
+          details: "Artifact: postgres-pitr-restore-drill-log-${{ github.run_id }}"

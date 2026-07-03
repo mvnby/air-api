@@ -1,0 +1,81 @@
+name: Notify HA Failure
+description: Send an optional Telegram alert for failed MVN HA monitor workflows.
+
+inputs:
+  bot-token:
+    description: Telegram bot token used only for this notification.
+    required: false
+    default: ""
+  chat-id:
+    description: Telegram chat id for HA alerts.
+    required: false
+    default: ""
+  thread-id:
+    description: Optional Telegram forum topic/thread id.
+    required: false
+    default: ""
+  title:
+    description: Short alert title.
+    required: true
+  details:
+    description: Optional one-line context, usually the uploaded artifact name.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Send Telegram alert
+      shell: bash
+      env:
+        BOT_TOKEN: ${{ inputs.bot-token }}
+        CHAT_ID: ${{ inputs.chat-id }}
+        THREAD_ID: ${{ inputs.thread-id }}
+        TITLE: ${{ inputs.title }}
+        DETAILS: ${{ inputs.details }}
+      run: |
+        set -euo pipefail
+        if [ -z "${BOT_TOKEN}" ] || [ -z "${CHAT_ID}" ]; then
+          echo "HA alert skipped: HA_ALERT_TELEGRAM_BOT_TOKEN or HA_ALERT_TELEGRAM_CHAT_ID is not configured."
+          exit 0
+        fi
+
+        payload_file="$(mktemp)"
+        python3 - <<'PY' > "${payload_file}"
+        import json
+        import os
+
+        run_url = (
+            f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/"
+            f"{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/"
+            f"{os.environ.get('GITHUB_RUN_ID', '')}"
+        )
+        lines = [
+            os.environ.get("TITLE", "MVN HA monitor failed"),
+            f"Workflow: {os.environ.get('GITHUB_WORKFLOW', '')}",
+            f"Branch: {os.environ.get('GITHUB_REF_NAME', '')}",
+            f"Run: {run_url}",
+        ]
+        details = os.environ.get("DETAILS", "").strip()
+        if details:
+            lines.append(details)
+
+        payload = {
+            "chat_id": os.environ["CHAT_ID"],
+            "text": "\n".join(lines),
+            "disable_web_page_preview": True,
+        }
+        thread_id = os.environ.get("THREAD_ID", "").strip()
+        if thread_id:
+            payload["message_thread_id"] = thread_id
+        print(json.dumps(payload, ensure_ascii=True))
+        PY
+
+        if ! curl --fail --silent --show-error \
+          --request POST \
+          --header "Content-Type: application/json" \
+          --data @"${payload_file}" \
+          "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" >/dev/null; then
+          echo "::warning::Failed to send HA Telegram alert"
+        fi
+        rm -f "${payload_file}"

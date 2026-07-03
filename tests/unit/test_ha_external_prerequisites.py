@@ -36,6 +36,8 @@ def test_external_prerequisites_report_missing_cloudflare_secret_and_vars():
     assert any("missing GitHub secret CLOUDFLARE_LB_READ_TOKEN" in item for item in failures)
     assert any("missing GitHub variable CLOUDFLARE_ACCOUNT_ID" in item for item in failures)
     assert any("missing GitHub variable CLOUDFLARE_ZONE_ID" in item for item in failures)
+    assert any("missing optional GitHub secret HA_ALERT_TELEGRAM_BOT_TOKEN" in item for item in warnings)
+    assert any("missing optional GitHub secret HA_ALERT_TELEGRAM_CHAT_ID" in item for item in warnings)
     assert any("POSTGRES_PITR_REQUIRED is not true yet" in item for item in warnings)
     assert any("variable present: POSTGRES_PITR_MAX_WAL_AGE_MINUTES" in item for item in ok)
 
@@ -76,12 +78,13 @@ def test_external_prerequisites_pass_when_all_metadata_is_ready():
                 "POSTGRES_PITR_MAX_WAL_AGE_MINUTES": "180",
                 "POSTGRES_PITR_REQUIRED": "true",
             },
-            secrets={"CLOUDFLARE_LB_READ_TOKEN"},
+            secrets={"CLOUDFLARE_LB_READ_TOKEN", "HA_ALERT_TELEGRAM_BOT_TOKEN", "HA_ALERT_TELEGRAM_CHAT_ID"},
         ),
         require_strict=True,
     )
 
     assert not failures
+    assert any("optional secret present: HA_ALERT_TELEGRAM_BOT_TOKEN" in item for item in ok)
     assert any("strict variable enabled: API_HA_READINESS_STRICT" in item for item in ok)
     assert any("strict variable enabled: POSTGRES_PITR_REQUIRED" in item for item in ok)
     assert any("private PITR R2 credentials are host-local" in item for item in warnings)

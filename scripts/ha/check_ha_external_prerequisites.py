@@ -22,6 +22,11 @@ REQUIRED_SECRETS = {
     "CLOUDFLARE_LB_READ_TOKEN": "Cloudflare read-only token for Load Balancer config audit",
 }
 
+OPTIONAL_SECRETS = {
+    "HA_ALERT_TELEGRAM_BOT_TOKEN": "Telegram bot token for owner-visible HA failure alerts",
+    "HA_ALERT_TELEGRAM_CHAT_ID": "Telegram chat id for owner-visible HA failure alerts",
+}
+
 REQUIRED_VARIABLES = {
     "API_HA_READINESS_STRICT": "Controls whether the rollup HA audit treats soft blockers as failures",
     "CLOUDFLARE_ACCOUNT_ID": "Cloudflare account id for Load Balancer pools/monitors",
@@ -91,6 +96,12 @@ def check_metadata(metadata: GithubMetadata, *, require_strict: bool) -> tuple[l
             ok.append(f"secret present: {name}")
         else:
             failures.append(f"missing GitHub secret {name}: {description}")
+
+    for name, description in sorted(OPTIONAL_SECRETS.items()):
+        if name in metadata.secrets:
+            ok.append(f"optional secret present: {name}")
+        else:
+            warnings.append(f"missing optional GitHub secret {name}: {description}")
 
     for name, description in sorted(REQUIRED_VARIABLES.items()):
         value = metadata.variables.get(name)

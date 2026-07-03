@@ -181,6 +181,22 @@ Scheduled monitors:
 | `postgres-pitr-restore-drill.yml` | daily when `POSTGRES_PITR_REQUIRED=true` | disposable physical restore from PITR basebackup + WAL |
 | `check-media-cdn.yml` | every 6 hours | public product images and DB-backed object-storage media use `cdn.mvn.by`; sampled CDN objects are cacheable |
 
+Owner-visible alerting:
+
+All HA monitor workflows call `.github/actions/notify-ha-failure` on failure
+after the log artifact upload step. Without the secrets below, the notifier
+prints a skip message and does not fail the workflow:
+
+```bash
+gh secret set HA_ALERT_TELEGRAM_BOT_TOKEN --repo mvnby/air-api
+gh secret set HA_ALERT_TELEGRAM_CHAT_ID --repo mvnby/air-api
+# Optional, only for Telegram forum topics:
+gh secret set HA_ALERT_TELEGRAM_THREAD_ID --repo mvnby/air-api
+```
+
+Use a dedicated Telegram bot or a tightly scoped internal alert chat. Do not
+reuse the customer-facing bot token for infrastructure alerts.
+
 ## PostgreSQL PITR
 
 Streaming replication protects us from a dead primary host. PITR protects us
@@ -741,5 +757,5 @@ gh workflow run api-restore-drill.yml --repo mvnby/air-api --ref main
 
 ## Next Improvements
 
-- Add owner-visible alerts from GitHub Actions or Cloudflare to Telegram/email
-  beyond the default GitHub failed-workflow notification path.
+- Add Cloudflare-native origin health alerts if GitHub Actions alerting is not
+  fast enough for operational needs.
