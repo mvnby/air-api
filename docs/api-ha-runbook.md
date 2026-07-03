@@ -155,35 +155,29 @@ checklist; they are derived from the current blockers and failures without
 printing secret values.
 
 After creating the Cloudflare LB read-only token and finding the zone/account
-ids, apply them to GitHub without pasting secrets into command history:
+ids, put them in local `.env` as:
 
 ```bash
-printf 'Cloudflare LB token: '
-stty -echo
-IFS= read -r CLOUDFLARE_LB_READ_TOKEN
-stty echo
-printf '\n'
-export CLOUDFLARE_LB_READ_TOKEN
-export CLOUDFLARE_ZONE_ID=<mvn.by zone id>
-export CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
-python3 scripts/ha/apply_cloudflare_lb_github_prerequisites.py --repo mvnby/air-api
-unset CLOUDFLARE_LB_READ_TOKEN
+CLOUDFLARE_API_TOKEN_LB_AUDIT=<read-only Cloudflare token>
+CLOUDFLARE_ZONE_ID=<mvn.by zone id>
+CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
 ```
+
+Then apply them to GitHub without printing secret values:
+
+```bash
+python3 scripts/ha/apply_cloudflare_lb_github_prerequisites.py --repo mvnby/air-api --env-file .env
+```
+
+The helper also accepts `CLOUDFLARE_LB_READ_TOKEN` for the local input token,
+but always stores the GitHub Actions secret under the canonical
+`CLOUDFLARE_LB_READ_TOKEN` name.
 
 After the required Cloudflare LB workflow passes and you want scheduled checks
 to fail on drift, repeat with:
 
 ```bash
-printf 'Cloudflare LB token: '
-stty -echo
-IFS= read -r CLOUDFLARE_LB_READ_TOKEN
-stty echo
-printf '\n'
-export CLOUDFLARE_LB_READ_TOKEN
-export CLOUDFLARE_ZONE_ID=<mvn.by zone id>
-export CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
-python3 scripts/ha/apply_cloudflare_lb_github_prerequisites.py --repo mvnby/air-api --mark-required
-unset CLOUDFLARE_LB_READ_TOKEN
+python3 scripts/ha/apply_cloudflare_lb_github_prerequisites.py --repo mvnby/air-api --env-file .env --mark-required
 ```
 
 After Cloudflare LB credentials are in GitHub and PostgreSQL PITR has passed
@@ -198,7 +192,10 @@ python3 scripts/ha/enable_ha_strict_mode.py --repo mvnby/air-api
 The helper waits for the required Cloudflare LB config audit, PITR status
 check, PITR restore drill, and strict HA readiness audit. It sets
 `CLOUDFLARE_LB_CONFIG_REQUIRED=true`, `POSTGRES_PITR_REQUIRED=true`, and
-`API_HA_READINESS_STRICT=true` only after those proof workflows pass.
+`API_HA_READINESS_STRICT=true` only after those proof workflows pass, then runs
+the final `report_ha_status.py --require-strict` rollup so the same command
+proves GitHub workflows, external prerequisites, and the live active/passive
+invariant after strict mode is enabled.
 
 Scheduled monitors:
 

@@ -206,6 +206,19 @@ def run_external_prereq_check(repo: str, *, require_strict: bool, runner: Runner
     run_checked(args, runner=runner)
 
 
+def run_final_status_report(
+    *,
+    repo: str,
+    ref: str,
+    runner: Runner | None = None,
+) -> None:
+    script = Path(__file__).with_name("report_ha_status.py")
+    run_checked(
+        [sys.executable, str(script), "--repo", repo, "--branch", ref, "--require-strict"],
+        runner=runner,
+    )
+
+
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run MVN HA proof workflows and enable GitHub strict-mode variables only after they pass."
@@ -232,6 +245,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             for name in STRICT_VARIABLES:
                 log("dry-run", f"would set GitHub variable {name}=true")
             log("dry-run", "would verify strict external prerequisites")
+            log("dry-run", "would run final HA status report with --require-strict")
             return 0
 
         run_external_prereq_check(args.repo, require_strict=False)
@@ -242,6 +256,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             set_variable(args.repo, name, "true")
 
         run_external_prereq_check(args.repo, require_strict=True)
+        run_final_status_report(repo=args.repo, ref=args.ref)
         log("ok", "strict HA mode is enabled")
         return 0
     except RuntimeError as exc:

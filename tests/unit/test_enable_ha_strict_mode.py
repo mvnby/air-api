@@ -36,6 +36,7 @@ def test_dry_run_does_not_call_subprocess(monkeypatch, capsys):
     output = capsys.readouterr().out
     assert "would run and wait for check-cloudflare-lb-config.yml required=true" in output
     assert "would set GitHub variable API_HA_READINESS_STRICT=true" in output
+    assert "would run final HA status report with --require-strict" in output
 
 
 def test_main_runs_proofs_before_enabling_strict_variables(monkeypatch):
@@ -59,6 +60,16 @@ def test_main_runs_proofs_before_enabling_strict_variables(monkeypatch):
     variable_calls = [args for args, _stdin in calls if args[:3] == ["gh", "variable", "set"]]
     first_variable_index = next(index for index, call in enumerate(calls) if call[0][:3] == ["gh", "variable", "set"])
     last_watch_index = max(index for index, call in enumerate(calls) if call[0][:3] == ["gh", "run", "watch"])
+    strict_external_index = next(
+        index
+        for index, call in enumerate(calls)
+        if call[0][-1] == "--require-strict" and "check_ha_external_prerequisites.py" in call[0][1]
+    )
+    final_report_index = next(
+        index
+        for index, call in enumerate(calls)
+        if call[0][-1] == "--require-strict" and "report_ha_status.py" in call[0][1]
+    )
 
     assert [call[3] for call in workflow_calls] == [
         "check-cloudflare-lb-config.yml",
@@ -76,7 +87,9 @@ def test_main_runs_proofs_before_enabling_strict_variables(monkeypatch):
         "API_HA_READINESS_STRICT",
     ]
     assert all(stdin == "true\n" for _args, stdin in calls if _args[:3] == ["gh", "variable", "set"])
+    assert last_watch_index < first_variable_index < strict_external_index < final_report_index
     assert calls[-1][0][-1] == "--require-strict"
+    assert "report_ha_status.py" in calls[-1][0][1]
 
 
 def test_workflow_output_without_url_falls_back_to_recent_run_list(monkeypatch):
@@ -135,3 +148,26 @@ def test_failed_proof_does_not_enable_strict_variables(monkeypatch):
     assert module.main(["--repo", "mvnby/air-api"]) == 1
 
     assert not any(args[:3] == ["gh", "variable", "set"] for args, _stdin in calls)
+
+
+def test_failed_final_status_report_keeps_strict_helper_failed(monkeypatch, capsys):
+    calls = []
+    run_id = 28640000000
+
+    def fake_runner(args, stdin):
+        nonlocal run_id
+        args = list(args)
+        calls.append((args, stdin))
+        if args[:3] == ["gh", "workflow", "run"]:
+            run_id += 1
+            return FakeCompleted(stdout=f"https://github.com/mvnby/air-api/actions/runs/{run_id}\n")
+        if "report_ha_status.py" in args[1]:
+            return FakeCompleted(stderr="strict report failed", returncode=1)
+        return FakeCompleted()
+
+    monkeypatch.setattr(module, "_run_subprocess", fake_runner)
+
+    assert module.main(["--repo", "mvnby/air-api"]) == 1
+
+    assert any(args[:3] == ["gh", "variable", "set"] for args, _stdin in calls)
+    assert "strict report failed" in capsys.readouterr().out
