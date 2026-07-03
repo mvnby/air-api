@@ -486,14 +486,22 @@ def _product_catalog_category(product: dict[str, Any]) -> str | None:
     title = _normalize_text(product.get("title"))
     combined = f"{system_type} {indoor_type} {title}"
 
-    if "полупром" in combined or any(
-        marker in combined for marker in ("кассет", "каналь", "колонн", "напольно", "потолоч")
-    ):
-        return "semi"
     if "мульти" in combined:
         return "multi"
     if any(marker in system_type for marker in _INDOOR_MARKERS + _OUTDOOR_MARKERS):
         return "multi"
+    component_title = (
+        "блок" in title
+        and any(marker in title for marker in _INDOOR_MARKERS + _OUTDOOR_MARKERS)
+        and "сплит" not in title
+        and "система" not in title
+    )
+    if component_title:
+        return "multi"
+    if "полупром" in combined or any(
+        marker in combined for marker in ("кассет", "каналь", "колонн", "напольно", "потолоч")
+    ):
+        return "semi"
     if "сплит" in system_type:
         return "household"
     return None
