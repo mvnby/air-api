@@ -60,6 +60,7 @@ jobs:
           POSTGRES_PITR_REQUIRED: ${{ vars.POSTGRES_PITR_REQUIRED || 'false' }}
           EXPECTED_CDN_BASE: https://cdn.mvn.by
           MIN_DB_CDN_URLS: "3"
+          CHECK_PUBLIC_READY: "false"
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_LB_READ_TOKEN }}
           CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}

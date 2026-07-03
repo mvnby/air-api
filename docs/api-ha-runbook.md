@@ -125,8 +125,8 @@ Scheduled monitors:
 | Workflow | Schedule | Purpose |
 | --- | --- | --- |
 | `check-api-vps-health.yml` | every 6 hours | primary host, containers, DB, backups, media storage config |
-| `check-api-ha-readiness.yml` | every 6 hours | whole-system HA readiness rollup; core checks fail, Cloudflare/PITR are soft blockers until strict |
-| `check-api-ha-invariants.yml` | every 30 minutes | public/primary ready and standby fenced |
+| `check-api-ha-readiness.yml` | every 6 hours | whole-system HA readiness rollup; direct-origin core checks fail, Cloudflare/PITR are soft blockers until strict |
+| `check-api-ha-invariants.yml` | every 30 minutes | direct primary ready and standby fenced; public Cloudflare routing is covered by the LB monitor/config checks |
 | `check-cloudflare-lb-config.yml` | every 6 hours | Cloudflare LB pool order, fallback, host header, and monitor config |
 | `api-restore-drill.yml` | daily after the 03:00 UTC backup | disposable DB restore drill |
 | `check-postgres-pitr.yml` | every 6 hours | PITR archive/timer/backlog and remote R2 freshness |

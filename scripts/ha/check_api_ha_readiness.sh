@@ -97,6 +97,7 @@ run_active_passive() {
     STANDBY_ORIGIN="${STANDBY_ORIGIN}" \
     PRIMARY_ROLE=primary \
     STANDBY_ROLE=standby \
+    CHECK_PUBLIC_READY="${CHECK_PUBLIC_READY:-false}" \
     bash scripts/ha/check_active_passive.sh
 }
 
