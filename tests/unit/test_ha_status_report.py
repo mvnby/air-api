@@ -96,11 +96,8 @@ def test_latest_runs_prefers_latest_completed_run_over_current_in_progress():
     assert latest["API HA Status Report"] == previous
 
 
-def test_default_expected_workflows_include_status_report_self_check():
-    assert any(
-        workflow.name == "API HA Status Report" and workflow.max_age_hours == 3
-        for workflow in report_ha_status.EXPECTED_WORKFLOWS
-    )
+def test_default_expected_workflows_do_not_self_check_status_report():
+    assert all(workflow.name != "API HA Status Report" for workflow in report_ha_status.EXPECTED_WORKFLOWS)
 
 
 def test_external_prereq_failures_are_blockers_until_require_strict(monkeypatch):

@@ -100,7 +100,7 @@ def _api_patch(path: str, token: str, payload: dict[str, Any]) -> dict[str, Any]
             response_payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
-        raise AuditFailure(f"Cloudflare API HTTP {exc.code} for {path}: {body}") from exc
+        raise AuditFailure(_format_cloudflare_patch_error(path, exc.code, body)) from exc
     except urllib.error.URLError as exc:
         raise AuditFailure(f"Cloudflare API request failed for {path}: {exc}") from exc
 
@@ -111,6 +111,18 @@ def _api_patch(path: str, token: str, payload: dict[str, Any]) -> dict[str, Any]
     if not isinstance(result, dict):
         raise AuditFailure(f"Cloudflare API result is not an object for {path}")
     return result
+
+
+def _format_cloudflare_patch_error(path: str, status_code: int, body: str) -> str:
+    message = f"Cloudflare API HTTP {status_code} for {path}: {body}"
+    if status_code in {401, 403} and path.startswith("/zones/") and "/load_balancers/" in path:
+        message += (
+            " Required token permission for applying this switch: "
+            "Zone / Load Balancers / Edit scoped to the mvn.by zone. "
+            "The read-only audit token can inspect this configuration but cannot patch "
+            "default_pools or fallback_pool."
+        )
+    return message
 
 
 def _desired_default_pools(
