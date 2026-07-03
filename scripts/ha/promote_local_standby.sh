@@ -9,15 +9,21 @@ OLD_PRIMARY_SSH="${OLD_PRIMARY_SSH:-}"
 OLD_PRIMARY_PROJECT_DIR="${OLD_PRIMARY_PROJECT_DIR:-/opt/air-api}"
 OLD_PRIMARY_COMPOSE_FILE="${OLD_PRIMARY_COMPOSE_FILE:-docker-compose.prod.yml}"
 CONFIRM_PROMOTE="${CONFIRM_PROMOTE:-false}"
+ALLOW_UNFENCED_PROMOTE="${ALLOW_UNFENCED_PROMOTE:-false}"
 
 usage() {
   cat <<'USAGE'
 Usage:
   CONFIRM_PROMOTE=true bash scripts/ha/promote_local_standby.sh
+  CONFIRM_PROMOTE=true bash scripts/ha/promote_local_standby.sh --allow-unfenced
 
 Runs on the standby host. It fences the old primary when OLD_PRIMARY_SSH is set,
 promotes local PostgreSQL, swaps the local compose file to the prepared primary
 compose, starts app+bot, disables media pull, and verifies local /api/ready.
+
+By default the helper refuses to promote when OLD_PRIMARY_SSH is empty. If the
+old primary is unreachable and cannot be fenced over SSH, explicitly set
+ALLOW_UNFENCED_PROMOTE=true or pass --allow-unfenced.
 
 Important env:
   PROJECT_DIR=/opt/mvn-reserve
@@ -28,6 +34,7 @@ Important env:
   OLD_PRIMARY_COMPOSE_FILE=docker-compose.prod.yml
   LOCAL_READY_URL=http://127.0.0.1:18000/api/ready
   CONFIRM_PROMOTE=true
+  ALLOW_UNFENCED_PROMOTE=false
 USAGE
 }
 
@@ -39,6 +46,9 @@ for arg in "$@"; do
       ;;
     --yes)
       CONFIRM_PROMOTE=true
+      ;;
+    --allow-unfenced)
+      ALLOW_UNFENCED_PROMOTE=true
       ;;
     *)
       echo "Unsupported argument: ${arg}" >&2
@@ -59,6 +69,11 @@ if [[ "${CONFIRM_PROMOTE}" != "true" ]]; then
     echo "Refusing to promote without CONFIRM_PROMOTE=true or --yes." >&2
     exit 1
   fi
+fi
+
+if [[ -z "${OLD_PRIMARY_SSH}" && "${ALLOW_UNFENCED_PROMOTE}" != "true" ]]; then
+  echo "Refusing to promote without OLD_PRIMARY_SSH fencing. If the old primary is unreachable, set ALLOW_UNFENCED_PROMOTE=true or pass --allow-unfenced." >&2
+  exit 1
 fi
 
 cd "${PROJECT_DIR}"
@@ -88,7 +103,7 @@ if [[ -n "${OLD_PRIMARY_SSH}" ]]; then
   ssh -o BatchMode=yes -o ConnectTimeout=10 "${OLD_PRIMARY_SSH}" \
     "cd '${OLD_PRIMARY_PROJECT_DIR}' && docker compose -f '${OLD_PRIMARY_COMPOSE_FILE}' stop app bot"
 else
-  echo "WARNING: OLD_PRIMARY_SSH is empty; old primary was not fenced by this script." >&2
+  echo "WARNING: OLD_PRIMARY_SSH is empty and ALLOW_UNFENCED_PROMOTE=true; old primary was not fenced by this script." >&2
 fi
 
 echo "Promoting local PostgreSQL..."

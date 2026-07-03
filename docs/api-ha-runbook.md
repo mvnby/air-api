@@ -426,6 +426,13 @@ Preferred helper path, run on `zakup` after copying
 ssh zakup 'OLD_PRIMARY_SSH=root@10.77.0.2 CONFIRM_PROMOTE=true /usr/local/sbin/mvn-promote-local-standby'
 ```
 
+The helper refuses to promote without `OLD_PRIMARY_SSH` by default. If
+`mvn-api` is unreachable and cannot be fenced over SSH, make that risk explicit:
+
+```bash
+ssh zakup 'ALLOW_UNFENCED_PROMOTE=true CONFIRM_PROMOTE=true /usr/local/sbin/mvn-promote-local-standby'
+```
+
 The manual steps below are the same procedure expanded for review.
 
 1. Fence the old primary first if reachable:
