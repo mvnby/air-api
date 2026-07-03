@@ -25,6 +25,7 @@ REQUIRED_SECRETS = {
 OPTIONAL_SECRETS = {
     "HA_ALERT_TELEGRAM_BOT_TOKEN": "Telegram bot token for owner-visible HA failure alerts",
     "HA_ALERT_TELEGRAM_CHAT_ID": "Telegram chat id for owner-visible HA failure alerts",
+    "HA_ALERT_TELEGRAM_THREAD_ID": "Optional Telegram forum topic id for owner-visible HA failure alerts",
 }
 
 REQUIRED_VARIABLES = {

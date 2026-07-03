@@ -38,6 +38,7 @@ def test_external_prerequisites_report_missing_cloudflare_secret_and_vars():
     assert any("missing GitHub variable CLOUDFLARE_ZONE_ID" in item for item in failures)
     assert any("missing optional GitHub secret HA_ALERT_TELEGRAM_BOT_TOKEN" in item for item in warnings)
     assert any("missing optional GitHub secret HA_ALERT_TELEGRAM_CHAT_ID" in item for item in warnings)
+    assert any("missing optional GitHub secret HA_ALERT_TELEGRAM_THREAD_ID" in item for item in warnings)
     assert any("POSTGRES_PITR_REQUIRED is not true yet" in item for item in warnings)
     assert any("variable present: POSTGRES_PITR_MAX_WAL_AGE_MINUTES" in item for item in ok)
 
@@ -78,7 +79,12 @@ def test_external_prerequisites_pass_when_all_metadata_is_ready():
                 "POSTGRES_PITR_MAX_WAL_AGE_MINUTES": "180",
                 "POSTGRES_PITR_REQUIRED": "true",
             },
-            secrets={"CLOUDFLARE_LB_READ_TOKEN", "HA_ALERT_TELEGRAM_BOT_TOKEN", "HA_ALERT_TELEGRAM_CHAT_ID"},
+            secrets={
+                "CLOUDFLARE_LB_READ_TOKEN",
+                "HA_ALERT_TELEGRAM_BOT_TOKEN",
+                "HA_ALERT_TELEGRAM_CHAT_ID",
+                "HA_ALERT_TELEGRAM_THREAD_ID",
+            },
         ),
         require_strict=True,
     )
@@ -93,6 +99,7 @@ def test_external_prerequisites_pass_when_all_metadata_is_ready():
 def test_env_metadata_loader_records_presence_without_secret_values(monkeypatch):
     monkeypatch.setenv("CLOUDFLARE_LB_READ_TOKEN", "secret-token")
     monkeypatch.setenv("HA_ALERT_TELEGRAM_BOT_TOKEN", "telegram-token")
+    monkeypatch.setenv("HA_ALERT_TELEGRAM_THREAD_ID", "42")
     monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "account")
     monkeypatch.setenv("CLOUDFLARE_ZONE_ID", "zone")
     monkeypatch.setenv("POSTGRES_PITR_REQUIRED", "false")
@@ -100,7 +107,11 @@ def test_env_metadata_loader_records_presence_without_secret_values(monkeypatch)
 
     metadata = module.load_metadata(repo="mvnby/air-api", source="env")
 
-    assert metadata.secrets == {"CLOUDFLARE_LB_READ_TOKEN", "HA_ALERT_TELEGRAM_BOT_TOKEN"}
+    assert metadata.secrets == {
+        "CLOUDFLARE_LB_READ_TOKEN",
+        "HA_ALERT_TELEGRAM_BOT_TOKEN",
+        "HA_ALERT_TELEGRAM_THREAD_ID",
+    }
     assert metadata.variables["CLOUDFLARE_ACCOUNT_ID"] == "account"
     assert metadata.variables["CLOUDFLARE_ZONE_ID"] == "zone"
     assert metadata.variables["POSTGRES_PITR_REQUIRED"] == "false"

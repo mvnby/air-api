@@ -352,8 +352,18 @@ def next_steps_for(result: ReportResult) -> list[str]:
             "`python3 scripts/ha/enable_ha_strict_mode.py --repo mvnby/air-api`"
         )
 
-    if "HA_ALERT_TELEGRAM_BOT_TOKEN" in joined or "HA_ALERT_TELEGRAM_CHAT_ID" in joined:
-        add_once("set HA_ALERT_TELEGRAM_BOT_TOKEN and HA_ALERT_TELEGRAM_CHAT_ID to receive owner-visible HA alerts")
+    if any(
+        key in joined
+        for key in (
+            "HA_ALERT_TELEGRAM_BOT_TOKEN",
+            "HA_ALERT_TELEGRAM_CHAT_ID",
+            "HA_ALERT_TELEGRAM_THREAD_ID",
+        )
+    ):
+        add_once(
+            "set HA_ALERT_TELEGRAM_BOT_TOKEN and HA_ALERT_TELEGRAM_CHAT_ID "
+            "(optionally HA_ALERT_TELEGRAM_THREAD_ID) to receive owner-visible HA alerts"
+        )
 
     if "live active/passive check skipped" in joined:
         add_once("rerun without --skip-live before failover, promotion, or strict-mode changes")
