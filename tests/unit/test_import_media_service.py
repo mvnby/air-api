@@ -61,6 +61,16 @@ class _FakeOriginalSourceStorage:
         )
 
 
+class _FailingOriginalSourceStorage(_FakeOriginalSourceStorage):
+    async def save_product_original(
+        self,
+        *,
+        content: bytes,
+        extension: str = "webp",
+    ) -> StoredMediaObject:
+        raise RuntimeError("PutObject Unauthorized")
+
+
 @pytest.fixture
 async def sqlite_session(tmp_path: Path):
     db_path = tmp_path / "import_media_test.db"
@@ -216,3 +226,68 @@ async def test_import_media_service_writes_download_through_original_source_stor
         )
     ).scalar_one()
     assert cache_row.local_url == first
+
+
+@pytest.mark.asyncio
+async def test_import_media_service_can_raise_on_download_status(
+    sqlite_session,
+    monkeypatch,
+):
+    class _FakeClient:
+        def __init__(self, *args, **kwargs):  # noqa: ARG002
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url):
+            return _FakeResponse(
+                status_code=403,
+                content=b"",
+                url=url,
+            )
+
+    monkeypatch.setattr("services.import_media_service.httpx.AsyncClient", _FakeClient)
+
+    with pytest.raises(RuntimeError, match="status=403"):
+        await ImportMediaService.resolve_or_download(
+            sqlite_session,
+            source_url="https://example.com/forbidden.png",
+            raise_on_error=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_import_media_service_can_raise_on_storage_error(
+    sqlite_session,
+    monkeypatch,
+):
+    class _FakeClient:
+        def __init__(self, *args, **kwargs):  # noqa: ARG002
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url):
+            return _FakeResponse(
+                status_code=200,
+                content=_png_bytes((120, 80, 20)),
+                url=url,
+            )
+
+    monkeypatch.setattr("services.import_media_service.httpx.AsyncClient", _FakeClient)
+
+    with pytest.raises(RuntimeError, match="PutObject Unauthorized"):
+        await ImportMediaService.resolve_or_download(
+            sqlite_session,
+            source_url="https://example.com/r2-error.png",
+            source_storage=_FailingOriginalSourceStorage(),
+            raise_on_error=True,
+        )

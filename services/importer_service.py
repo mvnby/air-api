@@ -51,6 +51,17 @@ def _augment_auto_slugs_with_wifi_specs(auto_slugs: List[str], specs: dict) -> L
     return result
 
 
+def _should_replace_imported_main_image(existing_url: str | None) -> bool:
+    current = str(existing_url or "").strip()
+    if not current:
+        return True
+    if current.startswith("/media/") or current.startswith("media/"):
+        return False
+    if current.startswith("https://cdn.mvn.by/"):
+        return False
+    return current.startswith(("http://", "https://"))
+
+
 async def _normalize_import_price_to_byn(session, *, data: dict, source_url: str) -> None:
     """Convert source price to BYN if parser reports foreign currency."""
     raw_price = data.get("price")
@@ -334,10 +345,12 @@ class ImporterService:
             # Main Image
             main_image_url = data.get('main_image')
             local_main_image = None
+            require_media_download = bool(data.get("require_media_download"))
             if main_image_url:
                 local_main_image = await ImportMediaService.resolve_or_download(
                     session,
                     source_url=main_image_url,
+                    raise_on_error=require_media_download,
                 )
             
             # --- Gallery images ---
@@ -361,7 +374,7 @@ class ImporterService:
                 existing.source_url = canonical_source_url
                 if data.get("publish_on_update"):
                     existing.is_published = True
-                if local_main_image and not existing.main_image:
+                if local_main_image and _should_replace_imported_main_image(existing.main_image):
                     existing.main_image = local_main_image
 
                 # Preserve manual tags, but append newly inferred auto-tags.
@@ -426,6 +439,7 @@ class ImporterService:
                         local_path = await ImportMediaService.resolve_or_download(
                             session,
                             source_url=img_url,
+                            raise_on_error=require_media_download,
                         )
                         if local_path and local_path not in existing_gallery_urls:
                             pi = ProductImage(

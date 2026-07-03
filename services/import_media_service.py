@@ -81,6 +81,7 @@ class ImportMediaService:
         *,
         source_url: str,
         source_storage: ProductOriginalSourceStorage | None = None,
+        raise_on_error: bool = False,
     ) -> Optional[str]:
         normalized_url = ImportMediaService.normalize_source_url(source_url)
         if not normalized_url:
@@ -96,6 +97,10 @@ class ImportMediaService:
             session.add(existing)
             return existing.local_url
 
+        def fail(message: str, exc: Exception | None = None) -> None:
+            if raise_on_error:
+                raise RuntimeError(message) from exc
+
         try:
             parts = urlsplit(normalized_url)
             verify_tls = not parts.netloc.endswith("mdv-aircond.ru")
@@ -108,6 +113,7 @@ class ImportMediaService:
                 response = await client.get(normalized_url)
         except Exception as exc:
             logger.warning("Import image download failed for %s: %s", normalized_url, exc)
+            fail(f"Import image download failed for {normalized_url}: {exc}", exc)
             return None
 
         if response.status_code != 200:
@@ -115,6 +121,10 @@ class ImportMediaService:
                 "Import image download failed for %s: status=%s",
                 normalized_url,
                 response.status_code,
+            )
+            fail(
+                f"Import image download failed for {normalized_url}: "
+                f"status={response.status_code}"
             )
             return None
 
@@ -125,6 +135,7 @@ class ImportMediaService:
             )
         except Exception as exc:
             logger.warning("Import image processing failed for %s: %s", normalized_url, exc)
+            fail(f"Import image processing failed for {normalized_url}: {exc}", exc)
             return None
 
         resolved_url = ImportMediaService.normalize_source_url(str(response.url))

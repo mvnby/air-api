@@ -9,7 +9,7 @@ from sqlmodel import SQLModel
 from sqlmodel import select
 
 from models import ImportMediaCache, Product, ProductAttachment
-from services.importer_service import ImporterService
+from services.importer_service import ImporterService, _should_replace_imported_main_image
 
 
 def _png_bytes(color=(40, 80, 160)) -> bytes:
@@ -17,6 +17,16 @@ def _png_bytes(color=(40, 80, 160)) -> bytes:
     output = BytesIO()
     image.save(output, format="PNG")
     return output.getvalue()
+
+
+def test_importer_replaces_only_empty_or_remote_main_images():
+    assert _should_replace_imported_main_image(None) is True
+    assert _should_replace_imported_main_image("") is True
+    assert _should_replace_imported_main_image("https://mdv-aircond.ru/upload/source.png") is True
+    assert _should_replace_imported_main_image("https://example.com/source.png") is True
+    assert _should_replace_imported_main_image("/media/products/shared/source.webp") is False
+    assert _should_replace_imported_main_image("media/products/shared/source.webp") is False
+    assert _should_replace_imported_main_image("https://cdn.mvn.by/products/shared/source.webp") is False
 
 
 class _FakeResponse:
@@ -138,3 +148,58 @@ async def test_importer_saves_manuals_and_reuses_image_cache_on_update(sqlite_se
 
     cache_rows = (await sqlite_session.execute(select(ImportMediaCache))).scalars().all()
     assert len(cache_rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_importer_propagates_required_media_errors(sqlite_session, monkeypatch):
+    calls = []
+
+    class _FakeParser:
+        async def parse(self, url):  # noqa: ARG002
+            return {
+                "title": "MDV Required Media",
+                "slug": "mdv-required-media",
+                "description": "Test description",
+                "price": 1234,
+                "area": 25,
+                "main_image": "https://mdv-aircond.ru/upload/required.png",
+                "images": [],
+                "save_gallery": True,
+                "require_media_download": True,
+                "categories": [],
+                "specs": {"brand": "MDV", "type": "сплит-система"},
+                "metrics": {"area": 25, "is_inverter": True, "power_cooling": 2.6},
+                "related_urls": [],
+            }
+
+    async def fake_resolve_or_download(*args, **kwargs):  # noqa: ARG001
+        calls.append(kwargs)
+        raise RuntimeError("PutObject Unauthorized")
+
+    monkeypatch.setattr(
+        "services.importer_service.async_session_maker",
+        lambda: _FakeSessionContext(sqlite_session),
+    )
+    monkeypatch.setattr(
+        "services.importer_service.ImportMediaService.resolve_or_download",
+        fake_resolve_or_download,
+    )
+
+    service = ImporterService()
+    service.get_parser = lambda url: _FakeParser()  # noqa: ARG005
+
+    with pytest.raises(RuntimeError, match="PutObject Unauthorized"):
+        await service.import_product(
+            "https://mdv-aircond.ru/catalog/test",
+            update_existing=False,
+            collect_related=False,
+        )
+
+    assert calls
+    assert calls[0]["raise_on_error"] is True
+    product = (
+        await sqlite_session.execute(
+            select(Product).where(Product.slug == "mdv-required-media")
+        )
+    ).scalar_one_or_none()
+    assert product is None

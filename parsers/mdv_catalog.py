@@ -131,6 +131,7 @@ class MdvCatalogParser(BaseParser):
             "main_image": self._absolute_url(item.get("PREVIEW_PICTURE") or item.get("DETAIL_PICTURE")),
             "images": images,
             "save_gallery": True,
+            "require_media_download": True,
             "categories": [],
             "specs": specs,
             "metrics": {

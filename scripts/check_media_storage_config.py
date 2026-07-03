@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +23,7 @@ from services.media_storage_service import (
 
 OBJECT_STORAGE_PROVIDERS = {"r2", "s3", "s3_compatible"}
 SAMPLE_HASH = "a" * 64
+WRITE_PROBE_CONTENT = b"mvn-media-storage-write-probe\n"
 
 
 @dataclass(frozen=True)
@@ -106,6 +108,60 @@ def validate_checks(
     return failures
 
 
+async def run_write_probe() -> list[str]:
+    failures: list[str] = []
+    probes = [
+        (
+            "general_media",
+            get_general_media_storage(require_write=True).save_media(
+                content=WRITE_PROBE_CONTENT,
+                namespace="diagnostics/media-storage",
+                variant_type="probe",
+                extension="txt",
+                content_type="text/plain",
+            ),
+        ),
+        (
+            "product_variants",
+            get_product_media_storage(require_write=True).save_product_variant(
+                content=WRITE_PROBE_CONTENT,
+                variant_type="diagnostics",
+                extension="txt",
+            ),
+        ),
+        (
+            "product_originals",
+            get_product_original_source_storage().save_product_original(
+                content=WRITE_PROBE_CONTENT,
+                extension="txt",
+            ),
+        ),
+    ]
+    for label, awaitable in probes:
+        try:
+            stored = await awaitable
+        except Exception as exc:
+            failures.append(f"{label}: {type(exc).__name__}: {exc}")
+            print(
+                "media_storage_write_probe "
+                f"label={label} "
+                "status=failed "
+                f"error_type={type(exc).__name__} "
+                f"error={exc}",
+                file=sys.stderr,
+            )
+            continue
+        print(
+            "media_storage_write_probe "
+            f"label={label} "
+            "status=passed "
+            f"provider={stored.storage_provider} "
+            f"url={stored.url} "
+            f"path={stored.path}"
+        )
+    return failures
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Validate configured media storage providers and public target URLs."
@@ -119,6 +175,11 @@ def main(argv: list[str] | None = None) -> int:
         "--expected-public-base-url",
         default="",
         help="Optional expected public URL prefix, for example https://cdn.mvn.by.",
+    )
+    parser.add_argument(
+        "--write-probe",
+        action="store_true",
+        help="Also try writing one small diagnostic object through each storage adapter.",
     )
     args = parser.parse_args(argv)
 
@@ -149,6 +210,11 @@ def main(argv: list[str] | None = None) -> int:
         for failure in failures:
             print(f"media_storage_config_failure={failure}", file=sys.stderr)
         return 1
+
+    if args.write_probe:
+        write_failures = asyncio.run(run_write_probe())
+        if write_failures:
+            return 1
 
     print("media_storage_config_status=passed")
     return 0
