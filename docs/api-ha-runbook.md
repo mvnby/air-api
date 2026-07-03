@@ -53,6 +53,7 @@ unreviewed host-local compose edits:
 | `zakup` as standby | `deploy/ha/zakup/docker-compose.standby.yml` |
 | Active-passive invariant check | `scripts/ha/check_active_passive.sh` |
 | Local standby promotion helper | `scripts/ha/promote_local_standby.sh` |
+| GitHub Actions primary switch helper | `scripts/ha/switch_github_api_primary.py` |
 | Disposable DB restore drill | `scripts/ha/restore_drill_latest_db.sh` |
 | PostgreSQL PITR WAL/basebackup upload | `scripts/ha/upload_postgres_pitr_to_s3.py`, `scripts/ha/upload_postgres_pitr_wal.sh`, `scripts/ha/create_postgres_pitr_basebackup.sh` |
 | PostgreSQL PITR restore helpers | `scripts/ha/restore_postgres_pitr_from_s3.py`, `scripts/ha/restore_postgres_pitr_drill.sh`, `.github/workflows/postgres-pitr-restore-drill.yml` |
@@ -409,10 +410,12 @@ keeps proving that basebackups plus archived WAL can actually be restored.
 
 ## GitHub Actions Routing
 
-Current production variables must match the active primary:
+Current production GitHub secret/variables must match the active primary:
 
 ```text
 SSH_HOST_API=185.250.45.54
+API_PRIMARY_ORIGIN=185.250.45.54
+API_STANDBY_ORIGIN=193.47.42.213
 API_PROJECT_DIR=/opt/air-api
 API_COMPOSE_FILE=docker-compose.prod.yml
 API_COMPOSE_SOURCE_FILE=deploy/ha/mvn-api/docker-compose.primary.yml
@@ -432,6 +435,24 @@ API_STANDBY_COPY_COMPOSE=true
 API_STANDBY_COMPOSE_SOURCE_FILE=deploy/ha/zakup/docker-compose.standby.yml
 API_STANDBY_HEALTH_URL=http://localhost:18000/api/health
 ```
+
+Use the helper to switch these GitHub secret/variables after a real promotion
+or planned failback. It prints a dry-run plan by default:
+
+```bash
+# Normal routing: mvn-api primary, zakup standby.
+python3 scripts/ha/switch_github_api_primary.py --repo mvnby/air-api --primary mvn-api
+python3 scripts/ha/switch_github_api_primary.py --repo mvnby/air-api --primary mvn-api --confirm
+
+# After zakup has actually been promoted.
+python3 scripts/ha/switch_github_api_primary.py --repo mvnby/air-api --primary zakup
+python3 scripts/ha/switch_github_api_primary.py --repo mvnby/air-api --primary zakup --confirm
+```
+
+The helper updates the `SSH_HOST_API` GitHub secret plus the repo variables
+used by deploy, smoke checks, replication checks, standby image deploy, and
+Cloudflare origin audits. Run it only after the database role has been changed;
+it does not promote PostgreSQL and does not switch Cloudflare traffic.
 
 If an emergency requires manual host-local compose edits, set
 `API_COPY_COMPOSE=false` and/or `API_STANDBY_COPY_COMPOSE=false` temporarily.
@@ -667,9 +688,8 @@ The manual steps below are the same procedure expanded for review.
    `zakup` the current primary:
 
    ```bash
-   gh variable set API_PRIMARY_ORIGIN --repo mvnby/air-api --body 193.47.42.213
-   gh variable set API_STANDBY_ORIGIN --repo mvnby/air-api --body 185.250.45.54
-   gh variable set API_STANDBY_HOST --repo mvnby/air-api --body 185.250.45.54
+   python3 scripts/ha/switch_github_api_primary.py --repo mvnby/air-api --primary zakup
+   python3 scripts/ha/switch_github_api_primary.py --repo mvnby/air-api --primary zakup --confirm
 
    printf 'Cloudflare LB write token: '
    stty -echo
@@ -692,10 +712,12 @@ The manual steps below are the same procedure expanded for review.
 9. Do not restart `mvn-api` as primary. Rebuild it as standby from the promoted
    database.
 
-GitHub Actions variables after `zakup` promotion:
+GitHub Actions secret/variables after `zakup` promotion:
 
 ```text
 SSH_HOST_API=193.47.42.213
+API_PRIMARY_ORIGIN=193.47.42.213
+API_STANDBY_ORIGIN=185.250.45.54
 API_PROJECT_DIR=/opt/mvn-reserve
 API_COMPOSE_FILE=docker-compose.reserve.yml
 API_COMPOSE_SOURCE_FILE=deploy/ha/zakup/docker-compose.primary.yml
@@ -705,6 +727,9 @@ API_READY_URL=http://localhost:18000/api/ready
 API_LOCAL_HEALTH_URL=http://127.0.0.1:18000/api/health
 API_TUNNEL_REMOTE_PORT=18000
 API_DEPLOY_SERVICES=app bot
+API_SMOKE_COMPOSE_SERVICE_CHECKS=app bot db
+API_COMPOSE_SERVICE_CHECKS=app bot db
+API_BOT_EXPECT_ENABLED=true
 API_STANDBY_HOST=185.250.45.54
 API_STANDBY_PROJECT_DIR=/opt/air-api
 API_STANDBY_COMPOSE_FILE=docker-compose.prod.yml
