@@ -1,0 +1,70 @@
+name: Media CDN Check
+
+on:
+  schedule:
+    - cron: "41 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      products_url:
+        description: "Public products API URL to sample"
+        type: string
+        required: false
+        default: "https://api.mvn.by/api/v1/products?limit=5"
+      expected_cdn_base:
+        description: "Expected CDN URL prefix"
+        type: string
+        required: false
+        default: "https://cdn.mvn.by"
+      min_cdn_urls:
+        description: "Minimum primary image CDN URLs"
+        type: string
+        required: false
+        default: "3"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run media CDN check
+        env:
+          PRODUCTS_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.products_url || 'https://api.mvn.by/api/v1/products?limit=5' }}
+          EXPECTED_CDN_BASE: ${{ github.event_name == 'workflow_dispatch' && inputs.expected_cdn_base || 'https://cdn.mvn.by' }}
+          MIN_CDN_URLS: ${{ github.event_name == 'workflow_dispatch' && inputs.min_cdn_urls || '3' }}
+        run: |
+          set -euo pipefail
+          python3 scripts/check_media_cdn_public.py \
+            --products-url "${PRODUCTS_URL}" \
+            --expected-cdn-base "${EXPECTED_CDN_BASE}" \
+            --min-cdn-urls "${MIN_CDN_URLS}" \
+            --max-fetches 5 \
+            2>&1 \
+            | tee media-cdn-check.log
+
+      - name: Write Summary
+        if: always()
+        run: |
+          {
+            echo "## Media CDN Check"
+            echo "- products_url: ${{ github.event_name == 'workflow_dispatch' && inputs.products_url || 'https://api.mvn.by/api/v1/products?limit=5' }}"
+            echo "- expected_cdn_base: ${{ github.event_name == 'workflow_dispatch' && inputs.expected_cdn_base || 'https://cdn.mvn.by' }}"
+            echo "- min_cdn_urls: ${{ github.event_name == 'workflow_dispatch' && inputs.min_cdn_urls || '3' }}"
+            echo "- log_artifact: media-cdn-check-log-${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload media CDN log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: media-cdn-check-log-${{ github.run_id }}
+          path: media-cdn-check.log
+          if-no-files-found: warn
