@@ -19,9 +19,15 @@ const suggestionLoading = ref(false);
 const applyLoading = ref(false);
 const inlineSearchQuery = ref<Record<string, string>>({});
 const inlineCandidates = ref<Record<string, any[]>>({});
+const sourceUrlCandidates = ref<any[]>([]);
+const sourceUrlSelection = ref<Record<string, boolean>>({});
+const sourceUrlLoading = ref(false);
+const sourceUrlImportLoading = ref(false);
+const importWithRelated = ref(false);
 
 const keyOf = (offer: any) => `${offer.supplier_id}:${offer.external_id}`;
 const readyToApplyCount = computed(() => Object.keys(bulkSelection.value).filter((k) => bulkSelection.value[k] && selectedProductMap.value[k]).length);
+const selectedSourceUrlCount = computed(() => Object.keys(sourceUrlSelection.value).filter((url) => sourceUrlSelection.value[url]).length);
 
 const normalizeCandidate = (candidate: any) => ({
   ...candidate,
@@ -67,6 +73,27 @@ const loadUnmapped = async () => {
     error.value = getApiErrorMessage(e);
   } finally {
     loading.value = false;
+  }
+};
+
+const loadSourceUrlCandidates = async () => {
+  sourceUrlLoading.value = true;
+  error.value = '';
+  try {
+    const res = await api.listSupplierSourceUrlImportCandidates(
+      100,
+      supplierFilterId.value ? Number(supplierFilterId.value) : undefined,
+      sourceFilterId.value ? Number(sourceFilterId.value) : undefined,
+    );
+    sourceUrlCandidates.value = res.items || [];
+    sourceUrlSelection.value = {};
+    for (const item of sourceUrlCandidates.value) {
+      if (item.source_url) sourceUrlSelection.value[item.source_url] = true;
+    }
+  } catch (e) {
+    error.value = getApiErrorMessage(e);
+  } finally {
+    sourceUrlLoading.value = false;
   }
 };
 
@@ -179,6 +206,33 @@ const applyBulk = async () => {
   }
 };
 
+const startSourceUrlImport = async () => {
+  const urls = sourceUrlCandidates.value
+    .map((item) => item.source_url)
+    .filter((url) => url && sourceUrlSelection.value[url]);
+  const uniqueUrls = Array.from(new Set(urls));
+  if (!uniqueUrls.length) {
+    setToast('Нет выбранных ссылок');
+    return;
+  }
+  if (!confirm(`Запустить импорт ${uniqueUrls.length} товаров из source URL?`)) return;
+
+  sourceUrlImportLoading.value = true;
+  try {
+    const job = await api.startSupplierSourceUrlImport({
+      urls: uniqueUrls,
+      with_related: importWithRelated.value,
+      update_existing: false,
+    });
+    setToast(`Импорт запущен: ${job.job_id}`);
+    await loadSourceUrlCandidates();
+  } catch (e) {
+    error.value = getApiErrorMessage(e);
+  } finally {
+    sourceUrlImportLoading.value = false;
+  }
+};
+
 watch(supplierFilterId, async (value) => {
   if (!value) {
     sourceFilterId.value = '';
@@ -240,6 +294,63 @@ onMounted(async () => {
         </button>
       </div>
     </div>
+
+    <section class="bg-white dark:bg-slate-800 border border-blue-100 dark:border-slate-700 rounded-xl p-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 class="font-semibold text-slate-900 dark:text-white">Добавить товары из source URL</h2>
+          <p class="text-sm text-slate-500">
+            Показывает незамапленные строки прайса с Onliner/source URL, которых еще нет в каталоге.
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <label class="inline-flex items-center gap-2 rounded border px-3 py-2 text-sm">
+            <input v-model="importWithRelated" type="checkbox" />
+            связанные модели
+          </label>
+          <button
+            class="px-3 py-2 rounded border border-blue-200 text-blue-700 disabled:opacity-50"
+            :disabled="sourceUrlLoading"
+            @click="loadSourceUrlCandidates"
+          >
+            {{ sourceUrlLoading ? 'Проверка...' : 'Показать кандидатов' }}
+          </button>
+          <button
+            class="px-3 py-2 rounded bg-teal-600 text-white disabled:opacity-50"
+            :disabled="sourceUrlImportLoading || !selectedSourceUrlCount"
+            @click="startSourceUrlImport"
+          >
+            {{ sourceUrlImportLoading ? 'Запуск...' : `Импортировать: ${selectedSourceUrlCount}` }}
+          </button>
+        </div>
+      </div>
+      <div v-if="sourceUrlCandidates.length" class="mt-3 grid gap-2 md:grid-cols-2">
+        <label
+          v-for="item in sourceUrlCandidates"
+          :key="item.source_url"
+          class="flex gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+        >
+          <input v-model="sourceUrlSelection[item.source_url]" type="checkbox" class="mt-1" />
+          <span class="min-w-0">
+            <span class="block truncate font-medium">{{ item.title_raw || item.source_url }}</span>
+            <span class="mt-1 block text-xs text-slate-500">
+              {{ item.supplier_name || item.supplier_id }}<span v-if="item.source_name"> · {{ item.source_name }}</span>
+              <span v-if="item.rrc_byn"> · {{ item.rrc_byn }} BYN</span>
+              <span v-if="item.qty"> · {{ item.qty }} шт.</span>
+            </span>
+            <span v-if="item.model_tokens?.length" class="mt-1 block truncate font-mono text-xs text-slate-500">
+              {{ item.model_tokens.join(', ') }}
+            </span>
+            <a :href="item.source_url" target="_blank" rel="noreferrer" class="mt-1 inline-flex text-xs text-blue-700 underline">
+              открыть источник
+            </a>
+          </span>
+        </label>
+      </div>
+      <p v-else-if="sourceUrlLoading === false" class="mt-3 text-sm text-slate-500">
+        Нажмите проверку, чтобы найти товары для добавления.
+      </p>
+    </section>
 
     <div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
       <table class="w-full text-sm">

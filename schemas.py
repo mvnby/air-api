@@ -2922,6 +2922,30 @@ class SupplierOfferListResponse(BaseModel):
     meta: Meta
 
 
+class SupplierSourceUrlImportCandidate(BaseModel):
+    supplier_id: int
+    supplier_name: Optional[str] = None
+    source_id: Optional[int] = None
+    source_name: Optional[str] = None
+    external_id: str
+    title_raw: Optional[str] = None
+    source_url: str
+    model_tokens: List[str] = Field(default_factory=list)
+    qty: int = 0
+    rrc_byn: Optional[float] = None
+
+
+class SupplierSourceUrlImportCandidateListResponse(BaseModel):
+    items: List[SupplierSourceUrlImportCandidate]
+    total: int
+
+
+class SupplierSourceUrlImportPayload(BaseModel):
+    urls: List[str]
+    with_related: bool = False
+    update_existing: bool = False
+
+
 class SupplierMappingCreatePayload(BaseModel):
     product_id: int
     supplier_id: int

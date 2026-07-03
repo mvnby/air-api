@@ -83,6 +83,8 @@ import type { SupplierPriceSourceUpdatePayload } from '../models/SupplierPriceSo
 import type { SupplierResponse } from '../models/SupplierResponse';
 import type { SupplierSheetTabListResponse } from '../models/SupplierSheetTabListResponse';
 import type { SupplierSourceAnalysisResponse } from '../models/SupplierSourceAnalysisResponse';
+import type { SupplierSourceUrlImportCandidateListResponse } from '../models/SupplierSourceUrlImportCandidateListResponse';
+import type { SupplierSourceUrlImportPayload } from '../models/SupplierSourceUrlImportPayload';
 import type { SupplierSyncRunResponse } from '../models/SupplierSyncRunResponse';
 import type { SupplierUpdatePayload } from '../models/SupplierUpdatePayload';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -1699,6 +1701,51 @@ export class ManagerService {
                 'supplier_id': supplierId,
                 'source_id': sourceId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Supplier Source Url Import Candidates
+     * @param limit
+     * @param supplierId
+     * @param sourceId
+     * @returns SupplierSourceUrlImportCandidateListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listSupplierSourceUrlImportCandidates(
+        limit: number = 100,
+        supplierId?: (number | null),
+        sourceId?: (number | null),
+    ): CancelablePromise<SupplierSourceUrlImportCandidateListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/supplier-offers/source-url-import-candidates',
+            query: {
+                'limit': limit,
+                'supplier_id': supplierId,
+                'source_id': sourceId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Start Supplier Source Url Import
+     * @param requestBody
+     * @returns CatalogImportJobStartResponse Successful Response
+     * @throws ApiError
+     */
+    public static startSupplierSourceUrlImport(
+        requestBody: SupplierSourceUrlImportPayload,
+    ): CancelablePromise<CatalogImportJobStartResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/supplier-offers/source-url-import',
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

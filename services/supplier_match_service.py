@@ -11,7 +11,7 @@ from sqlmodel import select
 from models.product import Product
 from models.supplier import SupplierOffer
 from services.product_manager_service import ProductManagerService
-from services.supplier_source_url import normalize_source_url
+from services.supplier_source_url import normalize_source_url, source_url_variants
 
 
 MATCH_NORMALIZER_VERSION = "supplier-match-v2"
@@ -189,7 +189,7 @@ async def _collect_candidate_products(
     by_id: dict[int, dict[str, Any]] = {}
     if offer_source_url:
         result = await session.execute(
-            select(Product).where(Product.source_url == offer_source_url).limit(limit)
+            select(Product).where(Product.source_url.in_(source_url_variants(offer_source_url))).limit(limit)
         )
         for product in result.scalars().all():
             if product.id is not None:

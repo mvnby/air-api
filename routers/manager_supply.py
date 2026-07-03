@@ -17,9 +17,11 @@ from routers.manager_operation_ids import (
     DELETE_SUPPLIER_SOURCE,
     DELETE_SUPPLIER_MAPPING,
     GET_PRODUCT_SUPPLIER_OFFERS,
+    LIST_SUPPLIER_SOURCE_URL_IMPORT_CANDIDATES,
     LIST_SUPPLIER_SHEETS,
     LIST_SUPPLIERS,
     LIST_SUPPLIER_SOURCES,
+    START_SUPPLIER_SOURCE_URL_IMPORT,
     SUGGEST_SUPPLIER_OFFERS,
     SYNC_ALL_SUPPLIER_SOURCES,
     LIST_UNMAPPED_SUPPLIER_OFFERS,
@@ -30,6 +32,7 @@ from routers.manager_operation_ids import (
 )
 from schemas import (
     ManagerActionMessageResponse,
+    CatalogImportJobStartResponse,
     ProductLocalStockPayload,
     ProductLocalStockResponse,
     SupplierCreatePayload,
@@ -41,6 +44,8 @@ from schemas import (
     SupplierOfferListResponse,
     SupplierOfferSuggestionsPayload,
     SupplierOfferSuggestionsResponse,
+    SupplierSourceUrlImportCandidateListResponse,
+    SupplierSourceUrlImportPayload,
     SupplierSourceAnalysisResponse,
     SupplierPriceSourceCreatePayload,
     SupplierPriceSourceListResponse,
@@ -51,6 +56,7 @@ from schemas import (
     SupplierSyncRunResponse,
     SupplierUpdatePayload,
 )
+from services.catalog_import_runtime_service import catalog_import_runtime_service
 from services.supplier_mapping_service import SupplierCatalogService, SupplierMappingService
 from services.supplier_sync_service import SupplierSyncService
 
@@ -331,6 +337,55 @@ async def list_unmapped_supplier_offers(
         source_id=source_id,
         page=page,
         limit=limit,
+    )
+
+
+@router.get(
+    "/supplier-offers/source-url-import-candidates",
+    response_model=SupplierSourceUrlImportCandidateListResponse,
+    operation_id=LIST_SUPPLIER_SOURCE_URL_IMPORT_CANDIDATES,
+)
+async def list_supplier_source_url_import_candidates(
+    limit: int = Query(100, ge=1, le=200),
+    supplier_id: Optional[int] = Query(None),
+    source_id: Optional[int] = Query(None),
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    return await SupplierMappingService.list_source_url_import_candidates(
+        session=session,
+        supplier_id=supplier_id,
+        source_id=source_id,
+        limit=limit,
+    )
+
+
+@router.post(
+    "/supplier-offers/source-url-import",
+    response_model=CatalogImportJobStartResponse,
+    operation_id=START_SUPPLIER_SOURCE_URL_IMPORT,
+)
+async def start_supplier_source_url_import(
+    payload: SupplierSourceUrlImportPayload,
+    _user: str = Depends(get_current_username),
+):
+    urls = [url.strip() for url in payload.urls if url.strip()]
+    if not urls:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=START_SUPPLIER_SOURCE_URL_IMPORT,
+            error_code=BAD_REQUEST,
+            message="No URLs provided",
+        )
+    job = await catalog_import_runtime_service.start_import(
+        urls=list(dict.fromkeys(urls)),
+        with_related=payload.with_related,
+        update_existing=payload.update_existing,
+    )
+    return CatalogImportJobStartResponse(
+        job_id=job["job_id"],
+        status=job["status"],
+        stage=job["stage"],
     )
 
 

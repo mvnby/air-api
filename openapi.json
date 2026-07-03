@@ -14273,6 +14273,134 @@
         }
       }
     },
+    "/api/manager/supplier-offers/source-url-import-candidates": {
+      "get": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "List Supplier Source Url Import Candidates",
+        "operationId": "list_supplier_source_url_import_candidates",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "supplier_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Supplier Id"
+            }
+          },
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierSourceUrlImportCandidateListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/supplier-offers/source-url-import": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Start Supplier Source Url Import",
+        "operationId": "start_supplier_source_url_import",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupplierSourceUrlImportPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogImportJobStartResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/supplier-offers/suggestions": {
       "post": {
         "tags": [
@@ -37222,6 +37350,143 @@
           "row_kind"
         ],
         "title": "SupplierSourceAnalysisRow"
+      },
+      "SupplierSourceUrlImportCandidate": {
+        "properties": {
+          "supplier_id": {
+            "type": "integer",
+            "title": "Supplier Id"
+          },
+          "supplier_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Name"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "source_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Name"
+          },
+          "external_id": {
+            "type": "string",
+            "title": "External Id"
+          },
+          "title_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Raw"
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "model_tokens": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Model Tokens"
+          },
+          "qty": {
+            "type": "integer",
+            "title": "Qty",
+            "default": 0
+          },
+          "rrc_byn": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrc Byn"
+          }
+        },
+        "type": "object",
+        "required": [
+          "supplier_id",
+          "external_id",
+          "source_url"
+        ],
+        "title": "SupplierSourceUrlImportCandidate"
+      },
+      "SupplierSourceUrlImportCandidateListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SupplierSourceUrlImportCandidate"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "SupplierSourceUrlImportCandidateListResponse"
+      },
+      "SupplierSourceUrlImportPayload": {
+        "properties": {
+          "urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Urls"
+          },
+          "with_related": {
+            "type": "boolean",
+            "title": "With Related",
+            "default": false
+          },
+          "update_existing": {
+            "type": "boolean",
+            "title": "Update Existing",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "urls"
+        ],
+        "title": "SupplierSourceUrlImportPayload"
       },
       "SupplierSyncRunResponse": {
         "properties": {

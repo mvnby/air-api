@@ -346,6 +346,9 @@ export type { SupplierSheetTabListResponse } from './models/SupplierSheetTabList
 export type { SupplierSheetTabResponse } from './models/SupplierSheetTabResponse';
 export type { SupplierSourceAnalysisResponse } from './models/SupplierSourceAnalysisResponse';
 export type { SupplierSourceAnalysisRow } from './models/SupplierSourceAnalysisRow';
+export type { SupplierSourceUrlImportCandidate } from './models/SupplierSourceUrlImportCandidate';
+export type { SupplierSourceUrlImportCandidateListResponse } from './models/SupplierSourceUrlImportCandidateListResponse';
+export type { SupplierSourceUrlImportPayload } from './models/SupplierSourceUrlImportPayload';
 export type { SupplierSyncRunResponse } from './models/SupplierSyncRunResponse';
 export type { SupplierUpdatePayload } from './models/SupplierUpdatePayload';
 export type { TagGroupResponse } from './models/TagGroupResponse';
