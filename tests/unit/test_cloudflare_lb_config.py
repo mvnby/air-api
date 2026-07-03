@@ -3,6 +3,7 @@ import pytest
 from scripts.ha.check_cloudflare_lb_config import (
     AuditConfig,
     AuditFailure,
+    _format_cloudflare_http_error,
     audit_configuration,
 )
 
@@ -103,6 +104,19 @@ def test_audit_configuration_rejects_standby_fallback_pool():
             monitors=monitors,
             config=_config(),
         )
+
+
+def test_cloudflare_http_403_for_zone_lb_explains_required_token_permissions():
+    message = _format_cloudflare_http_error(
+        "/zones/zone-123/load_balancers",
+        403,
+        '{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}',
+    )
+
+    assert "10000: Authentication error" in message
+    assert "Zone / Load Balancers / Read" in message
+    assert "Account / Load Balancing: Monitors and Pools / Read" in message
+
 
 def test_audit_configuration_rejects_reversed_pool_order():
     load_balancers, pools, monitors = _fixtures()
