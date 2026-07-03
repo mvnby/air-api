@@ -91,10 +91,12 @@ def validate_db_media_refs(
     *,
     expected_cdn_base: str,
     min_db_cdn_urls: int,
+    min_db_cdn_urls_by_source: Mapping[str, int] | None = None,
 ) -> list[str]:
     failures: list[str] = []
     normalized_base = expected_cdn_base.rstrip("/")
     cdn_count = 0
+    cdn_count_by_source: dict[str, int] = {}
 
     for ref in refs:
         label = f"source={ref.source} object_id={ref.object_id} field={ref.field}"
@@ -113,11 +115,49 @@ def validate_db_media_refs(
             failures.append(f"{label} url does not use {normalized_base}: {ref.url}")
             continue
         cdn_count += 1
+        cdn_count_by_source[ref.source] = cdn_count_by_source.get(ref.source, 0) + 1
 
     if cdn_count < min_db_cdn_urls:
         failures.append(f"only {cdn_count} DB CDN media urls found; expected at least {min_db_cdn_urls}")
 
+    for source, minimum in (min_db_cdn_urls_by_source or {}).items():
+        actual = cdn_count_by_source.get(source, 0)
+        if actual < minimum:
+            failures.append(f"source {source} has {actual} DB CDN media urls; expected at least {minimum}")
+
     return failures
+
+
+def parse_min_db_cdn_urls_by_source(value: str | None) -> dict[str, int]:
+    result: dict[str, int] = {}
+    for raw_item in (value or "").split(","):
+        item = raw_item.strip()
+        if not item:
+            continue
+        if "=" not in item:
+            raise ValueError(f"source threshold must look like source=count: {item}")
+        source, raw_minimum = (part.strip() for part in item.split("=", 1))
+        if not source:
+            raise ValueError(f"source threshold is missing source name: {item}")
+        try:
+            minimum = int(raw_minimum)
+        except ValueError as exc:
+            raise ValueError(f"source threshold count must be an integer: {item}") from exc
+        if minimum < 0:
+            raise ValueError(f"source threshold count must be >= 0: {item}")
+        result[source] = minimum
+    return result
+
+
+def summarize_refs_by_source(refs: list[DbMediaRef], *, expected_cdn_base: str) -> dict[str, dict[str, int]]:
+    normalized_base = expected_cdn_base.rstrip("/")
+    summary: dict[str, dict[str, int]] = {}
+    for ref in refs:
+        source_summary = summary.setdefault(ref.source, {"refs": 0, "cdn_urls": 0})
+        source_summary["refs"] += 1
+        if ref.url and ref.url.startswith(f"{normalized_base}/"):
+            source_summary["cdn_urls"] += 1
+    return summary
 
 
 def unique_db_cdn_urls(refs: list[DbMediaRef], *, expected_cdn_base: str) -> list[str]:
@@ -197,6 +237,7 @@ async def check_db_media_cdn(
     *,
     expected_cdn_base: str,
     min_db_cdn_urls: int,
+    min_db_cdn_urls_by_source: Mapping[str, int] | None,
     max_rows_per_source: int,
     order_scan_limit: int,
     max_fetches: int,
@@ -212,6 +253,7 @@ async def check_db_media_cdn(
         refs,
         expected_cdn_base=expected_cdn_base,
         min_db_cdn_urls=min_db_cdn_urls,
+        min_db_cdn_urls_by_source=min_db_cdn_urls_by_source,
     )
 
     fetch_results: list[CdnFetchResult] = []
@@ -257,10 +299,24 @@ def _print_fetch(result: CdnFetchResult) -> None:
     )
 
 
+def _print_source_summary(source: str, counts: Mapping[str, int]) -> None:
+    print(
+        "db_media_cdn_source "
+        f"source={source} "
+        f"refs={counts.get('refs', 0)} "
+        f"cdn_urls={counts.get('cdn_urls', 0)}"
+    )
+
+
 async def async_main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check DB-backed media CDN URLs.")
     parser.add_argument("--expected-cdn-base", default="https://cdn.mvn.by")
     parser.add_argument("--min-db-cdn-urls", type=int, default=3)
+    parser.add_argument(
+        "--min-db-cdn-urls-by-source",
+        default="",
+        help="Comma-separated per-source thresholds, for example product_image_variant=1,media_asset=1.",
+    )
     parser.add_argument("--max-rows-per-source", type=int, default=20)
     parser.add_argument("--order-scan-limit", type=int, default=200)
     parser.add_argument("--max-fetches", type=int, default=10)
@@ -269,9 +325,11 @@ async def async_main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        min_db_cdn_urls_by_source = parse_min_db_cdn_urls_by_source(args.min_db_cdn_urls_by_source)
         refs, fetch_results, failures = await check_db_media_cdn(
             expected_cdn_base=args.expected_cdn_base,
             min_db_cdn_urls=args.min_db_cdn_urls,
+            min_db_cdn_urls_by_source=min_db_cdn_urls_by_source,
             max_rows_per_source=max(1, args.max_rows_per_source),
             order_scan_limit=max(1, args.order_scan_limit),
             max_fetches=max(1, args.max_fetches),
@@ -284,6 +342,8 @@ async def async_main(argv: list[str] | None = None) -> int:
 
     for ref in refs:
         _print_ref(ref)
+    for source, counts in sorted(summarize_refs_by_source(refs, expected_cdn_base=args.expected_cdn_base).items()):
+        _print_source_summary(source, counts)
     for result in fetch_results:
         _print_fetch(result)
 
