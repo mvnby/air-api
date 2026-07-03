@@ -8,17 +8,22 @@ stdin, not as a command-line argument, so it does not appear in process args.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Sequence
 
 
 DEFAULT_REPO = "mvnby/air-api"
 DEFAULT_REF = "main"
 WORKFLOW = "check-cloudflare-lb-config.yml"
+DEFAULT_TOKEN_ENV = "CLOUDFLARE_LB_READ_TOKEN"
+TOKEN_FALLBACK_ENVS = ("CLOUDFLARE_API_TOKEN_LB_AUDIT",)
 
 Runner = Callable[[Sequence[str], str | None], subprocess.CompletedProcess[str]]
 
@@ -50,20 +55,76 @@ def env_value(name: str) -> str:
     return str(os.environ.get(name) or "").strip()
 
 
-def collect_inputs(*, token_env: str, zone_id_env: str, account_id_env: str) -> tuple[str, str, str]:
-    values = (
-        env_value(token_env),
-        env_value(zone_id_env),
-        env_value(account_id_env),
-    )
-    missing = [
+def _parse_env_line(line: str) -> tuple[str, str] | None:
+    line = line.strip()
+    if not line or line.startswith("#") or "=" not in line:
+        return None
+    key, raw_value = line.split("=", 1)
+    key = key.strip().removeprefix("export ").strip()
+    if not key or not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", key):
+        return None
+    raw_value = raw_value.strip()
+    if raw_value and raw_value[0] in {"'", '"'}:
+        try:
+            parts = shlex.split(f"{key}={raw_value}", posix=True)
+        except ValueError:
+            parts = []
+        if parts and "=" in parts[0]:
+            return key, parts[0].split("=", 1)[1]
+    if " #" in raw_value:
+        raw_value = raw_value.split(" #", 1)[0].rstrip()
+    return key, raw_value
+
+
+def load_env_file(path: Path, *, allowed_names: set[str]) -> None:
+    if not path.exists():
+        raise RuntimeError(f"env file not found: {path}")
+    loaded = 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        parsed = _parse_env_line(line)
+        if parsed is None:
+            continue
+        key, value = parsed
+        if key not in allowed_names:
+            continue
+        if key not in os.environ:
+            os.environ[key] = value
+            loaded += 1
+    log("ok", f"loaded env file: {path} keys={loaded}")
+
+
+def _first_env_value(names: Sequence[str]) -> tuple[str, str]:
+    for name in names:
+        value = env_value(name)
+        if value:
+            return value, name
+    return "", names[0] if names else ""
+
+
+def collect_inputs(
+    *,
+    token_env: str,
+    zone_id_env: str,
+    account_id_env: str,
+    token_fallback_envs: Sequence[str] = TOKEN_FALLBACK_ENVS,
+) -> tuple[str, str, str, str]:
+    token, token_source = _first_env_value((token_env, *token_fallback_envs))
+    zone_id = env_value(zone_id_env)
+    account_id = env_value(account_id_env)
+    token_label = token_env
+    if token_fallback_envs:
+        token_label = f"{token_env} (or {'/'.join(token_fallback_envs)})"
+    missing = []
+    if not token:
+        missing.append(token_label)
+    missing.extend(
         env_name
-        for env_name, value in zip((token_env, zone_id_env, account_id_env), values, strict=True)
+        for env_name, value in ((zone_id_env, zone_id), (account_id_env, account_id))
         if not value
-    ]
+    )
     if missing:
         raise RuntimeError("missing required environment variables: " + ", ".join(missing))
-    return values
+    return token, zone_id, account_id, token_source
 
 
 def set_secret(repo: str, name: str, value: str, *, runner: Runner | None = None) -> None:
@@ -90,6 +151,72 @@ def parse_run_id(output: str) -> str:
     return match.group(1)
 
 
+def parse_run_id_optional(output: str) -> str | None:
+    match = re.search(r"/actions/runs/([0-9]+)", output)
+    if match:
+        return match.group(1)
+    return None
+
+
+def parse_github_time(value: str) -> datetime | None:
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def find_recent_workflow_run_id(
+    *,
+    repo: str,
+    ref: str,
+    workflow: str,
+    started_after: datetime,
+    runner: Runner | None = None,
+) -> str:
+    output = run_checked(
+        [
+            "gh",
+            "run",
+            "list",
+            "--repo",
+            repo,
+            "--workflow",
+            workflow,
+            "--branch",
+            ref,
+            "--event",
+            "workflow_dispatch",
+            "--json",
+            "databaseId,createdAt,url",
+            "--limit",
+            "10",
+        ],
+        runner=runner,
+    )
+    try:
+        runs = json.loads(output or "[]")
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"could not parse gh run list output for {workflow}: {output!r}") from exc
+
+    candidates: list[tuple[datetime, str]] = []
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        created_at = parse_github_time(str(run.get("createdAt") or ""))
+        run_id = str(run.get("databaseId") or "")
+        if created_at and run_id and created_at >= started_after:
+            candidates.append((created_at, run_id))
+
+    if not candidates:
+        raise RuntimeError(
+            f"could not find a recent workflow_dispatch run for {workflow}; "
+            "rerun or inspect GitHub Actions manually"
+        )
+
+    candidates.sort(reverse=True)
+    return candidates[0][1]
+
+
 def run_cloudflare_required_workflow(
     *,
     repo: str,
@@ -97,6 +224,7 @@ def run_cloudflare_required_workflow(
     wait: bool,
     runner: Runner | None = None,
 ) -> str:
+    started_after = datetime.now(timezone.utc) - timedelta(seconds=10)
     output = run_checked(
         [
             "gh",
@@ -112,7 +240,15 @@ def run_cloudflare_required_workflow(
         ],
         runner=runner,
     )
-    run_id = parse_run_id(output)
+    run_id = parse_run_id_optional(output)
+    if not run_id:
+        run_id = find_recent_workflow_run_id(
+            repo=repo,
+            ref=ref,
+            workflow=WORKFLOW,
+            started_after=started_after,
+            runner=runner,
+        )
     log("ok", f"started Cloudflare LB required audit: {output}")
     if wait:
         run_checked(
@@ -129,9 +265,14 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     )
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY") or DEFAULT_REPO)
     parser.add_argument("--ref", default=DEFAULT_REF)
-    parser.add_argument("--token-env", default="CLOUDFLARE_LB_READ_TOKEN")
+    parser.add_argument("--token-env", default=DEFAULT_TOKEN_ENV)
     parser.add_argument("--zone-id-env", default="CLOUDFLARE_ZONE_ID")
     parser.add_argument("--account-id-env", default="CLOUDFLARE_ACCOUNT_ID")
+    parser.add_argument(
+        "--env-file",
+        default=os.environ.get("HA_ENV_FILE") or "",
+        help="Optional dotenv-style file to load before reading Cloudflare inputs.",
+    )
     parser.add_argument(
         "--mark-required",
         action="store_true",
@@ -153,13 +294,23 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     try:
-        token, zone_id, account_id = collect_inputs(
+        if args.env_file:
+            load_env_file(
+                Path(args.env_file),
+                allowed_names={
+                    args.token_env,
+                    *TOKEN_FALLBACK_ENVS,
+                    args.zone_id_env,
+                    args.account_id_env,
+                },
+            )
+        token, zone_id, account_id, token_source = collect_inputs(
             token_env=args.token_env,
             zone_id_env=args.zone_id_env,
             account_id_env=args.account_id_env,
         )
         log("info", f"repo={args.repo} ref={args.ref}")
-        log("info", f"using token from ${args.token_env}; value will not be printed")
+        log("info", f"using token from ${token_source}; value will not be printed")
         if args.mark_required and args.no_wait:
             raise RuntimeError("--mark-required requires waiting for the required audit to pass")
 
