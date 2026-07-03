@@ -236,3 +236,16 @@ def test_main_with_confirm_patches_minimal_payload(monkeypatch):
         "secret-token",
         {"default_pools": ["pool-standby", "pool-primary"], "fallback_pool": "pool-standby"},
     )
+
+
+def test_cloudflare_patch_403_explains_write_permission():
+    message = module._format_cloudflare_patch_error(
+        "/zones/zone/load_balancers/lb-api",
+        403,
+        '{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}',
+    )
+
+    assert "Authentication error" in message
+    assert "Zone / Load Balancers / Edit" in message
+    assert "default_pools" in message
+    assert "fallback_pool" in message
