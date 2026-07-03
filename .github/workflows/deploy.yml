@@ -467,6 +467,9 @@ jobs:
             echo "⏭️ API_STANDBY_COPY_COMPOSE=${API_STANDBY_COPY_COMPOSE}; keeping remote standby compose unchanged"
           fi
 
+          cat scripts/ha/promote_local_standby.sh | ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "install -m 0755 /dev/stdin /usr/local/sbin/mvn-promote-local-standby"
+          cat scripts/ha/mvn-standby-status.sh | ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "install -m 0755 /dev/stdin /usr/local/sbin/mvn-standby-status"
+
           ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "\
             set -euo pipefail && \
             cd '${API_STANDBY_PROJECT_DIR}' && \
