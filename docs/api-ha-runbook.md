@@ -63,6 +63,7 @@ unreviewed host-local compose edits:
 | PostgreSQL PITR systemd units | `deploy/ha/systemd/mvn-postgres-wal-upload.*`, `deploy/ha/systemd/mvn-postgres-basebackup.*` |
 | Cloudflare LB primary switch helper | `scripts/ha/switch_cloudflare_lb_primary.py` |
 | External strict-mode prerequisite check | `scripts/ha/check_ha_external_prerequisites.py` |
+| Operator HA status report | `scripts/ha/report_ha_status.py` |
 | Strict-mode activation helper | `scripts/ha/enable_ha_strict_mode.py` |
 | Cloudflare LB GitHub prerequisite apply helper | `scripts/ha/apply_cloudflare_lb_github_prerequisites.py` |
 | Status helpers | `scripts/ha/mvn-primary-status.sh`, `scripts/ha/mvn-standby-status.sh` |
@@ -137,6 +138,18 @@ This check uses `gh` metadata only. It lists missing GitHub variables/secrets
 without printing secret values. It cannot read host-local private PITR R2
 credentials; after those are installed, verify them on the primary with
 `ssh mvn-api '/usr/local/sbin/mvn-postgres-pitr-bootstrap verify'`.
+
+Operator rollup report:
+
+```bash
+python3 scripts/ha/report_ha_status.py --repo mvnby/air-api
+python3 scripts/ha/report_ha_status.py --repo mvnby/air-api --require-strict
+```
+
+The default report checks recent GitHub deploy/monitor runs, lists external
+strict-mode blockers as attention items, and runs the direct-origin
+active-passive invariant. Use `--require-strict` before enabling strict mode;
+in that mode missing Cloudflare/PITR prerequisites become hard failures.
 
 After creating the Cloudflare LB read-only token and finding the zone/account
 ids, apply them to GitHub without pasting secrets into command history:
