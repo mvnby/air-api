@@ -38,7 +38,7 @@ def test_external_prerequisites_report_missing_cloudflare_secret_and_vars():
     assert any("missing GitHub variable CLOUDFLARE_ZONE_ID" in item for item in failures)
     assert any("missing optional GitHub secret HA_ALERT_TELEGRAM_BOT_TOKEN" in item for item in warnings)
     assert any("missing optional GitHub secret HA_ALERT_TELEGRAM_CHAT_ID" in item for item in warnings)
-    assert any("missing optional GitHub secret HA_ALERT_TELEGRAM_THREAD_ID" in item for item in warnings)
+    assert not any("HA_ALERT_TELEGRAM_THREAD_ID" in item for item in warnings)
     assert any("POSTGRES_PITR_REQUIRED is not true yet" in item for item in warnings)
     assert any("variable present: POSTGRES_PITR_MAX_WAL_AGE_MINUTES" in item for item in ok)
 
@@ -91,9 +91,11 @@ def test_external_prerequisites_pass_when_all_metadata_is_ready():
 
     assert not failures
     assert any("optional secret present: HA_ALERT_TELEGRAM_BOT_TOKEN" in item for item in ok)
+    assert any("optional secret present: HA_ALERT_TELEGRAM_THREAD_ID" in item for item in ok)
     assert any("strict variable enabled: API_HA_READINESS_STRICT" in item for item in ok)
     assert any("strict variable enabled: POSTGRES_PITR_REQUIRED" in item for item in ok)
-    assert any("private PITR R2 credentials are host-local" in item for item in warnings)
+    assert any("strict PITR checks are enabled" in item for item in ok)
+    assert not any("private PITR R2 credentials are host-local" in item for item in warnings)
 
 
 def test_env_metadata_loader_records_presence_without_secret_values(monkeypatch):

@@ -152,7 +152,6 @@ def test_next_steps_explain_external_blockers_without_secret_values():
         ok=[],
         warnings=[
             "missing optional GitHub secret HA_ALERT_TELEGRAM_BOT_TOKEN",
-            "missing optional GitHub secret HA_ALERT_TELEGRAM_THREAD_ID",
             "POSTGRES_PITR_REQUIRED is not true yet",
             "private PITR R2 credentials are host-local; verify with `ssh mvn-api`",
         ],
@@ -170,7 +169,7 @@ def test_next_steps_explain_external_blockers_without_secret_values():
     assert any("mvn-postgres-pitr-bootstrap verify" in step for step in steps)
     assert any("enable_ha_strict_mode.py" in step for step in steps)
     assert any("HA_ALERT_TELEGRAM_BOT_TOKEN" in step for step in steps)
-    assert any("HA_ALERT_TELEGRAM_THREAD_ID" in step for step in steps)
+    assert any("optionally HA_ALERT_TELEGRAM_THREAD_ID" in step for step in steps)
     assert not any("secret-token" in step for step in steps)
 
 
