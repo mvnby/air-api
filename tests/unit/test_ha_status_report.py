@@ -73,14 +73,14 @@ def test_evaluate_workflows_flags_missing_failed_and_stale_runs():
 
 
 def test_external_prereq_failures_are_blockers_until_require_strict(monkeypatch):
-    def fake_load_metadata(repo: str):
+    def fake_load_metadata(*, repo: str):
         assert repo == "mvnby/air-api"
         return object()
 
     def fake_check_metadata(metadata: object, *, require_strict: bool):
         return ["var present"], ["optional missing"], ["missing cloudflare token"]
 
-    monkeypatch.setattr(report_ha_status, "load_github_metadata", fake_load_metadata)
+    monkeypatch.setattr(report_ha_status, "load_metadata", fake_load_metadata)
     monkeypatch.setattr(report_ha_status, "check_metadata", fake_check_metadata)
 
     soft = report_ha_status.external_prereq_result(repo="mvnby/air-api", require_strict=False)

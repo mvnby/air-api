@@ -88,3 +88,20 @@ def test_external_prerequisites_pass_when_all_metadata_is_ready():
     assert any("strict variable enabled: API_HA_READINESS_STRICT" in item for item in ok)
     assert any("strict variable enabled: POSTGRES_PITR_REQUIRED" in item for item in ok)
     assert any("private PITR R2 credentials are host-local" in item for item in warnings)
+
+
+def test_env_metadata_loader_records_presence_without_secret_values(monkeypatch):
+    monkeypatch.setenv("CLOUDFLARE_LB_READ_TOKEN", "secret-token")
+    monkeypatch.setenv("HA_ALERT_TELEGRAM_BOT_TOKEN", "telegram-token")
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "account")
+    monkeypatch.setenv("CLOUDFLARE_ZONE_ID", "zone")
+    monkeypatch.setenv("POSTGRES_PITR_REQUIRED", "false")
+    monkeypatch.setenv("POSTGRES_PITR_MAX_WAL_AGE_MINUTES", "180")
+
+    metadata = module.load_metadata(repo="mvnby/air-api", source="env")
+
+    assert metadata.secrets == {"CLOUDFLARE_LB_READ_TOKEN", "HA_ALERT_TELEGRAM_BOT_TOKEN"}
+    assert metadata.variables["CLOUDFLARE_ACCOUNT_ID"] == "account"
+    assert metadata.variables["CLOUDFLARE_ZONE_ID"] == "zone"
+    assert metadata.variables["POSTGRES_PITR_REQUIRED"] == "false"
+    assert "secret-token" not in metadata.secrets

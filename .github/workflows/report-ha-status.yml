@@ -1,0 +1,96 @@
+name: API HA Status Report
+
+on:
+  schedule:
+    - cron: "17 */2 * * *"
+  workflow_dispatch:
+    inputs:
+      require_strict:
+        description: "Fail on external strict-mode blockers"
+        type: boolean
+        required: false
+        default: false
+      skip_live:
+        description: "Skip direct-origin active/passive curl check"
+        type: boolean
+        required: false
+        default: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  HA_STATUS_REQUIRE_STRICT: ${{ github.event_name == 'workflow_dispatch' && inputs.require_strict || 'false' }}
+  HA_STATUS_SKIP_LIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_live || 'false' }}
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run HA status report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HA_EXTERNAL_METADATA_SOURCE: env
+          API_PRIMARY_ORIGIN: ${{ vars.API_PRIMARY_ORIGIN || '185.250.45.54' }}
+          API_STANDBY_ORIGIN: ${{ vars.API_STANDBY_ORIGIN || '193.47.42.213' }}
+          API_HA_READINESS_STRICT: ${{ vars.API_HA_READINESS_STRICT || 'false' }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_LB_CONFIG_REQUIRED: ${{ vars.CLOUDFLARE_LB_CONFIG_REQUIRED || 'false' }}
+          CLOUDFLARE_LB_READ_TOKEN: ${{ secrets.CLOUDFLARE_LB_READ_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
+          HA_ALERT_TELEGRAM_BOT_TOKEN: ${{ secrets.HA_ALERT_TELEGRAM_BOT_TOKEN }}
+          HA_ALERT_TELEGRAM_CHAT_ID: ${{ secrets.HA_ALERT_TELEGRAM_CHAT_ID }}
+          POSTGRES_PITR_MAX_BASEBACKUP_AGE_HOURS: ${{ vars.POSTGRES_PITR_MAX_BASEBACKUP_AGE_HOURS || '30' }}
+          POSTGRES_PITR_MAX_WAL_AGE_MINUTES: ${{ vars.POSTGRES_PITR_MAX_WAL_AGE_MINUTES || '180' }}
+          POSTGRES_PITR_REQUIRED: ${{ vars.POSTGRES_PITR_REQUIRED || 'false' }}
+        run: |
+          set -euo pipefail
+          args=(
+            --repo "${GITHUB_REPOSITORY}"
+            --branch "${GITHUB_REF_NAME:-main}"
+            --primary-origin "${API_PRIMARY_ORIGIN}"
+            --standby-origin "${API_STANDBY_ORIGIN}"
+          )
+          if [ "${HA_STATUS_REQUIRE_STRICT}" = "true" ]; then
+            args+=(--require-strict)
+          fi
+          if [ "${HA_STATUS_SKIP_LIVE}" = "true" ]; then
+            args+=(--skip-live)
+          fi
+          python3 scripts/ha/report_ha_status.py "${args[@]}" 2>&1 | tee ha-status-report.log
+
+      - name: Write Summary
+        if: always()
+        run: |
+          {
+            echo "## API HA Status Report"
+            echo "- require_strict: ${HA_STATUS_REQUIRE_STRICT}"
+            echo "- skip_live: ${HA_STATUS_SKIP_LIVE}"
+            echo "- primary_origin: ${{ vars.API_PRIMARY_ORIGIN || '185.250.45.54' }}"
+            echo "- standby_origin: ${{ vars.API_STANDBY_ORIGIN || '193.47.42.213' }}"
+            echo "- log_artifact: ha-status-report-log-${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload HA status report log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ha-status-report-log-${{ github.run_id }}
+          path: ha-status-report.log
+          if-no-files-found: warn
+
+      - name: Notify HA failure
+        if: failure()
+        uses: ./.github/actions/notify-ha-failure
+        with:
+          bot-token: ${{ secrets.HA_ALERT_TELEGRAM_BOT_TOKEN }}
+          chat-id: ${{ secrets.HA_ALERT_TELEGRAM_CHAT_ID }}
+          thread-id: ${{ secrets.HA_ALERT_TELEGRAM_THREAD_ID }}
+          title: "MVN API HA status report failed"
+          details: "Artifact: ha-status-report-log-${{ github.run_id }}"

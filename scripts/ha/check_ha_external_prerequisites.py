@@ -82,6 +82,34 @@ def load_github_metadata(repo: str) -> GithubMetadata:
     return GithubMetadata(variables=variables, secrets=secrets)
 
 
+def load_env_metadata() -> GithubMetadata:
+    """Load prerequisite metadata from process env without printing secrets.
+
+    GitHub Actions' default token can run workflows and read workflow history,
+    but it is not a good fit for listing repository secret metadata. Scheduled
+    HA reports pass the relevant secret names as env vars and this loader only
+    records whether each value is non-empty.
+    """
+
+    variables = {
+        name: os.getenv(name, "").strip()
+        for name in REQUIRED_VARIABLES
+        if os.getenv(name, "").strip()
+    }
+    secret_names = set(REQUIRED_SECRETS) | set(OPTIONAL_SECRETS)
+    secrets = {name for name in secret_names if os.getenv(name, "").strip()}
+    return GithubMetadata(variables=variables, secrets=secrets)
+
+
+def load_metadata(*, repo: str, source: str | None = None) -> GithubMetadata:
+    metadata_source = (source or os.getenv("HA_EXTERNAL_METADATA_SOURCE") or "github").strip().lower()
+    if metadata_source == "github":
+        return load_github_metadata(repo)
+    if metadata_source == "env":
+        return load_env_metadata()
+    raise RuntimeError("HA_EXTERNAL_METADATA_SOURCE must be 'github' or 'env'")
+
+
 def is_true(value: str | None) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
@@ -158,13 +186,19 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         action="store_true",
         help="Fail unless strict-mode variables are already true.",
     )
+    parser.add_argument(
+        "--metadata-source",
+        choices=("github", "env"),
+        default=os.environ.get("HA_EXTERNAL_METADATA_SOURCE") or "github",
+        help="Where to read prerequisite metadata from. Default: github.",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     try:
-        metadata = load_github_metadata(args.repo)
+        metadata = load_metadata(repo=args.repo, source=args.metadata_source)
     except (RuntimeError, json.JSONDecodeError) as exc:
         print(f"[ha-external][fail] {exc}", file=sys.stderr)
         return 2
