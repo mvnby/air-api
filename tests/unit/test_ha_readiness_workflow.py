@@ -37,6 +37,7 @@ def test_ha_readiness_workflow_wires_core_and_soft_blocker_inputs():
     assert "secrets.SSH_KEY" in ssh_step["env"]["SSH_KEY"]
     assert "CLOUDFLARE_LB_READ_TOKEN" in audit_step["env"]["CLOUDFLARE_API_TOKEN"]
     assert "POSTGRES_PITR_REQUIRED" in audit_step["env"]
+    assert audit_step["env"]["CHECK_PUBLIC_READY"] == "false"
     assert "scripts/ha/check_api_ha_readiness.sh" in audit_step["run"]
     assert "PRIMARY_SSH" in audit_step["run"]
     assert "STANDBY_SSH" in audit_step["run"]
@@ -44,3 +45,11 @@ def test_ha_readiness_workflow_wires_core_and_soft_blocker_inputs():
     assert "strict:" in summary_step["run"]
     assert artifact_step["if"] == "always()"
     assert artifact_step["with"]["path"] == "api-ha-readiness.log"
+
+
+def test_ha_invariant_workflow_skips_public_cloudflare_challenge_from_runner():
+    workflow = _workflow(".github/workflows/check-api-ha-invariants.yml")
+    check_step = next(step for step in workflow["jobs"]["check"]["steps"] if step.get("name") == "Run active-passive invariant check")
+
+    assert check_step["env"]["CHECK_PUBLIC_READY"] == "false"
+    assert "scripts/ha/check_active_passive.sh" in check_step["run"]

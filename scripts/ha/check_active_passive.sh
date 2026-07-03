@@ -7,6 +7,7 @@ PRIMARY_ORIGIN="${PRIMARY_ORIGIN:-185.250.45.54}"
 STANDBY_ORIGIN="${STANDBY_ORIGIN:-193.47.42.213}"
 PRIMARY_ROLE="${PRIMARY_ROLE:-primary}"
 STANDBY_ROLE="${STANDBY_ROLE:-standby}"
+CHECK_PUBLIC_READY="${CHECK_PUBLIC_READY:-true}"
 CURL_CONNECT_TIMEOUT="${CURL_CONNECT_TIMEOUT:-5}"
 CURL_MAX_TIME="${CURL_MAX_TIME:-15}"
 
@@ -31,6 +32,13 @@ curl_json() {
     -w '%{http_code}' \
     "$@" \
     "${url}"
+}
+
+is_true() {
+  case "${1:-}" in
+    true|TRUE|True|1|yes|YES|Yes|on|ON|On) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 validate_payload() {
@@ -72,14 +80,18 @@ public_file="${TMP_DIR}/public-ready.json"
 primary_file="${TMP_DIR}/primary-ready.json"
 standby_file="${TMP_DIR}/standby-ready.json"
 
-public_code="$(curl_json "public ready" "${PUBLIC_BASE_URL%/}/api/ready" "${public_file}")"
-printf '\n'
-if [[ "${public_code}" != "200" ]]; then
-  log "public /api/ready expected HTTP 200, got ${public_code}"
-  cat "${public_file}" || true
-  exit 1
+if is_true "${CHECK_PUBLIC_READY}"; then
+  public_code="$(curl_json "public ready" "${PUBLIC_BASE_URL%/}/api/ready" "${public_file}")"
+  printf '\n'
+  if [[ "${public_code}" != "200" ]]; then
+    log "public /api/ready expected HTTP 200, got ${public_code}"
+    cat "${public_file}" || true
+    exit 1
+  fi
+  validate_payload "public" "${public_file}" "${PRIMARY_ROLE}" ready
+else
+  log "public ready check skipped"
 fi
-validate_payload "public" "${public_file}" "${PRIMARY_ROLE}" ready
 
 primary_code="$(curl_json "primary direct ready" "https://${API_HOST}/api/ready" "${primary_file}" --resolve "${API_HOST}:443:${PRIMARY_ORIGIN}")"
 printf '\n'

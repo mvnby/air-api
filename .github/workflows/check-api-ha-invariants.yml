@@ -38,6 +38,7 @@ jobs:
           STANDBY_ORIGIN: ${{ github.event.inputs.standby_origin || vars.API_STANDBY_ORIGIN || '193.47.42.213' }}
           PRIMARY_ROLE: primary
           STANDBY_ROLE: standby
+          CHECK_PUBLIC_READY: "false"
         run: bash scripts/ha/check_active_passive.sh | tee api-ha-invariant.log
 
       - name: Upload HA invariant log
