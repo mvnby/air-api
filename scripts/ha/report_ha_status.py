@@ -300,6 +300,62 @@ def combine_results(results: Sequence[ReportResult]) -> ReportResult:
     return ReportResult(ok=ok, warnings=warnings, blockers=blockers, failures=failures)
 
 
+def next_steps_for(result: ReportResult) -> list[str]:
+    messages = [*result.failures, *result.blockers, *result.warnings]
+    joined = "\n".join(messages)
+    next_steps: list[str] = []
+
+    def add_once(message: str) -> None:
+        if message not in next_steps:
+            next_steps.append(message)
+
+    if result.failures:
+        add_once("inspect failed workflow URLs/artifacts before changing API routing or database roles")
+
+    if any(
+        key in joined
+        for key in (
+            "CLOUDFLARE_LB_READ_TOKEN",
+            "CLOUDFLARE_ACCOUNT_ID",
+            "CLOUDFLARE_ZONE_ID",
+        )
+    ):
+        add_once(
+            "create the Cloudflare LB read-only token and zone/account ids, then run "
+            "`python3 scripts/ha/apply_cloudflare_lb_github_prerequisites.py --repo mvnby/air-api`"
+        )
+
+    if "private PITR R2 credentials are host-local" in joined:
+        add_once(
+            "install private PostgreSQL PITR R2 credentials on the primary, then run "
+            "`ssh mvn-api '/usr/local/sbin/mvn-postgres-pitr-bootstrap verify'`"
+        )
+
+    if "POSTGRES_PITR_REQUIRED is not true yet" in joined:
+        add_once("run one required PostgreSQL PITR freshness check and physical restore drill before enabling PITR strict mode")
+
+    if any(
+        key in joined
+        for key in (
+            "API_HA_READINESS_STRICT is not true yet",
+            "CLOUDFLARE_LB_CONFIG_REQUIRED is not true yet",
+            "POSTGRES_PITR_REQUIRED is not true yet",
+        )
+    ):
+        add_once(
+            "after Cloudflare LB and PITR proofs pass, enable strict mode with "
+            "`python3 scripts/ha/enable_ha_strict_mode.py --repo mvnby/air-api`"
+        )
+
+    if "HA_ALERT_TELEGRAM_BOT_TOKEN" in joined or "HA_ALERT_TELEGRAM_CHAT_ID" in joined:
+        add_once("set HA_ALERT_TELEGRAM_BOT_TOKEN and HA_ALERT_TELEGRAM_CHAT_ID to receive owner-visible HA alerts")
+
+    if "live active/passive check skipped" in joined:
+        add_once("rerun without --skip-live before failover, promotion, or strict-mode changes")
+
+    return next_steps
+
+
 def print_result(prefix: str, result: ReportResult) -> None:
     for line in result.ok:
         log(f"{prefix}-ok", line)
@@ -370,6 +426,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"status={combined.status} ok={len(combined.ok)} warnings={len(combined.warnings)} "
         f"blockers={len(combined.blockers)} failures={len(combined.failures)}",
     )
+    for step in next_steps_for(combined):
+        log("next-step", step)
     return 1 if combined.failures else 0
 
 
