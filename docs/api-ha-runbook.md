@@ -222,7 +222,9 @@ ssh mvn-api 'CONFIRM_RECREATE_DB=true /usr/local/sbin/mvn-postgres-pitr-bootstra
 # Then enable recurring PITR.
 ssh mvn-api '/usr/local/sbin/mvn-postgres-pitr-bootstrap enable-timers'
 
-# Finally make the scheduled GitHub PITR check strict.
+# Finally make the scheduled GitHub PITR check strict, but only after
+# `mvn-postgres-pitr-bootstrap verify` and one physical restore drill have both
+# passed with archived WAL present.
 gh variable set POSTGRES_PITR_REQUIRED --repo mvnby/air-api --body true
 ```
 
@@ -288,8 +290,9 @@ gh workflow run postgres-pitr-restore-drill.yml --repo mvnby/air-api --ref main 
 ```
 
 The scheduled workflow skips itself while `POSTGRES_PITR_REQUIRED=false`.
-After PITR is enabled and the strict PITR freshness check is green, leave
-`POSTGRES_PITR_REQUIRED=true` so the daily physical restore drill runs.
+Do not set `POSTGRES_PITR_REQUIRED=true` until both the strict freshness check
+and a physical restore drill pass. After that, leave it true so the daily drill
+keeps proving that basebackups plus archived WAL can actually be restored.
 
 ## GitHub Actions Routing
 
