@@ -114,3 +114,42 @@ def test_run_live_active_passive_maps_exit_codes():
     assert ok.status == "passed"
     assert failed.status == "failed"
     assert "active/passive direct-origin invariant failed" in failed.failures[0]
+
+
+def test_next_steps_explain_external_blockers_without_secret_values():
+    result = report_ha_status.ReportResult(
+        ok=[],
+        warnings=[
+            "missing optional GitHub secret HA_ALERT_TELEGRAM_BOT_TOKEN",
+            "POSTGRES_PITR_REQUIRED is not true yet",
+            "private PITR R2 credentials are host-local; verify with `ssh mvn-api`",
+        ],
+        blockers=[
+            "missing GitHub secret CLOUDFLARE_LB_READ_TOKEN",
+            "missing GitHub variable CLOUDFLARE_ACCOUNT_ID",
+            "missing GitHub variable CLOUDFLARE_ZONE_ID",
+        ],
+        failures=[],
+    )
+
+    steps = report_ha_status.next_steps_for(result)
+
+    assert any("apply_cloudflare_lb_github_prerequisites.py" in step for step in steps)
+    assert any("mvn-postgres-pitr-bootstrap verify" in step for step in steps)
+    assert any("enable_ha_strict_mode.py" in step for step in steps)
+    assert any("HA_ALERT_TELEGRAM_BOT_TOKEN" in step for step in steps)
+    assert not any("secret-token" in step for step in steps)
+
+
+def test_next_steps_prioritize_failed_workflows_and_live_skip():
+    result = report_ha_status.ReportResult(
+        ok=[],
+        warnings=["live active/passive check skipped"],
+        blockers=[],
+        failures=["Media CDN Check: latest run concluded failure (url=https://github.test/run)"],
+    )
+
+    steps = report_ha_status.next_steps_for(result)
+
+    assert steps[0] == "inspect failed workflow URLs/artifacts before changing API routing or database roles"
+    assert any("rerun without --skip-live" in step for step in steps)
