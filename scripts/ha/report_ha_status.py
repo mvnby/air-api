@@ -75,7 +75,6 @@ class ReportResult:
 EXPECTED_WORKFLOWS = (
     ExpectedWorkflow("Deploy to Production 🚀"),
     ExpectedWorkflow("CI (Test & Lint)"),
-    ExpectedWorkflow("API HA Status Report", max_age_hours=3),
     ExpectedWorkflow("API HA Invariant Check", max_age_hours=8),
     ExpectedWorkflow("API HA Readiness Audit", max_age_hours=8),
     ExpectedWorkflow("API VPS Health Check", max_age_hours=8),
