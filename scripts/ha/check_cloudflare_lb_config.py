@@ -69,7 +69,7 @@ def _api_get(path: str, token: str, params: dict[str, str] | None = None) -> Any
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
-        raise AuditFailure(f"Cloudflare API HTTP {exc.code} for {path}: {body}") from exc
+        raise AuditFailure(_format_cloudflare_http_error(path, exc.code, body)) from exc
     except urllib.error.URLError as exc:
         raise AuditFailure(f"Cloudflare API request failed for {path}: {exc}") from exc
 
@@ -77,6 +77,58 @@ def _api_get(path: str, token: str, params: dict[str, str] | None = None) -> Any
         errors = payload.get("errors") or []
         raise AuditFailure(f"Cloudflare API returned success=false for {path}: {errors}")
     return payload
+
+
+def _format_cloudflare_http_error(path: str, status_code: int, body: str) -> str:
+    details = _cloudflare_error_messages(body)
+    message = f"Cloudflare API HTTP {status_code} for {path}"
+    if details:
+        message = f"{message}: {details}"
+    else:
+        message = f"{message}: {body}"
+
+    if status_code in {401, 403}:
+        hint = _cloudflare_token_permission_hint(path)
+        if hint:
+            message = f"{message}. {hint}"
+    return message
+
+
+def _cloudflare_error_messages(body: str) -> str:
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        return ""
+    errors = payload.get("errors")
+    if not isinstance(errors, list):
+        return ""
+    messages = []
+    for error in errors:
+        if not isinstance(error, dict):
+            continue
+        code = error.get("code")
+        text = error.get("message")
+        if code and text:
+            messages.append(f"{code}: {text}")
+        elif text:
+            messages.append(str(text))
+    return "; ".join(messages)
+
+
+def _cloudflare_token_permission_hint(path: str) -> str:
+    if path.startswith("/zones/") and "/load_balancers" in path:
+        return (
+            "Required token permissions: Zone / Load Balancers / Read scoped to "
+            "the mvn.by zone, plus Account / Load Balancing: Monitors and Pools / Read "
+            "scoped to the Cloudflare account."
+        )
+    if path.startswith("/accounts/") and "/load_balancers/" in path:
+        return (
+            "Required token permissions: Account / Load Balancing: Monitors and Pools / Read "
+            "scoped to the Cloudflare account, plus Zone / Load Balancers / Read scoped "
+            "to the mvn.by zone."
+        )
+    return ""
 
 
 def _list_all(path: str, token: str) -> list[dict[str, Any]]:
