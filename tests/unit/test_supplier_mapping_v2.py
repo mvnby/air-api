@@ -1,8 +1,13 @@
 import pytest
 
-from models.supplier import Supplier
+from models.product import Product
+from models.supplier import Supplier, SupplierOffer, SupplierPriceSource
 from services.supplier_mapping_service import SupplierCatalogService
-from services.supplier_match_service import build_offer_match_profile, normalize_offer_title_for_search
+from services.supplier_match_service import (
+    build_offer_match_profile,
+    normalize_offer_title_for_search,
+    suggest_products_for_offer,
+)
 from services.supplier_source_url import extract_first_source_url, normalize_source_url
 
 
@@ -41,6 +46,12 @@ def test_extract_first_source_url_from_supplier_row():
             ["AS25S2SF3FA-W", "1U25S2SM3FA"],
             ["AS25S2SF3FA-W"],
             ["1U25S2SM3FA"],
+        ),
+        (
+            "Внутренний блок MDCA5-12HRN1 + Наружный блок MDOU3-12HN1(-L)+Панель T-MBQ4-03E",
+            ["MDCA5-12HRN1", "MDOU3-12HN1", "MDOU3-12HN1-L", "T-MBQ4-03E"],
+            ["MDCA5-12HRN1"],
+            ["MDOU3-12HN1", "MDOU3-12HN1-L"],
         ),
     ],
 )
@@ -114,3 +125,80 @@ async def test_create_source_rejects_unknown_sheet_name(db, monkeypatch):
                 "is_active": True,
             },
         )
+
+
+@pytest.mark.asyncio
+async def test_mdv_rac_context_prefers_household_system_over_multi_component(db):
+    supplier = Supplier(name="Биоконд", code="biokond", priority=1)
+    db.add(supplier)
+    await db.commit()
+    await db.refresh(supplier)
+
+    source = SupplierPriceSource(
+        supplier_id=supplier.id,
+        sheet_name="MDV RAC",
+        col_title="C",
+        col_wholesale="F",
+        col_wholesale_currency="USD",
+        col_rrc_byn="G",
+        col_qty="H",
+    )
+    db.add(source)
+    await db.commit()
+    await db.refresh(source)
+
+    household = Product(
+        title="MDV iERA inverter MDSAJ-09HRFN8/MDOAJ-09HFN8",
+        slug="mdv-iera-household-09",
+        price=1350,
+        specs={
+            "__mdv_catalog": "household",
+            "type": "сплит-система",
+            "indoor_type": "настенный",
+            "model_indoor": "MDSAJ-09HRFN8",
+            "model_outdoor": "MDOAJ-09HFN8",
+        },
+    )
+    multi_indoor = Product(
+        title="Внутренний блок MDV iERA inverter MDSAJ-09HRFN8",
+        slug="mdv-iera-multi-indoor-09",
+        price=800,
+        specs={
+            "__mdv_catalog": "multi",
+            "type": "внутренний блок",
+            "indoor_type": "настенный",
+            "model_indoor": "MDSAJ-09HRFN8",
+        },
+    )
+    db.add_all([household, multi_indoor])
+    await db.commit()
+    await db.refresh(household)
+    await db.refresh(multi_indoor)
+
+    offer = SupplierOffer(
+        supplier_id=supplier.id,
+        source_id=source.id,
+        external_id="MDSAJ-09HRFN8",
+        title_raw="Сплит-система MDSAJ-09HRFN8",
+        title_normalized="сплит-система mdsaj-09hrfn8",
+        model_tokens=["MDSAJ-09HRFN8"],
+        indoor_model_tokens=["MDSAJ-09HRFN8"],
+        rrc_byn=1350,
+        is_active=True,
+    )
+    db.add(offer)
+    await db.commit()
+    await db.refresh(offer)
+
+    result = await suggest_products_for_offer(
+        db,
+        title_raw=offer.title_raw,
+        offer=offer,
+        limit=5,
+    )
+
+    assert result["auto_eligible"] is True
+    assert result["candidates"][0]["product_id"] == household.id
+    assert result["candidates"][0]["score_breakdown"]["catalog_context"] == 18
+    multi_candidate = next(item for item in result["candidates"] if item["product_id"] == multi_indoor.id)
+    assert multi_candidate["score_breakdown"]["catalog_mismatch"] == -34

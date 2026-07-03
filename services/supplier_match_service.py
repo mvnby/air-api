@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models.product import Product
-from models.supplier import SupplierOffer
+from models.supplier import SupplierOffer, SupplierPriceSource
 from services.product_manager_service import ProductManagerService
 from services.supplier_source_url import normalize_source_url, source_url_variants
 
@@ -28,6 +28,9 @@ _INDOOR_MARKERS = ("внутрен", "indoor", "внутр.")
 _OUTDOOR_MARKERS = ("наруж", "outdoor", "внешн.")
 _CAPACITY_MARKERS = {"07", "09", "12", "18", "24", "25", "28", "30", "35", "36", "48", "50", "55", "60", "70"}
 _MODEL_TOKEN_RE = re.compile(r"(?<![A-Z0-9])(?=[A-Z0-9/-]*\d)(?=[A-Z0-9/-]*[A-Z])[A-Z0-9]{1,12}(?:[-/][A-Z0-9]{1,12})+(?![A-Z0-9])|(?<![A-Z0-9])(?=[A-Z0-9]*\d)(?=[A-Z0-9]*[A-Z])(?:[A-Z]{1,5}|[0-9][A-Z])[A-Z0-9]{3,16}(?![A-Z0-9])")
+_OPTIONAL_SUFFIX_MODEL_RE = re.compile(
+    r"(?<![A-Z0-9])(?P<base>(?=[A-Z0-9/-]*\d)(?=[A-Z0-9/-]*[A-Z])[A-Z0-9]{1,12}(?:[-/][A-Z0-9]{1,12})+)\((?P<suffix>-[A-Z0-9]{1,8})\)"
+)
 _CYRILLIC_LOOKALIKES = str.maketrans(
     {
         "А": "A",
@@ -119,10 +122,18 @@ async def suggest_products_for_offer(
     *,
     title_raw: str | None,
     offer: SupplierOffer | None = None,
+    offer_source_name: str | None = None,
     limit: int = 5,
 ) -> dict[str, Any]:
     offer_profile = _profile_from_offer_or_title(offer, title_raw)
     offer_source_url = normalize_source_url(offer.source_url if offer else None)
+    if offer_source_name is None and offer and offer.source_id:
+        source = await session.get(SupplierPriceSource, offer.source_id)
+        offer_source_name = source.sheet_name if source else None
+    offer_catalog_categories = _infer_offer_catalog_categories(
+        source_name=offer_source_name,
+        title_raw=offer.title_raw if offer else title_raw,
+    )
     if not offer_profile.title_normalized and not offer_profile.model_tokens and not offer_source_url:
         return {
             "normalized_query": "",
@@ -145,6 +156,7 @@ async def suggest_products_for_offer(
             offer_profile=offer_profile,
             product=item,
             offer_source_url=offer_source_url,
+            offer_catalog_categories=offer_catalog_categories,
             offer_rrc=_decimal_to_float(offer.rrc_byn) if offer else None,
         )
         for item in candidate_rows
@@ -211,6 +223,7 @@ def _score_candidate(
     offer_profile: MatchProfile,
     product: dict[str, Any],
     offer_source_url: str | None = None,
+    offer_catalog_categories: set[str] | None = None,
     offer_rrc: float | None = None,
 ) -> dict[str, Any]:
     product_profile = build_product_match_profile(product)
@@ -250,6 +263,22 @@ def _score_candidate(
         score -= 45
         breakdown["role_mismatch"] = -45
         explanations.append("Есть риск перепутать внутренний и наружный блок")
+
+    product_catalog = _product_catalog_category(product)
+    if offer_catalog_categories and product_catalog:
+        catalog_label = _catalog_label(product_catalog)
+        if product_catalog in offer_catalog_categories:
+            score += 18
+            breakdown["catalog_context"] = 18
+            explanations.append(f"Контекст прайса совпал: {catalog_label}")
+            if _has_explicit_catalog(product):
+                score += 6
+                breakdown["catalog_source"] = 6
+                explanations.append("Товар из нормализованного каталога производителя")
+        elif _catalogs_are_incompatible(offer_catalog_categories, product_catalog):
+            score -= 34
+            breakdown["catalog_mismatch"] = -34
+            explanations.append(f"Категория прайса не похожа на товар: {catalog_label}")
 
     offer_capacity = _capacity_markers_from_tokens(offer_profile.model_tokens)
     product_capacity = _capacity_markers_from_tokens(product_profile.model_tokens)
@@ -321,27 +350,40 @@ def _suggestion_status(candidates: list[dict[str, Any]]) -> tuple[str, bool]:
 
 def _extract_model_tokens(raw: str) -> dict[str, list[str]]:
     text = _normalize_token_text(raw)
-    raw_context_source = (raw or "").replace("\xa0", " ")
+    optional_text = _normalize_token_text_with_parentheses(raw)
     model_tokens: list[str] = []
     indoor_tokens: list[str] = []
     outdoor_tokens: list[str] = []
+
+    def append_token(token: str, *, has_indoor_context: bool, has_outdoor_context: bool) -> None:
+        if not _looks_like_model_token(token):
+            return
+        model_tokens.append(token)
+        if has_indoor_context or token.startswith(("MDS", "AS", "HSU", "RC", "RCI", "MDC", "MDF")):
+            indoor_tokens.append(token)
+        if has_outdoor_context or token.startswith(("MDO", "1U", "UU", "CU", "MD2O", "MD3O", "MD4O", "MD5O")):
+            outdoor_tokens.append(token)
+
+    for match in _OPTIONAL_SUFFIX_MODEL_RE.finditer(optional_text):
+        has_indoor_context, has_outdoor_context = _role_context(optional_text, match.start(), match.end())
+        append_token(
+            _normalize_model_token(f"{match.group('base')}{match.group('suffix')}"),
+            has_indoor_context=has_indoor_context,
+            has_outdoor_context=has_outdoor_context,
+        )
+
     for match in _MODEL_TOKEN_RE.finditer(text):
-        context = text[max(0, match.start() - 42): min(len(text), match.end() + 14)].lower()
-        raw_context = raw_context_source[max(0, match.start() - 42): min(len(raw_context_source), match.end() + 14)].lower()
-        has_indoor_context = any(marker in context or marker in raw_context for marker in _INDOOR_MARKERS)
-        has_outdoor_context = any(marker in context or marker in raw_context for marker in _OUTDOOR_MARKERS)
+        has_indoor_context, has_outdoor_context = _role_context(text, match.start(), match.end())
         raw_token = str(match.group(0))
         token_candidates = [_normalize_model_token(raw_token)]
         if "/" in raw_token:
             token_candidates.extend(_normalize_model_token(part) for part in raw_token.split("/"))
         for token in token_candidates:
-            if not _looks_like_model_token(token):
-                continue
-            model_tokens.append(token)
-            if has_indoor_context or token.startswith(("MDS", "AS", "HSU", "RC", "RCI")):
-                indoor_tokens.append(token)
-            if has_outdoor_context or token.startswith(("MDO", "1U", "UU", "CU")):
-                outdoor_tokens.append(token)
+            append_token(
+                token,
+                has_indoor_context=has_indoor_context,
+                has_outdoor_context=has_outdoor_context,
+            )
     return {
         "model_tokens": _dedupe(model_tokens),
         "indoor_model_tokens": _dedupe(indoor_tokens),
@@ -359,6 +401,13 @@ def _normalize_token_text(raw: str | None) -> str:
     value = (raw or "").replace("\xa0", " ").translate(_CYRILLIC_LOOKALIKES).upper()
     value = value.replace("–", "-").replace("—", "-").replace("_", "-")
     value = re.sub(r"[^0-9A-Zа-яА-ЯёЁ\-+/ .]+", " ", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _normalize_token_text_with_parentheses(raw: str | None) -> str:
+    value = (raw or "").replace("\xa0", " ").translate(_CYRILLIC_LOOKALIKES).upper()
+    value = value.replace("–", "-").replace("—", "-").replace("_", "-")
+    value = re.sub(r"[^0-9A-Zа-яА-ЯёЁ\-+/ ().]+", " ", value)
     return re.sub(r"\s+", " ", value).strip()
 
 
@@ -392,6 +441,83 @@ def _capacity_markers_from_tokens(tokens: Iterable[str]) -> set[str]:
             if value in _CAPACITY_MARKERS:
                 markers.add(value)
     return markers
+
+
+def _role_context(text: str, start: int, end: int) -> tuple[bool, bool]:
+    left = max(text.rfind(delimiter, 0, start) for delimiter in ("+", "/", ",", ";"))
+    right_candidates = [text.find(delimiter, end) for delimiter in ("+", "/", ",", ";")]
+    right_values = [value for value in right_candidates if value >= 0]
+    right = min(right_values) if right_values else len(text)
+    segment = text[left + 1:right].lower()
+    has_indoor_context = any(marker in segment for marker in _INDOOR_MARKERS)
+    has_outdoor_context = any(marker in segment for marker in _OUTDOOR_MARKERS)
+    return has_indoor_context, has_outdoor_context
+
+
+def _infer_offer_catalog_categories(*, source_name: str | None, title_raw: str | None) -> set[str]:
+    source = _normalize_text(source_name)
+    title = _normalize_text(title_raw)
+    combined = f"{source} {title}"
+
+    if "pac" in source or "pack" in source or "полупром" in combined:
+        return {"semi"}
+    if "atom" in source or "vrf" in combined or "мультизон" in combined:
+        return {"vrf"}
+    if "multi" in source or "мульти" in combined:
+        return {"multi"}
+    if "rac" in source:
+        component_only = (
+            any(marker in title for marker in _INDOOR_MARKERS + _OUTDOOR_MARKERS)
+            and "сплит" not in title
+            and "система" not in title
+        )
+        return {"multi"} if component_only else {"household"}
+    return set()
+
+
+def _product_catalog_category(product: dict[str, Any]) -> str | None:
+    specs = product.get("specs") if isinstance(product.get("specs"), dict) else {}
+    explicit = str(specs.get("__mdv_catalog") or specs.get("mdv_catalog") or "").strip().lower()
+    if explicit in {"household", "semi", "multi"}:
+        return explicit
+
+    system_type = _normalize_text(specs.get("type") or specs.get("Тип"))
+    indoor_type = _normalize_text(specs.get("indoor_type") or specs.get("Тип внутреннего блока"))
+    title = _normalize_text(product.get("title"))
+    combined = f"{system_type} {indoor_type} {title}"
+
+    if "полупром" in combined or any(
+        marker in combined for marker in ("кассет", "каналь", "колонн", "напольно", "потолоч")
+    ):
+        return "semi"
+    if "мульти" in combined:
+        return "multi"
+    if any(marker in system_type for marker in _INDOOR_MARKERS + _OUTDOOR_MARKERS):
+        return "multi"
+    if "сплит" in system_type:
+        return "household"
+    return None
+
+
+def _has_explicit_catalog(product: dict[str, Any]) -> bool:
+    specs = product.get("specs") if isinstance(product.get("specs"), dict) else {}
+    return bool(specs.get("__mdv_catalog") or specs.get("mdv_catalog"))
+
+
+def _catalogs_are_incompatible(offer_categories: set[str], product_catalog: str) -> bool:
+    if "vrf" in offer_categories or product_catalog == "vrf":
+        return product_catalog not in offer_categories
+    known = {"household", "semi", "multi"}
+    return bool(offer_categories & known) and product_catalog in known
+
+
+def _catalog_label(catalog: str) -> str:
+    return {
+        "household": "бытовая сплит-система",
+        "semi": "полупром",
+        "multi": "мультисплит",
+        "vrf": "VRF/ATOM",
+    }.get(catalog, catalog)
 
 
 def _first_spec_value(specs: dict[str, Any], keys: tuple[str, ...]) -> str:
