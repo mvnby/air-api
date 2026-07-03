@@ -26,6 +26,7 @@ from scripts.ha.check_cloudflare_lb_config import (  # noqa: E402
     AuditFailure,
     _find_lb,
     _find_pool_by_origin,
+    _first_env_value,
     _id,
     _name,
     _normalize_bool,
@@ -39,6 +40,7 @@ DEFAULT_PRIMARY_ORIGIN = "185.250.45.54"
 DEFAULT_STANDBY_ORIGIN = "193.47.42.213"
 DEFAULT_HOST_HEADER = "api.mvn.by"
 DEFAULT_MONITOR_PATH = "/api/ready"
+WRITE_TOKEN_ENV_NAMES = ("CLOUDFLARE_LB_WRITE_TOKEN", "CLOUDFLARE_API_TOKEN")
 
 
 @dataclass(frozen=True)
@@ -279,21 +281,19 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
-    token = _clean(os.getenv("CLOUDFLARE_API_TOKEN"))
+    token, token_source = _first_env_value(WRITE_TOKEN_ENV_NAMES)
     zone_id = _clean(os.getenv("CLOUDFLARE_ZONE_ID"))
     account_id = _clean(os.getenv("CLOUDFLARE_ACCOUNT_ID"))
-    missing = [
-        name
-        for name, value in (
-            ("CLOUDFLARE_API_TOKEN", token),
-            ("CLOUDFLARE_ZONE_ID", zone_id),
-            ("CLOUDFLARE_ACCOUNT_ID", account_id),
-        )
-        if not value
-    ]
+    missing = []
+    if not token:
+        missing.append("one of " + "/".join(WRITE_TOKEN_ENV_NAMES))
+    for name, value in (("CLOUDFLARE_ZONE_ID", zone_id), ("CLOUDFLARE_ACCOUNT_ID", account_id)):
+        if not value:
+            missing.append(name)
     if missing:
         log("fail", "missing Cloudflare credentials: " + ", ".join(missing))
         return 1
+    log("info", f"using token from {token_source}")
 
     config = SwitchConfig(
         hostname=args.hostname,

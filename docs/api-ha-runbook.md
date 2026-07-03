@@ -530,22 +530,25 @@ important than order and fallback.
 Repo-tracked Cloudflare config audit:
 
 ```bash
-python3 scripts/ha/check_cloudflare_lb_config.py
+python3 scripts/ha/check_cloudflare_lb_config.py --env-file .env
 ```
 
 Required environment:
 
 ```text
-CLOUDFLARE_API_TOKEN=<read-only token>
+CLOUDFLARE_API_TOKEN_LB_AUDIT=<read-only token>
 CLOUDFLARE_ZONE_ID=<mvn.by zone id>
 CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
 ```
 
-This is a normal Cloudflare API token, separate from R2 S3 credentials. Create a
-custom read-only token from the Cloudflare API Tokens screen and scope it to the
-`mvn.by` zone/account. Current Cloudflare role naming exposes the relevant
-account-scoped role as **Load Balancing Account Read**, which reads Load
-Balancers, Monitors, Monitor Groups, Pools, and Health Checks.
+The audit helper also accepts `CLOUDFLARE_LB_READ_TOKEN` and, for compatibility
+with GitHub workflow env mapping, `CLOUDFLARE_API_TOKEN`. Locally prefer
+`CLOUDFLARE_API_TOKEN_LB_AUDIT` so an old generic Cloudflare token cannot be
+picked accidentally. This is a normal Cloudflare API token, separate from R2 S3
+credentials. Create a custom read-only token from the Cloudflare API Tokens
+screen and scope it to the `mvn.by` zone/account. Current Cloudflare role naming
+exposes the relevant account-scoped role as **Load Balancing Account Read**,
+which reads Load Balancers, Monitors, Monitor Groups, Pools, and Health Checks.
 
 The audit calls these read-only endpoints, so the token must be able to read:
 
@@ -567,10 +570,10 @@ membership. Always run it without `--confirm` first:
 ```bash
 printf 'Cloudflare LB write token: '
 stty -echo
-IFS= read -r CLOUDFLARE_API_TOKEN
+IFS= read -r CLOUDFLARE_LB_WRITE_TOKEN
 stty echo
 printf '\n'
-export CLOUDFLARE_API_TOKEN
+export CLOUDFLARE_LB_WRITE_TOKEN
 export CLOUDFLARE_ZONE_ID=<mvn.by zone id>
 export CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
 
@@ -585,7 +588,7 @@ python3 scripts/ha/switch_cloudflare_lb_primary.py \
   --passive-origin 193.47.42.213 \
   --confirm
 
-unset CLOUDFLARE_API_TOKEN
+unset CLOUDFLARE_LB_WRITE_TOKEN
 ```
 
 After the switch is applied and the required Cloudflare LB audit passes, revoke
@@ -598,10 +601,10 @@ After a `zakup` promotion, reverse the origins:
 ```bash
 printf 'Cloudflare LB write token: '
 stty -echo
-IFS= read -r CLOUDFLARE_API_TOKEN
+IFS= read -r CLOUDFLARE_LB_WRITE_TOKEN
 stty echo
 printf '\n'
-export CLOUDFLARE_API_TOKEN
+export CLOUDFLARE_LB_WRITE_TOKEN
 export CLOUDFLARE_ZONE_ID=<mvn.by zone id>
 export CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
 
@@ -613,7 +616,7 @@ python3 scripts/ha/switch_cloudflare_lb_primary.py \
   --passive-origin 185.250.45.54 \
   --confirm
 
-unset CLOUDFLARE_API_TOKEN
+unset CLOUDFLARE_LB_WRITE_TOKEN
 ```
 
 GitHub scheduled audit fallback, if the helper above is not available:
@@ -722,10 +725,10 @@ The manual steps below are the same procedure expanded for review.
 
    printf 'Cloudflare LB write token: '
    stty -echo
-   IFS= read -r CLOUDFLARE_API_TOKEN
+   IFS= read -r CLOUDFLARE_LB_WRITE_TOKEN
    stty echo
    printf '\n'
-   export CLOUDFLARE_API_TOKEN
+   export CLOUDFLARE_LB_WRITE_TOKEN
    export CLOUDFLARE_ZONE_ID=<mvn.by zone id>
    export CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
    python3 scripts/ha/switch_cloudflare_lb_primary.py \
@@ -735,7 +738,7 @@ The manual steps below are the same procedure expanded for review.
      --active-origin 193.47.42.213 \
      --passive-origin 185.250.45.54 \
      --confirm
-   unset CLOUDFLARE_API_TOKEN
+   unset CLOUDFLARE_LB_WRITE_TOKEN
    ```
 
    After the switch is verified, revoke/delete that write token. Keep

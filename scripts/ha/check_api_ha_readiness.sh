@@ -134,7 +134,8 @@ run_postgres_pitr() {
 
 run_cloudflare_lb() {
   local missing=()
-  [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] || missing+=("CLOUDFLARE_API_TOKEN")
+  local cloudflare_lb_token="${CLOUDFLARE_API_TOKEN_LB_AUDIT:-${CLOUDFLARE_LB_READ_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}}"
+  [[ -n "${cloudflare_lb_token}" ]] || missing+=("one of CLOUDFLARE_API_TOKEN_LB_AUDIT/CLOUDFLARE_LB_READ_TOKEN/CLOUDFLARE_API_TOKEN")
   [[ -n "${CLOUDFLARE_ZONE_ID:-}" ]] || missing+=("CLOUDFLARE_ZONE_ID")
   [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || missing+=("CLOUDFLARE_ACCOUNT_ID")
   if (( ${#missing[@]} > 0 )); then
