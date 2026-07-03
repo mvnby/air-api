@@ -4,7 +4,7 @@ This runbook describes the current active-passive API setup for `api.mvn.by`.
 The system intentionally has one writable PostgreSQL primary and one warm
 standby. Do not make both origins public-writable.
 
-Last verified state: 2026-07-02.
+Last verified state: 2026-07-03.
 
 ## Current Hosts
 
@@ -173,6 +173,18 @@ POSTGRES_PITR_S3_ACCESS_KEY_ID=<private-r2-token-access-key>
 POSTGRES_PITR_S3_SECRET_ACCESS_KEY=<private-r2-token-secret>
 POSTGRES_PITR_S3_KEY_PREFIX=postgres/pitr
 ```
+
+Create these credentials from Cloudflare R2, not from the regular Cloudflare
+API Tokens page. In Cloudflare dashboard open **R2 object storage**, create a
+private bucket for database PITR only, then under R2 API tokens create a token
+with **Object Read & Write** scoped to that specific private bucket. Record the
+shown **Access Key ID** and **Secret Access Key** immediately; Cloudflare shows
+the secret only once. Use the S3 API endpoint
+`https://<account-id>.r2.cloudflarestorage.com`.
+
+Do not use the public media bucket or a public `r2.dev`/CDN endpoint for PITR.
+The helper refuses that configuration because database WAL/basebackups must not
+share the public media surface.
 
 If `zakup` is promoted, change `POSTGRES_PITR_CLUSTER=zakup` on that host before
 enabling its PITR timers. The prefix can stay the same; cluster name separates
@@ -408,13 +420,23 @@ CLOUDFLARE_ZONE_ID=<mvn.by zone id>
 CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
 ```
 
-The token needs read-only Cloudflare Load Balancing permissions:
+This is a normal Cloudflare API token, separate from R2 S3 credentials. Create a
+custom read-only token from the Cloudflare API Tokens screen and scope it to the
+`mvn.by` zone/account. Current Cloudflare role naming exposes the relevant
+account-scoped role as **Load Balancing Account Read**, which reads Load
+Balancers, Monitors, Monitor Groups, Pools, and Health Checks.
 
-- Zone-level `Load Balancers Read`, used for
-  `GET /zones/{zone_id}/load_balancers`;
-- Account-level `Load Balancing: Monitors and Pools Read`, used for
-  `GET /accounts/{account_id}/load_balancers/pools` and
+The audit calls these read-only endpoints, so the token must be able to read:
+
+- zone load balancers, used for `GET /zones/{zone_id}/load_balancers`;
+- account load balancing pools, used for
+  `GET /accounts/{account_id}/load_balancers/pools`;
+- account load balancing monitors, used for
   `GET /accounts/{account_id}/load_balancers/monitors`.
+
+If the dashboard presents granular permission groups instead of roles, choose
+read/list-only permissions for those same Load Balancing resources. Do not grant
+edit permissions for this audit token.
 
 GitHub scheduled audit:
 
