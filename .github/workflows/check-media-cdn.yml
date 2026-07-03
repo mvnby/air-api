@@ -20,6 +20,11 @@ on:
         type: string
         required: false
         default: "3"
+      min_db_cdn_urls:
+        description: "Minimum DB-backed object-storage CDN URLs"
+        type: string
+        required: false
+        default: "3"
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -50,6 +55,49 @@ jobs:
             2>&1 \
             | tee media-cdn-check.log
 
+      - name: Setup API SSH Key
+        env:
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
+          SSH_USER_API: ${{ secrets.SSH_USER_API }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_HOST_API}" ] || [ -z "${SSH_USER_API}" ] || [ -z "${SSH_KEY}" ]; then
+            echo "::error::Missing one of required secrets: SSH_HOST_API, SSH_USER_API, SSH_KEY"
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "${SSH_KEY}" > ~/.ssh/media_cdn_key
+          chmod 600 ~/.ssh/media_cdn_key
+          ssh-keyscan -T 10 -H "${SSH_HOST_API}" >> ~/.ssh/known_hosts
+
+      - name: Run DB-backed media CDN check
+        env:
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
+          SSH_USER_API: ${{ secrets.SSH_USER_API }}
+          API_PROJECT_DIR: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}
+          API_COMPOSE_FILE: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}
+          EXPECTED_CDN_BASE: ${{ github.event_name == 'workflow_dispatch' && inputs.expected_cdn_base || 'https://cdn.mvn.by' }}
+          MIN_DB_CDN_URLS: ${{ github.event_name == 'workflow_dispatch' && inputs.min_db_cdn_urls || '3' }}
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-i ~/.ssh/media_cdn_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+          quote() {
+            printf '%q' "$1"
+          }
+
+          ssh ${SSH_OPTS} "${SSH_USER_API}@${SSH_HOST_API}" "\
+            set -euo pipefail && \
+            cd $(quote "${API_PROJECT_DIR}") && \
+            docker compose -f $(quote "${API_COMPOSE_FILE}") exec -T app \
+              python3 scripts/check_media_cdn_db_urls.py \
+                --expected-cdn-base $(quote "${EXPECTED_CDN_BASE}") \
+                --min-db-cdn-urls $(quote "${MIN_DB_CDN_URLS}") \
+                --max-fetches 10" \
+            2>&1 \
+            | tee -a media-cdn-check.log
+
       - name: Write Summary
         if: always()
         run: |
@@ -58,6 +106,9 @@ jobs:
             echo "- products_url: ${{ github.event_name == 'workflow_dispatch' && inputs.products_url || 'https://api.mvn.by/api/v1/products?limit=5' }}"
             echo "- expected_cdn_base: ${{ github.event_name == 'workflow_dispatch' && inputs.expected_cdn_base || 'https://cdn.mvn.by' }}"
             echo "- min_cdn_urls: ${{ github.event_name == 'workflow_dispatch' && inputs.min_cdn_urls || '3' }}"
+            echo "- min_db_cdn_urls: ${{ github.event_name == 'workflow_dispatch' && inputs.min_db_cdn_urls || '3' }}"
+            echo "- api_project_dir: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}"
+            echo "- api_compose_file: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}"
             echo "- log_artifact: media-cdn-check-log-${{ github.run_id }}"
           } >> "$GITHUB_STEP_SUMMARY"
 

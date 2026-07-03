@@ -385,7 +385,10 @@ After the bounded smoke passes and the owner approves the full switch:
 4. Monitor backend logs for `S3/R2 media storage` errors and Pillow processing
    failures during normal manager uploads/search attaches and variant
    generation.
-5. Spot-check new manager media rows daily during the first rollout window:
+5. Keep the scheduled `check-media-cdn.yml` workflow green. It samples public
+   catalog image URLs and DB-backed object-storage rows from the API primary,
+   including product variants, media library assets, and order/bot attachments.
+6. Spot-check new manager media rows daily during the first rollout window:
 
    ```sql
    select variant_type, storage_provider, processing_status, count(*)

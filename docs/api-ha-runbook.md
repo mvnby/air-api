@@ -118,7 +118,7 @@ Scheduled monitors:
 | `api-restore-drill.yml` | daily after the 03:00 UTC backup | disposable DB restore drill |
 | `check-postgres-pitr.yml` | every 6 hours | PITR archive/timer/backlog and remote R2 freshness |
 | `postgres-pitr-restore-drill.yml` | daily when `POSTGRES_PITR_REQUIRED=true` | disposable physical restore from PITR basebackup + WAL |
-| `check-media-cdn.yml` | every 6 hours | public product primary images use `cdn.mvn.by` and CDN objects are cacheable |
+| `check-media-cdn.yml` | every 6 hours | public product images and DB-backed object-storage media use `cdn.mvn.by`; sampled CDN objects are cacheable |
 
 ## PostgreSQL PITR
 
