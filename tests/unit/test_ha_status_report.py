@@ -185,3 +185,21 @@ def test_next_steps_prioritize_failed_workflows_and_live_skip():
 
     assert steps[0] == "inspect failed workflow URLs/artifacts before changing API routing or database roles"
     assert any("rerun without --skip-live" in step for step in steps)
+
+
+def test_next_steps_explain_failed_cloudflare_lb_config_check():
+    result = report_ha_status.ReportResult(
+        ok=[],
+        warnings=[],
+        blockers=[],
+        failures=[
+            "Cloudflare LB Config Check: latest run concluded failure (url=https://github.test/run)",
+        ],
+    )
+
+    steps = report_ha_status.next_steps_for(result)
+
+    assert any("Zone / Load Balancers / Read" in step for step in steps)
+    assert any("Account / Load Balancing: Monitors and Pools / Read" in step for step in steps)
+    assert any("apply_cloudflare_lb_github_prerequisites.py" in step for step in steps)
+    assert not any("secret-token" in step for step in steps)
