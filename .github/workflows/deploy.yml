@@ -433,6 +433,8 @@ jobs:
       API_STANDBY_COPY_COMPOSE: ${{ vars.API_STANDBY_COPY_COMPOSE || 'false' }}
       API_STANDBY_COMPOSE_SOURCE_FILE: ${{ vars.API_STANDBY_COMPOSE_SOURCE_FILE || vars.API_STANDBY_COMPOSE_FILE || 'docker-compose.prod.yml' }}
       API_STANDBY_HEALTH_URL: ${{ vars.API_STANDBY_HEALTH_URL || 'http://localhost:8000/api/health' }}
+      API_PRIMARY_ORIGIN: ${{ vars.API_PRIMARY_ORIGIN || '185.250.45.54' }}
+      API_STANDBY_ORIGIN: ${{ vars.API_STANDBY_ORIGIN || '193.47.42.213' }}
 
     steps:
       - name: Checkout
@@ -494,6 +496,15 @@ jobs:
             docker compose -f '${API_STANDBY_COMPOSE_FILE}' logs --tail=120 app; \
             exit 1"
 
+      - name: Post-Standby Active-Passive Invariant Check
+        id: standby_active_passive
+        run: |
+          set -euo pipefail
+          CHECK_PUBLIC_READY=false \
+          PRIMARY_ORIGIN="${API_PRIMARY_ORIGIN}" \
+          STANDBY_ORIGIN="${API_STANDBY_ORIGIN}" \
+          bash scripts/ha/check_active_passive.sh 2>&1 | tee standby_active_passive.log
+
       - name: Prune Unused Standby Docker Images
         id: prune_standby_images
         run: |
@@ -510,6 +521,7 @@ jobs:
         with:
           name: standby-deploy-logs-${{ github.run_id }}
           path: |
+            standby_active_passive.log
             standby_docker_prune.log
           if-no-files-found: warn
 
@@ -525,7 +537,13 @@ jobs:
             echo "- standby_compose_source_file: ${API_STANDBY_COMPOSE_SOURCE_FILE}"
             echo "- backend_image: ghcr.io/${GITHUB_REPOSITORY,,}/backend:${GITHUB_SHA}"
             echo "- health_url: ${API_STANDBY_HEALTH_URL}"
+            echo "- primary_origin: ${API_PRIMARY_ORIGIN}"
+            echo "- standby_origin: ${API_STANDBY_ORIGIN}"
+            echo "- active_passive_status: ${{ steps.standby_active_passive.outcome }}"
             echo "- docker_prune_status: ${{ steps.prune_standby_images.outcome }}"
+            if [ -f standby_active_passive.log ]; then
+              echo "- active_passive_log: collected"
+            fi
             if [ -f standby_docker_prune.log ]; then
               echo "- docker_prune_log: collected"
             fi
