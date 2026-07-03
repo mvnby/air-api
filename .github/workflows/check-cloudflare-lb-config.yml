@@ -20,9 +20,15 @@ on:
         type: string
         required: false
         default: ""
+      required:
+        description: "Fail if Cloudflare credentials are missing"
+        type: boolean
+        required: false
+        default: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  CF_LB_CONFIG_REQUIRED: ${{ github.event_name == 'workflow_dispatch' && inputs.required || vars.CLOUDFLARE_LB_CONFIG_REQUIRED || 'false' }}
 
 jobs:
   check:
@@ -49,10 +55,29 @@ jobs:
           CF_LB_MONITOR_EXPECTED_CODE: "200"
           CF_LB_REQUIRE_ADAPTIVE_FAILOVER: "true"
           CF_LB_REQUIRE_SESSION_AFFINITY_OFF: "true"
-          CF_LB_SKIP_IF_MISSING_CREDENTIALS: "true"
         run: |
           set -euo pipefail
+          case "${CF_LB_CONFIG_REQUIRED}" in
+            true|TRUE|True|1|yes|YES|Yes|on|ON|On)
+              export CF_LB_SKIP_IF_MISSING_CREDENTIALS=false
+              ;;
+            *)
+              export CF_LB_SKIP_IF_MISSING_CREDENTIALS=true
+              ;;
+          esac
           python3 scripts/ha/check_cloudflare_lb_config.py | tee cloudflare-lb-config.log
+
+      - name: Write Summary
+        if: always()
+        run: |
+          {
+            echo "## Cloudflare LB Config Check"
+            echo "- required: ${CF_LB_CONFIG_REQUIRED}"
+            echo "- hostname: ${{ github.event.inputs.hostname || vars.CF_LB_HOSTNAME || 'api.mvn.by' }}"
+            echo "- primary_origin: ${{ github.event.inputs.primary_origin || vars.API_PRIMARY_ORIGIN || '185.250.45.54' }}"
+            echo "- standby_origin: ${{ github.event.inputs.standby_origin || vars.API_STANDBY_ORIGIN || '193.47.42.213' }}"
+            echo "- log_artifact: cloudflare-lb-config-log-${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Cloudflare LB config log
         if: always()

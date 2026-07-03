@@ -406,13 +406,16 @@ GitHub scheduled audit:
 gh secret set CLOUDFLARE_LB_READ_TOKEN --repo mvnby/air-api
 gh variable set CLOUDFLARE_ZONE_ID --repo mvnby/air-api --body <zone-id>
 gh variable set CLOUDFLARE_ACCOUNT_ID --repo mvnby/air-api --body <account-id>
-gh workflow run check-cloudflare-lb-config.yml --repo mvnby/air-api --ref main
+gh workflow run check-cloudflare-lb-config.yml --repo mvnby/air-api --ref main -f required=true
+gh variable set CLOUDFLARE_LB_CONFIG_REQUIRED --repo mvnby/air-api --body true
 ```
 
 Until those values exist, the scheduled workflow exits as skipped and does not
-fail. After the read-only token is configured, the workflow fails on config
-drift such as reversed pool order, fallback pointing to standby, missing Host
-header, or monitor path changing away from `/api/ready`.
+fail. After the read-only token is configured and the manual `required=true`
+run is green, set `CLOUDFLARE_LB_CONFIG_REQUIRED=true`. From that point the
+scheduled workflow fails if credentials disappear or config drifts, including
+reversed pool order, fallback pointing to standby, missing Host header, or
+monitor path changing away from `/api/ready`.
 
 ## Emergency Failover: `mvn-api` -> `zakup`
 
