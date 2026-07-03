@@ -75,6 +75,7 @@ class ReportResult:
 EXPECTED_WORKFLOWS = (
     ExpectedWorkflow("Deploy to Production 🚀"),
     ExpectedWorkflow("CI (Test & Lint)"),
+    ExpectedWorkflow("API HA Status Report", max_age_hours=3),
     ExpectedWorkflow("API HA Invariant Check", max_age_hours=8),
     ExpectedWorkflow("API HA Readiness Audit", max_age_hours=8),
     ExpectedWorkflow("API VPS Health Check", max_age_hours=8),
@@ -171,7 +172,11 @@ def load_workflow_runs(
 def latest_runs_by_workflow(runs: Sequence[WorkflowRun]) -> dict[str, WorkflowRun]:
     latest: dict[str, WorkflowRun] = {}
     for run in runs:
-        if run.workflow_name not in latest:
+        current = latest.get(run.workflow_name)
+        if current is None:
+            latest[run.workflow_name] = run
+            continue
+        if current.status != "completed" and run.status == "completed":
             latest[run.workflow_name] = run
     return latest
 

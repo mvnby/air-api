@@ -146,12 +146,13 @@ python3 scripts/ha/report_ha_status.py --repo mvnby/air-api
 python3 scripts/ha/report_ha_status.py --repo mvnby/air-api --require-strict
 ```
 
-The default report checks recent GitHub deploy/monitor runs, lists external
-strict-mode blockers as attention items, and runs the direct-origin
-active-passive invariant. Use `--require-strict` before enabling strict mode;
-in that mode missing Cloudflare/PITR prerequisites become hard failures. Treat
-`[ha-status][next-step]` lines as the immediate operator checklist; they are
-derived from the current blockers and failures without printing secret values.
+The default report checks recent GitHub deploy/monitor runs, including its own
+scheduled workflow, lists external strict-mode blockers as attention items, and
+runs the direct-origin active-passive invariant. Use `--require-strict` before
+enabling strict mode; in that mode missing Cloudflare/PITR prerequisites become
+hard failures. Treat `[ha-status][next-step]` lines as the immediate operator
+checklist; they are derived from the current blockers and failures without
+printing secret values.
 
 After creating the Cloudflare LB read-only token and finding the zone/account
 ids, apply them to GitHub without pasting secrets into command history:
