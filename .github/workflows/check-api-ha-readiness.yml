@@ -1,0 +1,98 @@
+name: API HA Readiness Audit
+
+on:
+  schedule:
+    - cron: "11 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      strict:
+        description: "Fail unless Cloudflare LB strict audit and PITR are fully enabled"
+        type: boolean
+        required: false
+        default: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  HA_READINESS_STRICT: ${{ github.event_name == 'workflow_dispatch' && inputs.strict || vars.API_HA_READINESS_STRICT || 'false' }}
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup API SSH Key
+        env:
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
+          SSH_USER_API: ${{ secrets.SSH_USER_API }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          API_STANDBY_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_HOST_API}" ] || [ -z "${SSH_USER_API}" ] || [ -z "${SSH_KEY}" ]; then
+            echo "::error::Missing one of required secrets: SSH_HOST_API, SSH_USER_API, SSH_KEY"
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "${SSH_KEY}" > ~/.ssh/ha_readiness_key
+          chmod 600 ~/.ssh/ha_readiness_key
+          ssh-keyscan -T 10 -H "${SSH_HOST_API}" >> ~/.ssh/known_hosts
+          ssh-keyscan -T 10 -H "${API_STANDBY_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Run API HA readiness audit
+        env:
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
+          SSH_USER_API: ${{ secrets.SSH_USER_API }}
+          API_STANDBY_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
+          API_STANDBY_USER: ${{ vars.API_STANDBY_USER || secrets.SSH_USER_API }}
+          API_PROJECT_DIR: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}
+          API_COMPOSE_FILE: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}
+          API_STANDBY_PROJECT_DIR: ${{ vars.API_STANDBY_PROJECT_DIR || '/opt/mvn-reserve' }}
+          API_STANDBY_COMPOSE_FILE: ${{ vars.API_STANDBY_COMPOSE_FILE || 'docker-compose.reserve.yml' }}
+          API_PRIMARY_ORIGIN: ${{ vars.API_PRIMARY_ORIGIN || '185.250.45.54' }}
+          API_STANDBY_ORIGIN: ${{ vars.API_STANDBY_ORIGIN || '193.47.42.213' }}
+          POSTGRES_PITR_REQUIRED: ${{ vars.POSTGRES_PITR_REQUIRED || 'false' }}
+          EXPECTED_CDN_BASE: https://cdn.mvn.by
+          MIN_DB_CDN_URLS: "3"
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_LB_READ_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          export SSH_OPTS="-i ~/.ssh/ha_readiness_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+          export PRIMARY_SSH="${SSH_USER_API}@${SSH_HOST_API}"
+          export STANDBY_SSH="${API_STANDBY_USER}@${API_STANDBY_HOST}"
+          export PRIMARY_ORIGIN="${API_PRIMARY_ORIGIN}"
+          export STANDBY_ORIGIN="${API_STANDBY_ORIGIN}"
+          export PRIMARY_PROJECT_DIR="${API_PROJECT_DIR}"
+          export PRIMARY_COMPOSE_FILE="${API_COMPOSE_FILE}"
+          export STANDBY_PROJECT_DIR="${API_STANDBY_PROJECT_DIR}"
+          export STANDBY_COMPOSE_FILE="${API_STANDBY_COMPOSE_FILE}"
+          bash scripts/ha/check_api_ha_readiness.sh | tee api-ha-readiness.log
+
+      - name: Write Summary
+        if: always()
+        run: |
+          {
+            echo "## API HA Readiness Audit"
+            echo "- strict: ${HA_READINESS_STRICT}"
+            echo "- primary_origin: ${{ vars.API_PRIMARY_ORIGIN || '185.250.45.54' }}"
+            echo "- standby_origin: ${{ vars.API_STANDBY_ORIGIN || '193.47.42.213' }}"
+            echo "- api_project_dir: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}"
+            echo "- standby_project_dir: ${{ vars.API_STANDBY_PROJECT_DIR || '/opt/mvn-reserve' }}"
+            echo "- log_artifact: api-ha-readiness-log-${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload HA readiness log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: api-ha-readiness-log-${{ github.run_id }}
+          path: api-ha-readiness.log
+          if-no-files-found: warn
