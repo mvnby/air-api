@@ -473,6 +473,9 @@ Expected deploy behavior:
 
 - primary `mvn-api`: recreate `app` and `bot`;
 - standby `zakup`: recreate only `app`, then stop `bot`;
+- after standby deploy: run the active-passive invariant check with public
+  Cloudflare readiness skipped, proving the direct primary origin is ready and
+  writable while the direct standby origin remains fenced;
 - both API hosts: prune unused Docker images after successful deploy; this does
   not remove volumes or images used by running containers;
 - frontend deploy is skipped unless explicitly requested.
