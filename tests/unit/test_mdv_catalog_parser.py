@@ -144,6 +144,7 @@ async def test_mdv_catalog_parses_household_product_with_gallery_and_manuals(mon
     assert data["price"] == 46300
     assert data["price_currency"] == "RUB"
     assert data["main_image"] == "https://mdv-aircond.ru/upload/main-household.png"
+    assert data["require_media_download"] is True
     assert data["images"] == [
         "https://mdv-aircond.ru/upload/gallery-a.png",
         "https://mdv-aircond.ru/upload/gallery-b.png",
