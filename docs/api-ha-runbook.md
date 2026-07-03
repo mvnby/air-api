@@ -60,6 +60,7 @@ unreviewed host-local compose edits:
 | PostgreSQL PITR monitoring | `scripts/ha/check_postgres_pitr_status.sh`, `scripts/ha/check_postgres_pitr_remote.py`, `.github/workflows/check-postgres-pitr.yml` |
 | PostgreSQL PITR systemd units | `deploy/ha/systemd/mvn-postgres-wal-upload.*`, `deploy/ha/systemd/mvn-postgres-basebackup.*` |
 | External strict-mode prerequisite check | `scripts/ha/check_ha_external_prerequisites.py` |
+| Cloudflare LB GitHub prerequisite apply helper | `scripts/ha/apply_cloudflare_lb_github_prerequisites.py` |
 | Status helpers | `scripts/ha/mvn-primary-status.sh`, `scripts/ha/mvn-standby-status.sh` |
 | Media sync helper/timer | `scripts/ha/media_sync_pull.sh`, `deploy/ha/systemd/mvn-media-sync.*` |
 
@@ -132,6 +133,38 @@ This check uses `gh` metadata only. It lists missing GitHub variables/secrets
 without printing secret values. It cannot read host-local private PITR R2
 credentials; after those are installed, verify them on the primary with
 `ssh mvn-api '/usr/local/sbin/mvn-postgres-pitr-bootstrap verify'`.
+
+After creating the Cloudflare LB read-only token and finding the zone/account
+ids, apply them to GitHub without pasting secrets into command history:
+
+```bash
+printf 'Cloudflare LB token: '
+stty -echo
+IFS= read -r CLOUDFLARE_LB_READ_TOKEN
+stty echo
+printf '\n'
+export CLOUDFLARE_LB_READ_TOKEN
+export CLOUDFLARE_ZONE_ID=<mvn.by zone id>
+export CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
+python3 scripts/ha/apply_cloudflare_lb_github_prerequisites.py --repo mvnby/air-api
+unset CLOUDFLARE_LB_READ_TOKEN
+```
+
+After the required Cloudflare LB workflow passes and you want scheduled checks
+to fail on drift, repeat with:
+
+```bash
+printf 'Cloudflare LB token: '
+stty -echo
+IFS= read -r CLOUDFLARE_LB_READ_TOKEN
+stty echo
+printf '\n'
+export CLOUDFLARE_LB_READ_TOKEN
+export CLOUDFLARE_ZONE_ID=<mvn.by zone id>
+export CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
+python3 scripts/ha/apply_cloudflare_lb_github_prerequisites.py --repo mvnby/air-api --mark-required
+unset CLOUDFLARE_LB_READ_TOKEN
+```
 
 Scheduled monitors:
 
@@ -451,13 +484,14 @@ If the dashboard presents granular permission groups instead of roles, choose
 read/list-only permissions for those same Load Balancing resources. Do not grant
 edit permissions for this audit token.
 
-GitHub scheduled audit:
+GitHub scheduled audit fallback, if the helper above is not available:
 
 ```bash
 gh secret set CLOUDFLARE_LB_READ_TOKEN --repo mvnby/air-api
 gh variable set CLOUDFLARE_ZONE_ID --repo mvnby/air-api --body <zone-id>
 gh variable set CLOUDFLARE_ACCOUNT_ID --repo mvnby/air-api --body <account-id>
 gh workflow run check-cloudflare-lb-config.yml --repo mvnby/air-api --ref main -f required=true
+# Set this only after the required workflow is green.
 gh variable set CLOUDFLARE_LB_CONFIG_REQUIRED --repo mvnby/air-api --body true
 ```
 
