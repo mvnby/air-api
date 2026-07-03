@@ -25,6 +25,9 @@ REQUIRED_SECRETS = {
 OPTIONAL_SECRETS = {
     "HA_ALERT_TELEGRAM_BOT_TOKEN": "Telegram bot token for owner-visible HA failure alerts",
     "HA_ALERT_TELEGRAM_CHAT_ID": "Telegram chat id for owner-visible HA failure alerts",
+}
+
+INFO_SECRETS = {
     "HA_ALERT_TELEGRAM_THREAD_ID": "Optional Telegram forum topic id for owner-visible HA failure alerts",
 }
 
@@ -97,7 +100,7 @@ def load_env_metadata() -> GithubMetadata:
         for name in REQUIRED_VARIABLES
         if os.getenv(name, "").strip()
     }
-    secret_names = set(REQUIRED_SECRETS) | set(OPTIONAL_SECRETS)
+    secret_names = set(REQUIRED_SECRETS) | set(OPTIONAL_SECRETS) | set(INFO_SECRETS)
     secrets = {name for name in secret_names if os.getenv(name, "").strip()}
     return GithubMetadata(variables=variables, secrets=secrets)
 
@@ -132,6 +135,10 @@ def check_metadata(metadata: GithubMetadata, *, require_strict: bool) -> tuple[l
         else:
             warnings.append(f"missing optional GitHub secret {name}: {description}")
 
+    for name in sorted(INFO_SECRETS):
+        if name in metadata.secrets:
+            ok.append(f"optional secret present: {name}")
+
     for name, description in sorted(REQUIRED_VARIABLES.items()):
         value = metadata.variables.get(name)
         if value:
@@ -150,11 +157,14 @@ def check_metadata(metadata: GithubMetadata, *, require_strict: bool) -> tuple[l
         else:
             warnings.append(f"{name} is not true yet")
 
-    warnings.append(
-        "private PITR R2 credentials are host-local; verify with "
-        "`ssh mvn-api '/usr/local/sbin/mvn-postgres-pitr-bootstrap verify'` "
-        "after bucket credentials are installed"
-    )
+    if is_true(metadata.variables.get("POSTGRES_PITR_REQUIRED")):
+        ok.append("private PITR R2 credentials are host-local and strict PITR checks are enabled")
+    else:
+        warnings.append(
+            "private PITR R2 credentials are host-local; verify with "
+            "`ssh mvn-api '/usr/local/sbin/mvn-postgres-pitr-bootstrap verify'` "
+            "after bucket credentials are installed"
+        )
     return ok, warnings, failures
 
 
