@@ -227,6 +227,10 @@ gh secret set HA_ALERT_TELEGRAM_CHAT_ID --repo mvnby/air-api
 gh secret set HA_ALERT_TELEGRAM_THREAD_ID --repo mvnby/air-api
 ```
 
+The HA status report treats all three names as alerting prerequisites: bot
+token and chat id are functionally required for alerts, while thread id only
+routes alerts into a Telegram forum topic.
+
 Use a dedicated Telegram bot or a tightly scoped internal alert chat. Do not
 reuse the customer-facing bot token for infrastructure alerts.
 
