@@ -16,6 +16,9 @@ jobs:
       contents: read
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
       - name: Setup API SSH Key
         env:
           SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
@@ -54,3 +57,13 @@ jobs:
           name: api-restore-drill-log-${{ github.run_id }}
           path: api-restore-drill.log
           if-no-files-found: warn
+
+      - name: Notify HA failure
+        if: failure()
+        uses: ./.github/actions/notify-ha-failure
+        with:
+          bot-token: ${{ secrets.HA_ALERT_TELEGRAM_BOT_TOKEN }}
+          chat-id: ${{ secrets.HA_ALERT_TELEGRAM_CHAT_ID }}
+          thread-id: ${{ secrets.HA_ALERT_TELEGRAM_THREAD_ID }}
+          title: "MVN API restore drill failed"
+          details: "Artifact: api-restore-drill-log-${{ github.run_id }}"

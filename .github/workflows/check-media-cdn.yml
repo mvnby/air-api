@@ -119,3 +119,13 @@ jobs:
           name: media-cdn-check-log-${{ github.run_id }}
           path: media-cdn-check.log
           if-no-files-found: warn
+
+      - name: Notify HA failure
+        if: failure()
+        uses: ./.github/actions/notify-ha-failure
+        with:
+          bot-token: ${{ secrets.HA_ALERT_TELEGRAM_BOT_TOKEN }}
+          chat-id: ${{ secrets.HA_ALERT_TELEGRAM_CHAT_ID }}
+          thread-id: ${{ secrets.HA_ALERT_TELEGRAM_THREAD_ID }}
+          title: "MVN media CDN check failed"
+          details: "Artifact: media-cdn-check-log-${{ github.run_id }}"
