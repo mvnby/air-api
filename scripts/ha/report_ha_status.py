@@ -28,7 +28,7 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from check_ha_external_prerequisites import (  # noqa: E402
     check_metadata,
-    load_github_metadata,
+    load_metadata,
 )
 
 
@@ -280,7 +280,7 @@ def run_live_active_passive(
 
 
 def external_prereq_result(*, repo: str, require_strict: bool) -> ReportResult:
-    metadata = load_github_metadata(repo)
+    metadata = load_metadata(repo=repo)
     ok, warnings, failures = check_metadata(metadata, require_strict=require_strict)
     if require_strict:
         return ReportResult(ok=list(ok), warnings=list(warnings), blockers=[], failures=list(failures))

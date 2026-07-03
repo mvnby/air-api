@@ -16,6 +16,7 @@ ALERTED_WORKFLOWS = [
     (".github/workflows/check-postgres-pitr.yml", "check"),
     (".github/workflows/check-postgres-replication.yml", "check"),
     (".github/workflows/postgres-pitr-restore-drill.yml", "pitr-restore-drill"),
+    (".github/workflows/report-ha-status.yml", "report"),
 ]
 
 

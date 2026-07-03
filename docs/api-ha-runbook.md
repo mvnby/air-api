@@ -63,7 +63,7 @@ unreviewed host-local compose edits:
 | PostgreSQL PITR systemd units | `deploy/ha/systemd/mvn-postgres-wal-upload.*`, `deploy/ha/systemd/mvn-postgres-basebackup.*` |
 | Cloudflare LB primary switch helper | `scripts/ha/switch_cloudflare_lb_primary.py` |
 | External strict-mode prerequisite check | `scripts/ha/check_ha_external_prerequisites.py` |
-| Operator HA status report | `scripts/ha/report_ha_status.py` |
+| Operator HA status report | `scripts/ha/report_ha_status.py`, `.github/workflows/report-ha-status.yml` |
 | Strict-mode activation helper | `scripts/ha/enable_ha_strict_mode.py` |
 | Cloudflare LB GitHub prerequisite apply helper | `scripts/ha/apply_cloudflare_lb_github_prerequisites.py` |
 | Status helpers | `scripts/ha/mvn-primary-status.sh`, `scripts/ha/mvn-standby-status.sh` |
@@ -201,6 +201,7 @@ Scheduled monitors:
 
 | Workflow | Schedule | Purpose |
 | --- | --- | --- |
+| `report-ha-status.yml` | every 2 hours | operator rollup over deploys, monitors, external prerequisites, and direct active/passive state |
 | `check-api-vps-health.yml` | every 6 hours | primary host, containers, DB, backups, media storage config |
 | `check-api-ha-readiness.yml` | every 6 hours | whole-system HA readiness rollup; direct-origin core checks fail, Cloudflare/PITR are soft blockers until strict |
 | `check-api-ha-invariants.yml` | every 30 minutes | direct primary ready and standby fenced; public Cloudflare routing is covered by the LB monitor/config checks |
