@@ -60,6 +60,7 @@ unreviewed host-local compose edits:
 | PostgreSQL PITR primary prerequisite apply helper | `scripts/ha/apply_postgres_pitr_primary_prerequisites.py` |
 | PostgreSQL PITR monitoring | `scripts/ha/check_postgres_pitr_status.sh`, `scripts/ha/check_postgres_pitr_remote.py`, `.github/workflows/check-postgres-pitr.yml` |
 | PostgreSQL PITR systemd units | `deploy/ha/systemd/mvn-postgres-wal-upload.*`, `deploy/ha/systemd/mvn-postgres-basebackup.*` |
+| Cloudflare LB primary switch helper | `scripts/ha/switch_cloudflare_lb_primary.py` |
 | External strict-mode prerequisite check | `scripts/ha/check_ha_external_prerequisites.py` |
 | Cloudflare LB GitHub prerequisite apply helper | `scripts/ha/apply_cloudflare_lb_github_prerequisites.py` |
 | Status helpers | `scripts/ha/mvn-primary-status.sh`, `scripts/ha/mvn-standby-status.sh` |
@@ -494,6 +495,58 @@ If the dashboard presents granular permission groups instead of roles, choose
 read/list-only permissions for those same Load Balancing resources. Do not grant
 edit permissions for this audit token.
 
+For planned failover/failback, use a separate short-lived write token with
+`Load Balancers Write`. The switch helper changes only `default_pools` and
+`fallback_pool`; it does not edit origins, monitors, host headers, or pool
+membership. Always run it without `--confirm` first:
+
+```bash
+printf 'Cloudflare LB write token: '
+stty -echo
+IFS= read -r CLOUDFLARE_API_TOKEN
+stty echo
+printf '\n'
+export CLOUDFLARE_API_TOKEN
+export CLOUDFLARE_ZONE_ID=<mvn.by zone id>
+export CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
+
+# Current normal routing: mvn-api primary, zakup passive.
+python3 scripts/ha/switch_cloudflare_lb_primary.py \
+  --active-origin 185.250.45.54 \
+  --passive-origin 193.47.42.213
+
+# Apply only after the printed plan is correct.
+python3 scripts/ha/switch_cloudflare_lb_primary.py \
+  --active-origin 185.250.45.54 \
+  --passive-origin 193.47.42.213 \
+  --confirm
+
+unset CLOUDFLARE_API_TOKEN
+```
+
+After a `zakup` promotion, reverse the origins:
+
+```bash
+printf 'Cloudflare LB write token: '
+stty -echo
+IFS= read -r CLOUDFLARE_API_TOKEN
+stty echo
+printf '\n'
+export CLOUDFLARE_API_TOKEN
+export CLOUDFLARE_ZONE_ID=<mvn.by zone id>
+export CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
+
+python3 scripts/ha/switch_cloudflare_lb_primary.py \
+  --active-origin 193.47.42.213 \
+  --passive-origin 185.250.45.54
+python3 scripts/ha/switch_cloudflare_lb_primary.py \
+  --active-origin 193.47.42.213 \
+  --passive-origin 185.250.45.54 \
+  --confirm
+
+unset CLOUDFLARE_API_TOKEN
+```
+
 GitHub scheduled audit fallback, if the helper above is not available:
 
 ```bash
@@ -580,7 +633,30 @@ The manual steps below are the same procedure expanded for review.
    ```
 
 8. Update GitHub Actions variables and Cloudflare pool order/fallback to make
-   `zakup` the current primary.
+   `zakup` the current primary:
+
+   ```bash
+   gh variable set API_PRIMARY_ORIGIN --repo mvnby/air-api --body 193.47.42.213
+   gh variable set API_STANDBY_ORIGIN --repo mvnby/air-api --body 185.250.45.54
+   gh variable set API_STANDBY_HOST --repo mvnby/air-api --body 185.250.45.54
+
+   printf 'Cloudflare LB write token: '
+   stty -echo
+   IFS= read -r CLOUDFLARE_API_TOKEN
+   stty echo
+   printf '\n'
+   export CLOUDFLARE_API_TOKEN
+   export CLOUDFLARE_ZONE_ID=<mvn.by zone id>
+   export CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
+   python3 scripts/ha/switch_cloudflare_lb_primary.py \
+     --active-origin 193.47.42.213 \
+     --passive-origin 185.250.45.54
+   python3 scripts/ha/switch_cloudflare_lb_primary.py \
+     --active-origin 193.47.42.213 \
+     --passive-origin 185.250.45.54 \
+     --confirm
+   unset CLOUDFLARE_API_TOKEN
+   ```
 
 9. Do not restart `mvn-api` as primary. Rebuild it as standby from the promoted
    database.
@@ -665,6 +741,5 @@ gh workflow run api-restore-drill.yml --repo mvnby/air-api --ref main
 
 ## Next Improvements
 
-- Add Cloudflare API automation for pool order/fallback changes.
 - Add owner-visible alerts from GitHub Actions or Cloudflare to Telegram/email
   beyond the default GitHub failed-workflow notification path.
