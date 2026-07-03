@@ -641,6 +641,11 @@ Preferred helper path, run on `zakup` after copying
 ssh zakup 'OLD_PRIMARY_SSH=root@10.77.0.2 CONFIRM_PROMOTE=true /usr/local/sbin/mvn-promote-local-standby'
 ```
 
+The helper is the source of truth for the host-local promotion mechanics. It
+backs up the active standby compose file, copies
+`docker-compose.primary.yml` over `docker-compose.reserve.yml`, starts `db`,
+`app`, and `bot`, disables media pull, and verifies local `/api/ready`.
+
 The helper refuses to promote without `OLD_PRIMARY_SSH` by default. If
 `mvn-api` is unreachable and cannot be fenced over SSH, make that risk explicit:
 
@@ -677,6 +682,13 @@ The manual steps below are the same procedure expanded for review.
    - `BOT_ENABLED=true` and `SCHEDULER_ENABLED=false` in `bot`
 
    Use `deploy/ha/zakup/docker-compose.primary.yml` as the source of truth.
+   Do not hand-edit the active compose file unless the prepared primary compose
+   is missing. Back up the active standby compose and replace it with the
+   prepared primary compose:
+
+   ```bash
+   ssh zakup 'cd /opt/mvn-reserve && cp docker-compose.reserve.yml "docker-compose.reserve.yml.pre-promote.$(date -u +%Y%m%d%H%M%S)" && cp docker-compose.primary.yml docker-compose.reserve.yml'
+   ```
 
 5. Start primary services on `zakup`:
 
