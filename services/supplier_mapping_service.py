@@ -16,9 +16,11 @@ from crud.supplier import (
     SupplyProductDAO,
 )
 from models.product import Product
-from models.supplier import ProductSupplierMapping, Supplier
+from models.supplier import ProductSupplierMapping, Supplier, SupplierOffer
 from services.google_service import get_google_service
 from services.supplier_match_service import suggest_products_for_offer
+from services.supplier_source_analysis_service import analyze_supplier_source_rows
+from services.supplier_source_url import normalize_source_url, source_url_variants
 
 
 class SupplierCatalogService:
@@ -125,6 +127,21 @@ class SupplierCatalogService:
         return get_google_service().list_sheet_tabs(supplier.spreadsheet_id)
 
     @staticmethod
+    async def analyze_source(session: AsyncSession, source_id: int, limit: int = 50) -> dict:
+        source = await SupplierSourceDAO.get_source(session, source_id)
+        if not source:
+            raise ValueError("Supplier source not found")
+        supplier = await SupplierDAO.get_supplier(session, source.supplier_id)
+        if not supplier or not supplier.spreadsheet_id:
+            raise ValueError("Supplier spreadsheet is not configured")
+        values = get_google_service().read_sheet_values(
+            spreadsheet_id=supplier.spreadsheet_id,
+            sheet_name=source.sheet_name,
+            range_a1=source.range_a1,
+        )
+        return analyze_supplier_source_rows(source, values, limit=limit)
+
+    @staticmethod
     async def _validate_sheet_name(session: AsyncSession, supplier_id: int, sheet_name: str | None) -> None:
         if not sheet_name:
             raise ValueError("sheet_name is required")
@@ -226,6 +243,7 @@ class SupplierMappingService:
                     "external_id": offer.external_id,
                     "title_raw": offer.title_raw,
                     "title_normalized": offer.title_normalized,
+                    "source_url": offer.source_url,
                     "model_tokens": offer.model_tokens or [],
                     "indoor_model_tokens": offer.indoor_model_tokens or [],
                     "outdoor_model_tokens": offer.outdoor_model_tokens or [],
@@ -352,6 +370,86 @@ class SupplierMappingService:
         return {"items": out}
 
     @staticmethod
+    async def list_source_url_import_candidates(
+        session: AsyncSession,
+        *,
+        supplier_id: int | None = None,
+        source_id: int | None = None,
+        limit: int = 100,
+    ) -> dict:
+        mapping_exists = (
+            select(ProductSupplierMapping.id)
+            .where(
+                ProductSupplierMapping.supplier_id == SupplierOffer.supplier_id,
+                ProductSupplierMapping.external_id == SupplierOffer.external_id,
+                ProductSupplierMapping.is_active.is_(True),
+            )
+            .exists()
+        )
+        exact_product_exists = (
+            select(Product.id)
+            .where(Product.source_url == SupplierOffer.source_url)
+            .exists()
+        )
+        stmt = (
+            select(SupplierOffer)
+            .where(
+                SupplierOffer.is_active.is_(True),
+                SupplierOffer.source_url.is_not(None),
+                SupplierOffer.source_url != "",
+                ~mapping_exists,
+                ~exact_product_exists,
+            )
+            .order_by(SupplierOffer.updated_at.desc())
+            .limit(max(1, limit * 3))
+        )
+        if supplier_id is not None:
+            stmt = stmt.where(SupplierOffer.supplier_id == supplier_id)
+        if source_id is not None:
+            stmt = stmt.where(SupplierOffer.source_id == source_id)
+
+        result = await session.execute(stmt)
+        offers = list(result.scalars().all())
+        suppliers = await SupplierDAO.list_suppliers(session)
+        sources = await SupplierSourceDAO.list_sources(session)
+        supplier_map = {s.id: s for s in suppliers}
+        source_map = {s.id: s for s in sources}
+
+        items: list[dict] = []
+        seen_urls: set[str] = set()
+        for offer in offers:
+            normalized_url = normalize_source_url(offer.source_url)
+            if not normalized_url or normalized_url in seen_urls:
+                continue
+            product_lookup = await session.execute(
+                select(Product.id).where(Product.source_url.in_(source_url_variants(normalized_url))).limit(1)
+            )
+            if product_lookup.scalar_one_or_none() is not None:
+                continue
+
+            seen_urls.add(normalized_url)
+            supplier = supplier_map.get(offer.supplier_id)
+            source = source_map.get(offer.source_id) if offer.source_id else None
+            items.append(
+                {
+                    "supplier_id": offer.supplier_id,
+                    "supplier_name": supplier.name if supplier else None,
+                    "source_id": offer.source_id,
+                    "source_name": source.sheet_name if source else None,
+                    "external_id": offer.external_id,
+                    "title_raw": offer.title_raw,
+                    "source_url": normalized_url,
+                    "model_tokens": offer.model_tokens or [],
+                    "qty": int(offer.qty or 0),
+                    "rrc_byn": float(offer.rrc_byn) if offer.rrc_byn is not None else None,
+                }
+            )
+            if len(items) >= limit:
+                break
+
+        return {"items": items, "total": len(items)}
+
+    @staticmethod
     async def delete_mapping(session: AsyncSession, mapping_id: int) -> bool:
         mapping = await SupplierMappingDAO.get_mapping(session, mapping_id)
         if not mapping:
@@ -388,6 +486,7 @@ class SupplierMappingService:
                     "external_id": offer.external_id,
                     "title_raw": offer.title_raw,
                     "title_normalized": offer.title_normalized,
+                    "source_url": offer.source_url,
                     "model_tokens": offer.model_tokens or [],
                     "indoor_model_tokens": offer.indoor_model_tokens or [],
                     "outdoor_model_tokens": offer.outdoor_model_tokens or [],

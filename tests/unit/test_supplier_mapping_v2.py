@@ -3,6 +3,7 @@ import pytest
 from models.supplier import Supplier
 from services.supplier_mapping_service import SupplierCatalogService
 from services.supplier_match_service import build_offer_match_profile, normalize_offer_title_for_search
+from services.supplier_source_url import extract_first_source_url, normalize_source_url
 
 
 def test_normalize_offer_title_for_search_strips_parasites():
@@ -11,6 +12,13 @@ def test_normalize_offer_title_for_search_strips_parasites():
     assert "сплит" not in normalized
     assert "внутренний блок" not in normalized
     assert "mdsa-12hrfn8" in normalized
+
+
+def test_extract_first_source_url_from_supplier_row():
+    row = ["MDV", "MDSAG-09HRFN8", "https://catalog.onliner.by/conditioners/mdv/mdsag09hrfn8)."]
+
+    assert normalize_source_url(row[2]) == "https://catalog.onliner.by/conditioners/mdv/mdsag09hrfn8"
+    assert extract_first_source_url(row) == "https://catalog.onliner.by/conditioners/mdv/mdsag09hrfn8"
 
 
 @pytest.mark.parametrize(

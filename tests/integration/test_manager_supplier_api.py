@@ -27,8 +27,16 @@ async def test_manager_supplier_sync_and_mapping_flow(async_client, db, monkeypa
 
         def read_sheet_values(self, spreadsheet_id: str, **kwargs):
             return [
-                ["sku", "title", "wholesale", "currency", "rrc", "qty"],
-                ["SKU-1", "Split AC MDSAG-09HRFN8", "479", "USD", "2670", "5"],
+                ["sku", "title", "wholesale", "currency", "rrc", "qty", "url"],
+                [
+                    "SKU-1",
+                    "Split AC MDSAG-09HRFN8",
+                    "479",
+                    "USD",
+                    "2670",
+                    "5",
+                    "https://catalog.onliner.by/conditioners/mdv/mdsag09hrfn8",
+                ],
             ]
 
     from services import supplier_mapping_service, supplier_sync_service
@@ -62,10 +70,22 @@ async def test_manager_supplier_sync_and_mapping_flow(async_client, db, monkeypa
             "col_wholesale_currency": "D",
             "col_rrc_byn": "E",
             "col_qty": "F",
+            "col_source_url": "G",
         },
     )
     assert create_source.status_code == 200
     source_id = create_source.json()["id"]
+    assert create_source.json()["col_source_url"] == "G"
+
+    analysis_resp = await async_client.get(
+        f"/api/manager/supplier-sources/{source_id}/analysis",
+        headers=headers,
+    )
+    assert analysis_resp.status_code == 200
+    analysis = analysis_resp.json()
+    assert analysis["product_rows"] == 1
+    assert analysis["url_rows"] == 1
+    assert analysis["sample_rows"][1]["source_url"] == "https://catalog.onliner.by/conditioners/mdv/mdsag09hrfn8"
 
     sync_resp = await async_client.post(
         f"/api/manager/supplier-sources/{source_id}/sync",
@@ -88,12 +108,59 @@ async def test_manager_supplier_sync_and_mapping_flow(async_client, db, monkeypa
     offer_item = unmapped_by_source.json()["items"][0]
     assert offer_item["title_normalized"] == "split ac mdsag-09hrfn8"
     assert "MDSAG-09HRFN8" in offer_item["model_tokens"]
+    assert offer_item["source_url"] == "https://catalog.onliner.by/conditioners/mdv/mdsag09hrfn8"
 
-    product = Product(title="Split AC MDSAG-09HRFN8", slug="mapped-ac", price=3000, area=25)
+    import_candidates = await async_client.get(
+        "/api/manager/supplier-offers/source-url-import-candidates",
+        headers=headers,
+        params={"source_id": source_id},
+    )
+    assert import_candidates.status_code == 200
+    assert import_candidates.json()["items"][0]["source_url"] == "https://catalog.onliner.by/conditioners/mdv/mdsag09hrfn8"
+
+    class FakeCatalogImportRuntime:
+        def __init__(self):
+            self.urls = []
+
+        async def start_import(self, *, urls, with_related: bool, update_existing: bool):
+            self.urls = urls
+            assert with_related is False
+            assert update_existing is False
+            return {"job_id": "job-1", "status": "queued", "stage": "queued"}
+
+    fake_runtime = FakeCatalogImportRuntime()
+    from routers import manager_supply
+
+    monkeypatch.setattr(manager_supply, "catalog_import_runtime_service", fake_runtime)
+
+    start_import = await async_client.post(
+        "/api/manager/supplier-offers/source-url-import",
+        headers=headers,
+        json={"urls": ["https://catalog.onliner.by/conditioners/mdv/mdsag09hrfn8"]},
+    )
+    assert start_import.status_code == 200
+    assert start_import.json()["job_id"] == "job-1"
+    assert fake_runtime.urls == ["https://catalog.onliner.by/conditioners/mdv/mdsag09hrfn8"]
+
+    product = Product(
+        title="Split AC MDSAG-09HRFN8",
+        slug="mapped-ac",
+        price=3000,
+        area=25,
+        source_url="https://catalog.onliner.by/conditioners/mdv/mdsag09hrfn8",
+    )
     db.add(product)
     await db.commit()
     await db.refresh(product)
     product_id = product.id
+
+    import_candidates_after_product = await async_client.get(
+        "/api/manager/supplier-offers/source-url-import-candidates",
+        headers=headers,
+        params={"source_id": source_id},
+    )
+    assert import_candidates_after_product.status_code == 200
+    assert import_candidates_after_product.json()["items"] == []
 
     suggestions = await async_client.post(
         "/api/manager/supplier-offers/suggestions",
@@ -106,6 +173,9 @@ async def test_manager_supplier_sync_and_mapping_flow(async_client, db, monkeypa
     assert suggestions.status_code == 200
     assert suggestions.json()["items"][0]["auto_eligible"] is True
     assert suggestions.json()["items"][0]["offer_tokens"] == ["MDSAG-09HRFN8"]
+    candidate = suggestions.json()["items"][0]["candidates"][0]
+    assert candidate["source_url"] == "https://catalog.onliner.by/conditioners/mdv/mdsag09hrfn8"
+    assert "Совпала ссылка источника / Onliner" in candidate["explanations"]
 
     create_mapping = await async_client.post(
         "/api/manager/supplier-mappings",

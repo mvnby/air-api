@@ -15,6 +15,7 @@ export type SupplierPriceSourceUpdatePayload = {
     col_wholesale_currency?: (string | null);
     col_rrc_byn?: (string | null);
     col_qty?: (string | null);
+    col_source_url?: (string | null);
     is_active?: (boolean | null);
 };
 

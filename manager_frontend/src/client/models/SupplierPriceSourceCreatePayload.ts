@@ -15,6 +15,7 @@ export type SupplierPriceSourceCreatePayload = {
     col_wholesale_currency?: string;
     col_rrc_byn?: string;
     col_qty?: string;
+    col_source_url?: (string | null);
     is_active?: boolean;
 };
 

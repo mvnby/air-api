@@ -6,9 +6,12 @@ from decimal import Decimal
 from typing import Any, Iterable
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
+from models.product import Product
 from models.supplier import SupplierOffer
 from services.product_manager_service import ProductManagerService
+from services.supplier_source_url import normalize_source_url, source_url_variants
 
 
 MATCH_NORMALIZER_VERSION = "supplier-match-v2"
@@ -119,7 +122,8 @@ async def suggest_products_for_offer(
     limit: int = 5,
 ) -> dict[str, Any]:
     offer_profile = _profile_from_offer_or_title(offer, title_raw)
-    if not offer_profile.title_normalized and not offer_profile.model_tokens:
+    offer_source_url = normalize_source_url(offer.source_url if offer else None)
+    if not offer_profile.title_normalized and not offer_profile.model_tokens and not offer_source_url:
         return {
             "normalized_query": "",
             "offer_tokens": [],
@@ -130,11 +134,17 @@ async def suggest_products_for_offer(
             "reason": "empty_query",
         }
 
-    candidate_rows = await _collect_candidate_products(session, offer_profile, limit=max(limit * 3, 12))
+    candidate_rows = await _collect_candidate_products(
+        session,
+        offer_profile,
+        offer_source_url=offer_source_url,
+        limit=max(limit * 3, 12),
+    )
     scored = [
         _score_candidate(
             offer_profile=offer_profile,
             product=item,
+            offer_source_url=offer_source_url,
             offer_rrc=_decimal_to_float(offer.rrc_byn) if offer else None,
         )
         for item in candidate_rows
@@ -168,6 +178,7 @@ async def _collect_candidate_products(
     session: AsyncSession,
     offer_profile: MatchProfile,
     *,
+    offer_source_url: str | None = None,
     limit: int,
 ) -> list[dict[str, Any]]:
     queries = _dedupe([
@@ -176,6 +187,13 @@ async def _collect_candidate_products(
         *[" ".join(offer_profile.model_tokens[:2]) if len(offer_profile.model_tokens) >= 2 else ""],
     ])
     by_id: dict[int, dict[str, Any]] = {}
+    if offer_source_url:
+        result = await session.execute(
+            select(Product).where(Product.source_url.in_(source_url_variants(offer_source_url))).limit(limit)
+        )
+        for product in result.scalars().all():
+            if product.id is not None:
+                by_id[int(product.id)] = _product_to_candidate_dict(product)
     for query in queries:
         if not query:
             continue
@@ -192,6 +210,7 @@ def _score_candidate(
     *,
     offer_profile: MatchProfile,
     product: dict[str, Any],
+    offer_source_url: str | None = None,
     offer_rrc: float | None = None,
 ) -> dict[str, Any]:
     product_profile = build_product_match_profile(product)
@@ -207,6 +226,12 @@ def _score_candidate(
     score = 0
     breakdown: dict[str, int] = {}
     explanations: list[str] = []
+
+    product_source_url = normalize_source_url(product.get("source_url"))
+    if offer_source_url and product_source_url and offer_source_url == product_source_url:
+        score += 120
+        breakdown["source_url"] = 120
+        explanations.append("Совпала ссылка источника / Onliner")
 
     if matched_tokens:
         value = min(85, 42 * len(matched_tokens))
@@ -260,12 +285,23 @@ def _score_candidate(
         "product_id": product["id"],
         "title": product["title"],
         "price": product["price"],
+        "source_url": product.get("source_url"),
         "score": score,
         "confidence": confidence,
         "matched_tokens": matched_tokens,
         "missing_tokens": missing_tokens,
         "explanations": explanations,
         "score_breakdown": breakdown,
+    }
+
+
+def _product_to_candidate_dict(product: Product) -> dict[str, Any]:
+    return {
+        "id": product.id,
+        "title": product.title,
+        "price": product.price,
+        "source_url": product.source_url,
+        "specs": product.specs or {},
     }
 
 

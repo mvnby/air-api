@@ -55,6 +55,7 @@ import {
     type SupplierMappingCreatePayload,
     type SupplierMappingBulkCreatePayload,
     type SupplierOfferSuggestionsPayload,
+    type SupplierSourceUrlImportPayload,
     type ProductLocalStockPayload,
     type ManagerGoogleAuthStatusResponse,
     type ManagerGoogleAuthUrlResponse,
@@ -878,6 +879,10 @@ export const api = {
         return await ManagerService.deleteSupplierSource(sourceId);
     },
 
+    async analyzeSupplierSource(sourceId: number, limit = 50) {
+        return await ManagerService.analyzeSupplierSource(sourceId, limit);
+    },
+
     async syncSupplierSource(sourceId: number) {
         return await ManagerService.syncSupplierSource(sourceId);
     },
@@ -888,6 +893,14 @@ export const api = {
 
     async listUnmappedSupplierOffers(page = 1, limit = 50, supplierId?: number, sourceId?: number) {
         return await ManagerService.listUnmappedSupplierOffers(page, limit, supplierId ?? null, sourceId ?? null);
+    },
+
+    async listSupplierSourceUrlImportCandidates(limit = 100, supplierId?: number, sourceId?: number) {
+        return await ManagerService.listSupplierSourceUrlImportCandidates(limit, supplierId ?? null, sourceId ?? null);
+    },
+
+    async startSupplierSourceUrlImport(payload: SupplierSourceUrlImportPayload) {
+        return await ManagerService.startSupplierSourceUrlImport(payload);
     },
 
     async createSupplierMapping(payload: SupplierMappingCreatePayload) {

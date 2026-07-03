@@ -10,6 +10,7 @@ export type SupplierOfferResponse = {
     external_id: string;
     title_raw?: (string | null);
     title_normalized?: (string | null);
+    source_url?: (string | null);
     model_tokens?: Array<string>;
     indoor_model_tokens?: Array<string>;
     outdoor_model_tokens?: Array<string>;

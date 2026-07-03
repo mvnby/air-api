@@ -46,6 +46,7 @@ class SupplierPriceSource(SQLModel, table=True):
     col_wholesale_currency: str = Field(default="D")
     col_rrc_byn: str = Field(default="E")
     col_qty: str = Field(default="F")
+    col_source_url: Optional[str] = Field(default=None)
 
     is_active: bool = Field(default=True, index=True)
     last_sync_at: Optional[datetime] = None
@@ -76,6 +77,7 @@ class SupplierOffer(SQLModel, table=True):
     indoor_model_tokens: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     outdoor_model_tokens: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     match_normalizer_version: Optional[str] = Field(default=None, index=True)
+    source_url: Optional[str] = Field(default=None, index=True)
     qty_raw: Optional[str] = None
     wholesale_raw: Optional[str] = None
     rrc_raw: Optional[str] = None
