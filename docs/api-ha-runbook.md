@@ -57,6 +57,7 @@ unreviewed host-local compose edits:
 | PostgreSQL PITR WAL/basebackup upload | `scripts/ha/upload_postgres_pitr_to_s3.py`, `scripts/ha/upload_postgres_pitr_wal.sh`, `scripts/ha/create_postgres_pitr_basebackup.sh` |
 | PostgreSQL PITR restore helpers | `scripts/ha/restore_postgres_pitr_from_s3.py`, `scripts/ha/restore_postgres_pitr_drill.sh`, `.github/workflows/postgres-pitr-restore-drill.yml` |
 | PostgreSQL PITR env/bootstrap | `scripts/ha/configure_postgres_pitr_env.py`, `scripts/ha/bootstrap_postgres_pitr.sh` |
+| PostgreSQL PITR primary prerequisite apply helper | `scripts/ha/apply_postgres_pitr_primary_prerequisites.py` |
 | PostgreSQL PITR monitoring | `scripts/ha/check_postgres_pitr_status.sh`, `scripts/ha/check_postgres_pitr_remote.py`, `.github/workflows/check-postgres-pitr.yml` |
 | PostgreSQL PITR systemd units | `deploy/ha/systemd/mvn-postgres-wal-upload.*`, `deploy/ha/systemd/mvn-postgres-basebackup.*` |
 | External strict-mode prerequisite check | `scripts/ha/check_ha_external_prerequisites.py` |
@@ -267,22 +268,31 @@ tar -czf - \
 # Copy deploy/ha/mvn-api/docker-compose.primary.yml through CI.
 gh workflow run deploy.yml --repo mvnby/air-api --ref main -f deploy_frontend=false
 
-# Put the private R2 credentials in a temporary root-only file on the primary.
-# Do not paste these values in tickets, PRs, or chat.
-ssh mvn-api 'umask 077; cat > /root/mvn-postgres-pitr.env' <<'EOF'
-POSTGRES_PITR_CLUSTER=mvn-api
-POSTGRES_PITR_S3_BUCKET=<private-r2-bucket>
-POSTGRES_PITR_S3_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
-POSTGRES_PITR_S3_REGION=auto
-POSTGRES_PITR_S3_ACCESS_KEY_ID=<private-r2-token-access-key>
-POSTGRES_PITR_S3_SECRET_ACCESS_KEY=<private-r2-token-secret>
-POSTGRES_PITR_S3_KEY_PREFIX=postgres/pitr
-EOF
+# Put the private R2 credentials in the local shell environment or let the
+# helper prompt for the missing access-key values. It uploads a temporary
+# root-only env file to the primary, removes it after the remote phase, and
+# never prints access keys.
+export POSTGRES_PITR_CLUSTER=mvn-api
+export POSTGRES_PITR_S3_BUCKET=<private-r2-bucket>
+export POSTGRES_PITR_S3_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
+export POSTGRES_PITR_S3_REGION=auto
+export POSTGRES_PITR_S3_KEY_PREFIX=postgres/pitr
 
-# Validate credentials, write PITR env with archive mode still off, upload a
-# physical basebackup, and stage archive_mode=on for the next DB recreate.
-ssh mvn-api 'ENV_INPUT_FILE=/root/mvn-postgres-pitr.env /usr/local/sbin/mvn-postgres-pitr-bootstrap bootstrap-before-maintenance'
-ssh mvn-api 'rm -f /root/mvn-postgres-pitr.env'
+# First verify the local input shape without touching the primary.
+python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py --dry-run
+
+# Then upload the temporary env file and run the remote preflight. This does not
+# write the production .env, upload a basebackup, or recreate the database.
+python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py --phase preflight
+
+# Finally validate credentials, write PITR env with archive mode still off,
+# upload a physical basebackup, and stage archive_mode=on for the next DB
+# recreate. This still does not recreate the database.
+python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py --phase bootstrap-before-maintenance
+
+unset POSTGRES_PITR_CLUSTER POSTGRES_PITR_S3_BUCKET POSTGRES_PITR_S3_ENDPOINT_URL
+unset POSTGRES_PITR_S3_REGION POSTGRES_PITR_S3_ACCESS_KEY_ID
+unset POSTGRES_PITR_S3_SECRET_ACCESS_KEY POSTGRES_PITR_S3_KEY_PREFIX
 
 # In a short maintenance window, recreate db so archive_mode=on and the
 # /postgres-wal-archive mount become active. The helper also resets historical
