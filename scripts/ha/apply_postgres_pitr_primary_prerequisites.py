@@ -16,6 +16,7 @@ import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
 
@@ -26,6 +27,15 @@ DEFAULT_REMOTE_ENV_FILE = "/root/mvn-postgres-pitr.env"
 DEFAULT_BOOTSTRAP_HELPER = "/usr/local/sbin/mvn-postgres-pitr-bootstrap"
 
 BUCKET_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$")
+PITR_ENV_NAMES = {
+    "POSTGRES_PITR_CLUSTER",
+    "POSTGRES_PITR_S3_BUCKET",
+    "POSTGRES_PITR_S3_ENDPOINT_URL",
+    "POSTGRES_PITR_S3_REGION",
+    "POSTGRES_PITR_S3_ACCESS_KEY_ID",
+    "POSTGRES_PITR_S3_SECRET_ACCESS_KEY",
+    "POSTGRES_PITR_S3_KEY_PREFIX",
+}
 
 Runner = Callable[[Sequence[str], str | None], subprocess.CompletedProcess[str]]
 
@@ -73,6 +83,44 @@ def _clean(value: object | None) -> str:
 
 def _env(name: str, environ: Mapping[str, str]) -> str:
     return _clean(environ.get(name))
+
+
+def _parse_env_line(line: str) -> tuple[str, str] | None:
+    line = line.strip()
+    if not line or line.startswith("#") or "=" not in line:
+        return None
+    key, raw_value = line.split("=", 1)
+    key = key.strip().removeprefix("export ").strip()
+    if not key or not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", key):
+        return None
+    raw_value = raw_value.strip()
+    if raw_value and raw_value[0] in {"'", '"'}:
+        try:
+            parts = shlex.split(f"{key}={raw_value}", posix=True)
+        except ValueError:
+            parts = []
+        if parts and "=" in parts[0]:
+            return key, parts[0].split("=", 1)[1]
+    if " #" in raw_value:
+        raw_value = raw_value.split(" #", 1)[0].rstrip()
+    return key, raw_value
+
+
+def load_env_file(path: Path, *, allowed_names: set[str] = PITR_ENV_NAMES) -> None:
+    if not path.exists():
+        raise RuntimeError(f"env file not found: {path}")
+    loaded = 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        parsed = _parse_env_line(line)
+        if parsed is None:
+            continue
+        key, value = parsed
+        if key not in allowed_names:
+            continue
+        if key not in os.environ:
+            os.environ[key] = value
+            loaded += 1
+    log("ok", f"loaded env file: {path} keys={loaded}")
 
 
 def _prompt(name: str, *, secret: bool, no_prompt: bool) -> str:
@@ -256,6 +304,11 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--remote-env-file", default=DEFAULT_REMOTE_ENV_FILE)
     parser.add_argument("--bootstrap-helper", default=DEFAULT_BOOTSTRAP_HELPER)
     parser.add_argument(
+        "--env-file",
+        default=os.environ.get("HA_ENV_FILE") or "",
+        help="Optional dotenv-style file to load before reading PITR inputs.",
+    )
+    parser.add_argument(
         "--phase",
         choices=("preflight", "bootstrap-before-maintenance"),
         default="preflight",
@@ -273,6 +326,8 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     try:
+        if args.env_file:
+            load_env_file(Path(args.env_file))
         config = collect_inputs(no_prompt=args.no_prompt)
         log("info", f"ssh_host={args.ssh_host} project_dir={args.project_dir} compose_file={args.compose_file}")
         log("info", f"phase={args.phase}")

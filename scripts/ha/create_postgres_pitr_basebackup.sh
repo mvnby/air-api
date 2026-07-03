@@ -42,13 +42,6 @@ if ! "${COMPOSE[@]}" exec -T "${DB_SERVICE}" sh -lc 'psql -U "$POSTGRES_USER" -d
   exit 1
 fi
 
-network="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "${db_container}" | head -n 1)"
-db_ip="$(docker inspect -f '{{range $_, $network := .NetworkSettings.Networks}}{{println $network.IPAddress}}{{end}}' "${db_container}" | head -n 1)"
-if [[ -z "${network}" || -z "${db_ip}" ]]; then
-  echo "Could not detect Docker network/IP for ${DB_SERVICE}." >&2
-  exit 1
-fi
-
 backup_id="$(date -u +%Y%m%dT%H%M%SZ)"
 backup_dir="${BACKUP_ROOT}/${backup_id}"
 mkdir -p "${backup_dir}"
@@ -61,11 +54,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-log "Creating physical pg_basebackup ${backup_id} from ${db_ip} on ${network}..."
+# Join the DB container network namespace so Postgres sees this as localhost.
+# The default pg_hba.conf allows local replication without opening replication
+# to the whole Docker bridge network.
+log "Creating physical pg_basebackup ${backup_id} through ${DB_SERVICE} localhost network namespace..."
 docker run --rm \
-  --network "${network}" \
+  --network "container:${db_container}" \
   -e PGPASSWORD="${POSTGRES_PASSWORD}" \
-  -e PGHOST="${db_ip}" \
+  -e PGHOST="127.0.0.1" \
   -e PGUSER="${POSTGRES_USER}" \
   -e PGLABEL="mvn-pitr-${backup_id}" \
   -v "${backup_dir}:/backup" \

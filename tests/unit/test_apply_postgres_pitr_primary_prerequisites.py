@@ -47,6 +47,38 @@ def test_render_env_redacts_access_keys():
     assert "POSTGRES_PITR_S3_SECRET_ACCESS_KEY=redacted" in rendered
 
 
+def test_load_env_file_loads_only_pitr_keys_without_overriding(tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "POSTGRES_PITR_S3_BUCKET=mvn-postgres-pitr",
+                "POSTGRES_PITR_S3_ENDPOINT_URL='https://account-id.r2.cloudflarestorage.com'",
+                "POSTGRES_PITR_S3_ACCESS_KEY_ID=access-key-id",
+                "POSTGRES_PITR_S3_SECRET_ACCESS_KEY=super-secret-key",
+                "GH_TOKEN=stale-github-token",
+                "CLOUDFLARE_API_TOKEN_LB_AUDIT=cloudflare-token",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("POSTGRES_PITR_S3_BUCKET", "existing-bucket")
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN_LB_AUDIT", raising=False)
+
+    module.load_env_file(env_file)
+
+    assert module._env("POSTGRES_PITR_S3_BUCKET", module.os.environ) == "existing-bucket"
+    assert (
+        module._env("POSTGRES_PITR_S3_ENDPOINT_URL", module.os.environ)
+        == "https://account-id.r2.cloudflarestorage.com"
+    )
+    assert module._env("POSTGRES_PITR_S3_SECRET_ACCESS_KEY", module.os.environ) == "super-secret-key"
+    assert module._env("GH_TOKEN", module.os.environ) == ""
+    assert module._env("CLOUDFLARE_API_TOKEN_LB_AUDIT", module.os.environ) == ""
+
+
 def test_upload_remote_env_passes_secret_only_via_stdin():
     calls = []
 
@@ -165,3 +197,26 @@ def test_main_runs_upload_and_preflight_with_monkeypatched_subprocess(monkeypatc
     assert "super-secret-key" in calls[0][1]
     assert all("super-secret-key" not in arg for args, _stdin in calls for arg in args)
     assert "preflight" in calls[1][0][2]
+
+
+def test_main_can_load_project_env_file(tmp_path, monkeypatch):
+    calls = []
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(f"{name}={value}" for name, value in _env().items()),
+        encoding="utf-8",
+    )
+
+    def fake_runner(args, stdin):
+        calls.append((list(args), stdin))
+        return FakeCompleted()
+
+    for name in _env():
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(module, "_run_subprocess", fake_runner)
+
+    assert module.main(["--no-prompt", "--phase", "preflight", "--env-file", str(env_file)]) == 0
+
+    assert len(calls) == 2
+    assert "super-secret-key" in calls[0][1]
+    assert all("super-secret-key" not in arg for args, _stdin in calls for arg in args)
