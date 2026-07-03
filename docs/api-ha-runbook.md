@@ -319,31 +319,22 @@ tar -czf - \
 # Copy deploy/ha/mvn-api/docker-compose.primary.yml through CI.
 gh workflow run deploy.yml --repo mvnby/air-api --ref main -f deploy_frontend=false
 
-# Put the private R2 credentials in the local shell environment or let the
-# helper prompt for the missing access-key values. It uploads a temporary
+# Put the private R2 credentials in local `.env` using the names above. The
+# helper loads only `POSTGRES_PITR_*` keys from that file, uploads a temporary
 # root-only env file to the primary, removes it after the remote phase, and
 # never prints access keys.
-export POSTGRES_PITR_CLUSTER=mvn-api
-export POSTGRES_PITR_S3_BUCKET=<private-r2-bucket>
-export POSTGRES_PITR_S3_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
-export POSTGRES_PITR_S3_REGION=auto
-export POSTGRES_PITR_S3_KEY_PREFIX=postgres/pitr
 
 # First verify the local input shape without touching the primary.
-python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py --dry-run
+python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py --env-file .env --dry-run --no-prompt
 
 # Then upload the temporary env file and run the remote preflight. This does not
 # write the production .env, upload a basebackup, or recreate the database.
-python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py --phase preflight
+python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py --env-file .env --phase preflight --no-prompt
 
 # Finally validate credentials, write PITR env with archive mode still off,
 # upload a physical basebackup, and stage archive_mode=on for the next DB
 # recreate. This still does not recreate the database.
-python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py --phase bootstrap-before-maintenance
-
-unset POSTGRES_PITR_CLUSTER POSTGRES_PITR_S3_BUCKET POSTGRES_PITR_S3_ENDPOINT_URL
-unset POSTGRES_PITR_S3_REGION POSTGRES_PITR_S3_ACCESS_KEY_ID
-unset POSTGRES_PITR_S3_SECRET_ACCESS_KEY POSTGRES_PITR_S3_KEY_PREFIX
+python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py --env-file .env --phase bootstrap-before-maintenance --no-prompt
 
 # In a short maintenance window, recreate db so archive_mode=on and the
 # /postgres-wal-archive mount become active. The helper also resets historical
