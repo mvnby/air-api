@@ -62,6 +62,7 @@ unreviewed host-local compose edits:
 | PostgreSQL PITR systemd units | `deploy/ha/systemd/mvn-postgres-wal-upload.*`, `deploy/ha/systemd/mvn-postgres-basebackup.*` |
 | Cloudflare LB primary switch helper | `scripts/ha/switch_cloudflare_lb_primary.py` |
 | External strict-mode prerequisite check | `scripts/ha/check_ha_external_prerequisites.py` |
+| Strict-mode activation helper | `scripts/ha/enable_ha_strict_mode.py` |
 | Cloudflare LB GitHub prerequisite apply helper | `scripts/ha/apply_cloudflare_lb_github_prerequisites.py` |
 | Status helpers | `scripts/ha/mvn-primary-status.sh`, `scripts/ha/mvn-standby-status.sh` |
 | Media sync helper/timer | `scripts/ha/media_sync_pull.sh`, `deploy/ha/systemd/mvn-media-sync.*` |
@@ -167,6 +168,20 @@ export CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
 python3 scripts/ha/apply_cloudflare_lb_github_prerequisites.py --repo mvnby/air-api --mark-required
 unset CLOUDFLARE_LB_READ_TOKEN
 ```
+
+After Cloudflare LB credentials are in GitHub and PostgreSQL PITR has passed
+`mvn-postgres-pitr-bootstrap verify`, use the strict-mode activation helper
+instead of setting strict variables by hand:
+
+```bash
+python3 scripts/ha/enable_ha_strict_mode.py --repo mvnby/air-api --dry-run
+python3 scripts/ha/enable_ha_strict_mode.py --repo mvnby/air-api
+```
+
+The helper waits for the required Cloudflare LB config audit, PITR status
+check, PITR restore drill, and strict HA readiness audit. It sets
+`CLOUDFLARE_LB_CONFIG_REQUIRED=true`, `POSTGRES_PITR_REQUIRED=true`, and
+`API_HA_READINESS_STRICT=true` only after those proof workflows pass.
 
 Scheduled monitors:
 
