@@ -317,6 +317,14 @@ def next_steps_for(result: ReportResult) -> list[str]:
     if result.failures:
         add_once("inspect failed workflow URLs/artifacts before changing API routing or database roles")
 
+    if "Cloudflare LB Config Check" in joined:
+        add_once(
+            "fix the Cloudflare LB read token permissions: grant `Zone / Load Balancers / Read` "
+            "for the `mvn.by` zone and `Account / Load Balancing: Monitors and Pools / Read` "
+            "for the account, update local `.env` if the token changed, then run "
+            "`python3 scripts/ha/apply_cloudflare_lb_github_prerequisites.py --repo mvnby/air-api --env-file .env`"
+        )
+
     if any(
         key in joined
         for key in (
