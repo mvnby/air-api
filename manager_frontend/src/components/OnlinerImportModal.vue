@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { api, type CatalogImportJobStatusResponse } from '../api';
+import { api, type CatalogImportJobStatusResponse, type MdvCatalogPreviewResponse } from '../api';
 import { getApiErrorMessage } from '../utils/api-errors';
 
 const emit = defineEmits<{
@@ -16,7 +16,29 @@ const result = ref<{ success_count: number; error_count: number; errors: string[
 const importError = ref('');
 const importJobId = ref('');
 const importProgress = ref<CatalogImportJobStatusResponse | null>(null);
+const mdvPreview = ref<MdvCatalogPreviewResponse | null>(null);
+const mdvLoading = ref(false);
+const mdvError = ref('');
 let pollTimer: ReturnType<typeof window.setInterval> | null = null;
+
+type MdvCatalogKey = 'household' | 'semi' | 'multi';
+
+const mdvCatalogOptions: Array<{ key: MdvCatalogKey; label: string; short: string }> = [
+  { key: 'household', label: 'Бытовые', short: 'Дом' },
+  { key: 'semi', label: 'Полупром', short: 'Полупром' },
+  { key: 'multi', label: 'Мультисплит', short: 'Мульти' },
+];
+const mdvReplaceOptions: Array<'semi' | 'multi'> = ['semi', 'multi'];
+
+const mdvCatalogSelection = ref<Record<MdvCatalogKey, boolean>>({
+  household: true,
+  semi: true,
+  multi: true,
+});
+const mdvReplaceLegacySelection = ref<Record<'semi' | 'multi', boolean>>({
+  semi: false,
+  multi: false,
+});
 
 const importPresets = [
   {
@@ -34,6 +56,19 @@ const parsedUrls = () =>
     .split('\n')
     .map((u) => u.trim())
     .filter(Boolean);
+
+const selectedMdvCatalogs = computed(() =>
+  mdvCatalogOptions
+    .filter((item) => mdvCatalogSelection.value[item.key])
+    .map((item) => item.key)
+);
+
+const selectedMdvReplaceCatalogs = computed(() =>
+  (['semi', 'multi'] as const).filter((key) => mdvReplaceLegacySelection.value[key])
+);
+
+const mdvCatalogLabel = (key: string) =>
+  mdvCatalogOptions.find((item) => item.key === key)?.label || key;
 
 const progressPercent = computed(() => {
   const progress = importProgress.value;
@@ -125,6 +160,49 @@ const handleImport = async () => {
   }
 };
 
+const handleMdvPreview = async () => {
+  if (selectedMdvCatalogs.value.length === 0) return;
+  mdvLoading.value = true;
+  mdvError.value = '';
+  mdvPreview.value = null;
+  try {
+    mdvPreview.value = await api.previewMdvCatalogImport({
+      catalogs: selectedMdvCatalogs.value,
+      sample_limit: 20,
+      replace_legacy_catalogs: selectedMdvReplaceCatalogs.value,
+    });
+  } catch (e) {
+    mdvError.value = getApiErrorMessage(e);
+  } finally {
+    mdvLoading.value = false;
+  }
+};
+
+const handleMdvImport = async () => {
+  if (selectedMdvCatalogs.value.length === 0) return;
+  loading.value = true;
+  result.value = null;
+  importError.value = '';
+  mdvError.value = '';
+  importJobId.value = '';
+  importProgress.value = null;
+  stopPolling();
+
+  try {
+    const job = await api.startMdvCatalogImportJob({
+      catalogs: selectedMdvCatalogs.value,
+      update_existing: true,
+      replace_legacy_catalogs: selectedMdvReplaceCatalogs.value,
+    });
+    importJobId.value = job.job_id;
+    startPolling();
+    await refreshImportStatus();
+  } catch (e) {
+    mdvError.value = getApiErrorMessage(e);
+    loading.value = false;
+  }
+};
+
 const applyImportPreset = (preset: (typeof importPresets)[number]) => {
   if (loading.value) return;
   urlsText.value = preset.url;
@@ -132,6 +210,7 @@ const applyImportPreset = (preset: (typeof importPresets)[number]) => {
   updateExisting.value = preset.updateExisting;
   result.value = null;
   importError.value = '';
+  mdvError.value = '';
 };
 
 const handleClose = () => {
@@ -203,6 +282,129 @@ onBeforeUnmount(stopPolling);
                 </button>
               </div>
             </div>
+
+            <section class="rounded-xl border border-teal-500/30 bg-teal-950/20 p-4 space-y-4">
+              <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div>
+                  <p class="text-sm font-semibold text-teal-100">MDV официальный каталог</p>
+                  <p class="text-xs text-teal-200/70 mt-0.5">JSON, галерея, инструкции, нормализация характеристик</p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    :disabled="loading || mdvLoading || selectedMdvCatalogs.length === 0"
+                    @click="handleMdvPreview"
+                    class="inline-flex items-center gap-1.5 rounded-lg border border-teal-400/50 px-3 py-2 text-xs font-semibold text-teal-100 hover:bg-teal-500/15 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span
+                      v-if="mdvLoading"
+                      class="h-3.5 w-3.5 rounded-full border-2 border-teal-100/30 border-t-teal-100 animate-spin"
+                    />
+                    <span v-else class="material-icons-round text-base">fact_check</span>
+                    Проверить
+                  </button>
+                  <button
+                    type="button"
+                    :disabled="loading || mdvLoading || selectedMdvCatalogs.length === 0"
+                    @click="handleMdvImport"
+                    class="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span class="material-icons-round text-base">sync</span>
+                    Импорт
+                  </button>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-3 gap-2">
+                <button
+                  v-for="item in mdvCatalogOptions"
+                  :key="item.key"
+                  type="button"
+                  :disabled="loading || mdvLoading"
+                  @click="mdvCatalogSelection[item.key] = !mdvCatalogSelection[item.key]"
+                  class="rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-50"
+                  :class="mdvCatalogSelection[item.key]
+                    ? 'border-teal-400/70 bg-teal-500/20 text-teal-50'
+                    : 'border-slate-700 bg-slate-900/60 text-slate-400'"
+                >
+                  <span class="block text-xs font-semibold">{{ item.short }}</span>
+                  <span class="mt-0.5 block text-[11px] opacity-70">{{ item.label }}</span>
+                </button>
+              </div>
+
+              <div class="rounded-lg border border-slate-700 bg-slate-900/50 p-3">
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Legacy-замена</p>
+                <div class="mt-2 grid grid-cols-2 gap-2">
+                  <label
+                    v-for="key in mdvReplaceOptions"
+                    :key="key"
+                    class="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950/30 px-3 py-2 text-xs text-slate-300"
+                    :class="{ 'opacity-50': !mdvCatalogSelection[key] }"
+                  >
+                    <input
+                      v-model="mdvReplaceLegacySelection[key]"
+                      :disabled="loading || mdvLoading || !mdvCatalogSelection[key]"
+                      type="checkbox"
+                      class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-teal-500 focus:ring-teal-500"
+                    />
+                    <span>{{ mdvCatalogLabel(key) }}</span>
+                  </label>
+                </div>
+              </div>
+
+              <div
+                v-if="mdvPreview"
+                class="rounded-xl border border-slate-700 bg-slate-950/50 p-3 text-xs text-slate-300 space-y-3"
+              >
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div class="rounded-lg bg-slate-900 px-3 py-2">
+                    <p class="text-slate-500">Всего</p>
+                    <p class="mt-0.5 text-base font-bold text-slate-100 tabular-nums">{{ mdvPreview.total }}</p>
+                  </div>
+                  <div class="rounded-lg bg-slate-900 px-3 py-2">
+                    <p class="text-slate-500">Создать</p>
+                    <p class="mt-0.5 text-base font-bold text-emerald-300 tabular-nums">{{ mdvPreview.actions?.create || 0 }}</p>
+                  </div>
+                  <div class="rounded-lg bg-slate-900 px-3 py-2">
+                    <p class="text-slate-500">Обновить</p>
+                    <p class="mt-0.5 text-base font-bold text-sky-300 tabular-nums">{{ mdvPreview.actions?.update || 0 }}</p>
+                  </div>
+                  <div class="rounded-lg bg-slate-900 px-3 py-2">
+                    <p class="text-slate-500">Без URL</p>
+                    <p class="mt-0.5 text-base font-bold text-amber-300 tabular-nums">{{ mdvPreview.unmatched_source_urls || 0 }}</p>
+                  </div>
+                </div>
+
+                <div class="flex flex-wrap gap-2">
+                  <span
+                    v-for="(count, key) in mdvPreview.by_catalog"
+                    :key="key"
+                    class="rounded-full bg-slate-900 px-2.5 py-1 text-slate-300"
+                  >
+                    {{ mdvCatalogLabel(String(key)) }}: {{ count }}
+                  </span>
+                </div>
+
+                <div
+                  v-if="mdvPreview.legacy_replace?.enabled"
+                  class="rounded-lg border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-amber-100"
+                >
+                  Legacy: удалить {{ mdvPreview.legacy_replace.deletable_count }},
+                  оставить для обновления {{ mdvPreview.legacy_replace.keep_for_update_count }}.
+                </div>
+
+                <div v-if="mdvPreview.top_unpromoted_spec_keys?.length" class="rounded-lg bg-slate-900 px-3 py-2">
+                  <p class="font-semibold text-slate-200">Новые сырые ключи</p>
+                  <p class="mt-1 text-slate-400">
+                    {{ mdvPreview.top_unpromoted_spec_keys.slice(0, 8).map((item) => `${item.key} (${item.count})`).join(', ') }}
+                  </p>
+                </div>
+              </div>
+
+              <div v-if="mdvError" class="rounded-lg border border-red-500/40 bg-red-900/20 px-3 py-2 text-xs text-red-300">
+                {{ mdvError }}
+              </div>
+            </section>
 
             <!-- URL textarea -->
             <div>

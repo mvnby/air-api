@@ -347,7 +347,7 @@ export const useSpecRegistry = () => {
         specGroupOrder,
         getSpecHelpText,
         formatSelectOptionLabel,
-        isHiddenSpecKey: (key: string) => hiddenSpecKeys.has(key),
+        isHiddenSpecKey: (key: string) => hiddenSpecKeys.has(key) || key.startsWith('__'),
         knownSpecKeys: computed(() => knownSpecKeys.value),
         loadSpecRegistry,
         normalizeValueForEdit,

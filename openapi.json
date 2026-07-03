@@ -6445,6 +6445,100 @@
         }
       }
     },
+    "/api/manager/catalog/mdv/preview": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Preview Mdv Catalog Import",
+        "description": "Build a dry-run report for official MDV exports before writing products.",
+        "operationId": "preview_mdv_catalog_import",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MdvCatalogPreviewPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MdvCatalogPreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/catalog/mdv/import/jobs": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Start Mdv Catalog Import Job",
+        "description": "Start an official MDV catalog refresh in the existing background queue.",
+        "operationId": "start_mdv_catalog_import_job",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MdvCatalogImportPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogImportJobStartResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/specs/bulk-update": {
       "post": {
         "tags": [
@@ -31777,6 +31871,327 @@
         },
         "type": "object",
         "title": "ManagerTariffUpdatePayload"
+      },
+      "MdvCatalogImportPayload": {
+        "properties": {
+          "catalogs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Catalogs"
+          },
+          "update_existing": {
+            "type": "boolean",
+            "title": "Update Existing",
+            "default": true
+          },
+          "replace_legacy_catalogs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Replace Legacy Catalogs"
+          }
+        },
+        "type": "object",
+        "title": "MdvCatalogImportPayload"
+      },
+      "MdvCatalogPreviewItemResponse": {
+        "properties": {
+          "catalog": {
+            "type": "string",
+            "title": "Catalog"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "existing_product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Existing Product Id"
+          },
+          "price_rub": {
+            "type": "integer",
+            "title": "Price Rub",
+            "default": 0
+          },
+          "series": {
+            "type": "string",
+            "title": "Series",
+            "default": ""
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "default": ""
+          },
+          "model_indoor": {
+            "type": "string",
+            "title": "Model Indoor",
+            "default": ""
+          },
+          "model_outdoor": {
+            "type": "string",
+            "title": "Model Outdoor",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "catalog",
+          "action",
+          "title",
+          "source_url"
+        ],
+        "title": "MdvCatalogPreviewItemResponse"
+      },
+      "MdvCatalogPreviewPayload": {
+        "properties": {
+          "catalogs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Catalogs"
+          },
+          "sample_limit": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Sample Limit",
+            "default": 30
+          },
+          "replace_legacy_catalogs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Replace Legacy Catalogs"
+          }
+        },
+        "type": "object",
+        "title": "MdvCatalogPreviewPayload"
+      },
+      "MdvCatalogPreviewResponse": {
+        "properties": {
+          "catalogs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Catalogs"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "by_catalog": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "By Catalog"
+          },
+          "actions": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Actions"
+          },
+          "unmatched_source_urls": {
+            "type": "integer",
+            "title": "Unmatched Source Urls",
+            "default": 0
+          },
+          "raw_spec_key_count": {
+            "type": "integer",
+            "title": "Raw Spec Key Count",
+            "default": 0
+          },
+          "top_raw_spec_keys": {
+            "items": {
+              "$ref": "#/components/schemas/MdvCatalogSpecKeyStatResponse"
+            },
+            "type": "array",
+            "title": "Top Raw Spec Keys"
+          },
+          "top_unpromoted_spec_keys": {
+            "items": {
+              "$ref": "#/components/schemas/MdvCatalogSpecKeyStatResponse"
+            },
+            "type": "array",
+            "title": "Top Unpromoted Spec Keys"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/MdvCatalogPreviewItemResponse"
+            },
+            "type": "array",
+            "title": "Samples"
+          },
+          "legacy_replace": {
+            "$ref": "#/components/schemas/MdvLegacyReplacePreviewResponse"
+          },
+          "source_urls": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Source Urls"
+          },
+          "next_step": {
+            "type": "string",
+            "title": "Next Step",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "catalogs",
+          "total"
+        ],
+        "title": "MdvCatalogPreviewResponse"
+      },
+      "MdvCatalogSpecKeyStatResponse": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "count"
+        ],
+        "title": "MdvCatalogSpecKeyStatResponse"
+      },
+      "MdvLegacyReplacePreviewResponse": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": false
+          },
+          "catalogs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Catalogs"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "by_catalog": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "By Catalog"
+          },
+          "deletable_count": {
+            "type": "integer",
+            "title": "Deletable Count",
+            "default": 0
+          },
+          "keep_for_update_count": {
+            "type": "integer",
+            "title": "Keep For Update Count",
+            "default": 0
+          },
+          "deleted_count": {
+            "type": "integer",
+            "title": "Deleted Count",
+            "default": 0
+          },
+          "archived_count": {
+            "type": "integer",
+            "title": "Archived Count",
+            "default": 0
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/MdvLegacyReplaceSampleResponse"
+            },
+            "type": "array",
+            "title": "Samples"
+          }
+        },
+        "type": "object",
+        "title": "MdvLegacyReplacePreviewResponse"
+      },
+      "MdvLegacyReplaceSampleResponse": {
+        "properties": {
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "catalog": {
+            "type": "string",
+            "title": "Catalog"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "is_published": {
+            "type": "boolean",
+            "title": "Is Published",
+            "default": true
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "slug",
+          "catalog",
+          "action"
+        ],
+        "title": "MdvLegacyReplaceSampleResponse"
       },
       "MediaWorkerClaimPayload": {
         "properties": {

@@ -66,6 +66,9 @@ import {
     type ManagerRestoreJobStatusResponse,
     type CatalogImportJobStartResponse,
     type CatalogImportJobStatusResponse,
+    type MdvCatalogImportPayload,
+    type MdvCatalogPreviewPayload,
+    type MdvCatalogPreviewResponse,
     type ManagerBrandResponse,
     type ManagerBrandCreatePayload,
     type ManagerBrandFeatureCreatePayload,
@@ -124,6 +127,9 @@ export type {
     ManagerRestoreJobStatusResponse,
     CatalogImportJobStartResponse,
     CatalogImportJobStatusResponse,
+    MdvCatalogImportPayload,
+    MdvCatalogPreviewPayload,
+    MdvCatalogPreviewResponse,
 };
 export type {
     ManagerInstallEstimateCalculatePayload,
@@ -978,6 +984,14 @@ export const api = {
             with_related: withRelated,
             update_existing: updateExisting,
         });
+    },
+
+    async previewMdvCatalogImport(payload: MdvCatalogPreviewPayload): Promise<MdvCatalogPreviewResponse> {
+        return await ManagerService.previewMdvCatalogImport(payload);
+    },
+
+    async startMdvCatalogImportJob(payload: MdvCatalogImportPayload): Promise<CatalogImportJobStartResponse> {
+        return await ManagerService.startMdvCatalogImportJob(payload);
     },
 
     async getImportProductsJobStatus(jobId: string): Promise<CatalogImportJobStatusResponse> {

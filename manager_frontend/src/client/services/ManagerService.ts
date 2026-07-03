@@ -49,6 +49,9 @@ import type { ManagerMediaSetMainImageResponse } from '../models/ManagerMediaSet
 import type { ManagerMediaUploadLocalImagesResponse } from '../models/ManagerMediaUploadLocalImagesResponse';
 import type { ManagerNormalizeLegacySpecsResponse } from '../models/ManagerNormalizeLegacySpecsResponse';
 import type { ManagerTagGroupResponse } from '../models/ManagerTagGroupResponse';
+import type { MdvCatalogImportPayload } from '../models/MdvCatalogImportPayload';
+import type { MdvCatalogPreviewPayload } from '../models/MdvCatalogPreviewPayload';
+import type { MdvCatalogPreviewResponse } from '../models/MdvCatalogPreviewResponse';
 import type { ProductCreate } from '../models/ProductCreate';
 import type { ProductDuplicatePayload } from '../models/ProductDuplicatePayload';
 import type { ProductImageCropPayload } from '../models/ProductImageCropPayload';
@@ -1392,6 +1395,46 @@ export class ManagerService {
             query: {
                 'dry_run': dryRun,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Preview Mdv Catalog Import
+     * Build a dry-run report for official MDV exports before writing products.
+     * @param requestBody
+     * @returns MdvCatalogPreviewResponse Successful Response
+     * @throws ApiError
+     */
+    public static previewMdvCatalogImport(
+        requestBody: MdvCatalogPreviewPayload,
+    ): CancelablePromise<MdvCatalogPreviewResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/catalog/mdv/preview',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Start Mdv Catalog Import Job
+     * Start an official MDV catalog refresh in the existing background queue.
+     * @param requestBody
+     * @returns CatalogImportJobStartResponse Successful Response
+     * @throws ApiError
+     */
+    public static startMdvCatalogImportJob(
+        requestBody: MdvCatalogImportPayload,
+    ): CancelablePromise<CatalogImportJobStartResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/catalog/mdv/import/jobs',
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },
