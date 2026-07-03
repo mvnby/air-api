@@ -6,15 +6,20 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import shlex
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from typing import Any
+from pathlib import Path
+from typing import Any, Mapping, Sequence
 
 
 API_BASE_URL = "https://api.cloudflare.com/client/v4"
+TOKEN_ENV_NAMES = ("CLOUDFLARE_API_TOKEN_LB_AUDIT", "CLOUDFLARE_LB_READ_TOKEN", "CLOUDFLARE_API_TOKEN")
+CREDENTIAL_ENV_NAMES = {*TOKEN_ENV_NAMES, "CLOUDFLARE_ZONE_ID", "CLOUDFLARE_ACCOUNT_ID"}
 
 
 class AuditFailure(Exception):
@@ -50,6 +55,74 @@ def _normalize_bool(value: str | bool | None, *, default: bool = False) -> bool:
     if normalized in {"0", "false", "no", "off"}:
         return False
     raise argparse.ArgumentTypeError(f"expected boolean, got {value!r}")
+
+
+def _clean(value: object | None) -> str:
+    return str(value or "").strip()
+
+
+def _env(name: str, environ: Mapping[str, str] | None = None) -> str:
+    source = os.environ if environ is None else environ
+    return _clean(source.get(name))
+
+
+def _parse_env_line(line: str) -> tuple[str, str] | None:
+    line = line.strip()
+    if not line or line.startswith("#") or "=" not in line:
+        return None
+    key, raw_value = line.split("=", 1)
+    key = key.strip().removeprefix("export ").strip()
+    if not key or not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", key):
+        return None
+    raw_value = raw_value.strip()
+    if raw_value and raw_value[0] in {"'", '"'}:
+        try:
+            parts = shlex.split(f"{key}={raw_value}", posix=True)
+        except ValueError:
+            parts = []
+        if parts and "=" in parts[0]:
+            return key, parts[0].split("=", 1)[1]
+    if " #" in raw_value:
+        raw_value = raw_value.split(" #", 1)[0].rstrip()
+    return key, raw_value
+
+
+def load_env_file(path: Path, *, allowed_names: set[str] = CREDENTIAL_ENV_NAMES) -> None:
+    if not path.exists():
+        raise AuditFailure(f"env file not found: {path}")
+    loaded = 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        parsed = _parse_env_line(line)
+        if parsed is None:
+            continue
+        key, value = parsed
+        if key not in allowed_names:
+            continue
+        if key not in os.environ:
+            os.environ[key] = value
+            loaded += 1
+    _log("ok", f"loaded env file: {path} keys={loaded}")
+
+
+def _first_env_value(names: Sequence[str], environ: Mapping[str, str] | None = None) -> tuple[str, str]:
+    for name in names:
+        value = _env(name, environ)
+        if value:
+            return value, name
+    return "", names[0] if names else ""
+
+
+def collect_credentials(environ: Mapping[str, str] | None = None) -> tuple[str, str, str, str, list[str]]:
+    token, token_source = _first_env_value(TOKEN_ENV_NAMES, environ)
+    zone_id = _env("CLOUDFLARE_ZONE_ID", environ)
+    account_id = _env("CLOUDFLARE_ACCOUNT_ID", environ)
+    missing = []
+    if not token:
+        missing.append("one of " + "/".join(TOKEN_ENV_NAMES))
+    for name, value in (("CLOUDFLARE_ZONE_ID", zone_id), ("CLOUDFLARE_ACCOUNT_ID", account_id)):
+        if not value:
+            missing.append(name)
+    return token, token_source, zone_id, account_id, missing
 
 
 def _api_get(path: str, token: str, params: dict[str, str] | None = None) -> Any:
@@ -365,29 +438,31 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         default=_normalize_bool(os.getenv("CF_LB_SKIP_IF_MISSING_CREDENTIALS"), default=False),
     )
+    parser.add_argument(
+        "--env-file",
+        type=Path,
+        help="Load Cloudflare audit credentials from a dotenv file without sourcing it as a shell script.",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    token = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
-    zone_id = os.getenv("CLOUDFLARE_ZONE_ID", "").strip()
-    account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
-    missing = [
-        name
-        for name, value in (
-            ("CLOUDFLARE_API_TOKEN", token),
-            ("CLOUDFLARE_ZONE_ID", zone_id),
-            ("CLOUDFLARE_ACCOUNT_ID", account_id),
-        )
-        if not value
-    ]
+    if args.env_file:
+        try:
+            load_env_file(args.env_file)
+        except AuditFailure as exc:
+            _log("fail", str(exc))
+            return 1
+
+    token, token_source, zone_id, account_id, missing = collect_credentials()
     if missing:
         message = "missing Cloudflare credentials: " + ", ".join(missing)
         if args.skip_if_missing_credentials:
             _log("skip", message)
             return 0
         raise SystemExit(message)
+    _log("info", f"using token from {token_source}")
 
     config = AuditConfig(
         hostname=args.hostname,

@@ -197,6 +197,25 @@ def test_main_without_confirm_prints_plan_but_does_not_patch(monkeypatch):
     assert calls[0][1]["token"] == "secret-token"
 
 
+def test_main_prefers_explicit_lb_write_token_over_generic_token(monkeypatch):
+    calls = []
+    load_balancers, pools, monitors = _fixtures()
+
+    def fake_fetch(**kwargs):
+        calls.append(("fetch", kwargs))
+        return load_balancers, pools, monitors
+
+    monkeypatch.setenv("CLOUDFLARE_LB_WRITE_TOKEN", "write-token")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "old-generic-token")
+    monkeypatch.setenv("CLOUDFLARE_ZONE_ID", "zone")
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "account")
+    monkeypatch.setattr(module, "fetch_cloudflare_config", fake_fetch)
+
+    assert module.main(["--active-origin", "193.47.42.213", "--passive-origin", "185.250.45.54"]) == 0
+
+    assert calls[0][1]["token"] == "write-token"
+
+
 def test_main_with_confirm_patches_minimal_payload(monkeypatch):
     calls = []
     load_balancers, pools, monitors = _fixtures()

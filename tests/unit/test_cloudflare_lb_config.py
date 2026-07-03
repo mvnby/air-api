@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from scripts.ha.check_cloudflare_lb_config import (
@@ -5,6 +7,8 @@ from scripts.ha.check_cloudflare_lb_config import (
     AuditFailure,
     _format_cloudflare_http_error,
     audit_configuration,
+    collect_credentials,
+    load_env_file,
 )
 
 
@@ -155,3 +159,79 @@ def test_audit_configuration_rejects_monitor_path_drift():
             monitors=monitors,
             config=_config(),
         )
+
+
+def test_collect_credentials_prefers_lb_audit_token_over_generic_token():
+    token, token_source, zone_id, account_id, missing = collect_credentials(
+        {
+            "CLOUDFLARE_API_TOKEN_LB_AUDIT": "audit-token",
+            "CLOUDFLARE_LB_READ_TOKEN": "read-token",
+            "CLOUDFLARE_API_TOKEN": "old-generic-token",
+            "CLOUDFLARE_ZONE_ID": "zone",
+            "CLOUDFLARE_ACCOUNT_ID": "account",
+        }
+    )
+
+    assert token == "audit-token"
+    assert token_source == "CLOUDFLARE_API_TOKEN_LB_AUDIT"
+    assert zone_id == "zone"
+    assert account_id == "account"
+    assert missing == []
+
+
+def test_collect_credentials_falls_back_to_github_read_token():
+    token, token_source, _, _, missing = collect_credentials(
+        {
+            "CLOUDFLARE_LB_READ_TOKEN": "read-token",
+            "CLOUDFLARE_API_TOKEN": "old-generic-token",
+            "CLOUDFLARE_ZONE_ID": "zone",
+            "CLOUDFLARE_ACCOUNT_ID": "account",
+        }
+    )
+
+    assert token == "read-token"
+    assert token_source == "CLOUDFLARE_LB_READ_TOKEN"
+    assert missing == []
+
+
+def test_collect_credentials_reports_all_accepted_token_names_when_token_missing():
+    _, _, _, _, missing = collect_credentials(
+        {
+            "CLOUDFLARE_ZONE_ID": "zone",
+            "CLOUDFLARE_ACCOUNT_ID": "account",
+        }
+    )
+
+    assert missing == [
+        "one of CLOUDFLARE_API_TOKEN_LB_AUDIT/CLOUDFLARE_LB_READ_TOKEN/CLOUDFLARE_API_TOKEN"
+    ]
+
+
+def test_load_env_file_reads_only_cloudflare_credentials_without_sourcing(tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "CLOUDFLARE_API_TOKEN_LB_AUDIT=audit-token",
+                "CLOUDFLARE_ZONE_ID=zone",
+                "CLOUDFLARE_ACCOUNT_ID=account",
+                "CLIENT_NAME=Дмитрий Иванов",
+                "CACHE_HEADER=max-age=31536000, immutable",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    for name in (
+        "CLOUDFLARE_API_TOKEN_LB_AUDIT",
+        "CLOUDFLARE_ZONE_ID",
+        "CLOUDFLARE_ACCOUNT_ID",
+        "CLIENT_NAME",
+        "CACHE_HEADER",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    load_env_file(env_file)
+
+    assert collect_credentials()[0] == "audit-token"
+    assert "CLIENT_NAME" not in os.environ
+    assert "CACHE_HEADER" not in os.environ
