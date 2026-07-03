@@ -386,8 +386,10 @@ After the bounded smoke passes and the owner approves the full switch:
    failures during normal manager uploads/search attaches and variant
    generation.
 5. Keep the scheduled `check-media-cdn.yml` workflow green. It samples public
-   catalog image URLs and DB-backed object-storage rows from the API primary,
-   including product variants, media library assets, and order/bot attachments.
+   catalog image URLs and DB-backed object-storage rows from the API primary.
+   The DB-backed check now enforces at least one CDN URL from each active
+   runtime media source: product variants, media library assets, and order/bot
+   attachments.
 6. Spot-check new manager media rows daily during the first rollout window:
 
    ```sql

@@ -25,6 +25,11 @@ on:
         type: string
         required: false
         default: "3"
+      min_db_cdn_urls_by_source:
+        description: "Per-source DB CDN thresholds, comma-separated source=count"
+        type: string
+        required: false
+        default: "product_image_variant=1,media_asset=1,order_technical_meta=1"
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -80,6 +85,7 @@ jobs:
           API_COMPOSE_FILE: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}
           EXPECTED_CDN_BASE: ${{ github.event_name == 'workflow_dispatch' && inputs.expected_cdn_base || 'https://cdn.mvn.by' }}
           MIN_DB_CDN_URLS: ${{ github.event_name == 'workflow_dispatch' && inputs.min_db_cdn_urls || '3' }}
+          MIN_DB_CDN_URLS_BY_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.min_db_cdn_urls_by_source || 'product_image_variant=1,media_asset=1,order_technical_meta=1' }}
         run: |
           set -euo pipefail
           SSH_OPTS="-i ~/.ssh/media_cdn_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
@@ -94,6 +100,7 @@ jobs:
               python3 scripts/check_media_cdn_db_urls.py \
                 --expected-cdn-base $(quote "${EXPECTED_CDN_BASE}") \
                 --min-db-cdn-urls $(quote "${MIN_DB_CDN_URLS}") \
+                --min-db-cdn-urls-by-source $(quote "${MIN_DB_CDN_URLS_BY_SOURCE}") \
                 --max-fetches 10" \
             2>&1 \
             | tee -a media-cdn-check.log
@@ -107,6 +114,7 @@ jobs:
             echo "- expected_cdn_base: ${{ github.event_name == 'workflow_dispatch' && inputs.expected_cdn_base || 'https://cdn.mvn.by' }}"
             echo "- min_cdn_urls: ${{ github.event_name == 'workflow_dispatch' && inputs.min_cdn_urls || '3' }}"
             echo "- min_db_cdn_urls: ${{ github.event_name == 'workflow_dispatch' && inputs.min_db_cdn_urls || '3' }}"
+            echo "- min_db_cdn_urls_by_source: ${{ github.event_name == 'workflow_dispatch' && inputs.min_db_cdn_urls_by_source || 'product_image_variant=1,media_asset=1,order_technical_meta=1' }}"
             echo "- api_project_dir: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}"
             echo "- api_compose_file: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}"
             echo "- log_artifact: media-cdn-check-log-${{ github.run_id }}"
