@@ -610,3 +610,62 @@ def test_eer_cop_pair_is_split_into_two_specs():
     specs = normalize_specs({"EER/COP": "3,21 / 3,61"})
     assert specs["eer"] == "3.21"
     assert specs["cop"] == "3.61"
+
+
+def test_lg24_watt_scale_power_values_are_converted_to_kw():
+    specs = normalize_specs(
+        {
+            "Потребление электроэнергии в режиме охлаждения (Мин / Ном / Макс), кВт": "210 / 2164 / 2500",
+            "Потребление электроэнергии в режиме нагрева (Мин / Ном / Макс), кВт": "190 / 2027 / 2700",
+        }
+    )
+
+    assert specs["power_cons_cooling_min_kw"] == "0.21"
+    assert specs["power_cons_cooling_kw"] == "2.164"
+    assert specs["power_cons_cooling_max_kw"] == "2.5"
+    assert specs["power_cons_heating_min_kw"] == "0.19"
+    assert specs["power_cons_heating_kw"] == "2.027"
+    assert specs["power_cons_heating_max_kw"] == "2.7"
+    assert specs["__typed_specs"]["power_cons_cooling_kw"]["value"] == 2.164
+
+
+def test_lg24_current_nominal_max_pairs_are_split():
+    specs = normalize_specs(
+        {
+            "Рабочий ток в режиме охлаждения (Ном / Макс), А": "4.7 / 6.0",
+            "Рабочий ток в режиме нагрева (Ном/Макс), А": "4.7 / 7.0",
+        }
+    )
+
+    assert specs["current_cooling_nominal_a"] == "4.7"
+    assert specs["current_cooling_max_a"] == "6.0"
+    assert specs["current_heating_nominal_a"] == "4.7"
+    assert specs["current_heating_max_a"] == "7.0"
+
+
+def test_lg24_commercial_dimensions_airflow_pipes_and_route_limits_are_normalized():
+    specs = normalize_specs(
+        {
+            "Внутренний блок (Ш х В х Г) мм": "1 250 x 270 x 700",
+            "Внешний блок (Ш х В х Г) мм": "950 x 834 x 330",
+            "Расход воздуха Выс./Средн./Низ. , м³": "38.0 / 33.0 / 28.0",
+            "Диаметр трубопровода, жидкость, внутренний блок, мм ( дюйм)": "6.35 (1/4)",
+            "Диаметр трубопровода, газ, внутренний блок, мм ( дюйм)": "9.52 (3/8)",
+            "Диаметр трубопровода, дренаж, внутренний блок, Нар. Ø / Внутр. Ø, мм": "32 / 25",
+            "Длина трассы (Мин / Макс), м": "3 / 30",
+            "Перепад высоты между блоками (Макс), м": "15",
+        }
+    )
+
+    assert specs["width_indoor"] == "1250"
+    assert specs["height_indoor"] == "270"
+    assert specs["depth_indoor"] == "700"
+    assert specs["width_outdoor"] == "950"
+    assert specs["height_outdoor"] == "834"
+    assert specs["depth_outdoor"] == "330"
+    assert specs["airflow_max"] == "2280 / 1980 / 1680"
+    assert specs["pipe_liquid"] == '1/4"'
+    assert specs["pipe_gas"] == '3/8"'
+    assert specs["drain_pipe_diameter"] == "32"
+    assert specs["pipe_max_length"] == "30"
+    assert specs["pipe_max_height"] == "15"

@@ -45,6 +45,29 @@ _PREFERRED_NUMERIC_KEYS = {
     "current_heating_nominal_a",
     "warranty_months",
     "drain_pipe_diameter",
+    "pipe_max_length",
+    "pipe_max_height",
+    "multi_max_total_pipe_length",
+}
+_POWER_KW_KEYS = {
+    "capacity_cooling_kw",
+    "capacity_heating_kw",
+    "capacity_cooling_min_kw",
+    "capacity_cooling_max_kw",
+    "capacity_heating_min_kw",
+    "capacity_heating_max_kw",
+    "power_cons_cooling_kw",
+    "power_cons_heating_kw",
+    "power_cons_cooling_min_kw",
+    "power_cons_cooling_max_kw",
+    "power_cons_heating_min_kw",
+    "power_cons_heating_max_kw",
+}
+_MAX_FROM_RANGE_NUMERIC_KEYS = {
+    "area_m2",
+    "pipe_max_length",
+    "pipe_max_height",
+    "multi_max_total_pipe_length",
 }
 
 _DROPPED_SPEC_KEYS = {
@@ -75,9 +98,12 @@ def _split_dimensions(specs: Dict[str, Any]) -> Dict[str, Any]:
         parts = [p.strip() for p in text.split("×") if p.strip()]
         nums = []
         for p in parts:
-            m = re.search(r"(\d+(?:[.,]\d+)?)", p)
+            m = re.search(r"(\d[\d\s]*(?:[.,]\d+)?)", p)
             if m:
-                nums.append(m.group(1).replace(",", "."))
+                raw_number = m.group(1).replace(" ", "").replace(",", ".")
+                if re.fullmatch(r"\d{1,2}\.\d{3}", raw_number):
+                    raw_number = raw_number.replace(".", "")
+                nums.append(raw_number)
         if len(nums) >= 3:
             if raw_key in _UNORDERED_WIDTH_HEIGHT_DIMENSION_KEYS:
                 first = float(nums[0])
@@ -145,6 +171,21 @@ def clean_value(key: str, val: Any, keep_units: bool = True, source_key: str | N
             if token in lowered:
                 return normalized
         return text
+
+    if key == "airflow_max":
+        numbers = re.findall(r"[-+]?\d+(?:[.,]\d+)?", val)
+        if numbers:
+            parsed = [float(number.replace(",", ".")) for number in numbers]
+            source_text = f"{source_key or ''} {val}".lower().replace("\xa0", " ")
+            looks_like_m3_per_min = (
+                "м³" in source_text
+                and "/ч" not in source_text
+                and "/ч" not in source_text.replace(" ", "")
+                and max(parsed) <= 100
+            )
+            if looks_like_m3_per_min:
+                return " / ".join(f"{number * 60:.6f}".rstrip("0").rstrip(".") for number in parsed)
+        return re.sub(r"\s+", " ", val).strip()
 
     if key in {"dimensions_indoor_package_mm", "dimensions_outdoor_package_mm"}:
         text = val.replace("?", "×").replace("？", "×")
@@ -226,14 +267,28 @@ def clean_value(key: str, val: Any, keep_units: bool = True, source_key: str | N
             if key in {"capacity_cooling_kw", "capacity_heating_kw", "power_cons_cooling_kw", "power_cons_heating_kw"} and "/" in val:
                 # For min/nom/max triplets pick nominal (middle) value.
                 if len(normalized) >= 3:
-                    return normalized[1]
-            if key == "area_m2" and ("-" in val or "до" in val_lower or "~" in val):
+                    selected = normalized[1]
+                else:
+                    selected = normalized[0]
+            elif key in _MAX_FROM_RANGE_NUMERIC_KEYS and ("-" in val or "/" in val or "до" in val_lower or "~" in val):
                 # For ranges use upper bound as recommended/max area.
                 try:
-                    return str(max(float(n) for n in normalized)).rstrip("0").rstrip(".")
+                    selected = str(max(float(n) for n in normalized)).rstrip("0").rstrip(".")
                 except ValueError:
-                    pass
-            return normalized[0]
+                    selected = normalized[0]
+            else:
+                selected = normalized[0]
+
+            if key in _POWER_KW_KEYS:
+                try:
+                    number = float(selected)
+                except ValueError:
+                    return selected
+                # Some supplier pages label values as kW but still publish watt-scale
+                # numbers, e.g. "210 / 2164 / 2500" for power consumption.
+                if abs(number) >= 100:
+                    return f"{number / 1000:.6f}".rstrip("0").rstrip(".")
+            return selected
 
     # 2. Чистка чисел (Только если keep_units = False)
     if not keep_units:
@@ -665,6 +720,35 @@ def normalize_specs(
                     del new_specs[rus_key]
                 continue
 
+            if (
+                sys_key in {"current_cooling_nominal_a", "current_heating_nominal_a"}
+                and "рабочий ток" in rus_key_l
+                and "ном" in rus_key_l
+                and "макс" in rus_key_l
+            ):
+                numbers = re.findall(r"[-+]?\d+(?:[.,]\d+)?", str(raw_val))
+                if numbers:
+                    max_key = (
+                        "current_cooling_max_a"
+                        if sys_key == "current_cooling_nominal_a"
+                        else "current_heating_max_a"
+                    )
+                    new_specs[sys_key] = clean_value(
+                        sys_key,
+                        numbers[0].replace(",", "."),
+                        keep_units=keep_units,
+                        source_key=rus_key,
+                    )
+                    new_specs[max_key] = clean_value(
+                        max_key,
+                        numbers[-1].replace(",", "."),
+                        keep_units=keep_units,
+                        source_key=rus_key,
+                    )
+                if rus_key != sys_key and rus_key in new_specs:
+                    del new_specs[rus_key]
+                continue
+
             if sys_key in {"eer", "cop", "seer", "scop"} and "класс" in rus_key_l and "/" in str(raw_val):
                 numbers = re.findall(r"[-+]?\d+(?:[.,]\d+)?", str(raw_val))
                 if numbers:
@@ -686,7 +770,7 @@ def normalize_specs(
                 continue
 
             if sys_key == "energy_class" and "/" in str(raw_val) and (
-                "охлаждение" in rus_key_l or "холод" in rus_key_l
+                "охлаждение" in rus_key_l or "холод" in rus_key_l or "охл" in rus_key_l
             ):
                 classes = [
                     item.strip().replace("А", "A").replace("а", "A")
@@ -753,6 +837,8 @@ def normalize_specs(
         if not sys_key or sys_key in new_specs:
             continue
         new_specs[sys_key] = clean_value(sys_key, raw_val, keep_units=keep_units, source_key=raw_key)
+        if raw_key in new_specs:
+            del new_specs[raw_key]
 
     # Source price/rate are import internals; never persist in product specs.
     for dropped_key in _DROPPED_SPEC_KEYS:

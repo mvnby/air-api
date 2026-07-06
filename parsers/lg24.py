@@ -1,6 +1,6 @@
 import re
 from typing import Any, Dict, List
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 from bs4 import BeautifulSoup
@@ -27,9 +27,94 @@ class Lg24Parser(BaseParser):
         "user guide",
         "паспорт",
     )
+    _KNOWN_SERIES = (
+        "ARTCOOL Gallery Special",
+        "ARTCOOL Gallery Premium",
+        "DUALCOOL Premium",
+        "ARTCOOL Gallery",
+        "ARTCOOL Mirror",
+        "Ultra Inverter R32",
+        "Ultra Inverter",
+        "Deluxe Pro",
+        "EVO Max",
+        "ECO Smart",
+        "LOOK Smart",
+        "Smart Line",
+        "Objet Green",
+        "Objet Beige",
+        "PuriCare",
+        "PROCOOL",
+        "EVOCOOL",
+        "ECO",
+    )
+    _CATEGORY_STOP_PARTS = {
+        "главная",
+        "каталог",
+        "кондиционеры для дома",
+        "коммерческие кондиционеры",
+        "настенный блок",
+        "канальный блок",
+        "кассетный блок",
+        "потолочный блок",
+        "напольно-потолочный блок",
+        "колонный блок",
+    }
 
     def supports(self, url: str) -> bool:
-        return "lg24.by" in url
+        parts = urlsplit(str(url or ""))
+        if "lg24.by" not in parts.netloc:
+            return False
+        return parts.path.startswith("/product/") or parts.path.startswith("/product-category/")
+
+    @staticmethod
+    def _is_category_url(url: str) -> bool:
+        return urlsplit(str(url or "")).path.startswith("/product-category/")
+
+    @staticmethod
+    def _is_product_url(url: str) -> bool:
+        return urlsplit(str(url or "")).path.startswith("/product/")
+
+    async def get_import_urls(self, url: str) -> List[str]:
+        if not self._is_category_url(url):
+            return [url.strip()]
+
+        product_urls: List[str] = []
+        seen_products: set[str] = set()
+        seen_pages: set[str] = set()
+        pending_pages: List[str] = [url.strip()]
+
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=20.0,
+            headers=self._HEADERS,
+        ) as client:
+            while pending_pages and len(seen_pages) < 20:
+                page_url = pending_pages.pop(0)
+                if page_url in seen_pages:
+                    continue
+                seen_pages.add(page_url)
+
+                response = await client.get(page_url)
+                if response.status_code != 200:
+                    raise Exception(f"Ошибка загрузки категории lg24.by: {response.status_code}")
+
+                soup = BeautifulSoup(response.text, "html.parser")
+                for link in soup.select("li.product a[href*='/product/'], a.woocommerce-LoopProduct-link[href]"):
+                    href = self._to_abs_url(link.get("href", ""), str(response.url)).split("#")[0]
+                    if not href or not self._is_product_url(href):
+                        continue
+                    normalized = href.rstrip("/") + "/"
+                    if normalized in seen_products:
+                        continue
+                    seen_products.add(normalized)
+                    product_urls.append(normalized)
+
+                for link in soup.select(".woocommerce-pagination a[href], a.page-numbers[href]"):
+                    href = self._to_abs_url(link.get("href", ""), str(response.url)).split("#")[0]
+                    if href and href not in seen_pages and href not in pending_pages:
+                        pending_pages.append(href)
+
+        return product_urls or [url.strip()]
 
     @staticmethod
     def _slug_from_url(url: str) -> str:
@@ -56,6 +141,8 @@ class Lg24Parser(BaseParser):
         title = re.sub(
             r"^(?:(?:кассетн(?:ый|ая|ое|ые)|настенн(?:ый|ая|ое|ые)|канальн(?:ый|ая|ое|ые)|"
             r"напольно-потолочн(?:ый|ая|ое|ые)|мобильн(?:ый|ая|ое|ые)|бытов(?:ой|ая|ое|ые)|"
+            r"потолочн(?:ый|ая|ое|ые)|средненапорн(?:ый|ая|ое|ые)|низконапорн(?:ый|ая|ое|ые)|"
+            r"высоконапорн(?:ый|ая|ое|ые)|\d+[-\s]?поточн(?:ый|ая|ое|ые)|"
             r"колонн(?:ый|ая|ое|ые)|универсальн(?:ый|ая|ое|ые)|инверторн(?:ый|ая|ое|ые)|"
             r"полупромышленн(?:ый|ая|ое|ые))\s+)+",
             "",
@@ -65,7 +152,7 @@ class Lg24Parser(BaseParser):
 
         # Keep model-oriented title in DB (without generic product type noun).
         title = re.sub(
-            r"^(?:кондиционер|сплит[\s-]?система|мульти[\s-]?сплит[\s-]?система|внутренний\s+блок|наружный\s+блок)\s+",
+            r"^(?:тип|кондиционер|сплит[\s-]?система|мульти[\s-]?сплит[\s-]?система|внутренний\s+блок|наружный\s+блок)\s+",
             "",
             title,
             flags=re.IGNORECASE,
@@ -162,6 +249,19 @@ class Lg24Parser(BaseParser):
             parts.append(text)
         return parts
 
+    @classmethod
+    def _infer_series_from_context(cls, title: str, breadcrumb_parts: List[str]) -> str:
+        candidates = [part for part in breadcrumb_parts if part]
+        candidates.append(title)
+        for candidate in candidates:
+            normalized_candidate = candidate.casefold().replace("ё", "е")
+            if normalized_candidate in cls._CATEGORY_STOP_PARTS:
+                continue
+            for series in cls._KNOWN_SERIES:
+                if re.search(rf"(?<!\w){re.escape(series)}(?!\w)", candidate, flags=re.IGNORECASE):
+                    return series
+        return ""
+
     @staticmethod
     def _infer_type_specs_from_breadcrumb(parts: List[str]) -> Dict[str, str]:
         inferred: Dict[str, str] = {}
@@ -191,6 +291,21 @@ class Lg24Parser(BaseParser):
             else:
                 inferred["Тип"] = "полупромышленный кондиционер"
         return inferred
+
+    @staticmethod
+    def _infer_component_models(specs: Dict[str, str]) -> Dict[str, str]:
+        model = re.sub(r"\s+", " ", str(specs.get("Модель") or specs.get("model") or "")).strip()
+        if not model or "/" not in model:
+            return {}
+
+        parts = [part.strip() for part in re.split(r"\s*/\s*", model, maxsplit=1) if part.strip()]
+        if len(parts) != 2:
+            return {}
+
+        return {
+            "Модель внутреннего блока": parts[0],
+            "Модель наружного блока": parts[1],
+        }
 
     @staticmethod
     def _extract_specs(soup: BeautifulSoup) -> Dict[str, str]:
@@ -324,6 +439,8 @@ class Lg24Parser(BaseParser):
                 raise Exception(f"Ошибка загрузки страницы lg24.by: {response.status_code}")
 
         soup = BeautifulSoup(response.text, "html.parser")
+        if not self._is_product_url(str(response.url)):
+            raise ValueError("Lg24Parser.parse expects a product URL")
 
         h1 = soup.select_one("h1.product_title") or soup.select_one("h1.entry-title") or soup.select_one("h1")
         title_raw = h1.get_text(" ", strip=True) if h1 else "Без названия"
@@ -355,6 +472,11 @@ class Lg24Parser(BaseParser):
         specs.setdefault("Бренд", "LG")
         breadcrumb_parts = self._extract_breadcrumb_parts(soup)
         for key, value in self._infer_type_specs_from_breadcrumb(breadcrumb_parts).items():
+            specs.setdefault(key, value)
+        series = self._infer_series_from_context(title, breadcrumb_parts)
+        if series:
+            specs.setdefault("Серия", series)
+        for key, value in self._infer_component_models(specs).items():
             specs.setdefault(key, value)
         if availability:
             specs.setdefault("Наличие", availability)

@@ -144,6 +144,99 @@ def test_lg24_title_brand_prefix_not_duplicated_when_present():
     assert normalized == "LG ECO Smart PC07SQR"
 
 
+def test_lg24_title_cleanup_handles_commercial_prefixes():
+    assert (
+        Lg24Parser._normalize_model_title("Потолочный кондиционер Ultra Inverter UV18R/UU18WR")
+        == "LG Ultra Inverter UV18R/UU18WR"
+    )
+    assert (
+        Lg24Parser._normalize_model_title("4-поточный кассетный тип Ultra Inverter UT48R/UU48WR")
+        == "LG Ultra Inverter UT48R/UU48WR"
+    )
+
+
+def test_lg24_infers_series_from_breadcrumb_or_title():
+    assert (
+        Lg24Parser._infer_series_from_context(
+            "LG ECO Smart PC24SQ",
+            ["Главная", "Кондиционеры для дома", "ECO SMART", "Кондиционер LG ECO Smart PC24SQ"],
+        )
+        == "ECO Smart"
+    )
+    assert (
+        Lg24Parser._infer_series_from_context(
+            "LG Smart Line TC24GQ",
+            ["Главная", "Кондиционеры для дома", "Настенный блок", "Кондиционер LG Smart Line TC24GQ"],
+        )
+        == "Smart Line"
+    )
+
+
+def test_lg24_infers_component_models_from_combined_model():
+    inferred = Lg24Parser._infer_component_models({"Модель": "PC24SQ.NSKR / PC24SQ.U24R"})
+
+    assert inferred == {
+        "Модель внутреннего блока": "PC24SQ.NSKR",
+        "Модель наружного блока": "PC24SQ.U24R",
+    }
+
+
+@pytest.mark.asyncio
+async def test_lg24_category_url_expands_product_pages(monkeypatch):
+    page_1 = """
+    <html>
+      <body>
+        <ul class="products">
+          <li class="product"><a class="woocommerce-LoopProduct-link" href="/product/kondiczioner-lg-eco-smart-pc07sqr/">PC07</a></li>
+          <li class="product"><a class="woocommerce-LoopProduct-link" href="/product/kondiczioner-lg-eco-smart-pc09sqr/">PC09</a></li>
+        </ul>
+        <nav class="woocommerce-pagination"><a class="page-numbers" href="/product-category/konditionery_dla_doma/eco-smart/page/2/">2</a></nav>
+      </body>
+    </html>
+    """
+    page_2 = """
+    <html>
+      <body>
+        <ul class="products">
+          <li class="product"><a class="woocommerce-LoopProduct-link" href="/product/kondiczioner-lg-eco-smart-pc12sq/">PC12</a></li>
+        </ul>
+      </body>
+    </html>
+    """
+
+    class _Resp:
+        status_code = 200
+
+        def __init__(self, text, url):
+            self.text = text
+            self.url = url
+
+    class _FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url):
+            if "/page/2/" in url:
+                return _Resp(page_2, "https://lg24.by/product-category/konditionery_dla_doma/eco-smart/page/2/")
+            return _Resp(page_1, "https://lg24.by/product-category/konditionery_dla_doma/eco-smart/")
+
+    monkeypatch.setattr("parsers.lg24.httpx.AsyncClient", _FakeClient)
+
+    urls = await Lg24Parser().get_import_urls("https://lg24.by/product-category/konditionery_dla_doma/eco-smart/")
+
+    assert urls == [
+        "https://lg24.by/product/kondiczioner-lg-eco-smart-pc07sqr/",
+        "https://lg24.by/product/kondiczioner-lg-eco-smart-pc09sqr/",
+        "https://lg24.by/product/kondiczioner-lg-eco-smart-pc12sq/",
+    ]
+
+
 @pytest.mark.asyncio
 async def test_lg24_parse_sets_fixed_lg_brand(monkeypatch):
     html = """
@@ -151,7 +244,14 @@ async def test_lg24_parse_sets_fixed_lg_brand(monkeypatch):
       <body>
         <h1 class="product_title">4-поточный кассетный тип Ultra Inverter UT48R/UU48WR</h1>
         <meta itemprop="price" content="12345" />
+        <nav class="woocommerce-breadcrumb">
+          <a href="/">Главная</a> /
+          <a href="/commercial">Коммерческие кондиционеры</a> /
+          <a href="/cassette">Кассетный блок</a> /
+          4-поточный кассетный тип Ultra Inverter UT48R/UU48WR
+        </nav>
         <section id="tab1">
+          <dl><dt>Модель</dt><dd>UT48R.NR0 / UU48WR.U30</dd></dl>
           <dl><dt>Мощность охлаждения (Мин/Ном/Макс), кВт</dt><dd>5.0 / 13.4 / 14.0</dd></dl>
         </section>
       </body>
@@ -182,3 +282,7 @@ async def test_lg24_parse_sets_fixed_lg_brand(monkeypatch):
     parsed = await parser.parse("https://lg24.by/product/ut48r-uu48wr/")
 
     assert parsed["specs"]["Бренд"] == "LG"
+    assert parsed["title"] == "LG Ultra Inverter UT48R/UU48WR"
+    assert parsed["specs"]["Серия"] == "Ultra Inverter"
+    assert parsed["specs"]["Модель внутреннего блока"] == "UT48R.NR0"
+    assert parsed["specs"]["Модель наружного блока"] == "UU48WR.U30"
