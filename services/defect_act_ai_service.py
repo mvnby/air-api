@@ -6,15 +6,25 @@ import httpx
 
 from core.config import settings
 from schemas import ManagerRepairActAiDraftPayload
+from services.repair_defect_template_service import RepairDefectTemplateService
 
 
 class DefectActAIService:
-    """Builds repair defect-act field drafts through an LLM."""
+    """Builds structured repair diagnostics through an LLM and local templates."""
 
     ALLOWED_REPAIR_META_KEYS = {
+        "fault_type",
+        "fault_location",
+        "operation_status",
+        "risks",
+        "recommended_actions",
+        "structured_diagnosis",
+        "defect_act_blocks",
+        "hidden_defects_possible",
         "customer_complaint",
         "complaint_official",
         "likely_diagnosis",
+        "diagnostic_notes",
         "equipment_name",
         "equipment_brand",
         "equipment_model",
@@ -36,9 +46,43 @@ class DefectActAIService:
         "refrigerant_pricing_mode",
         "repair_not_viable",
         "repair_not_viable_reason",
+        "repair_estimate_text",
         "inspection_work_done",
     }
-
+    ALLOWED_STRUCTURED_KEYS = {
+        "fault_type",
+        "fault_location",
+        "repairable",
+        "operation_status",
+        "risks",
+        "recommended_actions",
+        "refrigerant",
+        "refrigerant_type",
+        "refrigerant_amount",
+        "hidden_defects_possible",
+    }
+    STRUCTURED_RESPONSE_KEYS = {
+        "fault_type",
+        "fault_location",
+        "operation_status",
+        "risks",
+        "recommended_actions",
+        "structured_diagnosis",
+        "defect_act_blocks",
+        "hidden_defects_possible",
+    }
+    PRIMARY_RESPONSE_KEYS = {
+        "likely_diagnosis",
+        "diagnostic_notes",
+        "diagnostic_result",
+        "repair_recommendation",
+        "repair_possible",
+        "repair_not_viable",
+        "repair_not_viable_reason",
+        "refrigerant_type",
+        "refrigerant_amount",
+        "repair_estimate_text",
+    }
     @staticmethod
     def _clean_text(value: Any, *, max_length: int = 1200) -> str:
         text = str(value or "").strip()
@@ -47,12 +91,33 @@ class DefectActAIService:
         return text[:max_length].strip()
 
     @staticmethod
-    def _clean_meta(raw_meta: Any) -> Dict[str, str]:
+    def _clean_meta(raw_meta: Any) -> Dict[str, Any]:
         if not isinstance(raw_meta, dict):
             return {}
-        cleaned: Dict[str, str] = {}
+        cleaned: Dict[str, Any] = {}
         for key, value in raw_meta.items():
             if key not in DefectActAIService.ALLOWED_REPAIR_META_KEYS:
+                continue
+            if isinstance(value, dict):
+                nested = {
+                    str(nested_key): nested_value
+                    for nested_key, nested_value in value.items()
+                    if isinstance(nested_value, (str, int, float, bool, list, dict)) or nested_value is None
+                }
+                if nested:
+                    cleaned[key] = nested
+                continue
+            if isinstance(value, list):
+                items = [
+                    DefectActAIService._clean_text(item, max_length=160)
+                    for item in value
+                    if DefectActAIService._clean_text(item, max_length=160)
+                ]
+                if items:
+                    cleaned[key] = items
+                continue
+            if isinstance(value, bool):
+                cleaned[key] = value
                 continue
             text = DefectActAIService._clean_text(value)
             if text:
@@ -60,8 +125,35 @@ class DefectActAIService:
         return cleaned
 
     @staticmethod
+    def _clean_structured(raw: Any, payload: ManagerRepairActAiDraftPayload) -> Dict[str, Any]:
+        if not isinstance(raw, dict):
+            raw = {}
+        nested = raw.get("structured_diagnosis")
+        if isinstance(nested, dict):
+            raw = {**raw, **nested}
+        cleaned: Dict[str, Any] = {}
+        for key in DefectActAIService.ALLOWED_STRUCTURED_KEYS:
+            value = raw.get(key)
+            if isinstance(value, list):
+                cleaned[key] = [
+                    DefectActAIService._clean_text(item, max_length=120)
+                    for item in value
+                    if DefectActAIService._clean_text(item, max_length=120)
+                ]
+            elif isinstance(value, bool):
+                cleaned[key] = value
+            elif value is not None:
+                text = DefectActAIService._clean_text(value, max_length=200)
+                if text:
+                    cleaned[key] = text
+        if not cleaned.get("fault_type"):
+            cleaned["fault_type"] = payload.defect_type
+        return cleaned
+
+    @staticmethod
     def build_prompt(payload: ManagerRepairActAiDraftPayload) -> str:
         current_meta = DefectActAIService._clean_meta(payload.current_meta or {})
+        fault_types = ", ".join(sorted(RepairDefectTemplateService.TEMPLATES.keys()))
         inputs = {
             "defect_type": payload.defect_type,
             "defect_label": payload.defect_label,
@@ -74,6 +166,9 @@ class DefectActAIService:
             "customer_complaint": payload.customer_complaint,
             "complaint_official": payload.complaint_official,
             "likely_diagnosis": payload.likely_diagnosis,
+            "diagnostic_notes": payload.diagnostic_notes,
+            "refrigerant_type": payload.refrigerant_type,
+            "refrigerant_amount": payload.refrigerant_amount,
             "extra_context": payload.extra_context,
             "current_meta": current_meta,
         }
@@ -97,50 +192,40 @@ class DefectActAIService:
         )
         mode_rules = assumptions_rules if payload.allow_assumptions else strict_rules
         existing_rules = (
-            "- Если в current_meta уже есть осмысленное значение, можно улучшить его стиль: "
-            "исправить терминологию, сделать формулировку официальной, раскрыть мысль до уровня дефектного акта.\n"
-            "- При улучшении заполненных полей строго сохраняй фактический смысл. Не добавляй новые факты, работы, "
-            "числовые измерения, даты, серийные или инвентарные номера, которых нет во входных данных.\n"
+            "- Используй current_meta как контекст: уточняй fault_type, risks и recommended_actions по уже заполненным данным.\n"
+            "- Не возвращай готовые текстовые поля дефектного акта и не переписывай ручные override-поля.\n"
+            "- Строго сохраняй фактический смысл. Не добавляй новые факты, работы, числовые измерения, даты, "
+            "серийные или инвентарные номера, которых нет во входных данных.\n"
         ) if payload.polish_existing else (
-            "- Если в current_meta уже есть осмысленное значение, не переписывай это поле и не возвращай его в ответе.\n"
-            "- Заполняй только пустые или явно неполные поля, опираясь на входные данные.\n"
+            "- Если в current_meta уже есть осмысленное значение, учитывай его как контекст, но не возвращай замену этого поля.\n"
+            "- Возвращай только структурированные выводы по диагностике и не трогай заполненные ручные поля.\n"
         )
 
         return (
-            "Ты инженер по ремонту систем кондиционирования и составляешь текстовые поля "
-            "для дефектного акта на русском языке.\n\n"
-            "Нужно заполнить значения для Google Docs-плейсхолдеров дефектного акта. "
-            "Пиши официально, по-деловому, без маркетинга и без разговорных формулировок.\n\n"
+            "Ты инженер по ремонту систем кондиционирования. Нужно определить структурированные выводы "
+            "по диагностике, а не писать готовый дефектный акт.\n\n"
+            "Документ и смета будут собраны отдельными шаблонами. Не дублируй одну мысль разными словами "
+            "и не возвращай длинные документные формулировки.\n\n"
             "Правила:\n"
             "- Верни только JSON-объект без markdown.\n"
             f"{mode_rules}"
             f"{existing_rules}"
-            "- Итог должен быть пригоден для дефектного акта, но не должен обещать невозможное без диагностики.\n\n"
-            "Разрешенные ключи JSON:\n"
-            + ", ".join(sorted(DefectActAIService.ALLOWED_REPAIR_META_KEYS))
-            + "\n\n"
-            "Смысл ключей:\n"
-            "customer_complaint - простая жалоба клиента; "
-            "complaint_official - официальная формулировка жалобы для акта; "
-            "likely_diagnosis - вероятная причина; "
-            "technical_condition - техническое состояние оборудования; "
-            "startup_check_result - результат проверки запуска; "
-            "compressor_check_result - проверка компрессора; "
-            "measurement_result - результаты диагностики/замеров без выдуманных чисел; "
-            "diagnostic_result - канонический результат диагностики; "
-            "further_use_assessment - возможность дальнейшей эксплуатации; "
-            "operation_restrictions - ограничения эксплуатации; "
-            "technical_conclusion - итоговое техническое заключение; "
-            "repair_feasibility - целесообразность ремонта; "
-            "recommended_decision - рекомендованное решение; "
-            "repair_recommendation - каноническая рекомендация по ремонту; "
-            "repair_possible - возможен ли ремонт; "
-            "refrigerant_type - тип хладагента; "
-            "refrigerant_amount - объем хладагента; "
-            "refrigerant_pricing_mode - способ расчета хладагента; "
-            "repair_not_viable - ремонт невозможен или нецелесообразен; "
-            "repair_not_viable_reason - причина невозможности или нецелесообразности ремонта; "
-            "inspection_work_done - выполненные диагностические действия.\n\n"
+            "- Итог должен быть пригоден для выбора шаблона, но не должен обещать невозможное без диагностики.\n\n"
+            "Разрешенные fault_type:\n"
+            f"{fault_types}\n\n"
+            "Верни JSON в такой структуре:\n"
+            "{\n"
+            '  "fault_type": "refrigerant_leak",\n'
+            '  "fault_location": "flare_connections",\n'
+            '  "repairable": true,\n'
+            '  "operation_status": "limited",\n'
+            '  "risks": ["compressor_damage"],\n'
+            '  "recommended_actions": ["restore_circuit_tightness", "vacuuming", "full_refrigerant_charge"],\n'
+            '  "refrigerant": "R410A",\n'
+            '  "refrigerant_amount": "790 g",\n'
+            '  "hidden_defects_possible": true\n'
+            "}\n\n"
+            "Если данных недостаточно, используй fault_type=unknown_fault и operation_status=unknown.\n\n"
             "Входные данные:\n"
             f"{json.dumps(inputs, ensure_ascii=False, indent=2)}"
         )
@@ -206,19 +291,31 @@ class DefectActAIService:
             raise ValueError("AI response has unexpected format") from exc
 
     @staticmethod
-    async def generate_repair_meta(payload: ManagerRepairActAiDraftPayload) -> Dict[str, str]:
+    async def generate_repair_meta(payload: ManagerRepairActAiDraftPayload) -> Dict[str, Any]:
         prompt = DefectActAIService.build_prompt(payload)
         content = await DefectActAIService._request_completion(prompt)
         parsed = DefectActAIService._extract_json_object(content)
-        meta = DefectActAIService._clean_meta(parsed)
+        structured = DefectActAIService._clean_structured(parsed, payload)
+        current_meta = DefectActAIService._clean_meta(payload.current_meta or {})
+        meta = RepairDefectTemplateService.build_meta_from_structured(
+            raw=structured,
+            current_meta=current_meta,
+            fallback_fault_type=payload.defect_type,
+            diagnostic_notes=payload.diagnostic_notes or payload.extra_context,
+        )
+        response_keys = DefectActAIService.STRUCTURED_RESPONSE_KEYS | DefectActAIService.PRIMARY_RESPONSE_KEYS
         if payload.polish_existing:
-            return meta
+            return {
+                key: value
+                for key, value in meta.items()
+                if key in response_keys
+            }
 
-        existing_meta = DefectActAIService._clean_meta(payload.current_meta or {})
         return {
             key: value
             for key, value in meta.items()
-            if not existing_meta.get(key)
+            if key in DefectActAIService.STRUCTURED_RESPONSE_KEYS
+            or (key in DefectActAIService.PRIMARY_RESPONSE_KEYS and not current_meta.get(key))
         }
 
     @staticmethod

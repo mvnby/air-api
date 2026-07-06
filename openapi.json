@@ -29724,6 +29724,39 @@
             ],
             "title": "Likely Diagnosis"
           },
+          "diagnostic_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnostic Notes"
+          },
+          "refrigerant_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refrigerant Type"
+          },
+          "refrigerant_amount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refrigerant Amount"
+          },
           "extra_context": {
             "anyOf": [
               {
@@ -29750,9 +29783,7 @@
       "ManagerRepairActAiDraftResponse": {
         "properties": {
           "repair_meta": {
-            "additionalProperties": {
-              "type": "string"
-            },
+            "additionalProperties": true,
             "type": "object",
             "title": "Repair Meta"
           },
@@ -29768,7 +29799,7 @@
           "prompt_version": {
             "type": "string",
             "title": "Prompt Version",
-            "default": "defect_act_v1"
+            "default": "defect_act_v2"
           }
         },
         "type": "object",

@@ -3525,15 +3525,18 @@ class ManagerRepairActAiDraftPayload(BaseModel):
     customer_complaint: Optional[str] = None
     complaint_official: Optional[str] = None
     likely_diagnosis: Optional[str] = None
+    diagnostic_notes: Optional[str] = None
+    refrigerant_type: Optional[str] = None
+    refrigerant_amount: Optional[str] = None
     extra_context: Optional[str] = None
     current_meta: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ManagerRepairActAiDraftResponse(BaseModel):
-    repair_meta: Dict[str, str] = Field(default_factory=dict)
+    repair_meta: Dict[str, Any] = Field(default_factory=dict)
     provider: str = "deepseek"
     model: str
-    prompt_version: str = "defect_act_v1"
+    prompt_version: str = "defect_act_v2"
 
 
 # --- SERVICE ESTIMATES ---
