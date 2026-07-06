@@ -119,7 +119,11 @@ async def test_bulk_update_logic(async_client: AsyncClient, db):
         # Clear session to avoid caching
         db.expire_all()
         p = await db.get(Product, pid)
-        assert p.specs["wifi"] == "yes"
+        assert "wifi" not in p.specs
+        assert p.specs["wifi_ready"] is True
+        assert p.specs["wifi_builtin"] is True
+        assert p.specs["wifi_state"] == "builtin"
+        assert p.specs["__filter_wifi"] is True
         assert p.specs["warranty"] == "3 years"
         assert p.specs["old"] == "val"
 
