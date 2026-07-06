@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type ManagerRepairActAiDraftResponse = {
-    repair_meta?: Record<string, string>;
+    repair_meta?: Record<string, any>;
     provider?: string;
     model: string;
     prompt_version?: string;

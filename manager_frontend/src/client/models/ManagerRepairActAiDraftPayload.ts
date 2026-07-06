@@ -14,6 +14,9 @@ export type ManagerRepairActAiDraftPayload = {
     customer_complaint?: (string | null);
     complaint_official?: (string | null);
     likely_diagnosis?: (string | null);
+    diagnostic_notes?: (string | null);
+    refrigerant_type?: (string | null);
+    refrigerant_amount?: (string | null);
     extra_context?: (string | null);
     current_meta?: Record<string, any>;
 };

@@ -29,6 +29,20 @@ import type {
 } from '../../client';
 import { ManagerOrdersService, ManagerSettingsService, ManagerMailService, ManagerRepairComplaintsService, ManagerEquipmentService } from '../../client';
 import { EXECUTION_STATUS_OPTIONS, NEGOTIATION_STATUS_OPTIONS, formatMoney } from './order-utils';
+import {
+  CUSTOMER_APPROVAL_STATUS_OPTIONS,
+  EQUIPMENT_EVENT_OPTIONS,
+  PARTS_STATUS_OPTIONS,
+  REFRIGERANT_PRICING_MODE_OPTIONS,
+  REPAIR_AI_DEFECT_TYPES,
+  REPAIR_CHOICE_OPTIONS,
+  REPAIR_WORKFLOW_STATUS_OPTIONS,
+  emptyRepairMeta,
+  labeledOptionsWithCurrent,
+  normalizeRepairMeta,
+  selectOptionsWithCurrent,
+  type RepairMeta,
+} from './repair-meta';
 import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../../utils/datetime';
 
 import { getApiErrorMessage } from '../../utils/api-errors';
@@ -90,242 +104,12 @@ type ProductLine = {
 };
 type ServiceLine = { service_id?: number | null; title: string; quantity: number; price: number; cost: number };
 type OrderWorkflowType = 'sales_installation' | 'service_work' | 'maintenance' | 'repair';
-type RepairMeta = {
-  repair_status: string;
-  customer_approval_status: string;
-  customer_approval_note: string;
-  parts_status: string;
-  parts_note: string;
-  repair_completion_note: string;
-  customer_complaint: string;
-  complaint_official: string;
-  complaint_text?: string;
-  likely_diagnosis: string;
-  equipment_name: string;
-  equipment_brand: string;
-  equipment_model: string;
-  equipment_power: string;
-  equipment_serial_number: string;
-  equipment_inventory_number: string;
-  equipment_commissioning_date: string;
-  technical_condition: string;
-  startup_check_result: string;
-  compressor_check_result: string;
-  measurement_result: string;
-  diagnostic_result: string;
-  further_use_assessment: string;
-  operation_restrictions: string;
-  technical_conclusion: string;
-  repair_feasibility: string;
-  recommended_decision: string;
-  repair_recommendation: string;
-  repair_possible: string;
-  refrigerant_type: string;
-  refrigerant_amount: string;
-  refrigerant_pricing_mode: string;
-  repair_not_viable: string;
-  repair_not_viable_reason: string;
-};
-type RepairAiDefectType = {
-  value: string;
-  label: string;
-  hint: string;
-};
 
 const WORKFLOW_OPTIONS: Array<{ value: OrderWorkflowType; label: string; hint: string; icon: string }> = [
   { value: 'sales_installation', label: 'Продажа + монтаж', hint: 'товары, КП, монтаж', icon: 'shopping_cart' },
   { value: 'service_work', label: 'Работы', hint: 'монтаж, демонтаж, трассы', icon: 'construction' },
   { value: 'maintenance', label: 'Обслуживание', hint: 'ТО и сервисные договоры', icon: 'ac_unit' },
   { value: 'repair', label: 'Ремонт', hint: 'диагностика и дефектный акт', icon: 'build_circle' },
-];
-
-const REPAIR_WORKFLOW_STATUS_OPTIONS = [
-  { value: 'new', label: 'Новая' },
-  { value: 'scheduled', label: 'Запланирован' },
-  { value: 'diagnostic_in_progress', label: 'Диагностика идет' },
-  { value: 'awaiting_diagnostic_result', label: 'Ждем диагностику' },
-  { value: 'awaiting_customer_approval', label: 'На согласовании' },
-  { value: 'approved_for_repair', label: 'Ремонт согласован' },
-  { value: 'repair_in_progress', label: 'Ремонт идет' },
-  { value: 'awaiting_parts', label: 'Ждем запчасти' },
-  { value: 'completed', label: 'Завершен' },
-  { value: 'not_repairable', label: 'Не ремонтируется' },
-  { value: 'cancelled', label: 'Отменен' },
-];
-const REPAIR_WORKFLOW_STATUS_VALUES = new Set(REPAIR_WORKFLOW_STATUS_OPTIONS.map((item) => item.value));
-
-const CUSTOMER_APPROVAL_STATUS_OPTIONS = [
-  { value: '', label: 'Не указано' },
-  { value: 'pending', label: 'Ожидает согласования' },
-  { value: 'approved', label: 'Согласовано' },
-  { value: 'rejected', label: 'Отказано' },
-];
-
-const PARTS_STATUS_OPTIONS = [
-  { value: '', label: 'Не указано' },
-  { value: 'not_required', label: 'Не требуются' },
-  { value: 'awaiting', label: 'Ожидаются' },
-  { value: 'ordered', label: 'Заказаны' },
-  { value: 'received', label: 'Получены' },
-  { value: 'installed', label: 'Установлены' },
-];
-
-const emptyRepairMeta = (): RepairMeta => ({
-  repair_status: '',
-  customer_approval_status: '',
-  customer_approval_note: '',
-  parts_status: '',
-  parts_note: '',
-  repair_completion_note: '',
-  customer_complaint: '',
-  complaint_official: '',
-  likely_diagnosis: '',
-  equipment_name: '',
-  equipment_brand: '',
-  equipment_model: '',
-  equipment_power: '',
-  equipment_serial_number: '',
-  equipment_inventory_number: '',
-  equipment_commissioning_date: '',
-  technical_condition: '',
-  startup_check_result: '',
-  compressor_check_result: '',
-  measurement_result: '',
-  diagnostic_result: '',
-  further_use_assessment: '',
-  operation_restrictions: '',
-  technical_conclusion: '',
-  repair_feasibility: '',
-  recommended_decision: '',
-  repair_recommendation: '',
-  repair_possible: '',
-  refrigerant_type: '',
-  refrigerant_amount: '',
-  refrigerant_pricing_mode: '',
-  repair_not_viable: '',
-  repair_not_viable_reason: '',
-});
-
-const REPAIR_CHOICE_OPTIONS = ['', 'Да', 'Нет'];
-const REFRIGERANT_PRICING_MODE_OPTIONS = [
-  'по фактической массе',
-  'включен в стоимость ремонта',
-  'отдельной строкой сметы',
-  'не требуется',
-];
-const EQUIPMENT_EVENT_OPTIONS: Array<{ value: EquipmentServiceEventType; label: string }> = [
-  { value: 'diagnostic', label: 'Диагностика' },
-  { value: 'repair', label: 'Ремонт' },
-  { value: 'maintenance', label: 'Обслуживание' },
-  { value: 'refrigerant_charge', label: 'Заправка хладагентом' },
-  { value: 'leak', label: 'Утечка' },
-  { value: 'recommendation', label: 'Рекомендация' },
-  { value: 'not_repairable', label: 'Не ремонтируется' },
-  { value: 'other', label: 'Другое' },
-];
-
-const textValue = (value: unknown) => String(value ?? '').trim();
-
-const normalizeRepairWorkflowStatus = (value: unknown) => {
-  const raw = textValue(value);
-  const normalized = raw.toLowerCase().replace(/-/g, '_').split(/\s+/).filter(Boolean).join('_');
-  return REPAIR_WORKFLOW_STATUS_VALUES.has(normalized) ? normalized : '';
-};
-
-const choiceText = (value: unknown) => {
-  if (typeof value === 'boolean') return value ? 'Да' : 'Нет';
-  return textValue(value);
-};
-
-const isExplicitNegativeRepairText = (value: unknown) => {
-  const text = textValue(value).toLowerCase();
-  if (!text) return false;
-  return [
-    'невозмож',
-    'не возмож',
-    'нецелесообраз',
-    'не целесообраз',
-    'нерентаб',
-    'не рентаб',
-    'списан',
-    'списани',
-    'вывести из эксплуатации',
-  ].some((marker) => text.includes(marker));
-};
-
-const normalizeRepairMeta = (
-  raw: Partial<RepairMeta> | Record<string, any> | null | undefined,
-  options: { defaultRepairStatus?: boolean } = {},
-): RepairMeta => {
-  const meta = { ...emptyRepairMeta(), ...((raw || {}) as Partial<RepairMeta>) };
-  meta.repair_status = normalizeRepairWorkflowStatus(meta.repair_status) || (options.defaultRepairStatus ? 'new' : '');
-  meta.customer_approval_status = textValue(meta.customer_approval_status);
-  meta.customer_approval_note = textValue(meta.customer_approval_note);
-  meta.parts_status = textValue(meta.parts_status);
-  meta.parts_note = textValue(meta.parts_note);
-  meta.repair_completion_note = textValue(meta.repair_completion_note);
-  if (!textValue(meta.customer_complaint)) {
-    meta.customer_complaint = textValue(meta.complaint_official) || textValue(meta.complaint_text);
-  }
-  if (!textValue(meta.diagnostic_result)) {
-    meta.diagnostic_result = textValue(meta.measurement_result);
-  }
-  if (!textValue(meta.repair_recommendation)) {
-    meta.repair_recommendation = textValue(meta.recommended_decision) || textValue(meta.technical_conclusion);
-  }
-  meta.repair_possible = choiceText(meta.repair_possible);
-  meta.repair_not_viable = choiceText(meta.repair_not_viable);
-  const legacyFeasibility = textValue(meta.repair_feasibility);
-  if (legacyFeasibility && isExplicitNegativeRepairText(legacyFeasibility)) {
-    if (!textValue(meta.repair_not_viable)) meta.repair_not_viable = 'Да';
-    if (!textValue(meta.repair_not_viable_reason)) meta.repair_not_viable_reason = legacyFeasibility;
-  }
-  return meta;
-};
-
-const selectOptionsWithCurrent = (baseOptions: string[], current: unknown) => {
-  const currentValue = textValue(current);
-  if (!currentValue || baseOptions.includes(currentValue)) return baseOptions;
-  return [...baseOptions, currentValue];
-};
-
-const labeledOptionsWithCurrent = (baseOptions: Array<{ value: string; label: string }>, current: unknown) => {
-  const currentValue = textValue(current);
-  if (!currentValue || baseOptions.some((item) => item.value === currentValue)) return baseOptions;
-  return [...baseOptions, { value: currentValue, label: currentValue }];
-};
-
-const REPAIR_AI_DEFECT_TYPES: RepairAiDefectType[] = [
-  {
-    value: 'multiple_heat_exchanger_defects',
-    label: 'Множественные дефекты теплообменника',
-    hint: 'коррозия, загрязнение, механические повреждения, нарушение теплообмена',
-  },
-  {
-    value: 'compressor_winding_breakdown',
-    label: 'Пробой обмотки компрессора',
-    hint: 'электрическая неисправность компрессора, срабатывание защиты',
-  },
-  {
-    value: 'refrigerant_leak',
-    label: 'Утечка хладагента',
-    hint: 'падение производительности, обмерзание, требуется поиск и устранение утечки',
-  },
-  {
-    value: 'control_board_failure',
-    label: 'Неисправность платы управления',
-    hint: 'ошибки управления, нестабильная работа, отсутствие запуска',
-  },
-  {
-    value: 'fan_motor_failure',
-    label: 'Неисправность двигателя вентилятора',
-    hint: 'шум, отсутствие вращения, перегрев, ошибка вентилятора',
-  },
-  {
-    value: 'drainage_failure',
-    label: 'Нарушение отвода конденсата',
-    hint: 'протечка воды, засор или неправильный уклон дренажа',
-  },
 ];
 
 const serviceKindLabels: Record<string, string> = {
@@ -1105,11 +889,28 @@ const filteredRepairComplaintPresets = computed(() => {
 const selectedRepairAiDefect = computed(() => (
   REPAIR_AI_DEFECT_TYPES.find((item) => item.value === repairAiDefectType.value) || REPAIR_AI_DEFECT_TYPES[0]
 ));
+const repairStructuredJson = computed(() => {
+  const payload = {
+    structured_diagnosis: repairMeta.value.structured_diagnosis || {},
+    defect_act_blocks: repairMeta.value.defect_act_blocks || {},
+    risks: repairMeta.value.risks || [],
+    recommended_actions: repairMeta.value.recommended_actions || [],
+  };
+  return JSON.stringify(payload, null, 2);
+});
 const repairPossibleOptions = computed(() => selectOptionsWithCurrent(REPAIR_CHOICE_OPTIONS, repairMeta.value.repair_possible));
 const repairNotViableOptions = computed(() => selectOptionsWithCurrent(REPAIR_CHOICE_OPTIONS, repairMeta.value.repair_not_viable));
 const customerApprovalStatusOptions = computed(() => labeledOptionsWithCurrent(CUSTOMER_APPROVAL_STATUS_OPTIONS, repairMeta.value.customer_approval_status));
 const partsStatusOptions = computed(() => labeledOptionsWithCurrent(PARTS_STATUS_OPTIONS, repairMeta.value.parts_status));
-const buildRepairMetaPayload = () => normalizeRepairMeta(repairMeta.value, { defaultRepairStatus: isRepairWorkflow.value });
+watch(repairAiDefectType, (value) => {
+  if (isRepairWorkflow.value) {
+    repairMeta.value.fault_type = value;
+  }
+});
+const buildRepairMetaPayload = () => normalizeRepairMeta({
+  ...repairMeta.value,
+  fault_type: repairMeta.value.fault_type || repairAiDefectType.value,
+}, { defaultRepairStatus: isRepairWorkflow.value });
 const documentSectionSummary = computed(() => {
   const contractText = hasContract.value ? 'договор есть' : (hasOrderInvoice.value ? 'есть счет' : 'без договора');
   return `${orderDocuments.value.length} док. · ${contractText}`;
@@ -1577,6 +1378,14 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   repairMeta.value = normalizeRepairMeta(((order as any).repair_meta || {}) as Partial<RepairMeta>, {
     defaultRepairStatus: workflowType.value === 'repair',
   });
+  if (workflowType.value === 'repair') {
+    const savedFaultType = repairMeta.value.fault_type || (repairMeta.value.structured_diagnosis || {}).fault_type;
+    if (savedFaultType && REPAIR_AI_DEFECT_TYPES.some((item) => item.value === savedFaultType)) {
+      repairAiDefectType.value = savedFaultType;
+    } else {
+      repairMeta.value.fault_type = repairAiDefectType.value;
+    }
+  }
   repairComplaintSearch.value = '';
   if (workflowType.value === 'repair' && !repairComplaintPresets.value.length) {
     void loadRepairComplaintPresets();
@@ -2147,7 +1956,10 @@ const generateRepairAiDraft = async () => {
       customer_complaint: repairMeta.value.customer_complaint,
       complaint_official: repairMeta.value.complaint_official,
       likely_diagnosis: repairMeta.value.likely_diagnosis,
-      extra_context: repairAiExtraContext.value || defect.hint,
+      diagnostic_notes: repairMeta.value.diagnostic_notes,
+      refrigerant_type: repairMeta.value.refrigerant_type,
+      refrigerant_amount: repairMeta.value.refrigerant_amount,
+      extra_context: repairMeta.value.diagnostic_notes || repairAiExtraContext.value || defect.hint,
       current_meta: repairMeta.value as any,
     });
     repairMeta.value = normalizeRepairMeta({ ...repairMeta.value, ...((response.repair_meta || {}) as Partial<RepairMeta>) });
@@ -3025,22 +2837,12 @@ watch(
           </div>
           <div class="md:col-span-2 rounded-xl border border-violet-100 bg-violet-50/60 p-3">
             <div class="mb-2 flex flex-col gap-2 lg:flex-row lg:items-end">
-              <label class="field-label flex-1">
-                Базовая неисправность
-                <select v-model="repairAiDefectType" class="field-input bg-white">
-                  <option v-for="item in REPAIR_AI_DEFECT_TYPES" :key="item.value" :value="item.value">
-                    {{ item.label }}
-                  </option>
-                </select>
-              </label>
-              <label class="field-label flex-[1.2]">
-                Детали диагностики
-                <input
-                  v-model="repairAiExtraContext"
-                  class="field-input bg-white"
-                  placeholder="Например: наружный блок не стартует, запах гари, сильная коррозия..."
-                />
-              </label>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-semibold text-violet-950">AI-черновик по выбранной неисправности</p>
+                <p class="mt-1 truncate text-xs text-violet-700/80">
+                  {{ selectedRepairAiDefect?.label || 'Базовая неисправность не выбрана' }}
+                </p>
+              </div>
               <button
                 type="button"
                 class="btn-mini h-[42px] justify-center whitespace-nowrap bg-violet-600 hover:bg-violet-700"
@@ -3066,12 +2868,12 @@ watch(
               </div>
             </div>
           </div>
-          <div class="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div class="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <p class="text-sm font-semibold text-slate-900">Статусы ремонта</p>
-              <p class="text-xs text-slate-600">Этап ремонта; CRM/Kanban статус заказа отдельно.</p>
-            </div>
-            <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <details class="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <summary class="cursor-pointer select-none text-sm font-semibold text-slate-900">
+              Статусы, согласование и запчасти
+              <span class="ml-2 text-xs font-normal text-slate-500">{{ repairWorkflowStatusLabel || 'не указано' }}</span>
+            </summary>
+            <div class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               <label class="field-label">
                 Этап ремонта
                 <select v-model="repairMeta.repair_status" class="field-input bg-white">
@@ -3121,7 +2923,7 @@ watch(
                 />
               </label>
             </div>
-          </div>
+          </details>
           <label class="field-label md:col-span-2">
             Жалоба клиента
             <textarea
@@ -3131,19 +2933,19 @@ watch(
             />
           </label>
           <label class="field-label">
-            Формулировка для акта
-            <textarea
-              v-model="repairMeta.complaint_official"
-              class="field-input min-h-[72px]"
-              placeholder="Официальная формулировка жалобы"
-            />
+            Базовая неисправность
+            <select v-model="repairAiDefectType" class="field-input">
+              <option v-for="item in REPAIR_AI_DEFECT_TYPES" :key="`main-${item.value}`" :value="item.value">
+                {{ item.label }}
+              </option>
+            </select>
           </label>
-          <label class="field-label">
-            Вероятный диагноз
+          <label class="field-label md:col-span-2">
+            Детали диагностики / заметки инженера
             <textarea
-              v-model="repairMeta.likely_diagnosis"
+              v-model="repairMeta.diagnostic_notes"
               class="field-input min-h-[72px]"
-              placeholder="Предварительная причина неисправности"
+              placeholder="Что увидел инженер: симптомы, проверки, ограничения, важные нюансы"
             />
           </label>
           <label class="field-label">
@@ -3160,6 +2962,14 @@ watch(
               v-model="repairMeta.repair_recommendation"
               class="field-input min-h-[88px]"
               placeholder="Что сделать: устранить утечку, заменить узел, дозаправить..."
+            />
+          </label>
+          <label class="field-label md:col-span-2">
+            Формулировка для сметы ремонта
+            <textarea
+              v-model="repairMeta.repair_estimate_text"
+              class="field-input min-h-[72px]"
+              placeholder="Короткая строка работ для сметы"
             />
           </label>
           <label class="field-label">
@@ -3207,6 +3017,12 @@ watch(
             />
           </label>
 
+          <details class="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <summary class="cursor-pointer select-none text-sm font-semibold text-slate-900">
+              Оборудование и паспортные данные
+              <span class="ml-2 text-xs font-normal text-slate-500">{{ repairMeta.equipment_model || repairMeta.equipment_name || 'не заполнено' }}</span>
+            </summary>
+            <div class="mt-3 grid gap-3 md:grid-cols-2">
           <label class="field-label">
             Оборудование
             <input v-model="repairMeta.equipment_name" class="field-input" placeholder="Кондиционер настенный" />
@@ -3348,7 +3164,34 @@ watch(
               </div>
             </div>
           </div>
+            </div>
+          </details>
 
+          <details class="md:col-span-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+            <summary class="cursor-pointer select-none text-sm font-semibold text-amber-900">
+              Экспертный режим: JSON и ручные override-поля
+            </summary>
+            <div class="mt-3 grid gap-3 md:grid-cols-2">
+              <label class="field-label md:col-span-2">
+                Структурированные выводы AI
+                <textarea :value="repairStructuredJson" readonly class="field-input min-h-[180px] font-mono text-xs" />
+              </label>
+              <label class="field-label">
+                Формулировка для акта
+                <textarea
+                  v-model="repairMeta.complaint_official"
+                  class="field-input min-h-[72px]"
+                  placeholder="Override официальной формулировки жалобы"
+                />
+              </label>
+              <label class="field-label">
+                Вероятный диагноз
+                <textarea
+                  v-model="repairMeta.likely_diagnosis"
+                  class="field-input min-h-[72px]"
+                  placeholder="Override предварительной причины"
+                />
+              </label>
           <label class="field-label">
             Техническое состояние
             <textarea v-model="repairMeta.technical_condition" class="field-input min-h-[80px]" placeholder="Общее состояние, износ, загрязнение, следы вмешательства..." />
@@ -3385,6 +3228,8 @@ watch(
             Техническое заключение
             <textarea v-model="repairMeta.technical_conclusion" class="field-input min-h-[96px]" placeholder="Итоговый вывод для дефектного акта" />
           </label>
+            </div>
+          </details>
         </div>
       </OrderDrawerSection>
 

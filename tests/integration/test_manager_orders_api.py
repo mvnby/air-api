@@ -508,12 +508,16 @@ async def test_manager_repair_act_ai_draft_generates_sanitized_meta(async_client
         captured["prompt"] = prompt
         return json.dumps(
             {
-                "repair_meta": {
-                    "technical_condition": "Теплообменник имеет множественные дефекты, загрязнение и следы коррозии.",
-                    "technical_conclusion": "Эксплуатация оборудования без ремонта не рекомендуется.",
-                    "recommended_decision": "Рассмотреть замену теплообменника или оборудования в сборе.",
-                    "unknown_key": "must be ignored",
-                }
+                "fault_type": "refrigerant_leak",
+                "fault_location": "flare_connections",
+                "repairable": True,
+                "operation_status": "limited",
+                "risks": ["compressor_damage"],
+                "recommended_actions": ["restore_circuit_tightness", "vacuuming", "full_refrigerant_charge"],
+                "refrigerant": "R410A",
+                "refrigerant_amount": "790 g",
+                "hidden_defects_possible": True,
+                "unknown_key": "must be ignored",
             },
             ensure_ascii=False,
         )
@@ -524,9 +528,10 @@ async def test_manager_repair_act_ai_draft_generates_sanitized_meta(async_client
 
     headers = await _auth_headers(async_client)
     payload = {
-        "defect_type": "multiple_heat_exchanger_defects",
-        "defect_label": "Множественные дефекты теплообменника",
+        "defect_type": "refrigerant_leak",
+        "defect_label": "Утечка хладагента",
         "equipment_model": "Daikin FTXB25C",
+        "diagnostic_notes": "Обмерзает внутренний блок, давление ниже нормы.",
         "current_meta": {"customer_complaint": "Плохо холодит"},
     }
     response = await async_client.post("/api/manager/repair-complaints/ai-draft", json=payload, headers=headers)
@@ -534,12 +539,18 @@ async def test_manager_repair_act_ai_draft_generates_sanitized_meta(async_client
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["provider"] == "deepseek"
-    assert data["prompt_version"] == "defect_act_v1"
-    assert data["repair_meta"]["technical_condition"].startswith("Теплообменник")
-    assert data["repair_meta"]["technical_conclusion"] == "Эксплуатация оборудования без ремонта не рекомендуется."
+    assert data["prompt_version"] == "defect_act_v2"
+    assert data["repair_meta"]["fault_type"] == "refrigerant_leak"
+    assert data["repair_meta"]["structured_diagnosis"]["fault_location"] == "flare_connections"
+    assert data["repair_meta"]["diagnostic_result"].startswith("Выявлены признаки утечки")
+    assert data["repair_meta"]["repair_recommendation"].startswith("Рекомендуется восстановить герметичность")
+    assert data["repair_meta"]["repair_estimate_text"].startswith("Устранение утечки хладагента")
+    assert "technical_condition" not in data["repair_meta"]
+    assert "technical_conclusion" not in data["repair_meta"]
     assert "unknown_key" not in data["repair_meta"]
-    assert "Множественные дефекты теплообменника" in captured["prompt"]
+    assert "Утечка хладагента" in captured["prompt"]
     assert "Daikin FTXB25C" in captured["prompt"]
+    assert "готовый дефектный акт" in captured["prompt"]
 
 
 @pytest.mark.asyncio
@@ -2502,6 +2513,65 @@ async def test_manager_order_generate_defect_act_placeholders(async_client, db, 
     assert replacements["{{repair_not_viable}}"] == "Да"
     assert replacements["{{repair_not_viable_reason}}"] == "Стоимость ремонта сопоставима с заменой оборудования."
     assert replacements["{{additional_conditions}}"] == "Работы выполнять после согласования с администратором."
+
+
+@pytest.mark.asyncio
+async def test_manager_order_generate_defect_act_from_structured_repair_meta(async_client, db, monkeypatch):
+    customer = Customer(name='ООО "Структура"', phone="+375297777700", type=CustomerType.company)
+    order = Order(
+        customer_id=customer.id,
+        status=OrderStatus.NEW_LEAD,
+        technical_meta={
+            "repair": {
+                "customer_complaint": "Плохо охлаждает",
+                "fault_type": "refrigerant_leak",
+                "diagnostic_notes": "Обмерзает теплообменник внутреннего блока.",
+                "structured_diagnosis": {
+                    "fault_type": "refrigerant_leak",
+                    "fault_location": "flare_connections",
+                    "repairable": True,
+                    "operation_status": "limited",
+                    "risks": ["compressor_damage"],
+                    "recommended_actions": ["restore_circuit_tightness", "vacuuming", "full_refrigerant_charge"],
+                    "refrigerant": "R410A",
+                    "refrigerant_amount": "790 g",
+                    "hidden_defects_possible": True,
+                },
+            },
+        },
+    )
+    db.add_all([customer, order])
+    await db.commit()
+    await db.refresh(order)
+
+    captured = {}
+
+    class _FakeGoogleService:
+        def copy_template(self, template_id, title):
+            return {"file_id": "fake-defect-act", "edit_url": "https://docs.google.com/document/d/fake-defect-act/edit"}
+
+        def replace_placeholders(self, file_id, replacements):
+            captured["replacements"] = replacements
+
+    from services import document_service
+
+    monkeypatch.setattr(document_service, "get_google_service", lambda: _FakeGoogleService())
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/defect_act?contract_date=2026-05-14T00:00:00",
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    replacements = captured["replacements"]
+    assert replacements["{{technical_condition}}"].startswith("Неисправное. Выявлены признаки утечки хладагента")
+    assert "Обмерзает теплообменник" in replacements["{{measurement_result}}"]
+    assert "Эксплуатация оборудования допускается только с ограничениями" in replacements["{{further_use_assessment}}"]
+    assert "повреждение компрессора" in replacements["{{operation_restrictions}}"]
+    assert "восстановить герметичность холодильного контура" in replacements["{{technical_conclusion}}"]
+    assert replacements["{{repair_possible}}"] == "Да"
+    assert replacements["{{refrigerant_type}}"] == "R410A"
+    assert replacements["{{refrigerant_amount}}"] == "790 g"
 
 
 @pytest.mark.asyncio
