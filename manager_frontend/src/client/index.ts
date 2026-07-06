@@ -20,6 +20,7 @@ export type { BankStatementImportResponse } from './models/BankStatementImportRe
 export type { Body_attach_manager_doc_file } from './models/Body_attach_manager_doc_file';
 export type { Body_bulk_upload_local_images } from './models/Body_bulk_upload_local_images';
 export type { Body_complete_media_worker_job } from './models/Body_complete_media_worker_job';
+export type { Body_create_repair_diagnostic_lead } from './models/Body_create_repair_diagnostic_lead';
 export type { Body_import_manager_bank_statement } from './models/Body_import_manager_bank_statement';
 export type { Body_login_access_token } from './models/Body_login_access_token';
 export type { Body_recognize_manager_customer_requisites } from './models/Body_recognize_manager_customer_requisites';
@@ -325,6 +326,7 @@ export type { ProductSeriesResponse } from './models/ProductSeriesResponse';
 export type { ProductSiblingResponse } from './models/ProductSiblingResponse';
 export type { ProductUpdate } from './models/ProductUpdate';
 export type { PublicBrandResponse } from './models/PublicBrandResponse';
+export type { RepairDiagnosticLeadResponse } from './models/RepairDiagnosticLeadResponse';
 export type { ServiceResponse } from './models/ServiceResponse';
 export type { SpecRegistryItemResponse } from './models/SpecRegistryItemResponse';
 export type { SpecRegistryResponse } from './models/SpecRegistryResponse';

@@ -521,6 +521,28 @@ export async function submitContactForm(formData) {
     }
 }
 
+export async function submitRepairDiagnostic(payload, photoFiles = {}) {
+    const url = `${API_V1}/leads/repair-diagnostic`;
+    const body = new FormData();
+    body.append('payload', JSON.stringify(payload));
+
+    Object.entries(photoFiles || {}).forEach(([field, files]) => {
+        Array.from(files || []).forEach((file) => {
+            if (file) body.append(field, file);
+        });
+    });
+
+    try {
+        return await fetchJson(url, {
+            method: 'POST',
+            body,
+        }, false);
+    } catch (e) {
+        console.error('[API] submitRepairDiagnostic failed:', e);
+        return null;
+    }
+}
+
 export async function submitProductAvailabilityLead(payload) {
     const url = `${API_V1}/leads/product-availability`;
     try {

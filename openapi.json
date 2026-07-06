@@ -636,6 +636,48 @@
         }
       }
     },
+    "/api/v1/leads/repair-diagnostic": {
+      "post": {
+        "tags": [
+          "api",
+          "api"
+        ],
+        "summary": "Create Repair Diagnostic Lead",
+        "operationId": "create_repair_diagnostic_lead",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_repair_diagnostic_lead"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepairDiagnosticLeadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/orders": {
       "post": {
         "tags": [
@@ -15445,6 +15487,94 @@
           "file"
         ],
         "title": "Body_complete_media_worker_job"
+      },
+      "Body_create_repair_diagnostic_lead": {
+        "properties": {
+          "payload": {
+            "type": "string",
+            "title": "Payload"
+          },
+          "nameplate": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nameplate"
+          },
+          "indoor_unit": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indoor Unit"
+          },
+          "outdoor_unit": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outdoor Unit"
+          },
+          "error_display": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Display"
+          },
+          "leak_place": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leak Place"
+          }
+        },
+        "type": "object",
+        "required": [
+          "payload"
+        ],
+        "title": "Body_create_repair_diagnostic_lead"
       },
       "Body_import_manager_bank_statement": {
         "properties": {
@@ -36208,6 +36338,35 @@
           "sort_order"
         ],
         "title": "PublicBrandResponse"
+      },
+      "RepairDiagnosticLeadResponse": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "ai_pre_diagnosis_status": {
+            "type": "string",
+            "title": "Ai Pre Diagnosis Status",
+            "default": "pending"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "status",
+          "created_at"
+        ],
+        "title": "RepairDiagnosticLeadResponse"
       },
       "ServiceResponse": {
         "properties": {
