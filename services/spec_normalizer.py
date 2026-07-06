@@ -460,6 +460,8 @@ def _classify_wifi_value(value: Any) -> str | None:
         "не поддерж",
         "отсутств",
         "нет",
+        "false",
+        "no",
     )
     if any(marker in text for marker in none_markers):
         return "none"
@@ -484,6 +486,7 @@ def _classify_wifi_value(value: Any) -> str | None:
         "check",
         "галоч",
         "true",
+        "yes",
         "да",
         "есть",
         "✓",

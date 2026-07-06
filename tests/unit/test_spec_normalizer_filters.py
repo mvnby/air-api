@@ -51,6 +51,21 @@ def test_wifi_module_alias_sets_wifi_filter_flags():
     assert specs["__filter_wifi_builtin"] is True
 
 
+def test_dynamic_wifi_key_understands_english_yes_no_values():
+    yes_specs = normalize_specs({"wifi": "yes"})
+    no_specs = normalize_specs({"wi-fi": "no"})
+
+    assert yes_specs["wifi_ready"] is True
+    assert yes_specs["wifi_builtin"] is True
+    assert yes_specs["wifi_state"] == "builtin"
+    assert yes_specs["__filter_wifi"] is True
+
+    assert no_specs["wifi_ready"] is False
+    assert no_specs["wifi_builtin"] is False
+    assert no_specs["wifi_state"] == "none"
+    assert no_specs["__filter_wifi"] is False
+
+
 def test_wifi_ready_false_does_not_override_wifi_module_true():
     specs = normalize_specs({"wifi_ready": False, "wifi_module": "true"})
 
