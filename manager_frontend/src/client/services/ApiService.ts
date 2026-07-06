@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { AddressSuggestResponse } from '../models/AddressSuggestResponse';
 import type { ArticleResponse } from '../models/ArticleResponse';
+import type { Body_create_repair_diagnostic_lead } from '../models/Body_create_repair_diagnostic_lead';
 import type { CatalogResponse } from '../models/CatalogResponse';
 import type { CatalogRevisionResponse } from '../models/CatalogRevisionResponse';
 import type { FiltersConfigResponse } from '../models/FiltersConfigResponse';
@@ -14,6 +15,7 @@ import type { ProductAvailabilityLeadResponse } from '../models/ProductAvailabil
 import type { ProductResponse } from '../models/ProductResponse';
 import type { ProductSeriesNavigationResponse } from '../models/ProductSeriesNavigationResponse';
 import type { PublicBrandResponse } from '../models/PublicBrandResponse';
+import type { RepairDiagnosticLeadResponse } from '../models/RepairDiagnosticLeadResponse';
 import type { ServiceResponse } from '../models/ServiceResponse';
 import type { SpecRegistryResponse } from '../models/SpecRegistryResponse';
 import type { SpecsKeysResponse } from '../models/SpecsKeysResponse';
@@ -272,6 +274,25 @@ export class ApiService {
             url: '/api/v1/leads/product-availability',
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Repair Diagnostic Lead
+     * @param formData
+     * @returns RepairDiagnosticLeadResponse Successful Response
+     * @throws ApiError
+     */
+    public static createRepairDiagnosticLead(
+        formData: Body_create_repair_diagnostic_lead,
+    ): CancelablePromise<RepairDiagnosticLeadResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/leads/repair-diagnostic',
+            formData: formData,
+            mediaType: 'multipart/form-data',
             errors: {
                 422: `Validation Error`,
             },
