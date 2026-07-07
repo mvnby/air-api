@@ -170,6 +170,13 @@ def test_lg24_infers_series_from_breadcrumb_or_title():
         )
         == "Smart Line"
     )
+    assert (
+        Lg24Parser._infer_series_from_context(
+            "LG Smart Inverter UT18WC/UU18WC",
+            ["Главная", "Коммерческие кондиционеры", "Кассетный блок", "4-поточный кассетный тип Smart Inverter UT18WC/UU18WC"],
+        )
+        == "Smart Inverter"
+    )
 
 
 def test_lg24_infers_component_models_from_combined_model():

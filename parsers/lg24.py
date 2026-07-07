@@ -35,6 +35,7 @@ class Lg24Parser(BaseParser):
         "ARTCOOL Mirror",
         "Ultra Inverter R32",
         "Ultra Inverter",
+        "Smart Inverter",
         "Deluxe Pro",
         "EVO Max",
         "ECO Smart",
