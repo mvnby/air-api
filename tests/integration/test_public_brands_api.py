@@ -1,7 +1,7 @@
 import pytest
 from httpx import AsyncClient
 
-from models import Brand, Product
+from models import Brand, BrandFeature, Product
 
 
 @pytest.mark.asyncio
@@ -22,6 +22,29 @@ async def test_public_brands_include_only_published_brands_with_published_produc
     empty = Brand(title="Empty", slug="empty", is_published=True, sort_order=30)
     db.add_all([tcl, mdv, hidden, empty])
     await db.flush()
+    db.add_all(
+        [
+            BrandFeature(
+                brand_id=tcl.id,
+                title="Fresh Air",
+                slug="fresh-air",
+                text="Фильтрация воздуха в бытовых сериях.",
+                image_url="/media/brands/tcl/fresh-air.webp",
+                icon="air",
+                footnote="Доступно не во всех моделях",
+                aliases=["filter"],
+                is_published=True,
+                sort_order=20,
+            ),
+            BrandFeature(
+                brand_id=tcl.id,
+                title="Draft feature",
+                slug="draft-feature",
+                is_published=False,
+                sort_order=10,
+            ),
+        ]
+    )
 
     db.add_all(
         [
@@ -79,7 +102,23 @@ async def test_public_brands_include_only_published_brands_with_published_produc
 
     detail_response = await async_client.get("/api/v1/content/brands/tcl")
     assert detail_response.status_code == 200, detail_response.text
-    assert detail_response.json()["products_count"] == 1
+    detail_payload = detail_response.json()
+    assert detail_payload["products_count"] == 1
+    assert detail_payload["features"] == [
+        {
+            "id": detail_payload["features"][0]["id"],
+            "title": "Fresh Air",
+            "slug": "fresh-air",
+            "text": "Фильтрация воздуха в бытовых сериях.",
+            "image_url": "/media/brands/tcl/fresh-air.webp",
+            "icon": "air",
+            "footnote": "Доступно не во всех моделях",
+            "source_url": None,
+            "aliases": ["filter"],
+            "is_published": True,
+            "sort_order": 20,
+        }
+    ]
 
     for slug in ("hidden", "empty", "missing"):
         missing_response = await async_client.get(f"/api/v1/content/brands/{slug}")

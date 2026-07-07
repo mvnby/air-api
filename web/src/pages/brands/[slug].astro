@@ -1,12 +1,13 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import CatalogApp from "../../components/CatalogApp.vue";
-import ProductCard from "../../components/ProductCard.astro";
-import {
-    buildBrandSeriesCatalog,
-    formatSeriesProductCount,
-} from "../../utils/brand-series";
+import BrandFeatureStrip from "../../components/brands/BrandFeatureStrip.astro";
+import BrandHero from "../../components/brands/BrandHero.astro";
+import BrandSeriesCatalog from "../../components/brands/BrandSeriesCatalog.astro";
+import BrandSeriesNav from "../../components/brands/BrandSeriesNav.astro";
+import { buildBrandSeriesCatalog } from "../../utils/brand-series";
 import "../../styles/brand-page.css";
+import "../../styles/brand-page-responsive.css";
 import {
     applyRuntimeFreshnessHeaders,
     createRuntimeFreshnessContext,
@@ -30,6 +31,16 @@ interface PublicBrand {
     slug: string;
     logo_url?: string | null;
     description?: string | null;
+    features?: Array<{
+        id?: number | null;
+        title: string;
+        slug?: string | null;
+        text?: string | null;
+        image_url?: string | null;
+        icon?: string | null;
+        footnote?: string | null;
+        sort_order?: number | null;
+    }>;
     products_count: number;
     sort_order: number;
 }
@@ -56,7 +67,19 @@ interface Product {
         short_description?: string | null;
         description?: string | null;
         hero_image?: string | null;
+        gallery_images?: string[] | null;
         features?: string[] | null;
+        brand_features?: Array<{
+            id?: number | null;
+            title?: string | null;
+            slug?: string | null;
+            text?: string | null;
+            image_url?: string | null;
+            icon?: string | null;
+            footnote?: string | null;
+            source_url?: string | null;
+            sort_order?: number | null;
+        }> | null;
         feature_blocks?: Array<{
             title?: string | null;
             text?: string | null;
@@ -64,6 +87,14 @@ interface Product {
             icon?: string | null;
             footnote?: string | null;
         }> | null;
+        content_blocks?: Array<{
+            kind?: string | null;
+            title?: string | null;
+            text?: string | null;
+            image_url?: string | null;
+            layout?: string | null;
+        }> | null;
+        footnotes?: string[] | null;
     } | null;
     badges?: Array<{ text: string; class?: string }>;
     tags?: Array<{
@@ -93,9 +124,8 @@ interface Props {
 const { brand: initialBrand } = Astro.props as Props;
 const runtimeFreshness = await createRuntimeFreshnessContext();
 const runtimeFreshnessOption = runtimeFreshness ? { runtimeFreshness } : undefined;
-const brand = runtimeFreshness
-    ? await getPublicBrandBySlug(Astro.params.slug || "", runtimeFreshnessOption)
-    : initialBrand || (await getPublicBrandBySlug(Astro.params.slug || ""));
+const brandSlug = Astro.params.slug || initialBrand?.slug || "";
+const brand = await getPublicBrandBySlug(brandSlug, runtimeFreshnessOption);
 if (!brand) {
     return createRuntimeNotFoundResponse(Astro.response, runtimeFreshness, {
         canonicalOrigin: Astro.url.origin,
@@ -136,6 +166,50 @@ const {
     seriesGroupsByCatalog,
     productsWithoutSeriesByCatalog,
 } = buildBrandSeriesCatalog(products, popularProducts, brand.title);
+const asText = (value: unknown) => String(value || "").trim();
+const normalizeFeatureKey = (value: string) => value.toLowerCase().replace(/ё/g, "е");
+const brandFeatureMap = new Map<string, NonNullable<PublicBrand["features"]>[number]>();
+for (const feature of brand.features || []) {
+    const title = asText(feature.title);
+    if (!title) continue;
+    brandFeatureMap.set(normalizeFeatureKey(feature.slug || title), { ...feature, title });
+}
+for (const group of seriesGroups) {
+    for (const feature of group.brandFeatures || []) {
+        const title = asText(feature.title);
+        if (!title) continue;
+        const key = normalizeFeatureKey(feature.slug || title);
+        if (!brandFeatureMap.has(key)) {
+            brandFeatureMap.set(key, {
+                title,
+                slug: feature.slug,
+                text: feature.text,
+                image_url: feature.imageUrl,
+                icon: feature.icon,
+                footnote: feature.footnote,
+                sort_order: feature.sortOrder,
+            });
+        }
+    }
+}
+if (brandFeatureMap.size === 0) {
+    for (const group of seriesGroups) {
+        for (const feature of group.distinctFeatures || []) {
+            const title = asText(feature);
+            const key = normalizeFeatureKey(title);
+            if (title && !brandFeatureMap.has(key)) {
+                brandFeatureMap.set(key, { title, icon: "check_circle" });
+            }
+            if (brandFeatureMap.size >= 6) break;
+        }
+        if (brandFeatureMap.size >= 6) break;
+    }
+}
+const brandFeatureHighlights = Array.from(brandFeatureMap.values())
+    .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0) || a.title.localeCompare(b.title, "ru"))
+    .slice(0, 6);
+const heroImage = seriesGroups.find((group) => group.primaryImage)?.primaryImage || "";
+const resolvedHeroImage = heroImage ? resolveImageUrl(heroImage) : "";
 ---
 
 <Layout
@@ -154,20 +228,24 @@ const {
                 <span class="sep">/</span>
                 <span>{brand.title}</span>
             </div>
-            <div class="brand-hero">
-                <div class="brand-hero-copy">
-                    <h1 class="gradient-text">{h1}</h1>
-                    <div class="header-description brand-intro-markdown" set:html={brandIntroHtml} />
-                    <div class="brand-hero-meta">
-                        <span>{brandProductCount}</span>
-                        <span>наличие и монтаж уточняем перед заказом</span>
-                    </div>
-                </div>
-                <div class="brand-logo-panel" aria-label={brandLogoLabel}>
-                    {logoUrl ? <img src={logoUrl} alt={brand.title} /> : <span>{brandInitials}</span>}
-                </div>
-            </div>
+            <BrandHero
+                brandTitle={brand.title}
+                h1={h1}
+                introHtml={brandIntroHtml}
+                productCountLabel={brandProductCount}
+                logoUrl={logoUrl}
+                logoLabel={brandLogoLabel}
+                initials={brandInitials}
+                heroImage={resolvedHeroImage}
+                fallbackFeatures={brandFeatureHighlights}
+            />
         </header>
+
+        <BrandFeatureStrip
+            brandTitle={brand.title}
+            features={brandFeatureHighlights}
+            resolveImageUrl={resolveImageUrl}
+        />
 
         <CatalogApp
             client:idle
@@ -182,132 +260,16 @@ const {
             initialBrands={filtersConfig?.brands || []}
         >
             <div class="catalog-static-content">
-                {
-                    seriesGroups.length > 0 && (
-                        <nav class="brand-series-nav" aria-labelledby="brand-series-nav-title">
-                            <div class="brand-series-nav-head">
-                                <div>
-                                    <p class="section-kicker" id="brand-series-nav-title">Серии {brand.title}</p>
-                                    <p>Сначала бытовые линейки, затем мульти-сплит и полупромышленные модели.</p>
-                                </div>
-                            </div>
-                            <div class="brand-series-nav-list">
-                                {seriesGroupsByCatalog.map((catalogGroup) => (
-                                    <section class="brand-series-nav-group" aria-labelledby={`brand-series-nav-${catalogGroup.key}`}>
-                                        <p class="brand-series-nav-group-title" id={`brand-series-nav-${catalogGroup.key}`}>
-                                            {catalogGroup.navTitle}
-                                        </p>
-                                        <div class="brand-series-nav-chips">
-                                            {catalogGroup.series.map((group) => (
-                                                <a class="brand-series-chip" href={`#${group.anchorId}`}>
-                                                    <span>{group.displayTitle}</span>
-                                                    <small>{group.catalogGroup.shortLabel} · {formatSeriesProductCount(group.products.length)}</small>
-                                                </a>
-                                            ))}
-                                        </div>
-                                    </section>
-                                ))}
-                            </div>
-                        </nav>
-                    )
-                }
+                <BrandSeriesNav brandTitle={brand.title} seriesGroupsByCatalog={seriesGroupsByCatalog} />
 
                 {
                     seriesSourceProducts.length > 0 ? (
-                        <section class="catalog-section brand-series-section" aria-labelledby="brand-products-title">
-                            <div class="catalog-section-head">
-                                <h2 id="brand-products-title">Модели {brand.title} по сериям</h2>
-                            </div>
-                            <div class="brand-series-list">
-                                {seriesGroupsByCatalog.map((catalogGroup) => (
-                                    <section class="brand-catalog-group" aria-labelledby={`brand-catalog-${catalogGroup.key}`}>
-                                        <div class="brand-catalog-group-head">
-                                            <h3 id={`brand-catalog-${catalogGroup.key}`}>{catalogGroup.title}</h3>
-                                        </div>
-                                        <div class="brand-catalog-group-list">
-                                            {catalogGroup.series.map((group) => (
-                                                <section id={group.anchorId} class="brand-series-group" aria-labelledby={`brand-series-${group.key}`}>
-                                                    <div class={`brand-series-head brand-products-group-head ${group.heroImage ? "has-thumb" : ""}`}>
-                                                        {group.heroImage && (
-                                                            <img
-                                                                class="brand-series-thumb"
-                                                                src={resolveImageUrl(group.heroImage)}
-                                                                alt={`Серия ${group.displayTitle}`}
-                                                                loading="lazy"
-                                                            />
-                                                        )}
-                                                        <div class="brand-series-copy">
-                                                            <div class="brand-series-title-row">
-                                                                <div>
-                                                                    <p class="section-kicker">Серия</p>
-                                                                    <h4 id={`brand-series-${group.key}`}>{group.displayTitle}</h4>
-                                                                </div>
-                                                                <span>{formatSeriesProductCount(group.products.length)}</span>
-                                                            </div>
-                                                            {group.tagline && (
-                                                                <p class="brand-series-tagline">{group.tagline}</p>
-                                                            )}
-                                                            {group.shortDescription || group.description ? (
-                                                                <p>{group.shortDescription || group.description}</p>
-                                                            ) : (
-                                                                <p>{formatSeriesProductCount(group.products.length)} в каталоге {brand.title}.</p>
-                                                            )}
-                                                            {group.distinctFeatures.length > 0 && (
-                                                                <ul class="brand-series-features" aria-label={`Особенности серии ${group.displayTitle}`}>
-                                                                    {group.distinctFeatures.map((feature) => (
-                                                                        <li>{feature}</li>
-                                                                    ))}
-                                                                </ul>
-                                                            )}
-                                                            {group.featureBlocks.length > 0 && (
-                                                                <div class="brand-series-feature-blocks" aria-label={`Преимущества серии ${group.displayTitle}`}>
-                                                                    {group.featureBlocks.slice(0, 3).map((block) => (
-                                                                        <article class="brand-series-feature-block">
-                                                                            <strong>{block.title}</strong>
-                                                                            {block.text && <span>{block.text}</span>}
-                                                                        </article>
-                                                                    ))}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                    <div class="catalog-grid series-products-grid">
-                                                        {group.products.map((product) => (
-                                                            <ProductCard
-                                                                product={product}
-                                                                variant="default"
-                                                                showInstallation={true}
-                                                                refreshProductOnMount={false}
-                                                            />
-                                                        ))}
-                                                    </div>
-                                                </section>
-                                            ))}
-                                        </div>
-                                    </section>
-                                ))}
-                                {productsWithoutSeriesByCatalog.map((catalogGroup) => (
-                                    <section class="brand-catalog-group" aria-labelledby={`brand-catalog-unsorted-${catalogGroup.key}`}>
-                                        <div class="brand-catalog-group-head">
-                                            <h3 id={`brand-catalog-unsorted-${catalogGroup.key}`}>{catalogGroup.emptyTitle}</h3>
-                                            <span>{formatSeriesProductCount(catalogGroup.products.length)}</span>
-                                        </div>
-                                        <div class="brand-series-group">
-                                            <div class="catalog-grid series-products-grid">
-                                                {catalogGroup.products.map((product) => (
-                                                    <ProductCard
-                                                        product={product}
-                                                        variant="default"
-                                                        showInstallation={true}
-                                                        refreshProductOnMount={false}
-                                                    />
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </section>
-                                ))}
-                            </div>
-                        </section>
+                        <BrandSeriesCatalog
+                            brandTitle={brand.title}
+                            seriesGroupsByCatalog={seriesGroupsByCatalog}
+                            productsWithoutSeriesByCatalog={productsWithoutSeriesByCatalog}
+                            resolveImageUrl={resolveImageUrl}
+                        />
                     ) : (
                         <div class="empty-status card">
                             <span class="material-icons-round large">search_off</span>

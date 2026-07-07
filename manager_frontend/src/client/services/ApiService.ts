@@ -14,6 +14,7 @@ import type { ProductAvailabilityLeadPayload } from '../models/ProductAvailabili
 import type { ProductAvailabilityLeadResponse } from '../models/ProductAvailabilityLeadResponse';
 import type { ProductResponse } from '../models/ProductResponse';
 import type { ProductSeriesNavigationResponse } from '../models/ProductSeriesNavigationResponse';
+import type { PublicBrandDetailResponse } from '../models/PublicBrandDetailResponse';
 import type { PublicBrandResponse } from '../models/PublicBrandResponse';
 import type { RepairDiagnosticLeadResponse } from '../models/RepairDiagnosticLeadResponse';
 import type { ServiceResponse } from '../models/ServiceResponse';
@@ -197,12 +198,12 @@ export class ApiService {
      * Get Public Brand
      * Get a published brand by slug if it has published products.
      * @param slug
-     * @returns PublicBrandResponse Successful Response
+     * @returns PublicBrandDetailResponse Successful Response
      * @throws ApiError
      */
     public static getPublicBrand(
         slug: string,
-    ): CancelablePromise<PublicBrandResponse> {
+    ): CancelablePromise<PublicBrandDetailResponse> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/content/brands/{slug}',

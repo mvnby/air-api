@@ -10,7 +10,19 @@ export interface BrandSeriesProduct {
         short_description?: string | null;
         description?: string | null;
         hero_image?: string | null;
+        gallery_images?: string[] | null;
         features?: string[] | null;
+        brand_features?: Array<{
+            id?: number | null;
+            title?: string | null;
+            slug?: string | null;
+            text?: string | null;
+            image_url?: string | null;
+            icon?: string | null;
+            footnote?: string | null;
+            source_url?: string | null;
+            sort_order?: number | null;
+        }> | null;
         feature_blocks?: Array<{
             title?: string | null;
             text?: string | null;
@@ -18,6 +30,14 @@ export interface BrandSeriesProduct {
             icon?: string | null;
             footnote?: string | null;
         }> | null;
+        content_blocks?: Array<{
+            kind?: string | null;
+            title?: string | null;
+            text?: string | null;
+            image_url?: string | null;
+            layout?: string | null;
+        }> | null;
+        footnotes?: string[] | null;
     } | null;
     tags?: Array<{
         title?: string;
@@ -37,6 +57,25 @@ export interface BrandSeriesFeatureBlock {
     imageUrl: string;
     icon: string;
     footnote: string;
+}
+
+export interface BrandSeriesBrandFeature extends BrandSeriesFeatureBlock {
+    id: number | null;
+    slug: string;
+    sourceUrl: string;
+    sortOrder: number;
+}
+
+export interface BrandSeriesContentBlock {
+    kind: string;
+    title: string;
+    text: string;
+    imageUrl: string;
+    layout: string;
+}
+
+export interface BrandSeriesVisualBlock extends BrandSeriesFeatureBlock {
+    source: "feature_block" | "brand_feature" | "content_block";
 }
 
 const CATALOG_GROUP_DEFINITIONS = {
@@ -95,8 +134,14 @@ export interface BrandSeriesGroup<T extends BrandSeriesProduct> {
     shortDescription: string;
     description: string;
     heroImage: string;
+    galleryImages: string[];
     features: string[];
+    brandFeatures: BrandSeriesBrandFeature[];
     featureBlocks: BrandSeriesFeatureBlock[];
+    contentBlocks: BrandSeriesContentBlock[];
+    footnotes: string[];
+    primaryImage: string;
+    visualFeatureBlocks: BrandSeriesVisualBlock[];
     catalogGroupKey: CatalogGroupKey;
     products: T[];
     anchorId: string;
@@ -163,6 +208,14 @@ const normalizeSeriesFeatures = (value: unknown) =>
         ? value.map((item) => asText(item)).filter(Boolean)
         : [];
 
+const normalizeSeriesGalleryImages = (series: BrandSeriesProduct["series"]) => {
+    const images = [
+        asText(series?.hero_image),
+        ...(Array.isArray(series?.gallery_images) ? series.gallery_images.map((item) => asText(item)) : []),
+    ].filter(Boolean);
+    return [...new Set(images)];
+};
+
 const normalizeSeriesFeatureBlocks = (value: unknown): BrandSeriesFeatureBlock[] =>
     Array.isArray(value)
         ? value
@@ -181,6 +234,96 @@ const normalizeSeriesFeatureBlocks = (value: unknown): BrandSeriesFeatureBlock[]
             })
             .filter((item): item is BrandSeriesFeatureBlock => Boolean(item))
         : [];
+
+const normalizeSeriesBrandFeatures = (value: unknown): BrandSeriesBrandFeature[] =>
+    Array.isArray(value)
+        ? value
+            .map((item) => {
+                if (!item || typeof item !== "object") return null;
+                const feature = item as Record<string, unknown>;
+                const title = asText(feature.title);
+                if (!title) return null;
+                const sortOrder = Number(feature.sort_order);
+                return {
+                    id: typeof feature.id === "number" ? feature.id : null,
+                    title,
+                    slug: asText(feature.slug),
+                    text: asText(feature.text),
+                    imageUrl: asText(feature.image_url),
+                    icon: asText(feature.icon),
+                    footnote: asText(feature.footnote),
+                    sourceUrl: asText(feature.source_url),
+                    sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0,
+                };
+            })
+            .filter((item): item is BrandSeriesBrandFeature => Boolean(item))
+            .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title, "ru"))
+        : [];
+
+const normalizeSeriesContentBlocks = (value: unknown): BrandSeriesContentBlock[] =>
+    Array.isArray(value)
+        ? value
+            .map((item) => {
+                if (!item || typeof item !== "object") return null;
+                const block = item as Record<string, unknown>;
+                const title = asText(block.title);
+                const text = asText(block.text);
+                const imageUrl = asText(block.image_url);
+                if (!title && !text && !imageUrl) return null;
+                return {
+                    kind: asText(block.kind) || "text",
+                    title,
+                    text,
+                    imageUrl,
+                    layout: asText(block.layout) || "text_left",
+                };
+            })
+            .filter((item): item is BrandSeriesContentBlock => Boolean(item))
+        : [];
+
+const getPrimarySeriesImage = (group: {
+    galleryImages: string[];
+    featureBlocks: BrandSeriesFeatureBlock[];
+    brandFeatures: BrandSeriesBrandFeature[];
+    contentBlocks: BrandSeriesContentBlock[];
+}) =>
+    group.galleryImages[0]
+    || group.featureBlocks.find((block) => block.imageUrl)?.imageUrl
+    || group.brandFeatures.find((block) => block.imageUrl)?.imageUrl
+    || group.contentBlocks.find((block) => block.imageUrl)?.imageUrl
+    || "";
+
+const buildVisualFeatureBlocks = (group: {
+    featureBlocks: BrandSeriesFeatureBlock[];
+    brandFeatures: BrandSeriesBrandFeature[];
+    contentBlocks: BrandSeriesContentBlock[];
+}): BrandSeriesVisualBlock[] => {
+    const seen = new Set<string>();
+    const blocks: BrandSeriesVisualBlock[] = [];
+    const addBlock = (block: BrandSeriesFeatureBlock, source: BrandSeriesVisualBlock["source"]) => {
+        const key = normalizeText(`${block.title} ${block.text}`);
+        if (!block.title || seen.has(key)) return;
+        seen.add(key);
+        blocks.push({ ...block, source });
+    };
+
+    group.featureBlocks.forEach((block) => addBlock(block, "feature_block"));
+    group.brandFeatures.forEach((block) => addBlock(block, "brand_feature"));
+    group.contentBlocks.forEach((block) =>
+        addBlock(
+            {
+                title: block.title || "Особенность серии",
+                text: block.text,
+                imageUrl: block.imageUrl,
+                icon: "",
+                footnote: "",
+            },
+            "content_block",
+        ),
+    );
+
+    return blocks;
+};
 
 const getTagSlugs = (product: BrandSeriesProduct) =>
     (product.tags || []).map((tag) => normalizeText(tag.slug || tag.title));
@@ -367,6 +510,10 @@ export const buildBrandSeriesCatalog = <T extends BrandSeriesProduct>(
         }
 
         if (!seriesGroupsMap.has(key)) {
+            const galleryImages = normalizeSeriesGalleryImages(product.series);
+            const featureBlocks = normalizeSeriesFeatureBlocks(product.series?.feature_blocks);
+            const brandFeatures = normalizeSeriesBrandFeatures(product.series?.brand_features);
+            const contentBlocks = normalizeSeriesContentBlocks(product.series?.content_blocks);
             seriesGroupsMap.set(key, {
                 key,
                 title,
@@ -374,8 +521,14 @@ export const buildBrandSeriesCatalog = <T extends BrandSeriesProduct>(
                 shortDescription: asText(product.series?.short_description),
                 description: asText(product.series?.description),
                 heroImage: asText(product.series?.hero_image),
+                galleryImages,
                 features: normalizeSeriesFeatures(product.series?.features),
-                featureBlocks: normalizeSeriesFeatureBlocks(product.series?.feature_blocks),
+                brandFeatures,
+                featureBlocks,
+                contentBlocks,
+                footnotes: normalizeSeriesFeatures(product.series?.footnotes),
+                primaryImage: "",
+                visualFeatureBlocks: [],
                 catalogGroupKey: getProductCatalogGroupKey(product),
                 products: [],
             });
@@ -387,11 +540,23 @@ export const buildBrandSeriesCatalog = <T extends BrandSeriesProduct>(
             if (!group.shortDescription) group.shortDescription = asText(product.series?.short_description);
             if (!group.description) group.description = asText(product.series?.description);
             if (!group.heroImage) group.heroImage = asText(product.series?.hero_image);
+            if (group.galleryImages.length === 0) {
+                group.galleryImages = normalizeSeriesGalleryImages(product.series);
+            }
             if (group.features.length === 0) {
                 group.features = normalizeSeriesFeatures(product.series?.features);
             }
+            if (group.brandFeatures.length === 0) {
+                group.brandFeatures = normalizeSeriesBrandFeatures(product.series?.brand_features);
+            }
             if (group.featureBlocks.length === 0) {
                 group.featureBlocks = normalizeSeriesFeatureBlocks(product.series?.feature_blocks);
+            }
+            if (group.contentBlocks.length === 0) {
+                group.contentBlocks = normalizeSeriesContentBlocks(product.series?.content_blocks);
+            }
+            if (group.footnotes.length === 0) {
+                group.footnotes = normalizeSeriesFeatures(product.series?.footnotes);
             }
             group.products.push(product);
         }
@@ -404,14 +569,21 @@ export const buildBrandSeriesCatalog = <T extends BrandSeriesProduct>(
         return counts;
     }, new Map<string, number>());
     const getDistinctFeatures = getDistinctFeaturesFactory(rawSeriesGroups);
-    const seriesGroups = rawSeriesGroups.map((group, index) => ({
-        ...group,
-        anchorId: `series-${slugifySeriesFallback(group.key || group.title) || index + 1}`,
-        catalogGroup: catalogGroups[group.catalogGroupKey],
-        displayTitle: getDisplayTitle(group.title, group.products, seriesTitleCounts.get(normalizeText(group.title)) || 0),
-        distinctFeatures: getDistinctFeatures(group.features),
-        previewProducts: getSeriesPreviewProducts(group.products),
-    }));
+    const seriesGroups = rawSeriesGroups.map((group, index) => {
+        const normalizedGroup = {
+            ...group,
+            primaryImage: getPrimarySeriesImage(group),
+            visualFeatureBlocks: buildVisualFeatureBlocks(group),
+        };
+        return {
+            ...normalizedGroup,
+            anchorId: `series-${slugifySeriesFallback(group.key || group.title) || index + 1}`,
+            catalogGroup: catalogGroups[group.catalogGroupKey],
+            displayTitle: getDisplayTitle(group.title, group.products, seriesTitleCounts.get(normalizeText(group.title)) || 0),
+            distinctFeatures: getDistinctFeatures(group.features),
+            previewProducts: getSeriesPreviewProducts(group.products),
+        };
+    });
     const seriesGroupsByCatalog = catalogGroupList
         .map((catalogGroup) => ({
             ...catalogGroup,

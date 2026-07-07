@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from core.database import get_session
-from schemas import ArticleResponse, PublicBrandResponse, ServiceResponse
+from schemas import ArticleResponse, PublicBrandDetailResponse, PublicBrandResponse, ServiceResponse
 from services.article_service import ArticleService
 from services.content_api_service import ContentApiService
 from services.installation_service import InstallationService
@@ -42,7 +42,7 @@ async def get_public_brands(session: AsyncSession = Depends(get_session)):
 
 @router.get(
     "/v1/content/brands/{slug}",
-    response_model=PublicBrandResponse,
+    response_model=PublicBrandDetailResponse,
     operation_id="get_public_brand",
 )
 async def get_public_brand(slug: str, session: AsyncSession = Depends(get_session)):

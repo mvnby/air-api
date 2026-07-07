@@ -438,6 +438,10 @@ class PublicBrandResponse(BaseModel):
     products_count: int
     sort_order: int
 
+
+class PublicBrandDetailResponse(PublicBrandResponse):
+    features: List[ProductSeriesBrandFeatureResponse] = Field(default_factory=list)
+
 # --- ORDERS ---
 
 class CalendarEventType(str, Enum):
