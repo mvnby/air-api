@@ -11,6 +11,7 @@ from crud.supplier import SupplierDAO, SupplierOfferDAO, SupplierSourceDAO, Supp
 from models.supplier import SupplierOffer, SupplierPriceSource
 from services.supplier_availability import parse_qty_with_text_fallback
 from services.google_service import get_google_service
+from services.hisense_price_service import HISENSE_PRICE_SOURCE_TYPE, sync_hisense_price_source
 from services.supplier_match_service import supplier_offer_match_payload
 from services.supplier_source_url import extract_first_source_url, normalize_source_url
 
@@ -110,6 +111,9 @@ class SupplierSyncService:
         session: AsyncSession,
         source: SupplierPriceSource,
     ) -> dict:
+        if source.source_type == HISENSE_PRICE_SOURCE_TYPE:
+            return await sync_hisense_price_source(session, source)
+
         run = await SupplierSyncRunDAO.create_run(session, source.id)
         rows_total = 0
         rows_upserted = 0
@@ -198,7 +202,7 @@ class SupplierSyncService:
                 await SupplierOfferDAO.upsert_offer(session, offer_payload)
                 rows_upserted += 1
 
-            active_sources = await SupplierSourceDAO.list_active_google_sources(session)
+            active_sources = await SupplierSourceDAO.list_active_sync_sources(session)
             active_for_supplier = [s for s in active_sources if s.supplier_id == source.supplier_id]
             if len(active_for_supplier) <= 1:
                 rows_deactivated = await SupplierOfferDAO.deactivate_missing_offers(
@@ -253,7 +257,7 @@ class SupplierSyncService:
 
     @staticmethod
     async def sync_all_active_sources(session: AsyncSession) -> list[dict]:
-        sources = await SupplierSourceDAO.list_active_google_sources(session)
+        sources = await SupplierSourceDAO.list_active_sync_sources(session)
         results: list[dict] = []
         for source in sources:
             result = await SupplierSyncService.sync_source(session, source)

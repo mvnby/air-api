@@ -113,17 +113,17 @@ class SupplierSourceDAO:
         return source
 
     @staticmethod
-    async def list_active_google_sources(session: AsyncSession) -> list[SupplierPriceSource]:
+    async def list_active_sync_sources(session: AsyncSession) -> list[SupplierPriceSource]:
         result = await session.execute(
             select(SupplierPriceSource).where(
                 SupplierPriceSource.is_active.is_(True),
-                SupplierPriceSource.source_type == "google_sheet",
+                SupplierPriceSource.source_type.in_(("google_sheet", "hisense_price_xlsx")),
             )
         )
         return list(result.scalars().all())
 
     @staticmethod
-    async def list_active_google_sources_for_supplier(
+    async def list_active_sync_sources_for_supplier(
         session: AsyncSession,
         supplier_id: int,
     ) -> list[SupplierPriceSource]:
@@ -131,10 +131,21 @@ class SupplierSourceDAO:
             select(SupplierPriceSource).where(
                 SupplierPriceSource.supplier_id == supplier_id,
                 SupplierPriceSource.is_active.is_(True),
-                SupplierPriceSource.source_type == "google_sheet",
+                SupplierPriceSource.source_type.in_(("google_sheet", "hisense_price_xlsx")),
             )
         )
         return list(result.scalars().all())
+
+    @staticmethod
+    async def list_active_google_sources(session: AsyncSession) -> list[SupplierPriceSource]:
+        return await SupplierSourceDAO.list_active_sync_sources(session)
+
+    @staticmethod
+    async def list_active_google_sources_for_supplier(
+        session: AsyncSession,
+        supplier_id: int,
+    ) -> list[SupplierPriceSource]:
+        return await SupplierSourceDAO.list_active_sync_sources_for_supplier(session, supplier_id)
 
     @staticmethod
     async def delete_source(session: AsyncSession, source: SupplierPriceSource) -> None:

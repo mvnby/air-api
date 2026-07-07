@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from parsers.base import BaseParser
 from parsers.aircond import AircondParser
 from parsers.haierproff import HaierProffParser
+from parsers.hisense_catalog import HisenseCatalogParser
 from parsers.hobot import HobotParser
 from parsers.lg24 import Lg24Parser
 from parsers.mdv_catalog import MdvCatalogParser
@@ -164,6 +165,7 @@ class ImporterService:
         self.parsers: List[BaseParser] = [
             AircondParser(),
             HaierProffParser(),
+            HisenseCatalogParser(),
             Lg24Parser(),
             HobotParser(),
             TvoyKlimatParser(),
