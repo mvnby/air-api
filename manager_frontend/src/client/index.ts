@@ -325,6 +325,7 @@ export type { ProductSeriesNavigationResponse } from './models/ProductSeriesNavi
 export type { ProductSeriesResponse } from './models/ProductSeriesResponse';
 export type { ProductSiblingResponse } from './models/ProductSiblingResponse';
 export type { ProductUpdate } from './models/ProductUpdate';
+export type { PublicBrandDetailResponse } from './models/PublicBrandDetailResponse';
 export type { PublicBrandResponse } from './models/PublicBrandResponse';
 export type { RepairDiagnosticLeadResponse } from './models/RepairDiagnosticLeadResponse';
 export type { ServiceResponse } from './models/ServiceResponse';

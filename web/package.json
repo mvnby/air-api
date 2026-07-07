@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "astro dev",
-    "test:brands": "node tests/brand-markdown.test.mjs",
+    "test:brands": "node tests/brand-markdown.test.mjs && node tests/brand-series.test.mjs",
     "check-api": "node scripts/check-api.js",
     "audit:theme": "bash ../scripts/audit_theme_hardcodes.sh",
     "test:seo": "node scripts/test-seo-helpers.mjs",

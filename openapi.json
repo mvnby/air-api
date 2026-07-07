@@ -485,7 +485,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PublicBrandResponse"
+                  "$ref": "#/components/schemas/PublicBrandDetailResponse"
                 }
               }
             }
@@ -36283,6 +36283,68 @@
         },
         "type": "object",
         "title": "ProductUpdate"
+      },
+      "PublicBrandDetailResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "products_count": {
+            "type": "integer",
+            "title": "Products Count"
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/ProductSeriesBrandFeatureResponse"
+            },
+            "type": "array",
+            "title": "Features"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "slug",
+          "products_count",
+          "sort_order"
+        ],
+        "title": "PublicBrandDetailResponse"
       },
       "PublicBrandResponse": {
         "properties": {
