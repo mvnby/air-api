@@ -1,6 +1,6 @@
 <script setup>
-import { ref, onMounted } from 'vue';
-import { submitContactForm } from '../utils/api';
+import { ref, onBeforeUnmount, onMounted, watch } from 'vue';
+import { getAddressSuggestions, submitContactForm } from '../utils/api';
 import { formatPhoneForDisplay, validateRequiredBelarusPhone } from '../utils/validation';
 
 const props = defineProps({
@@ -19,18 +19,65 @@ const props = defineProps({
   subject: {
     type: String,
     default: '' // e.g. 'Заказ монтажа', 'Сервис'
+  },
+  showAddress: {
+    type: Boolean,
+    default: false
+  },
+  addressLabel: {
+    type: String,
+    default: 'Адрес или район'
+  },
+  addressPlaceholder: {
+    type: String,
+    default: 'Начните вводить адрес'
+  },
+  showPreferredTime: {
+    type: Boolean,
+    default: false
+  },
+  preferredTimeLabel: {
+    type: String,
+    default: 'Когда удобнее принять мастера'
+  },
+  preferredTimeHint: {
+    type: String,
+    default: 'Точное время согласуем после заявки.'
+  },
+  commentLabel: {
+    type: String,
+    default: 'Комментарий (необязательно)'
+  },
+  commentPlaceholder: {
+    type: String,
+    default: 'Меня интересует...'
   }
 });
 
 const form = ref({
   name: '',
   phone: '',
+  address: '',
+  preferredTime: '',
   message: ''
 });
 
 const phoneInput = ref(null);
 const isSubmitting = ref(false);
 const isSuccess = ref(false);
+const addressSuggestions = ref([]);
+const isAddressSuggestLoading = ref(false);
+const showAddressSuggestions = ref(false);
+const skipNextAddressSuggestLookup = ref(false);
+let addressSuggestTimer = null;
+
+const preferredTimeOptions = [
+  'Первая половина дня',
+  'Вторая половина дня',
+  'После 17:00',
+  'Выходной день',
+  'Не важно'
+];
 
 onMounted(() => {
     if (!phoneInput.value) return;
@@ -42,6 +89,89 @@ onMounted(() => {
     };
 });
 
+watch(
+    () => form.value.address,
+    (value) => {
+        if (!props.showAddress) return;
+        if (addressSuggestTimer) {
+            clearTimeout(addressSuggestTimer);
+            addressSuggestTimer = null;
+        }
+
+        const query = String(value || '').trim();
+        if (skipNextAddressSuggestLookup.value) {
+            skipNextAddressSuggestLookup.value = false;
+            return;
+        }
+
+        if (query.length < 2) {
+            addressSuggestions.value = [];
+            showAddressSuggestions.value = false;
+            isAddressSuggestLoading.value = false;
+            return;
+        }
+
+        addressSuggestTimer = setTimeout(async () => {
+            isAddressSuggestLoading.value = true;
+            const lookupValue = query;
+
+            try {
+                const response = await getAddressSuggestions(lookupValue);
+                if (String(form.value.address || '').trim() !== lookupValue) return;
+
+                addressSuggestions.value = Array.isArray(response?.items) ? response.items : [];
+                showAddressSuggestions.value = addressSuggestions.value.length > 0;
+            } catch (e) {
+                console.warn('Failed to fetch address suggestions', e);
+                if (String(form.value.address || '').trim() === lookupValue) {
+                    addressSuggestions.value = [];
+                    showAddressSuggestions.value = false;
+                }
+            } finally {
+                if (String(form.value.address || '').trim() === lookupValue) {
+                    isAddressSuggestLoading.value = false;
+                }
+            }
+        }, 300);
+    }
+);
+
+onBeforeUnmount(() => {
+    if (addressSuggestTimer) clearTimeout(addressSuggestTimer);
+});
+
+const onAddressFocus = () => {
+    if (addressSuggestions.value.length > 0) {
+        showAddressSuggestions.value = true;
+    }
+};
+
+const onAddressBlur = () => {
+    setTimeout(() => {
+        showAddressSuggestions.value = false;
+    }, 150);
+};
+
+const applyAddressSuggestion = (suggestion) => {
+    skipNextAddressSuggestLookup.value = true;
+    form.value.address = suggestion.value;
+    addressSuggestions.value = [];
+    showAddressSuggestions.value = false;
+};
+
+const buildMessage = () => {
+  const lines = [];
+  const message = String(form.value.message || '').trim();
+
+  if (props.subject) lines.push(`[${props.subject}]`);
+  if (props.showPreferredTime && form.value.preferredTime) {
+      lines.push(`Удобное время: ${form.value.preferredTime}. Точное время согласовать отдельно.`);
+  }
+  if (message) lines.push(message);
+
+  return lines.join('\n');
+};
+
 const submitForm = async () => {
   form.value.phone = formatPhoneForDisplay(form.value.phone);
   const phoneError = validateRequiredBelarusPhone(form.value.phone, true);
@@ -52,12 +182,11 @@ const submitForm = async () => {
 
   isSubmitting.value = true;
   
-  // Combine subject with message if present
-  const payload = { ...form.value };
-  if (props.subject) {
-      const prefix = `[${props.subject}] `;
-      payload.message = prefix + (payload.message || '');
-  }
+  const payload = {
+      ...form.value,
+      address: props.showAddress ? String(form.value.address || '').trim() : '',
+      message: buildMessage()
+  };
   
   const success = await submitContactForm(payload);
   
@@ -68,7 +197,9 @@ const submitForm = async () => {
     // Reset after 5 seconds
     setTimeout(() => {
         isSuccess.value = false;
-        form.value = { name: '', phone: '', message: '' };
+        form.value = { name: '', phone: '', address: '', preferredTime: '', message: '' };
+        addressSuggestions.value = [];
+        showAddressSuggestions.value = false;
     }, 5000);
   } else {
     alert('Ошибка отправки. Попробуйте позже.');
@@ -113,13 +244,62 @@ const submitForm = async () => {
         >
       </div>
 
+      <div v-if="showAddress" class="form-group">
+        <label for="contact-address">{{ addressLabel }}</label>
+        <div class="address-suggest">
+          <div class="input-with-loader">
+            <input
+              type="text"
+              id="contact-address"
+              v-model="form.address"
+              @focus="onAddressFocus"
+              @blur="onAddressBlur"
+              autocomplete="street-address"
+              :placeholder="addressPlaceholder"
+              required
+            >
+            <span v-if="isAddressSuggestLoading" class="loader-icon material-icons-round">sync</span>
+          </div>
+          <div v-if="showAddressSuggestions" class="suggest-dropdown">
+            <button
+              v-for="suggestion in addressSuggestions"
+              :key="suggestion.value"
+              type="button"
+              class="suggest-option"
+              @mousedown.prevent="applyAddressSuggestion(suggestion)"
+            >
+              <span class="suggest-title">{{ suggestion.title }}</span>
+              <span v-if="suggestion.subtitle" class="suggest-subtitle">{{ suggestion.subtitle }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="showPreferredTime" class="form-group">
+        <label>{{ preferredTimeLabel }}</label>
+        <div class="time-options" role="radiogroup" :aria-label="preferredTimeLabel">
+          <button
+            v-for="option in preferredTimeOptions"
+            :key="option"
+            type="button"
+            class="time-option"
+            :class="{ active: form.preferredTime === option }"
+            :aria-pressed="form.preferredTime === option"
+            @click="form.preferredTime = option"
+          >
+            {{ option }}
+          </button>
+        </div>
+        <p class="field-hint">{{ preferredTimeHint }}</p>
+      </div>
+
       <div class="form-group">
-        <label for="message">Комментарий (необязательно)</label>
+        <label for="message">{{ commentLabel }}</label>
         <textarea 
           id="message" 
           v-model="form.message" 
           rows="3" 
-          placeholder="Меня интересует..."
+          :placeholder="commentPlaceholder"
         ></textarea>
       </div>
 
@@ -205,6 +385,110 @@ input:focus, textarea:focus {
   box-shadow: 0 0 0 3px rgba(0, 127, 128, 0.1);
 }
 
+.input-with-loader {
+  position: relative;
+}
+
+.input-with-loader input {
+  padding-right: 2.75rem;
+}
+
+.address-suggest {
+  position: relative;
+}
+
+.suggest-dropdown {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: var(--panel-glass-bg);
+  border: 1px solid var(--panel-glass-border);
+  border-radius: 0.875rem;
+  box-shadow: var(--panel-glass-shadow);
+  overflow: hidden;
+  backdrop-filter: blur(18px);
+}
+
+.suggest-option {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0.8rem 1rem;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.suggest-option + .suggest-option {
+  border-top: 1px solid var(--panel-chip-border);
+}
+
+.suggest-option:hover {
+  background: var(--panel-chip-bg);
+}
+
+.suggest-title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.suggest-subtitle {
+  color: var(--text-muted);
+  font-size: 0.86rem;
+}
+
+.loader-icon {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  color: var(--primary);
+  transform: translateY(-50%);
+  animation: spin 1s linear infinite;
+  font-size: 1.2rem;
+}
+
+.time-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.time-option {
+  border: 1px solid var(--panel-chip-border);
+  background: var(--panel-chip-bg);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.55rem 0.75rem;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.time-option:hover {
+  border-color: var(--panel-chip-hover-border);
+}
+
+.time-option.active {
+  background: var(--panel-active-gradient);
+  border-color: transparent;
+  color: var(--panel-active-text);
+}
+
+.field-hint {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
 .btn {
   margin-top: 0.5rem;
   justify-content: center;
@@ -266,5 +550,9 @@ input:focus, textarea:focus {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin {
+  to { transform: translateY(-50%) rotate(360deg); }
 }
 </style>

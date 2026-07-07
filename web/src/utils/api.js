@@ -495,7 +495,8 @@ export async function submitContactForm(formData) {
         customer: {
             name: formData.name,
             phone: formData.phone,
-            email: formData.email || null
+            email: formData.email || null,
+            address: formData.address || null
         },
         items: [],
         comment: formData.message || formData.comment || null
@@ -619,7 +620,13 @@ export async function getCompanyByUnp(unp) {
 export async function getAddressSuggestions(query) {
     const normalized = String(query || '').trim();
     if (normalized.length < 2) return { items: [] };
-    return await fetchJson(`${API_V1}/address-suggest?q=${encodeURIComponent(normalized)}`) || { items: [] };
+    try {
+        const response = await fetch(`${API_V1}/address-suggest?q=${encodeURIComponent(normalized)}`);
+        if (!response.ok) return { items: [] };
+        return await response.json();
+    } catch {
+        return { items: [] };
+    }
 }
 
 export async function getBankBySearch(search) {
