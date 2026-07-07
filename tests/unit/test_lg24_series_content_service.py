@@ -16,6 +16,7 @@ from services.lg24_series_content_service import (
     extract_short_features,
     resolve_or_import_series_media,
     remap_feature_block_image_urls,
+    should_update_media_value,
     text_matches_series,
 )
 from services.media_library_service import StoredLibraryImage
@@ -170,6 +171,27 @@ def test_feature_block_media_url_collection_and_remap():
     assert remapped[1]["image_url"] == "/media/library/original/a.webp"
     assert remapped[2]["image_url"] == "/media/library/original/c.webp"
     assert remapped[3]["image_url"] is None
+
+
+def test_import_media_updates_existing_external_media_values_without_overwrite():
+    assert should_update_media_value(
+        ["https://lg24.by/a.jpg"],
+        ["/media/library/original/a.webp"],
+        overwrite=False,
+        import_media=True,
+    )
+    assert not should_update_media_value(
+        ["/media/library/original/a.webp"],
+        ["/media/library/original/a.webp"],
+        overwrite=False,
+        import_media=True,
+    )
+    assert not should_update_media_value(
+        ["https://lg24.by/a.jpg"],
+        ["/media/library/original/a.webp"],
+        overwrite=False,
+        import_media=False,
+    )
 
 
 @pytest.mark.asyncio

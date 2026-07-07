@@ -414,6 +414,12 @@ def should_update_value(current: Any, *, overwrite: bool) -> bool:
     return False
 
 
+def should_update_media_value(current: Any, next_value: Any, *, overwrite: bool, import_media: bool) -> bool:
+    if should_update_value(current, overwrite=overwrite):
+        return True
+    return bool(import_media and next_value and current != next_value)
+
+
 async def seed_lg24_series_content(
     session: AsyncSession,
     *,
@@ -523,10 +529,20 @@ async def seed_lg24_series_content(
                 if should_update_value(series.features, overwrite=overwrite):
                     series.features = list(features)
                     changed = True
-                if feature_blocks and should_update_value(series.feature_blocks, overwrite=overwrite):
+                if feature_blocks and should_update_media_value(
+                    series.feature_blocks,
+                    feature_blocks,
+                    overwrite=overwrite,
+                    import_media=import_media,
+                ):
                     series.feature_blocks = feature_blocks
                     changed = True
-                if gallery_images and should_update_value(series.gallery_images, overwrite=overwrite):
+                if gallery_images and should_update_media_value(
+                    series.gallery_images,
+                    gallery_images,
+                    overwrite=overwrite,
+                    import_media=import_media,
+                ):
                     series.gallery_images = gallery_images
                     changed = True
 
