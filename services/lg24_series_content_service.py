@@ -224,16 +224,9 @@ async def resolve_or_import_series_media(
     if not normalized_url:
         return None
 
-    existing = (
-        await session.execute(
-            select(MediaAsset)
-            .where(MediaAsset.original_url == normalized_url)
-            .order_by(MediaAsset.id.asc())
-            .limit(1)
-        )
-    ).scalar_one_or_none()
-    if existing and existing.url:
-        return ResolvedSeriesMedia(url=existing.url, created=False)
+    existing = await find_imported_series_media(session, source_url=normalized_url)
+    if existing:
+        return existing
 
     content, filename = await MediaLibraryService._download_remote_image(normalized_url)
     stored = await MediaLibraryService._store_image(content, variant_type="original")
@@ -258,6 +251,28 @@ async def resolve_or_import_series_media(
     session.add(asset)
     await session.flush()
     return ResolvedSeriesMedia(url=stored.url, created=True)
+
+
+async def find_imported_series_media(
+    session: AsyncSession,
+    *,
+    source_url: str,
+) -> ResolvedSeriesMedia | None:
+    normalized_url = normalize_remote_media_url(source_url)
+    if not normalized_url:
+        return None
+
+    existing = (
+        await session.execute(
+            select(MediaAsset)
+            .where(MediaAsset.original_url == normalized_url)
+            .order_by(MediaAsset.id.asc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if existing and existing.url:
+        return ResolvedSeriesMedia(url=existing.url, created=False)
+    return None
 
 
 def collect_feature_block_image_urls(feature_blocks: Sequence[dict[str, Any]]) -> list[str]:
@@ -301,20 +316,22 @@ async def import_series_media_urls(
         "failed": [],
         "map": {},
     }
-    if not execute:
-        return result
-
     for index, source_url in enumerate(unique_urls, start=1):
         try:
-            resolved = await resolve_or_import_series_media(
-                session,
-                source_url=source_url,
-                title=f"{title_prefix}: изображение {index}",
-            )
+            if execute:
+                resolved = await resolve_or_import_series_media(
+                    session,
+                    source_url=source_url,
+                    title=f"{title_prefix}: изображение {index}",
+                )
+            else:
+                resolved = await find_imported_series_media(session, source_url=source_url)
         except Exception as exc:
             result["failed"].append({"url": source_url, "error": str(exc)})
             continue
         if not resolved:
+            if not execute:
+                continue
             result["failed"].append({"url": source_url, "error": "empty media url"})
             continue
         result["map"][source_url] = resolved.url

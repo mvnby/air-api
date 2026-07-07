@@ -14,6 +14,7 @@ from services.lg24_series_content_service import (
     extract_feature_blocks,
     extract_feature_gallery_images,
     extract_short_features,
+    import_series_media_urls,
     resolve_or_import_series_media,
     remap_feature_block_image_urls,
     should_update_media_value,
@@ -248,3 +249,38 @@ async def test_resolve_or_import_series_media_creates_and_reuses_asset(sqlite_se
     assert assets[0].original_url == "https://lg24.by/wp-content/uploads/feature.jpg"
     assert assets[0].kind == "brand"
     assert assets[0].tags == ["lg", "series", "feature", "promo"]
+
+
+@pytest.mark.asyncio
+async def test_import_series_media_urls_dry_run_maps_existing_assets(sqlite_session):
+    sqlite_session.add(
+        MediaAsset(
+            title="Existing LG promo",
+            kind="brand",
+            variant_type="original",
+            url="/media/library/original/existing.webp",
+            original_url="https://lg24.by/wp-content/uploads/existing.jpg",
+            mime_type="image/webp",
+            storage_provider="r2",
+            processing_status="ready",
+        )
+    )
+    await sqlite_session.flush()
+
+    result = await import_series_media_urls(
+        sqlite_session,
+        urls=[
+            "https://lg24.by/wp-content/uploads/existing.jpg",
+            "https://lg24.by/wp-content/uploads/new.jpg",
+        ],
+        execute=False,
+        title_prefix="LG Test",
+    )
+
+    assert result["planned"] == 2
+    assert result["imported"] == 0
+    assert result["reused"] == 1
+    assert result["failed"] == []
+    assert result["map"] == {
+        "https://lg24.by/wp-content/uploads/existing.jpg": "/media/library/original/existing.webp"
+    }
