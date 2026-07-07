@@ -864,6 +864,7 @@ class MediaLibraryService:
                 select(func.count()).select_from(ProductSeries).where(ProductSeries.hero_image == url)
             )
         )
+        counts.append(await MediaLibraryService._series_json_usage_count(session, url))
         counts.append(
             await session.scalar(select(func.count()).select_from(ProductAttachment).where(ProductAttachment.url == url))
         )
@@ -979,21 +980,45 @@ class MediaLibraryService:
                 )
             )
 
-        series_rows = (
-            await session.execute(select(ProductSeries).where(ProductSeries.hero_image.is_not(None)))
-        ).scalars().all()
+        series_rows = (await session.execute(select(ProductSeries))).scalars().all()
         for series in series_rows:
-            if not series.hero_image:
-                continue
-            references.append(
-                ExistingMediaReference(
-                    url=series.hero_image,
-                    kind="brand",
-                    title=series.title or f"Product series #{series.id}",
-                    variant_type="hero",
-                    tags=("legacy", "series", "hero"),
+            if series.hero_image:
+                references.append(
+                    ExistingMediaReference(
+                        url=series.hero_image,
+                        kind="brand",
+                        title=series.title or f"Product series #{series.id}",
+                        variant_type="hero",
+                        tags=("legacy", "series", "hero"),
+                    )
                 )
-            )
+            for image_url in series.gallery_images or []:
+                if not image_url:
+                    continue
+                references.append(
+                    ExistingMediaReference(
+                        url=str(image_url),
+                        kind="brand",
+                        title=series.title or f"Product series #{series.id}",
+                        variant_type="gallery",
+                        tags=("legacy", "series", "gallery"),
+                    )
+                )
+            for block in series.feature_blocks or []:
+                if not isinstance(block, dict):
+                    continue
+                image_url = str(block.get("image_url") or "").strip()
+                if not image_url:
+                    continue
+                references.append(
+                    ExistingMediaReference(
+                        url=image_url,
+                        kind="brand",
+                        title=block.get("title") or series.title or f"Product series #{series.id}",
+                        variant_type="feature",
+                        tags=("legacy", "series", "feature"),
+                    )
+                )
 
         services = (await session.execute(select(Service).where(Service.image.is_not(None)))).scalars().all()
         for service in services:
@@ -1010,6 +1035,20 @@ class MediaLibraryService:
             )
 
         return [ref for ref in references if ref.url]
+
+    @staticmethod
+    async def _series_json_usage_count(session: AsyncSession, url: str) -> int:
+        if not url:
+            return 0
+
+        count = 0
+        series_rows = (await session.execute(select(ProductSeries))).scalars().all()
+        for series in series_rows:
+            count += sum(1 for image_url in series.gallery_images or [] if image_url == url)
+            for block in series.feature_blocks or []:
+                if isinstance(block, dict) and block.get("image_url") == url:
+                    count += 1
+        return count
 
     @staticmethod
     def _group_references_by_url(
