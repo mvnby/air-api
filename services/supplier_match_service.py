@@ -361,7 +361,9 @@ def _extract_model_tokens(raw: str) -> dict[str, list[str]]:
         model_tokens.append(token)
         if has_indoor_context or token.startswith(("MDS", "AS", "HSU", "RC", "RCI", "MDC", "MDF")):
             indoor_tokens.append(token)
-        if has_outdoor_context or token.startswith(("MDO", "1U", "UU", "CU", "MD2O", "MD3O", "MD4O", "MD5O")):
+        if has_outdoor_context or token.startswith(
+            ("MDO", "1U", "UU", "CU", "MD2O", "MD3O", "MD4O", "MD5O", "AMW", "AUW")
+        ):
             outdoor_tokens.append(token)
 
     for match in _OPTIONAL_SUFFIX_MODEL_RE.finditer(optional_text):
@@ -461,6 +463,8 @@ def _infer_offer_catalog_categories(*, source_name: str | None, title_raw: str |
 
     if "pac" in source or "pack" in source or "полупром" in combined:
         return {"semi"}
+    if any(marker in combined for marker in ("кассет", "каналь", "колонн", "напольно", "потолоч", "консол")):
+        return {"semi"}
     if "atom" in source or "vrf" in combined or "мультизон" in combined:
         return {"vrf"}
     if "multi" in source or "мульти" in combined:
@@ -477,7 +481,13 @@ def _infer_offer_catalog_categories(*, source_name: str | None, title_raw: str |
 
 def _product_catalog_category(product: dict[str, Any]) -> str | None:
     specs = product.get("specs") if isinstance(product.get("specs"), dict) else {}
-    explicit = str(specs.get("__mdv_catalog") or specs.get("mdv_catalog") or "").strip().lower()
+    explicit = str(
+        specs.get("__mdv_catalog")
+        or specs.get("mdv_catalog")
+        or specs.get("__hisense_catalog")
+        or specs.get("hisense_catalog")
+        or ""
+    ).strip().lower()
     if explicit in {"household", "semi", "multi"}:
         return explicit
 
@@ -509,7 +519,12 @@ def _product_catalog_category(product: dict[str, Any]) -> str | None:
 
 def _has_explicit_catalog(product: dict[str, Any]) -> bool:
     specs = product.get("specs") if isinstance(product.get("specs"), dict) else {}
-    return bool(specs.get("__mdv_catalog") or specs.get("mdv_catalog"))
+    return bool(
+        specs.get("__mdv_catalog")
+        or specs.get("mdv_catalog")
+        or specs.get("__hisense_catalog")
+        or specs.get("hisense_catalog")
+    )
 
 
 def _catalogs_are_incompatible(offer_categories: set[str], product_catalog: str) -> bool:
