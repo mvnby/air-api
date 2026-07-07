@@ -513,7 +513,7 @@ async def seed_lg24_series_content(
                 media_reused += int(media_result["reused"])
                 media_failed.extend(media_result["failed"])
                 media_map = media_result["map"]
-                if execute and media_map:
+                if media_map:
                     gallery_images = [
                         media_map.get(normalize_remote_media_url(url), url)
                         for url in gallery_images

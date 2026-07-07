@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
-from models import MediaAsset, ProductSeries
+from models import Brand, MediaAsset, ProductSeries
 from services.lg24_series_content_service import (
     Lg24SeriesSeed,
     collect_feature_block_image_urls,
@@ -17,6 +17,7 @@ from services.lg24_series_content_service import (
     import_series_media_urls,
     resolve_or_import_series_media,
     remap_feature_block_image_urls,
+    seed_lg24_series_content,
     should_update_media_value,
     text_matches_series,
 )
@@ -284,3 +285,99 @@ async def test_import_series_media_urls_dry_run_maps_existing_assets(sqlite_sess
     assert result["map"] == {
         "https://lg24.by/wp-content/uploads/existing.jpg": "/media/library/original/existing.webp"
     }
+
+
+@pytest.mark.asyncio
+async def test_seed_dry_run_remaps_existing_media_before_change_detection(sqlite_session, monkeypatch):
+    seed = Lg24SeriesSeed(
+        title="EVO Max",
+        source_url="https://lg24.by/product-category/konditionery_dla_doma/evo_max/",
+        match_slugs=("evo-max",),
+        tagline="Tagline",
+        short_description="Short",
+        description="Description",
+        fallback_features=(),
+    )
+    brand = Brand(title="LG", slug="lg")
+    sqlite_session.add(brand)
+    await sqlite_session.flush()
+    sqlite_session.add(
+        ProductSeries(
+            brand_id=brand.id,
+            title="EVO Max",
+            slug="evo-max",
+            tagline=seed.tagline,
+            short_description=seed.short_description,
+            description=seed.description,
+            source_url=seed.source_url,
+            features=["Feature"],
+            gallery_images=["/media/library/original/gallery.webp"],
+            feature_blocks=[
+                {
+                    "title": "Block",
+                    "text": "Text",
+                    "image_url": "/media/library/original/feature.webp",
+                    "icon": None,
+                    "footnote": None,
+                }
+            ],
+        )
+    )
+    sqlite_session.add(
+        MediaAsset(
+            title="Gallery",
+            kind="brand",
+            variant_type="original",
+            url="/media/library/original/gallery.webp",
+            original_url="https://lg24.by/wp-content/uploads/gallery.jpg",
+            mime_type="image/webp",
+            storage_provider="r2",
+            processing_status="ready",
+        )
+    )
+    sqlite_session.add(
+        MediaAsset(
+            title="Feature",
+            kind="brand",
+            variant_type="original",
+            url="/media/library/original/feature.webp",
+            original_url="https://lg24.by/wp-content/uploads/feature.jpg",
+            mime_type="image/webp",
+            storage_provider="r2",
+            processing_status="ready",
+        )
+    )
+    await sqlite_session.flush()
+
+    async def fake_fetch_series_page_content(_client, _seed):
+        return (
+            ["Feature"],
+            [
+                {
+                    "title": "Block",
+                    "text": "Text",
+                    "image_url": "https://lg24.by/wp-content/uploads/feature.jpg",
+                    "icon": None,
+                    "footnote": None,
+                }
+            ],
+            ["https://lg24.by/wp-content/uploads/gallery.jpg"],
+            "https://lg24.by/product/demo/",
+        )
+
+    monkeypatch.setattr(
+        "services.lg24_series_content_service.fetch_series_page_content",
+        fake_fetch_series_page_content,
+    )
+
+    result = await seed_lg24_series_content(
+        sqlite_session,
+        execute=False,
+        import_media=True,
+        seeds=[seed],
+    )
+
+    assert result["updated"] == 0
+    assert result["kept"] == ["EVO Max"]
+    assert result["media"]["planned"] == 2
+    assert result["media"]["reused"] == 2
