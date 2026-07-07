@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from bs4 import BeautifulSoup, Tag
@@ -11,10 +13,17 @@ from slugify import slugify
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import Brand, BrandFeature, ProductSeries, ProductSeriesFeatureLink
+from models import Brand, BrandFeature, MediaAsset, ProductSeries, ProductSeriesFeatureLink
 from parsers.lg24 import Lg24Parser
 from services.catalog_revision_service import CatalogRevisionService
 from services.lg24_series_content_data import BRAND_FEATURE_SEEDS, SERIES_SEEDS, Lg24SeriesSeed
+from services.media_library_service import MediaLibraryService
+
+
+@dataclass(frozen=True)
+class ResolvedSeriesMedia:
+    url: str
+    created: bool
 
 
 def normalize_seed_slug(value: str) -> str:
@@ -46,6 +55,39 @@ def image_url_from_tag(img: Tag, current_url: str) -> str:
     return url
 
 
+def normalize_remote_media_url(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    parts = urlsplit(raw)
+    if not parts.scheme and not parts.netloc:
+        return raw
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, parts.query, ""))
+
+
+def first_image_url_from_tag(tag: Tag, current_url: str) -> str:
+    if tag.name == "img":
+        return image_url_from_tag(tag, current_url)
+    for img in tag.find_all("img"):
+        if not isinstance(img, Tag):
+            continue
+        url = image_url_from_tag(img, current_url)
+        if url:
+            return url
+    return ""
+
+
+def iter_feature_block_nodes(heading: Tag) -> Iterable[Tag]:
+    for node in heading.next_elements:
+        if node is heading:
+            continue
+        if not isinstance(node, Tag):
+            continue
+        if node.name in {"h2", "h3"}:
+            break
+        yield node
+
+
 def extract_short_features(soup: BeautifulSoup) -> list[str]:
     container = soup.select_one(".woocommerce-product-details__short-description")
     if not container:
@@ -65,7 +107,12 @@ def extract_short_features(soup: BeautifulSoup) -> list[str]:
     return items
 
 
-def extract_feature_blocks(soup: BeautifulSoup, *, max_blocks: int = 8) -> list[dict[str, str | None]]:
+def extract_feature_blocks(
+    soup: BeautifulSoup,
+    current_url: str = "",
+    *,
+    max_blocks: int = 8,
+) -> list[dict[str, str | None]]:
     blocks: list[dict[str, str | None]] = []
     started = False
     excluded_titles = {"габаритные размеры", "отзывы", "добавить отзыв отменить ответ"}
@@ -87,22 +134,24 @@ def extract_feature_blocks(soup: BeautifulSoup, *, max_blocks: int = 8) -> list[
             continue
 
         text = ""
-        parent = heading.parent if isinstance(heading.parent, Tag) else heading
-        for sibling in parent.find_next_siblings():
-            if not isinstance(sibling, Tag):
+        image_url = ""
+        for node in iter_feature_block_nodes(heading):
+            if node.find(["h2", "h3"]):
                 continue
-            if sibling.find(["h2", "h3"]):
-                break
-            sibling_text = clean_text(sibling.get_text(" ", strip=True))
-            if sibling_text:
-                text = sibling_text
+            if not text and node.name in {"p", "div", "li"}:
+                sibling_text = clean_text(node.get_text(" ", strip=True))
+                if sibling_text:
+                    text = sibling_text
+            if current_url and not image_url:
+                image_url = first_image_url_from_tag(node, current_url)
+            if text and image_url:
                 break
 
         blocks.append(
             {
                 "title": title,
                 "text": text or None,
-                "image_url": None,
+                "image_url": image_url or None,
                 "icon": None,
                 "footnote": None,
             }
@@ -158,10 +207,122 @@ async def fetch_series_page_content(client: httpx.AsyncClient, seed: Lg24SeriesS
     soup = BeautifulSoup(response.text, "html.parser")
     return (
         extract_short_features(soup),
-        extract_feature_blocks(soup),
+        extract_feature_blocks(soup, str(response.url)),
         extract_feature_gallery_images(soup, str(response.url)),
         str(response.url),
     )
+
+
+async def resolve_or_import_series_media(
+    session: AsyncSession,
+    *,
+    source_url: str,
+    title: str,
+    created_by: str | None = "lg24-series-seed",
+) -> ResolvedSeriesMedia | None:
+    normalized_url = normalize_remote_media_url(source_url)
+    if not normalized_url:
+        return None
+
+    existing = (
+        await session.execute(
+            select(MediaAsset)
+            .where(MediaAsset.original_url == normalized_url)
+            .order_by(MediaAsset.id.asc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if existing and existing.url:
+        return ResolvedSeriesMedia(url=existing.url, created=False)
+
+    content, filename = await MediaLibraryService._download_remote_image(normalized_url)
+    stored = await MediaLibraryService._store_image(content, variant_type="original")
+    asset = MediaAsset(
+        title=title or MediaLibraryService._title_from_filename(filename) or "LG feature",
+        alt_text=title or None,
+        kind="brand",
+        tags=MediaLibraryService._normalize_tags(["lg", "series", "feature", "promo"]),
+        variant_type="original",
+        url=stored.url,
+        original_url=normalized_url,
+        source_filename=filename,
+        mime_type=stored.mime_type,
+        storage_provider=stored.storage_provider,
+        processing_status="ready",
+        content_hash=stored.content_hash,
+        width=stored.width,
+        height=stored.height,
+        size_bytes=stored.size_bytes,
+        created_by=created_by,
+    )
+    session.add(asset)
+    await session.flush()
+    return ResolvedSeriesMedia(url=stored.url, created=True)
+
+
+def collect_feature_block_image_urls(feature_blocks: Sequence[dict[str, Any]]) -> list[str]:
+    urls: list[str] = []
+    seen: set[str] = set()
+    for block in feature_blocks:
+        url = normalize_remote_media_url(str(block.get("image_url") or ""))
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        urls.append(url)
+    return urls
+
+
+def remap_feature_block_image_urls(
+    feature_blocks: Sequence[dict[str, Any]],
+    media_map: dict[str, str],
+) -> list[dict[str, Any]]:
+    remapped: list[dict[str, Any]] = []
+    for block in feature_blocks:
+        next_block = dict(block)
+        source_url = normalize_remote_media_url(str(next_block.get("image_url") or ""))
+        if source_url and source_url in media_map:
+            next_block["image_url"] = media_map[source_url]
+        remapped.append(next_block)
+    return remapped
+
+
+async def import_series_media_urls(
+    session: AsyncSession,
+    *,
+    urls: Sequence[str],
+    execute: bool,
+    title_prefix: str,
+) -> dict[str, Any]:
+    unique_urls = [normalize_remote_media_url(url) for url in dict.fromkeys(urls) if normalize_remote_media_url(url)]
+    result: dict[str, Any] = {
+        "planned": len(unique_urls),
+        "imported": 0,
+        "reused": 0,
+        "failed": [],
+        "map": {},
+    }
+    if not execute:
+        return result
+
+    for index, source_url in enumerate(unique_urls, start=1):
+        try:
+            resolved = await resolve_or_import_series_media(
+                session,
+                source_url=source_url,
+                title=f"{title_prefix}: изображение {index}",
+            )
+        except Exception as exc:
+            result["failed"].append({"url": source_url, "error": str(exc)})
+            continue
+        if not resolved:
+            result["failed"].append({"url": source_url, "error": "empty media url"})
+            continue
+        result["map"][source_url] = resolved.url
+        if resolved.created:
+            result["imported"] += 1
+        else:
+            result["reused"] += 1
+    return result
 
 
 async def upsert_brand_features(
@@ -258,11 +419,26 @@ async def seed_lg24_series_content(
     *,
     execute: bool = False,
     overwrite: bool = False,
+    import_media: bool = False,
     seeds: Iterable[Lg24SeriesSeed] = SERIES_SEEDS,
 ) -> dict[str, Any]:
     brand = (await session.execute(select(Brand).where(Brand.slug == "lg"))).scalar_one_or_none()
     if brand is None or brand.id is None:
-        return {"updated": 0, "linked": 0, "missed": ["LG brand not found"]}
+        return {
+            "updated": 0,
+            "linked": 0,
+            "missed": ["LG brand not found"],
+            "kept": [],
+            "applied": [],
+            "media": {
+                "enabled": import_media,
+                "planned": 0,
+                "imported": 0,
+                "reused": 0,
+                "failed": [],
+            },
+            "mode": "execute" if execute else "dry-run",
+        }
 
     series_rows = (
         await session.execute(select(ProductSeries).where(ProductSeries.brand_id == brand.id))
@@ -279,6 +455,10 @@ async def seed_lg24_series_content(
     missed: list[str] = []
     kept: list[str] = []
     applied: list[str] = []
+    media_planned = 0
+    media_imported = 0
+    media_reused = 0
+    media_failed: list[dict[str, str]] = []
 
     async with httpx.AsyncClient(
         headers=Lg24Parser._HEADERS,
@@ -293,6 +473,30 @@ async def seed_lg24_series_content(
 
             short_features, feature_blocks, gallery_images, resolved_source_url = await fetch_series_page_content(client, seed)
             features = short_features or list(seed.fallback_features)
+            media_map: dict[str, str] = {}
+            if import_media:
+                media_urls = [
+                    *gallery_images,
+                    *collect_feature_block_image_urls(feature_blocks),
+                ]
+                media_result = await import_series_media_urls(
+                    session,
+                    urls=media_urls,
+                    execute=execute,
+                    title_prefix=f"LG {seed.title}",
+                )
+                media_planned += int(media_result["planned"])
+                media_imported += int(media_result["imported"])
+                media_reused += int(media_result["reused"])
+                media_failed.extend(media_result["failed"])
+                media_map = media_result["map"]
+                if execute and media_map:
+                    gallery_images = [
+                        media_map.get(normalize_remote_media_url(url), url)
+                        for url in gallery_images
+                    ]
+                    feature_blocks = remap_feature_block_image_urls(feature_blocks, media_map)
+
             block_text = [
                 str(value)
                 for block in feature_blocks
@@ -358,5 +562,12 @@ async def seed_lg24_series_content(
         "missed": missed,
         "kept": kept,
         "applied": applied,
+        "media": {
+            "enabled": import_media,
+            "planned": media_planned,
+            "imported": media_imported,
+            "reused": media_reused,
+            "failed": media_failed,
+        },
         "mode": "execute" if execute else "dry-run",
     }

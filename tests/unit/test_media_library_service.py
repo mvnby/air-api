@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
 import models  # noqa: F401
-from models import MediaAsset, MediaProcessingJob, Product, ProductAttachment, ProductImage, Service
+from models import MediaAsset, MediaProcessingJob, Product, ProductAttachment, ProductImage, ProductSeries, Service
 from services.general_media_storage_service import StoredGeneralMediaObject
 from services import media_library_service
 from services.media_library_service import MediaLibraryService
@@ -580,11 +580,20 @@ async def test_usage_count_protects_service_images_and_product_attachments(
     monkeypatch.chdir(tmp_path)
     image_url = "/media/services/protected.png"
     attachment_url = "/media/products/manuals/manual.pdf"
+    series_gallery_url = "/media/library/original/series-gallery.webp"
+    series_feature_url = "/media/library/original/series-feature.webp"
     write_media_file(tmp_path / image_url.lstrip("/"))
     product = Product(title="Protected Product", slug="protected-product", price=100)
     service = Service(title="Protected Service", slug="protected-service", image=image_url)
+    series = ProductSeries(
+        title="Protected Series",
+        slug="protected-series",
+        gallery_images=[series_gallery_url],
+        feature_blocks=[{"title": "Feature", "image_url": series_feature_url}],
+    )
     sqlite_session.add(product)
     sqlite_session.add(service)
+    sqlite_session.add(series)
     await sqlite_session.flush()
     sqlite_session.add(
         ProductAttachment(
@@ -610,5 +619,7 @@ async def test_usage_count_protects_service_images_and_product_attachments(
 
     assert await MediaLibraryService._usage_count(sqlite_session, image_url) == 1
     assert await MediaLibraryService._usage_count(sqlite_session, attachment_url) == 1
+    assert await MediaLibraryService._usage_count(sqlite_session, series_gallery_url) == 1
+    assert await MediaLibraryService._usage_count(sqlite_session, series_feature_url) == 1
     with pytest.raises(ValueError, match="Media asset is used"):
         await MediaLibraryService.delete_asset(session=sqlite_session, asset_id=asset.id)
