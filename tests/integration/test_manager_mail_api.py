@@ -1,4 +1,5 @@
 from datetime import datetime
+from email.message import EmailMessage
 
 import pytest
 
@@ -316,6 +317,206 @@ async def test_manager_mail_send_test_endpoint_uses_smtp_service(async_client, m
     assert payload["id"] == 99
     assert payload["status"] == "sent"
     assert payload["recipient_email"] == "client@example.com"
+
+
+@pytest.mark.asyncio
+async def test_manager_mail_lists_outgoing_emails_with_failures(async_client, db):
+    customer = Customer(name="Outbox Client", phone="+375291112233", email="client@example.com", type=CustomerType.company)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION, title="Документы на отправку")
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    db.add_all(
+        [
+            OutgoingEmail(
+                status="sent",
+                order_id=order.id,
+                customer_id=customer.id,
+                recipient_email="client@example.com",
+                subject="Успешное письмо",
+                body_text="sent",
+                sent_at=datetime(2026, 7, 8, 10, 0),
+                created_at=datetime(2026, 7, 8, 9, 59),
+            ),
+            OutgoingEmail(
+                status="failed",
+                order_id=order.id,
+                customer_id=customer.id,
+                recipient_email="client@example.com",
+                subject="Ошибка доставки",
+                body_text="failed",
+                error="[Errno 101] Network is unreachable",
+                created_at=datetime(2026, 7, 8, 10, 1),
+            ),
+            OutgoingEmail(
+                status="pending",
+                recipient_email="other@example.com",
+                subject="Другое письмо",
+                body_text="pending",
+                created_at=datetime(2026, 7, 8, 10, 2),
+            ),
+        ]
+    )
+    await db.commit()
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.get(
+        "/api/manager/mail/outgoing-emails",
+        headers=headers,
+        params={"status": "failed", "q": "доставки"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    item = payload["items"][0]
+    assert item["status"] == "failed"
+    assert item["customer_name"] == "Outbox Client"
+    assert item["order_title"] == "Документы на отправку"
+    assert item["error"] == "[Errno 101] Network is unreachable"
+
+
+@pytest.mark.asyncio
+async def test_manager_mail_lists_order_outgoing_emails(async_client, db):
+    customer = Customer(name="Order Mail Client", phone="+375291112244", email="mail@example.com", type=CustomerType.individual)
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION, title="Заказ с письмами")
+    other_order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION, title="Другой заказ")
+    db.add_all([order, other_order])
+    await db.commit()
+    await db.refresh(order)
+    await db.refresh(other_order)
+
+    db.add_all(
+        [
+            OutgoingEmail(status="sent", order_id=order.id, customer_id=customer.id, recipient_email="mail@example.com", subject="Документы", body_text="1"),
+            OutgoingEmail(status="failed", order_id=other_order.id, customer_id=customer.id, recipient_email="mail@example.com", subject="Другое", body_text="2"),
+        ]
+    )
+    await db.commit()
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.get(f"/api/manager/mail/orders/{order.id}/outgoing-emails", headers=headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["order_id"] == order.id
+    assert payload["items"][0]["subject"] == "Документы"
+
+
+@pytest.mark.asyncio
+async def test_manager_mail_get_outgoing_email_detail_includes_retry_chain(async_client, db):
+    original = OutgoingEmail(
+        status="failed",
+        recipient_email="client@example.com",
+        subject="Документы",
+        body_text="Не ушло",
+        error="[Errno 101] Network is unreachable",
+    )
+    db.add(original)
+    await db.commit()
+    await db.refresh(original)
+
+    retry = OutgoingEmail(
+        status="sent",
+        retry_of_email_id=original.id,
+        recipient_email="client@example.com",
+        subject="Документы",
+        body_text="Ушло",
+        sent_at=datetime(2026, 7, 8, 11, 0),
+    )
+    db.add(retry)
+    await db.commit()
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.get(f"/api/manager/mail/outgoing-emails/{original.id}", headers=headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == original.id
+    assert [item["status"] for item in payload["retry_attempts"]] == ["failed", "sent"]
+
+
+@pytest.mark.asyncio
+async def test_manager_mail_retry_failed_email_creates_new_attempt(async_client, db, monkeypatch):
+    original = OutgoingEmail(
+        status="failed",
+        recipient_email="client@example.com",
+        subject="Повторить",
+        body_text="Текст письма",
+        error="[Errno 101] Network is unreachable",
+    )
+    db.add(original)
+    await db.commit()
+    await db.refresh(original)
+
+    sent_messages = []
+
+    def fake_build_message(**kwargs):
+        msg = EmailMessage()
+        msg["To"] = kwargs["to_email"]
+        msg["Subject"] = kwargs["subject"]
+        msg.set_content(kwargs["body_text"] or "")
+        return msg
+
+    def fake_send_message(message):
+        sent_messages.append(message)
+
+    monkeypatch.setattr("services.outgoing_email_service.MailSmtpService.build_message", fake_build_message)
+    monkeypatch.setattr("services.outgoing_email_service.MailSmtpService.send_message", fake_send_message)
+    monkeypatch.setattr("services.outgoing_email_service.MailSmtpService._configured_from_email", lambda: "noreply@example.com")
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.post(f"/api/manager/mail/outgoing-emails/{original.id}/retry", headers=headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] != original.id
+    assert payload["retry_of_email_id"] == original.id
+    assert payload["status"] == "sent"
+    assert len(sent_messages) == 1
+
+    refreshed_original = await db.get(OutgoingEmail, original.id)
+    assert refreshed_original.status == "failed"
+    assert refreshed_original.error == "[Errno 101] Network is unreachable"
+
+
+@pytest.mark.asyncio
+async def test_manager_mail_retry_attachment_email_requires_snapshot(async_client, db, monkeypatch):
+    original = OutgoingEmail(
+        status="failed",
+        recipient_email="client@example.com",
+        subject="Документы",
+        body_text="См. вложение",
+        error="[Errno 101] Network is unreachable",
+        attachments=[{"filename": "invoice.pdf", "mime_type": "application/pdf", "size": 100}],
+    )
+    db.add(original)
+    await db.commit()
+    await db.refresh(original)
+
+    sent_messages = []
+    monkeypatch.setattr("services.outgoing_email_service.MailSmtpService.send_message", lambda message: sent_messages.append(message))
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.post(f"/api/manager/mail/outgoing-emails/{original.id}/retry", headers=headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] != original.id
+    assert payload["retry_of_email_id"] == original.id
+    assert payload["status"] == "failed"
+    assert "snapshot PDF" in payload["error"]
+    assert sent_messages == []
 
 
 @pytest.mark.asyncio

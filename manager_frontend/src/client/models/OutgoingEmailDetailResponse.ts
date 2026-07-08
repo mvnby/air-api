@@ -3,7 +3,8 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { OutgoingEmailAttachmentResponse } from './OutgoingEmailAttachmentResponse';
-export type OutgoingEmailResponse = {
+import type { OutgoingEmailResponse } from './OutgoingEmailResponse';
+export type OutgoingEmailDetailResponse = {
     id: number;
     status: string;
     retry_of_email_id?: (number | null);
@@ -23,5 +24,6 @@ export type OutgoingEmailResponse = {
     sent_at?: (string | null);
     created_at: string;
     updated_at?: (string | null);
+    retry_attempts?: Array<OutgoingEmailResponse>;
 };
 

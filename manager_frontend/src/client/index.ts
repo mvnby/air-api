@@ -282,6 +282,9 @@ export type { OrderServiceLineResponse } from './models/OrderServiceLineResponse
 export type { OrderWorkStageCreatePayload } from './models/OrderWorkStageCreatePayload';
 export type { OrderWorkStageResponse } from './models/OrderWorkStageResponse';
 export type { OrderWorkStageUpdatePayload } from './models/OrderWorkStageUpdatePayload';
+export type { OutgoingEmailAttachmentResponse } from './models/OutgoingEmailAttachmentResponse';
+export type { OutgoingEmailDetailResponse } from './models/OutgoingEmailDetailResponse';
+export type { OutgoingEmailListResponse } from './models/OutgoingEmailListResponse';
 export type { OutgoingEmailResponse } from './models/OutgoingEmailResponse';
 export type { OutgoingEmailSendPayload } from './models/OutgoingEmailSendPayload';
 export type { PaymentBankReceiptResponse } from './models/PaymentBankReceiptResponse';

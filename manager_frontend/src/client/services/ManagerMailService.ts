@@ -12,6 +12,8 @@ import type { BankStatementImportResponse } from '../models/BankStatementImportR
 import type { Body_import_manager_bank_statement } from '../models/Body_import_manager_bank_statement';
 import type { EmailLeadImportJobResponse } from '../models/EmailLeadImportJobResponse';
 import type { OrderEmailSendPayload } from '../models/OrderEmailSendPayload';
+import type { OutgoingEmailDetailResponse } from '../models/OutgoingEmailDetailResponse';
+import type { OutgoingEmailListResponse } from '../models/OutgoingEmailListResponse';
 import type { OutgoingEmailResponse } from '../models/OutgoingEmailResponse';
 import type { OutgoingEmailSendPayload } from '../models/OutgoingEmailSendPayload';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -209,6 +211,115 @@ export class ManagerMailService {
             url: '/api/manager/mail/bank-receipts/{receipt_id}',
             path: {
                 'receipt_id': receiptId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Manager Outgoing Emails
+     * @param page
+     * @param limit
+     * @param status
+     * @param orderId
+     * @param customerId
+     * @param recipient
+     * @param q
+     * @param dateFrom
+     * @param dateTo
+     * @returns OutgoingEmailListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listManagerOutgoingEmails(
+        page: number = 1,
+        limit: number = 50,
+        status?: (string | null),
+        orderId?: (number | null),
+        customerId?: (number | null),
+        recipient?: (string | null),
+        q?: (string | null),
+        dateFrom?: (string | null),
+        dateTo?: (string | null),
+    ): CancelablePromise<OutgoingEmailListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/mail/outgoing-emails',
+            query: {
+                'page': page,
+                'limit': limit,
+                'status': status,
+                'order_id': orderId,
+                'customer_id': customerId,
+                'recipient': recipient,
+                'q': q,
+                'date_from': dateFrom,
+                'date_to': dateTo,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Manager Outgoing Email
+     * @param emailId
+     * @returns OutgoingEmailDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerOutgoingEmail(
+        emailId: number,
+    ): CancelablePromise<OutgoingEmailDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/mail/outgoing-emails/{email_id}',
+            path: {
+                'email_id': emailId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Manager Order Outgoing Emails
+     * @param orderId
+     * @param limit
+     * @returns OutgoingEmailListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listManagerOrderOutgoingEmails(
+        orderId: number,
+        limit: number = 20,
+    ): CancelablePromise<OutgoingEmailListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/mail/orders/{order_id}/outgoing-emails',
+            path: {
+                'order_id': orderId,
+            },
+            query: {
+                'limit': limit,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Retry Manager Outgoing Email
+     * @param emailId
+     * @returns OutgoingEmailResponse Successful Response
+     * @throws ApiError
+     */
+    public static retryManagerOutgoingEmail(
+        emailId: number,
+    ): CancelablePromise<OutgoingEmailResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/mail/outgoing-emails/{email_id}/retry',
+            path: {
+                'email_id': emailId,
             },
             errors: {
                 422: `Validation Error`,

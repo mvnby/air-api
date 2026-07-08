@@ -13,6 +13,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: boolean];
   sent: [];
+  settled: [];
 }>();
 
 const DOC_TYPE_LABELS: Record<string, string> = {
@@ -133,10 +134,12 @@ const sendEmail = async () => {
       body_text: bodyText.value.trim(),
       document_ids: selectedDocumentIds.value,
     });
+    emit('settled');
     emit('sent');
     emit('update:modelValue', false);
   } catch (err) {
     error.value = getApiErrorMessage(err);
+    emit('settled');
   } finally {
     sending.value = false;
   }
