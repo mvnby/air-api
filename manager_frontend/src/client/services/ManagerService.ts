@@ -70,6 +70,10 @@ import type { ProductMainImageCleanupRejectPayload } from '../models/ProductMain
 import type { ProductMainImageCleanupSkipPayload } from '../models/ProductMainImageCleanupSkipPayload';
 import type { ProductMainImageCleanupSkipReasonsResponse } from '../models/ProductMainImageCleanupSkipReasonsResponse';
 import type { ProductUpdate } from '../models/ProductUpdate';
+import type { SupplierContactCreatePayload } from '../models/SupplierContactCreatePayload';
+import type { SupplierContactListResponse } from '../models/SupplierContactListResponse';
+import type { SupplierContactResponse } from '../models/SupplierContactResponse';
+import type { SupplierContactUpdatePayload } from '../models/SupplierContactUpdatePayload';
 import type { SupplierCreatePayload } from '../models/SupplierCreatePayload';
 import type { SupplierListResponse } from '../models/SupplierListResponse';
 import type { SupplierMappingBulkCreatePayload } from '../models/SupplierMappingBulkCreatePayload';
@@ -90,6 +94,21 @@ import type { SupplierSourceUrlImportCandidateListResponse } from '../models/Sup
 import type { SupplierSourceUrlImportPayload } from '../models/SupplierSourceUrlImportPayload';
 import type { SupplierSyncRunResponse } from '../models/SupplierSyncRunResponse';
 import type { SupplierUpdatePayload } from '../models/SupplierUpdatePayload';
+import type { SupplierWarehouseCreatePayload } from '../models/SupplierWarehouseCreatePayload';
+import type { SupplierWarehouseListResponse } from '../models/SupplierWarehouseListResponse';
+import type { SupplierWarehouseResponse } from '../models/SupplierWarehouseResponse';
+import type { SupplierWarehouseUpdatePayload } from '../models/SupplierWarehouseUpdatePayload';
+import type { SupplyLogisticsMessagePayload } from '../models/SupplyLogisticsMessagePayload';
+import type { SupplyMessageResponse } from '../models/SupplyMessageResponse';
+import type { SupplyRequestCreatePayload } from '../models/SupplyRequestCreatePayload';
+import type { SupplyRequestCreateResponse } from '../models/SupplyRequestCreateResponse';
+import type { SupplyRequestFromOrderLinesPayload } from '../models/SupplyRequestFromOrderLinesPayload';
+import type { SupplyRequestLineUpdatePayload } from '../models/SupplyRequestLineUpdatePayload';
+import type { SupplyRequestListResponse } from '../models/SupplyRequestListResponse';
+import type { SupplyRequestMessagePayload } from '../models/SupplyRequestMessagePayload';
+import type { SupplyRequestResponse } from '../models/SupplyRequestResponse';
+import type { SupplyRequestStockCreatePayload } from '../models/SupplyRequestStockCreatePayload';
+import type { SupplyRequestUpdatePayload } from '../models/SupplyRequestUpdatePayload';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -1571,6 +1590,194 @@ export class ManagerService {
         });
     }
     /**
+     * List Supplier Contacts
+     * @param supplierId
+     * @returns SupplierContactListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listSupplierContacts(
+        supplierId: number,
+    ): CancelablePromise<SupplierContactListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/suppliers/{supplier_id}/contacts',
+            path: {
+                'supplier_id': supplierId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Supplier Contact
+     * @param supplierId
+     * @param requestBody
+     * @returns SupplierContactResponse Successful Response
+     * @throws ApiError
+     */
+    public static createSupplierContact(
+        supplierId: number,
+        requestBody: SupplierContactCreatePayload,
+    ): CancelablePromise<SupplierContactResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/suppliers/{supplier_id}/contacts',
+            path: {
+                'supplier_id': supplierId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Patch Supplier Contact
+     * @param supplierId
+     * @param contactId
+     * @param requestBody
+     * @returns SupplierContactResponse Successful Response
+     * @throws ApiError
+     */
+    public static patchSupplierContact(
+        supplierId: number,
+        contactId: number,
+        requestBody: SupplierContactUpdatePayload,
+    ): CancelablePromise<SupplierContactResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/suppliers/{supplier_id}/contacts/{contact_id}',
+            path: {
+                'supplier_id': supplierId,
+                'contact_id': contactId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Delete Supplier Contact
+     * @param supplierId
+     * @param contactId
+     * @returns ManagerActionMessageResponse Successful Response
+     * @throws ApiError
+     */
+    public static deleteSupplierContact(
+        supplierId: number,
+        contactId: number,
+    ): CancelablePromise<ManagerActionMessageResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/suppliers/{supplier_id}/contacts/{contact_id}',
+            path: {
+                'supplier_id': supplierId,
+                'contact_id': contactId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Supplier Warehouses
+     * @param supplierId
+     * @returns SupplierWarehouseListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listSupplierWarehouses(
+        supplierId: number,
+    ): CancelablePromise<SupplierWarehouseListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/suppliers/{supplier_id}/warehouses',
+            path: {
+                'supplier_id': supplierId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Supplier Warehouse
+     * @param supplierId
+     * @param requestBody
+     * @returns SupplierWarehouseResponse Successful Response
+     * @throws ApiError
+     */
+    public static createSupplierWarehouse(
+        supplierId: number,
+        requestBody: SupplierWarehouseCreatePayload,
+    ): CancelablePromise<SupplierWarehouseResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/suppliers/{supplier_id}/warehouses',
+            path: {
+                'supplier_id': supplierId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Patch Supplier Warehouse
+     * @param supplierId
+     * @param warehouseId
+     * @param requestBody
+     * @returns SupplierWarehouseResponse Successful Response
+     * @throws ApiError
+     */
+    public static patchSupplierWarehouse(
+        supplierId: number,
+        warehouseId: number,
+        requestBody: SupplierWarehouseUpdatePayload,
+    ): CancelablePromise<SupplierWarehouseResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/suppliers/{supplier_id}/warehouses/{warehouse_id}',
+            path: {
+                'supplier_id': supplierId,
+                'warehouse_id': warehouseId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Delete Supplier Warehouse
+     * @param supplierId
+     * @param warehouseId
+     * @returns ManagerActionMessageResponse Successful Response
+     * @throws ApiError
+     */
+    public static deleteSupplierWarehouse(
+        supplierId: number,
+        warehouseId: number,
+    ): CancelablePromise<ManagerActionMessageResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/suppliers/{supplier_id}/warehouses/{warehouse_id}',
+            path: {
+                'supplier_id': supplierId,
+                'warehouse_id': warehouseId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * List Supplier Sheets
      * @param supplierId
      * @returns SupplierSheetTabListResponse Successful Response
@@ -1908,6 +2115,192 @@ export class ManagerService {
             path: {
                 'product_id': productId,
             },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Supply Requests
+     * @param page
+     * @param limit
+     * @param status
+     * @param supplierId
+     * @param warehouseId
+     * @param sourceType
+     * @param orderId
+     * @returns SupplyRequestListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listSupplyRequests(
+        page: number = 1,
+        limit: number = 50,
+        status?: (string | null),
+        supplierId?: (number | null),
+        warehouseId?: (number | null),
+        sourceType?: (string | null),
+        orderId?: (number | null),
+    ): CancelablePromise<SupplyRequestListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/supply-requests',
+            query: {
+                'page': page,
+                'limit': limit,
+                'status': status,
+                'supplier_id': supplierId,
+                'warehouse_id': warehouseId,
+                'source_type': sourceType,
+                'order_id': orderId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Supply Request
+     * @param requestBody
+     * @returns SupplyRequestCreateResponse Successful Response
+     * @throws ApiError
+     */
+    public static createSupplyRequest(
+        requestBody: SupplyRequestCreatePayload,
+    ): CancelablePromise<SupplyRequestCreateResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/supply-requests',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Supply Request From Order Lines
+     * @param requestBody
+     * @returns SupplyRequestCreateResponse Successful Response
+     * @throws ApiError
+     */
+    public static createSupplyRequestFromOrderLines(
+        requestBody: SupplyRequestFromOrderLinesPayload,
+    ): CancelablePromise<SupplyRequestCreateResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/supply-requests/from-order-lines',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Stock Supply Request
+     * @param requestBody
+     * @returns SupplyRequestCreateResponse Successful Response
+     * @throws ApiError
+     */
+    public static createStockSupplyRequest(
+        requestBody: SupplyRequestStockCreatePayload,
+    ): CancelablePromise<SupplyRequestCreateResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/supply-requests/stock',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Patch Supply Request
+     * @param requestId
+     * @param requestBody
+     * @returns SupplyRequestResponse Successful Response
+     * @throws ApiError
+     */
+    public static patchSupplyRequest(
+        requestId: number,
+        requestBody: SupplyRequestUpdatePayload,
+    ): CancelablePromise<SupplyRequestResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/supply-requests/{request_id}',
+            path: {
+                'request_id': requestId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Patch Supply Request Line
+     * @param lineId
+     * @param requestBody
+     * @returns SupplyRequestResponse Successful Response
+     * @throws ApiError
+     */
+    public static patchSupplyRequestLine(
+        lineId: number,
+        requestBody: SupplyRequestLineUpdatePayload,
+    ): CancelablePromise<SupplyRequestResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/supply-requests/lines/{line_id}',
+            path: {
+                'line_id': lineId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Generate Supply Request Supplier Message
+     * @param requestId
+     * @param requestBody
+     * @returns SupplyMessageResponse Successful Response
+     * @throws ApiError
+     */
+    public static generateSupplyRequestSupplierMessage(
+        requestId: number,
+        requestBody: SupplyRequestMessagePayload,
+    ): CancelablePromise<SupplyMessageResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/supply-requests/{request_id}/message/supplier',
+            path: {
+                'request_id': requestId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Generate Supply Logistics Message
+     * @param requestBody
+     * @returns SupplyMessageResponse Successful Response
+     * @throws ApiError
+     */
+    public static generateSupplyLogisticsMessage(
+        requestBody: SupplyLogisticsMessagePayload,
+    ): CancelablePromise<SupplyMessageResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/supply-requests/message/logistics',
             body: requestBody,
             mediaType: 'application/json',
             errors: {

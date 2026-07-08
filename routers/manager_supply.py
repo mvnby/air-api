@@ -10,23 +10,39 @@ from core.security import get_current_username
 from routers.manager_operation_ids import (
     ANALYZE_SUPPLIER_SOURCE,
     BULK_CREATE_SUPPLIER_MAPPINGS,
+    CREATE_STOCK_SUPPLY_REQUEST,
     CREATE_SUPPLIER,
+    CREATE_SUPPLIER_CONTACT,
     CREATE_SUPPLIER_MAPPING,
     CREATE_SUPPLIER_SOURCE,
+    CREATE_SUPPLIER_WAREHOUSE,
+    CREATE_SUPPLY_REQUEST,
+    CREATE_SUPPLY_REQUEST_FROM_ORDER_LINES,
     DELETE_SUPPLIER,
+    DELETE_SUPPLIER_CONTACT,
     DELETE_SUPPLIER_SOURCE,
     DELETE_SUPPLIER_MAPPING,
+    DELETE_SUPPLIER_WAREHOUSE,
+    GENERATE_SUPPLY_LOGISTICS_MESSAGE,
+    GENERATE_SUPPLY_REQUEST_SUPPLIER_MESSAGE,
     GET_PRODUCT_SUPPLIER_OFFERS,
     LIST_SUPPLIER_SOURCE_URL_IMPORT_CANDIDATES,
+    LIST_SUPPLIER_CONTACTS,
     LIST_SUPPLIER_SHEETS,
     LIST_SUPPLIERS,
     LIST_SUPPLIER_SOURCES,
+    LIST_SUPPLIER_WAREHOUSES,
+    LIST_SUPPLY_REQUESTS,
     START_SUPPLIER_SOURCE_URL_IMPORT,
     SUGGEST_SUPPLIER_OFFERS,
     SYNC_ALL_SUPPLIER_SOURCES,
     LIST_UNMAPPED_SUPPLIER_OFFERS,
     PATCH_SUPPLIER,
+    PATCH_SUPPLIER_CONTACT,
     PATCH_SUPPLIER_SOURCE,
+    PATCH_SUPPLIER_WAREHOUSE,
+    PATCH_SUPPLY_REQUEST,
+    PATCH_SUPPLY_REQUEST_LINE,
     SYNC_SUPPLIER_SOURCE,
     UPSERT_PRODUCT_LOCAL_STOCK,
 )
@@ -35,6 +51,10 @@ from schemas import (
     CatalogImportJobStartResponse,
     ProductLocalStockPayload,
     ProductLocalStockResponse,
+    SupplierContactCreatePayload,
+    SupplierContactListResponse,
+    SupplierContactResponse,
+    SupplierContactUpdatePayload,
     SupplierCreatePayload,
     SupplierListResponse,
     SupplierMappingCreatePayload,
@@ -55,10 +75,26 @@ from schemas import (
     SupplierSheetTabListResponse,
     SupplierSyncRunResponse,
     SupplierUpdatePayload,
+    SupplierWarehouseCreatePayload,
+    SupplierWarehouseListResponse,
+    SupplierWarehouseResponse,
+    SupplierWarehouseUpdatePayload,
+    SupplyLogisticsMessagePayload,
+    SupplyMessageResponse,
+    SupplyRequestCreatePayload,
+    SupplyRequestCreateResponse,
+    SupplyRequestFromOrderLinesPayload,
+    SupplyRequestLineUpdatePayload,
+    SupplyRequestListResponse,
+    SupplyRequestMessagePayload,
+    SupplyRequestResponse,
+    SupplyRequestStockCreatePayload,
+    SupplyRequestUpdatePayload,
 )
 from services.catalog_import_runtime_service import catalog_import_runtime_service
 from services.supplier_mapping_service import SupplierCatalogService, SupplierMappingService
 from services.supplier_sync_service import SupplierSyncService
+from services.supply_request_service import SupplierProfileService, SupplyRequestService
 
 
 router = APIRouter(prefix="/api/manager", tags=["manager"])
@@ -136,6 +172,208 @@ async def delete_supplier(
             message="Supplier not found",
         )
     return {"message": "Поставщик удалён"}
+
+
+@router.get(
+    "/suppliers/{supplier_id}/contacts",
+    response_model=SupplierContactListResponse,
+    operation_id=LIST_SUPPLIER_CONTACTS,
+)
+async def list_supplier_contacts(
+    supplier_id: int,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        return await SupplierProfileService.list_contacts(session, supplier_id)
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=LIST_SUPPLIER_CONTACTS,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/suppliers/{supplier_id}/contacts",
+    response_model=SupplierContactResponse,
+    operation_id=CREATE_SUPPLIER_CONTACT,
+)
+async def create_supplier_contact(
+    supplier_id: int,
+    payload: SupplierContactCreatePayload,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        return await SupplierProfileService.create_contact(session, supplier_id, payload.model_dump())
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=CREATE_SUPPLIER_CONTACT,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.patch(
+    "/suppliers/{supplier_id}/contacts/{contact_id}",
+    response_model=SupplierContactResponse,
+    operation_id=PATCH_SUPPLIER_CONTACT,
+)
+async def patch_supplier_contact(
+    supplier_id: int,
+    contact_id: int,
+    payload: SupplierContactUpdatePayload,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        result = await SupplierProfileService.update_contact(
+            session,
+            supplier_id,
+            contact_id,
+            payload.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=PATCH_SUPPLIER_CONTACT,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+    if not result:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=PATCH_SUPPLIER_CONTACT,
+            error_code=BAD_REQUEST,
+            message="Supplier contact not found",
+        )
+    return result
+
+
+@router.delete(
+    "/suppliers/{supplier_id}/contacts/{contact_id}",
+    response_model=ManagerActionMessageResponse,
+    operation_id=DELETE_SUPPLIER_CONTACT,
+)
+async def delete_supplier_contact(
+    supplier_id: int,
+    contact_id: int,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    ok = await SupplierProfileService.delete_contact(session, supplier_id, contact_id)
+    if not ok:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=DELETE_SUPPLIER_CONTACT,
+            error_code=BAD_REQUEST,
+            message="Supplier contact not found",
+        )
+    return {"message": "Контакт удалён"}
+
+
+@router.get(
+    "/suppliers/{supplier_id}/warehouses",
+    response_model=SupplierWarehouseListResponse,
+    operation_id=LIST_SUPPLIER_WAREHOUSES,
+)
+async def list_supplier_warehouses(
+    supplier_id: int,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        return await SupplierProfileService.list_warehouses(session, supplier_id)
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=LIST_SUPPLIER_WAREHOUSES,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/suppliers/{supplier_id}/warehouses",
+    response_model=SupplierWarehouseResponse,
+    operation_id=CREATE_SUPPLIER_WAREHOUSE,
+)
+async def create_supplier_warehouse(
+    supplier_id: int,
+    payload: SupplierWarehouseCreatePayload,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        return await SupplierProfileService.create_warehouse(session, supplier_id, payload.model_dump())
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=CREATE_SUPPLIER_WAREHOUSE,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.patch(
+    "/suppliers/{supplier_id}/warehouses/{warehouse_id}",
+    response_model=SupplierWarehouseResponse,
+    operation_id=PATCH_SUPPLIER_WAREHOUSE,
+)
+async def patch_supplier_warehouse(
+    supplier_id: int,
+    warehouse_id: int,
+    payload: SupplierWarehouseUpdatePayload,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        result = await SupplierProfileService.update_warehouse(
+            session,
+            supplier_id,
+            warehouse_id,
+            payload.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=PATCH_SUPPLIER_WAREHOUSE,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+    if not result:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=PATCH_SUPPLIER_WAREHOUSE,
+            error_code=BAD_REQUEST,
+            message="Supplier warehouse not found",
+        )
+    return result
+
+
+@router.delete(
+    "/suppliers/{supplier_id}/warehouses/{warehouse_id}",
+    response_model=ManagerActionMessageResponse,
+    operation_id=DELETE_SUPPLIER_WAREHOUSE,
+)
+async def delete_supplier_warehouse(
+    supplier_id: int,
+    warehouse_id: int,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    ok = await SupplierProfileService.delete_warehouse(session, supplier_id, warehouse_id)
+    if not ok:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=DELETE_SUPPLIER_WAREHOUSE,
+            error_code=BAD_REQUEST,
+            message="Supplier warehouse not found",
+        )
+    return {"message": "Склад удалён"}
 
 
 @router.get("/suppliers/{supplier_id}/sheets", response_model=SupplierSheetTabListResponse, operation_id=LIST_SUPPLIER_SHEETS)
@@ -504,5 +742,207 @@ async def upsert_product_local_stock(
             status_code=404,
             endpoint=UPSERT_PRODUCT_LOCAL_STOCK,
             error_code=PRODUCT_NOT_FOUND,
+            message=str(exc),
+        ) from exc
+
+
+@router.get(
+    "/supply-requests",
+    response_model=SupplyRequestListResponse,
+    operation_id=LIST_SUPPLY_REQUESTS,
+)
+async def list_supply_requests(
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=100),
+    status: Optional[str] = Query(None),
+    supplier_id: Optional[int] = Query(None),
+    warehouse_id: Optional[int] = Query(None),
+    source_type: Optional[str] = Query(None),
+    order_id: Optional[int] = Query(None),
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        return await SupplyRequestService.list_requests(
+            session,
+            page=page,
+            limit=limit,
+            status=status,
+            supplier_id=supplier_id,
+            warehouse_id=warehouse_id,
+            source_type=source_type,
+            order_id=order_id,
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=LIST_SUPPLY_REQUESTS,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/supply-requests",
+    response_model=SupplyRequestCreateResponse,
+    operation_id=CREATE_SUPPLY_REQUEST,
+)
+async def create_supply_request(
+    payload: SupplyRequestCreatePayload,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_username),
+):
+    try:
+        return await SupplyRequestService.create_request(session, payload.model_dump(), created_by=user)
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=CREATE_SUPPLY_REQUEST,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/supply-requests/from-order-lines",
+    response_model=SupplyRequestCreateResponse,
+    operation_id=CREATE_SUPPLY_REQUEST_FROM_ORDER_LINES,
+)
+async def create_supply_request_from_order_lines(
+    payload: SupplyRequestFromOrderLinesPayload,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_username),
+):
+    try:
+        return await SupplyRequestService.create_from_order_lines(session, payload.model_dump(), created_by=user)
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=CREATE_SUPPLY_REQUEST_FROM_ORDER_LINES,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/supply-requests/stock",
+    response_model=SupplyRequestCreateResponse,
+    operation_id=CREATE_STOCK_SUPPLY_REQUEST,
+)
+async def create_stock_supply_request(
+    payload: SupplyRequestStockCreatePayload,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_username),
+):
+    try:
+        return await SupplyRequestService.create_stock_requests(session, payload.model_dump(), created_by=user)
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=CREATE_STOCK_SUPPLY_REQUEST,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.patch(
+    "/supply-requests/{request_id}",
+    response_model=SupplyRequestResponse,
+    operation_id=PATCH_SUPPLY_REQUEST,
+)
+async def patch_supply_request(
+    request_id: int,
+    payload: SupplyRequestUpdatePayload,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        return await SupplyRequestService.update_request(
+            session,
+            request_id,
+            payload.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=PATCH_SUPPLY_REQUEST,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.patch(
+    "/supply-requests/lines/{line_id}",
+    response_model=SupplyRequestResponse,
+    operation_id=PATCH_SUPPLY_REQUEST_LINE,
+)
+async def patch_supply_request_line(
+    line_id: int,
+    payload: SupplyRequestLineUpdatePayload,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        return await SupplyRequestService.update_line(
+            session,
+            line_id,
+            payload.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=PATCH_SUPPLY_REQUEST_LINE,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/supply-requests/{request_id}/message/supplier",
+    response_model=SupplyMessageResponse,
+    operation_id=GENERATE_SUPPLY_REQUEST_SUPPLIER_MESSAGE,
+)
+async def generate_supply_request_supplier_message(
+    request_id: int,
+    payload: SupplyRequestMessagePayload,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        return await SupplyRequestService.generate_supplier_message(
+            session,
+            request_id,
+            mark_sent=payload.mark_sent,
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=GENERATE_SUPPLY_REQUEST_SUPPLIER_MESSAGE,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/supply-requests/message/logistics",
+    response_model=SupplyMessageResponse,
+    operation_id=GENERATE_SUPPLY_LOGISTICS_MESSAGE,
+)
+async def generate_supply_logistics_message(
+    payload: SupplyLogisticsMessagePayload,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    try:
+        return await SupplyRequestService.generate_logistics_message(
+            session,
+            payload.request_ids,
+            mark_sent=payload.mark_sent,
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=GENERATE_SUPPLY_LOGISTICS_MESSAGE,
+            error_code=BAD_REQUEST,
             message=str(exc),
         ) from exc

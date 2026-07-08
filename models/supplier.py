@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, ForeignKeyConstraint, JSON, Numeric, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKeyConstraint, JSON, Numeric, String, Text, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -17,6 +17,15 @@ class Supplier(SQLModel, table=True):
     spreadsheet_id: Optional[str] = Field(default=None, index=True)
     spreadsheet_url: Optional[str] = Field(default=None)
     google_sheet_synced_at: Optional[datetime] = None
+    legal_name: Optional[str] = Field(default=None)
+    tax_id: Optional[str] = Field(default=None, index=True)
+    legal_address: Optional[str] = Field(default=None)
+    postal_address: Optional[str] = Field(default=None)
+    default_payment_method: str = Field(
+        default="unknown",
+        sa_column=Column(String, default="unknown", nullable=False),
+    )
+    payment_comment: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(
         default_factory=datetime.now,
@@ -25,6 +34,58 @@ class Supplier(SQLModel, table=True):
 
     sources: list["SupplierPriceSource"] = Relationship(back_populates="supplier")
     offers: list["SupplierOffer"] = Relationship(back_populates="supplier")
+    contacts: list["SupplierContact"] = Relationship(back_populates="supplier")
+    warehouses: list["SupplierWarehouse"] = Relationship(back_populates="supplier")
+    supply_requests: list["SupplyRequest"] = Relationship(back_populates="supplier")
+
+
+class SupplierContact(SQLModel, table=True):
+    __tablename__ = "supplier_contact"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    supplier_id: int = Field(foreign_key="supplier.id", index=True)
+    name: str
+    role: Optional[str] = Field(default=None)
+    phone: Optional[str] = Field(default=None)
+    viber: Optional[str] = Field(default=None)
+    telegram_username: Optional[str] = Field(default=None)
+    telegram_chat_id: Optional[str] = Field(default=None)
+    email: Optional[str] = Field(default=None)
+    preferred_channel: str = Field(default="phone", sa_column=Column(String, default="phone", nullable=False))
+    default_for_orders: bool = Field(default=False, index=True)
+    default_for_logistics: bool = Field(default=False, index=True)
+    comment: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(
+        default_factory=datetime.now,
+        sa_column_kwargs={"onupdate": datetime.now},
+    )
+
+    supplier: "Supplier" = Relationship(back_populates="contacts")
+
+
+class SupplierWarehouse(SQLModel, table=True):
+    __tablename__ = "supplier_warehouse"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    supplier_id: int = Field(foreign_key="supplier.id", index=True)
+    name: str
+    address: str = Field(sa_column=Column(Text, nullable=False))
+    contact_id: Optional[int] = Field(default=None, foreign_key="supplier_contact.id", index=True)
+    contact_name: Optional[str] = Field(default=None)
+    contact_phone: Optional[str] = Field(default=None)
+    work_hours: Optional[str] = Field(default=None)
+    pickup_notes: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    is_default: bool = Field(default=False, index=True)
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(
+        default_factory=datetime.now,
+        sa_column_kwargs={"onupdate": datetime.now},
+    )
+
+    supplier: "Supplier" = Relationship(back_populates="warehouses")
+    contact: Optional["SupplierContact"] = Relationship()
+    supply_requests: list["SupplyRequest"] = Relationship(back_populates="warehouse")
 
 
 class SupplierPriceSource(SQLModel, table=True):
@@ -143,6 +204,74 @@ class ProductLocalStock(SQLModel, table=True):
     )
 
     product: "Product" = Relationship(back_populates="local_stocks")
+
+
+class SupplyRequest(SQLModel, table=True):
+    __tablename__ = "supply_request"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    supplier_id: int = Field(foreign_key="supplier.id", index=True)
+    warehouse_id: Optional[int] = Field(default=None, foreign_key="supplier_warehouse.id", index=True)
+    supplier_contact_id: Optional[int] = Field(default=None, foreign_key="supplier_contact.id", index=True)
+    logistics_contact_id: Optional[int] = Field(default=None, foreign_key="supplier_contact.id", index=True)
+    status: str = Field(default="draft", sa_column=Column(String, default="draft", nullable=False, index=True))
+    intent: str = Field(default="order", sa_column=Column(String, default="order", nullable=False, index=True))
+    payment_method: str = Field(default="unknown", sa_column=Column(String, default="unknown", nullable=False, index=True))
+    comment: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    supplier_message_snapshot: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    logistics_message_snapshot: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    created_by: Optional[str] = Field(default=None, index=True)
+    supplier_message_sent_at: Optional[datetime] = None
+    logistics_message_sent_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.now, index=True)
+    updated_at: datetime = Field(
+        default_factory=datetime.now,
+        sa_column_kwargs={"onupdate": datetime.now},
+    )
+
+    supplier: "Supplier" = Relationship(back_populates="supply_requests")
+    warehouse: Optional["SupplierWarehouse"] = Relationship(back_populates="supply_requests")
+    supplier_contact: Optional["SupplierContact"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "SupplyRequest.supplier_contact_id"}
+    )
+    logistics_contact: Optional["SupplierContact"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "SupplyRequest.logistics_contact_id"}
+    )
+    lines: list["SupplyRequestLine"] = Relationship(
+        back_populates="request",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
+
+
+class SupplyRequestLine(SQLModel, table=True):
+    __tablename__ = "supply_request_line"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    request_id: int = Field(foreign_key="supply_request.id", index=True)
+    order_product_link_id: Optional[int] = Field(default=None, foreign_key="order_product_link.id", index=True)
+    source_type: str = Field(default="manual", sa_column=Column(String, default="manual", nullable=False, index=True))
+    product_id: Optional[int] = Field(default=None, foreign_key="product.id", index=True)
+    supplier_offer_external_id: Optional[str] = Field(default=None, index=True)
+    supplier_offer_title: Optional[str] = Field(default=None)
+    title_snapshot: str
+    qty: int = Field(default=1)
+    unit_cost_snapshot: Optional[Decimal] = Field(
+        default=None,
+        sa_column=Column(Numeric(12, 2), nullable=True),
+    )
+    status: str = Field(default="draft", sa_column=Column(String, default="draft", nullable=False, index=True))
+    reserved_until: Optional[datetime] = None
+    received_qty: int = Field(default=0)
+    comment: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(
+        default_factory=datetime.now,
+        sa_column_kwargs={"onupdate": datetime.now},
+    )
+
+    request: "SupplyRequest" = Relationship(back_populates="lines")
+    product: Optional["Product"] = Relationship()
+    order_product_link: Optional["OrderProductLink"] = Relationship()
 
 
 class SupplierSyncRun(SQLModel, table=True):

@@ -24,6 +24,8 @@ from services.supplier_source_url import normalize_source_url, source_url_varian
 
 
 class SupplierCatalogService:
+    VALID_PAYMENT_METHODS = {"cash", "bank", "mixed", "unknown"}
+
     @staticmethod
     def _extract_spreadsheet_id(value: str | None) -> tuple[str | None, str | None]:
         raw = (value or "").strip()
@@ -31,6 +33,18 @@ class SupplierCatalogService:
             return None, None
         spreadsheet_id = get_google_service().extract_spreadsheet_id(raw)
         return spreadsheet_id, raw
+
+    @staticmethod
+    def _normalize_supplier_profile_payload(payload: dict) -> dict:
+        data = dict(payload)
+        for key in ("legal_name", "tax_id", "legal_address", "postal_address", "payment_comment"):
+            if key in data:
+                cleaned = " ".join(str(data.get(key) or "").split())
+                data[key] = cleaned or None
+        if "default_payment_method" in data:
+            method = str(data.get("default_payment_method") or "unknown").strip()
+            data["default_payment_method"] = method if method in SupplierCatalogService.VALID_PAYMENT_METHODS else "unknown"
+        return data
 
     @staticmethod
     async def _ensure_unique_code(
@@ -62,6 +76,7 @@ class SupplierCatalogService:
 
     @staticmethod
     async def create_supplier(session: AsyncSession, payload: dict):
+        payload = SupplierCatalogService._normalize_supplier_profile_payload(payload)
         spreadsheet_id_or_url = payload.pop("spreadsheet_id_or_url", None)
         spreadsheet_id, spreadsheet_url = SupplierCatalogService._extract_spreadsheet_id(spreadsheet_id_or_url)
         payload["spreadsheet_id"] = spreadsheet_id
@@ -79,6 +94,7 @@ class SupplierCatalogService:
         supplier = await SupplierDAO.get_supplier(session, supplier_id)
         if not supplier:
             return None
+        payload = SupplierCatalogService._normalize_supplier_profile_payload(payload)
         if "name" in payload and "code" not in payload:
             payload["code"] = await SupplierCatalogService._ensure_unique_code(
                 session=session,

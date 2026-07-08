@@ -11,6 +11,12 @@ export type SupplierResponse = {
     spreadsheet_id?: (string | null);
     spreadsheet_url?: (string | null);
     google_sheet_synced_at?: (string | null);
+    legal_name?: (string | null);
+    tax_id?: (string | null);
+    legal_address?: (string | null);
+    postal_address?: (string | null);
+    default_payment_method?: string;
+    payment_comment?: (string | null);
     created_at: string;
     updated_at: string;
 };

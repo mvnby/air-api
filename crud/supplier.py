@@ -12,9 +12,13 @@ from models.supplier import (
     ProductLocalStock,
     ProductSupplierMapping,
     Supplier,
+    SupplierContact,
     SupplierOffer,
     SupplierPriceSource,
     SupplierSyncRun,
+    SupplierWarehouse,
+    SupplyRequest,
+    SupplyRequestLine,
 )
 
 
@@ -48,6 +52,22 @@ class SupplierDAO:
 
     @staticmethod
     async def delete_supplier(session: AsyncSession, supplier: Supplier) -> None:
+        await session.execute(
+            delete(SupplyRequestLine).where(
+                SupplyRequestLine.request_id.in_(
+                    select(SupplyRequest.id).where(SupplyRequest.supplier_id == supplier.id)
+                )
+            )
+        )
+        await session.execute(
+            delete(SupplyRequest).where(SupplyRequest.supplier_id == supplier.id)
+        )
+        await session.execute(
+            delete(SupplierWarehouse).where(SupplierWarehouse.supplier_id == supplier.id)
+        )
+        await session.execute(
+            delete(SupplierContact).where(SupplierContact.supplier_id == supplier.id)
+        )
         await session.execute(
             delete(ProductSupplierMapping).where(ProductSupplierMapping.supplier_id == supplier.id)
         )
