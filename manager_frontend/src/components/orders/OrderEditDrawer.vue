@@ -93,6 +93,7 @@ type OrderLogisticsComponent = {
   kind?: LogisticsComponentKind | null;
 };
 type ProductLine = {
+  link_id?: number | null;
   product_id: number;
   product_query: string;
   quantity: number;
@@ -249,6 +250,8 @@ const setExecutionStatus = (value: string) => {
 const installersList = ref<ManagerInstallerResponse[]>([]);
 
 const productLines = ref<ProductLine[]>([]);
+const supplyRequests = ref<any[]>([]);
+const supplyActionLoadingLineId = ref<number | null>(null);
 const serviceLines = ref<ServiceLine[]>([]);
 const savedLinesSnapshot = ref('');
 const pendingDraftClearOrderId = ref<number | null>(null);
@@ -677,6 +680,63 @@ const setToast = (message: string, type: 'success' | 'error' = 'success') => {
   window.setTimeout(() => {
     if (toast.value === message) toast.value = '';
   }, 3000);
+};
+
+const supplyStatusLabels: Record<string, string> = {
+  draft: 'черновик',
+  awaiting_reply: 'ждем ответ',
+  reserved: 'бронь',
+  ordered: 'заказано',
+  ready_for_pickup: 'готово к забору',
+  picked_up: 'забрано',
+  received: 'получено',
+  canceled: 'отменено',
+};
+
+const loadOrderSupplyRequests = async (orderId: number) => {
+  try {
+    const response = await api.listSupplyRequests({ orderId, limit: 100 });
+    supplyRequests.value = response.items || [];
+  } catch (error) {
+    console.warn('Failed to load supply requests for order', error);
+    supplyRequests.value = [];
+  }
+};
+
+const supplyBadgeForLine = (line: ProductLine) => {
+  if (!line.link_id) return null;
+  for (const request of supplyRequests.value) {
+    const requestLine = (request.lines || []).find((item: any) => Number(item.order_product_link_id) === Number(line.link_id));
+    if (requestLine) {
+      return {
+        label: supplyStatusLabels[requestLine.status] || requestLine.status,
+        requestId: request.id,
+        status: requestLine.status,
+      };
+    }
+  }
+  return null;
+};
+
+const createSupplyFromProductLine = async (line: ProductLine, intent: 'order' | 'reserve') => {
+  if (!props.order?.id) return;
+  if (!line.link_id) {
+    setToast('Сначала сохраните заказ, чтобы создать поставку по строке.', 'error');
+    return;
+  }
+  supplyActionLoadingLineId.value = line.link_id;
+  try {
+    await api.createSupplyRequestFromOrderLines({
+      order_product_link_ids: [line.link_id],
+      intent,
+    });
+    setToast(intent === 'reserve' ? 'Строка отправлена в бронирование.' : 'Строка добавлена в поставки.');
+    await loadOrderSupplyRequests(props.order.id);
+  } catch (error) {
+    setToast(`Не удалось создать поставку: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    supplyActionLoadingLineId.value = null;
+  }
 };
 
 const normalizeManagerLabel = (value: string) => value.trim().replace(/\s+/g, ' ');
@@ -1221,6 +1281,7 @@ const debouncedLoadProductOptions = useDebounceFn(async (index: number, q: strin
 const currentLinesSnapshot = () => JSON.stringify({
   activeProposalId: activeProposalId.value,
   products: productLines.value.map((line) => ({
+    link_id: line.link_id ?? null,
     product_id: Number(line.product_id || 0),
     product_query: String(line.product_query || '').trim(),
     quantity: Number(line.quantity || 0),
@@ -1264,6 +1325,7 @@ const restoreDraft = () => {
     const payload = JSON.parse(raw) as Partial<OrderDrawerDraft>;
     if (Array.isArray(payload.productLines)) {
       productLines.value = payload.productLines.map((line) => ({
+        link_id: Number((line as any).link_id || 0) || null,
         product_id: Number(line.product_id || 0),
         product_query: String(line.product_query || ''),
         quantity: Number(line.quantity || 1),
@@ -1329,6 +1391,7 @@ const clearDraft = () => {
 };
 
 const mapProductLineFromResponse = (line: OrderProductLineResponse): ProductLine => ({
+  link_id: line.id,
   product_id: line.product_id || 0,
   product_query: line.product_title || '',
   quantity: line.quantity,
@@ -1472,6 +1535,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   serviceTariffLookupLoading.value = false;
   restoreDraft();
   syncProductLookupFromLines();
+  await loadOrderSupplyRequests(order.id);
 };
 
 watch(
@@ -1609,6 +1673,7 @@ const openSelectedProduct = (index: number) => {
 
 const addProductLine = () => {
   productLines.value.push({
+    link_id: null,
     product_id: 0,
     product_query: '',
     quantity: 1,
@@ -1636,6 +1701,7 @@ const applyOrderResponse = async (
       || (order.proposals || []).find((proposal) => !proposal.is_archived));
   loadProposalLines(nextProposal || null, order);
   syncProductLookupFromLines();
+  await loadOrderSupplyRequests(order.id);
   if (emitReload) emit('reload', order.id);
 };
 
@@ -1646,7 +1712,7 @@ const buildProposalLinesPayload = () => ({
     price: Math.round(Number(line.price) || 0),
     cost: (!line.cost && line.cost !== 0) ? null : toIntegerMoney(line.cost),
     logistics_components: normalizeOrderLogisticsComponents(line.logistics_components),
-    link_id: null,
+    link_id: line.link_id ?? null,
     proposal_id: activeProposalId.value,
   })),
   services: serviceLines.value.map((line) => ({
@@ -3427,6 +3493,31 @@ watch(
               >
                 Цена строки отличается от каталожной ({{ formatMoney(currentCatalogPrice(line.product_id) || 0) }}).
               </p>
+              <div class="col-span-6 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2 md:col-span-12">
+                <span
+                  v-if="supplyBadgeForLine(line)"
+                  class="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-700"
+                >
+                  Поставка: {{ supplyBadgeForLine(line)?.label }}
+                </span>
+                <span v-else-if="line.link_id" class="text-xs text-gray-500">Поставка не создана</span>
+                <button
+                  type="button"
+                  class="rounded-lg border border-teal-200 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50 disabled:opacity-50"
+                  :disabled="!line.product_id || supplyActionLoadingLineId === line.link_id"
+                  @click="createSupplyFromProductLine(line, 'order')"
+                >
+                  В поставку
+                </button>
+                <button
+                  type="button"
+                  class="rounded-lg border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+                  :disabled="!line.product_id || supplyActionLoadingLineId === line.link_id"
+                  @click="createSupplyFromProductLine(line, 'reserve')"
+                >
+                  Забронировать
+                </button>
+              </div>
             </div>
           </div>
         </div>

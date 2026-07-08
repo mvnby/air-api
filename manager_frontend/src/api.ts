@@ -50,12 +50,22 @@ import {
     type ManagerInstallEstimateResponse,
     type SupplierCreatePayload,
     type SupplierUpdatePayload,
+    type SupplierContactCreatePayload,
+    type SupplierContactUpdatePayload,
+    type SupplierWarehouseCreatePayload,
+    type SupplierWarehouseUpdatePayload,
     type SupplierPriceSourceCreatePayload,
     type SupplierPriceSourceUpdatePayload,
     type SupplierMappingCreatePayload,
     type SupplierMappingBulkCreatePayload,
     type SupplierOfferSuggestionsPayload,
     type SupplierSourceUrlImportPayload,
+    type SupplyLogisticsMessagePayload,
+    type SupplyRequestCreatePayload,
+    type SupplyRequestFromOrderLinesPayload,
+    type SupplyRequestLineUpdatePayload,
+    type SupplyRequestStockCreatePayload,
+    type SupplyRequestUpdatePayload,
     type ProductLocalStockPayload,
     type ManagerGoogleAuthStatusResponse,
     type ManagerGoogleAuthUrlResponse,
@@ -191,6 +201,18 @@ export type {
     ProductMainImageCleanupDecisionResponse,
     ProductMainImageCleanupItemListResponse,
     ProductMainImageCleanupItemResponse,
+};
+export type {
+    SupplierContactCreatePayload,
+    SupplierContactUpdatePayload,
+    SupplierWarehouseCreatePayload,
+    SupplierWarehouseUpdatePayload,
+    SupplyLogisticsMessagePayload,
+    SupplyRequestCreatePayload,
+    SupplyRequestFromOrderLinesPayload,
+    SupplyRequestLineUpdatePayload,
+    SupplyRequestStockCreatePayload,
+    SupplyRequestUpdatePayload,
 };
 
 const parseContentDispositionFilename = (header: string | null): string | undefined => {
@@ -869,6 +891,38 @@ export const api = {
         return await ManagerService.deleteSupplier(supplierId);
     },
 
+    async listSupplierContacts(supplierId: number) {
+        return await ManagerService.listSupplierContacts(supplierId);
+    },
+
+    async createSupplierContact(supplierId: number, payload: SupplierContactCreatePayload) {
+        return await ManagerService.createSupplierContact(supplierId, payload);
+    },
+
+    async patchSupplierContact(supplierId: number, contactId: number, payload: SupplierContactUpdatePayload) {
+        return await ManagerService.patchSupplierContact(supplierId, contactId, payload);
+    },
+
+    async deleteSupplierContact(supplierId: number, contactId: number) {
+        return await ManagerService.deleteSupplierContact(supplierId, contactId);
+    },
+
+    async listSupplierWarehouses(supplierId: number) {
+        return await ManagerService.listSupplierWarehouses(supplierId);
+    },
+
+    async createSupplierWarehouse(supplierId: number, payload: SupplierWarehouseCreatePayload) {
+        return await ManagerService.createSupplierWarehouse(supplierId, payload);
+    },
+
+    async patchSupplierWarehouse(supplierId: number, warehouseId: number, payload: SupplierWarehouseUpdatePayload) {
+        return await ManagerService.patchSupplierWarehouse(supplierId, warehouseId, payload);
+    },
+
+    async deleteSupplierWarehouse(supplierId: number, warehouseId: number) {
+        return await ManagerService.deleteSupplierWarehouse(supplierId, warehouseId);
+    },
+
     async listSupplierSources() {
         return await ManagerService.listSupplierSources();
     },
@@ -935,6 +989,54 @@ export const api = {
 
     async upsertProductLocalStock(productId: number, payload: ProductLocalStockPayload) {
         return await ManagerService.upsertProductLocalStock(productId, payload);
+    },
+
+    async listSupplyRequests(params: {
+        page?: number;
+        limit?: number;
+        status?: string | null;
+        supplierId?: number | null;
+        warehouseId?: number | null;
+        sourceType?: string | null;
+        orderId?: number | null;
+    } = {}) {
+        return await ManagerService.listSupplyRequests(
+            params.page ?? 1,
+            params.limit ?? 50,
+            params.status ?? null,
+            params.supplierId ?? null,
+            params.warehouseId ?? null,
+            params.sourceType ?? null,
+            params.orderId ?? null,
+        );
+    },
+
+    async createSupplyRequest(payload: SupplyRequestCreatePayload) {
+        return await ManagerService.createSupplyRequest(payload);
+    },
+
+    async createSupplyRequestFromOrderLines(payload: SupplyRequestFromOrderLinesPayload) {
+        return await ManagerService.createSupplyRequestFromOrderLines(payload);
+    },
+
+    async createStockSupplyRequest(payload: SupplyRequestStockCreatePayload) {
+        return await ManagerService.createStockSupplyRequest(payload);
+    },
+
+    async patchSupplyRequest(requestId: number, payload: SupplyRequestUpdatePayload) {
+        return await ManagerService.patchSupplyRequest(requestId, payload);
+    },
+
+    async patchSupplyRequestLine(lineId: number, payload: SupplyRequestLineUpdatePayload) {
+        return await ManagerService.patchSupplyRequestLine(lineId, payload);
+    },
+
+    async generateSupplyRequestSupplierMessage(requestId: number, markSent = false) {
+        return await ManagerService.generateSupplyRequestSupplierMessage(requestId, { mark_sent: markSent });
+    },
+
+    async generateSupplyLogisticsMessage(payload: SupplyLogisticsMessagePayload) {
+        return await ManagerService.generateSupplyLogisticsMessage(payload);
     },
 
     async searchServices(q: string) {

@@ -2773,6 +2773,12 @@ class SupplierResponse(BaseModel):
     spreadsheet_id: Optional[str] = None
     spreadsheet_url: Optional[str] = None
     google_sheet_synced_at: Optional[datetime] = None
+    legal_name: Optional[str] = None
+    tax_id: Optional[str] = None
+    legal_address: Optional[str] = None
+    postal_address: Optional[str] = None
+    default_payment_method: str = "unknown"
+    payment_comment: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -2783,6 +2789,12 @@ class SupplierCreatePayload(BaseModel):
     spreadsheet_id_or_url: Optional[str] = None
     is_active: bool = True
     priority: int = 100
+    legal_name: Optional[str] = None
+    tax_id: Optional[str] = None
+    legal_address: Optional[str] = None
+    postal_address: Optional[str] = None
+    default_payment_method: str = "unknown"
+    payment_comment: Optional[str] = None
 
 
 class SupplierUpdatePayload(BaseModel):
@@ -2791,10 +2803,96 @@ class SupplierUpdatePayload(BaseModel):
     spreadsheet_id_or_url: Optional[str] = None
     is_active: Optional[bool] = None
     priority: Optional[int] = None
+    legal_name: Optional[str] = None
+    tax_id: Optional[str] = None
+    legal_address: Optional[str] = None
+    postal_address: Optional[str] = None
+    default_payment_method: Optional[str] = None
+    payment_comment: Optional[str] = None
 
 
 class SupplierListResponse(BaseModel):
     items: List[SupplierResponse]
+
+
+class SupplierContactBasePayload(BaseModel):
+    name: str
+    role: Optional[str] = None
+    phone: Optional[str] = None
+    viber: Optional[str] = None
+    telegram_username: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
+    email: Optional[str] = None
+    preferred_channel: str = "phone"
+    default_for_orders: bool = False
+    default_for_logistics: bool = False
+    comment: Optional[str] = None
+
+
+class SupplierContactCreatePayload(SupplierContactBasePayload):
+    pass
+
+
+class SupplierContactUpdatePayload(BaseModel):
+    name: Optional[str] = None
+    role: Optional[str] = None
+    phone: Optional[str] = None
+    viber: Optional[str] = None
+    telegram_username: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
+    email: Optional[str] = None
+    preferred_channel: Optional[str] = None
+    default_for_orders: Optional[bool] = None
+    default_for_logistics: Optional[bool] = None
+    comment: Optional[str] = None
+
+
+class SupplierContactResponse(SupplierContactBasePayload):
+    id: int
+    supplier_id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class SupplierContactListResponse(BaseModel):
+    items: List[SupplierContactResponse]
+
+
+class SupplierWarehouseBasePayload(BaseModel):
+    name: str
+    address: str
+    contact_id: Optional[int] = None
+    contact_name: Optional[str] = None
+    contact_phone: Optional[str] = None
+    work_hours: Optional[str] = None
+    pickup_notes: Optional[str] = None
+    is_default: bool = False
+
+
+class SupplierWarehouseCreatePayload(SupplierWarehouseBasePayload):
+    pass
+
+
+class SupplierWarehouseUpdatePayload(BaseModel):
+    name: Optional[str] = None
+    address: Optional[str] = None
+    contact_id: Optional[int] = None
+    contact_name: Optional[str] = None
+    contact_phone: Optional[str] = None
+    work_hours: Optional[str] = None
+    pickup_notes: Optional[str] = None
+    is_default: Optional[bool] = None
+
+
+class SupplierWarehouseResponse(SupplierWarehouseBasePayload):
+    id: int
+    supplier_id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class SupplierWarehouseListResponse(BaseModel):
+    items: List[SupplierWarehouseResponse]
 
 
 class SupplierPriceSourceResponse(BaseModel):
@@ -3050,6 +3148,141 @@ class ProductLocalStockResponse(BaseModel):
     qty: int
     updated_by: Optional[str] = None
     updated_at: datetime
+
+
+class SupplyRequestLineCreatePayload(BaseModel):
+    source_type: str = "manual"
+    order_product_link_id: Optional[int] = None
+    product_id: Optional[int] = None
+    supplier_offer_external_id: Optional[str] = None
+    title: Optional[str] = None
+    qty: int = 1
+    unit_cost: Optional[float] = None
+    reserved_until: Optional[datetime] = None
+    comment: Optional[str] = None
+
+
+class SupplyRequestCreatePayload(BaseModel):
+    supplier_id: int
+    warehouse_id: Optional[int] = None
+    supplier_contact_id: Optional[int] = None
+    logistics_contact_id: Optional[int] = None
+    intent: str = "order"
+    payment_method: Optional[str] = None
+    comment: Optional[str] = None
+    lines: List[SupplyRequestLineCreatePayload]
+
+
+class SupplyRequestFromOrderLinesPayload(BaseModel):
+    order_product_link_ids: List[int]
+    intent: str = "order"
+    supplier_id: Optional[int] = None
+    warehouse_id: Optional[int] = None
+    payment_method: Optional[str] = None
+    comment: Optional[str] = None
+
+
+class SupplyRequestStockLinePayload(BaseModel):
+    supplier_id: int
+    product_id: Optional[int] = None
+    title: Optional[str] = None
+    qty: int = 1
+    warehouse_id: Optional[int] = None
+    payment_method: Optional[str] = None
+    supplier_offer_external_id: Optional[str] = None
+    unit_cost: Optional[float] = None
+    comment: Optional[str] = None
+
+
+class SupplyRequestStockCreatePayload(BaseModel):
+    intent: str = "order"
+    comment: Optional[str] = None
+    lines: List[SupplyRequestStockLinePayload]
+
+
+class SupplyRequestUpdatePayload(BaseModel):
+    warehouse_id: Optional[int] = None
+    supplier_contact_id: Optional[int] = None
+    logistics_contact_id: Optional[int] = None
+    status: Optional[str] = None
+    intent: Optional[str] = None
+    payment_method: Optional[str] = None
+    comment: Optional[str] = None
+
+
+class SupplyRequestLineUpdatePayload(BaseModel):
+    status: Optional[str] = None
+    reserved_until: Optional[datetime] = None
+    received_qty: Optional[int] = None
+    comment: Optional[str] = None
+
+
+class SupplyRequestLineResponse(BaseModel):
+    id: int
+    request_id: int
+    order_product_link_id: Optional[int] = None
+    source_type: str
+    product_id: Optional[int] = None
+    product_title: Optional[str] = None
+    supplier_offer_external_id: Optional[str] = None
+    supplier_offer_title: Optional[str] = None
+    title_snapshot: str
+    qty: int
+    unit_cost_snapshot: Optional[float] = None
+    status: str
+    reserved_until: Optional[datetime] = None
+    received_qty: int
+    comment: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SupplyRequestResponse(BaseModel):
+    id: int
+    supplier_id: int
+    supplier_name: Optional[str] = None
+    warehouse_id: Optional[int] = None
+    warehouse_name: Optional[str] = None
+    warehouse_address: Optional[str] = None
+    supplier_contact_id: Optional[int] = None
+    supplier_contact_name: Optional[str] = None
+    logistics_contact_id: Optional[int] = None
+    logistics_contact_name: Optional[str] = None
+    status: str
+    intent: str
+    payment_method: str
+    comment: Optional[str] = None
+    supplier_message_snapshot: Optional[str] = None
+    logistics_message_snapshot: Optional[str] = None
+    created_by: Optional[str] = None
+    supplier_message_sent_at: Optional[datetime] = None
+    logistics_message_sent_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+    lines: List[SupplyRequestLineResponse] = Field(default_factory=list)
+
+
+class SupplyRequestListResponse(BaseModel):
+    items: List[SupplyRequestResponse]
+    meta: Meta
+
+
+class SupplyRequestCreateResponse(BaseModel):
+    items: List[SupplyRequestResponse]
+
+
+class SupplyRequestMessagePayload(BaseModel):
+    mark_sent: bool = False
+
+
+class SupplyLogisticsMessagePayload(BaseModel):
+    request_ids: List[int]
+    mark_sent: bool = False
+
+
+class SupplyMessageResponse(BaseModel):
+    text: str
+    request_ids: List[int] = Field(default_factory=list)
 
 
 class BulkRoundRequest(BaseModel):

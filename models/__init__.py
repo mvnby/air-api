@@ -62,10 +62,14 @@ from .product import (
 from .supplier import (
     ProductLocalStock,
     ProductSupplierMapping,
+    SupplierContact,
     Supplier,
     SupplierOffer,
     SupplierPriceSource,
     SupplierSyncRun,
+    SupplierWarehouse,
+    SupplyRequest,
+    SupplyRequestLine,
 )
 
 __all__ = [
@@ -135,9 +139,13 @@ __all__ = [
     "Payment",
     "PaymentType",
     "Supplier",
+    "SupplierContact",
     "SupplierPriceSource",
     "SupplierOffer",
     "ProductSupplierMapping",
     "ProductLocalStock",
     "SupplierSyncRun",
+    "SupplierWarehouse",
+    "SupplyRequest",
+    "SupplyRequestLine",
 ]

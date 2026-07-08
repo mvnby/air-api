@@ -73,6 +73,43 @@ class PaymentCurrency(str, Enum):
     EUR = "EUR"
 
 
+class SupplierPaymentMethod(str, Enum):
+    CASH = "cash"
+    BANK = "bank"
+    MIXED = "mixed"
+    UNKNOWN = "unknown"
+
+
+class SupplierContactChannel(str, Enum):
+    PHONE = "phone"
+    VIBER = "viber"
+    TELEGRAM = "telegram"
+    EMAIL = "email"
+    OTHER = "other"
+
+
+class SupplyRequestIntent(str, Enum):
+    RESERVE = "reserve"
+    ORDER = "order"
+
+
+class SupplyRequestStatus(str, Enum):
+    DRAFT = "draft"
+    AWAITING_REPLY = "awaiting_reply"
+    RESERVED = "reserved"
+    ORDERED = "ordered"
+    READY_FOR_PICKUP = "ready_for_pickup"
+    PICKED_UP = "picked_up"
+    RECEIVED = "received"
+    CANCELED = "canceled"
+
+
+class SupplyRequestLineSourceType(str, Enum):
+    ORDER_LINE = "order_line"
+    STOCK = "stock"
+    MANUAL = "manual"
+
+
 class DocumentRoleType(str, Enum):
     SELLER_BUYER = "seller_buyer"
     EXECUTOR_CUSTOMER = "executor_customer"
