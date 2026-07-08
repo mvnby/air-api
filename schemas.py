@@ -4061,13 +4061,23 @@ class OrderEmailSendPayload(OutgoingEmailSendPayload):
     document_ids: List[int] = Field(default_factory=list)
 
 
+class OutgoingEmailAttachmentResponse(BaseModel):
+    filename: Optional[str] = None
+    mime_type: Optional[str] = None
+    size: Optional[int] = None
+    storage_key: Optional[str] = None
+
+
 class OutgoingEmailResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     status: str
+    retry_of_email_id: Optional[int] = None
     order_id: Optional[int] = None
     customer_id: Optional[int] = None
+    customer_name: Optional[str] = None
+    order_title: Optional[str] = None
     recipient_email: str
     subject: str
     body_text: Optional[str] = None
@@ -4075,8 +4085,19 @@ class OutgoingEmailResponse(BaseModel):
     from_email: Optional[str] = None
     from_name: Optional[str] = None
     reply_to: Optional[str] = None
-    attachments: Optional[List[Dict[str, Any]]] = None
+    attachments: Optional[List[OutgoingEmailAttachmentResponse]] = None
     error: Optional[str] = None
     sent_at: Optional[datetime] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
+
+
+class OutgoingEmailDetailResponse(OutgoingEmailResponse):
+    retry_attempts: List[OutgoingEmailResponse] = Field(default_factory=list)
+
+
+class OutgoingEmailListResponse(BaseModel):
+    items: List[OutgoingEmailResponse]
+    total: int
+    page: int
+    limit: int

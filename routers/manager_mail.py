@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,8 +15,12 @@ from routers.manager_operation_ids import (
     IMPORT_MANAGER_BANK_STATEMENT,
     IMPORT_MANAGER_EMAIL_LEADS,
     GET_MANAGER_EMAIL_LEAD_IMPORT_STATUS,
+    GET_MANAGER_OUTGOING_EMAIL,
     LIST_MANAGER_BANK_RECEIPTS,
+    LIST_MANAGER_ORDER_OUTGOING_EMAILS,
+    LIST_MANAGER_OUTGOING_EMAILS,
     PATCH_MANAGER_BANK_RECEIPT_STATUS,
+    RETRY_MANAGER_OUTGOING_EMAIL,
     SEND_MANAGER_ORDER_EMAIL,
     SEND_MANAGER_TEST_EMAIL,
 )
@@ -30,6 +36,8 @@ from schemas import (
     EmailLeadImportJobResponse,
     EmailLeadImportResponse,
     OrderEmailSendPayload,
+    OutgoingEmailDetailResponse,
+    OutgoingEmailListResponse,
     OutgoingEmailResponse,
     OutgoingEmailSendPayload,
 )
@@ -38,6 +46,7 @@ from services.bank_statement_csv_service import BankStatementCsvService
 from services.email_lead_import_job_service import EmailLeadImportJobService, EmailLeadImportJobSnapshot
 from services.mail_imap_service import MailImapService
 from services.mail_smtp_service import MailSmtpService
+from services.outgoing_email_service import OutgoingEmailService
 
 
 router = APIRouter(
@@ -269,6 +278,108 @@ async def delete_manager_bank_receipt(
         raise manager_http_error(
             status_code=400,
             endpoint=DELETE_MANAGER_BANK_RECEIPT,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.get(
+    "/outgoing-emails",
+    response_model=OutgoingEmailListResponse,
+    operation_id=LIST_MANAGER_OUTGOING_EMAILS,
+)
+async def list_manager_outgoing_emails(
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=100),
+    status: str | None = None,
+    order_id: int | None = None,
+    customer_id: int | None = None,
+    recipient: str | None = None,
+    q: str | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        items, total = await OutgoingEmailService.list_emails(
+            session,
+            page=page,
+            limit=limit,
+            status=status,
+            order_id=order_id,
+            customer_id=customer_id,
+            recipient=recipient,
+            q=q,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        return OutgoingEmailListResponse(items=items, total=total, page=page, limit=limit)
+    except Exception as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=LIST_MANAGER_OUTGOING_EMAILS,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.get(
+    "/outgoing-emails/{email_id}",
+    response_model=OutgoingEmailDetailResponse,
+    operation_id=GET_MANAGER_OUTGOING_EMAIL,
+)
+async def get_manager_outgoing_email(
+    email_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await OutgoingEmailService.get_email_detail(session, email_id)
+    except Exception as exc:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=GET_MANAGER_OUTGOING_EMAIL,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.get(
+    "/orders/{order_id}/outgoing-emails",
+    response_model=OutgoingEmailListResponse,
+    operation_id=LIST_MANAGER_ORDER_OUTGOING_EMAILS,
+)
+async def list_manager_order_outgoing_emails(
+    order_id: int,
+    limit: int = Query(20, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        items, total = await OutgoingEmailService.list_emails(session, page=1, limit=limit, order_id=order_id)
+        return OutgoingEmailListResponse(items=items, total=total, page=1, limit=limit)
+    except Exception as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=LIST_MANAGER_ORDER_OUTGOING_EMAILS,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/outgoing-emails/{email_id}/retry",
+    response_model=OutgoingEmailResponse,
+    operation_id=RETRY_MANAGER_OUTGOING_EMAIL,
+)
+async def retry_manager_outgoing_email(
+    email_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await OutgoingEmailService.retry_failed_email(session, email_id)
+    except Exception as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=RETRY_MANAGER_OUTGOING_EMAIL,
             error_code=BAD_REQUEST,
             message=str(exc),
         ) from exc

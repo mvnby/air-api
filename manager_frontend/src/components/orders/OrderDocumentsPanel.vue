@@ -17,6 +17,7 @@ import type {
 import { getApiErrorMessage } from '../../utils/api-errors';
 import AdditionalConditionsLibrary from './AdditionalConditionsLibrary.vue';
 import DocumentSendModal from './DocumentSendModal.vue';
+import OrderEmailHistory from './OrderEmailHistory.vue';
 
 type ToastType = 'success' | 'error';
 type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
@@ -109,6 +110,7 @@ const isCreatePanelOpen = ref(false);
 const showAdvancedSettings = ref(false);
 const selectedDocumentType = ref('contract');
 const showDocumentSendModal = ref(false);
+const emailHistoryRefreshKey = ref(0);
 const isUploadingDoc = ref(false);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const externalContractOpen = ref(false);
@@ -928,8 +930,12 @@ const saveWaybillProductLines = async () => {
 };
 
 const handleDocumentsSent = () => {
-  notify('Письмо отправлено', 'success');
+  notify('Письмо записано в историю отправок', 'success');
   emit('refresh');
+};
+
+const handleDocumentsSendSettled = () => {
+  emailHistoryRefreshKey.value += 1;
 };
 
 const generateDocument = async (type: string) => {
@@ -1148,6 +1154,7 @@ const registerExternalContract = async () => {
       :order="order"
       :documents="documents"
       @sent="handleDocumentsSent"
+      @settled="handleDocumentsSendSettled"
     />
 
     <div class="mb-4 flex flex-col gap-3 border-b border-slate-100 pb-4 dark:border-slate-800 sm:flex-row sm:items-start sm:justify-between">
@@ -1194,6 +1201,13 @@ const registerExternalContract = async () => {
         </button>
       </div>
     </div>
+
+    <OrderEmailHistory
+      class="mb-4"
+      :order-id="order.id"
+      :refresh-key="emailHistoryRefreshKey"
+      @toast="notify($event.message, $event.type || 'success')"
+    />
 
     <div class="flex flex-col gap-3">
       <div>

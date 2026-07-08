@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import type { Component } from 'vue';
-import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Settings, Wallet, ChevronLeft, ChevronRight, ChevronDown, Tags, FileSpreadsheet, Link2, Award, Database, Calculator, ReceiptText, Image as ImageIcon, ShieldCheck, Truck } from 'lucide-vue-next';
+import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Settings, Wallet, ChevronLeft, ChevronRight, ChevronDown, Tags, FileSpreadsheet, Link2, Award, Database, Calculator, ReceiptText, Image as ImageIcon, ShieldCheck, Truck, Mail } from 'lucide-vue-next';
 import { api } from './api';
 import { getApiErrorMessage } from './utils/api-errors';
 import type { TelegramLoginPayload } from './api';
@@ -20,6 +20,7 @@ const SettingsBackupView = defineAsyncComponent(() => import('./views/SettingsBa
 const TariffsView = defineAsyncComponent(() => import('./views/TariffsView.vue'));
 const ServiceEstimatesView = defineAsyncComponent(() => import('./views/ServiceEstimatesView.vue'));
 const BankReceiptsView = defineAsyncComponent(() => import('./views/BankReceiptsView.vue'));
+const OutgoingEmailsView = defineAsyncComponent(() => import('./views/OutgoingEmailsView.vue'));
 const TagsView = defineAsyncComponent(() => import('./views/TagsView.vue'));
 const BrandsView = defineAsyncComponent(() => import('./views/BrandsView.vue'));
 const SupplierFeedsView = defineAsyncComponent(() => import('./views/SupplierFeedsView.vue'));
@@ -56,7 +57,7 @@ type NavItem = {
   match?: 'exact' | 'prefix';
 };
 
-type NavSectionId = 'catalog' | 'services' | 'team' | 'finance' | 'system';
+type NavSectionId = 'catalog' | 'services' | 'team' | 'finance' | 'mail' | 'system';
 
 type NavSection = {
   id: NavSectionId;
@@ -116,6 +117,13 @@ const navSections: NavSection[] = [
     ],
   },
   {
+    id: 'mail',
+    label: 'Почта',
+    items: [
+      { path: '/manager/mail/outbox', label: 'Исходящие', icon: Mail, match: 'prefix' },
+    ],
+  },
+  {
     id: 'system',
     label: 'Системное',
     items: [
@@ -130,6 +138,7 @@ const defaultExpandedNavSections: Record<NavSectionId, boolean> = {
   services: true,
   team: true,
   finance: true,
+  mail: true,
   system: true,
 };
 
@@ -199,6 +208,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/settings')) return 'settings';
   if (path.startsWith('/manager/tariffs')) return 'tariffs';
   if (path.startsWith('/manager/service-estimates')) return 'service-estimates';
+  if (path.startsWith('/manager/mail/outbox')) return 'outgoing-emails';
   if (path.startsWith('/manager/payments')) return 'payments';
   if (path.startsWith('/manager/tags')) return 'tags';
   if (path.startsWith('/manager/brands')) return 'brands';
@@ -588,6 +598,7 @@ watch(currentPath, () => {
       <SettingsView v-else-if="currentView === 'settings'" :key="currentLocation" />
       <TariffsView v-else-if="currentView === 'tariffs'" :key="currentLocation" />
       <ServiceEstimatesView v-else-if="currentView === 'service-estimates'" :key="currentLocation" />
+      <OutgoingEmailsView v-else-if="currentView === 'outgoing-emails'" :key="currentLocation" />
       <BankReceiptsView v-else-if="currentView === 'payments'" :key="currentLocation" />
       <TagsView v-else-if="currentView === 'tags'" :key="currentLocation" />
       <BrandsView v-else-if="currentView === 'brands'" :key="currentLocation" />
