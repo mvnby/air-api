@@ -2,6 +2,11 @@ name: Turbo Rebuild Web ⚡
 
 on:
   workflow_dispatch:
+    inputs:
+      catalog_revision:
+        description: Catalog revision that should be marked published after deploy
+        required: false
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -147,3 +152,47 @@ jobs:
 
           echo "::error::Manual web rebuild failed after ${MAX_ATTEMPTS} attempts (${FAILURE_KIND})."
           exit 1
+
+      - name: Mark catalog static revision published
+        if: ${{ success() }}
+        env:
+          CATALOG_REVISION: ${{ inputs.catalog_revision }}
+          WEB_REBUILD_CALLBACK_TOKEN: ${{ secrets.WEB_REBUILD_CALLBACK_TOKEN }}
+          WEB_REBUILD_CALLBACK_URL: ${{ vars.WEB_REBUILD_CALLBACK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WEB_REBUILD_CALLBACK_TOKEN:-}" ]; then
+            echo "No callback token configured; skipping API callback."
+            exit 0
+          fi
+
+          CATALOG_REVISION="${CATALOG_REVISION:-0}"
+          CALLBACK_URL="${WEB_REBUILD_CALLBACK_URL:-https://api.mvn.by/api/system/rebuild-web/complete}"
+          if ! curl -fsS -X POST "${CALLBACK_URL}" \
+            -H "Content-Type: application/json" \
+            -H "X-Web-Rebuild-Token: ${WEB_REBUILD_CALLBACK_TOKEN}" \
+            --data "{\"catalog_revision\":${CATALOG_REVISION},\"status\":\"success\"}"; then
+            echo "::warning::Static revision was deployed, but API callback failed."
+          fi
+
+      - name: Mark catalog static rebuild failed
+        if: ${{ failure() }}
+        env:
+          CATALOG_REVISION: ${{ inputs.catalog_revision }}
+          WEB_REBUILD_CALLBACK_TOKEN: ${{ secrets.WEB_REBUILD_CALLBACK_TOKEN }}
+          WEB_REBUILD_CALLBACK_URL: ${{ vars.WEB_REBUILD_CALLBACK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WEB_REBUILD_CALLBACK_TOKEN:-}" ]; then
+            echo "No callback token configured; skipping failure callback."
+            exit 0
+          fi
+
+          CATALOG_REVISION="${CATALOG_REVISION:-0}"
+          CALLBACK_URL="${WEB_REBUILD_CALLBACK_URL:-https://api.mvn.by/api/system/rebuild-web/complete}"
+          if ! curl -fsS -X POST "${CALLBACK_URL}" \
+            -H "Content-Type: application/json" \
+            -H "X-Web-Rebuild-Token: ${WEB_REBUILD_CALLBACK_TOKEN}" \
+            --data "{\"catalog_revision\":${CATALOG_REVISION},\"status\":\"failed\",\"error\":\"GitHub Actions rebuild-web failed\"}"; then
+            echo "::warning::Static rebuild failed, and API failure callback also failed."
+          fi

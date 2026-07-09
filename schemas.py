@@ -346,6 +346,28 @@ class CatalogRevisionResponse(BaseModel):
     updated_at: datetime
 
 
+class WebRebuildStatusResponse(BaseModel):
+    current_revision: int
+    current_revision_updated_at: datetime
+    published_revision: int
+    published_at: Optional[datetime] = None
+    requested_revision: Optional[int] = None
+    requested_at: Optional[datetime] = None
+    needs_rebuild: bool
+    state: str
+    last_error: Optional[str] = None
+
+
+class WebRebuildTriggerResponse(WebRebuildStatusResponse):
+    message: str
+
+
+class WebRebuildCompletePayload(BaseModel):
+    catalog_revision: int
+    status: str = "success"
+    error: Optional[str] = None
+
+
 class BulkSpecUpdate(BaseModel):
     product_ids: List[int]
     specs: Dict[str, Any]  # Словарь характеристик для добавления/обновления

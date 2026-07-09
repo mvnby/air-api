@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import type { Component } from 'vue';
-import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Settings, Wallet, ChevronLeft, ChevronRight, ChevronDown, Tags, FileSpreadsheet, Link2, Award, Database, Calculator, ReceiptText, Image as ImageIcon, ShieldCheck, Truck, Mail } from 'lucide-vue-next';
+import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Settings, Wallet, ChevronLeft, ChevronRight, ChevronDown, Tags, FileSpreadsheet, Link2, Award, Database, Calculator, ReceiptText, Image as ImageIcon, ShieldCheck, Truck, Mail, AlertTriangle } from 'lucide-vue-next';
 import { api } from './api';
 import { getApiErrorMessage } from './utils/api-errors';
 import type { TelegramLoginPayload } from './api';
@@ -37,6 +37,7 @@ const loginError = ref('');
 const telegramLoginLoading = ref(false);
 const telegramLoginContainer = ref<HTMLElement | null>(null);
 const rebuildLoading = ref(false);
+const webRebuildStatus = ref<WebRebuildStatus | null>(null);
 const isMobileNavOpen = ref(false);
 const isDesktopNavCollapsed = ref(false);
 const theme = ref<'light' | 'dark'>('light');
@@ -49,6 +50,19 @@ const THEME_STORAGE_KEY = 'manager_theme';
 const NAV_SECTIONS_STORAGE_KEY = 'manager_nav_sections_v1';
 const telegramLoginBotUsername = String(import.meta.env.VITE_TELEGRAM_LOGIN_BOT_USERNAME || '').trim();
 const telegramCallbackName = 'onTelegramManagerAuth';
+let webRebuildStatusInterval: ReturnType<typeof window.setInterval> | null = null;
+
+type WebRebuildStatus = {
+  current_revision: number;
+  current_revision_updated_at: string;
+  published_revision: number;
+  published_at?: string | null;
+  requested_revision?: number | null;
+  requested_at?: string | null;
+  needs_rebuild: boolean;
+  state: string;
+  last_error?: string | null;
+};
 
 type NavItem = {
   path: string;
@@ -218,6 +232,48 @@ const currentView = computed(() => {
   return 'products';
 });
 
+const webRebuildNeedsAttention = computed(() => Boolean(webRebuildStatus.value?.needs_rebuild));
+const webRebuildQueued = computed(() => webRebuildStatus.value?.state === 'queued');
+const webRebuildNoticeVisible = computed(() => (
+  webRebuildNeedsAttention.value || Boolean(webRebuildStatus.value?.last_error)
+));
+
+const webRebuildNoticeClass = computed(() => {
+  if (webRebuildQueued.value) return 'border-blue-200 bg-blue-50 text-blue-900';
+  if (webRebuildNeedsAttention.value || webRebuildStatus.value?.last_error) {
+    return 'border-amber-200 bg-amber-50 text-amber-900';
+  }
+  return 'border-gray-200 bg-gray-50 text-gray-700';
+});
+
+const webRebuildNoticeTitle = computed(() => {
+  if (webRebuildQueued.value) return 'Сборка запущена';
+  if (webRebuildNeedsAttention.value) return 'Сайт устарел';
+  return 'Статика актуальна';
+});
+
+const webRebuildNoticeText = computed(() => {
+  if (webRebuildQueued.value) {
+    return 'GitHub Actions собирает Astro. После deploy предупреждение снимется.';
+  }
+  if (webRebuildNeedsAttention.value) {
+    return 'Каталог изменился после последней публикации. Нужна пересборка сайта.';
+  }
+  return 'Опубликована текущая ревизия каталога.';
+});
+
+const rebuildButtonLabel = computed(() => {
+  if (rebuildLoading.value) return 'Сборка...';
+  if (webRebuildNeedsAttention.value) return 'Пересобрать сайт';
+  return 'Обновить сайт';
+});
+
+const rebuildButtonTitle = computed(() => {
+  if (!isDesktopNavCollapsed.value) return '';
+  if (webRebuildNeedsAttention.value) return 'Статика устарела - пересобрать сайт';
+  return 'Обновить сайт';
+});
+
 const onPopState = () => {
   currentLocation.value = `${window.location.pathname}${window.location.search}`;
 };
@@ -256,6 +312,14 @@ const setToast = (message: string, type: 'success' | 'error' = 'success') => {
   }, 3000);
 };
 
+const fetchWebRebuildStatus = async () => {
+  try {
+    webRebuildStatus.value = await api.getWebRebuildStatus() as WebRebuildStatus;
+  } catch {
+    // Non-critical status widget; the rebuild button reports its own errors.
+  }
+};
+
 const handleLogin = async () => {
   loginLoading.value = true;
   loginError.value = '';
@@ -265,6 +329,7 @@ const handleLogin = async () => {
     showLoginModal.value = false;
     loginPassword.value = '';
     void fetchLeadsCount();
+    void fetchWebRebuildStatus();
   } catch {
     loginError.value = 'Неверный логин или пароль';
   } finally {
@@ -280,6 +345,7 @@ const handleTelegramLogin = async (payload: TelegramLoginPayload) => {
     isAuthenticated.value = true;
     showLoginModal.value = false;
     void fetchLeadsCount();
+    void fetchWebRebuildStatus();
   } catch (err) {
     loginError.value = getApiErrorMessage(err) || 'Не удалось войти через Telegram';
   } finally {
@@ -313,7 +379,9 @@ const handleRebuild = async () => {
   rebuildLoading.value = true;
   try {
     const result = await api.rebuildWeb();
+    webRebuildStatus.value = result as WebRebuildStatus;
     setToast(String(result.message || 'Сборка запущена. Сайт обновится через пару минут.'));
+    void fetchWebRebuildStatus();
   } catch (err) {
     setToast(`Ошибка при запуске сборки: ${getApiErrorMessage(err)}`, 'error');
   } finally {
@@ -336,6 +404,7 @@ const checkAuth = async () => {
     isAuthenticated.value = true;
     // Fetch the badge count once authenticated
     void fetchLeadsCount();
+    void fetchWebRebuildStatus();
   } catch {
     isAuthenticated.value = false;
     showLoginModal.value = true;
@@ -355,11 +424,18 @@ onMounted(() => {
     navigate('/manager');
   }
   window.addEventListener('popstate', onPopState);
+  webRebuildStatusInterval = window.setInterval(() => {
+    if (isAuthenticated.value) void fetchWebRebuildStatus();
+  }, 60_000);
   checkAuth();
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('popstate', onPopState);
+  if (webRebuildStatusInterval) {
+    window.clearInterval(webRebuildStatusInterval);
+    webRebuildStatusInterval = null;
+  }
   delete window[telegramCallbackName];
 });
 
@@ -565,21 +641,42 @@ watch(currentPath, () => {
       </nav>
 
       <div class="p-3 border-t border-gray-100 mt-auto">
+        <div
+          v-if="webRebuildNoticeVisible && !isDesktopNavCollapsed"
+          class="mb-2 rounded-lg border px-3 py-2 text-xs leading-snug"
+          :class="webRebuildNoticeClass"
+        >
+          <div class="flex items-center gap-2 font-semibold">
+            <Loader2 v-if="webRebuildQueued" class="h-4 w-4 animate-spin shrink-0" />
+            <AlertTriangle v-else class="h-4 w-4 shrink-0" />
+            <span>{{ webRebuildNoticeTitle }}</span>
+          </div>
+          <p class="mt-1">{{ webRebuildNoticeText }}</p>
+          <p v-if="webRebuildStatus?.last_error" class="mt-1 break-words text-red-700">
+            {{ webRebuildStatus.last_error }}
+          </p>
+        </div>
         <button
-          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all"
+          class="relative w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all"
           :class="[
             rebuildLoading
               ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              : 'bg-teal-600 text-white hover:bg-teal-700 shadow-sm hover:shadow-md',
+              : webRebuildNeedsAttention
+                ? 'bg-amber-500 text-white hover:bg-amber-600 shadow-sm hover:shadow-md'
+                : 'bg-teal-600 text-white hover:bg-teal-700 shadow-sm hover:shadow-md',
             isDesktopNavCollapsed ? 'justify-center' : ''
           ]"
           :disabled="rebuildLoading"
           @click="handleRebuild"
-          :title="isDesktopNavCollapsed ? 'Обновить сайт (Deploy)' : ''"
+          :title="rebuildButtonTitle"
         >
+          <span
+            v-if="isDesktopNavCollapsed && webRebuildNeedsAttention"
+            class="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-amber-300 ring-2 ring-white"
+          />
           <Loader2 v-if="rebuildLoading" class="w-5 h-5 animate-spin shrink-0" />
           <Zap v-else class="w-5 h-5 shrink-0" />
-          <span v-if="!isDesktopNavCollapsed">{{ rebuildLoading ? 'Сборка...' : 'Обновить сайт' }}</span>
+          <span v-if="!isDesktopNavCollapsed">{{ rebuildButtonLabel }}</span>
         </button>
       </div>
     </aside>

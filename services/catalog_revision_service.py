@@ -26,6 +26,74 @@ class CatalogRevisionService:
         return CatalogRevisionService._serialize(row)
 
     @staticmethod
+    def _serialize_static_rebuild_status(row: Any) -> dict[str, Any]:
+        needs_rebuild = row.current_revision > row.published_revision
+        rebuild_requested_for_current = (
+            needs_rebuild
+            and row.requested_revision >= row.current_revision
+            and row.requested_at is not None
+            and row.last_error is None
+        )
+        if not needs_rebuild:
+            state = "fresh"
+        elif rebuild_requested_for_current:
+            state = "queued"
+        else:
+            state = "stale"
+
+        return {
+            "current_revision": row.current_revision,
+            "current_revision_updated_at": row.current_updated_at,
+            "published_revision": row.published_revision,
+            "published_at": row.published_at,
+            "requested_revision": row.requested_revision or None,
+            "requested_at": row.requested_at,
+            "needs_rebuild": needs_rebuild,
+            "state": state,
+            "last_error": row.last_error,
+        }
+
+    @staticmethod
+    async def get_static_rebuild_status(session: AsyncSession) -> dict[str, Any]:
+        row = await CatalogRevisionDAO.get_static_publish_snapshot(session)
+        return CatalogRevisionService._serialize_static_rebuild_status(row)
+
+    @staticmethod
+    async def mark_static_rebuild_requested(
+        session: AsyncSession,
+        revision: int,
+    ) -> dict[str, Any]:
+        row = await CatalogRevisionDAO.mark_static_rebuild_requested(
+            session,
+            revision=revision,
+        )
+        return CatalogRevisionService._serialize_static_rebuild_status(row)
+
+    @staticmethod
+    async def mark_static_rebuild_completed(
+        session: AsyncSession,
+        revision: int,
+    ) -> dict[str, Any]:
+        row = await CatalogRevisionDAO.mark_static_rebuild_completed(
+            session,
+            revision=revision,
+        )
+        return CatalogRevisionService._serialize_static_rebuild_status(row)
+
+    @staticmethod
+    async def mark_static_rebuild_failed(
+        session: AsyncSession,
+        revision: int,
+        error: str,
+    ) -> dict[str, Any]:
+        row = await CatalogRevisionDAO.mark_static_rebuild_failed(
+            session,
+            revision=revision,
+            error=error,
+        )
+        return CatalogRevisionService._serialize_static_rebuild_status(row)
+
+    @staticmethod
     async def bump(
         session: AsyncSession,
         scope: str,

@@ -117,6 +117,51 @@ async def test_product_update_and_brand_update_bump_revision(sqlite_session):
 
 
 @pytest.mark.asyncio
+async def test_static_rebuild_status_tracks_catalog_publication(sqlite_session):
+    initial = await CatalogRevisionService.get_static_rebuild_status(sqlite_session)
+    assert initial["current_revision"] == 0
+    assert initial["published_revision"] == 0
+    assert initial["needs_rebuild"] is False
+    assert initial["state"] == "fresh"
+
+    bumped = await CatalogRevisionService.bump(sqlite_session, scope="test_catalog_change")
+    stale = await CatalogRevisionService.get_static_rebuild_status(sqlite_session)
+    assert stale["current_revision"] == bumped["revision"]
+    assert stale["published_revision"] == 0
+    assert stale["needs_rebuild"] is True
+    assert stale["state"] == "stale"
+
+    queued = await CatalogRevisionService.mark_static_rebuild_requested(
+        sqlite_session,
+        bumped["revision"],
+    )
+    assert queued["requested_revision"] == bumped["revision"]
+    assert queued["needs_rebuild"] is True
+    assert queued["state"] == "queued"
+
+    fresh = await CatalogRevisionService.mark_static_rebuild_completed(
+        sqlite_session,
+        bumped["revision"],
+    )
+    assert fresh["published_revision"] == bumped["revision"]
+    assert fresh["needs_rebuild"] is False
+    assert fresh["state"] == "fresh"
+
+    failed_revision = (
+        await CatalogRevisionService.bump(sqlite_session, scope="test_failed_rebuild")
+    )["revision"]
+    failed = await CatalogRevisionService.mark_static_rebuild_failed(
+        sqlite_session,
+        failed_revision,
+        "deploy failed",
+    )
+    assert failed["requested_revision"] == failed_revision
+    assert failed["last_error"] == "deploy failed"
+    assert failed["needs_rebuild"] is True
+    assert failed["state"] == "stale"
+
+
+@pytest.mark.asyncio
 async def test_product_update_rolls_back_when_revision_bump_fails(sqlite_session, monkeypatch):
     product = Product(
         title="Rollback Revision Product",

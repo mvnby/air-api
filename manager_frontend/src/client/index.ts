@@ -390,6 +390,9 @@ export type { TagGroupResponse } from './models/TagGroupResponse';
 export type { TagResponse } from './models/TagResponse';
 export type { TelegramLoginPayload } from './models/TelegramLoginPayload';
 export type { ValidationError } from './models/ValidationError';
+export type { WebRebuildCompletePayload } from './models/WebRebuildCompletePayload';
+export type { WebRebuildStatusResponse } from './models/WebRebuildStatusResponse';
+export type { WebRebuildTriggerResponse } from './models/WebRebuildTriggerResponse';
 
 export { ApiService } from './services/ApiService';
 export { LoginService } from './services/LoginService';

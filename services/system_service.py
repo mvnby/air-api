@@ -4,7 +4,7 @@ from core.logger import logger
 
 class SystemService:
     @staticmethod
-    async def trigger_web_rebuild() -> dict:
+    async def trigger_web_rebuild(catalog_revision: int | None = None) -> dict:
         """
         Triggers the 'rebuild-web.yml' workflow in GitHub Actions.
         Requires GITHUB_TOKEN to be set in .env.
@@ -25,9 +25,11 @@ class SystemService:
             "X-GitHub-Api-Version": "2022-11-28",
         }
         
-        payload = {
-            "ref": "main" # Build from main branch
+        payload: dict[str, object] = {
+            "ref": "main"  # Build from main branch
         }
+        if catalog_revision is not None:
+            payload["inputs"] = {"catalog_revision": str(max(0, int(catalog_revision)))}
         
         async with httpx.AsyncClient() as client:
             try:
@@ -38,7 +40,10 @@ class SystemService:
                     logger.info("Successfully triggered rebuild-web workflow.")
                     return {"success": True}
                 else:
-                    error_data = response.json() if response.content else "No response body"
+                    try:
+                        error_data = response.json() if response.content else "No response body"
+                    except ValueError:
+                        error_data = response.text or "No response body"
                     logger.error(f"GitHub API Error ({response.status_code}): {error_data}")
                     return {
                         "success": False, 

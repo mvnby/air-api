@@ -198,6 +198,7 @@ class Settings(BaseSettings):
     GITHUB_TOKEN: str = ""
     GITHUB_OWNER: str = "mvnby"
     GITHUB_REPO: str = "air-api"
+    WEB_REBUILD_CALLBACK_TOKEN: str = ""
 
     # Mail integration (Yandex Mail by default)
     MAIL_IMAP_HOST: str = "imap.yandex.ru"
