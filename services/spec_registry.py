@@ -105,7 +105,12 @@ SPEC_DEFINITIONS: Mapping[str, SpecDefinition] = {
     "model_indoor": _spec("model_indoor", "Модель внутреннего блока", SpecValueType.TEXT),
     "model_outdoor": _spec("model_outdoor", "Модель наружного блока", SpecValueType.TEXT),
     "sku": _spec("sku", "Артикул", SpecValueType.TEXT),
-    "release_year": _spec("release_year", "Дата выхода на рынок", SpecValueType.TEXT, aliases=("Дата выхода на рынок",)),
+    "release_year": _spec(
+        "release_year",
+        "Дата выхода на рынок",
+        SpecValueType.TEXT,
+        aliases=("Дата выхода на рынок", "Год модели"),
+    ),
     "inverter": _spec(
         "inverter",
         "Инвертор",
@@ -497,6 +502,7 @@ SPEC_DEFINITIONS = {
     ),
     "ionizer": _spec("ionizer", "Ионизатор", SpecValueType.BOOLEAN),
     "modes": _spec("modes", "Режимы работы", SpecValueType.TEXT),
+    "features": _spec("features", "Функции", SpecValueType.TEXT, aliases=("Функции", "Особенности")),
     "multi_max_total_pipe_length": _spec(
         "multi_max_total_pipe_length",
         "Максимальная суммарная длина магистрали",
@@ -743,6 +749,7 @@ REGISTRY_HELP_TEXTS: Mapping[str, tuple[str | None, str | None]] = {
     "drain_pipe_diameter": ("Диаметр дренажной трубы или патрубка.", None),
     "electrostatic_filter": ("Наличие электростатического фильтра.", None),
     "fan_speed": ("Наличие регулировки скорости вентилятора.", None),
+    "features": ("Список маркетинговых и технических функций из источника.", None),
     "fresh_air": ("Наличие функции или канала притока свежего воздуха.", None),
     "humidification": ("Наличие функции увлажнения воздуха.", None),
     "includes_indoor_unit": ("Признак, что внутренний блок входит в комплект поставки.", None),
@@ -1038,6 +1045,7 @@ REGISTRY_LEGACY_ALIASES_BY_KEY: Mapping[str, tuple[str, ...]] = {
         'Установка',
     ),
     'inverter': (
+        'Инвертор',
         'Тип системы',
         'Инверторная технология',
         'Инверторный',
@@ -1068,6 +1076,10 @@ REGISTRY_LEGACY_ALIASES_BY_KEY: Mapping[str, tuple[str, ...]] = {
     'modes': (
         'Режим работы',
         'Режимы работы',
+    ),
+    'features': (
+        'Функции',
+        'Особенности',
     ),
     'multi_compat_mode': (
         'multi_compat_mode',
@@ -1420,9 +1432,13 @@ def _aliases_for_key(key: str) -> list[str]:
 
 REGISTRY_DIMENSIONS_MAP: dict[str, tuple[str, str, str]] = {
     "Габариты внутреннего блока (ШхВхГ)": ("width_indoor", "height_indoor", "depth_indoor"),
+    "Габариты внутреннего блока (Ш×В×Г)": ("width_indoor", "height_indoor", "depth_indoor"),
     "Габариты внутреннего блока (ШхВхГ), мм": ("width_indoor", "height_indoor", "depth_indoor"),
+    "Габариты внутреннего блока (Ш×В×Г), мм": ("width_indoor", "height_indoor", "depth_indoor"),
     "Габариты наружного блока (ШхВхГ)": ("width_outdoor", "height_outdoor", "depth_outdoor"),
+    "Габариты наружного блока (Ш×В×Г)": ("width_outdoor", "height_outdoor", "depth_outdoor"),
     "Габариты наружного блока (ШхВхГ), мм": ("width_outdoor", "height_outdoor", "depth_outdoor"),
+    "Габариты наружного блока (Ш×В×Г), мм": ("width_outdoor", "height_outdoor", "depth_outdoor"),
     "Габариты внешнего блока (ШхВхГ)": ("width_outdoor", "height_outdoor", "depth_outdoor"),
     "Габариты внешнего блока (ШхВхГ), мм": ("width_outdoor", "height_outdoor", "depth_outdoor"),
     "Габаритные размеры внутреннего блока (ШxВxГ) мм": ("width_indoor", "height_indoor", "depth_indoor"),
