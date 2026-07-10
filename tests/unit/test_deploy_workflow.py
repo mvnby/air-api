@@ -78,6 +78,8 @@ def test_release_jobs_use_immutable_tested_sha_and_protected_environments():
     assert checkout["with"]["ref"] == "${{ inputs.deploy_sha }}"
     standby_call = jobs["deploy-api-standby"]
     assert standby_call["uses"] == "./.github/workflows/deploy-api-standby.yml"
+    assert "always()" in standby_call["if"]
+    assert "needs.backend-release.result == 'success'" in standby_call["if"]
     assert standby_call["with"]["deploy_sha"] == "${{ needs.release-gate.outputs.deploy_sha }}"
     assert standby_call["with"]["backend_image"] == "${{ needs.backend-release.outputs.backend_image }}"
     assert standby_call["secrets"] == "inherit"
@@ -89,6 +91,8 @@ def test_release_jobs_use_immutable_tested_sha_and_protected_environments():
     assert web_checkout["with"]["ref"] == "${{ inputs.deploy_sha }}"
     web_call = jobs["deploy-frontend"]
     assert web_call["uses"] == "./.github/workflows/deploy-web.yml"
+    assert "always()" in web_call["if"]
+    assert "needs.backend-release.result == 'success'" in web_call["if"]
     assert web_call["with"]["deploy_sha"] == "${{ needs.release-gate.outputs.deploy_sha }}"
     assert web_call["secrets"] == "inherit"
     assert "backend-release" in web_call["needs"]
@@ -100,6 +104,18 @@ def test_release_jobs_use_immutable_tested_sha_and_protected_environments():
     assert "tags: ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ needs.release-gate.outputs.deploy_sha }}" in workflow_text
     assert "BACKEND_IMAGE='${{ steps.resolve_backend_image.outputs.reference }}'" in workflow_text
     assert 'reference="ghcr.io/${{ steps.prep.outputs.repo }}/backend@${digest}"' in workflow_text
+
+
+def test_frontend_detection_compares_against_the_deployed_release_sha():
+    workflow = _workflow(".github/workflows/deploy.yml")
+    detect = _step(workflow["jobs"]["detect-frontend-changes"], "Detect storefront-relevant changes")[
+        "run"
+    ]
+
+    assert "https://mvn.by/release.json?ci_run=${GITHUB_RUN_ID}" in detect
+    assert 'git merge-base --is-ancestor "${deployed_web_sha}" "${after}"' in detect
+    assert 'git diff --name-only "${deployed_web_sha}" "${after}"' in detect
+    assert "deploying frontend conservatively" in detect
 
 
 def test_backend_release_is_scoped_and_has_guarded_rollback():
