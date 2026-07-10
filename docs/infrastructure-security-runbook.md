@@ -91,6 +91,12 @@ alert on failure. It is included in `scripts/ha/report_ha_status.py`, so a stale
 or failed security check makes the aggregate reliability report require
 attention.
 
+The web deployment continues to use `SSH_USER_WEB` (normally `deploy`). The
+security audit uses repository variable `INFRA_SECURITY_WEB_USER`, defaulting
+to `root`, because reading fail2ban's control socket requires privilege. Keep
+these identities separate; do not grant the web deploy user broad sudo merely
+to satisfy monitoring.
+
 ## Rollback
 
 If `sshd -t` or `fail2ban-client -t` fails, do not reload either service.

@@ -61,7 +61,7 @@ jobs:
           RESERVE_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
           RESERVE_USER: ${{ vars.API_STANDBY_USER || secrets.SSH_USER_API }}
           WEB_HOST: ${{ secrets.SSH_HOST_WEB }}
-          WEB_USER: ${{ secrets.SSH_USER_WEB }}
+          WEB_USER: ${{ vars.INFRA_SECURITY_WEB_USER || 'root' }}
         run: |
           set -euo pipefail
           SSH_OPTIONS=(
