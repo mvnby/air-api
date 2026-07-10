@@ -20,7 +20,7 @@ trap cleanup EXIT
 role() {
   local service="$1"
   "${COMPOSE[@]}" exec -T "${service}" \
-    python3 -c 'import json,urllib.request; print(json.load(urllib.request.urlopen("http://127.0.0.1:8008", timeout=3))["role"])' \
+    python3 -c 'import json,urllib.request; print(json.load(urllib.request.urlopen("http://127.0.0.1:8008/patroni", timeout=3))["role"])' \
     2>/dev/null || true
 }
 
@@ -64,8 +64,9 @@ other_service() {
 sql() {
   local service="$1"
   local statement="$2"
-  "${COMPOSE[@]}" exec -T "${service}" \
+  "${COMPOSE[@]}" exec -T \
     -e "PGOPTIONS=-c statement_timeout=10000" \
+    "${service}" \
     psql -U postgres -d postgres -v ON_ERROR_STOP=1 -Atqc "${statement}"
 }
 
@@ -97,6 +98,16 @@ until [[ "$(sql "${replica}" "select value from ha_rehearsal where id=1" 2>/dev/
   }
   sleep 2
 done
+
+deadline=$((SECONDS + TIMEOUT))
+until [[ "$(sql "${leader}" "select sync_state from pg_stat_replication where application_name='${replica}' and state='streaming'" 2>/dev/null || true)" == "sync" ]]; do
+  (( SECONDS < deadline )) || {
+    log error "replica was not registered as synchronous"
+    exit 1
+  }
+  sleep 2
+done
+log check "synchronous standby=${replica}"
 
 log failover "stopping leader ${leader}"
 "${COMPOSE[@]}" stop "${leader}"

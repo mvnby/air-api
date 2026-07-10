@@ -53,7 +53,7 @@ def load_config() -> AgentConfig:
     return AgentConfig(
         project_dir=project_dir,
         compose_file=compose_file,
-        patroni_url=os.getenv("HA_PATRONI_URL", "http://127.0.0.1:8008").rstrip("/"),
+        patroni_url=os.getenv("HA_PATRONI_URL", "http://127.0.0.1:8008/patroni").rstrip("/"),
         ready_url=os.getenv("HA_READY_URL", "http://127.0.0.1:18080/api/ready"),
         app_role_env=project_dir / ".ha-app-role.env",
         bot_role_env=project_dir / ".ha-bot-role.env",

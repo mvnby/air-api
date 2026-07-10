@@ -53,9 +53,9 @@ def render_config() -> dict[str, Any]:
     name = required("PATRONI_NAME")
     connect_address = required("PATRONI_POSTGRESQL_CONNECT_ADDRESS")
     rest_connect_address = required("PATRONI_RESTAPI_CONNECT_ADDRESS")
-    etcd_protocol = os.getenv("PATRONI_ETCD_PROTOCOL", "https").strip().lower()
+    etcd_protocol = os.getenv("PATRONI_ETCD3_PROTOCOL", "https").strip().lower()
     if etcd_protocol not in {"http", "https"}:
-        raise ValueError("PATRONI_ETCD_PROTOCOL must be http or https")
+        raise ValueError("PATRONI_ETCD3_PROTOCOL must be http or https")
 
     ttl = integer("PATRONI_TTL", 30, minimum=20)
     loop_wait = integer("PATRONI_LOOP_WAIT", 10, minimum=1)
@@ -71,15 +71,15 @@ def render_config() -> dict[str, Any]:
     pgpass = os.getenv("PATRONI_POSTGRESQL_PGPASS", "/tmp/pgpass").strip()
 
     etcd3: dict[str, Any] = {
-        "hosts": csv("PATRONI_ETCD_HOSTS"),
+        "hosts": csv("PATRONI_ETCD3_HOSTS"),
         "protocol": etcd_protocol,
     }
     if etcd_protocol == "https":
         etcd3.update(
             {
-                "cacert": required("PATRONI_ETCD_CACERT"),
-                "cert": required("PATRONI_ETCD_CERT"),
-                "key": required("PATRONI_ETCD_KEY"),
+                "cacert": required("PATRONI_ETCD3_CACERT"),
+                "cert": required("PATRONI_ETCD3_CERT"),
+                "key": required("PATRONI_ETCD3_KEY"),
             }
         )
 

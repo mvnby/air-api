@@ -9,7 +9,7 @@ def _config(tmp_path: Path, *, app_service_override: str = "") -> AgentConfig:
     return AgentConfig(
         project_dir=tmp_path,
         compose_file="compose.yml",
-        patroni_url="http://127.0.0.1:8008",
+        patroni_url="http://127.0.0.1:8008/patroni",
         ready_url="http://127.0.0.1:18080/api/ready",
         app_role_env=tmp_path / ".ha-app-role.env",
         bot_role_env=tmp_path / ".ha-bot-role.env",

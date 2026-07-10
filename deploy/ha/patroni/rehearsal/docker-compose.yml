@@ -25,8 +25,8 @@ x-patroni: &patroni
   environment: &patroni-env
     PATRONI_SCOPE: mvn-rehearsal
     PATRONI_NAMESPACE: /mvn-rehearsal/
-    PATRONI_ETCD_HOSTS: etcd1:2379,etcd2:2379,etcd3:2379
-    PATRONI_ETCD_PROTOCOL: http
+    PATRONI_ETCD3_HOSTS: etcd1:2379,etcd2:2379,etcd3:2379
+    PATRONI_ETCD3_PROTOCOL: http
     PATRONI_ALLOW_BOOTSTRAP: "true"
     PATRONI_SYNCHRONOUS_MODE: "true"
     PATRONI_SYNCHRONOUS_MODE_STRICT: "false"

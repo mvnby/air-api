@@ -7,7 +7,8 @@ ALLOW_BOOTSTRAP="${PATRONI_ALLOW_BOOTSTRAP:-false}"
 
 if [ "$(id -u)" = "0" ]; then
   mkdir -p "${PGDATA}" "$(dirname "${CONFIG_FILE}")" /var/run/postgresql
-  chown -R postgres:postgres "${PGDATA}" "$(dirname "${CONFIG_FILE}")" /var/run/postgresql
+  chown postgres:postgres "${PGDATA}" "$(dirname "${CONFIG_FILE}")" /var/run/postgresql
+  chmod 0700 "${PGDATA}"
 fi
 
 if [ ! -s "${PGDATA}/PG_VERSION" ] && [ "${ALLOW_BOOTSTRAP}" != "true" ]; then
