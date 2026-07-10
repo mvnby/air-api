@@ -65,6 +65,7 @@ sql() {
   local service="$1"
   local statement="$2"
   "${COMPOSE[@]}" exec -T "${service}" \
+    -e "PGOPTIONS=-c statement_timeout=10000" \
     psql -U postgres -d postgres -v ON_ERROR_STOP=1 -Atqc "${statement}"
 }
 
