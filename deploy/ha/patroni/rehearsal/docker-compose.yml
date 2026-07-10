@@ -1,0 +1,128 @@
+name: mvn_patroni_rehearsal
+
+x-etcd: &etcd
+  image: quay.io/coreos/etcd:v3.6.11@sha256:6ae247c7666ceec554c51ba1f9bc8dd2212f975370dbd65710c9ca0e36ae1fff
+  restart: unless-stopped
+  networks: [ha]
+  healthcheck:
+    test: [CMD, etcdctl, endpoint, health]
+    interval: 5s
+    timeout: 3s
+    retries: 20
+
+x-patroni: &patroni
+  image: mvn-patroni-rehearsal:local
+  build:
+    context: ../../../..
+    dockerfile: deploy/ha/patroni/Dockerfile
+  restart: unless-stopped
+  depends_on:
+    etcd1: {condition: service_healthy}
+    etcd2: {condition: service_healthy}
+    etcd3: {condition: service_healthy}
+  environment: &patroni-env
+    PATRONI_SCOPE: mvn-rehearsal
+    PATRONI_NAMESPACE: /mvn-rehearsal/
+    PATRONI_ETCD_HOSTS: etcd1:2379,etcd2:2379,etcd3:2379
+    PATRONI_ETCD_PROTOCOL: http
+    PATRONI_ALLOW_BOOTSTRAP: "true"
+    PATRONI_SYNCHRONOUS_MODE: "true"
+    PATRONI_SYNCHRONOUS_MODE_STRICT: "false"
+    PATRONI_FAILSAFE_MODE: "true"
+    PATRONI_WATCHDOG_MODE: "off"
+    PATRONI_TTL: "20"
+    PATRONI_LOOP_WAIT: "4"
+    PATRONI_RETRY_TIMEOUT: "8"
+    PATRONI_MAXIMUM_LAG_ON_FAILOVER: "1048576"
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: rehearsal-superuser-password
+    PATRONI_REPLICATION_USERNAME: replicator
+    PATRONI_REPLICATION_PASSWORD: rehearsal-replication-password
+  networks: [ha]
+  healthcheck:
+    test: [CMD, curl, -fsS, http://127.0.0.1:8008/health]
+    interval: 5s
+    timeout: 3s
+    retries: 30
+    start_period: 10s
+
+services:
+  etcd1:
+    <<: *etcd
+    command:
+      - /usr/local/bin/etcd
+      - --name=etcd1
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd1:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://etcd1:2380
+      - --initial-cluster=etcd1=http://etcd1:2380,etcd2=http://etcd2:2380,etcd3=http://etcd3:2380
+      - --initial-cluster-token=mvn-patroni-rehearsal
+      - --initial-cluster-state=new
+    volumes: [etcd1_data:/etcd-data]
+
+  etcd2:
+    <<: *etcd
+    command:
+      - /usr/local/bin/etcd
+      - --name=etcd2
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd2:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://etcd2:2380
+      - --initial-cluster=etcd1=http://etcd1:2380,etcd2=http://etcd2:2380,etcd3=http://etcd3:2380
+      - --initial-cluster-token=mvn-patroni-rehearsal
+      - --initial-cluster-state=new
+    volumes: [etcd2_data:/etcd-data]
+
+  etcd3:
+    <<: *etcd
+    command:
+      - /usr/local/bin/etcd
+      - --name=etcd3
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd3:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://etcd3:2380
+      - --initial-cluster=etcd1=http://etcd1:2380,etcd2=http://etcd2:2380,etcd3=http://etcd3:2380
+      - --initial-cluster-token=mvn-patroni-rehearsal
+      - --initial-cluster-state=new
+    volumes: [etcd3_data:/etcd-data]
+
+  pg1:
+    <<: *patroni
+    environment:
+      <<: *patroni-env
+      PATRONI_NAME: pg1
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: pg1:5432
+      PATRONI_RESTAPI_CONNECT_ADDRESS: pg1:8008
+    ports:
+      - 127.0.0.1:55431:5432
+      - 127.0.0.1:18008:8008
+    volumes: [pg1_data:/var/lib/postgresql/data]
+
+  pg2:
+    <<: *patroni
+    environment:
+      <<: *patroni-env
+      PATRONI_NAME: pg2
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: pg2:5432
+      PATRONI_RESTAPI_CONNECT_ADDRESS: pg2:8008
+    ports:
+      - 127.0.0.1:55432:5432
+      - 127.0.0.1:18009:8008
+    volumes: [pg2_data:/var/lib/postgresql/data]
+
+networks:
+  ha:
+    driver: bridge
+
+volumes:
+  etcd1_data:
+  etcd2_data:
+  etcd3_data:
+  pg1_data:
+  pg2_data:
